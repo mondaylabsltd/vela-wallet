@@ -39,8 +39,8 @@ struct ExploreFixturesTests {
         if case .siteMenu(_, let statusLine, let items) = m.menus.siteMenu {
             out += (statusLine.isEmpty ? [] : [statusLine]) + items.map(\.label)
         }
-        if case .groupManage(let title, let rows, let newGroup) = m.menus.groupManage {
-            out += [title, newGroup] + rows.map(\.title) + rows.compactMap(\.meta)
+        if case .groupManage(let title, let rows) = m.menus.groupManage {
+            out += [title] + rows.map(\.title) + rows.compactMap(\.meta)
         }
         return out
     }
@@ -71,13 +71,12 @@ struct ExploreFixturesTests {
         #expect(e1.tabCountLabel == nil)
     }
 
-    @Test func e2CarriesEightTilesAndThreeGroups() {
+    /// Issue #465: no custom groups — under Favorites there is Recent alone.
+    @Test func e2CarriesEightTilesAndRecentAlone() {
         let e2 = ExploreFixtures.buildMobileState(.e2, loc: loc)
         #expect(e2.favorites?.tiles.count == 8)
         if case .add = e2.favorites?.tiles.last { } else { Issue.record("last tile is not `add`") }
-        #expect(e2.groups.map(\.id) == ["recent", "trading", "prediction"])
-        // Custom group names are what a person typed — never translated.
-        #expect(Array(e2.groups.dropFirst()).map(\.title) == ["交易", "预测市场"])
+        #expect(e2.groups.map(\.id) == ["recent"])
     }
 
     @Test func sheetsOpenOnlyWhereTheMockOpensThem() {
@@ -102,12 +101,49 @@ struct ExploreFixturesTests {
         #expect(tabs.first(where: \.selected)?.id == "uniswap")
     }
 
-    @Test func systemGroupsCanBeHiddenButNeverDeleted() {
-        guard case .groupManage(_, let rows, _) =
+    /// Issue #465: Manage groups is exactly Favorites and Recent dApps, an
+    /// eye each — no "System" word, nothing new, nothing to delete.
+    @Test func manageGroupsIsTheTwoSectionsAlone() {
+        guard case .groupManage(_, let rows) =
             ExploreFixtures.buildMobileState(.e3, loc: loc).menus.groupManage
         else { Issue.record("E3 has no group manager"); return }
-        #expect(rows.filter(\.system).map(\.id) == ["favorites", "recent"])
+        #expect(rows.map(\.id) == ["favorites", "recent"])
+        #expect(rows.map(\.title) == [loc.t("explore.favorites"), loc.t("explore.recent")])
+        #expect(rows[1].meta == nil, "Recent carries no second word")
     }
+
+    /// The Favorites row counts its sites in each language's own plural
+    /// forms — "1 site", never "1 sites"; Russian's few and many.
+    @Test func theFavoritesRowCountsItsSitesByThePluralKey() throws {
+        func meta(_ count: Int, _ tag: String) throws -> String? {
+            let favorites = (0..<count).map { index in
+                ExploreSiteWire(origin: "https://s\(index).example", url: "https://s\(index).example/",
+                                host: "s\(index).example", name: "S\(index)", renamed: false, addedMs: 0)
+            }
+            let view = ExploreViewWire(
+                favorites: favorites, tabs: [], selectedTab: nil, favoritesHidden: false,
+                recentHidden: false, favoritesFull: false, tabsFull: false, ready: true
+            )
+            guard case .groupManage(_, let rows) = ExploreLive.groupManage(
+                explore: view, loc: Loc(overrideTag: tag, preferredLanguages: [])
+            ) else { throw Missing() }
+            return rows.first?.meta
+        }
+        #expect(try meta(1, "en") == "1 site")
+        #expect(try meta(2, "en") == "2 sites")
+        #expect(try meta(3, "ru") == "3 сайта")
+        #expect(try meta(5, "ru") == "5 сайтов")
+        #expect(try meta(1, "zh") == "1 个网站")
+        for tag in ["en", "ru", "zh"] {
+            #expect(try meta(1, tag)?.contains("{{") == false, "\(tag): the count was filled")
+            #expect(try meta(1, tag)?.contains("siteCount") == false, "\(tag): the key resolved")
+        }
+        guard case .groupManage(_, let drawn) = ExploreFixtures.buildMobileState(.e3, loc: loc).menus.groupManage
+        else { throw Missing() }
+        #expect(drawn.first?.meta == "8 个网站")
+    }
+
+    private struct Missing: Error {}
 
     @Test func theStandInPageIsTheSitesContent() {
         let page = ExploreFixtures.buildMobileState(.e4, loc: loc).browser.page

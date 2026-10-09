@@ -36,6 +36,13 @@ const MIN_INTERVAL_MS = 12_000;
  * interested in the same hash (the send receipt, its background waiter, and Activity), so
  * coalesce them and never repeatedly hit the bundler faster than this. */
 export const USER_OP_RECEIPT_POLL_INTERVAL_MS = 3_000;
+/**
+ * How early an ask may come against that cooldown — the core's
+ * `tx_tracker::RECEIPT_TICK_SLACK_MS`, for the same reason (issue 464): the
+ * tracker asks on a 3 s timer, and a tick that reads 2 999 ms after the last
+ * ask must still reach the relay, or it waits a whole extra tick (6 s).
+ */
+export const USER_OP_RECEIPT_TICK_SLACK_MS = 250;
 
 let _running = false;
 let _lastRunAt = 0;
@@ -112,7 +119,13 @@ export async function pollUserOpStatus(
 }
 
 interface ReceiptPollCacheEntry {
-	completedAt?: number;
+	/**
+	 * When the last request for this op was SENT — the cooldown counts from
+	 * here (issue 464). It used to count from the answer: an answer 0.3 s after
+	 * its 3 s tick left the next tick 2.7 s out, served from this cache, and
+	 * the relay was asked every 6 s, not 3.
+	 */
+	askedAt?: number;
 	outcome?: UserOpReceiptPoll;
 	pending?: Promise<UserOpReceiptPoll>;
 }
@@ -130,9 +143,10 @@ export function _resetUserOpReceiptPollCache(): void {
 
 /**
  * Make (or join) the one permitted receipt request for this UserOp. A pending request is
- * always shared; an unresolved/null answer is retained for three seconds before trying again.
- * This is deliberately a small, local throttle rather than a global one: independent UserOps
- * may still settle concurrently.
+ * always shared; an unresolved/null answer is retained until three seconds after the ASK
+ * that produced it (less the tick slack), then the next caller asks again. This is
+ * deliberately a small, local throttle rather than a global one: independent UserOps may
+ * still settle concurrently.
  */
 export async function requestUserOpReceipt(
 	userOpHash: string,
@@ -144,13 +158,14 @@ export async function requestUserOpReceipt(
 	if (existing?.pending) return existing.pending;
 	if (existing?.outcome?.resolution) return existing.outcome;
 	if (
-		existing?.completedAt !== undefined &&
-		Date.now() - existing.completedAt < USER_OP_RECEIPT_POLL_INTERVAL_MS
+		existing?.askedAt !== undefined &&
+		Date.now() - existing.askedAt < USER_OP_RECEIPT_POLL_INTERVAL_MS - USER_OP_RECEIPT_TICK_SLACK_MS
 	) {
 		return existing.outcome ?? { resolution: null, reachedBundler: false };
 	}
 
 	const entry: ReceiptPollCacheEntry = existing ?? {};
+	entry.askedAt = Date.now();
 	const request = (async (): Promise<UserOpReceiptPoll> => {
 		try {
 			const res = await rpcCall('eth_getUserOperationReceipt', [userOpHash], chainId);
@@ -180,7 +195,6 @@ export async function requestUserOpReceipt(
 		return outcome;
 	} finally {
 		entry.pending = undefined;
-		entry.completedAt = Date.now();
 	}
 }
 

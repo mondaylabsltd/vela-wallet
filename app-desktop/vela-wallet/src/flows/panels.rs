@@ -39,6 +39,11 @@ pub type Click = Box<ClickFn>;
 /// What a `Click` holds.
 pub type ClickFn = dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static;
 
+/// A pick that names its row by ADDRESS (issue 467): the panel hands each
+/// row's own address to it, so the press picks the person drawn under the
+/// pointer, whatever order the list was in when the listeners were made.
+pub type PickAddress = std::rc::Rc<dyn Fn(&str, &mut Window, &mut App) + 'static>;
+
 /// The steps a panel can take, as listeners the page has already bound.
 ///
 /// `None` means the affordance is inert — which is what the gallery wants, and
@@ -130,8 +135,9 @@ pub struct PanelActions {
     pub change_token: Option<Click>,
     /// DSD2L, live: ⇄ — type the amount in money, or back in the token (#197).
     pub toggle_denom: Option<Click>,
-    /// DSD2eL, live: one listener per contact row, in the book's order.
-    pub pick_contact_rows: Vec<Click>,
+    /// DSD2eL, live: a contact row's pick, given the address that row
+    /// draws (issue 467) — not one listener per index into the book.
+    pub pick_contact: Option<PickAddress>,
     /// DSD2fL, live: one listener per fee-coin row, in the relay's order.
     pub fee_rows: Vec<Click>,
     /// DSD2cL, live: the unit toggle's two halves (fiat, token).
@@ -152,6 +158,9 @@ pub struct PanelActions {
     pub notice_action: Option<Click>,
     /// The relay-treasury stop's "Not now" — the core's `DismissTreasurySheet`.
     pub notice_dismiss: Option<Click>,
+    /// A relay stop's "Report this" (issue 466): the in-app reporter, seeded
+    /// with the core's report as it stands at the press.
+    pub notice_report: Option<Click>,
     /// DSD2eL, live: one listener per GROUP row — a whole group seeds a split.
     pub pick_group_rows: Vec<Click>,
     /// DSD2bL, live: each split row's own amount field and its remove — in the
@@ -263,7 +272,7 @@ fn column() -> Div {
 
 /// The hairline that separates rows in every list here.
 /// The parts of a batch (spec 038 #D2): every recipient of a split by name
-/// and avatar, every asset of a sweep by name — one list, drawn the same on
+/// and avatar, every asset of a sweep by its mark and name — one list, drawn the same on
 /// the confirm, the receipt and the transaction detail, so what was signed,
 /// what is landing and what landed read as one thing.
 fn breakdown_list(
@@ -290,7 +299,9 @@ fn breakdown_list(
         .bg(theme.bg_raised);
     for item in rows {
         let mut row = div().flex().items_center().gap(px(8.)).py(px(8.));
-        if let Some(seed) = item.seed.as_ref() {
+        if let Some(mark) = item.mark.as_ref() {
+            row = row.child(super::components::inline_mark(theme, mark));
+        } else if let Some(seed) = item.seed.as_ref() {
             row = row.child(crate::wallet::components::identicon_avatar(
                 identicons,
                 seed.as_ref(),
@@ -455,7 +466,7 @@ pub fn render(
             window,
             actions.search,
             actions.open_scan,
-            actions.pick_contact_rows,
+            actions.pick_contact,
             actions.pick_group_rows,
         ),
         FlowBody::FeeToken(model) => fee_token(model, theme, icons, actions.fee_rows),
@@ -469,8 +480,11 @@ pub fn render(
             icons,
             identicons,
             actions.advance,
-            actions.notice_action,
-            actions.notice_dismiss,
+            NoticeClicks {
+                action: actions.notice_action,
+                dismiss: actions.notice_dismiss,
+                report: actions.notice_report,
+            },
         ),
         FlowBody::SendReceipt(model) => send_receipt(
             model,
@@ -1489,7 +1503,7 @@ fn add_token(
     // dead-code warning nobody read. Same defect as the picker that eats a
     // file: the core said no and the screen went on looking fine.
     if let Some(notice) = &model.notice {
-        col = col.child(notice_card(notice, theme, None, None));
+        col = col.child(notice_card(notice, theme, NoticeClicks::default()));
     }
 
     // Nothing new to add, and the button says so rather than taking a
@@ -1509,12 +1523,25 @@ fn add_token(
 /// Amber while they are still typing, red when nothing can proceed as things
 /// stand. The action is the way out the CORE offered — never a button this
 /// file invented.
-fn notice_card(
-    notice: &SendNotice,
-    theme: &Theme,
+/// What a notice card's buttons answer to — the core's way out, leaving
+/// the stop, and "Report this" (issue 466). `None` draws that one inert.
+#[derive(Default)]
+struct NoticeClicks {
     action: Option<Click>,
     dismiss: Option<Click>,
-) -> Div {
+    report: Option<Click>,
+}
+
+/// The relay stops' "Report this" pill (issue 466), found by this id — the
+/// hook Android (`RELAY_REPORT_TAG`) and iOS (`testId`) carry for it too.
+pub const RELAY_REPORT_ID: &str = "relay-report";
+
+fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div {
+    let NoticeClicks {
+        action,
+        dismiss,
+        report,
+    } = clicks;
     let (tint, border) = if notice.error {
         (theme.error_soft, theme.error_base)
     } else {
@@ -1558,14 +1585,27 @@ fn notice_card(
     }
     // Two ways out of the same card: the retry the core offered, and — where
     // the stop has one — leaving it. Side by side, the retry first, because
-    // that is the one a person came here to press.
-    let mut row = div().flex().gap(px(8.));
+    // that is the one a person came here to press. Wrapping: the treasury
+    // stop's four (retry, report, copy, close) do not fit the 400 column on
+    // one line in any language, and German's three did not either — the
+    // last ones ran off the card.
+    let mut row = div().flex().flex_wrap().gap(px(8.));
     let mut any = false;
     if let Some(label) = &notice.action {
         any = true;
         row = row.child(clickable(
             "flow-notice-action",
             action,
+            pill(theme, label.clone()),
+        ));
+    }
+    // Issue 466: telling whoever runs the relay — the lead says it is the
+    // fastest fix. A pill like the retry: it does something, unlike leaving.
+    if let Some(label) = &notice.report {
+        any = true;
+        row = row.child(clickable(
+            RELAY_REPORT_ID,
+            report,
             pill(theme, label.clone()),
         ));
     }
@@ -1599,48 +1639,57 @@ fn notice_card(
     if any { card.child(row) } else { card }
 }
 
-/// The panel's CTA in the state the core put it in. A shut button is drawn
-/// shut and answers to nothing; a busy one keeps its accent — busy is not
-/// disabled, and a person who pressed once should see the press took.
-fn cta_button(
+/// The panel's CTA in the state the core put it in — the wallet's one
+/// primary button: the send Confirm, and the signing column's confirm
+/// (issue #461). A shut button is drawn shut and answers to nothing; a busy
+/// one keeps its accent — busy is not disabled, and a person who pressed
+/// once should see the press took.
+///
+/// `id` rides every state, so a test finds the control by it whether it is
+/// armed, shut or busy, and whatever its words say; only an enabled button
+/// with an action takes the click and the pointer.
+pub(crate) fn cta_button(
     id: &'static str,
     theme: &Theme,
     label: SharedString,
     state: CtaState,
     action: Option<Click>,
 ) -> Div {
-    let button = accent_button(theme, label.clone());
-    match state {
-        CtaState::Enabled => clickable(id, action, button),
+    let face = match state {
+        CtaState::Enabled => accent_button(theme, label),
         // The web's `loading` (078 F-09): full emphasis, the words kept for
         // the width but not shown, a spinner where they were — busy is a
         // wait, not a refusal, and a faded button read as one.
-        CtaState::Busy => clickable(
-            id,
-            None,
-            div()
-                .relative()
-                .child(button.text_color(gpui::transparent_black()))
-                .child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .size_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(crate::ui::spinner(
-                            gpui::Hsla::from(gpui::rgb(0xffffff)),
-                            px(20.),
-                            px(1.5),
-                        )),
-                ),
-        ),
+        CtaState::Busy => div()
+            .relative()
+            .child(accent_button(theme, label).text_color(gpui::transparent_black()))
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(crate::ui::spinner(
+                        gpui::Hsla::from(gpui::rgb(0xffffff)),
+                        px(20.),
+                        px(1.5),
+                    )),
+            ),
         // The fill fades and the label stays white, as the web's button
         // fades as one layer (078 T066) — see `disabled_accent_button`.
-        CtaState::Disabled => clickable(id, None, disabled_accent_button(theme, label)),
-    }
+        CtaState::Disabled => disabled_accent_button(theme, label),
+    };
+    let control = div().id(id).child(face);
+    let control = match action.filter(|_| state == CtaState::Enabled) {
+        Some(action) => control
+            .cursor_pointer()
+            .on_click(move |event, window, cx| action(event, window, cx)),
+        None => control,
+    };
+    div().flex().flex_col().child(control)
 }
 
 /// A bordered pill for a secondary action — the recipient-row actions and,
@@ -1681,7 +1730,14 @@ fn send_pick(
     // nothing to pick (078 W-04).
     if let Some(notice) = &model.lock_notice {
         let _ = (per_row, chip_clicks, select_all, cta, open_form.take());
-        return column().child(notice_card(notice, theme, notice_action, None));
+        return column().child(notice_card(
+            notice,
+            theme,
+            NoticeClicks {
+                action: notice_action,
+                ..NoticeClicks::default()
+            },
+        ));
     }
     let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
     let mut col = column();
@@ -2452,8 +2508,11 @@ fn send_form_parts(
             notice_card(
                 notice,
                 theme,
-                actions.notice_action.take(),
-                actions.notice_dismiss.take(),
+                NoticeClicks {
+                    action: actions.notice_action.take(),
+                    dismiss: actions.notice_dismiss.take(),
+                    report: actions.notice_report.take(),
+                },
             )
         });
     }
@@ -2575,13 +2634,10 @@ fn contact_pick(
     window: &Window,
     search: Option<AddressField>,
     open_scan: Option<Click>,
-    per_row: Vec<Click>,
+    pick: Option<PickAddress>,
     mut group_rows: Vec<Click>,
 ) -> Div {
     let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
-    // Indexed, not iterated: a search hides rows, and row N must still pick
-    // contact N.
-    let mut per_row = per_row.into_iter().map(Some).collect::<Vec<_>>();
     let mut col = column()
         .child(flow_search(
             theme,
@@ -2694,10 +2750,7 @@ fn contact_pick(
             .child(model.contacts_title.clone()),
     );
 
-    for (i, contact) in model.contacts.iter().enumerate() {
-        if !search_matches(&query, &format!("{} {}", contact.name, contact.address)) {
-            continue;
-        }
+    for (i, contact) in drawn_contacts(model, &query) {
         // The web's `ContactPickRow` (078 F-11): a 30 avatar, the name 15
         // semibold with its group as a raised 10 tag, the address mono 11,
         // a 14 chevron; padded 12 on a button's line.
@@ -2730,7 +2783,7 @@ fn contact_pick(
             .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
             .child(crate::wallet::components::identicon_avatar(
                 identicons,
-                contact.seed.as_ref(),
+                contact.address_full.as_ref(),
                 30.,
             ))
             .child(
@@ -2757,13 +2810,36 @@ fn contact_pick(
                 theme.fg_subtle,
                 14.,
             ));
+        // Issue 467: the press carries the address this row draws. Pairing
+        // row N with listener N from another list is a race with the core,
+        // which re-sorts the book: lose it and the send goes to whoever is
+        // Nth now.
+        let press = pick.clone().map(|pick| -> Click {
+            let address = contact.address_full.to_string();
+            Box::new(move |_, window, cx| pick(&address, window, cx))
+        });
         col = col.child(clickable(
             ElementId::from(("flow-contact", i)),
-            per_row.get_mut(i).and_then(Option::take),
+            press,
             entry,
         ));
     }
     col
+}
+
+/// The book's rows a search leaves, each with its place in the book (the
+/// row's element id) — drawn, and picked, from the same entries.
+fn drawn_contacts<'a>(
+    model: &'a ContactPick,
+    query: &'a str,
+) -> impl Iterator<Item = (usize, &'a crate::flows::fixtures::ContactEntry)> + 'a {
+    model
+        .contacts
+        .iter()
+        .enumerate()
+        .filter(move |(_, contact)| {
+            search_matches(query, &format!("{} {}", contact.name, contact.address))
+        })
 }
 
 fn fee_token(
@@ -3080,7 +3156,7 @@ fn batch_import_parts(
         col = col.child(warning_line(theme, icons, model.rejected.clone()));
     }
     if let Some(notice) = &model.notice {
-        col = col.child(notice_card(notice, theme, None, None));
+        col = col.child(notice_card(notice, theme, NoticeClicks::default()));
     }
 
     // The total and the button, under a rule: the figure beside what it is
@@ -3362,8 +3438,7 @@ fn send_confirm(
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     advance: Option<Click>,
-    notice_action: Option<Click>,
-    notice_dismiss: Option<Click>,
+    notice_clicks: NoticeClicks,
 ) -> Div {
     let mut hero = div()
         .flex()
@@ -3441,7 +3516,7 @@ fn send_confirm(
     }
 
     if let Some(notice) = &model.notice {
-        col = col.child(notice_card(notice, theme, notice_action, notice_dismiss));
+        col = col.child(notice_card(notice, theme, notice_clicks));
     }
     // Per the SPEC sheet this is the ONE accent CTA in the whole send journey.
     col.child(cta_button(
@@ -3562,10 +3637,23 @@ fn send_receipt(
         .child(div().flex_1().flex_grow(3.))
 }
 
+/// The glyph in the receipt hero's disc — `None` while submitting, which
+/// spins instead. A failure is an exclamation, never the ✕ that closes the
+/// sheet a few points above it (issue 460).
+fn hero_icon(stage: crate::flows::fixtures::ReceiptStage) -> Option<Icon> {
+    use crate::flows::fixtures::ReceiptStage;
+    match stage {
+        ReceiptStage::Submitting => None,
+        ReceiptStage::Submitted => Some(Icon::Clock),
+        ReceiptStage::Confirmed => Some(Icon::Check),
+        ReceiptStage::Failed => Some(Icon::Exclamation),
+    }
+}
+
 /// The receipt's centrepiece — the web's `StatusHero`: one 88 disc for all
 /// four stages, so the mark does not resize as the transaction moves — a
 /// spinner while submitting, a clock while submitted, a tick once confirmed,
-/// a cross on failure. Submitted and confirmed wear a ring OUTSIDE the disc
+/// an exclamation on failure (`hero_icon`). Submitted and confirmed wear a ring OUTSIDE the disc
 /// (104 across, 2.5 stroke): it fills as the chain's usual time passes and is
 /// the same ring that closes and turns green on the confirmation, so the tick
 /// arrives as the end of what the person was watching. Without an estimate
@@ -3587,11 +3675,9 @@ pub fn status_hero(
         ReceiptStage::Confirmed => (theme.success_soft, theme.success_base),
         ReceiptStage::Failed => (theme.error_soft, theme.error_base),
     };
-    let mark: gpui::AnyElement = match stage {
-        ReceiptStage::Submitting => crate::ui::spinner(fg, px(30.), px(1.5)),
-        ReceiptStage::Submitted => icon_img(icons, Icon::Clock, false, fg, 26.).into_any_element(),
-        ReceiptStage::Confirmed => icon_img(icons, Icon::Check, false, fg, 26.).into_any_element(),
-        ReceiptStage::Failed => icon_img(icons, Icon::X, false, fg, 26.).into_any_element(),
+    let mark: gpui::AnyElement = match hero_icon(stage) {
+        None => crate::ui::spinner(fg, px(30.), px(1.5)),
+        Some(icon) => icon_img(icons, icon, false, fg, 26.).into_any_element(),
     };
 
     // An arc of `sweep` (0–1 of a turn) from `start` (0–1, 0 = 12 o'clock),
@@ -3933,6 +4019,59 @@ fn receive_gate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 466: the "Report this" pill carries the phones' hook, so one
+    /// cross-platform test finds it on every shell.
+    #[test]
+    fn the_report_pill_keeps_the_phones_hook() {
+        assert_eq!(RELAY_REPORT_ID, "relay-report");
+    }
+
+    /// Issue 467: a search hides rows, and each row still left is drawn —
+    /// and picked — from its own entry: the one 阿豪 is under carries 阿豪's
+    /// address, not the first row's.
+    #[test]
+    fn a_searched_contact_row_picks_the_address_it_draws() {
+        use crate::flows::fixtures::{A_HAO_FULL, ALICE_FULL, HOLD_ON_FULL};
+        let s = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
+        let FlowBody::ContactPick(model) =
+            crate::flows::fixtures::body(crate::flows::FlowPanel::Dsd2e, &s)
+        else {
+            unreachable!("DSD2e is the contact picker");
+        };
+        let drawn = |query: &str| -> Vec<(usize, String)> {
+            drawn_contacts(&model, query)
+                .map(|(i, row)| (i, row.address_full.to_string()))
+                .collect()
+        };
+        assert_eq!(
+            drawn(""),
+            vec![
+                (0, ALICE_FULL.to_owned()),
+                (1, A_HAO_FULL.to_owned()),
+                (2, HOLD_ON_FULL.to_owned())
+            ]
+        );
+        assert_eq!(drawn("阿豪"), vec![(1, A_HAO_FULL.to_owned())]);
+        assert_eq!(drawn("hold"), vec![(2, HOLD_ON_FULL.to_owned())]);
+        assert!(drawn("nobody").is_empty());
+    }
+
+    /// Issue 460: a failed receipt's disc holds an exclamation — the cross
+    /// is the sheet's close, and a red one in the middle read as one too.
+    #[test]
+    fn a_failed_receipt_is_an_exclamation_not_a_close() {
+        use crate::flows::fixtures::ReceiptStage;
+        assert_eq!(hero_icon(ReceiptStage::Failed), Some(Icon::Exclamation));
+        for stage in [
+            ReceiptStage::Submitting,
+            ReceiptStage::Submitted,
+            ReceiptStage::Confirmed,
+            ReceiptStage::Failed,
+        ] {
+            assert_ne!(hero_icon(stage), Some(Icon::X), "{stage:?}");
+        }
+    }
 
     fn detail(tone: StatusTone, explorer_url: Option<&str>) -> TxDetail {
         TxDetail {

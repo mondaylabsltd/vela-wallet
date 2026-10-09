@@ -7,4 +7,11 @@ export type SignRequestView = { id: string, method: string, kind: SignMethodKind
  * The request's OWN chain (F4): `__chainId` when stamped, else the
  * global chain — live, like `reqChainId(incomingRequest, chainId)`.
  */
-chain_id: number, signer_address: string | null, };
+chain_id: number, signer_address: string | null, 
+/**
+ * The wallet asked itself ([`Event::RequestArrived`]'s `first_party`):
+ * no requester header — no mark, no "Vela Wallet", no network chip; the
+ * headline is the intent beside the close, and the reading's rows say
+ * the network. `false` for every request a page raised.
+ */
+first_party: boolean, };

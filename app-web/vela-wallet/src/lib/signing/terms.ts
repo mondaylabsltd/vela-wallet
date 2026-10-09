@@ -15,6 +15,10 @@ const ALL = {
 	intentApproveNft: true,
 	intentApproveAllNfts: true,
 	intentAuthorizeSpending: true,
+	// The wallet's own registry backup: its intent and its three rows
+	// (network, address, public keys) are core terms, so they translate here
+	// like any other — no index relabel in the shell.
+	intentBackUpPublicKeys: true,
 	intentBorrow: true,
 	intentBridge: true,
 	intentBurn: true,
@@ -38,6 +42,7 @@ const ALL = {
 	intentWithdraw: true,
 	intentWrap: true,
 	intentWrapEth: true,
+	labelAddress: true,
 	labelAmount: true,
 	labelAmountToSpend: true,
 	labelApproved: true,
@@ -46,6 +51,7 @@ const ALL = {
 	labelFrom: true,
 	labelMaxSpendingAmount: true,
 	labelMinReceived: true,
+	labelNetwork: true,
 	labelNewContract: true,
 	labelNft: true,
 	labelNonce: true,
@@ -55,6 +61,7 @@ const ALL = {
 	labelOwner: true,
 	labelPay: true,
 	labelPrice: true,
+	labelPublicKeys: true,
 	labelQuantities: true,
 	labelQuantity: true,
 	labelReceived: true,

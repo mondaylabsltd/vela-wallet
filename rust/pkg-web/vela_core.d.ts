@@ -686,6 +686,19 @@ export function bundlerQuoteCacheable(max_fee_per_gas: string): boolean;
 
 export function canonicalizeSignature(sig: string): string;
 
+/**
+ * `{base}/chainlogos/eip155-{chainId}.png` on the person's chain-data
+ * endpoint ("" = the built-in one); `undefined` for chain 0, which names no
+ * network.
+ */
+export function chainLogoUrl(ethereum_data_url: string, chain_id: number): string | undefined;
+
+/**
+ * A NETWORK drawn as itself, a `MarkView` (`remote_mark::chain_mark`): its
+ * own logo, never a badge.
+ */
+export function chainMark(ethereum_data_url: string, chain_id: number, native_symbol: string): any;
+
 export function checksumAddress(address_hex: string): string;
 
 /**
@@ -859,6 +872,23 @@ export function feeRequoteDelayMs(failure: string, attempt: number): number | un
 export function feeRequoteTimeoutMs(): number;
 
 export function feeSignalsCacheTtlMs(): number;
+
+/**
+ * The core's compact relative time — `"now"`, `"2m"`, `"3h"`, a short
+ * weekday under a week, else the date — spelt with the words the caller
+ * holds (`I18n::format_relative_time`'s rule, `format_relative_time_with`).
+ *
+ * For the web client, which carries no catalog: `now` / `minutes` /
+ * `hours` are `time.now`, `time.minutesShort` and `time.hoursShort` as the
+ * prerendered messages hold them (`{{n}}` in place); `language` the page's
+ * locale, which names the weekday. `ts_seconds` is the moment in WHOLE
+ * SECONDS (`Math.floor(atMs / 1000)` — milliseconds there read as the
+ * future, which is "now"); `now_ms` the clock; `utc_offset_minutes` what to
+ * add to UTC for local time (`-new Date(atMs).getTimezoneOffset()`);
+ * `date_format` the person's preset as stored (`resolvedFormatKeys().date`),
+ * `auto` already resolved.
+ */
+export function formatRelativeTime(ts_seconds: number, now_ms: number, utc_offset_minutes: number, date_format: string, language: string, now: string, minutes: string, hours: string): string;
 
 /**
  * A signed balance change from signed base units, or `undefined` for zero
@@ -1144,7 +1174,7 @@ export function signAnswered(payload_json: string): string | undefined;
 /**
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
- * May the signing slide arm, and if not why (spec 099 R7) — the one gate
+ * May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
  * every client reads: the four views' JSON, the speed in force, a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
  */
@@ -1236,6 +1266,14 @@ export function toBase64Url(data: Uint8Array): string;
 export function toHex(data: Uint8Array, prefixed: boolean): string;
 
 export function toQuantity(value: string): string;
+
+/**
+ * A COIN's mark, a `MarkView` (`remote_mark::token_mark`):
+ * `ethereumDataUrl` is the person's chain-data endpoint ("" = the built-in
+ * one), `tokenAddress` `undefined`/`null` for the chain's native coin, `named`
+ * the logo URLs an index already gave (tried first).
+ */
+export function tokenMark(ethereum_data_url: string, chain_id: number, symbol: string, token_address: string | null | undefined, named: string[]): any;
 
 /**
  * The relying party a key minted behind `signerOrigin` belongs to, or `null`
@@ -1464,6 +1502,8 @@ export interface InitOutput {
     readonly buildMemberProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly bundlerQuoteCacheable: (a: number, b: number) => number;
     readonly canonicalizeSignature: (a: number, b: number) => [number, number, number, number];
+    readonly chainLogoUrl: (a: number, b: number, c: number) => [number, number];
+    readonly chainMark: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
     readonly clearsigningcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
@@ -1535,6 +1575,7 @@ export interface InitOutput {
     readonly feetierprefcore_new: () => number;
     readonly feetierprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly feetierprefcore_view: (a: number) => [number, number, number, number];
+    readonly formatRelativeTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly formatSignedTokenAmount: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly fromBase64Url: (a: number, b: number) => [number, number, number, number];
     readonly fromHex: (a: number, b: number) => [number, number, number, number];
@@ -1653,6 +1694,7 @@ export interface InitOutput {
     readonly toBase64Url: (a: number, b: number) => [number, number];
     readonly toHex: (a: number, b: number, c: number) => [number, number];
     readonly toQuantity: (a: number, b: number) => [number, number, number, number];
+    readonly tokenMark: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => any;
     readonly tokentrustcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tokentrustcore_new: () => number;
     readonly tokentrustcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

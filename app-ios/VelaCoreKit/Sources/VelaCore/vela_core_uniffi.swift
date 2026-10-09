@@ -4042,6 +4042,20 @@ public protocol I18nProtocol: AnyObject, Sendable {
      */
     func exists(key: String, opts: TOptions) throws  -> Bool
     
+    /**
+     * The core's compact relative time in the active language — `"now"`,
+     * `"2m"`, `"3h"`, a short weekday under a week, else the date — for the
+     * home's "Updated <ago>" and anything else that says how long ago.
+     *
+     * `ts_seconds` is the moment in WHOLE SECONDS (`floor(at_ms / 1000)`;
+     * handing it milliseconds reads as the future, which is "now");
+     * `now_ms` the clock in milliseconds; `utc_offset_minutes` what to add
+     * to UTC for local time at that moment; `date_format` the person's date
+     * preset as stored (`ymd_slash`, `mdy_slash`, `dmy_slash`, `dmy_dot`,
+     * `iso`) with `auto` already resolved — an unknown word is `mdy_slash`.
+     */
+    func formatRelativeTime(tsSeconds: Int64, nowMs: Int64, utcOffsetMinutes: Int32, dateFormat: String) throws  -> String
+    
     func language() throws  -> String
     
     /**
@@ -4198,6 +4212,31 @@ open func exists(key: String, opts: TOptions)throws  -> Bool  {
             self.uniffiCloneHandle(),
         FfiConverterString.lower(key),
         FfiConverterTypeTOptions_lower(opts),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The core's compact relative time in the active language — `"now"`,
+     * `"2m"`, `"3h"`, a short weekday under a week, else the date — for the
+     * home's "Updated <ago>" and anything else that says how long ago.
+     *
+     * `ts_seconds` is the moment in WHOLE SECONDS (`floor(at_ms / 1000)`;
+     * handing it milliseconds reads as the future, which is "now");
+     * `now_ms` the clock in milliseconds; `utc_offset_minutes` what to add
+     * to UTC for local time at that moment; `date_format` the person's date
+     * preset as stored (`ymd_slash`, `mdy_slash`, `dmy_slash`, `dmy_dot`,
+     * `iso`) with `auto` already resolved — an unknown word is `mdy_slash`.
+     */
+open func formatRelativeTime(tsSeconds: Int64, nowMs: Int64, utcOffsetMinutes: Int32, dateFormat: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_i18n_format_relative_time(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(tsSeconds),
+        FfiConverterInt64.lower(nowMs),
+        FfiConverterInt32.lower(utcOffsetMinutes),
+        FfiConverterString.lower(dateFormat),uniffiCallStatus
     )
 })
 }
@@ -8015,6 +8054,98 @@ public func FfiConverterTypeLanguageState_lift(_ buf: RustBuffer) throws -> Lang
 #endif
 public func FfiConverterTypeLanguageState_lower(_ value: LanguageState) -> RustBuffer {
     return FfiConverterTypeLanguageState.lower(value)
+}
+
+
+/**
+ * What a circle standing for a token or a network wears
+ * (`vela_core::app::remote_mark::MarkView`): draw `glyph`, then the first of
+ * `logo_urls` that loads over it; the corner badge only when
+ * `badge_chain_id` is set (its dot, `badge_logo_url` over it).
+ */
+public struct MarkView: Equatable, Hashable {
+    /**
+     * The ticker's first three characters, upper-cased: always drawn.
+     */
+    public var glyph: String
+    /**
+     * Logo candidates, best first. Empty = the glyph alone.
+     */
+    public var logoUrls: [String]
+    /**
+     * The chain the badge names; `None` = no badge.
+     */
+    public var badgeChainId: UInt32?
+    /**
+     * The badge chain's logo; `None` whenever there is no badge.
+     */
+    public var badgeLogoUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The ticker's first three characters, upper-cased: always drawn.
+         */glyph: String, 
+        /**
+         * Logo candidates, best first. Empty = the glyph alone.
+         */logoUrls: [String], 
+        /**
+         * The chain the badge names; `None` = no badge.
+         */badgeChainId: UInt32?, 
+        /**
+         * The badge chain's logo; `None` whenever there is no badge.
+         */badgeLogoUrl: String?) {
+        self.glyph = glyph
+        self.logoUrls = logoUrls
+        self.badgeChainId = badgeChainId
+        self.badgeLogoUrl = badgeLogoUrl
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MarkView: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMarkView: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MarkView {
+        return
+            try MarkView(
+                glyph: FfiConverterString.read(from: &buf), 
+                logoUrls: FfiConverterSequenceString.read(from: &buf), 
+                badgeChainId: FfiConverterOptionUInt32.read(from: &buf), 
+                badgeLogoUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MarkView, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.glyph, into: &buf)
+        FfiConverterSequenceString.write(value.logoUrls, into: &buf)
+        FfiConverterOptionUInt32.write(value.badgeChainId, into: &buf)
+        FfiConverterOptionString.write(value.badgeLogoUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMarkView_lift(_ buf: RustBuffer) throws -> MarkView {
+    return try FfiConverterTypeMarkView.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMarkView_lower(_ value: MarkView) -> RustBuffer {
+    return FfiConverterTypeMarkView.lower(value)
 }
 
 
@@ -13315,6 +13446,35 @@ public func canonicalizeSignature(sig: String)throws  -> String  {
     )
 })
 }
+/**
+ * `{base}/chainlogos/eip155-{chain_id}.png` on the person's chain-data
+ * endpoint ("" = the built-in one); `None` for chain 0, which names no
+ * network.
+ */
+public func chainLogoUrl(ethereumDataUrl: String, chainId: UInt32) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_chain_logo_url(
+        FfiConverterString.lower(ethereumDataUrl),
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * A NETWORK drawn as itself (`remote_mark::chain_mark`): network rows and
+ * facts, chain-locking notices, receive rows, the QR centre, chips. Its own
+ * logo, never a badge.
+ */
+public func chainMark(ethereumDataUrl: String, chainId: UInt32, nativeSymbol: String) -> MarkView  {
+    return try!  FfiConverterTypeMarkView_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_chain_mark(
+        FfiConverterString.lower(ethereumDataUrl),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(nativeSymbol),uniffiCallStatus
+    )
+})
+}
 public func checksumAddress(addressHex: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -14471,11 +14631,11 @@ public func sha256(data: Data) -> Data  {
 })
 }
 /**
- * May the signing slide arm, and if not why (spec 099 R7): the sign, guard,
+ * May the signing confirm be tapped, and if not why (spec 099 R7): the sign, guard,
  * clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
  * no fee session) and the speed in force (`"fast"`…, `None` with no speed
  * control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
- * a view does not read, and the slide stays shut. See
+ * a view does not read, and the confirm stays disabled. See
  * `vela_core::app::sign_confirm`.
  */
 public func signConfirmState(signJson: String, guardJson: String, clearJson: String, feeJson: String?, speedTier: String?) -> String?  {
@@ -14627,6 +14787,25 @@ public func toQuantity(value: String)throws  -> String  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_to_quantity(
         FfiConverterString.lower(value),uniffiCallStatus
+    )
+})
+}
+/**
+ * A COIN's mark (`remote_mark::token_mark`): `ethereum_data_url` is the
+ * person's chain-data endpoint ("" = the built-in one), `token_address`
+ * `None` for the chain's native coin, `named` the logo URLs an index already
+ * gave (tried first). A native coin wears its home chain's logo, and its
+ * badge is hidden on that chain.
+ */
+public func tokenMark(ethereumDataUrl: String, chainId: UInt32, symbol: String, tokenAddress: String?, named: [String]) -> MarkView  {
+    return try!  FfiConverterTypeMarkView_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_token_mark(
+        FfiConverterString.lower(ethereumDataUrl),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(symbol),
+        FfiConverterOptionString.lower(tokenAddress),
+        FfiConverterSequenceString.lower(named),uniffiCallStatus
     )
 })
 }
@@ -15716,6 +15895,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_canonicalize_signature() != 18808) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_chain_logo_url() != 40193) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_chain_mark() != 38157) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_checksum_address() != 58505) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15992,7 +16177,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 51832) {
+    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 45936) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_ending_of() != 27357) {
@@ -16023,6 +16208,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_to_quantity() != 54875) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_token_mark() != 53788) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_typed_data_document() != 37492) {
@@ -16248,6 +16436,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_exists() != 43125) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_i18n_format_relative_time() != 35001) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_language() != 981) {

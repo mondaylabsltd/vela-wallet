@@ -113,8 +113,8 @@ test('an unlimited approval is kept as asked and said in danger; a cap is one ch
 	]);
 
 	// The sheet is the core's: it opens because `sign_request` says so.
-	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
-	await expect(slider).toBeVisible({ timeout: 25_000 });
+	const confirm = page.getByTestId('signing-confirm');
+	await expect(confirm).toBeVisible({ timeout: 25_000 });
 
 	// The guard's verdict, on screen (2026-09-26): the cap reads "Unlimited",
 	// the site's own chip is the one chosen — Permit2 bundles revert when the
@@ -143,7 +143,7 @@ test('rejecting answers the requester with 4001 — the ✕ IS the refusal', asy
 	await openWallet(page);
 	await fire(page, 'personal_sign', ['0x68656c6c6f', '0xD400866e00B055B20752a826CD5C89b811de130b']);
 
-	const sheet = page.getByRole('button', { name: /^Slide to confirm/ });
+	const sheet = page.getByTestId('signing-confirm');
 	await expect(sheet).toBeVisible({ timeout: 25_000 });
 
 	// Spec 079: a stray Escape or a tap on the scrim no longer throws the
@@ -200,13 +200,12 @@ test('a signed message ends on the tick, and the tick goes by itself', async ({ 
 	);
 	await fire(page, 'personal_sign', ['0x68656c6c6f', '0xD400866e00B055B20752a826CD5C89b811de130b']);
 
-	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
-	await expect(slider).toBeVisible({ timeout: 25_000 });
+	const confirm = page.getByTestId('signing-confirm');
+	await expect(confirm).toBeVisible({ timeout: 25_000 });
 	const tick = page.getByText(en('clearSigning.alertSignedTitle'), { exact: true });
-	// Watched from the slide on: the tick is a beat, not a state.
+	// Watched from the tap on: the tick is a beat, not a state.
 	const seen = expect(tick).toBeVisible({ timeout: 20_000 });
-	await slider.focus();
-	await slider.press('Enter');
+	await confirm.click();
 	await seen;
 
 	await expect

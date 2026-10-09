@@ -85,7 +85,8 @@ async function arrive(method: string, params: unknown[], siteChain: number | nul
 		granted_address: ACCOUNT,
 		requested_address: null,
 		request_ts_ms: null,
-		now_ms: Date.now()
+		now_ms: Date.now(),
+		first_party: false
 	});
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	session.dispose();

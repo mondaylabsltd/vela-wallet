@@ -39,7 +39,7 @@ abused later" window. This pairs with the never-unlimited-approval guard (J05) t
 
 ## 6. UX / flow notes
 
-The signing sheet (I01) presents the decoded intent; confirming triggers the OS biometric. Slide-to-confirm (M04) precedes the biometric on high-consequence actions.
+The signing sheet (I01) presents the decoded intent; confirming triggers the OS biometric. A tap on the confirm button raises the biometric; the risk banner and colour, not a gesture, carry the high-consequence warning (#461 retired the slide).
 
 ## 7. Acceptance criteria
 

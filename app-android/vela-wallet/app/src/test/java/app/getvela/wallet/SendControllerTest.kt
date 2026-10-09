@@ -213,6 +213,51 @@ class SendControllerTest {
     }
 
     /**
+     * Issue #467, the split's 从通讯录 pill: it opens the book for the split
+     * as a whole (no row named), and the pick fills the first row with no
+     * address yet — else a new row at the end. It used to land in the single
+     * form's recipient, which a split hides and never pays. The rule is the
+     * core's; these are the calls the pill and the book's rows make.
+     */
+    @Test
+    fun `a pick from the split's contacts pill fills the first free row, else a new one`() {
+        val send = controller()
+        send.open(
+            account = me,
+            display = usd,
+            params = SendOpenParams(preselected_symbol = "POL", preselected_network = SendExecutor.network(137)),
+        )
+        send.awaitView("on the form with POL") { it.stage == SendStage.EnterDetails && it.selected_token?.symbol == "POL" }
+        send.setRecipient(PAYEE)
+        send.awaitView("the payee typed") { it.recipient == PAYEE }
+        send.enterSplit()
+        val split = send.awaitView("the split, as [the payee, a blank]") { it.split_mode && it.recipients.size == 2 }
+        assertEquals(PAYEE, split.recipients[0].address)
+        assertEquals("", split.recipients[1].address)
+
+        // The pill: the book for the split, no row named.
+        send.openContactPicker()
+        send.awaitView("the book is up over the split") { it.show_contact_picker && it.split_mode }
+        send.pickedAddress(FRIEND)
+        val first = send.awaitView("the pick took the blank row") { !it.show_contact_picker && it.recipients.getOrNull(1)?.address == FRIEND }
+        assertEquals("no row is added while one is free", 2, first.recipients.size)
+        assertEquals(split.recipients[0], first.recipients[0])
+        assertEquals("the blank row is the one filled", split.recipients[1].id, first.recipients[1].id)
+        assertEquals("the hidden single recipient is not where it went", PAYEE, first.recipient)
+        assertEquals(app.getvela.wallet.feature.flows.FlowState.SD2, app.getvela.wallet.feature.send.SendLive.flowState(first, feeSheetOpen = false))
+
+        // Every row taken: the next pick is a new row at the end.
+        send.openContactPicker()
+        send.awaitView("the book is up again") { it.show_contact_picker }
+        send.pickedAddress(THIRD)
+        val second = send.awaitView("a third row") { !it.show_contact_picker && it.recipients.size == 3 }
+        assertEquals(first.recipients, second.recipients.take(2))
+        assertEquals(THIRD, second.recipients[2].address)
+        assertEquals("", second.recipients[2].amount)
+        assertEquals(PAYEE, second.recipient)
+    }
+
+    /**
      * Spec 082 (T128): what a tracker entry means for the send on screen is
      * the core's one mapping (`sendReceiptOutcomeOf`) — this app's own `when`
      * over four statuses is gone. A lost reply the relay has not shown it
@@ -235,5 +280,7 @@ class SendControllerTest {
     private companion object {
         const val ME = "0x576a2cc9e6adc0c95989fa6aa104290aa940c73f"
         const val PAYEE = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
+        const val FRIEND = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        const val THIRD = "0xdddddddddddddddddddddddddddddddddddddddd"
     }
 }

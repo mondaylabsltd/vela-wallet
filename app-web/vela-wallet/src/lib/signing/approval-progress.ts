@@ -1,5 +1,5 @@
 /**
- * Where an approved request stands between the slide and the answer (spec 079).
+ * Where an approved request stands between the confirm and the answer (spec 079).
  *
  * The sheet stops being a form the moment the person approves: it says
  * "preparing" (the funding check, the nonce, the estimate), then "waiting for

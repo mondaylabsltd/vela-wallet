@@ -164,7 +164,6 @@ export type UtilityIconId =
 	| 'share-2'
 	| 'power'
 	| 'lock'
-	| 'grip-vertical'
 	| 'external-link'
 	| 'compass'
 	// spec 023 additions (the settings rows' leading glyphs + their chrome)
@@ -184,6 +183,8 @@ export type UtilityIconId =
 	| 'log-out'
 	| 'message-square-text'
 	| 'circle-alert'
+	// issue 460: a failure's mark — the ✕ is the sheet's close, never a status
+	| 'exclamation'
 	// 078 round 3: the bug report's screenshots
 	| 'image-plus'
 	// 078: Settings → Community — its nav glyph, and the three brands' marks
@@ -462,6 +463,17 @@ export const UTILITY_ICONS: Record<UtilityIconId, IconDef> = {
 			{ tag: 'path', d: 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21' }
 		]
 	},
+	// Issue 460: a failure wears '!', not the ✕ — the ✕ is the sheet's close,
+	// and a red one in a status disc reads as a dead close button. The same
+	// two strokes as Android VelaIcons.Exclamation, iOS LucideGlyph.exclamation
+	// and desktop Icon::Exclamation.
+	exclamation: {
+		style: 'stroke',
+		elements: [
+			{ tag: 'path', d: 'M12 6v7' },
+			{ tag: 'path', d: 'M12 17h.01' }
+		]
+	},
 	// lucide `image-plus`: the frame opened at its top-right for the plus.
 	'image-plus': {
 		style: 'stroke',
@@ -577,17 +589,6 @@ export const UTILITY_ICONS: Record<UtilityIconId, IconDef> = {
 		elements: [
 			{ tag: 'rect', width: '18', height: '11', x: '3', y: '11', rx: '2' },
 			{ tag: 'path', d: 'M7 11V7a5 5 0 0 1 10 0v4' }
-		]
-	},
-	'grip-vertical': {
-		style: 'fill',
-		paths: [
-			'M10 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M10 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M10 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M17 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M17 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
-			'M17 18.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z'
 		]
 	},
 	'external-link': {

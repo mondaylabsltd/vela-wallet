@@ -10,19 +10,19 @@
 
 use gpui::{Hsla, SharedString, rgb};
 
+use vela_core::app::clear_signing::ClearTerm;
+
 use super::{SigningStrings, Tone, fill};
 use crate::explore::fixtures as explore_fixtures;
 use crate::wallet::fixtures::{ADDRESS_FULL, WALLET_NAME, chain_ethereum};
-
-/// A token's mark: its letter and its brand colour (content, not tokens).
-pub type Mark = (SharedString, Hsla);
 
 #[derive(Clone)]
 pub struct AmountLine {
     pub sign: SharedString,
     pub value: SharedString,
     pub symbol: SharedString,
-    pub token: Option<Mark>,
+    /// The coin's token mark, drawn beside the figure.
+    pub token: Option<crate::flows::fixtures::TokenMark>,
     pub fiat: Option<SharedString>,
     pub caption: Option<SharedString>,
     pub tone: Tone,
@@ -122,7 +122,11 @@ pub enum Block {
 }
 
 pub struct FeeTokenOption {
-    pub mark: Mark,
+    /// The coin's own mark — the send flow's fee-coin sheet's: its logo from
+    /// the chain-data endpoint over the drawn ticker, the request's chain as
+    /// the badge. It was a letter on a tinted disc, so USDC and USDT were the
+    /// same "U".
+    pub mark: crate::flows::fixtures::TokenMark,
     pub name: SharedString,
     pub balance: SharedString,
     pub fee: SharedString,
@@ -148,11 +152,15 @@ pub enum FeeModel {
         /// choose"); only the drawing kept the chevron. Android's `tappable`
         /// and the web's are the same flag, same rule.
         tappable: bool,
-        /// Under the row, in the error colour: why the slide is shut when
-        /// the coin the fee was quoted in cannot pay it (issue #262) — or,
+        /// Under the row, in the error colour: why the confirm is shut
+        /// when the coin the fee was quoted in cannot pay it (issue #262) — or,
         /// spec 079, that the service could not be reached and the wallet
         /// will ask again by itself.
         warning: Option<SharedString>,
+        /// The warning is the last settled quote's, held while the fee is
+        /// measured again: its line keeps its height, drawn invisibly — the
+        /// verdict is about the last quote, so it is not said.
+        warning_held: bool,
         /// Spec 079: the send form's refresh control beside the row (its
         /// label is what a screen reader says), `None` in the drawings.
         refresh: Option<SharedString>,
@@ -177,8 +185,10 @@ pub struct SigningModel {
     pub dapp_tint: Hsla,
     pub network_name: SharedString,
     pub network_dot: Hsla,
-    /// The wallet asking ITSELF (the key backup): its own mark and name, no host.
-    pub dapp_own: bool,
+    /// The wallet asking ITSELF (the key backup) — the core's
+    /// `SignRequestView.first_party`, never read off the request's bytes: no
+    /// requester header, and the intent leads as the headline.
+    pub first_party: bool,
     /// The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19).
     pub dapp_icon_urls: Vec<SharedString>,
     /// The chain's logo; the dot shows until it lands, and when there is none.
@@ -192,7 +202,7 @@ pub struct SigningModel {
     /// vocabulary: closing the column is the rejection.
     pub confirm_label: SharedString,
     pub confirm_enabled: bool,
-    /// Why the slide is shut, in the core's words (spec 099 R7) — under it,
+    /// Why the confirm is shut, in the core's words (spec 099 R7) — under it,
     /// so a dead control is never without its reason.
     pub confirm_note: Option<SharedString>,
     /// The third column's heading. The panel scaffold takes it from the page,
@@ -216,24 +226,64 @@ pub const DESKTOP_STATES: [&str; 10] = [
     dead_code,
     reason = "cross-platform scenario inventory (data-model.md §3)"
 )]
-pub const ALL_STATES: [&str; 35] = [
+pub const ALL_STATES: [&str; 36] = [
     "cs1", "cs2", "cs3", "cs4", "cs5", "cs6", "cs7", "cs8", "cs9", "cs10", "cs11", "cs12", "cs13",
     "cs14", "cs15", "cs16", "cs17", "cs18", "cs19", "cs20", "cs21", "cs22", "cs23", "cs24", "cs25",
     "cs26", "cs27", "cs28", "cs29", "cs30", "cs31", "cs32", "cs33",
     // Spec 032 phase 39: the state nobody had drawn — a cap being TYPED, and
     // the same field with the core refusing what is in it.
     "cs34", "cs35",
+    // The wallet asking itself: the key backup to Ethereum, first-party —
+    // no requester header, the intent as the headline, the network as the
+    // first row, the confirm saying the intent.
+    "cs36",
 ];
 
-fn mark(letter: &'static str, hex: u32) -> Mark {
-    (letter.into(), rgb(hex).into())
+/// The scenario `VELA_SIGNING_STATE=cs36` names, if it names one — with
+/// `VELA_PAGE=gallery`, the window opens with the signing column on that
+/// drawing. Same env-pin family as `VELA_FLOW` and `VELA_GALLERY_TAB`: a
+/// screenshot pass cannot click its way to a request nobody raised.
+pub fn from_env() -> Option<&'static str> {
+    let want = crate::dev_env::var!("VELA_SIGNING_STATE")?;
+    ALL_STATES
+        .into_iter()
+        .find(|state| state.eq_ignore_ascii_case(want.trim()))
+}
+
+/// A coin on an amount line as the drawings show it: its token mark on
+/// Ethereum, by the core's rule — its logo over its glyph, as a live line
+/// would wear it (the gallery's network rows fetch their logos the same way;
+/// offline, the glyph is what stays). `contract` is the coin's mainnet
+/// contract, `None` for ETH; a coin the drawings do not name one for is a
+/// contract the rule cannot place, so it gets no guessed logo.
+fn coin(ticker: &'static str, contract: Option<&str>) -> crate::flows::fixtures::TokenMark {
+    crate::flows::fixtures::TokenMark {
+        ticker: ticker.into(),
+        badge: chain_ethereum(),
+        logos: crate::marks::token_logos(1, ticker, contract, &[]),
+    }
+}
+
+/// A fee coin's mark as the drawings show it: the ticker glyph and the
+/// chain's badge colour, with no logos — the documented fallback, so the
+/// gallery never reaches the network. The badge is hidden where the live
+/// mark hides it, on the chain's own coin (ETH on Ethereum).
+fn fee_mark(ticker: &'static str) -> crate::flows::fixtures::TokenMark {
+    crate::flows::fixtures::TokenMark {
+        ticker: ticker.into(),
+        badge: chain_ethereum(),
+        logos: crate::marks::Logos {
+            badge_hidden: ticker == "ETH",
+            ..crate::marks::Logos::default()
+        },
+    }
 }
 
 fn amount(
     sign: &'static str,
     value: &'static str,
     symbol: &'static str,
-    token: Mark,
+    token: crate::flows::fixtures::TokenMark,
     tone: Tone,
 ) -> AmountLine {
     AmountLine {
@@ -296,7 +346,7 @@ fn base(
         dapp_tint: dapp.tint,
         network_name: "Ethereum".into(),
         network_dot: chain_ethereum(),
-        dapp_own: false,
+        first_party: false,
         dapp_icon_urls: Vec::new(),
         network_logo: None,
         blocks,
@@ -305,6 +355,7 @@ fn base(
             value: "~0.0021 ETH ≈ $5.40".into(),
             selector: None,
             warning: None,
+            warning_held: false,
             tappable: true,
             refresh: None,
             refreshing: false,
@@ -313,7 +364,7 @@ fn base(
         signer_label: s.signing_account.clone(),
         signer_name: WALLET_NAME.into(),
         signer_seed: ADDRESS_FULL.into(),
-        confirm_label: format!("{} · {}", s.slide_to_confirm, confirm_action).into(),
+        confirm_label: confirm_action.clone(),
         confirm_enabled: true,
         confirm_note: None,
         panel_title: s.panel_title.clone(),
@@ -338,11 +389,11 @@ const ADDRESS_DISPLAY: &str = "0x14fB1f…D1eA5c";
 
 #[allow(clippy::too_many_lines, reason = "33 scenarios, one arm each")]
 pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
-    let usdc = mark("U", 0x2775ca);
-    let eth = mark("E", 0x627eea);
-    let weth = mark("W", 0x8a92b2);
-    let spweth = mark("S", 0x4c6fff);
-    let usdt = mark("T", 0x26a17b);
+    let usdc = coin("USDC", Some("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"));
+    let eth = coin("ETH", None);
+    let weth = coin("WETH", Some("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"));
+    let spweth = coin("spWETH", Some(""));
+    let usdt = coin("USDT", Some("0xdac17f958d2ee523a2206206994597c13d831ec7"));
 
     let uniswap = || Dapp {
         name: "Uniswap",
@@ -572,7 +623,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
         // The typed cap. cs5 is where this starts — an unlimited request kept
         // on its Requested chip — and this is what the card becomes once
         // somebody picks Custom: the field under the chips, the big number
-        // above counting what has been typed, and the slide shut while the
+        // above counting what has been typed, and the confirm shut while the
         // typed amount is not one.
         "cs34" => {
             let mut m = base(
@@ -612,14 +663,14 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                 ],
                 &s.intent_approve,
             );
-            // A finite cap is a cap: the slide may arm.
+            // A finite cap is a cap: the confirm may arm.
             m.confirm_enabled = true;
             m
         }
 
         // The same field with something in it the core will not take. The
         // number above falls back to what is still true — the request is
-        // unlimited — and the slide is shut, because a cap nobody could parse
+        // unlimited — and the confirm is shut, because a cap nobody could parse
         // is not a cap.
         "cs35" => {
             let mut m = base(
@@ -660,6 +711,41 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                 &s.intent_approve,
             );
             m.confirm_enabled = false;
+            m
+        }
+
+        // The wallet's own key backup to Ethereum, as the live column draws
+        // the core's reading of it (a test holds the two together): the
+        // intent leads as the headline, then Network / Address / Public keys,
+        // each in the core's words; the confirm says the intent.
+        "cs36" => {
+            let term = |term: ClearTerm| s.terms.get(&term).cloned().unwrap_or_default();
+            let intent = term(ClearTerm::IntentBackUpPublicKeys);
+            let mut m = base(
+                s,
+                "cs36",
+                Dapp {
+                    name: "Vela Wallet",
+                    host: "",
+                    letter: "V",
+                    tint: unknown_tint(),
+                },
+                vec![
+                    // Success: the core grades the backup safe — the
+                    // headline still draws it in the base ink.
+                    Block::Intent {
+                        text: intent.clone(),
+                        tone: Tone::Success,
+                    },
+                    Block::Rows(vec![
+                        row(term(ClearTerm::LabelNetwork), "Ethereum"),
+                        mono_row(term(ClearTerm::LabelAddress), "0x88cCA0…266894"),
+                        row(term(ClearTerm::LabelPublicKeys), "3"),
+                    ]),
+                ],
+                &intent,
+            );
+            m.first_party = true;
             m
         }
 
@@ -906,7 +992,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         s.fee_token_title.clone(),
                         vec![
                             FeeTokenOption {
-                                mark: eth.clone(),
+                                mark: fee_mark("ETH"),
                                 name: "ETH".into(),
                                 balance: format!("{} 0.0689", s.fee_balance).into(),
                                 fee: "~0.0021 ETH".into(),
@@ -915,7 +1001,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                                 reason: None,
                             },
                             FeeTokenOption {
-                                mark: usdc.clone(),
+                                mark: fee_mark("USDC"),
                                 name: "USDC".into(),
                                 balance: format!("{} 1,240.00", s.fee_balance).into(),
                                 fee: "~5.55 USDC".into(),
@@ -926,6 +1012,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         ],
                     )),
                     warning: None,
+                    warning_held: false,
                     refresh: None,
                     refreshing: false,
                     stale_note: None,
@@ -1689,7 +1776,7 @@ mod tests {
     use crate::loc::Loc;
 
     /// Every scenario builds, and none of them ships an empty confirm label —
-    /// the slide is the only way to say yes, so it must always say what to.
+    /// the confirm is the only way to say yes, so it must always say what to.
     #[test]
     fn every_scenario_builds() {
         let strings = SigningStrings::resolve(&Loc::from_env());
@@ -1698,14 +1785,76 @@ mod tests {
             assert!(!model.blocks.is_empty(), "{state} has no blocks");
             assert!(
                 !model.confirm_label.is_empty(),
-                "{state} has no slide label"
+                "{state} has no confirm label"
             );
             assert!(!model.dapp_name.is_empty(), "{state} has no dApp name");
         }
     }
 
+    /// Issue #461: every drawn confirm is a tap that says the action alone —
+    /// the scenario's own verb, with no "Slide to confirm ·" before it.
+    #[test]
+    fn every_drawn_confirm_says_the_action_alone() {
+        let s = SigningStrings::resolve(&Loc::from_env());
+        let verbs = [
+            &s.confirm_send,
+            &s.confirm_swap,
+            &s.confirm_deposit,
+            &s.confirm_withdraw,
+            &s.confirm_plain,
+            &s.sign_label,
+            &s.intent_approve,
+            &s.intent_approve_all,
+            &s.intent_revoke,
+            &s.intent_transfer_nft,
+            &s.intent_deploy,
+            &s.intent_permit,
+            &s.intent_safe,
+            &s.intent_sign_in,
+        ];
+        let backup = s
+            .terms
+            .get(&ClearTerm::IntentBackUpPublicKeys)
+            .cloned()
+            .unwrap_or_default();
+        let verbs: Vec<&SharedString> = verbs.into_iter().chain([&backup]).collect();
+        for state in ALL_STATES {
+            let model = build(state, &s);
+            assert!(
+                verbs.contains(&&model.confirm_label),
+                "{state}: `{}` is not one action's words",
+                model.confirm_label
+            );
+        }
+        assert_eq!(build("cs11", &s).confirm_label, s.confirm_swap);
+    }
+
+    /// The kind rule on the amount lines: a coin beside a figure wears its
+    /// own token mark, lettered from the same ticker the line names — never
+    /// a one-letter disc that could stand for two coins.
+    #[test]
+    fn every_amount_line_wears_its_own_coins_mark() {
+        let s = SigningStrings::resolve(&Loc::from_env());
+        let mut seen = 0;
+        for state in ALL_STATES {
+            for block in build(state, &s).blocks {
+                let lines = match block {
+                    Block::Amount { line, .. } => vec![line],
+                    Block::Swap { pay, receive } => vec![pay, receive],
+                    _ => Vec::new(),
+                };
+                for line in lines {
+                    let Some(mark) = line.token else { continue };
+                    seen += 1;
+                    assert_eq!(mark.ticker, line.symbol, "{state}");
+                }
+            }
+        }
+        assert!(seen > 0, "the drawings draw coins beside their figures");
+    }
+
     /// Unlimited kept as asked, asserted rather than trusted (2026-09-26):
-    /// CS5 opens on its requested chip, says the danger, and may be slid.
+    /// CS5 opens on its requested chip, says the danger, and may be confirmed.
     #[test]
     fn unlimited_approval_is_kept_as_requested_and_said() {
         let strings = SigningStrings::resolve(&Loc::from_env());

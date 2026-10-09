@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! Open ─► SelectToken ─► EnterDetails ─► Continue{estimate ∥ treasury, 15s cap}
-//!            │ multi picker                  │ pass ─► Confirm ─slide─► lock.begin
+//!            │ multi picker                  │ pass ─► Confirm ─tap───► lock.begin
 //!            └ split editor                  └ fail/low-float ─► stay   │
 //!   Confirm: credential ─► treasury recheck ─► SubmitUserOp ─► Submitted│
 //!            (each hop is a cancel checkpoint — a passkey never          ▼
@@ -621,6 +621,51 @@ pub struct SendRelayUnreachable {
     /// the core when it publishes the sheet.
     #[serde(default)]
     pub operator_served: bool,
+}
+
+/// What "Report this" files about a relay stop on a network Vela ships
+/// (issue 466): built here once, so every shell files the same words under
+/// the same dedup key through the in-app reporter it already has (preview,
+/// consent, send, the prefilled form as the fallback).
+///
+/// English on purpose: it is read on the tracker by whoever runs the relay,
+/// not by the person — data, not corpus. It names the relay treasury's full
+/// address and figures. Those are the OPERATOR's, and public (the relay
+/// serves them at `/v1/treasury/<chain>`), never the person's: which is why
+/// they ride in `what`, which the reporter files as written, and never in
+/// the device facts it scrubs of addresses.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendRelayReport {
+    /// What happened. The first line is the issue's title, at most 80
+    /// characters ("Relayer out of gas on Unichain (130)"); the facts follow
+    /// after a blank line.
+    pub what: String,
+    /// How the person got there, numbered as the bug form asks.
+    pub steps: String,
+    /// The bug form's area option, verbatim: `"Send"`.
+    pub area: String,
+    /// The dedup key — `relay-gas-<chain>` or `relay-unreachable-<chain>`: one
+    /// open issue per outage per chain, however many people report it and
+    /// whatever the balance reads meanwhile.
+    pub fingerprint: String,
+}
+
+/// [`SendRelayReport::area`]: the bug form's "Send" option.
+pub const RELAY_REPORT_AREA: &str = "Send";
+
+/// The coin the form's fee row names ([`SendView::fee_coin`]): what the shell
+/// hands its token mark — the core's `remote_mark::token_mark` — to draw.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendFeeCoin {
+    /// The coin's ticker as the wallet writes it. Empty only for an ERC-20
+    /// nothing on the form names — the mark then draws its logo alone.
+    pub symbol: String,
+    /// `None` = the chain's own coin.
+    pub contract: Option<String>,
+    /// The chain the fee is paid on — never 0.
+    pub chain_id: u32,
 }
 
 /// A scan, already parsed by the shell (`parseEIP681` — the parser itself is
@@ -1332,20 +1377,24 @@ pub enum Event {
         recipients: Vec<SendRecipientDraft>,
     },
     /// `target` = the split row the picker fills; `None` = the single-mode
-    /// recipient field.
+    /// recipient field, or — in a split — the first row with no address,
+    /// else a new row.
     OpenContactPicker {
         target: Option<String>,
     },
     CloseContactPicker,
-    /// The contact picker chose an address.
+    /// The contact picker chose an address. It lands where
+    /// [`Event::OpenContactPicker`]'s `target` says; a shell never adds a
+    /// blank row of its own to aim a split's pick.
     PickedAddress {
         address: String,
     },
     OpenScanner,
     CloseScanner,
-    /// A scan, parsed by the shell. Routing (`SendScreen.tsx:181-203`): a
-    /// targeted split row takes ONLY the address (invariant ⑬); a full
-    /// request re-locks the whole flow; anything else fills the recipient.
+    /// A scan, parsed by the shell. Routing (`SendScreen.tsx:181-203`): in a
+    /// split, ONLY the address, into the row a pick would take (invariant
+    /// ⑬); a full request re-locks the whole flow; anything else fills the
+    /// recipient.
     ScanResolved {
         scan: SendScan,
     },
@@ -1377,7 +1426,33 @@ pub enum Event {
     FeeBusyChanged {
         busy: bool,
     },
-    /// The slide-to-confirm completed.
+    /// The fee card's coin in force — `FeeView.fee_token`, verbatim (`None` =
+    /// the chain's own coin). It names the fee row's coin while no estimate
+    /// is in hand ([`SendView::fee_coin`]) — when nobody chose, the fee
+    /// machine picks a coin that can pay, and a quote that then fails leaves
+    /// that coin in force with no estimate to say so. It prices and signs
+    /// nothing.
+    ///
+    /// This machine files the word against the form's chain AT THE MOMENT it
+    /// is said (a contract is an address on ONE chain), and DROPS it while
+    /// the form has no chain yet. So every shell's bridge — the same one that
+    /// mirrors [`Event::FeeBusyChanged`] — keeps one rule:
+    ///
+    /// - it speaks only while the fee session prices the form's own chain:
+    ///   the chain of the session's last question equals the form's chain
+    ///   (the selected token's, else the sweep's), both known;
+    /// - it dedupes on the pair (chain id, token): it sends whenever that
+    ///   pair differs from what this send journey was last told — so a coin
+    ///   first seen before the form had a chain, or while the session still
+    ///   priced the network just left, is told once the form is on the
+    ///   priced chain, and the same coin is told again for a new chain;
+    /// - a fresh journey has been told nothing: its first word always goes,
+    ///   `None` included.
+    FeeTokenChanged {
+        fee_token: Option<String>,
+    },
+    /// The confirm button was tapped. The name (and its `slide_confirm`
+    /// wire tag) predates the tap: every shell dispatches it, so it stays.
     SlideConfirm,
     /// The passkey sheet opened inside `SubmitUserOp`.
     SigningStarted,
@@ -1596,7 +1671,7 @@ enum Pipeline {
     },
     /// The sign→submit is in flight. Kept alive across a Cancel-during-signing
     /// (the shell's outcome decides, exactly as TS), replaced by any newer
-    /// slide.
+    /// confirm.
     Submitting {
         id: u64,
         gen: u64,
@@ -1661,6 +1736,15 @@ enum MaxFill {
     /// on the balance line's ladder ([`max_figure`]); every gate, the confirm
     /// figure and the signed call read this ([`model_token_amount`]).
     Exact(String),
+}
+
+/// What [`Event::FeeTokenChanged`] said, and the form's chain when it said
+/// it: a contract is an address on ONE chain, and a word about the network
+/// the form just left never names this one's coin.
+#[derive(Clone, Debug, PartialEq)]
+struct FeeCardCoin {
+    chain_id: u32,
+    token: Option<String>,
 }
 
 #[derive(Default)]
@@ -1735,6 +1819,9 @@ pub struct Model {
     /// fee machine's choice" and a quote in any coin is its answer; after a
     /// pick, `None` is native, said on purpose.
     fee_coin_chosen: bool,
+    /// The fee card's coin in force, as [`Event::FeeTokenChanged`] last said
+    /// it — `None` until it has. Read for the fee row's coin alone.
+    fee_card_coin: Option<FeeCardCoin>,
     treasury_bootstrap: Option<SendTreasuryStatus>,
     treasury_watch: Option<TreasuryWatch>,
     relay_unreachable: Option<SendRelayUnreachable>,
@@ -2017,13 +2104,13 @@ pub struct SendView {
     /// fires either. A dimmed control with no sentence is a refusal the user
     /// cannot act on. `Some` exactly when `denom_toggle_shown && !enabled`.
     pub denom_toggle_reason: Option<SendUnitIssue>,
-    /// **Why** the confirm slide is disarmed, when what disarmed it is the
+    /// **Why** the confirm is disabled, when what disabled it is the
     /// money.
     ///
     /// [`SendView::can_confirm`] never looked at the amount at all: a
     /// display-currency commit landing while the confirm page is open
     /// re-denominates the field to empty (`redenominate_to_display`), and the
-    /// slider stayed armed over a figure that resolved to nothing — a
+    /// confirm stayed enabled over a figure that resolved to nothing — a
     /// zero-value transfer, signable, unexplained. The gate now asks the same
     /// question `can_continue` asks, and this is the sentence that goes with
     /// the refusal (`send.warnCannotConvert`, the key that round added).
@@ -2099,6 +2186,28 @@ pub struct SendView {
     /// Chain-guarded (`selectedFeeEstimate`) — never a prior network's quote.
     pub fee: Option<FeeEstimateView>,
     pub gas_fee_token: Option<String>,
+    /// The coin the form's fee row wears, whether or not a figure is beside
+    /// it. The four shells each had their own answer for the frames with no
+    /// estimate — a quote out, a quote that failed, a speed being measured —
+    /// and drew one state three ways (an empty disc, the chain's coin, the
+    /// chosen coin). In order:
+    ///
+    /// 1. the estimate in hand — this speed's own when it has one, otherwise
+    ///    the speed just left's, which this machine keeps across a speed
+    ///    change and which names the coin that will pay (the coin does not
+    ///    change with the speed; the fee machine's `keep_quote_coin` keeps a
+    ///    quote on screen in the coin in force);
+    /// 2. the coin in force — the fee card's (`FeeView.fee_token`, mirrored by
+    ///    [`Event::FeeTokenChanged`] under its bridge rule, and only when it
+    ///    was said about this chain), else the person's pick on this form;
+    ///    named by the form's holdings;
+    /// 3. the chain's own coin;
+    ///
+    /// on the selected token's chain, else the sweep's, else the estimate's.
+    /// `None` only while no chain is known. The figure is not here: the row
+    /// still shows only this speed's own (issue 681).
+    #[serde(default)]
+    pub fee_coin: Option<SendFeeCoin>,
     pub amount_warning: Option<SendAmountWarning>,
     pub same_asset_fee_issue: Option<SendFeeIssueView>,
     /// The form's button gate — the whole of it. While a relay stop is up the
@@ -2106,7 +2215,7 @@ pub struct SendView {
     /// all the same; a shell draws this flag and adds no reason of its own
     /// (issue 424).
     pub can_continue: bool,
-    /// The confirm slide gate, the whole of it: fee settled ∧ nothing
+    /// The confirm gate, the whole of it: fee settled ∧ nothing
     /// re-quoting ∧ no same-asset breach ∧ idle ∧ no signature under way ∧ no
     /// refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
     /// the same predicate; a shell adds nothing to it (issue 424).
@@ -2120,6 +2229,12 @@ pub struct SendView {
     pub treasury_bootstrap: Option<SendTreasuryStatus>,
     /// Spec 098 §2: the relay cannot serve this chain; the send stops here.
     pub relay_unreachable: Option<SendRelayUnreachable>,
+    /// What the stop's "Report this" files (issue 466). `Some` exactly while
+    /// a relay stop is up on a network Vela ships — the stops whose
+    /// `operator_served` is true; on a network the person added there is no
+    /// operator to tell. The shell snapshots it when the button is pressed:
+    /// the stop may close (funded) while the report is being read.
+    pub relay_report: Option<SendRelayReport>,
     pub recipient_identity: Option<SendRecipientIdentity>,
     /// Who the money goes to, as the form's recipient line and the confirm
     /// page name them (spec 097 F, S2): the address always, a name only
@@ -2138,7 +2253,7 @@ pub struct SendView {
     /// list there — the registry's stablecoins and wrapped coin they hold, and
     /// tokens they added. A token contract almost never has a way to give
     /// back what is sent to it, so the form and the confirm page say so
-    /// plainly before the slide; it does not block. Not asked of a split's
+    /// plainly before the confirm; it does not block. Not asked of a split's
     /// rows.
     pub recipient_is_token_contract: bool,
     pub sim_json: Option<String>,
@@ -2288,6 +2403,9 @@ impl Send {
             Event::ChooseFeeToken { token } => {
                 model.gas_fee_token = token;
                 model.fee_coin_chosen = true;
+                // The pick is newer than the card's last word: it names the
+                // row's coin until the card says what it took up.
+                model.fee_card_coin = None;
                 // On the form the fee coin is part of what the quote is about
                 // — and so is a Max, which holds back a fee only in the coin
                 // being sent.
@@ -2296,6 +2414,13 @@ impl Send {
             Event::FeeUpdated { estimate } => fee_updated(model, estimate),
             Event::FeeBusyChanged { busy } => {
                 model.fee_busy = busy;
+                render()
+            }
+            Event::FeeTokenChanged { fee_token } => {
+                model.fee_card_coin = form_chain(model).map(|chain_id| FeeCardCoin {
+                    chain_id,
+                    token: fee_token,
+                });
                 render()
             }
             Event::SlideConfirm => slide_confirm(model),
@@ -2467,15 +2592,15 @@ impl Send {
                     .map(|left| from_base_units(left, token.decimals))
             });
 
-        // The confirm slide's gate — and the same amount question `Continue`
+        // The confirm's gate — and the same amount question `Continue`
         // asks, which this twin never asked.
         //
         // Everything it checked was about the FEE and the pipeline; the money
         // itself was never re-examined after `Continue`. But the confirm page
         // is a page someone can sit on, and a `display_changed` commit landing
         // underneath re-denominates the field to empty
-        // (`redenominate_to_display`) — leaving a slider armed over a figure
-        // that resolves to nothing. Sliding it signed a zero-value transfer
+        // (`redenominate_to_display`) — leaving a confirm enabled over a figure
+        // that resolves to nothing. Confirming signed a zero-value transfer
         // with no warning anywhere. The batch modes carry their money in
         // `recipients`/`multi_specs`, not in `model.amount`, so they are asked
         // the same question `can_continue` asks them.
@@ -2483,7 +2608,7 @@ impl Send {
         // The whole gate, here and only here (issue #424): the shells used to
         // AND their own reasons onto it — a relay stop, a signature under way,
         // a refused submit — and did not all AND the same ones, so one client
-        // armed a slide another held. `slide_confirm` refuses on the same
+        // enabled a confirm another held. `slide_confirm` refuses on the same
         // predicate.
         let can_confirm = stage == SendStage::Confirm
             && confirm_gate_open(model)
@@ -2559,6 +2684,7 @@ impl Send {
             fee_busy: model.fee_busy,
             fee: selected_fee(model).map(fee_to_view),
             gas_fee_token: quoted_fee_token(model, selected_fee(model)),
+            fee_coin: fee_coin(model),
             amount_warning: warning,
             same_asset_fee_issue: issue,
             can_continue,
@@ -2578,6 +2704,7 @@ impl Send {
                 sheet.operator_served = super::network_admin::is_builtin_chain(sheet.chain_id);
                 sheet
             }),
+            relay_report: relay_report(model),
             recipient_identity: model.recipient_identity.clone(),
             payees: payees(model),
             recipient_risk: model.recipient_risk.clone(),
@@ -4162,19 +4289,53 @@ fn recipients_changed(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
 /// way `seed_split` does for a whole group. Leaving the sheet up after the
 /// person chose would make the shell dispatch a second event to say what the
 /// first one already meant (spec 028 US5).
+///
+/// Which row, in a split: the one the picker was opened for; with no row
+/// named (a split's "from contacts" opens the picker for the split as a
+/// whole), the first row with no address yet, else a new row at the end. The
+/// single form's recipient is hidden while a split is up, and a pick that
+/// went there was a person the screen never showed and the send never paid.
+/// The split's cap holds: with every one of its rows taken, nothing is added.
 fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
     model.show_contact_picker = false;
-    match model.picker_target.clone() {
-        Some(target) => {
-            for row in &mut model.recipients {
-                if row.id == target {
-                    row.address = address.clone();
-                }
-            }
-            render()
-        }
-        None => hand_in_recipient(model, address),
+    if !model.split_mode {
+        return hand_in_recipient(model, address);
     }
+    let named = model
+        .picker_target
+        .as_ref()
+        .and_then(|target| model.recipients.iter().position(|row| &row.id == target));
+    let slot = named.or_else(|| {
+        model
+            .recipients
+            .iter()
+            .position(|row| row.address.trim().is_empty())
+    });
+    match slot {
+        Some(index) => {
+            if let Some(row) = model.recipients.get_mut(index) {
+                // A row's name is the person's word for whoever its address
+                // was (a group member, a list's name column); another address
+                // is somebody else. The same address in another letter case
+                // (a list's lowercase, the book's checksum) is the same one.
+                if !row.address.trim().eq_ignore_ascii_case(address.trim()) {
+                    row.name = None;
+                }
+                row.address = address;
+            }
+        }
+        None if model.recipients.len() < BATCH_MAX_RECIPIENTS => {
+            let id = make_recipient_id(model);
+            model.recipients.push(SendRecipientDraft {
+                id,
+                address,
+                amount: String::new(),
+                name: None,
+            });
+        }
+        None => {}
+    }
+    render()
 }
 
 /// A recipient that arrived from outside the field — a scan, a pick from the
@@ -4199,9 +4360,12 @@ fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
     // filled (issue #270), on every shell. The targeted path below closes it
     // through `apply_picked_address`; a re-lock reopens the flow either way.
     model.show_contact_picker = false;
-    // Per-row scan in split mode — just the address; a full-request re-lock
-    // would blow away the other recipients (invariant ⑬).
-    if model.picker_target.is_some() {
+    // A scan in split mode — just the address, into the row it was for or
+    // the row a pick would take; a full-request re-lock would blow away the
+    // other recipients (invariant ⑬). The picker's scan row is a pick, so a
+    // split's targetless picker scans into the split, never into the hidden
+    // single recipient.
+    if model.split_mode {
         let address = match scan {
             SendScan::Request { recipient, .. } => recipient,
             SendScan::Text { data } => data,
@@ -4364,6 +4528,95 @@ fn chain_native_symbol(model: &Model, chain_id: u32) -> Option<String> {
         .map(|c| c.native_symbol.clone())
 }
 
+/// The chain the form is on: the selected token's, else the sweep's.
+fn form_chain(model: &Model) -> Option<u32> {
+    model
+        .selected_token
+        .as_ref()
+        .map(|token| token.chain_id)
+        .or(model.multi_chain_id)
+}
+
+/// [`SendView::fee_coin`].
+fn fee_coin(model: &Model) -> Option<SendFeeCoin> {
+    // 1. The estimate in hand. This machine holds one: each quote the fee card
+    // settles is mirrored here (`FeeUpdated`) and none is dropped for a speed
+    // change, so it is this speed's own once that has landed, and the speed
+    // just left's while it is measured — in the coin that will pay either way.
+    if let Some(fee) = selected_fee(model) {
+        let chain_id = fee.chain_id;
+        return Some(match &fee.fee_asset {
+            FeeAsset::Native => native_fee_coin(model, chain_id),
+            FeeAsset::Erc20 { token, symbol, .. } => SendFeeCoin {
+                symbol: symbol
+                    .clone()
+                    .filter(|symbol| !symbol.trim().is_empty())
+                    .or_else(|| held_symbol(model, chain_id, token))
+                    .unwrap_or_default(),
+                contract: Some(token.clone()),
+                chain_id,
+            },
+        });
+    }
+    let chain_id = form_chain(model).or_else(|| model.fee_estimate.as_ref().map(|f| f.chain_id))?;
+    // 2. The coin in force: the card's word when it spoke about this chain,
+    // else the person's pick. `None` is the chain's own coin.
+    let in_force = match &model.fee_card_coin {
+        Some(card) if card.chain_id == chain_id => card.token.clone(),
+        _ if model.fee_coin_chosen => model.gas_fee_token.clone(),
+        _ => None,
+    };
+    // 3. The chain's own coin.
+    Some(match in_force.filter(|token| !token.trim().is_empty()) {
+        Some(token) => SendFeeCoin {
+            symbol: held_symbol(model, chain_id, &token).unwrap_or_default(),
+            contract: Some(token),
+            chain_id,
+        },
+        None => native_fee_coin(model, chain_id),
+    })
+}
+
+/// The chain's own coin as the fee row names it: the network list's symbol in
+/// the registry's spelling, else the registry's, else the holding's.
+fn native_fee_coin(model: &Model, chain_id: u32) -> SendFeeCoin {
+    let symbol = chain_native_symbol(model, chain_id)
+        .filter(|symbol| !symbol.trim().is_empty())
+        .map(|symbol| super::network_admin::display_native_symbol(chain_id, None, &symbol))
+        .or_else(|| super::network_admin::builtin_native_symbol(chain_id).map(str::to_owned))
+        .or_else(|| {
+            held(model)
+                .find(|token| token.chain_id == chain_id && token.is_native())
+                .map(|token| token.symbol.clone())
+        })
+        .unwrap_or_default();
+    SendFeeCoin {
+        symbol,
+        contract: None,
+        chain_id,
+    }
+}
+
+/// An ERC-20's ticker from the form's holdings on that chain, contracts
+/// compared case aside.
+fn held_symbol(model: &Model, chain_id: u32, contract: &str) -> Option<String> {
+    held(model)
+        .find(|token| {
+            token.chain_id == chain_id
+                && token
+                    .token_address
+                    .as_deref()
+                    .is_some_and(|address| address.trim().eq_ignore_ascii_case(contract.trim()))
+        })
+        .map(|token| token.symbol.clone())
+        .filter(|symbol| !symbol.trim().is_empty())
+}
+
+/// The form's holdings: the selected token first, then the list.
+fn held(model: &Model) -> impl Iterator<Item = &SendToken> {
+    model.selected_token.iter().chain(model.tokens.iter())
+}
+
 /// Nothing is sendable: the fee is drawn from the asset being sent, and the
 /// reserve `Max` holds back for it meets or exceeds the whole balance.
 ///
@@ -4504,7 +4757,7 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
     fee_asset_shortfall(model, token.chain_id, &[token.token_address.as_deref()])
 }
 
-/// The `Continue` / slide reading of [`fee_asset_shortfall`]: the fee coin has
+/// The `Continue` / confirm reading of [`fee_asset_shortfall`]: the fee coin has
 /// to be there, whatever the mode. A sweep is the exception it names — its fee
 /// asset is reserved out of the very line that would pay it
 /// (`reserve_native_gas` / `reserve_fee_token`), so a picked fee asset answers
@@ -4914,9 +5167,9 @@ fn slide_confirm(model: &mut Model) -> Cmd {
         return Command::done();
     }
     // The gate `can_confirm` publishes, asked again here: a disabled control
-    // is a suggestion, and a slide from a stale frame must not sign over a
+    // is a suggestion, and a confirm from a stale frame must not sign over a
     // relay stop, a refused submit or a re-quote in flight (issue #424). A
-    // stop's own retry lowers the stop before it slides.
+    // stop's own retry lowers the stop before it confirms.
     if !confirm_gate_open(model) {
         return Command::done();
     }
@@ -4924,7 +5177,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
         return Command::done();
     };
     // A fee re-quote can turn a valid amount into an unpayable same-token
-    // send — never let the slide reach signing in that state (invariant ⑧).
+    // send — never let the confirm reach signing in that state (invariant ⑧).
     if derive_same_asset_issue(model).is_some() {
         return edit_amount(model);
     }
@@ -4946,7 +5199,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
 
     // …and a re-quote can also outgrow the native balance that has to pay it
     // (issue #211). This is the last gate before the passkey, so it answers
-    // out loud rather than bouncing: the slide is on the confirm screen, and
+    // out loud rather than bouncing: the person is on the confirm screen, and
     // the amount is not what is wrong.
     if let Some(warning) = fee_asset_gate(model) {
         return alert(
@@ -4956,7 +5209,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
             },
         );
     }
-    // Synchronous single-flight lock: a second slide in the same tick is a
+    // Synchronous single-flight lock: a second confirm in the same tick is a
     // no-op (invariant ④'s acquisition half).
     let Some(gen) = model.lock.begin() else {
         return Command::done();
@@ -5045,7 +5298,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
     };
     let chain_id = token.chain_id;
 
-    // In-band: sign EXACTLY the fee the confirm slide displayed (amount +
+    // In-band: sign EXACTLY the fee the confirm screen displayed (amount +
     // recipient) — the bundler's 2× gate rejects a stale quote loudly and the
     // user re-confirms a NEW number, never a silent mismatch (invariant ①).
     let current_fee = model
@@ -5248,7 +5501,7 @@ fn retry_after_bootstrap(model: &mut Model) -> Cmd {
     clear_relay_stops(model);
     // After funding the relayer, return through the step-appropriate flow
     // (`SendScreen.tsx:214-224`): enter-details re-runs the pre-confirm
-    // pre-check; confirm re-runs the slide.
+    // pre-check; the confirm step confirms again.
     match model.step {
         SendStep::EnterDetails => handle_continue(model),
         SendStep::Confirm => slide_confirm(model),
@@ -5963,6 +6216,79 @@ fn treasury_symbol(model: &Model, status: &SendTreasuryStatus) -> Option<String>
     }
 }
 
+/// [`SendView::relay_report`]: the report for the relay stop that is up, on
+/// a network Vela ships (the `operator_served` predicate), else `None`.
+fn relay_report(model: &Model) -> Option<SendRelayReport> {
+    // Where the stop met the person: the form's Continue, or the pre-sign
+    // recheck on the confirm page.
+    let pressed = if model.step == SendStep::Confirm {
+        "Confirm"
+    } else {
+        "Continue"
+    };
+    if let Some(status) = &model.treasury_bootstrap {
+        let chain = relay_report_chain(status.chain_id)?;
+        return Some(SendRelayReport {
+            what: format!(
+                "Relayer out of gas on {chain}\n\nTreasury: {}\n{}",
+                status.address,
+                treasury_figures(status, treasury_coin(model, status).as_ref()),
+            ),
+            steps: format!(
+                "1. Send on {chain}\n2. {pressed}: the relay's treasury check stopped \
+                 the send — its relayer is out of gas"
+            ),
+            area: RELAY_REPORT_AREA.to_owned(),
+            fingerprint: format!("relay-gas-{}", status.chain_id),
+        });
+    }
+    let sheet = model.relay_unreachable.as_ref()?;
+    let chain = relay_report_chain(sheet.chain_id)?;
+    Some(SendRelayReport {
+        what: format!(
+            "Relay can't reach {chain}\n\nThe relay's treasury check answered that it \
+             cannot serve this network: it has no RPC it can use for it."
+        ),
+        steps: format!(
+            "1. Send on {chain}\n2. {pressed}: the relay's treasury check stopped the \
+             send — it cannot serve this network"
+        ),
+        area: RELAY_REPORT_AREA.to_owned(),
+        fingerprint: format!("relay-unreachable-{}", sheet.chain_id),
+    })
+}
+
+/// "Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH)." — in whole coin
+/// with its symbol, as the stop shows them. Figures that cannot be put in a
+/// coin are written as the relay's own base units, with their unit, rather
+/// than not at all.
+fn treasury_figures(status: &SendTreasuryStatus, coin: Option<&SendTreasuryCoin>) -> String {
+    if let Some((coin, symbol)) = coin.and_then(|coin| Some((coin, coin.symbol.as_deref()?))) {
+        return format!(
+            "Has {} {symbol} of its {} {symbol} floor (short {} {symbol}).",
+            coin.balance, coin.floor, coin.suggested
+        );
+    }
+    let unit = match status.asset {
+        SendTreasuryAsset::Native => "wei",
+        SendTreasuryAsset::PathUsd => "micro-pathUSD",
+    };
+    format!(
+        "Has {} {unit} of its {} {unit} floor.",
+        status.balance.trim(),
+        status.floor.trim()
+    )
+}
+
+/// "Unichain (130)": a network Vela ships, by its name and id — `None` for
+/// any other, which has no operator to report to.
+fn relay_report_chain(chain_id: u32) -> Option<String> {
+    if !super::network_admin::is_builtin_chain(chain_id) {
+        return None;
+    }
+    super::network_admin::builtin_display_name(chain_id).map(|name| format!("{name} ({chain_id})"))
+}
+
 /// Open the treasury sheet and start watching the relay (spec 098 §4).
 fn open_bootstrap(model: &mut Model, status: SendTreasuryStatus) -> Cmd {
     let chain_id = status.chain_id;
@@ -5976,10 +6302,10 @@ fn relay_stopped(model: &Model) -> bool {
     model.treasury_bootstrap.is_some() || model.relay_unreachable.is_some()
 }
 
-/// The confirm slide's gate, less the two figure checks (a same-asset breach
-/// and a figure that stopped resolving), which the slide answers by going back
+/// The confirm's gate, less the two figure checks (a same-asset breach
+/// and a figure that stopped resolving), which the confirm answers by going back
 /// to the amount rather than by refusing. Published in `can_confirm`, and the
-/// slide refuses on it (issue #424): every reason here is already on the page
+/// confirm refuses on it (issue #424): every reason here is already on the page
 /// — the stop's own notice, the fee row re-quoting, the receipt or the error
 /// panel — so a refusal is never silent.
 fn confirm_gate_open(model: &Model) -> bool {
@@ -6656,6 +6982,49 @@ impl super::SplitEffect for SendEffect {
         match self {
             SendEffect::Render(_) => None,
             SendEffect::Shell(request) => Some(request),
+        }
+    }
+}
+
+#[cfg(test)]
+mod relay_report_tests {
+    use super::{relay_report, Model, SendRelayUnreachable, SendTreasuryAsset, SendTreasuryStatus};
+    use crate::app::network_admin::BUILTIN_CHAINS;
+
+    /// Every network Vela ships gets a title the tracker can show whole.
+    #[test]
+    fn every_built_in_chain_s_title_fits_in_80_characters() {
+        for chain in BUILTIN_CHAINS {
+            let unreachable = Model {
+                relay_unreachable: Some(SendRelayUnreachable {
+                    chain_id: chain.chain_id,
+                    operator_served: false,
+                }),
+                ..Model::default()
+            };
+            let gas = Model {
+                treasury_bootstrap: Some(SendTreasuryStatus {
+                    chain_id: chain.chain_id,
+                    address: "0x3e59292e18417f814112f731e7163534c6d2fe3c".to_owned(),
+                    asset: SendTreasuryAsset::Native,
+                    balance: "0".to_owned(),
+                    floor: "100000000000000".to_owned(),
+                    bootstrap_needed: true,
+                    operator_served: false,
+                    coin: None,
+                }),
+                ..Model::default()
+            };
+            for model in [unreachable, gas] {
+                let Some(report) = relay_report(&model) else {
+                    unreachable!("{} ships, so its stop has a report", chain.display_name)
+                };
+                let title = report.what.lines().next().unwrap_or_default();
+                assert!(
+                    title.chars().count() <= 80 && title.contains(chain.display_name),
+                    "{title:?}"
+                );
+            }
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Outcome status badge — the one circle behind every result state's glyph
-//! (spec 014, 6 variants). Glyphs are text (✓ × !) except the timeout clock,
-//! which is drawn with `PathBuilder` — no SVG assets exist in this shell
-//! (research D7), and gpui would render them monochrome anyway.
+//! (spec 014, 6 variants). The glyph is the text `!` except the timeout
+//! clock, which is drawn with `PathBuilder` — no SVG assets exist in this
+//! shell (research D7), and gpui would render them monochrome anyway.
 
 use crate::outcome::BadgeVariant;
 use crate::theme::{self, BADGE_CIRCLE, RING_STROKE, Theme};
@@ -26,8 +26,8 @@ pub fn status_badge(theme: &Theme, variant: BadgeVariant) -> Div {
         .items_center()
         .justify_center();
 
-    match variant {
-        BadgeVariant::Timeout => circle.child(
+    match glyph(variant) {
+        None => circle.child(
             div().size(px(BADGE_CIRCLE / 2.)).child(
                 canvas(
                     |_, _, _| (),
@@ -38,22 +38,27 @@ pub fn status_badge(theme: &Theme, variant: BadgeVariant) -> Div {
                 .size_full(),
             ),
         ),
-        _ => {
-            let glyph = match variant {
-                BadgeVariant::Error => "×",
-                // Warning and Info share the exclamation: the difference the
-                // person reads is the colour, and a second glyph would be a
-                // second thing to learn for the same fact.
-                _ => "!",
-            };
-            circle.child(
-                div()
-                    .text_size(theme::text_badge_glyph())
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(fg)
-                    .child(glyph),
-            )
-        }
+        Some(glyph) => circle.child(
+            div()
+                .text_size(theme::text_badge_glyph())
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(fg)
+                .child(glyph),
+        ),
+    }
+}
+
+/// The text a badge draws, or `None` for the timeout, whose clock is painted.
+///
+/// Error, Warning and Info all draw the exclamation: the difference the
+/// person reads is the colour, and a second glyph would be a second thing to
+/// learn for the same fact. Error used to draw `×` — and a red × in a disc
+/// at the top of a sheet reads as the button that closes it, which this one
+/// is not (issue 460).
+pub(crate) fn glyph(variant: BadgeVariant) -> Option<&'static str> {
+    match variant {
+        BadgeVariant::Timeout => None,
+        BadgeVariant::Error | BadgeVariant::Warning | BadgeVariant::Info => Some("!"),
     }
 }
 
@@ -83,5 +88,23 @@ fn paint_clock(b: Bounds<Pixels>, color: Hsla, window: &mut Window) {
     pb.line_to(at(r * 0.42, r * 0.12));
     if let Ok(path) = pb.build() {
         window.paint_path(path, color);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue 460: an error says "!", never the close glyph — the sheet's own
+    /// ✕ and the window's are the only crosses a person should try to press.
+    #[test]
+    fn an_error_badge_is_an_exclamation_not_a_close() {
+        assert_eq!(glyph(BadgeVariant::Error), Some("!"));
+        for close in ["×", "✕", "x", "X"] {
+            assert_ne!(glyph(BadgeVariant::Error), Some(close));
+        }
+        assert_eq!(glyph(BadgeVariant::Warning), glyph(BadgeVariant::Error));
+        assert_eq!(glyph(BadgeVariant::Info), glyph(BadgeVariant::Error));
+        assert_eq!(glyph(BadgeVariant::Timeout), None, "the clock is painted");
     }
 }

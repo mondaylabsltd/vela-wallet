@@ -1,0 +1,1546 @@
+{
+ "suite": "relative-time",
+ "source": "hand-written from I18n::format_relative_time (vela-core src/i18n/mod.rs), 2026-10-08, which the phones and the web client used to port; every expectation was computed outside the code under test, from the shipped catalogs' time.* words (assets/i18n), the ICU weekday table (src/l10n/datetime_data.rs) and an independent calendar, rounding half away from zero",
+ "cases": [
+  {
+   "name": "en/ahead-of-the-clock-is-now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781358390,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "now"
+   }
+  },
+  {
+   "name": "en/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781358300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "now"
+   }
+  },
+  {
+   "name": "en/under-45s-is-now-the-clock-floors",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781358256,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "now"
+   }
+  },
+  {
+   "name": "en/45s-is-1m",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781358255,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "1m"
+   }
+  },
+  {
+   "name": "en/89s-rounds-down",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781358211,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "1m"
+   }
+  },
+  {
+   "name": "en/90s-rounds-half-up-to-2m",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781358210,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2m"
+   }
+  },
+  {
+   "name": "en/59-and-a-half-minus-rounds-down",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781354731,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "59m"
+   }
+  },
+  {
+   "name": "en/59-and-a-half-rounds-up-to-60m",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781354730,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "60m"
+   }
+  },
+  {
+   "name": "en/last-second-of-the-hour-is-60m",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781354701,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "60m"
+   }
+  },
+  {
+   "name": "en/an-hour-is-1h",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781354700,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "1h"
+   }
+  },
+  {
+   "name": "en/just-under-1-and-a-half-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781352901,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "1h"
+   }
+  },
+  {
+   "name": "en/1-and-a-half-hours-rounds-up-to-2h",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781352900,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2h"
+   }
+  },
+  {
+   "name": "en/last-second-of-the-day-is-24h",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781271901,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "24h"
+   }
+  },
+  {
+   "name": "en/a-day-is-the-weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781271900,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "Fri"
+   }
+  },
+  {
+   "name": "en/six-days-is-the-weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1780839900,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "Sun"
+   }
+  },
+  {
+   "name": "en/last-second-of-the-week-is-the-weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1780753501,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "Sat"
+   }
+  },
+  {
+   "name": "en/a-week-is-the-date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1780753500,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2026-06-06"
+   }
+  },
+  {
+   "name": "en/over-a-year-is-the-date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1746798300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2025-05-09"
+   }
+  },
+  {
+   "name": "en/weekday-at-utc-840min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": -840,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "Tue"
+   }
+  },
+  {
+   "name": "en/date-at-utc-840min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": -840,
+    "date_format": "ymd_slash"
+   },
+   "expect": {
+    "value": "2026/05/13"
+   }
+  },
+  {
+   "name": "en/weekday-at-utc-420min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": -420,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "Wed"
+   }
+  },
+  {
+   "name": "en/date-at-utc-420min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": -420,
+    "date_format": "ymd_slash"
+   },
+   "expect": {
+    "value": "2026/05/14"
+   }
+  },
+  {
+   "name": "en/weekday-at-utc+0min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "Wed"
+   }
+  },
+  {
+   "name": "en/date-at-utc+0min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "ymd_slash"
+   },
+   "expect": {
+    "value": "2026/05/14"
+   }
+  },
+  {
+   "name": "en/weekday-at-utc+330min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 330,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "Wed"
+   }
+  },
+  {
+   "name": "en/date-at-utc+330min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 330,
+    "date_format": "ymd_slash"
+   },
+   "expect": {
+    "value": "2026/05/14"
+   }
+  },
+  {
+   "name": "en/weekday-at-utc+840min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 840,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "Thu"
+   }
+  },
+  {
+   "name": "en/date-at-utc+840min",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 840,
+    "date_format": "ymd_slash"
+   },
+   "expect": {
+    "value": "2026/05/15"
+   }
+  },
+  {
+   "name": "en/date-format-ymd_slash",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "ymd_slash"
+   },
+   "expect": {
+    "value": "2026/05/14"
+   }
+  },
+  {
+   "name": "en/date-format-mdy_slash",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "mdy_slash"
+   },
+   "expect": {
+    "value": "05/14/2026"
+   }
+  },
+  {
+   "name": "en/date-format-dmy_slash",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_slash"
+   },
+   "expect": {
+    "value": "14/05/2026"
+   }
+  },
+  {
+   "name": "en/date-format-dmy_dot",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "en/date-format-iso",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2026-05-14"
+   }
+  },
+  {
+   "name": "en/date-format-auto",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "auto"
+   },
+   "expect": {
+    "value": "05/14/2026"
+   }
+  },
+  {
+   "name": "en/date-format-bogus",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "bogus"
+   },
+   "expect": {
+    "value": "05/14/2026"
+   }
+  },
+  {
+   "name": "every-language/en/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "now"
+   }
+  },
+  {
+   "name": "every-language/en/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2m"
+   }
+  },
+  {
+   "name": "every-language/en/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2h"
+   }
+  },
+  {
+   "name": "every-language/en/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "Wed"
+   }
+  },
+  {
+   "name": "every-language/en/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "en",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/zh/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "刚刚"
+   }
+  },
+  {
+   "name": "every-language/zh/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2分钟前"
+   }
+  },
+  {
+   "name": "every-language/zh/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2小时前"
+   }
+  },
+  {
+   "name": "every-language/zh/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "周三"
+   }
+  },
+  {
+   "name": "every-language/zh/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/zh-TW/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-TW",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "剛剛"
+   }
+  },
+  {
+   "name": "every-language/zh-TW/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-TW",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2分"
+   }
+  },
+  {
+   "name": "every-language/zh-TW/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-TW",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2小時"
+   }
+  },
+  {
+   "name": "every-language/zh-TW/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-TW",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "週三"
+   }
+  },
+  {
+   "name": "every-language/zh-TW/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-TW",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/zh-HK/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-HK",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "剛剛"
+   }
+  },
+  {
+   "name": "every-language/zh-HK/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-HK",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2分鐘"
+   }
+  },
+  {
+   "name": "every-language/zh-HK/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-HK",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2小時"
+   }
+  },
+  {
+   "name": "every-language/zh-HK/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-HK",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "週三"
+   }
+  },
+  {
+   "name": "every-language/zh-HK/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "zh-HK",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/ja/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ja",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "たった今"
+   }
+  },
+  {
+   "name": "every-language/ja/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ja",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2分前"
+   }
+  },
+  {
+   "name": "every-language/ja/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ja",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2時間前"
+   }
+  },
+  {
+   "name": "every-language/ja/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ja",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "水"
+   }
+  },
+  {
+   "name": "every-language/ja/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ja",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/ko/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ko",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "방금"
+   }
+  },
+  {
+   "name": "every-language/ko/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ko",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2분 전"
+   }
+  },
+  {
+   "name": "every-language/ko/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ko",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2시간 전"
+   }
+  },
+  {
+   "name": "every-language/ko/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ko",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "수"
+   }
+  },
+  {
+   "name": "every-language/ko/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ko",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/vi/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "vi",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "vừa xong"
+   }
+  },
+  {
+   "name": "every-language/vi/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "vi",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2p"
+   }
+  },
+  {
+   "name": "every-language/vi/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "vi",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2g"
+   }
+  },
+  {
+   "name": "every-language/vi/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "vi",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "Thứ 4"
+   }
+  },
+  {
+   "name": "every-language/vi/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "vi",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/id/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "id",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "sekarang"
+   }
+  },
+  {
+   "name": "every-language/id/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "id",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2m"
+   }
+  },
+  {
+   "name": "every-language/id/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "id",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2j"
+   }
+  },
+  {
+   "name": "every-language/id/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "id",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "Rab"
+   }
+  },
+  {
+   "name": "every-language/id/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "id",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/tr/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "tr",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "şimdi"
+   }
+  },
+  {
+   "name": "every-language/tr/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "tr",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 dk"
+   }
+  },
+  {
+   "name": "every-language/tr/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "tr",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 sa"
+   }
+  },
+  {
+   "name": "every-language/tr/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "tr",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "Çar"
+   }
+  },
+  {
+   "name": "every-language/tr/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "tr",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/es-MX/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "es-MX",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "ahora"
+   }
+  },
+  {
+   "name": "every-language/es-MX/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "es-MX",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 min"
+   }
+  },
+  {
+   "name": "every-language/es-MX/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "es-MX",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 h"
+   }
+  },
+  {
+   "name": "every-language/es-MX/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "es-MX",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "mié"
+   }
+  },
+  {
+   "name": "every-language/es-MX/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "es-MX",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/pt-BR/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "pt-BR",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "agora"
+   }
+  },
+  {
+   "name": "every-language/pt-BR/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "pt-BR",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2m"
+   }
+  },
+  {
+   "name": "every-language/pt-BR/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "pt-BR",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2h"
+   }
+  },
+  {
+   "name": "every-language/pt-BR/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "pt-BR",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "qua."
+   }
+  },
+  {
+   "name": "every-language/pt-BR/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "pt-BR",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/fr/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "fr",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "à l'instant"
+   }
+  },
+  {
+   "name": "every-language/fr/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "fr",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 min"
+   }
+  },
+  {
+   "name": "every-language/fr/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "fr",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 h"
+   }
+  },
+  {
+   "name": "every-language/fr/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "fr",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "mer."
+   }
+  },
+  {
+   "name": "every-language/fr/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "fr",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/de/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "de",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "gerade eben"
+   }
+  },
+  {
+   "name": "every-language/de/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "de",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 m"
+   }
+  },
+  {
+   "name": "every-language/de/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "de",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 h"
+   }
+  },
+  {
+   "name": "every-language/de/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "de",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "Mi"
+   }
+  },
+  {
+   "name": "every-language/de/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "de",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/ru/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ru",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "сейчас"
+   }
+  },
+  {
+   "name": "every-language/ru/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ru",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 мин"
+   }
+  },
+  {
+   "name": "every-language/ru/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ru",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 ч"
+   }
+  },
+  {
+   "name": "every-language/ru/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ru",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "ср"
+   }
+  },
+  {
+   "name": "every-language/ru/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "ru",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  },
+  {
+   "name": "every-language/it/now",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "it",
+    "ts_seconds": 1781358290,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "adesso"
+   }
+  },
+  {
+   "name": "every-language/it/2-minutes",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "it",
+    "ts_seconds": 1781358180,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 min"
+   }
+  },
+  {
+   "name": "every-language/it/2-hours",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "it",
+    "ts_seconds": 1781351100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "iso"
+   },
+   "expect": {
+    "value": "2 h"
+   }
+  },
+  {
+   "name": "every-language/it/weekday",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "it",
+    "ts_seconds": 1781099100,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "mer"
+   }
+  },
+  {
+   "name": "every-language/it/date",
+   "fn": "format_relative_time",
+   "input": {
+    "lng": "it",
+    "ts_seconds": 1778766300,
+    "now_ms": 1781358300999,
+    "utc_offset_minutes": 0,
+    "date_format": "dmy_dot"
+   },
+   "expect": {
+    "value": "14.05.2026"
+   }
+  }
+ ]
+}

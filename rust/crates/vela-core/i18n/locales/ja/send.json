@@ -80,7 +80,7 @@
     "recipientCount_other": "{{count}} 名の受取人",
     "removeRecipient": "削除",
     "alertInsufficientBalanceBody": "合計が残高を超えています。",
-    "recipientPickAria": "受取人を選択またはスキャン",
+    "recipientPickAria": "連絡先から選ぶ",
     "multiSendNoFundsAfterGas": "ガス予約後の残高が不足しています。",
     "gasReserved": "ガス確保済み",
     "txErrorGeneric": "トランザクションを送信できませんでした。資産は安全です — もう一度お試しください。",

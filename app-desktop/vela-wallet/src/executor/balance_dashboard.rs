@@ -463,6 +463,22 @@ pub fn refresh(cx: &mut App) {
     );
 }
 
+/// The read the PERSON asked for — the hero's "↻ Updated <ago>" (issue 462),
+/// what the phone's pull-to-refresh sends. `pull: true` is what makes it
+/// theirs: the core holds `BalanceView.refreshing` from this dispatch until
+/// this round settles or errors, and the control turns for exactly that
+/// long. The forced reads above stay `pull: false` — a token added is not a
+/// press, and must not spin a control nobody touched.
+pub fn pull(cx: &mut App) {
+    dispatch(
+        Event::RefreshRequested {
+            force: true,
+            pull: true,
+        },
+        cx,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -373,7 +373,7 @@
 		() => signView.request !== null && signView.surface !== 'hidden' && quotedFor !== ''
 	);
 	// Still choosing: the sheet is up and nothing has been signed yet. A free
-	// upgrade is never decided under somebody who already slid.
+	// upgrade is never decided under somebody who already confirmed.
 	speedControl.attach(
 		() =>
 			signView.request !== null &&
@@ -450,7 +450,7 @@
 	/**
 	 * The fee in force as this sheet reads it — a quote the chain could not
 	 * even be asked about (`contextLost`) is a recoverable failure here, said
-	 * and retried, never an idle row over an open slide (`withLostContext`).
+	 * and retried, never an idle row over an open confirm (`withLostContext`).
 	 */
 	const feeShown = $derived(
 		withLostContext(

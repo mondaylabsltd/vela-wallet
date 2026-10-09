@@ -38,6 +38,12 @@
 		 * above, unchanged.
 		 */
 		busyLabel?: string;
+		/**
+		 * A stable hook for tests where the label is no handle: the signing
+		 * sheet's confirm says the request's action ("Sign", "Confirm swap",
+		 * "Back up public keys"), in the person's language (issue 461).
+		 */
+		testid?: string;
 		onclick?: () => void;
 		children: Snippet;
 	}
@@ -50,6 +56,7 @@
 		disabled = false,
 		loading = false,
 		busyLabel,
+		testid,
 		onclick,
 		children
 	}: Props = $props();
@@ -59,6 +66,7 @@
 	<!-- eslint-disable svelte/no-navigation-without-resolve -- generic component; callers pass resolve()d paths, or an external URL -->
 	<a
 		class="button {variant} {shape}"
+		data-testid={testid}
 		{href}
 		target={external ? '_blank' : undefined}
 		rel={external ? 'noreferrer noopener' : undefined}>{@render children()}</a
@@ -68,6 +76,7 @@
 	<button
 		class="button {variant} {shape}"
 		class:loading
+		data-testid={testid}
 		disabled={disabled || loading}
 		aria-busy={loading}
 		{onclick}

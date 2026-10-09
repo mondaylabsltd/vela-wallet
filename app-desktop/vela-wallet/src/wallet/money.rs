@@ -105,6 +105,51 @@ fn batch_apply_event(replaces: bool, recipients: Vec<SendRecipientDraft>) -> Sen
     }
 }
 
+/// What `Event::FeeTokenChanged` last told this send journey: the fee card's
+/// coin and the chain it is a coin on — `None` until the first word (a
+/// journey is a `SendHost`, so a fresh one has been told nothing).
+///
+/// The core's one bridge rule (the doc on `Event::FeeTokenChanged`; iOS
+/// `SendStore.feeTokenChanged`): the send machine files the word against the
+/// form's chain at the moment it is said and drops it while the form has no
+/// chain. So the card's coin is told only while the fee session prices the
+/// form's own chain, and whenever the pair (chain, coin) differs from what
+/// was told last — a coin first seen before the form had a chain is told
+/// once it has one.
+#[derive(Debug, Default)]
+struct FeeTokenTold(Option<(u32, Option<String>)>);
+
+impl FeeTokenTold {
+    /// The coin to tell for the card's `in_force`, priced on `pricing` while
+    /// the form is on `form` — `None` when there is nothing to say.
+    fn news(
+        &mut self,
+        in_force: &Option<String>,
+        pricing: Option<u32>,
+        form: Option<u32>,
+    ) -> Option<Option<String>> {
+        let chain_id = pricing.filter(|chain_id| Some(*chain_id) == form)?;
+        if self
+            .0
+            .as_ref()
+            .is_some_and(|(told, token)| *told == chain_id && token == in_force)
+        {
+            return None;
+        }
+        self.0 = Some((chain_id, in_force.clone()));
+        Some(in_force.clone())
+    }
+}
+
+/// The chain the send form is on: the selected token's, else the sweep's
+/// (the core's `form_chain`).
+fn form_chain(view: &SendView) -> Option<u32> {
+    view.selected_token
+        .as_ref()
+        .map(|token| token.chain_id)
+        .or(view.multi_chain_id)
+}
+
 pub struct SendHost {
     send: CoreHost<Send>,
     /// The account this journey sends from, fixed when it opened.
@@ -145,6 +190,9 @@ pub struct SendHost {
     /// The `EstimateFee` effect the fee session is answering.
     pending_fee: Option<u64>,
     last_fee_busy: bool,
+    /// The fee card's coin in force (`FeeView.fee_token`) as this send was
+    /// last told it, with its chain ([`FeeTokenTold`]).
+    fee_token_told: FeeTokenTold,
     /// The WHOLE estimate the send machine last heard, not its charge (#686):
     /// on a floor-clamped chain two tiers charge the same wei, and a stamp of
     /// the charge alone kept the old tier's estimate in the send machine.
@@ -266,6 +314,7 @@ impl SendHost {
             window_handle,
             pending_fee: None,
             last_fee_busy: false,
+            fee_token_told: FeeTokenTold::default(),
             last_fee: None,
             alert: None,
             closed: false,
@@ -365,6 +414,8 @@ impl SendHost {
         self.sync_stage(cx);
         self.sync_batch(cx);
         self.ensure_watcher(cx);
+        // The form may have just reached the chain the fee session prices.
+        self.sync_fee_token(cx);
         // Back on the picker from the form: a round that settled meanwhile
         // was held back (`on_holdings`), and is due now.
         if self.view.stage == SendStage::SelectToken && self.pending_tokens.is_none() {
@@ -951,7 +1002,8 @@ impl SendHost {
     }
 
     /// The card's re-quotes, mirrored into the send machine: `busy` flips
-    /// disarm the confirm slide, and a settled estimate replaces the one it
+    /// disarm the confirm, the coin in force names the fee row's coin while
+    /// no estimate is in hand, and a settled estimate replaces the one it
     /// pre-checked with (`GasFeeCard.onBusyChange` / `onFeeUpdate`).
     fn sync_fee_to_send(&mut self, cx: &mut Context<Self>) {
         let busy = self.speed.fee_view().busy;
@@ -959,11 +1011,27 @@ impl SendHost {
             self.last_fee_busy = busy;
             self.dispatch(SendEvent::FeeBusyChanged { busy }, cx);
         }
+        self.sync_fee_token(cx);
         if let Some(fee) = self.speed.fee_view().fee.clone()
             && self.last_fee.as_ref() != Some(&fee)
         {
             self.last_fee = Some(fee.clone());
             self.dispatch(SendEvent::FeeUpdated { estimate: fee }, cx);
+        }
+    }
+
+    /// The card's coin in force into the send machine, under the bridge rule
+    /// ([`FeeTokenTold`]). Run when the fee session moves AND when the send
+    /// form does: a coin said before the form had a chain is told once the
+    /// form is on the chain the session prices.
+    fn sync_fee_token(&mut self, cx: &mut Context<Self>) {
+        let pricing = self.speed.pricing_chain_id();
+        let form = form_chain(&self.view);
+        if let Some(fee_token) =
+            self.fee_token_told
+                .news(&self.speed.fee_view().fee_token, pricing, form)
+        {
+            self.dispatch(SendEvent::FeeTokenChanged { fee_token }, cx);
         }
     }
 
@@ -1279,6 +1347,231 @@ fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOu
 mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
+    use vela_core::app::send::{SendChainInfo, SendFeeCoin, SendToken};
+
+    const BSC_USDT: &str = "0x55d398326f99059ff775485246999027b3197955";
+
+    /// A send journey on the real machine, its effects answered inline: the
+    /// holdings below, and every warm quote FAILED — the form has no estimate
+    /// in hand, so its fee row names the coin in force (`SendView.fee_coin`).
+    struct Journey(CoreHost<Send>);
+
+    impl Journey {
+        fn holding(
+            chain_id: u32,
+            network: &str,
+            symbol: &str,
+            contract: Option<&str>,
+        ) -> SendToken {
+            SendToken {
+                network: network.to_owned(),
+                chain_id,
+                symbol: symbol.to_owned(),
+                balance: "5".to_owned(),
+                decimals: 18,
+                token_address: contract.map(str::to_owned),
+                price_usd: Some(1.0),
+                logo_urls: Vec::new(),
+                spam: false,
+            }
+        }
+
+        fn bnb() -> SendToken {
+            Self::holding(56, "bsc", "BNB", None)
+        }
+
+        fn eth() -> SendToken {
+            Self::holding(1, "ethereum", "ETH", None)
+        }
+
+        fn open() -> Self {
+            let mut journey = Self(CoreHost::<Send>::new());
+            journey.drive(SendEvent::Open {
+                account: Some(SendAccountRef {
+                    id: "cred0".to_owned(),
+                    address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                    name: None,
+                }),
+                params: SendOpenParams::default(),
+                display: SendDisplayContext::default(),
+            });
+            journey
+        }
+
+        fn drive(&mut self, event: SendEvent) {
+            let mut pending = self.0.dispatch(event);
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                        tokens: Some(vec![
+                            Self::bnb(),
+                            Self::holding(56, "bsc", "USDT", Some(BSC_USDT)),
+                            Self::eth(),
+                        ]),
+                        chains: vec![
+                            SendChainInfo {
+                                chain_id: 56,
+                                network: "bsc".to_owned(),
+                                native_symbol: "BNB".to_owned(),
+                            },
+                            SendChainInfo {
+                                chain_id: 1,
+                                network: "ethereum".to_owned(),
+                                native_symbol: "ETH".to_owned(),
+                            },
+                        ],
+                    },
+                    SendOperation::LoadAccountCredential { .. } => {
+                        SendShellResult::AccountCredential {
+                            public_key_hex: Some("04aa".to_owned()),
+                        }
+                    }
+                    SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                    SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
+                        outcome: SendFeeOutcome::Failed {
+                            kind: SendEstimateFailure::QuoteUnavailable,
+                        },
+                    },
+                    _ => continue,
+                };
+                pending.extend(self.0.resolve(effect.id, result));
+            }
+        }
+
+        fn pick(&mut self, token: &SendToken) {
+            self.drive(SendEvent::SelectToken {
+                token_id: token.id(),
+            });
+            assert_eq!(self.view().stage, SendStage::EnterDetails);
+        }
+
+        fn view(&self) -> SendView {
+            self.0.view()
+        }
+
+        fn coin(&self) -> Option<SendFeeCoin> {
+            self.view().fee_coin
+        }
+
+        /// The bridge, as `SendHost::sync_fee_token` runs it: the card's coin
+        /// `token`, with its session pricing `pricing`.
+        fn tell(
+            &mut self,
+            told: &mut FeeTokenTold,
+            token: &Option<String>,
+            pricing: Option<u32>,
+        ) -> Option<Option<String>> {
+            let news = told.news(token, pricing, form_chain(&self.view()))?;
+            self.drive(SendEvent::FeeTokenChanged {
+                fee_token: news.clone(),
+            });
+            Some(news)
+        }
+    }
+
+    /// The bridge beside `FeeBusyChanged` (the core's rule, iOS
+    /// `SendStore.feeTokenChanged`): the card's coin reaches the send machine
+    /// whenever the pair (chain, coin) differs from what this journey was
+    /// last told, only while the fee session prices the form's own chain —
+    /// the core files the word against the form's chain at the moment it is
+    /// said, and drops it while the form has none. A fresh journey (a new
+    /// `SendHost`) has been told nothing.
+    #[test]
+    fn the_fee_cards_coin_is_told_once_per_change_and_again_to_a_new_journey() {
+        let usdt = Some(BSC_USDT.to_owned());
+        let mut told = FeeTokenTold::default();
+        let mut send = Journey::open();
+        // No chain on the form yet: a word now is about no chain at all.
+        assert_eq!(send.tell(&mut told, &usdt, Some(56)), None);
+        send.pick(&Journey::bnb());
+        assert_eq!(
+            send.coin().and_then(|coin| coin.contract),
+            None,
+            "nothing was told before the form had a chain"
+        );
+
+        assert_eq!(send.tell(&mut told, &usdt, Some(56)), Some(usdt.clone()));
+        assert_eq!(
+            send.coin(),
+            Some(SendFeeCoin {
+                symbol: "USDT".to_owned(),
+                contract: usdt.clone(),
+                chain_id: 56,
+            }),
+            "the card's coin names the row"
+        );
+
+        // The person picks the chain's own coin: newer than the card's word.
+        send.drive(SendEvent::ChooseFeeToken { token: None });
+        assert_eq!(send.coin().and_then(|coin| coin.contract), None);
+        // The card has not spoken again — the same word is not said twice, or
+        // it would undo the person's pick.
+        assert_eq!(
+            send.tell(&mut told, &usdt, Some(56)),
+            None,
+            "an unchanged coin is not told again"
+        );
+        assert_eq!(send.coin().and_then(|coin| coin.contract), None);
+        assert_eq!(send.tell(&mut told, &None, Some(56)), Some(None));
+        // A session still pricing another chain says nothing about this one.
+        assert_eq!(
+            send.tell(&mut told, &usdt, Some(1)),
+            None,
+            "another chain's coin is not told"
+        );
+        assert_eq!(
+            send.tell(&mut told, &usdt, None),
+            None,
+            "nor is a session that has priced nothing"
+        );
+        assert_eq!(send.coin().and_then(|coin| coin.contract), None);
+        assert_eq!(send.tell(&mut told, &usdt, Some(56)), Some(usdt.clone()));
+        assert_eq!(
+            send.coin().and_then(|coin| coin.contract),
+            usdt,
+            "a change is told"
+        );
+
+        // A new journey has been told nothing: the same coin is told again.
+        let mut told = FeeTokenTold::default();
+        let mut send = Journey::open();
+        send.pick(&Journey::bnb());
+        assert_eq!(send.tell(&mut told, &usdt, Some(56)), Some(usdt.clone()));
+        assert_eq!(
+            send.coin().and_then(|coin| coin.contract),
+            usdt,
+            "a fresh journey hears the card's coin"
+        );
+    }
+
+    /// The pair, not the coin: "the chain's own coin" said on BNB Chain is
+    /// news again once the form and the session are on Ethereum.
+    #[test]
+    fn the_same_coin_is_told_again_when_the_form_moves_to_another_chain() {
+        let mut told = FeeTokenTold::default();
+        let mut send = Journey::open();
+        send.pick(&Journey::bnb());
+        assert_eq!(send.tell(&mut told, &None, Some(56)), Some(None));
+
+        send.drive(SendEvent::ChangeToken);
+        send.pick(&Journey::eth());
+        assert_eq!(
+            send.tell(&mut told, &None, Some(56)),
+            None,
+            "the network just left says nothing about this one"
+        );
+        assert_eq!(send.tell(&mut told, &None, Some(1)), Some(None));
+        assert_eq!(send.tell(&mut told, &None, Some(1)), None);
+        assert_eq!(
+            send.coin(),
+            Some(SendFeeCoin {
+                symbol: "ETH".to_owned(),
+                contract: None,
+                chain_id: 1,
+            })
+        );
+    }
+
     // The sync driver's own: the host hands its fee sessions to
     // `speed_control` (069), so nothing above imports these any more.
     #[cfg(feature = "dev-fixtures")]
@@ -1519,10 +1812,10 @@ mod tests {
     /// The whole spine up to the confirm screen, live, for the golden Safe:
     /// its real holdings load, XDAI on Gnosis is picked, a dust transfer to
     /// fixture #2 is drafted, and `Continue` brings back the relay's real
-    /// quote — the stage is Confirm and the slide is armed. No signature, no
+    /// quote — the stage is Confirm and the confirm is armed. No signature, no
     /// submit: nothing moves.
     ///
-    /// `VELA_LIVE_SEND=1` goes one step further and slides — the parallel
+    /// `VELA_LIVE_SEND=1` goes one step further and confirms — the parallel
     /// space's fixture #1 signs, the relay accepts, and the hash is printed.
     /// That step spends dust and is never run by default.
     #[cfg(feature = "dev-fixtures")]
@@ -1614,16 +1907,16 @@ mod tests {
                 .unwrap_or_else(|| unreachable!("a real quote"));
             assert_eq!(fee.chain_id, 100);
             assert!(fee.quoted, "the relay's own quote, not a local fallback");
-            assert!(view.can_confirm, "the slide is armed");
+            assert!(view.can_confirm, "the confirm is armed");
 
             if std::env::var("VELA_LIVE_SEND").as_deref() != Ok("1") {
-                println!("stopping before the slide: set VELA_LIVE_SEND=1 to spend dust");
+                println!("stopping before the confirm: set VELA_LIVE_SEND=1 to spend dust");
                 return;
             }
             money.dispatch(SendEvent::SlideConfirm);
             let view = money.view();
             println!(
-                "after slide: tx_status={:?} error={:?} user_op_hash={:?} tracked={:?}",
+                "after confirm: tx_status={:?} error={:?} user_op_hash={:?} tracked={:?}",
                 view.tx_status, view.tx_error, view.user_op_hash, money.submitted
             );
             assert!(

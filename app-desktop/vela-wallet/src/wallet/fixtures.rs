@@ -136,6 +136,15 @@ pub struct BalanceModel {
     /// Issue #443: when the figure was last read — "Updated 2m" — drawn
     /// beside the control that reads it again. `None`: never read yet.
     pub updated: Option<SharedString>,
+    /// Issue 462: a read the person asked for is out — the core's
+    /// `refreshing`, held by the page for at least
+    /// [`crate::wallet::live::REFRESH_MIN_SPIN`]. The ↻ turns, the words
+    /// read [`Self::updating`], and the control takes no press.
+    pub refreshing: bool,
+    /// "Updating…" — what the control says while it turns. Carried even
+    /// while idle: the control is as wide as the longer of its two labels,
+    /// so a press never moves it.
+    pub updating: SharedString,
 }
 
 pub const MASK: &str = "••••";
@@ -152,6 +161,8 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
         live: None,
         status: None,
         updated: None,
+        refreshing: false,
+        updating: s.updating.clone(),
     }
 }
 
@@ -214,6 +225,8 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             live: Some(s.live_indicator.clone()),
             status: None,
             updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
         },
         BalanceModel {
             label: s.total_balance.clone(),
@@ -224,6 +237,8 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             live: None,
             status: None,
             updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
         },
         BalanceModel {
             label: s.total_balance.clone(),
@@ -234,6 +249,8 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             live: None,
             status: None,
             updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
         },
         BalanceModel {
             label: s.total_balance.clone(),
@@ -244,6 +261,8 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             live: None,
             status: Some((StatusKind::Warning, s.balance_unpriced.clone())),
             updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
         },
         BalanceModel {
             label: s.total_balance.clone(),
@@ -254,8 +273,33 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             live: None,
             status: Some((StatusKind::Refreshing, s.balance_stale.clone())),
             updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
         },
+        // Issue 462: the hero's refresh control at rest — "↻ Updated 2m" —
+        // and turning, which says "Updating…" in the same box. The board
+        // draws them without a press behind them.
+        balance_refresh(s, false),
+        balance_refresh(s, true),
     ]
+}
+
+/// The default hero with its refresh control drawn, at rest or turning
+/// (issue 462). "2m" is the core's own short form, in the reader's words.
+#[must_use]
+pub fn balance_refresh(s: &WalletStrings, refreshing: bool) -> BalanceModel {
+    BalanceModel {
+        updated: Some(
+            crate::wallet::fill(
+                &s.last_updated,
+                "ago",
+                &crate::wallet::fill(&s.minutes_short, "n", "2"),
+            )
+            .into(),
+        ),
+        refreshing,
+        ..balance_default(s)
+    }
 }
 
 /// Which D1 row the celebration is about: the `+120 USDT` receipt at index 1.
@@ -757,5 +801,45 @@ mod tests {
         let chain_rows = chains(&s);
         assert_eq!(chain_rows[0].name.as_ref(), "所有网络");
         assert_eq!(chain_rows.len(), 7);
+    }
+
+    /// Issue 462: the components board pins the hero's refresh control in
+    /// both its states — at rest it says when the figure was read, turning
+    /// it says "Updating…" — in the reader's words, never a key or a
+    /// template left unfilled.
+    #[test]
+    fn the_board_draws_the_refresh_control_at_rest_and_turning() {
+        for tag in ["en", "zh"] {
+            let s = WalletStrings::resolve(&Loc::for_tag(tag));
+            let variants = balance_variants(&s);
+            let at_rest = variants
+                .iter()
+                .find(|model| model.updated.is_some() && !model.refreshing)
+                .expect("a resting control");
+            let turning = variants
+                .iter()
+                .find(|model| model.refreshing)
+                .expect("a turning control");
+            let words = crate::wallet::components::refresh_words(at_rest).expect("words");
+            assert!(!words.contains("{{") && !words.contains("home."), "{words}");
+            assert!(words.contains('2'), "{words}");
+            assert_eq!(
+                crate::wallet::components::refresh_words(turning),
+                Some(s.updating.clone())
+            );
+            // Same box both ways: the turning one still carries the words
+            // it will go back to, for the width.
+            assert_eq!(turning.updated, at_rest.updated);
+        }
+        let en = WalletStrings::resolve(&Loc::for_tag("en"));
+        assert_eq!(
+            crate::wallet::components::refresh_words(&balance_refresh(&en, false)).as_deref(),
+            Some("Updated 2m")
+        );
+        // Never read and not turning: the glyph alone.
+        assert_eq!(
+            crate::wallet::components::refresh_words(&balance_default(&en)),
+            None
+        );
     }
 }

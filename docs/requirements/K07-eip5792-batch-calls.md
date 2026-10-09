@@ -41,7 +41,7 @@ reusing the same MultiSend engine as split/sweep (H07).
 
 ## 6. UX / flow notes
 
-The signing sheet (I01) shows the batch as one transaction with its combined effect (J02). Confirmed via slide-to-confirm (M04) + biometric.
+The signing sheet (I01) shows the batch as one transaction with its combined effect (J02). Confirmed with a tap on the confirm button + biometric.
 
 ## 7. Acceptance criteria
 

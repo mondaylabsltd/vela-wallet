@@ -9,10 +9,11 @@
 //  phones and a device pass can be scripted against the same vocabulary.
 //
 //  - `press`    a button under the finger (the founder's rule: press =
-//               deformation + haptic), and a tab that switches the
-//               destination (founder, 2026-09-26)
-//  - `detent`   a step crossed: a slider stop, a picker snapping, the signing
-//               slider's threshold
+//               deformation + haptic) — the signing sheet's confirm among
+//               them since it is a tap (issue #461) — and a tab that switches
+//               the destination (founder, 2026-09-26)
+//  - `detent`   a step crossed: a slider stop, a picker snapping, an index
+//               letter
 //  - `select`   a selection that TAKES EFFECT: a switch, a filter, a network /
 //               fee-token / account pick, a favourite, a copy
 //  - `success` / `reject`  an outcome the core decided

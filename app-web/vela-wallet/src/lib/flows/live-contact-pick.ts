@@ -49,3 +49,16 @@ export function liveContactPick(
 		}))
 	};
 }
+
+/**
+ * The picker inside a live send before the book has been read: nobody.
+ *
+ * The board's three fixture people carry real-looking full addresses, and a
+ * row answers with its address (issue 467) — so a tap on a drawn stranger
+ * would put that address into a real transfer. Until the `contacts` core has
+ * a view, the picker lists no one (scan and search stay); the book's people
+ * arrive with it.
+ */
+export function unreadContactPick(model: ContactPickModel): ContactPickModel {
+	return { ...model, groups: [], contacts: [] };
+}

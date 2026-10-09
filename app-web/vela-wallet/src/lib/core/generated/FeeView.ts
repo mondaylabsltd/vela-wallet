@@ -5,7 +5,7 @@ import type { FeeOptionView } from "./FeeOptionView";
 
 export type FeeView = { 
 /**
- * Estimating or requoting — the confirm slide must stay disabled
+ * Estimating or requoting — the confirm must stay disabled
  * (invariant ⑦, `SigningSheet.tsx:576-583`).
  */
 busy: boolean, failed: FeeFailure | null, 

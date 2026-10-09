@@ -4,8 +4,9 @@
 //
 //  Canonical explore fixtures (spec 022, data-model.md §2 — the single canon
 //  all four platforms port; web reference: src/lib/explore/fixtures.ts).
-//  Site names, hosts, group titles and the demo page are verbatim mock
-//  content (never translated); every label resolves through the corpus.
+//  Site names, hosts and the demo page are verbatim mock content (never
+//  translated); every label resolves through the corpus. Issue #465: no
+//  custom groups — the start page's sections are Favorites and Recent alone.
 //  Pure data + assembly: no fetching, no URL parsing, no business state.
 //
 
@@ -48,12 +49,6 @@ enum ExploreFixtures {
         return copy
     }
 
-    private static func withSubtitle(_ site: SiteModel, _ subtitle: String) -> SiteModel {
-        var copy = site
-        copy.subtitle = subtitle
-        return copy
-    }
-
     /// The page the browser shows. Fixture content: the site's words, not ours.
     static let demoPage = DemoPageModel(
         title: "兑换",
@@ -68,14 +63,6 @@ enum ExploreFixtures {
         [
             GroupModel(id: "recent", title: loc.t("explore.recent"), kind: .recent,
                        action: .clear, sites: [withMeta(hyperliquid, "刚刚")], hidden: false),
-            // Custom group titles and blurbs are what the person typed — mock
-            // content, verbatim, never translated (the spec-015 rule).
-            GroupModel(id: "trading", title: "交易", kind: .custom, action: .menu,
-                       sites: [withSubtitle(curve, "稳定币兑换"),
-                               withSubtitle(hyperliquid, "永续合约交易")], hidden: false),
-            GroupModel(id: "prediction", title: "预测市场", kind: .custom, action: .menu,
-                       sites: [withSubtitle(polymarket, "事件预测市场"),
-                               withSubtitle(limitless, "预测市场")], hidden: false),
         ]
     }
 
@@ -129,23 +116,18 @@ enum ExploreFixtures {
         )
     }
 
+    /// E3: Favorites and Recent dApps, an eye each — all Manage groups holds
+    /// (issue #465).
     static func groupManage(_ loc: Loc) -> ExploreSheet {
         .groupManage(
             title: loc.t("explore.manageGroups"),
             rows: [
                 GroupManageRow(id: "favorites", title: loc.t("explore.favorites"),
-                               meta: loc.t("explore.siteCount", vars: ["n": "8"]),
-                               system: true, hidden: false),
+                               meta: loc.t("explore.siteCount", count: 8),
+                               hidden: false),
                 GroupManageRow(id: "recent", title: loc.t("explore.recent"),
-                               meta: loc.t("explore.systemGroup"), system: true, hidden: false),
-                GroupManageRow(id: "trading", title: "交易",
-                               meta: loc.t("explore.siteCount", vars: ["n": "4"]),
-                               system: false, hidden: false),
-                GroupManageRow(id: "prediction", title: "预测市场",
-                               meta: loc.t("explore.siteCount", vars: ["n": "2"]),
-                               system: false, hidden: false),
-            ],
-            newGroup: loc.t("explore.newGroup")
+                               meta: nil, hidden: false),
+            ]
         )
     }
 

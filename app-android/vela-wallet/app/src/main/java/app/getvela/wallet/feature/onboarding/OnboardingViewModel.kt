@@ -127,6 +127,13 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     var cableQr by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * The code of the caBLE ceremony still running — kept after [cableQr]
+     * goes down for the phone's own prompt, so that prompt's Cancel ends the
+     * same ceremony and no other (issue #459).
+     */
+    private var cablePayload: String? = null
+
     /** Whether that QR's phone is to create a key, or to find one (087 F02). */
     var cableQrCreates by mutableStateOf(false)
         private set
@@ -168,6 +175,9 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         override fun touchWaiting(kind: String?, product: String) {
             viewModelScope.launch {
                 usbTouchWaiting = kind?.let { UsbTouch(it, product) }
+                // The phone answered the code and now shows its own prompt:
+                // the code has done its job, and one sheet asks at a time.
+                if (kind != null && product == app.getvela.wallet.feature.onboarding.core.HYBRID_PRODUCT) cableQr = null
             }
         }
 
@@ -218,6 +228,21 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     fun cancelInsertKey() {
         // The poll loop clears the state after completion.
         pendingInsertKey?.answer?.complete(false)
+    }
+
+    /**
+     * The person put the phone's code away, or the phone's "look at your
+     * phone" prompt (issue #459): the sheets go now, and the ceremony ends as
+     * `passkey_failed{cancelled}` — the core's quiet cancel, so Welcome is
+     * idle again, a create returns to its keys, a send to its confirm. Never a
+     * coroutine cancellation: that is never answered.
+     */
+    fun cancelCable() {
+        val payload = cablePayload ?: return
+        VelaLog.event("cable", "the person put the code away")
+        cableQr = null
+        if (usbTouchWaiting?.product == app.getvela.wallet.feature.onboarding.core.HYBRID_PRODUCT) usbTouchWaiting = null
+        passkey?.cancelHybrid(payload)
     }
 
     init {
@@ -293,6 +318,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 },
                 showQr = { qr, creates ->
                     viewModelScope.launch {
+                        cablePayload = qr
                         cableQr = qr
                         cableQrCreates = creates
                     }

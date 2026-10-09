@@ -4,9 +4,11 @@
 //
 //  The `explore_sites` machine's view model, in Swift.
 //
-//  The browser's own memory: which sites are pinned, how they are grouped,
-//  which tabs are open and which one is in front. One JSON document under
-//  `vela.explore`, the same document the other three clients read.
+//  The browser's own memory: which sites are pinned, which tabs are open and
+//  which one is in front. One JSON document under `vela.explore`, the same
+//  document the other three clients read. (Issue #465: there are no custom
+//  groups — a document written before it still loads, and the core drops its
+//  `groups` on the next write.)
 //
 //  Views are `Decodable` through `CoreJSON.decoder`; **operations and results
 //  stay dictionaries**. That is the house rule every Wire file in this app
@@ -34,21 +36,6 @@ struct ExploreSiteWire: Decodable, Equatable, Identifiable {
     let addedMs: Double
 
     var id: String { origin }
-}
-
-/// A named collection of favourites, resolved for drawing.
-///
-/// Membership is by origin and a site may be in several groups: a group is a
-/// VIEW over the favourites, never a container that owns them. Deleting one
-/// keeps its sites — the rule `contacts` settled for contact groups, so a
-/// person meets one behaviour rather than two.
-struct ExploreGroupWire: Decodable, Equatable, Identifiable {
-    let id: String
-    let name: String
-    let hidden: Bool
-    /// Already resolved from the favourites, in membership order. A member
-    /// whose site is gone is dropped here rather than drawn as a blank row.
-    let sites: [ExploreSiteWire]
 }
 
 /// One open tab.
@@ -90,7 +77,6 @@ enum ExploreTabCloseScope: Equatable {
 
 struct ExploreViewWire: Decodable, Equatable {
     let favorites: [ExploreSiteWire]
-    let groups: [ExploreGroupWire]
     let tabs: [ExploreTabWire]
     /// Always a tab that exists, whenever there is one at all.
     let selectedTab: String?
@@ -112,7 +98,7 @@ struct ExploreViewWire: Decodable, Equatable {
     var recentTabs: [String] = []
 
     static let empty = ExploreViewWire(
-        favorites: [], groups: [], tabs: [], selectedTab: nil,
+        favorites: [], tabs: [], selectedTab: nil,
         favoritesHidden: false, recentHidden: false,
         favoritesFull: false, tabsFull: false, ready: false
     )

@@ -199,6 +199,31 @@ fn panel_after_switch(destination: Section, signing_kept: bool) -> PanelId {
     }
 }
 
+/// What becomes of a send parked under "Report this" (issue 466) once the
+/// person is somewhere new.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ParkedSend {
+    /// Still in Settings, where the report is: the send waits, unseen.
+    Keep,
+    /// Back on the wallet with no other column open: the send is on screen
+    /// again as it was left — recipient, amount, the stop.
+    Resume,
+    /// Anywhere else: the switch closes the send, as any switch does.
+    Drop,
+}
+
+/// [`ParkedSend`] for where the person is now. The web swaps the same sheet's
+/// body and the phones lay the report over the flow; on desktop the reporter
+/// is a Settings page, so the send is parked the way RJ18 hides a signing
+/// column — and the way back to the wallet is the way back to it.
+fn parked_send_after(section: Section, panel: PanelId) -> ParkedSend {
+    match (section, panel) {
+        (Section::Settings, _) => ParkedSend::Keep,
+        (Section::Wallet, PanelId::None | PanelId::Flow) => ParkedSend::Resume,
+        _ => ParkedSend::Drop,
+    }
+}
+
 /// Whether a request's ending that arrives now is kept (RJ18): the column is
 /// on screen, or only hidden by a switch of section. One the person closed
 /// opens for nothing.
@@ -221,6 +246,10 @@ pub fn close_held(cx: &mut gpui::App) {
 
 /// The words a held close shows: 提交至网络… — what the window is waiting on.
 const CLOSE_HELD_WORDS: &str = "send.txSubmitting";
+
+/// How often the hero redraws while it is on screen, so "Updated <ago>"
+/// ages (issue 462): at least every 30 s, as every shell does.
+const HERO_CLOCK: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// The column a held close brings forward.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -351,10 +380,6 @@ enum ContactsMenu {
     /// Spec 034 — right-click on a contact row. Drawn since spec 018, opened
     /// by nothing until now.
     Contact,
-    /// Spec 032 phase 41 — "move to a group", listing the person's own
-    /// groups. A menu rather than a new picker component: the question is
-    /// "which of these", which is what a menu is.
-    MoveGroup,
     /// Spec 070 — which network the site on screen is on, ticked; picking
     /// one moves THAT site (`site_chain_picked`) and no other.
     SiteNetwork,
@@ -380,10 +405,6 @@ struct IdenticonViewer {
 enum ExploreAsk {
     /// Rename the favourite at this origin.
     RenameFavorite { origin: String },
-    /// Name a new group. `then_add` is the favourite that opened the picker,
-    /// which is dropped into the group the moment it exists — a person who
-    /// went "move to → new group" meant both halves.
-    NewGroup { then_add: Option<String> },
     /// Pin a site by typing where it lives. The start page's "+ 添加" tile was
     /// drawn with a pointer cursor and no listener, so the only way to get a
     /// favourite was to open a site first and use the tab menu.
@@ -396,13 +417,40 @@ struct ExploreForm {
     text: String,
 }
 
-/// The Explore groups, as the manage sheet lists them (078 W-11).
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// The Explore groups, as the manage sheet lists them (078 W-11): the two
+/// the start page has, and no others (issue 465).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ExploreGroupRow {
     Favorites,
     Recent,
-    /// A person's own group, by its place in the core's list.
-    Custom(usize),
+}
+
+/// One row of "Manage groups": which section, its name, its second line and
+/// whether it is hidden now.
+type ExploreGroupLine = (ExploreGroupRow, SharedString, Option<SharedString>, bool);
+
+/// The rows "Manage groups" draws, in order: Favorites, saying how many sites
+/// it holds, then Recent dApps with no second line — its old one, "System",
+/// told nobody anything once every row is a system group.
+fn explore_group_rows(
+    view: &vela_core::app::explore_sites::ExploreView,
+    strings: &ExploreStrings,
+    loc: &Loc,
+) -> [ExploreGroupLine; 2] {
+    [
+        (
+            ExploreGroupRow::Favorites,
+            strings.favorites.clone(),
+            Some(crate::explore::site_count(loc, view.favorites.len())),
+            view.favorites_hidden,
+        ),
+        (
+            ExploreGroupRow::Recent,
+            strings.recent.clone(),
+            None,
+            view.recent_hidden,
+        ),
+    ]
 }
 
 /// The frame the viewfinder is showing, and the discipline that keeps its
@@ -685,9 +733,16 @@ pub struct WalletPage {
     /// Spec 082 RJ18: the signing column was left for another section, not
     /// closed — its ending is kept, and shown again when Explore returns.
     signing_hidden: bool,
+    /// Issue 466: "Report this" left the send column for Settings →
+    /// Feedback with the send parked, not closed ([`parked_send_after`]).
+    send_parked: bool,
     /// The signing column's header and one-line summary as last drawn — what
     /// the ending still shows once the request is gone (spec 079).
     signing_last: Option<(signing_components::HeaderModel, Option<SharedString>)>,
+    /// The signing column's lines held through a fee measurement, for the
+    /// request whose id is beside them ([`signing_live::HeldLines`]).
+    #[cfg(not(target_os = "linux"))]
+    signing_held: Option<(String, signing_live::HeldLines)>,
     /// A request the person closed after approving it (spec 079 FR-002): its
     /// machines keep running, unseen, until the core answers the page — the
     /// close refused nothing, so the answer must still get out.
@@ -701,6 +756,12 @@ pub struct WalletPage {
     /// Spec 092: the list of networks the wallet cannot reach, which the
     /// hero's status line opens while any is.
     unreachable_open: bool,
+    /// Issue 462: the hero's refresh control turns at least until this —
+    /// the press plus `REFRESH_MIN_SPIN` — however fast the core answers.
+    refresh_hold: Option<std::time::Instant>,
+    /// Issue 462: redraws the hero every `HERO_CLOCK` while it is on screen,
+    /// so "Updated now" becomes "Updated 1m" without anything else moving.
+    hero_clock: Option<gpui::Task<()>>,
     contacts_query_focus: gpui::FocusHandle,
     /// Spec 032: the send journey's two machines, alive while the flow is
     /// open and discarded with it — a second send starts from a fresh
@@ -746,7 +807,8 @@ pub struct WalletPage {
     notice_press: u64,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
-    /// The explore name dialog: renaming a tile, or naming a new group.
+    /// The explore name dialog: renaming a tile, or pinning a site by its
+    /// address.
     ///
     /// One dialog for both, as the contacts one is for its two questions —
     /// they ask the same thing and differ only in which event takes the
@@ -1069,7 +1131,6 @@ pub struct Identity {
 struct SendBindings {
     host: gpui::Entity<SendHost>,
     token_ids: Vec<String>,
-    contact_addresses: Vec<String>,
     fee_contracts: Vec<Option<String>>,
     amount: String,
     recipient: String,
@@ -1147,6 +1208,12 @@ impl WalletPage {
         let mut page = Self::with_section(Section::Wallet, gallery, window, cx);
         if gallery && let Some(tab) = GalleryTab::from_gallery_env() {
             page.select_tab(tab, window);
+        }
+        // `VELA_SIGNING_STATE=cs36`: the third column on one drawn request —
+        // there is no live request on this route, and no way to click to one.
+        if gallery && let Some(state) = signing_fixtures::from_env() {
+            page.signing_state = state;
+            page.panel = PanelId::Signing;
         }
         page
     }
@@ -1364,12 +1431,17 @@ impl WalletPage {
             dapp_landing: None,
             dapp_landing_seq: 0,
             signing_hidden: false,
+            send_parked: false,
             signing_last: None,
+            #[cfg(not(target_os = "linux"))]
+            signing_held: None,
             #[cfg(not(target_os = "linux"))]
             signing_background: Vec::new(),
             contacts_query: String::new(),
             balance_detail_open: false,
             unreachable_open: false,
+            refresh_hold: None,
+            hero_clock: None,
             contacts_query_focus: cx.focus_handle(),
             send_host: None,
             send_background: Vec::new(),
@@ -1535,6 +1607,7 @@ impl WalletPage {
         }
         let lines = flow_fixtures::address_lines(&identity.address);
         let network = crate::flows::live::chain_name(self.receive_chain);
+        let network_mark = flows_live::network_mark(self.receive_chain);
         Some(ShareCardFacts {
             headline: self.flow_strings.share_card_headline.to_string(),
             payload: pay.qr_value.clone(),
@@ -1551,11 +1624,15 @@ impl WalletPage {
             // The NETWORK's mark in the code's centre, token or not: the card
             // says which network may pay, and one card serves every asset on
             // it (founder, 2026-08-15). The letters only show when the logo
-            // cannot be fetched.
-            network_ticker: network.chars().take(3).collect::<String>().to_uppercase(),
-            network_tint: flows_live::chain_tint(self.receive_chain),
-            network_logo_url: crate::marks::chain_logo_url(self.receive_chain)
-                .map(|url| url.to_string()),
+            // cannot be fetched, and they are the screen's own centre's — the
+            // network's coin ("XDA" for Gnosis), not its name's first three.
+            network_ticker: crate::marks::glyph(&network_mark.ticker).to_string(),
+            network_tint: network_mark.badge,
+            network_logo_url: network_mark
+                .logos
+                .logo_urls
+                .first()
+                .map(ToString::to_string),
             // "Vela Wallet", as the web's card signs itself.
             seed: identity.address.to_string(),
             wordmark: "Vela Wallet".to_owned(),
@@ -1618,7 +1695,8 @@ impl WalletPage {
         .detach();
     }
 
-    /// The explore name sheet — renaming a tile, and naming a new group.
+    /// The explore name sheet — renaming a tile, and pinning a site by its
+    /// address.
     ///
     /// The contacts dialog's twin, deliberately: same card, same field, same
     /// two buttons. Two dialogs that ask for a name should not look like two
@@ -1634,7 +1712,6 @@ impl WalletPage {
         let c = &self.contacts;
         let title = match form.ask {
             ExploreAsk::RenameFavorite { .. } => e.rename.clone(),
-            ExploreAsk::NewGroup { .. } => e.new_group.clone(),
             ExploreAsk::NewFavorite => e.add_to_favorites.clone(),
         };
         // The favourite's field takes a URL and nothing else — this dialog
@@ -1722,11 +1799,11 @@ impl WalletPage {
     }
 
     /// "Manage groups" — the web's `GroupManageSheet` (E3), reached from the
-    /// Favorites heading's Edit and a group's ⋯ (078 W-11). Every group, the
-    /// two system ones first: an eye to hide or show it, and — for the
-    /// person's own groups only — a trash to delete it. The system groups have
-    /// no trash rather than a refused one ("hideable, never deletable"). A
-    /// deleted group's sites stay favourited; the core says so.
+    /// Favorites heading's Edit (078 W-11). Exactly the two sections the start
+    /// page has, Favorites and Recent dApps, each with an eye to hide or show
+    /// it (issue 465 took the person's own groups out, and with them the
+    /// grip, the trash and "New group"). Hiding is the only thing a system
+    /// group offers: "hideable, never deletable".
     fn explore_groups_dialog(
         &mut self,
         theme: &Theme,
@@ -1737,38 +1814,8 @@ impl WalletPage {
             return None;
         }
         let view = resident::resident::<ExploreSites>(cx).read(cx).view();
-        let e = &self.explore;
-        let (favorites, recent, system_group, new_group_label, manage_groups, site_count) = (
-            e.favorites.clone(),
-            e.recent.clone(),
-            e.system_group.clone(),
-            e.new_group.clone(),
-            e.manage_groups.clone(),
-            e.site_count.clone(),
-        );
-        let count = |n: usize| SharedString::from(site_count.replace("{{n}}", &n.to_string()));
-        let mut rows: Vec<(ExploreGroupRow, SharedString, SharedString, bool)> = vec![
-            (
-                ExploreGroupRow::Favorites,
-                favorites,
-                count(view.favorites.len()),
-                view.favorites_hidden,
-            ),
-            (
-                ExploreGroupRow::Recent,
-                recent,
-                system_group,
-                view.recent_hidden,
-            ),
-        ];
-        for (i, group) in view.groups.iter().enumerate() {
-            rows.push((
-                ExploreGroupRow::Custom(i),
-                SharedString::from(group.name.clone()),
-                count(group.sites.len()),
-                group.hidden,
-            ));
-        }
+        let rows = explore_group_rows(&view, &self.explore, &self.loc);
+        let manage_groups = self.explore.manage_groups.clone();
 
         let mut list = div().flex().flex_col();
         for (index, (row, title, meta, hidden)) in rows.into_iter().enumerate() {
@@ -1785,20 +1832,13 @@ impl WalletPage {
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.set_explore_group_hidden(row, !hidden, cx);
                 }));
-            let mut line = div()
+            let line = div()
                 .flex()
                 .items_center()
                 .gap(px(16.))
                 .py(px(20.))
                 .border_b_1()
                 .border_color(theme.border_card)
-                .child(icon_img(
-                    &mut self.icons,
-                    Icon::GripVertical,
-                    false,
-                    theme.fg_subtle,
-                    18.,
-                ))
                 // Hidden reads as hidden: the words dim, so the eye is a
                 // confirmation rather than the only clue.
                 .child(
@@ -1816,74 +1856,13 @@ impl WalletPage {
                         .when(hidden, |d| d.opacity(0.4))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_subtle)
-                        .child(meta),
+                        .children(meta),
                 )
                 .child(toggle);
-            if let ExploreGroupRow::Custom(i) = row {
-                line = line.child(
-                    div()
-                        .id(("explore-group-delete", index))
-                        .cursor_pointer()
-                        .child(icon_img(
-                            &mut self.icons,
-                            Icon::Trash2,
-                            false,
-                            theme.fg_muted,
-                            18.,
-                        ))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.delete_explore_group(i, cx);
-                        })),
-                );
-            }
             list = list.child(line);
         }
 
-        let new_group = div()
-            .id("explore-groups-new")
-            .flex()
-            .items_center()
-            .gap(px(16.))
-            .py(px(20.))
-            .cursor_pointer()
-            .child(
-                div()
-                    .size(px(40.))
-                    .rounded_full()
-                    .bg(theme.bg_sunken)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(icon_img(
-                        &mut self.icons,
-                        Icon::Plus,
-                        false,
-                        theme.fg_subtle,
-                        18.,
-                    )),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_body())
-                    .text_color(theme.fg_subtle)
-                    .child(new_group_label),
-            )
-            .on_click(cx.listener(|this, _, window, cx| {
-                this.explore_groups = false;
-                this.explore_form = Some(ExploreForm {
-                    ask: ExploreAsk::NewGroup { then_add: None },
-                    text: String::new(),
-                });
-                window.focus(&this.explore_form_focus, cx);
-                cx.notify();
-            }));
-
-        let body = div()
-            .flex()
-            .flex_col()
-            .pb(px(8.))
-            .child(list)
-            .child(new_group);
+        let body = div().flex().flex_col().pb(px(8.)).child(list);
         Some(
             crate::ui::dialog::dialog(
                 "explore-groups",
@@ -1900,8 +1879,7 @@ impl WalletPage {
         )
     }
 
-    /// Hide or show one group — a system one by its kind, the person's own by
-    /// the core's id, read at the moment of the tap.
+    /// Hide or show one of the two sections, by its kind.
     fn set_explore_group_hidden(
         &mut self,
         row: ExploreGroupRow,
@@ -1909,44 +1887,12 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         use vela_core::app::explore_sites::{Event as SitesEvent, ExploreSystemGroup};
-        let resident = resident::resident::<ExploreSites>(cx);
-        let event = match row {
-            ExploreGroupRow::Favorites => SitesEvent::SystemGroupHiddenSet {
-                group: ExploreSystemGroup::Favorites,
-                hidden,
-            },
-            ExploreGroupRow::Recent => SitesEvent::SystemGroupHiddenSet {
-                group: ExploreSystemGroup::Recent,
-                hidden,
-            },
-            ExploreGroupRow::Custom(i) => {
-                let Some(id) = resident.read(cx).view().groups.get(i).map(|g| g.id.clone()) else {
-                    return;
-                };
-                SitesEvent::GroupHiddenSet { id, hidden }
-            }
+        let group = match row {
+            ExploreGroupRow::Favorites => ExploreSystemGroup::Favorites,
+            ExploreGroupRow::Recent => ExploreSystemGroup::Recent,
         };
-        resident.update(cx, |resident, cx| resident.dispatch(event, cx));
-        cx.notify();
-    }
-
-    /// Delete one of the person's own groups. Its sites stay favourited.
-    fn delete_explore_group(&mut self, index: usize, cx: &mut Context<Self>) {
-        let resident = resident::resident::<ExploreSites>(cx);
-        let Some(id) = resident
-            .read(cx)
-            .view()
-            .groups
-            .get(index)
-            .map(|g| g.id.clone())
-        else {
-            return;
-        };
-        resident.update(cx, |resident, cx| {
-            resident.dispatch(
-                vela_core::app::explore_sites::Event::GroupDeleted { id },
-                cx,
-            );
+        resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+            resident.dispatch(SitesEvent::SystemGroupHiddenSet { group, hidden }, cx);
         });
         cx.notify();
     }
@@ -1976,11 +1922,8 @@ impl WalletPage {
         }
     }
 
-    /// Take the typed name and give it to whichever machine asked.
-    ///
-    /// A new group made from "move to a group" also TAKES the tile: somebody
-    /// who went that way meant both halves, and leaving the group empty would
-    /// make them do the second half again.
+    /// Take what was typed and give it to the machine: a tile's new name, or
+    /// the address of a site to pin.
     fn save_explore_form(&mut self, cx: &mut Context<Self>) {
         let Some(form) = self.explore_form.take() else {
             return;
@@ -2016,34 +1959,6 @@ impl WalletPage {
                         cx,
                     );
                 });
-            }
-            ExploreAsk::NewGroup { then_add } => {
-                resident.update(cx, |resident, cx| {
-                    resident.dispatch(
-                        vela_core::app::explore_sites::Event::GroupCreated {
-                            name,
-                            now_ms: crate::executor::now_ms(),
-                        },
-                        cx,
-                    );
-                });
-                // The id is the core's, so it is read back rather than
-                // guessed: the machine makes it unique against what exists.
-                if let Some(origin) = then_add
-                    && let Some(id) = resident
-                        .read(cx)
-                        .view()
-                        .groups
-                        .last()
-                        .map(|group| group.id.clone())
-                {
-                    resident.update(cx, |resident, cx| {
-                        resident.dispatch(
-                            vela_core::app::explore_sites::Event::GroupMemberAdded { id, origin },
-                            cx,
-                        );
-                    });
-                }
             }
         }
         cx.notify();
@@ -3784,6 +3699,7 @@ impl WalletPage {
         let balance = self.balance_model(cx);
         let activity = self.activity_models(cx);
         let assets = self.asset_models(cx);
+        self.keep_hero_clock(cx);
 
         let pills = div()
             .flex()
@@ -3971,6 +3887,8 @@ impl WalletPage {
         // can cross. The balance stays outside it: one-ended, and a large one
         // needs the room. Full-screen, the rows used to run the width of the
         // monitor with a token's name at one end and its amount at the other.
+        // The system's Reduce Motion: the refresh glyph keeps still.
+        let reduce_motion = cx.reduce_motion();
         let column = self
             .content_scroll
             .wire(div().id("wallet-content").size_full(), cx.entity_id())
@@ -4006,14 +3924,14 @@ impl WalletPage {
                         // Issue #443: read everything again, now — the balances
                         // and the incoming scan, as coming back to the window
                         // does. There was no way to ask; the next look was up to
-                        // ten minutes away.
+                        // ten minutes away. Issue 462: as the person's own read.
                         self.identity.is_some().then(|| {
-                            Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                                crate::executor::balance_dashboard::refresh(cx);
-                                crate::executor::activity_feed::focus_tick(cx);
-                            })
+                            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.refresh_by_hand(cx);
+                            }))
                                 as crate::wallet::components::BalanceToggle
                         }),
+                        reduce_motion,
                     ))
                     .child(
                         div()
@@ -4811,7 +4729,81 @@ impl WalletPage {
                 &self.loc.relative_time(at, crate::executor::now_ms()),
             ))
         });
+        // Issue 462: the core's "a read they asked for is out", held for at
+        // least the press's minimum turn.
+        model.refreshing = wallet_live::refresh_turning(
+            view.refreshing,
+            self.refresh_hold,
+            std::time::Instant::now(),
+        );
         model
+    }
+
+    /// The hero's ↻ pressed (issues #443, 462): the balances as the
+    /// person's own read (`pull: true` — the core holds `refreshing` until
+    /// this round ends) and the incoming scan, exactly what the phone's
+    /// pull-to-refresh sends. The control turns for at least
+    /// `REFRESH_MIN_SPIN`, so a round answered in a blink still shows the
+    /// press took; while it turns it takes no press.
+    fn refresh_by_hand(&mut self, cx: &mut Context<Self>) {
+        if self.identity.is_none() {
+            return;
+        }
+        let refreshing = resident::resident::<BalanceDashboard>(cx)
+            .read(cx)
+            .view()
+            .refreshing;
+        let now = std::time::Instant::now();
+        if wallet_live::refresh_turning(refreshing, self.refresh_hold, now) {
+            return;
+        }
+        let until = now + wallet_live::REFRESH_MIN_SPIN;
+        self.refresh_hold = Some(until);
+        crate::executor::balance_dashboard::pull(cx);
+        crate::executor::activity_feed::focus_tick(cx);
+        // The hold ends on a frame of its own: a round that settled inside
+        // it drew nothing after, and the glyph would turn on until the next
+        // unrelated redraw.
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(wallet_live::REFRESH_MIN_SPIN)
+                .await;
+            page.update(cx, |this, cx| {
+                if this.refresh_hold == Some(until) {
+                    this.refresh_hold = None;
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Issue 462: "Updated <ago>" ages while the hero is on screen. Nothing
+    /// else PROMISES a redraw on a clock — the balance poll is ten minutes,
+    /// and whatever else happens to redraw the page is not a contract — so
+    /// "Updated now" could read "now" until something unrelated moved.
+    /// One timer for the page's life, redrawing only while the Wallet
+    /// section is up with a session behind it; the core's short form moves
+    /// at 45 s and then by the minute, so every `HERO_CLOCK` is enough.
+    fn keep_hero_clock(&mut self, cx: &mut Context<Self>) {
+        if self.hero_clock.is_some() || self.identity.is_none() {
+            return;
+        }
+        self.hero_clock = Some(cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor().timer(HERO_CLOCK).await;
+                let alive = page.update(cx, |this, cx| {
+                    if this.section == Section::Wallet && this.identity.is_some() {
+                        cx.notify();
+                    }
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        }));
     }
 
     /// The group rail: the person's own groups, or the mocks'.
@@ -6124,6 +6116,7 @@ impl WalletPage {
     /// column does, and its answer is what records the payment and hands it
     /// to the tracker, so the machines run on, unseen, until it is in.
     fn let_send_go(&mut self, cx: &mut Context<Self>) {
+        self.send_parked = false;
         let Some(host) = self.send_host.take() else {
             return;
         };
@@ -6146,6 +6139,8 @@ impl WalletPage {
         let display = self.send_display(cx);
         let window_handle = self.window_handle;
         let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
+        // A new send replaces one parked under a report.
+        self.send_parked = false;
         cx.observe(&host, |page, _, cx| {
             // A column that ran on unseen goes once its submit is in.
             page.send_background
@@ -6268,11 +6263,6 @@ impl WalletPage {
         let host = self.send_host.clone()?;
         let (mut view, fee) = self.send_views(cx)?;
         self.narrow_for_picker(panel, &mut view);
-        let contact_addresses = if panel == FlowPanel::Dsd2e {
-            flows_live::contact_addresses(&resident::resident::<Contacts>(cx).read(cx).view())
-        } else {
-            Vec::new()
-        };
         let batch_rate = self.send_host.as_ref().and_then(|host| {
             host.read(cx)
                 .batch_view
@@ -6303,7 +6293,6 @@ impl WalletPage {
         Some(SendBindings {
             host,
             token_ids: flows_live::send_token_ids(&view),
-            contact_addresses,
             fee_contracts: flows_live::fee_token_contracts(&fee),
             // Shown in the person's decimal mark (078 M-04); edits are read
             // against what was shown and handed on dot-decimal.
@@ -6972,7 +6961,7 @@ impl WalletPage {
             tap_max: None,
             change_token: None,
             toggle_denom: None,
-            pick_contact_rows: Vec::new(),
+            pick_contact: None,
             fee_rows: Vec::new(),
             batch_unit: None,
             batch_paste: None,
@@ -6983,6 +6972,7 @@ impl WalletPage {
             batch_merge: None,
             notice_action: None,
             notice_dismiss: None,
+            notice_report: None,
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
             split_address_fields: Vec::new(),
@@ -7176,6 +7166,18 @@ impl WalletPage {
                     SendEvent::DismissTreasurySheet
                 },
             ));
+            // Issue 466: "Report this" on a relay stop — the core's report as
+            // it stands at the PRESS, not at the draw (the stop's watch
+            // rewrites its figures every 10 s), into the reporter.
+            actions.notice_report = Some(Box::new(cx.listener(
+                |this, _: &gpui::ClickEvent, _, cx| {
+                    let Some(report) = this.send_views(cx).and_then(|(view, _)| view.relay_report)
+                    else {
+                        return;
+                    };
+                    this.open_relay_report(report, cx);
+                },
+            )));
             actions.notice_action = send.way_out.map(|way_out| match way_out {
                 flows_live::NoticeWayOut::RetryAfterBootstrap => {
                     to_host(SendEvent::RetryAfterBootstrap)
@@ -7508,26 +7510,18 @@ impl WalletPage {
                             )
                         })
                         .collect();
-                    actions.pick_contact_rows = send
-                        .contact_addresses
-                        .into_iter()
-                        .map(|address| -> panels::Click {
-                            let host = host.clone();
-                            Box::new(
-                                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                                    host.update(cx, |host, cx| {
-                                        host.dispatch(
-                                            SendEvent::PickedAddress {
-                                                address: address.clone(),
-                                            },
-                                            cx,
-                                        );
-                                        host.dispatch(SendEvent::CloseContactPicker, cx);
-                                    });
-                                },
-                            )
-                        })
-                        .collect();
+                    // Issue 467: the row says WHOM — its own address — and
+                    // the core is told that, never a place in a list.
+                    let picker = host.clone();
+                    actions.pick_contact = Some(std::rc::Rc::new(
+                        move |address: &str, _: &mut Window, cx: &mut gpui::App| {
+                            let address = address.to_owned();
+                            picker.update(cx, |host, cx| {
+                                host.dispatch(SendEvent::PickedAddress { address }, cx);
+                                host.dispatch(SendEvent::CloseContactPicker, cx);
+                            });
+                        },
+                    ));
                 }
                 FlowPanel::Dsd2f => {
                     actions.fee_rows = send
@@ -8176,6 +8170,8 @@ impl WalletPage {
         let s_clone = fixtures::balance_variants(&self.strings);
         let mut balances = div().flex().flex_col().gap(px(16.));
         for model in &s_clone {
+            // The board draws the motion design; gpui still holds a turn
+            // still under Reduce Motion.
             balances = balances.child(balance_display(
                 theme,
                 &mut self.icons,
@@ -8183,6 +8179,7 @@ impl WalletPage {
                 None,
                 None,
                 None,
+                false,
             ));
         }
 
@@ -9438,7 +9435,7 @@ impl WalletPage {
         // `VELA_SIGN_PROBE=1` (debug builds): raise the wallet's own signing column
         // once, so the column can be LOOKED at — there is no way to click this
         // app from a shell. A zero-value call to
-        // itself on Gnosis; nothing is signed unless somebody slides.
+        // itself on Gnosis; nothing is signed unless somebody confirms.
         #[cfg(all(debug_assertions, not(target_os = "linux")))]
         if crate::dev_env::flag!("VELA_SIGN_PROBE") {
             self.open_backup_signing(
@@ -15602,7 +15599,6 @@ impl WalletPage {
         // A new request opens closed: the last one's decision to look at the
         // bytes is not this one's.
         self.signing_advanced_open = false;
-        crate::signing::components::reset_slide();
         // The same question, once, for a request the core answered before
         // any observation fires — a refusal on arrival.
         self.signing_host_changed(&host, tab.as_deref(), cx);
@@ -15779,12 +15775,11 @@ impl WalletPage {
         } else {
             explore_fixtures::favorites()
         };
-        // Nothing pinned, nothing visited, no groups: the web's start page
-        // (078 E-01) — the mark, what this is for, and a way to begin —
-        // instead of a lone "Favorites" over an add tile and nothing else.
+        // Nothing pinned, nothing visited: the web's start page (078 E-01) —
+        // the mark, what this is for, and a way to begin — instead of a lone
+        // "Favorites" over an add tile and nothing else.
         if live_grid
             && favorites.is_empty()
-            && explore_live::custom_groups(&explore_view).is_empty()
             && resident::resident::<BrowserHistory>(cx)
                 .read(cx)
                 .view()
@@ -15893,39 +15888,25 @@ impl WalletPage {
             column = column.child(grid);
         }
 
-        // Recent is the core's; everything below it is still drawn, because
-        // nothing in `vela-core` owns favourites or custom groups yet. The
-        // drawn Recent group is DROPPED when the live one exists rather than
-        // shown beside it — two "Recent" headings, one of them invented, is
-        // the fixture leaking that phases 22, 26 and 27 each had to close.
+        // Recent is the core's, and the only section under the favourites
+        // (issue 465: no groups of the person's own). The drawn Recent group
+        // is DROPPED when the live one exists rather than shown beside it —
+        // two "Recent" headings, one of them invented, is the fixture leaking
+        // that phases 22, 26 and 27 each had to close.
         let history = resident::resident::<BrowserHistory>(cx).read(cx).view();
         // A hidden Recent draws nothing (078 W-11); it comes back from the sheet.
         let live_recent = explore_live::recent_group(&history.entries, &self.explore)
             .filter(|_| !(live_grid && explore_view.recent_hidden));
-        // …and so are the person's own groups. The drawn ones (交易 / 预测市场)
-        // are mock CONTENT, not chrome: they go the moment there is a real
-        // book to show, exactly as the drawn Recent does.
-        let live_groups = if live_grid {
-            explore_live::custom_groups(&explore_view)
-        } else {
-            Vec::new()
-        };
         let groups = explore_fixtures::groups(&self.explore)
             .into_iter()
             .filter(|group| !(group.id == "recent" && self.identity.is_some()))
-            .filter(|group| !(live_grid && group.id != "recent"))
-            .chain(live_groups)
             .collect::<Vec<_>>();
         for (group_index, group) in live_recent.into_iter().chain(groups).enumerate() {
             let action = match group.action {
                 explore_fixtures::GroupAction::Clear => self.explore.clear.clone(),
                 explore_fixtures::GroupAction::Edit => self.explore.edit.clone(),
-                explore_fixtures::GroupAction::Menu => SharedString::from("⋯"),
             };
             // The Clear on the live Recent heading clears the core's history.
-            // The drawn groups' actions stay inert: there is no machine behind
-            // a custom group, and a button that looked identical but deleted
-            // nothing would be the worse of the two lies.
             let clearable = group.id == "recent" && matches!(group.action, GroupAction::Clear);
             let (title_half, action_half) =
                 section_header_parts(theme, &mut self.icons, group.title.clone(), action);
@@ -15940,17 +15921,6 @@ impl WalletPage {
                         cx.notify();
                     }))
                     .into_any_element()
-            } else if live_grid && matches!(group.action, GroupAction::Menu) {
-                // A live group's ⋯ is "Manage groups" (078 W-11), as the web's
-                // header action is. A drawn group's stays inert.
-                action_half
-                    .id(("explore-group-menu", group_index))
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.explore_groups = true;
-                        cx.notify();
-                    }))
-                    .into_any_element()
             } else {
                 action_half.into_any_element()
             };
@@ -15960,10 +15930,9 @@ impl WalletPage {
             for (i, site) in group.sites.iter().enumerate() {
                 cells.push(
                     explore_components::site_row(
-                        // By the group's place on the page, not its kind: every
-                        // custom group is "custom", and row 0 of each one
-                        // shared an id — gpui then treats them as one element
-                        // (078 E-02).
+                        // By the group's place on the page, not its kind: two
+                        // groups of one kind once shared row 0's id, and gpui
+                        // then treats them as one element (078 E-02).
                         ElementId::NamedInteger(
                             SharedString::from(format!("explore-group-{group_index}")),
                             i as u64,
@@ -15990,12 +15959,11 @@ impl WalletPage {
                     .on_click({
                         // The row's OWN site (078 E-02). A Recent row opens
                         // where the person left off, verbatim — that is what
-                        // the core stores the whole URL for; a custom group's
-                        // row opens the url its site was pinned at. It used to
-                        // look every row up in the HISTORY by host, and a
-                        // pinned site nobody had visited yet found nothing —
-                        // yet the column still switched to the browser, onto
-                        // whatever page was loaded last.
+                        // the core stores the whole URL for. It used to look
+                        // every row up in the HISTORY by host, and a row with
+                        // no visit behind it found nothing — yet the column
+                        // still switched to the browser, onto whatever page
+                        // was loaded last.
                         let url = site.open_url();
                         cx.listener(move |this, _, _, cx| {
                             this.browser_go(crate::wallet::browser_host::Go::Open(url.clone()), cx);
@@ -16627,9 +16595,12 @@ impl WalletPage {
             let host = self.signing_host.as_ref()?.read(cx);
             let (method, params) = host.raw.clone();
             let result = host.clear_view.result.as_ref();
-            let summary = result
-                .and_then(|result| result.contract_name.clone())
-                .map(SharedString::from);
+            let first_party = host
+                .view
+                .request
+                .as_ref()
+                .is_some_and(|request| request.first_party);
+            let summary = crate::signing::live::tech_summary(&host.clear_view, first_party);
             let party = result.and_then(|result| {
                 let address = result.contract_address.clone()?;
                 let name = result
@@ -16697,19 +16668,20 @@ impl WalletPage {
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
         let mut model = signing_fixtures::build(self.signing_state, &self.signing);
-        // Which of the two things this column is: the request, or the gas
-        // account it cannot pay from.
-        let mut funding = false;
-        // Spec 081: the core refused the request outright.
-        let mut refused = false;
+        // Which of the three things this column is: the request, the core's
+        // refusal of it (spec 081), or the gas account it cannot pay from.
+        let mut kind = signing_live::ColumnKind::Request;
         // The speed control under the fee (spec 069) — the send form's own,
         // and the tiers its options pick, in order.
         // Spec 079 US7: this account signs on the Trusted Signer's page, whose
-        // own slide is the consent — the column offers a button that goes
-        // there, not a second slide.
+        // own control is the consent — the column offers a button that goes
+        // there, not a second confirm.
         let mut signs_on_page = false;
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
         let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
+        // The confirm's note line, held for a live request (`HeldLines::note`):
+        // its words, and whether they are said now.
+        let mut held_note: Option<Option<(SharedString, bool)>> = None;
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
@@ -16737,19 +16709,14 @@ impl WalletPage {
             // this surface "the in-sheet funding swap (BUG-1: never a stacked
             // second modal)", and a request drawn under a top-up prompt is a
             // person deciding two things at once.
-            if host.view.surface == vela_core::app::sign_request::SignSurface::Funding {
+            kind = signing_live::ColumnKind::of(&host.view);
+            if kind == signing_live::ColumnKind::Funding {
+                // The top-up's button, label and (no) fee card are its own
+                // (`column_confirm`, below): the header and the fee card
+                // belong to the request, not to the top-up — the person is
+                // being asked for one thing here.
                 model.blocks = signing_live::funding_blocks(&host.view, &self.signing);
-                model.confirm_label = self.signing.funding_check_now.clone();
-                // Armed on its own terms: this slide is not a signature, it is
-                // "I have sent it, look again". The three-machine AND governs
-                // signing, and applying it here would leave the only way out
-                // of a top-up shut.
-                model.confirm_enabled = true;
-                funding = true;
-                // The header and the fee card belong to the request, not to
-                // the top-up: the person is being asked for one thing here.
-                model.fee = signing_fixtures::FeeModel::Hidden;
-            } else if host.view.blocked.is_some() {
+            } else if kind == signing_live::ColumnKind::Refused {
                 // Spec 081: the core refused this request — it would have
                 // changed who controls the account. The refusal is the whole
                 // sheet. The decoded body, the simulation and the cap editor
@@ -16757,8 +16724,6 @@ impl WalletPage {
                 // reading them invites the question "so why can't I?", which
                 // the refusal already answers.
                 model.blocks = signing_live::status_blocks(&host.view, &self.signing);
-                refused = true;
-                model.fee = signing_fixtures::FeeModel::Hidden;
             } else {
                 // ALWAYS the core's, never "the core's if it has any". The old
                 // `if !blocks.is_empty()` left the GALLERY's blocks under a live
@@ -16817,44 +16782,23 @@ impl WalletPage {
             model.dapp_name = name;
             model.dapp_host = dapp_host;
             model.dapp_letter = letter;
-            // The wallet's own request (the key backup) is not a site: its own
-            // mark and name, and no host. A site gets its own icon over its
+            // The wallet's own request (the key backup) is not a site, and the
+            // core says which it is (`first_party`, set where the shell raised
+            // it) — never this file reading the transport or the bytes. It has
+            // no requester header at all. A site gets its own icon over its
             // initial — https only, never over a channel anybody could answer on.
-            let own = host.transport_id == crate::wallet::signing_host::WALLET_TRANSPORT;
-            model.dapp_own = own;
-            if own {
-                model.dapp_name = gpui::SharedString::from("Vela Wallet");
-                model.dapp_host = gpui::SharedString::default();
-                // Matched on the VERIFIED registry address, never on "it is ours"
-                // alone and never on the English words: the first look at this
-                // column headed a plain self-transfer "备份公钥".
-                let is_backup = host.clear_view.result.as_ref().is_some_and(|result| {
-                    result.verified
-                        && result.contract_address.as_deref().is_some_and(|address| {
-                            address.eq_ignore_ascii_case(vela_core::registry_backup::REGISTRY)
-                        })
-                });
-                // …and its built-in lines, in the person's language. The core's
-                // are English, like the descriptors beside them; this one is
-                // OURS. First-party + the intent block it opens with.
-                if is_backup
-                    && let Some(signing_fixtures::Block::Intent { text, .. }) =
-                        model.blocks.first_mut()
-                {
-                    *text = self.signing.backup_intent.clone();
-                }
-                let mut relabelled = 0;
-                for block in model.blocks.iter_mut().filter(|_| is_backup) {
-                    if let signing_fixtures::Block::Rows(rows) = block {
-                        for row in rows.iter_mut() {
-                            if let Some(label) = self.signing.backup_labels.get(relabelled) {
-                                row.0 = label.clone();
-                                relabelled += 1;
-                            }
-                        }
-                    }
-                }
-            } else if let Some(base) = host.origin.strip_prefix("https://") {
+            let own = host
+                .view
+                .request
+                .as_ref()
+                .is_some_and(|request| request.first_party);
+            model.first_party = own;
+            // Its words are the core's terms like any reading's
+            // (`localized_terms`, above): the backup's intent and its Network
+            // / Address / Public keys rows arrive named, so nothing here
+            // relabels them — the old swap by position would have put
+            // "Registered as" over the Network row the moment the core added it.
+            if !own && let Some(base) = host.origin.strip_prefix("https://") {
                 let base = base.split('/').next().unwrap_or_default();
                 if !base.is_empty() {
                     model.dapp_icon_urls = vec![
@@ -16869,8 +16813,10 @@ impl WalletPage {
             model.network_name =
                 gpui::SharedString::from(crate::flows::live::chain_name(host.chain_id));
             let speed_tier = Some(host.speed_view().tier);
-            if !refused {
-                model.fee = signing_live::fee_model(
+            // The top-up's "check again" and a refusal's absent confirm are
+            // the column's own; only the request reads the signing gate.
+            let mut confirm = signing_live::column_confirm(kind, &self.signing, || {
+                let mut fee_model = signing_live::fee_model(
                     &host.clear_view,
                     fee,
                     host.chain_id,
@@ -16883,31 +16829,68 @@ impl WalletPage {
                 // Spec 079: the speed control's own deployment read, which the
                 // fee machine never sees.
                 signing_live::fee_row_state(
-                    &mut model.fee,
+                    &mut fee_model,
                     host.fee_measuring(),
                     host.fee_unanswered(),
                     &self.signing,
                 );
-                model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
-                let confirm = signing_live::confirm_state(
+                let state = signing_live::confirm_state(
                     &host.view,
                     &host.guard_view,
                     &host.clear_view,
                     fee,
                     speed_tier,
                 );
-                model.confirm_enabled = confirm.enabled;
-                model.confirm_note = confirm
-                    .key
-                    .as_deref()
-                    .map(|key| gpui::SharedString::from(self.loc.t(key).to_string()));
-            } else {
-                // No confirm control at all. It is not disabled — it is
-                // absent, because the wallet never offered it.
-                model.confirm_label = gpui::SharedString::default();
-                model.confirm_enabled = false;
+                signing_live::ColumnConfirm {
+                    fee: fee_model,
+                    label: signing_live::confirm_label(&host.clear_view, &self.signing),
+                    enabled: state.enabled,
+                    note: state
+                        .key
+                        .as_deref()
+                        .map(|key| gpui::SharedString::from(self.loc.t(key).to_string())),
+                }
+            });
+            // Nothing moves while a figure is measured — a refresh, a speed
+            // switch, the 30 s re-quote: the shortfall under the fee row and
+            // the confirm's note keep their lines, holding the last words
+            // invisibly while they have nothing to say.
+            if kind == signing_live::ColumnKind::Request {
+                let id = host
+                    .view
+                    .request
+                    .as_ref()
+                    .map(|request| request.id.clone())
+                    .unwrap_or_default();
+                if self
+                    .signing_held
+                    .as_ref()
+                    .is_none_or(|(held, _)| *held != id)
+                {
+                    self.signing_held = Some((id, signing_live::HeldLines::default()));
+                }
+                if let Some((_, held)) = self.signing_held.as_mut() {
+                    let measuring = fee.busy
+                        || host.fee_measuring()
+                        || signing_live::fee_of_another_tier(fee, speed_tier);
+                    signing_live::hold_fee_warning(&mut confirm.fee, held, measuring);
+                    held_note = Some(
+                        held.note(
+                            confirm
+                                .note
+                                .clone()
+                                .filter(|_| !confirm.enabled && !confirm.label.is_empty()),
+                        ),
+                    );
+                }
             }
-            if !funding && !refused && !signing_live::off_chain(&host.clear_view) {
+            model.fee = confirm.fee;
+            model.confirm_label = confirm.label;
+            model.confirm_enabled = confirm.enabled;
+            model.confirm_note = confirm.note;
+            if kind == signing_live::ColumnKind::Request
+                && !signing_live::off_chain(&host.clear_view)
+            {
                 speed_tiers = host
                     .speed_view()
                     .options
@@ -16929,10 +16912,14 @@ impl WalletPage {
         }
         #[cfg(target_os = "linux")]
         let _ = cx;
+        let funding = kind == signing_live::ColumnKind::Funding;
+        let refused = kind == signing_live::ColumnKind::Refused;
 
         // Spec 079: once approved, the column is the send receipt — the form,
-        // its fee and its dimmed slide are gone from the first frame after the
+        // its fee and its confirm are gone from the first frame after the
         // approval, not when the core closes the sheet ninety seconds later.
+        // That is also why the confirm is never drawn busy or faded after
+        // the tap: there is no frame left to draw it in.
         // What the column was about is kept for the ending.
         #[cfg(not(target_os = "linux"))]
         if self.signing_host.is_some() && !funding && !refused {
@@ -16948,7 +16935,7 @@ impl WalletPage {
                     .flex()
                     .flex_col()
                     .gap(px(16.))
-                    .child(signing_components::header_view(theme, &header))
+                    .children(signing_components::header_view(theme, &header))
                     .child(card);
             }
             if let Some((receipt, chain_id)) = self.open_request_receipt(summary.as_ref(), cx) {
@@ -16968,25 +16955,24 @@ impl WalletPage {
             }
         }
 
-        // Passed ONLY when the three machines agreed. A shut slide that still
-        // carried an action would be a control the core said no to, waiting
-        // for a click to say yes.
+        // Passed ONLY when the three machines agreed. A shut confirm that
+        // still carried an action would be a control the core said no to,
+        // waiting for a click to say yes.
         #[cfg(not(target_os = "linux"))]
         let confirm_action: Option<panels::Click> =
             (model.confirm_enabled && self.signing_host.is_some()).then(|| {
                 Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                     if let Some(host) = page.signing_host.as_ref() {
                         host.update(cx, |host, cx| {
-                            if funding {
+                            // What the button SAID when it was drawn, never a
+                            // later read: a "check again" must not become an
+                            // approval because the sheet moved under it.
+                            match kind.tap_event() {
                                 // "I have topped it up" — the core re-runs the
                                 // pre-check with the opts it saved, so the
                                 // request resumes rather than starting over.
-                                host.dispatch_sign(
-                                    vela_core::app::sign_request::Event::FundingCompleteTapped,
-                                    cx,
-                                );
-                            } else {
-                                host.approve(cx);
+                                Some(event) => host.dispatch_sign(event, cx),
+                                None => host.approve(cx),
                             }
                         });
                     }
@@ -16994,11 +16980,13 @@ impl WalletPage {
             });
         #[cfg(target_os = "linux")]
         let confirm_action: Option<panels::Click> = None;
+        // The wallet's own request draws no header — and no gap where it was:
+        // its intent, the headline below, is the first thing in the column.
         let mut column = div()
             .flex()
             .flex_col()
             .gap(px(16.))
-            .child(signing_components::header(theme, &model));
+            .children(signing_components::header(theme, &model));
 
         // The allowance cards that are controls, in the order the blocks list
         // them: the single approval's, then each batch leg's. Each carries its
@@ -17132,7 +17120,7 @@ impl WalletPage {
                     window,
                 ));
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
-                (model.dapp_own, item)
+                (model.first_party, item)
             {
                 // The wallet's own request has no figure to lead with — its
                 // intent IS the outcome, so it is the headline rather than the
@@ -17351,38 +17339,56 @@ impl WalletPage {
                 &model.signer_seed,
             ))
             .children((!model.confirm_label.is_empty()).then(|| {
-                if signs_on_page && !funding {
-                    // One slide per signature (owner, spec 079 ruling 9): the
-                    // page's. This button sends the same approval the slide
-                    // did, and the page asks for the consent.
+                if funding {
+                    // The top-up's "check again": a plain button, not a
+                    // confirm — nothing is signed by it.
+                    signing_components::funding_check_button(
+                        theme,
+                        model.confirm_label.clone(),
+                        confirm_action,
+                    )
+                } else if signs_on_page {
+                    // One consent per signature (owner, spec 079 ruling 9):
+                    // the page's. This button sends the same approval the
+                    // confirm does, and the page asks for the consent.
                     signing_components::open_signer_button(
                         theme,
                         self.signing.open_signer.clone(),
                         model.confirm_enabled,
                         confirm_action,
                     )
-                    .into_any_element()
                 } else {
-                    signing_components::slide_to_confirm(
+                    // A tap (issue #461), never a drag: the send Confirm's own
+                    // button, saying the action alone.
+                    signing_components::confirm_button(
                         theme,
-                        &mut self.icons,
                         model.confirm_label.clone(),
                         model.confirm_enabled,
                         confirm_action,
                     )
-                    .into_any_element()
                 }
             }))
-            // Spec 099 R7: a shut slide says why, in the core's words.
+            // Spec 099 R7: a shut confirm says why, in the core's words — in
+            // a line that, once said, stays with its last words invisible
+            // while there is nothing to say, so the next measurement's note
+            // fills it rather than growing the column.
             .children(
-                model
-                    .confirm_note
-                    .clone()
-                    .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
-                    .map(|note| {
+                held_note
+                    .unwrap_or_else(|| {
+                        model
+                            .confirm_note
+                            .clone()
+                            .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
+                            .map(|note| (note, true))
+                    })
+                    .map(|(note, said)| {
                         div()
                             .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
+                            .text_color(if said {
+                                theme.fg_subtle
+                            } else {
+                                gpui::transparent_black()
+                            })
                             .child(note)
                     }),
             );
@@ -18202,6 +18208,9 @@ impl WalletPage {
             &receipt.title,
             &receipt.captions,
         );
+        // The wallet's own request has no header here either: its receipt
+        // is centred in the whole column, as one with no header is.
+        let header = header.and_then(|header| signing_components::header_view(theme, header));
         // Centred in what is left of the column, as the web's `.receipt`
         // (`min-height: 100%; justify-content: center`).
         let reserved = if header.is_some() { 190. } else { 120. };
@@ -18309,7 +18318,7 @@ impl WalletPage {
                 .flex()
                 .flex_col()
                 .gap(px(16.))
-                .child(signing_components::header_view(theme, header))
+                .child(header)
                 .child(body),
             None => body,
         }
@@ -19134,10 +19143,6 @@ impl WalletPage {
                     },
                 )) as contacts_components::MenuAction),
             ],
-            // "Move to a group": the person's own groups, newest last, with
-            // "new group" at the top. The index is the position in the SAME
-            // list the menu was built from — read again here rather than
-            // captured, so a group made in between cannot shift the answer.
             // The contact's own menu, in the order it is drawn: send, receive,
             // copy, edit, move to a group, delete. Every one of them has
             // somewhere to go on this shell — which is why it is opened at
@@ -19249,55 +19254,6 @@ impl WalletPage {
                     )
                 })
                 .collect(),
-            ContactsMenu::MoveGroup => {
-                let ids: Vec<String> = resident::resident::<ExploreSites>(cx)
-                    .read(cx)
-                    .view()
-                    .groups
-                    .iter()
-                    .map(|group| group.id.clone())
-                    .collect();
-                let mut actions: Vec<Option<contacts_components::MenuAction>> = vec![Some(
-                    Box::new(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
-                        // Name it first; the tile joins it the moment it
-                        // exists.
-                        let origin = this.menu_origin.take();
-                        this.menu = None;
-                        this.explore_form = Some(ExploreForm {
-                            ask: ExploreAsk::NewGroup { then_add: origin },
-                            text: String::new(),
-                        });
-                        window.focus(&this.explore_form_focus, cx);
-                        cx.notify();
-                    })) as contacts_components::MenuAction,
-                )];
-                for id in ids {
-                    actions.push(Some(Box::new(cx.listener(
-                        move |this, _: &gpui::ClickEvent, _, cx| {
-                            let origin = this.menu_origin.take();
-                            this.menu = None;
-                            if let Some(origin) = origin {
-                                resident::resident::<ExploreSites>(cx).update(
-                                    cx,
-                                    |resident, cx| {
-                                        resident.dispatch(
-                                        vela_core::app::explore_sites::Event::GroupMemberAdded {
-                                            id: id.clone(),
-                                            origin,
-                                        },
-                                        cx,
-                                    );
-                                    },
-                                );
-                            }
-                            cx.notify();
-                        },
-                    ))
-                        as contacts_components::MenuAction));
-                }
-                actions
-            }
-
             // Spec 099: a tab's closes — this one, then the core's scopes.
             ContactsMenu::Tab => {
                 use vela_core::app::explore_sites::TabCloseScope;
@@ -19367,14 +19323,12 @@ impl WalletPage {
                     cx.notify();
                 })) as contacts_components::MenuAction),
             ],
-            // The favourite tile's menu, in the order it is drawn: open in a
-            // new tab, rename, move to a group, remove.
+            // The favourite tile's menu, in the order `tile_menu` draws it:
+            // open in a new tab, rename, remove. Paired by place — a row
+            // taken out there is taken out here, or every row below it would
+            // run its neighbour's action (issue 465 took "Move to group…").
             //
-            // Remove is the core's `FavoriteRemoved`, which also takes the
-            // site out of every group it was in. Rename and move need an
-            // input and a group picker that no desktop scenario draws yet,
-            // and a new tab needs the strip (still owed) — all three stay
-            // drawn and inert rather than armed and lying.
+            // Remove is the core's `FavoriteRemoved`.
             ContactsMenu::Tile => vec![
                 // Open in a new tab — the strip exists now (phase 37).
                 Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
@@ -19421,14 +19375,6 @@ impl WalletPage {
                         cx.notify();
                     })) as contacts_components::MenuAction,
                 ),
-                // Move to a group — the picker, which keeps the origin.
-                Some(
-                    Box::new(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
-                        this.menu =
-                            Some((ContactsMenu::MoveGroup, event.position(), Anchor::TopLeft));
-                        cx.notify();
-                    })) as contacts_components::MenuAction,
-                ),
                 Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     let origin = this.menu_origin.take();
                     this.menu = None;
@@ -19448,25 +19394,11 @@ impl WalletPage {
 
     /// What the menu `kind` lists — its rows, in the order its actions are
     /// armed (`menu_actions`).
-    fn menu_model(
-        &self,
-        kind: ContactsMenu,
-        cx: &mut Context<Self>,
-    ) -> contacts_fixtures::MenuModel {
+    fn menu_model(&self, kind: ContactsMenu) -> contacts_fixtures::MenuModel {
         match kind {
             ContactsMenu::Header => contacts_fixtures::header_dropdown(&self.contacts),
             ContactsMenu::Group => contacts_fixtures::group_context(&self.contacts),
             ContactsMenu::Recent => explore_fixtures::recent_menu(&self.explore),
-            ContactsMenu::MoveGroup => explore_fixtures::group_pick_menu(
-                &self.explore,
-                &resident::resident::<ExploreSites>(cx)
-                    .read(cx)
-                    .view()
-                    .groups
-                    .iter()
-                    .map(|group| group.name.clone())
-                    .collect::<Vec<_>>(),
-            ),
             ContactsMenu::Tile => explore_fixtures::tile_menu(&self.explore),
             ContactsMenu::Tab => explore_fixtures::tab_menu(&self.explore),
             // Drawn by its own card: logos and figures, not glyphs.
@@ -19501,7 +19433,7 @@ impl WalletPage {
                 actions,
             )
         } else {
-            let model = self.menu_model(kind, cx);
+            let model = self.menu_model(kind);
             menu_card(theme, &mut self.icons, &model, actions)
         }
     }
@@ -19509,11 +19441,11 @@ impl WalletPage {
     /// How big [`Self::menu_card_of`] draws `kind`, its shadow aside — what
     /// a float is sized to before anything is laid out in it.
     #[cfg(target_os = "macos")]
-    fn menu_card_size_of(&self, kind: ContactsMenu, cx: &mut Context<Self>) -> gpui::Size<Pixels> {
+    fn menu_card_size_of(&self, kind: ContactsMenu) -> gpui::Size<Pixels> {
         if matches!(kind, ContactsMenu::SiteNetwork) {
             explore_components::network_pick_card_size(self.site_networks.len())
         } else {
-            contacts_components::menu_card_size(&self.menu_model(kind, cx))
+            contacts_components::menu_card_size(&self.menu_model(kind))
         }
     }
 
@@ -19647,8 +19579,23 @@ impl Render for WalletPage {
             self.address_selected = false;
         }
 
+        // The app's report left unsent: the person's own comes back.
+        self.settle_relay_report_visit();
+        // A send parked under that report: back with the wallet, kept while
+        // the person is in Settings, closed by any other switch.
+        if self.send_parked {
+            match parked_send_after(self.section, self.panel) {
+                _ if self.send_host.is_none() => self.send_parked = false,
+                ParkedSend::Keep => {}
+                ParkedSend::Resume => {
+                    self.panel = PanelId::Flow;
+                    self.send_parked = false;
+                }
+                ParkedSend::Drop => self.send_parked = false,
+            }
+        }
         // The column was closed under a live send: its machines go with it.
-        if self.panel != PanelId::Flow && self.send_host.is_some() {
+        if self.panel != PanelId::Flow && self.send_host.is_some() && !self.send_parked {
             self.let_send_go(cx);
             self.send_fee_picker = false;
         }
@@ -20064,6 +20011,50 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 mod tests {
     use super::*;
 
+    /// Issue 465: "Manage groups" is the start page's two sections and
+    /// nothing else — Favorites with its count, Recent dApps with no second
+    /// line, each with whether it is hidden — so there is no row a grip, a
+    /// trash or "New group" could hang off.
+    #[test]
+    fn manage_groups_lists_the_two_sections_and_nothing_else() {
+        let loc = crate::loc::Loc::from_env();
+        let strings = ExploreStrings::resolve(&loc);
+        let site = |origin: &str| vela_core::app::explore_sites::ExploreSite {
+            origin: origin.to_owned(),
+            url: format!("{origin}/"),
+            host: origin.trim_start_matches("https://").to_owned(),
+            name: origin.trim_start_matches("https://").to_owned(),
+            renamed: false,
+            added_ms: 1.0,
+        };
+        let view = vela_core::app::explore_sites::ExploreView {
+            favorites: vec![site("https://curve.fi"), site("https://app.uniswap.org")],
+            tabs: Vec::new(),
+            selected_tab: None,
+            favorites_hidden: false,
+            recent_hidden: true,
+            favorites_full: false,
+            tabs_full: false,
+            recent_tabs: Vec::new(),
+            ready: true,
+        };
+        let [favorites, recent] = explore_group_rows(&view, &strings, &loc);
+        assert_eq!(
+            favorites,
+            (
+                ExploreGroupRow::Favorites,
+                strings.favorites.clone(),
+                Some(crate::explore::site_count(&loc, 2)),
+                false,
+            )
+        );
+        assert_eq!(
+            recent,
+            (ExploreGroupRow::Recent, strings.recent.clone(), None, true),
+            "Recent has no \"System\" line, and its hide is the person's"
+        );
+    }
+
     /// Spec 082 RJ18 (G51, T181): a may-have-been-sent ending on screen →
     /// 钱包 → back to 探索: the ending is there. One that arrives while the
     /// column is hidden is kept too; one the person closed is not.
@@ -20087,6 +20078,46 @@ mod tests {
         // Closed by the person (✕, Done): nothing comes back.
         assert!(!keeps_ending(PanelId::None, false));
         assert_eq!(panel_after_switch(Section::Explore, false), PanelId::None);
+    }
+
+    /// Issue 466: "Report this" parks the send under Settings → Feedback.
+    /// The way back to the wallet is the way back to it — recipient, amount
+    /// and the stop as they were — and any other switch closes it as a
+    /// switch always has.
+    #[test]
+    fn a_send_parked_under_a_report_comes_back_with_the_wallet_only() {
+        // On the report (and anywhere in Settings): it waits.
+        assert_eq!(
+            parked_send_after(Section::Settings, PanelId::None),
+            ParkedSend::Keep
+        );
+        // 钱包 from the sidebar (no column), or 完成 on the filed report.
+        let panel = panel_after_switch(Section::Wallet, false);
+        assert_eq!(
+            parked_send_after(Section::Wallet, panel),
+            ParkedSend::Resume
+        );
+        // Any other section: gone.
+        for destination in [Section::Contacts, Section::Explore] {
+            let panel = panel_after_switch(destination, false);
+            assert_eq!(
+                parked_send_after(destination, panel),
+                ParkedSend::Drop,
+                "{destination:?}"
+            );
+        }
+        // Back on the wallet with another column opened over it — a receipt,
+        // a receive: that column is what the person went for.
+        assert_eq!(
+            parked_send_after(Section::Wallet, PanelId::Receive),
+            ParkedSend::Drop
+        );
+        // A signing column RJ18 brings back with Explore does not bring the
+        // send with it.
+        assert_eq!(
+            parked_send_after(Section::Explore, panel_after_switch(Section::Explore, true)),
+            ParkedSend::Drop
+        );
     }
 
     /// Spec 097 E: the Connection column speaks of a real connection or of

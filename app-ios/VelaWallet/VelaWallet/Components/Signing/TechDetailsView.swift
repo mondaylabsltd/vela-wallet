@@ -49,9 +49,17 @@ struct TechDetailsView: View {
                     }
                     ForEach(tech.identities) { identity in
                         HStack(spacing: Tokens.Space.s8) {
-                            if let mark = identity.mark {
-                                LetterAvatarView(letter: mark.letter, tint: mark.tint,
-                                                 size: Tokens.Space.s24)
+                            switch identity.lead {
+                            case .token(let mark)?:
+                                // On the grey card: ringed, or the drawn disc
+                                // is the card's own colour and its letters
+                                // float.
+                                InlineTokenMark(mark: mark, ring: true)
+                            case .identicon(let seed)?:
+                                IdenticonAvatar(seed: seed, size: WalletFlowGeometry.inlineMark,
+                                                tappable: false)
+                            case .dot?, nil:
+                                EmptyView()
                             }
                             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                                 Text(verbatim: "\(identity.role) · \(identity.name)")

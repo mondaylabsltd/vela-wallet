@@ -39,7 +39,10 @@ struct TokenIconView: View {
                 Circle()
                     .fill(theme.bgRaised)
                     .overlay {
-                        Text(verbatim: String(ticker.prefix(3)).uppercased())
+                        // The core's letters where it answered (058's
+                        // rule, now `MarkView.glyph`), the ticker's first
+                        // three otherwise.
+                        Text(verbatim: mark?.glyph ?? String(ticker.prefix(3)).uppercased())
                             .typeRole(Typography.tokenGlyph)
                             .foregroundStyle(theme.fgBase)
                     }
@@ -55,10 +58,10 @@ struct TokenIconView: View {
         if mark?.badgeHidden == true {
             EmptyView()
         } else if let url = mark?.badgeLogoURL {
-            RemoteLogoView(urls: [url], size: WalletGeometry.badge) {
+            RemoteLogoView(urls: [url], size: WalletGeometry.badgeLogo) {
                 Circle().fill(badgeColor)
             }
-            .padding(WalletGeometry.badgeRing)
+            .padding(WalletGeometry.badgeLogoRingWidth)
             .background(Circle().fill(theme.bgBase))
         } else {
             ChainBadgeDot(color: badgeColor)

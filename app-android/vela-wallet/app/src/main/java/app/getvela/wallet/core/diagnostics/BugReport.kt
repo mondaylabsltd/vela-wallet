@@ -34,13 +34,22 @@ import org.json.JSONObject
  * the sheet says so before 发送. Not multipart on purpose: the site's CSRF
  * check refuses a cross-site multipart POST.
  *
- * What may never be in a report — addresses, balances, endpoint or RPC URLs
- * (a self-hosted endpoint carries its API key in its path), raw `vela.*`
- * values — is kept out by construction: the payload is ASSEMBLED from the
- * five fields of [DeviceFacts], which cannot reach any of them. [redact] is
- * the second line, for the one field a person can choose (a custom network's
- * display name reaches `unreachable`, and somebody can name a network after
- * its own RPC URL).
+ * What may never be in a report — the PERSON's addresses and balances,
+ * endpoint or RPC URLs (a self-hosted endpoint carries its API key in its
+ * path), raw `vela.*` values — is kept out by construction: the payload is
+ * ASSEMBLED from the five fields of [DeviceFacts], which cannot reach any of
+ * them. [redact] is the second line, for the one field a person can choose (a
+ * custom network's display name reaches `unreachable`, and somebody can name
+ * a network after its own RPC URL).
+ *
+ * One exception, and it is not the person's (issue #466): a relay stop's
+ * "Report this" files the core's `SendRelayReport`, whose `what` names the
+ * relayer's treasury address and what it holds against its floor. That
+ * address and balance are the OPERATOR's, public on-chain, and the operator
+ * needs them to act. They ride in `what` — written by the core, shown in the
+ * sheet before 发送, editable there — never in `environment`, which stays
+ * the device's five facts and is redacted line by line (as it is on the
+ * server). Moving them into `environment` would turn them into "[address]".
  */
 object BugReport {
 
@@ -217,6 +226,13 @@ object BugReport {
         labels: EnvironmentLabels,
         facts: DeviceFacts,
         screenshots: List<ByteArray> = emptyList(),
+        /**
+         * Issue #466: the core's own marker for "the same complaint" — a relay
+         * stop's `relay-gas-<chain>` — so every reporter of one outage, on any
+         * platform or version, lands on ONE open issue as +1s. `null` derives
+         * it from the words, as a settings report always has.
+         */
+        fingerprint: String? = null,
     ): Payload {
         val trimmed = what.trim()
         return Payload(
@@ -224,7 +240,7 @@ object BugReport {
             steps = steps.trim(),
             area = area,
             environment = environmentLines(labels, facts).joinToString("\n"),
-            fingerprint = fingerprintOf(trimmed, area, facts.version),
+            fingerprint = fingerprint?.takeIf { it.isNotBlank() } ?: fingerprintOf(trimmed, area, facts.version),
             client = CLIENT,
             os = facts.platform,
             appVersion = facts.version.removePrefix("v"),

@@ -7,7 +7,6 @@ import app.getvela.wallet.feature.browser.core.BhistEntry
 import app.getvela.wallet.feature.browser.core.BhistView
 import app.getvela.wallet.feature.browser.core.DbrTabView
 import app.getvela.wallet.feature.browser.core.EngineState
-import app.getvela.wallet.feature.browser.core.ExploreGroupView
 import app.getvela.wallet.feature.browser.core.ExploreSite
 import app.getvela.wallet.feature.browser.core.ExploreTab
 import app.getvela.wallet.feature.browser.core.ExploreView
@@ -33,13 +32,11 @@ class ExploreLiveTest {
     }
     private val fallback = ExploreFixtures.buildState(ExploreScreenState.E2, strings)
     private val uniswap = ExploreSite(origin = "https://app.uniswap.org", url = "https://app.uniswap.org/swap", host = "app.uniswap.org", name = "Uniswap", added_ms = 1.0)
-    private val curve = ExploreSite(origin = "https://curve.fi", url = "https://curve.fi/", host = "curve.fi", name = "Curve", added_ms = 2.0)
 
     @Test
-    fun `favourites, groups, recents and tabs are the core's, and a site's id opens it`() {
+    fun `favourites, recents and tabs are the core's, and a site's id opens it`() {
         val view = ExploreView(
             favorites = listOf(uniswap),
-            groups = listOf(ExploreGroupView("g1", "交易", hidden = false, sites = listOf(curve)), ExploreGroupView("g2", "隐藏", hidden = true, sites = listOf(curve))),
             tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/swap", "Uniswap", "app.uniswap.org"), ExploreTab("t2", null, "", "")),
             selected_tab = "t1",
             ready = true,
@@ -54,7 +51,7 @@ class ExploreLiveTest {
         assertEquals(2, tiles.size)
         assertEquals("https://app.uniswap.org/swap", (tiles[0] as TileModel.Site).site.id)
         assertTrue(tiles[1] is TileModel.Add)
-        assertEquals(listOf("recent", "g1"), model.groups.map { it.id })
+        assertEquals("issue #465: Recent dApps is the only group under Favorites", listOf("recent"), model.groups.map { it.id })
         assertEquals(GroupAction.Clear, model.groups[0].action)
         assertEquals("an untitled recent falls back to its host", "curve.fi", model.groups[0].sites.single().name)
         assertEquals("https://curve.fi/dex", model.groups[0].sites.single().id)
@@ -66,8 +63,14 @@ class ExploreLiveTest {
         assertTrue("the page is a favourite", model.browser.bookmarked)
         assertTrue(model.browser.canBack)
         assertEquals("app.uniswap.org", model.browser.host)
-        assertEquals(listOf("favorites", "recent", "g1", "g2"), model.groupManageSheet.rows.map { it.id })
-        assertTrue(model.groupManageSheet.rows[3].hidden)
+        // Issue #465: Manage groups is the two sections, each with its eye — no
+        // "System" tag on Recent dApps, since there is nothing else to tell it from.
+        assertEquals(listOf("favorites", "recent"), model.groupManageSheet.rows.map { it.id })
+        // A plural (explore.siteCount_one/_other, chosen by the core's CLDR
+        // rule): one favourite is "1 site", never "1 sites".
+        assertEquals("1 site", model.groupManageSheet.rows[0].meta)
+        assertNull(model.groupManageSheet.rows[1].meta)
+        assertTrue(model.groupManageSheet.rows.none { it.hidden })
         assertEquals("app.uniswap.org", model.siteMenuSheet.site.host)
         assertTrue(model.browser.secure)
         assertTrue(model.siteMenuSheet.secure)
@@ -398,10 +401,9 @@ class ExploreLiveTest {
     @Test
     fun `with every group hidden, the Favorites heading stays the way to Manage groups`() {
         val recents = BhistView(listOf(BhistEntry("https://curve.fi", "https://curve.fi/", "curve.fi", "Curve", "", 1.0)))
-        val custom = ExploreGroupView("g1", "交易", hidden = true, sites = listOf(curve))
         val everyHidden = ExploreLive.home(
             fallback,
-            ExploreView(favorites = listOf(uniswap), groups = listOf(custom), favorites_hidden = true, recent_hidden = true, ready = true),
+            ExploreView(favorites = listOf(uniswap), favorites_hidden = true, recent_hidden = true, ready = true),
             recents, null, strings,
         )
         val heading = everyHidden.favorites!!
@@ -410,8 +412,8 @@ class ExploreLiveTest {
         assertTrue(heading.tiles.isEmpty())
         assertTrue("every group is off the page", everyHidden.groups.isEmpty())
         assertNull("not the empty start page", everyHidden.empty)
-        // Manage groups still lists every group, each with its eye.
-        assertEquals(listOf("favorites", "recent", "g1"), everyHidden.groupManageSheet.rows.map { it.id })
+        // Manage groups still lists both, each with its eye.
+        assertEquals(listOf("favorites", "recent"), everyHidden.groupManageSheet.rows.map { it.id })
         assertTrue(everyHidden.groupManageSheet.rows.all { it.hidden })
 
         // Only Favorites hidden: Recent's heading offers Clear, never Manage.

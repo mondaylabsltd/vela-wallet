@@ -116,6 +116,9 @@ struct FeeSession {
     /// rate limits to give (the pool's own signal, spec 082 RJ13).
     read_rate_limited: bool,
     generation: u64,
+    /// The chain of the last question that reached this session's core —
+    /// what its view's `fee_token` is a contract on. Set by [`ask_session`].
+    priced: Option<u32>,
 }
 
 impl FeeSession {
@@ -131,6 +134,7 @@ impl FeeSession {
             reading: false,
             read_rate_limited: false,
             generation: 0,
+            priced: None,
         }
     }
 }
@@ -193,6 +197,13 @@ impl SpeedControl {
     /// The fee in force, as the fee row reads it.
     pub fn fee_view(&self) -> &FeeView {
         &self.fee_view
+    }
+
+    /// The chain the session in force prices: the chain of the last question
+    /// that reached its core — what [`Self::fee_view`]'s `fee_token` is a
+    /// contract on. `None` before any question has.
+    pub fn pricing_chain_id(&self) -> Option<u32> {
+        self.fee.priced
     }
 
     /// The speed control, as the core decided it.
@@ -318,6 +329,9 @@ fn dispatch_to<H: SpeedHost>(host: &mut H, key: u64, event: FeeEvent, cx: &mut C
 /// Ask session `key` its question, then tell it what the operation moves
 /// when that is known (spec 083 fee): the question clears it in the machine.
 fn ask_session<H: SpeedHost>(host: &mut H, key: u64, event: FeeEvent, cx: &mut Context<H>) {
+    if let Some(session) = host.speed_control().session_mut(key) {
+        session.priced = session.ask.as_ref().map(|ask| ask.chain_id);
+    }
     dispatch_to(host, key, event, cx);
     if let Some(event) = host.speed_control().balance_event(key) {
         dispatch_to(host, key, event, cx);

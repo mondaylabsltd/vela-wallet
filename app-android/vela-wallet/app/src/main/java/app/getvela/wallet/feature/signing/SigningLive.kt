@@ -52,7 +52,7 @@ import app.getvela.wallet.feature.send.core.TrackOutcome
  * desktop's `signing/live.rs`). The drawn model keeps only its labels; the
  * dApp is the HOST (guessing a pretty name from a domain is exactly the
  * counterfeit route), the blocks are the core's reading, the fee is the
- * fee policy's, the slide opens only when all three machines say so.
+ * fee policy's, the confirm opens only when all three machines say so.
  */
 object SigningLive {
     data class Context(
@@ -130,29 +130,6 @@ object SigningLive {
     private fun VelaStrings.a(key: String) = t("componentsUi.signingApprove.$key")
     private fun VelaStrings.a(key: String, vars: Map<String, String>) = t("componentsUi.signingApprove.$key", vars)
 
-    /** `registry_backup::REGISTRY` — the one contract the wallet's own backup request calls. */
-    private const val PASSKEY_REGISTRY = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
-
-    /**
-     * The wallet's own key backup, in the person's language. The core's built-in
-     * results are English, like the descriptors beside them ("the words stay in
-     * the shell"); this one is OURS, and a Chinese sheet whose three most
-     * important lines were English read as half-finished (founder, 2026-09-19).
-     * Matched on the request being first-party AND the verified registry
-     * address — never on the English words.
-     */
-    fun localizedOwnBackup(clear: ClearSigningView, own: Boolean, strings: VelaStrings): ClearSigningView {
-        val result = clear.result ?: return clear
-        if (!own || !result.verified || result.contract_address?.equals(PASSKEY_REGISTRY, ignoreCase = true) != true) return clear
-        val labels = listOf("settingsModals.backup.registeredAs", "contacts.addressLabel", "settingsModals.backup.publicKeys").map(strings::t)
-        return clear.copy(
-            result = result.copy(
-                intent = strings.t("settingsModals.backup.intent"),
-                fields = result.fields.mapIndexed { index, field -> field.copy(label = labels.getOrElse(index) { field.label }) },
-            ),
-        )
-    }
-
     /**
      * The core's words in the reader's language. A clear-signing result is
      * English — a descriptor's intent and labels, the "Unlimited" a threshold
@@ -162,6 +139,11 @@ object SigningLive {
      * the descriptor wrote it. Same rule in every shell; runs before
      * [cappedApproval]. The confirm is left alone: [confirmLabel] switches on
      * its English intent and falls back to the term.
+     *
+     * The wallet's own key backup is no exception: the core names its intent
+     * and every row (Network, Address, Public keys), so it is translated here
+     * like any other reading — never relabelled by position, which put the
+     * wrong word on a row the moment the core added one.
      */
     fun localizedTerms(clear: ClearSigningView, strings: VelaStrings): ClearSigningView {
         fun word(term: String?, text: String): String {
@@ -266,10 +248,7 @@ object SigningLive {
         confirm: ConfirmState = confirmState(sign, guard, rawClear, fee, speed),
     ): SigningScreenModel {
         val s = ctx.strings
-        val clear = cappedApproval(
-            localizedTerms(localizedOwnBackup(rawClear, request.transportId == WALLET_TRANSPORT, s), s),
-            guard,
-        )
+        val clear = cappedApproval(localizedTerms(rawClear, s), guard)
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
         val facts = SigningController.firstCall(request.paramsJson, request.method)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0
@@ -280,9 +259,10 @@ object SigningLive {
         // transaction that will never be signed, and reading them invites the
         // question "so why can't I?" — which the sentence above already answers.
         val refused = sign.blocked != null
-        // The wallet's own request (the key backup) is not a site: its own mark
-        // and name, and no host — "getvela.app" under a letter read as a stranger.
-        val own = request.transportId == WALLET_TRANSPORT
+        // The wallet's own request (the key backup) is not a site, and the core
+        // says so (`first_party`, set in the one place the backup is raised) —
+        // never this sheet, from bytes or an origin any page could send.
+        val own = sign.request?.first_party == true
         val sims = simBlocks(sim, ctx)
         // Issue #314: on the wallet's own request a simulation that moves
         // nothing only confirms what the wallet itself wrote — a technical
@@ -290,20 +270,26 @@ object SigningLive {
         // the outcome. Anything else it has to say (a revert, a node that could
         // not check, a balance that would move) stays on the sheet.
         val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
-        val blocks =
+        val drawn =
             if (refused) statusBlocks(sign, s)
             else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
                 (if (quietSim != null) emptyList() else sims) + guardBlocks(guard, s)
+        // The wallet's own request leads with what it does, as the header's
+        // title beside the ✕ — so that intent is not said a second time under it.
+        val lead = if (own) drawn.indexOfFirst { it is SigningBlock.Intent } else -1
+        val headline = (drawn.getOrNull(lead) as? SigningBlock.Intent)?.text
+        val blocks = if (lead >= 0) drawn.filterIndexed { index, _ -> index != lead } else drawn
         // Spec 082 RE7: the name and whether the host is said again are the
         // core's (`browserSiteLabel`); a request carries no page title, so a
         // site is named by its host, once.
         val label = if (own) null else uniffi.vela_core_uniffi.browserSiteLabel("", host)
         return fallback.copy(
-            dappName = label?.name ?: "Vela Wallet",
+            dappName = label?.name.orEmpty(),
             dappHost = label?.hostLine.orEmpty(),
             dappLetter = ExploreLive.letterOf(host),
             dappTint = ExploreLive.tintOf(host),
             dappOwn = own,
+            headline = headline,
             dappIconUrls = if (own) emptyList() else siteIconUrls(request.origin),
             networkName = ctx.chainName,
             networkDot = ctx.chainDot,
@@ -313,7 +299,9 @@ object SigningLive {
             blocks = blocks,
             tech = fallback.tech.copy(
                 title = fallback.tech.title,
-                summary = if (refused) null else clear.result?.contract_name,
+                // "· Vela passkey registry" names a contract to the person who
+                // asked for nothing but their own backup: not on their own request.
+                summary = if (refused || own) null else clear.result?.contract_name,
                 functionLabel = if (refused) null else clear.result?.let { s.s("techFunction") },
                 signature = if (refused) null else clear.result?.intent,
                 params = emptyList(),
@@ -329,23 +317,22 @@ object SigningLive {
             techOpen = false,
             // No fee and no confirm control under a refusal: a fee for a
             // transaction nobody will send is a number about nothing, and a
-            // dead "Slide to confirm" reads as an option somebody merely
-            // failed to use.
+            // dead confirm reads as an option somebody merely failed to use.
             fee = if (refused) null else feeModel(clear, fee, ctx, speed),
             signerLabel = s.s("signingAccount"),
             signerName = ctx.walletName,
             signerSeed = ctx.walletAddress,
-            confirmHint = if (refused) null else s.s("slideToConfirm"),
             confirmAsButton = !refused && ctx.trustedSignerRoute,
             confirmButtonLabel = s.s("openSigner"),
             confirmAction = if (refused) null else confirmLabel(clear, s),
             confirmEnabled = !refused && confirm.enabled,
-            // Spec 099 R7: a shut slide says why, in the core's line for the
-            // part that is shut — none under a refusal, which has no slide.
+            // Spec 099 R7: a shut confirm says why, in the core's line for the
+            // part that is shut — none under a refusal, which has no confirm.
             confirmBlockLine = confirm.key?.takeIf { !refused && !confirm.enabled }?.let { s.t(it) },
             panelTitle = s.s("signatureRequest"),
             closeLabel = s.t(I18nKeys.Flow.CLOSE),
             receipt = if (refused) null else receipt(sign, blocks, ctx),
+            requestKey = request.id,
         )
     }
 
@@ -445,7 +432,7 @@ object SigningLive {
     }
 
     /**
-     * May the slide arm, and if not why (spec 099 R7) — the core's one gate,
+     * May the confirm arm, and if not why (spec 099 R7) — the core's one gate,
      * `sign_confirm::confirm_state`, over the sign, guard, clear-signing and
      * fee views exactly as the sheet received them (JSON; [feeJson] `null`
      * with no fee session) and the speed in force. It holds every rule this
@@ -453,7 +440,7 @@ object SigningLive {
      * the reading in (096 F7), the approval chosen, a message has no fee to
      * wait for, another speed's figure is not this speed's (issue 681), the
      * fee priced and its coin not short. A view that does not read keeps the
-     * slide shut — never a guess.
+     * confirm shut — never a guess.
      */
     fun confirmState(signJson: String?, guardJson: String?, clearJson: String?, feeJson: String?, speedTier: FeeTier?): ConfirmState {
         if (signJson == null || guardJson == null || clearJson == null) return ConfirmState()
@@ -467,7 +454,7 @@ object SigningLive {
      * [confirmState] over decoded views, re-encoded — for a caller that holds
      * no raw JSON (the gallery, a test). The live sheet passes the views as
      * the machines wrote them: a mirror that dropped a field the core needs
-     * would keep the slide shut, never open it.
+     * would keep the confirm shut, never open it.
      */
     fun confirmState(sign: SignView, guard: GuardView, clear: ClearSigningView, fee: FeeView, speed: SendLive.SpeedInputs?): ConfirmState {
         val wire = app.getvela.wallet.core.crux.Wire.json
@@ -483,7 +470,7 @@ object SigningLive {
     /**
      * The fee ROW's words only — a message says "no network fee" (the core's
      * `sign_confirm::off_chain`, which no export carries yet). Whether the
-     * slide arms is [confirmState]'s, never this.
+     * confirm arms is [confirmState]'s, never this.
      */
     private fun offChain(clear: ClearSigningView): Boolean =
         clear.result?.sign_type == ClearSignType.Signature || clear.surface == ClearSurface.MessageSign ||
@@ -1178,7 +1165,8 @@ object SigningLive {
             fee.options.map { option ->
                 FeeTokenOption(
                     id = option.contract ?: NATIVE_FEE_ID,
-                    mark = TokenMark(option.symbol.take(1).uppercase(), ctx.chainDot),
+                    // The request's chain (never an estimate's, which can be absent).
+                    mark = WalletLive.mark(ctx.chainId, option.symbol, option.contract),
                     name = option.symbol,
                     balance = "${ctx.strings.t("componentsUi.gas.rowBalance")} ${SendLive.fromBase(option.balance, option.decimals)}",
                     fee = option.amount?.let { "~${SendLive.feeFromBase(it, option.decimals)} ${option.symbol}" } ?: "—",
@@ -1215,6 +1203,8 @@ object SigningLive {
             },
             refreshLabel = ctx.strings.t(I18nKeys.Flows.FEE_REFRESH),
             refreshing = fee.busy,
+            // The core's FeeMeasuring, as the gate reads it.
+            measuring = fee.busy || ofAnotherTier(fee, speed),
             chevron = choosable,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->
@@ -1235,7 +1225,7 @@ object SigningLive {
     /** The fee list's id for the chain's own coin (the web's `'native'`). */
     const val NATIVE_FEE_ID = "native"
 
-    /** The slide's verb: the core's intent id, in the corpus's words (the desktop's `confirm_label`). */
+    /** The confirm's words, the action alone: the core's intent id, in the corpus's words (the desktop's `confirm_label`). */
     fun confirmLabel(clear: ClearSigningView, s: VelaStrings): String = when (val confirm = clear.confirm) {
         ClearConfirm.Sign -> s.s("signLabel")
         ClearConfirm.Confirm -> s.s("confirmLabel")

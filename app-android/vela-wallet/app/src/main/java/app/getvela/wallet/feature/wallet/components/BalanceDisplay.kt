@@ -31,7 +31,9 @@ import app.getvela.wallet.feature.wallet.BalanceStateKind
 /**
  * Hero balance (spec vocabulary #4): label line (总余额 · USD), amount with
  * de-emphasised decimals, and exactly one of normal / zero-live / loading /
- * hidden, plus the optional BalanceStatusLine slot.
+ * hidden, plus the optional BalanceStatusLine slot, then the refresh control
+ * (issue 462) under it. The refresh the control starts adds no status line
+ * (WalletLive.balanceStatus), so nothing above it moves when it is tapped.
  */
 @Composable
 fun BalanceDisplay(
@@ -39,6 +41,10 @@ fun BalanceDisplay(
     modifier: Modifier = Modifier,
     onToggleVisibility: () -> Unit = {},
     onStatusClick: () -> Unit = {},
+    /** Issue 462: the refresh control's tap; `null` (the gallery) draws it inert. */
+    onRefresh: (() -> Unit)? = null,
+    /** Whether the refresh glyph turns — the screen's held spin; the model's own flag by default. */
+    refreshSpinning: Boolean = model.refresh?.refreshing == true,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier) {
@@ -63,6 +69,10 @@ fun BalanceDisplay(
         model.status?.let { status ->
             Spacer(modifier = Modifier.height(VelaSpacing.md))
             BalanceStatusLine(model = status, onClick = onStatusClick)
+        }
+        model.refresh?.let { refresh ->
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            BalanceRefreshControl(model = refresh, spinning = refreshSpinning, onRefresh = onRefresh)
         }
     }
 }

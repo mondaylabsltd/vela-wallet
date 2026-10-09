@@ -694,7 +694,6 @@ class WalletController(
         trackerResumed()
     }
 
-    /** A pull-to-refresh, or the screen coming back into view. */
     /** Spec 048: a token detail's 收款 — the request machine shows THAT asset's code. */
     fun assetPicked(chainId: Int, tokenAddress: String?, symbol: String, decimals: Int, networkName: String) {
         VelaLog.event("receive", "asset picked", "chain" to chainId, "symbol" to symbol)
@@ -734,6 +733,20 @@ class WalletController(
             BalanceEvent.RefreshRequested(force = force, pull = pull),
             BalanceEvent.serializer(),
         )
+
+    /**
+     * The person asked for fresh figures (issue 462): the hero's "↻ Updated"
+     * control, or the pull gesture. What iOS's pull-to-refresh sends —
+     * every chain read again past the background gate (`force`), marked as
+     * the person's own (`pull`, so the core's `refreshing` holds until THIS
+     * round settles and the control turns until then) — and the activity
+     * tick, so a payment that landed shows in the list too.
+     */
+    fun pullRefresh() {
+        VelaLog.event("balance", "pull refresh")
+        refresh(force = true, pull = true)
+        feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
+    }
 
     fun togglePrivacy() {
         balanceHost.dispatch(BalanceEvent.PrivacyToggled, BalanceEvent.serializer())

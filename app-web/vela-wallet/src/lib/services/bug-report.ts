@@ -42,11 +42,18 @@
  *
  * ## What may never be in a report
  *
- * Addresses, balances, and endpoint or RPC URLs — the last because a
- * self-hosted endpoint routinely carries an API key in its path, and a public
- * issue tracker is the worst possible place for one. Raw `vela.*` values are
- * excluded for the same reason at one remove: they are the wallet's whole
- * shelf, and "include the storage for context" is how the other three get in.
+ * The PERSON's addresses and balances, and endpoint or RPC URLs — the last
+ * because a self-hosted endpoint routinely carries an API key in its path,
+ * and a public issue tracker is the worst possible place for one. Raw
+ * `vela.*` values are excluded for the same reason at one remove: they are
+ * the wallet's whole shelf, and "include the storage for context" is how the
+ * other three get in.
+ *
+ * One report names an address and a balance on purpose: a relay stop's
+ * (issue 466). The treasury it names is the OPERATOR's — public, on chain,
+ * and the whole point of telling them — and the core writes it into `what`,
+ * text the person reads and can edit before Send. It never rides in
+ * `environment`, the device's own lines, where the server would scrub it.
  *
  * The defence is not a scrub over a broad payload — it is that the payload is
  * ASSEMBLED from a named allowlist ({@link DeviceFacts}) that has no way to
@@ -523,6 +530,14 @@ export interface BugReportDraft {
 	what: string;
 	steps?: string;
 	area: string;
+	/**
+	 * The dedup marker, when somebody other than the words decides "the same
+	 * complaint": a relay stop's report carries the core's (`relay-gas-130`),
+	 * so every report of one outage lands on one issue whatever the person
+	 * typed, and whatever version or balance it was sent at (issue 466).
+	 * Absent, it is derived from the words ({@link fingerprintOf}).
+	 */
+	fingerprint?: string;
 	labels: EnvironmentLabels;
 	facts: DeviceFacts;
 	/** Base64 JPEGs from `screenshot-prep.ts`, in tile order. */
@@ -540,7 +555,7 @@ export function buildBugReport(draft: BugReportDraft): BugReportPayload {
 		steps,
 		area: draft.area,
 		environment,
-		fingerprint: fingerprintOf(what, draft.area, draft.facts.version),
+		fingerprint: draft.fingerprint ?? fingerprintOf(what, draft.area, draft.facts.version),
 		client: draft.facts.client,
 		// One line, scrubbed like every generated line, and short: it lands in
 		// the issue's header line.

@@ -42,8 +42,8 @@ Real money on a real chain, so keep the amounts to dust (0.001 XDAI).
 - `input tap x y`, `input text …`, `input swipe …`, `screencap -p`.
 - The keyboard covers buttons: check `dumpsys input_method | grep mInputShown`,
   BACK closes it. Tall sheets: scroll before reading the bottom.
-- The send confirm's CTA is a button, not a slider; the signing sheet's is a
-  slider (swipe along the wide node at the bottom).
+- The send confirm's CTA and the signing sheet's are both a plain button: a
+  tap confirms (the signing sheet's carries testTag `signing-confirm`).
 - Pages in the in-app browser: `WebView.setWebContentsDebuggingEnabled(true)`
   is on in debug; `adb forward tcp:9222 localabstract:webview_devtools_remote_<pid>`
   and a WebSocket `Runtime.evaluate` (the program's `devtools.mjs`).

@@ -17,6 +17,7 @@ import app.getvela.wallet.feature.wallet.core.RpcResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.BatchImportCore
@@ -36,7 +37,7 @@ import uniffi.vela_core_uniffi.WalletKeyRecord
  * Two bridges between machines live here because both other shells keep them
  * in the shell (research D7): `estimate_fee` is answered by the live fee
  * session, and the fee session's later estimates flow back into the send
- * machine as `FeeUpdated` / `FeeBusyChanged`.
+ * machine as `FeeUpdated` / `FeeBusyChanged` / `FeeTokenChanged`.
  */
 class SendController(
     private val scope: CoroutineScope,
@@ -352,10 +353,40 @@ class SendController(
                 }
             }
         }
+        // The card's coin in force names the fee row while no estimate is in
+        // hand (SendView.fee_coin): when nobody chose, the fee machine picks a
+        // coin that can pay, and a quote that then fails leaves that coin in
+        // force with nothing else to say so. Weighed again whenever the coin,
+        // the chain the session prices, or the send form moves (every commit:
+        // a form that reaches the priced chain is what lets a coin said before
+        // it had one through).
+        scope.launch {
+            combine(fee, speedControl.pricingChainId, sendHost.commits) { view, pricing, _ -> view.fee_token to pricing }
+                .collect { (feeToken, pricing) -> tellFeeToken(feeToken, pricing) }
+        }
     }
 
     private fun dispatch(event: SendEvent) {
         sendHost.dispatch(event, SendEvent.serializer())
+    }
+
+    /** What this send journey was last told of the fee card's coin; [open] forgets it. */
+    private val feeTokenWord = FeeTokenWord()
+
+    /** The event number of this journey's `Open` — under [feeTokenWord]'s lock. */
+    private var openEvent = 0L
+
+    /**
+     * `FeeTokenChanged` under the core's bridge rule ([FeeTokenWord]): the
+     * card's coin [feeToken], its session pricing [pricing], against the
+     * form's chain. Under the word's lock with the dispatch, so a word can
+     * never be queued ahead of the `Open` that would wipe it while this side
+     * believes it was heard — and read only from a view the `Open` has
+     * reached, so the form's chain is this journey's, not the last one's.
+     */
+    private fun tellFeeToken(feeToken: String?, pricing: Int?) = synchronized(feeTokenWord) {
+        if (!sendHost.applied(openEvent)) return@synchronized
+        feeTokenWord.news(feeToken, pricing, formChain(send.value))?.let(::dispatch)
     }
 
     // -- the fee bridge (research D7) ----------------------------------------------
@@ -421,7 +452,16 @@ class SendController(
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         speedControl.reset()
-        dispatch(SendEvent.Open(account = account, params = params, display = display))
+        // The core's Open starts a journey that has been told nothing; the
+        // fee bridge's next word about the card's coin goes, whatever it is,
+        // once the form is on the chain the fee session prices.
+        synchronized(feeTokenWord) {
+            feeTokenWord.forget()
+            openEvent = sendHost.dispatchNumbered(
+                SendEvent.Open(account = account, params = params, display = display),
+                SendEvent.serializer(),
+            )
+        }
     }
 
     // -- the speed control (spec 069) -----------------------------------------------
@@ -646,6 +686,44 @@ class SendController(
         } ?: SendScan.Text(data = text.trim())
     }
 }
+
+/**
+ * What one send journey was last told of the fee card's coin in force
+ * (`FeeView.fee_token`, by `FeeTokenChanged`), and the chain it is a coin on —
+ * the core's one bridge rule (the doc on `send::Event::FeeTokenChanged`; iOS
+ * `SendStore.feeTokenChanged`).
+ *
+ * The send machine files the word against the form's chain at the moment it
+ * is said and drops it while the form has no chain. So the coin is told only
+ * while the fee session prices the form's own chain, and whenever the pair
+ * (chain, coin) differs from what this journey was last told — a coin first
+ * seen before the form had a chain is told once it has one. A freshly opened
+ * journey has been told nothing: its first word goes, `null` (the chain's own
+ * coin) included. Not thread-safe: the controller holds its lock.
+ */
+internal class FeeTokenWord {
+    private var told: Pair<Int, String?>? = null
+
+    /**
+     * The event that tells [feeToken], priced on [pricing] while the form is on
+     * [form] — or `null` when there is nothing to say.
+     */
+    fun news(feeToken: String?, pricing: Int?, form: Int?): SendEvent.FeeTokenChanged? {
+        if (pricing == null || pricing != form) return null
+        val said = pricing to feeToken
+        if (told == said) return null
+        told = said
+        return SendEvent.FeeTokenChanged(feeToken)
+    }
+
+    /** A new journey: nothing told yet. */
+    fun forget() {
+        told = null
+    }
+}
+
+/** The chain the send form is on: the selected token's, else the sweep's (the core's `form_chain`). */
+internal fun formChain(view: SendView): Int? = view.selected_token?.chain_id ?: view.multi_chain_id
 
 /**
  * The account store as the send path reads it: a wallet's founding keys,

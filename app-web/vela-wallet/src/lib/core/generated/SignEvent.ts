@@ -16,7 +16,19 @@ granted_address: string | null,
 /**
  * §12.1.6: the address the request asks to act as (popup path).
  */
-requested_address: string | null, request_ts_ms: number | null, now_ms: number, } | { "type": "chain_switch_requested", id: string | null, transport_id: string | null, chain_id_param: string | null, } | { "type": "approve_tapped", opts: SignApproveOpts, } | { "type": "reject_tapped" } | { "type": "dismiss_tapped" } | { "type": "retry_tapped" } | { "type": "swipe_dismissed" } | { "type": "funding_complete_tapped" } | { "type": "funding_cancelled" } | { "type": "op_submitted", id: string, user_op_hash: string, now_ms: number, 
+requested_address: string | null, request_ts_ms: number | null, now_ms: number, 
+/**
+ * The wallet asked itself: the request was raised by the wallet's
+ * own code (the passkey-registry backup, spec 062), never by a page.
+ * The shell sets it in the ONE place it raises such a request and
+ * sends `false` everywhere else; it is never inferred from the
+ * reading, because any site can submit the same calldata. A
+ * first-party sheet draws no requester header (no mark, no name,
+ * no network chip) — its reading's rows say the network instead.
+ * Absent on the wire = `false`, so a shell that predates the field
+ * keeps today's third-party header.
+ */
+first_party: boolean, } | { "type": "chain_switch_requested", id: string | null, transport_id: string | null, chain_id_param: string | null, } | { "type": "approve_tapped", opts: SignApproveOpts, } | { "type": "reject_tapped" } | { "type": "dismiss_tapped" } | { "type": "retry_tapped" } | { "type": "swipe_dismissed" } | { "type": "funding_complete_tapped" } | { "type": "funding_cancelled" } | { "type": "op_submitted", id: string, user_op_hash: string, now_ms: number, 
 /**
  * The submit's reply was lost and `user_op_hash` is the local hash
  * (spec 082 RA2/RA3): the op is recorded and tracked all the same,

@@ -408,7 +408,8 @@ struct AmountHeroView: View {
 }
 
 /// The send receipt's centrepiece (component 20) — SD4a's spinner, SD4b's
-/// clock, SD4c's tick, and the failure cross.
+/// clock, SD4c's tick, and the failure's "!" (issue #460: never the close
+/// glyph, which reads as a button that does nothing).
 ///
 /// One disc size for all four so the mark does not resize as the transaction
 /// moves between them: the person is watching this circle, and a circle that
@@ -499,12 +500,28 @@ struct StatusHeroView: View {
                         spinning = true
                     }
                 }
-        case .submitted:
-            LucideIcon(.clock, size: LucideIconSize.flowStatus).foregroundStyle(theme.fgMuted)
-        case .confirmed:
-            LucideIcon(.check, size: LucideIconSize.flowStatus).foregroundStyle(theme.successBase)
-        case .failed:
-            LucideIcon(.close, size: LucideIconSize.flowStatus).foregroundStyle(theme.errorBase)
+        case .submitted, .confirmed, .failed:
+            if let glyph = Self.markGlyph(stage) {
+                LucideIcon(glyph, size: LucideIconSize.flowStatus).foregroundStyle(markTint)
+            }
+        }
+    }
+
+    /// The disc's glyph; `nil` while submitting, which spins instead.
+    static func markGlyph(_ stage: ReceiptStage) -> LucideGlyph? {
+        switch stage {
+        case .submitting: nil
+        case .submitted: .clock
+        case .confirmed: .check
+        case .failed: .exclamation
+        }
+    }
+
+    private var markTint: Color {
+        switch stage {
+        case .submitting, .submitted: theme.fgMuted
+        case .confirmed: theme.successBase
+        case .failed: theme.errorBase
         }
     }
 
@@ -964,8 +981,9 @@ struct FeeRefreshButton: View {
 /// Folded: the word and the tier in force — THEIR default, never a hardcoded
 /// one. Opened: the one-shot promise first (somebody about to change one
 /// payment needs to know every later one is untouched), then three options —
-/// name, its own fee, its gas bid, what it buys, a tick — or, on a network
-/// with one speed, that one statement instead.
+/// name, its own fee, its gas bid, a tick — or, on a network with one speed,
+/// that one statement instead. What each speed buys is said where the default
+/// is chosen (Settings), not under a price the person can read for themselves.
 struct FeeSpeedControlView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
@@ -1026,17 +1044,21 @@ struct FeeSpeedControlView: View {
             .padding(.horizontal, Tokens.Space.s12)
     }
 
-    /// One speed, on TWO lines (round 2, all four shells): name … fee, then
-    /// what it buys … its gas bid. The bid used to sit alone on a middle line
-    /// with the description under it, which left a hole under the name.
+    /// One speed: name … fee, and under the fee its gas bid (round 2, all
+    /// four shells). The tier descriptions are gone from this picker (they
+    /// stay on Settings' default speed); the bid is the whole second line,
+    /// trailing under the price as before.
     ///
-    /// The description wraps under itself when the pair does not fit; the bid
-    /// never truncates. The bid is the UI font with fixed-width DIGITS — a
-    /// monospace face for the whole string (Menlo) read as a different voice.
-    /// A chosen row says so in weight and a ✓ in ink, not accent: accent is
-    /// for moving money and submitting only.
+    /// **No jump.** While a tier is measuring it has no bid yet; an invisible
+    /// line of the same caption type holds the row's height, so a pick or a
+    /// refresh never shrinks every option and grows it back. The description
+    /// used to do that implicitly. The bid is the UI font with fixed-width
+    /// DIGITS — a monospace face for the whole string (Menlo) read as a
+    /// different voice. A chosen row says so in weight and a ✓ in ink, not
+    /// accent: accent is for moving money and submitting only.
     private func row(_ option: FeeSpeedOptionModel) -> some View {
         let name = (option.selected ? Typography.bodyStrong : Typography.body).scaled(textScale)
+        let caption = Typography.flowCaption.scaled(textScale)
         return HStack(alignment: .top, spacing: Tokens.Space.s8) {
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 // The name and its fee side by side while both fit whole; the
@@ -1052,30 +1074,29 @@ struct FeeSpeedControlView: View {
                         .foregroundStyle(theme.fgBase)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                // The reason wraps in its own column; the bid never gives way.
-                // Below six of the reason's own characters that column would
-                // stack the sentence into a tower, so the bid drops under it
-                // instead, whole, on the fee's right edge (the web's rule).
-                ReasonAndFigure(
-                    minReasonWidth: Typography.flowCaption.scaled(textScale).size
-                        * ReasonAndFigure.minReasonChars
-                ) {
-                    Text(verbatim: option.detail)
-                        .typeRole(Typography.flowCaption.scaled(textScale))
-                        .foregroundStyle(theme.fgSubtle)
-                    // Named, because an unnamed "3,244 wei" under a fee reads
-                    // as a second charge. Nothing while this tier measures.
-                    if speed.gasPriceLine, let bid = option.gasPrice {
-                        Text(verbatim: "\(speed.gasPriceLabel)  \(bid)")
-                            .monospacedDigit()
-                            .typeRole(Typography.flowCaption.scaled(textScale))
-                            .foregroundStyle(theme.fgSubtle)
-                            .lineLimit(1)
-                            // Only where even a line of its own is too narrow
-                            // (an accessibility text size): smaller, never cut,
-                            // never off the screen.
-                            .minimumScaleFactor(WalletGeometry.heroMinScale)
+                if speed.gasPriceLine {
+                    Group {
+                        if let bid = option.gasPrice {
+                            // Named, because an unnamed "3,244 wei" under a
+                            // fee reads as a second charge.
+                            Text(verbatim: "\(speed.gasPriceLabel)  \(bid)")
+                                .monospacedDigit()
+                                .typeRole(caption)
+                                .foregroundStyle(theme.fgSubtle)
+                                .lineLimit(1)
+                                // Only where the line is too narrow (an
+                                // accessibility text size): smaller, never
+                                // cut, never off the screen.
+                                .minimumScaleFactor(WalletGeometry.heroMinScale)
+                        } else {
+                            // Measuring: the line's height, and nothing to read.
+                            Text(verbatim: speed.gasPriceLabel)
+                                .typeRole(caption)
+                                .lineLimit(1)
+                                .hidden()
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
             // Its own column, centred on line 1 whatever the text size.
@@ -1091,84 +1112,6 @@ struct FeeSpeedControlView: View {
                 .fill(option.selected ? theme.bgRaised : Color.clear)
         )
         .contentShape(Rectangle())
-    }
-}
-
-/// A speed row's line 2: a reason that wraps, and a figure that does not.
-///
-/// Side by side while the reason keeps a column of at least `minReasonWidth`
-/// (six of its own characters — the web's `flex: 1 1 6em`); below that the
-/// figure drops to a line of its own under the reason, trailing-aligned, so a
-/// narrow phone at a large text size never gets a one-word tower or a figure
-/// pushed off the screen. The reason is never cut in either shape. Both pieces
-/// are the same caption type, so top-aligned they share a baseline.
-struct ReasonAndFigure: Layout {
-    /// How many of the reason's own characters its column may not go below.
-    static let minReasonChars: CGFloat = 6
-
-    let minReasonWidth: CGFloat
-    var columnGap: CGFloat = Tokens.Space.s8
-    var rowGap: CGFloat = Tokens.Space.s2
-
-    private struct Plan {
-        let size: CGSize
-        let reason: CGRect
-        let figure: CGRect?
-    }
-
-    private func plan(width proposed: CGFloat?, subviews: Subviews) -> Plan {
-        guard let reason = subviews.first else { return Plan(size: .zero, reason: .zero, figure: nil) }
-        let figure = subviews.count > 1 ? subviews[1] : nil
-        guard let figure else {
-            let size = reason.sizeThatFits(ProposedViewSize(width: proposed, height: nil))
-            return Plan(size: size, reason: CGRect(origin: .zero, size: size), figure: nil)
-        }
-        let ideal = figure.sizeThatFits(.unspecified)
-        guard let width = proposed else {
-            // Unconstrained: one line, side by side.
-            let reasonSize = reason.sizeThatFits(.unspecified)
-            let total = CGSize(width: reasonSize.width + columnGap + ideal.width,
-                               height: max(reasonSize.height, ideal.height))
-            return Plan(size: total, reason: CGRect(origin: .zero, size: reasonSize),
-                        figure: CGRect(x: reasonSize.width + columnGap, y: 0,
-                                       width: ideal.width, height: ideal.height))
-        }
-        let room = width - ideal.width - columnGap
-        if room >= minReasonWidth {
-            let reasonSize = reason.sizeThatFits(ProposedViewSize(width: room, height: nil))
-            return Plan(
-                size: CGSize(width: width, height: max(reasonSize.height, ideal.height)),
-                reason: CGRect(origin: .zero, size: CGSize(width: room, height: reasonSize.height)),
-                figure: CGRect(x: width - ideal.width, y: 0, width: ideal.width, height: ideal.height)
-            )
-        }
-        let reasonSize = reason.sizeThatFits(ProposedViewSize(width: width, height: nil))
-        let figureWidth = min(ideal.width, width)
-        let figureSize = figure.sizeThatFits(ProposedViewSize(width: figureWidth, height: nil))
-        let top = reasonSize.height + rowGap
-        return Plan(
-            size: CGSize(width: width, height: top + figureSize.height),
-            reason: CGRect(origin: .zero, size: CGSize(width: width, height: reasonSize.height)),
-            figure: CGRect(x: width - figureWidth, y: top, width: figureWidth, height: figureSize.height)
-        )
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        plan(width: proposal.width, subviews: subviews).size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let laid = plan(width: bounds.width, subviews: subviews)
-        subviews.first?.place(
-            at: CGPoint(x: bounds.minX + laid.reason.minX, y: bounds.minY + laid.reason.minY),
-            proposal: ProposedViewSize(laid.reason.size)
-        )
-        if let frame = laid.figure, subviews.count > 1 {
-            subviews[1].place(
-                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
-                proposal: ProposedViewSize(frame.size)
-            )
-        }
     }
 }
 

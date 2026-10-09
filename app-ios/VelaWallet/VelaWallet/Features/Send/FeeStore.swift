@@ -283,6 +283,10 @@ final class FeeStore {
         for entry in settled { entry.resume(view) }
     }
 
+    /// The chain the session in force is pricing — its last question's. What
+    /// `view.feeToken` is a contract on; `nil` before any question.
+    var pricingChainId: Int? { inForce.ask?.chainId }
+
     // MARK: - The facade `send` awaits
 
     /// Ask for a quote and wait for it to settle.

@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 1890 paths = 1791 leaf + 99 branch. Repeated per locale these key bytes
-//! would cost 761385 bytes; interned once they cost 52615.
+//! 1888 paths = 1789 leaf + 99 branch. Repeated per locale these key bytes
+//! would cost 760920 bytes; interned once they cost 52584.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 1890] = [
+pub(crate) static PATHS: [&str; 1888] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -530,6 +530,7 @@ pub(crate) static PATHS: [&str; 1890] = [
     "componentsUi.signing.intentApproveAllNfts",
     "componentsUi.signing.intentApproveNft",
     "componentsUi.signing.intentAuthorizeSpending",
+    "componentsUi.signing.intentBackUpPublicKeys",
     "componentsUi.signing.intentBorrow",
     "componentsUi.signing.intentBridge",
     "componentsUi.signing.intentBurn",
@@ -555,6 +556,7 @@ pub(crate) static PATHS: [&str; 1890] = [
     "componentsUi.signing.intentWrap",
     "componentsUi.signing.intentWrapEth",
     "componentsUi.signing.interactingLabel",
+    "componentsUi.signing.labelAddress",
     "componentsUi.signing.labelAmount",
     "componentsUi.signing.labelAmountToSpend",
     "componentsUi.signing.labelApproved",
@@ -564,6 +566,7 @@ pub(crate) static PATHS: [&str; 1890] = [
     "componentsUi.signing.labelFrom",
     "componentsUi.signing.labelMaxSpendingAmount",
     "componentsUi.signing.labelMinReceived",
+    "componentsUi.signing.labelNetwork",
     "componentsUi.signing.labelNewContract",
     "componentsUi.signing.labelNft",
     "componentsUi.signing.labelNonce",
@@ -573,6 +576,7 @@ pub(crate) static PATHS: [&str; 1890] = [
     "componentsUi.signing.labelOwner",
     "componentsUi.signing.labelPay",
     "componentsUi.signing.labelPrice",
+    "componentsUi.signing.labelPublicKeys",
     "componentsUi.signing.labelQuantities",
     "componentsUi.signing.labelQuantity",
     "componentsUi.signing.labelReceived",
@@ -634,8 +638,6 @@ pub(crate) static PATHS: [&str; 1890] = [
     "componentsUi.signing.siweOk",
     "componentsUi.signing.siweOrigin",
     "componentsUi.signing.siweStatement",
-    "componentsUi.signing.slideConfirmAction",
-    "componentsUi.signing.slideToConfirm",
     "componentsUi.signing.spenderLabel",
     "componentsUi.signing.stillConfirming",
     "componentsUi.signing.submitted",
@@ -967,9 +969,6 @@ pub(crate) static PATHS: [&str; 1890] = [
     "explore.edit",
     "explore.favorites",
     "explore.forward",
-    "explore.groupOptions",
-    "explore.hiddenCount",
-    "explore.hiddenTag",
     "explore.hide",
     "explore.linkCopied",
     "explore.loadCertificate",
@@ -978,9 +977,7 @@ pub(crate) static PATHS: [&str; 1890] = [
     "explore.loadProxy",
     "explore.loadRetrying",
     "explore.manageGroups",
-    "explore.moveToGroup",
     "explore.network",
-    "explore.newGroup",
     "explore.newTab",
     "explore.openInNewTab",
     "explore.openInSystemBrowser",
@@ -999,14 +996,16 @@ pub(crate) static PATHS: [&str; 1890] = [
     "explore.secureSite",
     "explore.share",
     "explore.show",
-    "explore.siteCount",
+    "explore.siteCount_few",
+    "explore.siteCount_many",
+    "explore.siteCount_one",
+    "explore.siteCount_other",
     "explore.siteMenu",
     "explore.startCta",
     "explore.startHint",
     "explore.startPage",
     "explore.startTitle",
     "explore.switchAccount",
-    "explore.systemGroup",
     "explore.tabs",
     "explore.title",
     "explore.walletConnectUnsupported",
@@ -1081,6 +1080,7 @@ pub(crate) static PATHS: [&str; 1890] = [
     "home.invalidQrTitle",
     "home.lastUpdated",
     "home.liveIndicator",
+    "home.refreshBalance",
     "home.rescanAgain",
     "home.rescanButton",
     "home.rescanClose",
@@ -1103,6 +1103,7 @@ pub(crate) static PATHS: [&str; 1890] = [
     "home.tabConnections",
     "home.toastReceived",
     "home.totalBalance",
+    "home.updating",
     "language",
     "language.chinese",
     "language.contributeCta",
@@ -1804,10 +1805,7 @@ pub(crate) static PATHS: [&str; 1890] = [
     "settingsModals.backup.backedUp",
     "settingsModals.backup.couldNotCheck",
     "settingsModals.backup.explain",
-    "settingsModals.backup.intent",
     "settingsModals.backup.notBackedUp",
-    "settingsModals.backup.publicKeys",
-    "settingsModals.backup.registeredAs",
     "settingsModals.backup.title",
     "settingsModals.endpoints",
     "settingsModals.endpoints.bundlerHint",
@@ -1905,26 +1903,26 @@ pub(crate) static PATHS: [&str; 1890] = [
 /// A branch is a distinct lookup outcome, not a miss: `t("home")` must return the
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
-pub(crate) static IS_BRANCH: [u8; 237] = [
+pub(crate) static IS_BRANCH: [u8; 236] = [
     0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0xc0, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
     0x0c, 0x00, 0x20, 0x42, 0x08, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x50, 0x48, 0x84,
     0x00, 0x00, 0x80, 0x40, 0x08, 0x28, 0x20, 0x00, 0x00, 0x01, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x80,
-    0x00, 0x00, 0x00, 0x00, 0x04, 0x22, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x80,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x40, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x20, 0x00,
-    0x00, 0x00, 0x04, 0x80, 0x10, 0x00, 0x00, 0x27, 0x49, 0x12, 0x02, 0x00, 0x01, 0x00, 0x10, 0x00,
-    0x00, 0x00, 0x00, 0x10, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
-    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0x04, 0x20, 0x01, 0x42,
-    0x80, 0x24, 0x44, 0x80, 0x40, 0x20, 0x40, 0x00, 0x02, 0x00, 0x00, 0xc0, 0x10, 0x00, 0x00, 0x80,
-    0x00, 0x01, 0x00, 0x22, 0x00, 0x02, 0x20, 0x00, 0x02, 0x01, 0x04, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+    0x02, 0x00, 0x00, 0x00, 0x10, 0x88, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x40,
+    0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x40, 0x00,
+    0x00, 0x00, 0x08, 0x00, 0x21, 0x00, 0x00, 0x4e, 0x92, 0x24, 0x04, 0x00, 0x02, 0x00, 0x20, 0x00,
+    0x00, 0x00, 0x00, 0x20, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+    0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4c, 0x08, 0x40, 0x02, 0x84,
+    0x00, 0x49, 0x88, 0x00, 0x81, 0x40, 0x80, 0x00, 0x04, 0x00, 0x00, 0x80, 0x21, 0x00, 0x00, 0x00,
+    0x41, 0x00, 0x80, 0x08, 0x80, 0x00, 0x08, 0x80, 0x40, 0x00, 0x41, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 1890;
+pub(crate) const N_PATHS: usize = 1888;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

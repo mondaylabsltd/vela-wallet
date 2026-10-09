@@ -544,10 +544,11 @@ pub struct FeeRow {
 /// One option of the speed control (spec 068).
 #[derive(Clone)]
 pub struct FeeSpeedOption {
-    /// The SPEED — 超快 / 标准 / 较慢 — never a number.
+    /// The SPEED — 超快 / 标准 / 较慢 — never a number. Nothing says what
+    /// it buys here: the fee beside it and the gas bid under it already do,
+    /// for this transaction (the Settings default-speed sheet, which has no
+    /// figures, keeps the descriptions).
     pub label: SharedString,
-    /// What that speed buys, one line under the name.
-    pub detail: SharedString,
     /// This option's OWN fee, or the "…" / "—" standing in for it.
     pub value: SharedString,
     /// Its gas bid as a range, already formatted by the core over the set.
@@ -598,6 +599,9 @@ pub struct SendNotice {
     /// A button that copies a value, and its label — today only the
     /// relay-treasury stop's address (spec 098 §4).
     pub copy: Option<(SharedString, SharedString)>,
+    /// "Report this", on the two relay stops while the core has a report
+    /// for them (issue 466): it opens the in-app reporter seeded with it.
+    pub report: Option<SharedString>,
     /// Red rather than amber: the person cannot proceed as things stand.
     pub error: bool,
 }
@@ -667,8 +671,12 @@ pub struct SendForm {
 pub struct ContactEntry {
     pub name: SharedString,
     pub group: Option<SharedString>,
+    /// The address as the row shows it, shortened.
     pub address: SharedString,
-    pub seed: SharedString,
+    /// The whole address: the avatar's seed, and what a press on this row
+    /// picks (issue 467) — the row names its contact, never its place in a
+    /// list the core re-sorts.
+    pub address_full: SharedString,
 }
 
 #[derive(Clone)]
@@ -783,6 +791,10 @@ pub struct BreakdownRow {
     /// A recipient's address, for the avatar beside the name (spec 038 #D2);
     /// `None` for an asset row, which carries no person.
     pub seed: Option<SharedString>,
+    /// A sweep's coin, drawn as its mark where a recipient's avatar would be
+    /// ("every asset of a sweep by its mark", spec 038 #D2) — the coin rule,
+    /// as the web's breakdown draws it. `None` on a recipient's row.
+    pub mark: Option<TokenMark>,
     pub label: SharedString,
     /// The label IS an address (nobody named it), so it is set in mono — said
     /// by whoever built the row, as the web's `BreakdownRowModel.mono`.
@@ -814,7 +826,7 @@ pub struct SendConfirm {
     /// (`confirm_probes`), so the form never has it to show. Live only;
     /// `None` on a split.
     pub recipient_tag: Option<SharedString>,
-    /// Live only: why the slide is disarmed, when something disarmed it.
+    /// Live only: why the confirm is disarmed, when something disarmed it.
     pub notice: Option<SendNotice>,
     pub cta: SharedString,
     /// The core's `can_confirm`, plus signing / submitting.
@@ -1490,19 +1502,19 @@ fn contact_pick(s: &FlowStrings) -> ContactPick {
                 name: "Alice".into(),
                 group: Some("家人".into()),
                 address: ALICE_DISPLAY.into(),
-                seed: ALICE_FULL.into(),
+                address_full: ALICE_FULL.into(),
             },
             ContactEntry {
                 name: "阿豪".into(),
                 group: None,
                 address: "0x77Bd…4F02".into(),
-                seed: A_HAO_FULL.into(),
+                address_full: A_HAO_FULL.into(),
             },
             ContactEntry {
                 name: "hold on".into(),
                 group: None,
                 address: HOLD_ON_DISPLAY.into(),
-                seed: HOLD_ON_FULL.into(),
+                address_full: HOLD_ON_FULL.into(),
             },
         ],
     }

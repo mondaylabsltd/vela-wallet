@@ -4,11 +4,11 @@
  *
  * The web runs no simulation of its own (RG6), so the relay's
  * `eth_estimateUserOperationGas` is the one voice that can say "this will
- * revert" before the slide. The quote's simulation (`simulateUserOpGas`)
+ * revert" before the confirm. The quote's simulation (`simulateUserOpGas`)
  * records a revert here, keyed by chain and account, and clears it at the start
  * of every new question; the signing sheet reads it to draw the danger line
  * (`simWillFail` / `simWillFailReason`). A warning informs and never blocks
- * (L-D5): the slide stays live.
+ * (L-D5): the confirm stays live.
  *
  * A module of its own, with no imports, so the sheet's pure model can read it
  * without pulling the send path in, and a test can plant a verdict.

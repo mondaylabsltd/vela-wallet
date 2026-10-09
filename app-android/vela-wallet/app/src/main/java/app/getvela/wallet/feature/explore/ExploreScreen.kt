@@ -79,10 +79,8 @@ class ExploreCallbacks(
     val onTabClose: (String) -> Unit,
     val onTabNew: () -> Unit,
     val onTabsCloseAll: () -> Unit,
+    /** Manage groups' eye: Favorites or Recent dApps hidden (`true`) or shown again. */
     val onGroupToggle: (String, Boolean) -> Unit,
-    val onGroupNew: () -> Unit,
-    /** Issue #439: a group of the person's own, deleted from Manage groups (its sites stay favourited). */
-    val onGroupDelete: (String) -> Unit = {},
     val onSiteMenuPick: (String) -> Unit,
     val onBookmark: () -> Unit,
     val onRecentClear: () -> Unit,
@@ -390,8 +388,8 @@ fun ExploreScreen(
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 when (current) {
                     // Live: the rows are the core's and change under an open
-                    // sheet (a new group appeared only after reopening —
-                    // device-found); the drawn snapshot serves the gallery.
+                    // sheet (a hide showed only after reopening — device-found);
+                    // the drawn snapshot serves the gallery.
                     is ExploreSheet.GroupManage -> {
                         val shown = if (live != null) model.groupManageSheet else current
                         GroupManageSheetContent(
@@ -400,7 +398,6 @@ fun ExploreScreen(
                             closeLabel = strings.t("explore.close"),
                             hideLabel = strings.t("explore.hide"),
                             showLabel = strings.t("explore.show"),
-                            deleteLabel = strings.t("explore.delete"),
                             onClose = { sheet = null },
                             onToggle = { id ->
                                 // The row as drawn, not as the sheet opened: the
@@ -413,9 +410,6 @@ fun ExploreScreen(
                                     hidden = if (hidden.contains(id)) hidden - id else hidden + id
                                 }
                             },
-                            onNew = { live?.onGroupNew() },
-                            // Issue #439: the trash was drawn with no tap behind it.
-                            onDelete = { id -> live?.onGroupDelete(id) },
                         )
                     }
 
@@ -627,15 +621,13 @@ private fun StartPage(
             }
         }
 
+        // Issue #465: Recent dApps is the only group under Favorites — its one
+        // action is Clear; hiding it lives in Manage groups, behind Edit.
         model.groups.filterNot { hidden.contains(it.id) }.forEach { group ->
             SectionHeader(
                 title = group.title,
-                action = if (group.action == GroupAction.Clear) {
-                    strings.t("explore.clear")
-                } else {
-                    "⋯"
-                },
-                onAction = { if (group.action == GroupAction.Clear && live != null) live.onRecentClear() else onManageGroups() },
+                action = strings.t("explore.clear"),
+                onAction = { live?.onRecentClear() },
             )
             group.sites.forEach { site ->
                 SiteRow(site = site, onOpen = { id -> if (onOpenSite != null) onOpenSite(id) else onBrowse() })

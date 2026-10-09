@@ -209,8 +209,11 @@ The names below are the design's vocabulary. As shipped on the web they are
 gallery alike) over `SigningHost.svelte`/`SigningPanel.svelte`, with the parts in
 `signing/ui/` — `SigningHeader`, `IntentLabel`/`IntentSentence`, `AmountHero`/`NftHero`,
 `SwapPair`, `PartyRow`, `BalanceChanges`, `DetailCard`/`KeyValueRows`, `TechDetails`,
-`AllowanceEditor`, `WarningBanner`, `FeeRow`, `SlideToConfirm`. The other three shells mirror
-that list in their own toolkits.
+`AllowanceEditor`, `WarningBanner`, `FeeRow`, and the confirm: the shared primary `Button`
+(`$lib/ui/Button.svelte`, `data-testid="signing-confirm"`), the same tap the Send screen
+uses, labelled with the action alone (#461 retired the slide; the passkey prompt the tap
+raises is the deliberate second step). The other three shells mirror that list in their own
+toolkits.
 
 ```
 signing sheet (orchestrator)

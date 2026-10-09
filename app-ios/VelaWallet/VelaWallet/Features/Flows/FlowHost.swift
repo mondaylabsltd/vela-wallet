@@ -105,6 +105,10 @@ struct FlowHost: View {
     var sendWarning: String?
     /// Spec 098 §4: the treasury stop's address, under [sendWarning].
     var sendFund: FundAddressModel?
+    /// Issue #466: a relay stop's "Report this" on the form (the confirm
+    /// page's rides in its model), and its tap on either page.
+    var sendReport: String?
+    var onRelayReport: (() -> Void)?
     var sendCtaDisabled = false
     /// Which row of the picker was tapped. The index travels because the core
     /// keys tokens by id and the screen only knows positions — the same defect
@@ -155,9 +159,10 @@ struct FlowHost: View {
     var onNoticeAction: (() -> Void)?
     var onNoticeSecondary: (() -> Void)?
     var onPickFeeToken: ((Int) -> Void)?
-    var onPickContact: ((Int) -> Void)?
-    /// A whole group from the picker, added to the split.
-    var onPickGroup: ((Int) -> Void)?
+    /// The picked person's address (issue #467), never a row position.
+    var onPickContact: ((String) -> Void)?
+    /// A whole group from the picker, by its id, added to the split.
+    var onPickGroup: ((String) -> Void)?
     /// The batch importer's four live edges — the unit toggle, the file
     /// picker, the template and the apply — plus its two fields. Absent
     /// everywhere the sheet is a picture, which is the gallery and the
@@ -399,6 +404,8 @@ struct FlowHost: View {
                     rowText: sendRow,
                     warning: sendWarning,
                     fund: sendFund,
+                    report: sendReport,
+                    onReport: { onRelayReport?() },
                     ctaDisabled: sendCtaDisabled,
                     onRefreshFee: onRefreshFee,
                     onToggleSpeed: { onToggleSpeed?() },
@@ -410,13 +417,14 @@ struct FlowHost: View {
                 SendConfirmBody(
                     model: m,
                     onNoticeAction: { onNoticeAction?() },
-                    onNoticeSecondary: { onNoticeSecondary?() }
+                    onNoticeSecondary: { onNoticeSecondary?() },
+                    onNoticeReport: { onRelayReport?() }
                 )
             } footer: {
                 FlowFooter {
-                    // A BUTTON, not a slider: the slider belongs to the signing
-                    // sheet, and Android 045 recorded the difference after
-                    // building the wrong one.
+                    // A BUTTON — the same primary button the signing sheet
+                    // confirms with since issue #461, so the two confirm
+                    // screens are one control.
                     VelaButton(title: m.cta, kind: .primary) {
                         if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
                     }
@@ -479,9 +487,10 @@ private struct FlowSheetHost: View {
     var onNoticeAction: (() -> Void)?
     var onNoticeSecondary: (() -> Void)?
     var onPickFeeToken: ((Int) -> Void)?
-    var onPickContact: ((Int) -> Void)?
-    /// A whole group from the picker, added to the split.
-    var onPickGroup: ((Int) -> Void)?
+    /// The picked person's address (issue #467), never a row position.
+    var onPickContact: ((String) -> Void)?
+    /// A whole group from the picker, by its id, added to the split.
+    var onPickGroup: ((String) -> Void)?
     /// The batch importer's four live edges — the unit toggle, the file
     /// picker, the template and the apply — plus its two fields. Absent
     /// everywhere the sheet is a picture, which is the gallery and the
@@ -597,8 +606,8 @@ private struct FlowSheetHost: View {
             ContactPickBody(
                 model: m,
                 onScan: { onNavigate(.scan) },
-                onGroup: { index in onPickGroup?(index) },
-                onSelect: { index in onPickContact?(index) }
+                onGroup: { id in onPickGroup?(id) },
+                onSelect: { address in onPickContact?(address) }
             )
         case .feeToken(let m):
             FeeTokenBody(model: m, onSelect: { index in onPickFeeToken?(index) })

@@ -23,6 +23,8 @@ final class DappActivity097ScreenshotTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // Its account is a seeded VELA_ACCOUNT: never on somebody's phone.
+        try skipOnDeviceForSeededAccount()
     }
 
     private static let me = "0x0970970970970970970970970970970970970970"

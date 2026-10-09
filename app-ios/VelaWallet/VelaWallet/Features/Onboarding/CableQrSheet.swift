@@ -8,6 +8,11 @@
 //  ends. The matrix comes from the core (cableQrMatrix, the same encoder every
 //  platform draws with), so this view owns only pixels.
 //
+//  Issue #459: a person who changes their mind can leave — Cancel, a swipe or
+//  a tap outside — and that ends the ceremony as a cancel, quietly, as the
+//  desktop's card always has. It used to hold them for the 90 s scan and then
+//  blame the link.
+//
 
 import SwiftUI
 import VelaCore
@@ -19,6 +24,8 @@ struct CableQrSheet: View {
     /// Creating a key on the phone, or finding one there (087 F02): a sign-in
     /// creates nothing, so its line is the scan itself.
     let chooser: KeyChooser
+    /// Cancel, a swipe or a tap outside: the ceremony ends as a cancel.
+    var onCancel: () -> Void = {}
 
     var body: some View {
         let copy = methodCopy(.hybrid, chooser: chooser, loc: loc)
@@ -42,16 +49,21 @@ struct CableQrSheet: View {
                     .frame(maxWidth: 260)
                     .padding(.top, Tokens.Space.s8)
             }
+
+            // The desktop card's Cancel (`common.cancel`): a lone code with
+            // nothing to press reads as stuck.
+            VelaButton(title: loc.t(I18nKeys.Flow.cancel), kind: .secondary) { onCancel() }
+                .padding(.top, Tokens.Space.s8)
+                .accessibilityIdentifier("cable.cancel")
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.vertical, Tokens.Space.s32)
         .presentationDetents([.large])
-        .presentationDragIndicator(.hidden)
+        .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
-        // Dismissing would strand a ceremony blocked on the scan; it times out
-        // on its own instead, exactly like the touch sheet.
-        .interactiveDismissDisabled(true)
+        // A swipe or a tap outside is a cancel too: the shared sheet's
+        // dismissal reaches `OnboardingModel.dismissOnboardingSheet`.
     }
 }
 

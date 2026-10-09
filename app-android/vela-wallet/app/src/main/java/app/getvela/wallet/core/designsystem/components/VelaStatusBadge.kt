@@ -29,7 +29,12 @@ enum class BadgeVariant {
     /** Dark disc ! — E4, E5, B6. */
     Neutral,
 
-    /** Red × — E1, E2, E6, E7, E9, E10, B3, B4. */
+    /**
+     * Red ! — E1, E2, E6, E7, E9, E10, B3, B4. Never ×: the sheet's column is
+     * leading-aligned, so a × in a disc sat top-left where a close button
+     * goes, and it closed nothing (issue #460). Only the colour differs from
+     * [Warning].
+     */
     Error,
 
     /** Amber clock — E3. */
@@ -48,39 +53,33 @@ fun VelaStatusBadge(
     val colors = VelaTheme.colors
     val disc: Color
     val glyphTint: Color
-    val glyph: ImageVector
     when (variant) {
         BadgeVariant.Success -> {
             disc = colors.successSoft
             glyphTint = colors.successBase
-            glyph = VelaIcons.Check
         }
         BadgeVariant.Warning -> {
             disc = colors.warningSoft
             glyphTint = colors.warningBase
-            glyph = VelaIcons.Exclamation
         }
         BadgeVariant.Neutral -> {
             disc = colors.bgSunken
             glyphTint = colors.fgBase
-            glyph = VelaIcons.Exclamation
         }
         BadgeVariant.Error -> {
             disc = colors.errorSoft
             glyphTint = colors.errorBase
-            glyph = VelaIcons.Close
         }
         BadgeVariant.Timeout -> {
             disc = colors.warningSoft
             glyphTint = colors.warningBase
-            glyph = VelaIcons.Clock
         }
         BadgeVariant.Info -> {
             disc = colors.infoSoft
             glyphTint = colors.infoBase
-            glyph = VelaIcons.Exclamation
         }
     }
+    val glyph = badgeGlyph(variant)
     Box(
         modifier = modifier
             .size(VelaSizing.emptyStateCircle)
@@ -95,4 +94,14 @@ fun VelaStatusBadge(
             modifier = Modifier.size(VelaIconSize.xl),
         )
     }
+}
+
+/**
+ * The badge's glyph: ✓ for success, a clock for a timeout, and ! for every
+ * other outcome, error included — the close glyph is for things that close.
+ */
+fun badgeGlyph(variant: BadgeVariant): ImageVector = when (variant) {
+    BadgeVariant.Success -> VelaIcons.Check
+    BadgeVariant.Timeout -> VelaIcons.Clock
+    BadgeVariant.Warning, BadgeVariant.Neutral, BadgeVariant.Error, BadgeVariant.Info -> VelaIcons.Exclamation
 }

@@ -469,7 +469,7 @@ export function enforceNoUnlimited(method: string, params: any[] | undefined): v
 	// Off-chain permit SIGNATURES (typed data) are redeemed by the dApp with its
 	// OWN struct — the wallet can't cap what it doesn't submit, so a forced cap
 	// only desyncs the signature and reverts the dApp's tx. These are gated by an
-	// explicit, deliberate UI risk-consent (slide-to-confirm), not by this
+	// explicit, deliberate UI risk-consent (the signing confirm), not by this
 	// amount guard, which only governs txs the WALLET itself submits.
 	if (detected.locus.type === 'typed-path') return;
 	// Boolean grants (setApprovalForAll true) are handled by explicit UI consent,

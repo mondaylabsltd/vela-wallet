@@ -30,6 +30,16 @@ enum WalletGeometry {
     static let badge: CGFloat = 12
     /// Ring separating the badge from the icon (bg-colored).
     static let badgeRing: CGFloat = 2
+    /// A chain badge that carries the chain's LOGO is a size a logo can be
+    /// read at (078 H-09), the same on all four shells (the 2026-10-08
+    /// ruling): 16 across with its 1.5 ring (border.emphasis, in the page
+    /// colour) inside that — the web's `.badge.with-logo` (border-box),
+    /// Android's and the desktop's. It was a 12 logo in a 2 ring here. A bare
+    /// dot, which only a gallery draws, keeps the mock's 12 in its 2 ring.
+    static let badgeLogoRing: CGFloat = 16
+    static let badgeLogoRingWidth: CGFloat = Tokens.BorderWidth.emphasis
+    /// The logo inside that ring, and the dot it falls back to: 16 − 2 × 1.5.
+    static let badgeLogo: CGFloat = badgeLogoRing - 2 * badgeLogoRingWidth
     /// Network-pill chain dots and their overlap in the all-networks variant.
     static let pillDot: CGFloat = 14
     static let pillDotOverlap: CGFloat = 7

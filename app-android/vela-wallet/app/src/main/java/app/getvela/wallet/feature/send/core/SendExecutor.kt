@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.send.core
 
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.FailureKind
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
@@ -596,9 +597,17 @@ class SendExecutor(
          * `fetch_tokens` answer and every `HoldingsUpdated`. The dashboard's
          * `tokens` already holds its unpriced rows (`unpriced_tokens` is a
          * subset of them, for the detail sheet), so the two are joined by
-         * holding and a row is never listed twice. No `logo_urls`: the asset
-         * list has none either, and both draw the same mark from the chain,
-         * symbol and contract (`Marks.tokenMark`).
+         * holding and a row is never listed twice.
+         *
+         * `logo_urls` are each coin's logo candidates by the core's one rule on
+         * the person's endpoint (`Marks.tokenMark`: an ERC-20's asset entry,
+         * checksummed then lowercase; a native coin its home chain's logo), as
+         * the web's `toSendToken`, the desktop and iOS fill them. The core
+         * copies them into the records and the receipt it writes, so a send
+         * made on this phone still wears its coins' logos when any shell opens
+         * it later. They were empty, and a sweep's coins read back from its
+         * record could only be letters. Drawing a holding is unchanged: the
+         * rule puts the same URLs after these and drops the repeats.
          */
         fun sendTokens(view: BalanceView): List<SendToken> =
             (view.tokens + view.unpriced_tokens)
@@ -612,7 +621,7 @@ class SendExecutor(
                         decimals = token.decimals,
                         token_address = token.token_address,
                         price_usd = token.price_usd,
-                        logo_urls = emptyList(),
+                        logo_urls = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).logoUrls,
                         spam = token.spam,
                     )
                 }

@@ -10,7 +10,7 @@ import app.getvela.wallet.feature.wallet.WalletFixtures
  * Canonical explore fixtures (spec 022, data-model.md §2 — the single canon all
  * four platforms port; web reference: `src/lib/explore/fixtures.ts`).
  *
- * Site names, hosts, group titles and the demo page are verbatim mock content
+ * Site names, hosts and the demo page are verbatim mock content
  * and are never translated; every label resolves through the corpus. Brand hex
  * values are FIXTURE DATA, exempt from the tokens-only rule exactly as the
  * wallet's chain dots are.
@@ -28,8 +28,6 @@ object ExploreFixtures {
         val lido = Color(0xFFF0616D)
         val ens = Color(0xFF5284FF)
         val hyperliquid = Color(0xFF50D2C1)
-        val curve = Color(0xFF7B7BE8)
-        val limitless = Color(0xFF8B6DFF)
 
         /** The stand-in web page's own palette (spec 022 §2). */
         object DemoPage {
@@ -50,8 +48,6 @@ object ExploreFixtures {
     val ens = SiteModel("ens", "ENS", "app.ens.domains", "E", Brand.ens)
     val hyperliquid =
         SiteModel("hyperliquid", "Hyperliquid", "app.hyperliquid.xyz", "H", Brand.hyperliquid)
-    val curve = SiteModel("curve", "Curve", "curve.fi", "C", Brand.curve)
-    val limitless = SiteModel("limitless", "Limitless", "limitless.exchange", "L", Brand.limitless)
 
     /** The favourites grid, in mock order (E2/DE2). */
     val favorites: List<SiteModel> =
@@ -80,28 +76,6 @@ object ExploreFixtures {
             kind = GroupKind.Recent,
             action = GroupAction.Clear,
             sites = listOf(hyperliquid.copy(meta = "刚刚")),
-        ),
-        // Custom group titles and blurbs are what the person typed — mock
-        // content, verbatim, never translated (the spec-015 rule).
-        GroupModel(
-            id = "trading",
-            title = "交易",
-            kind = GroupKind.Custom,
-            action = GroupAction.Menu,
-            sites = listOf(
-                curve.copy(subtitle = "稳定币兑换"),
-                hyperliquid.copy(subtitle = "永续合约交易"),
-            ),
-        ),
-        GroupModel(
-            id = "prediction",
-            title = "预测市场",
-            kind = GroupKind.Custom,
-            action = GroupAction.Menu,
-            sites = listOf(
-                polymarket.copy(subtitle = "事件预测市场"),
-                limitless.copy(subtitle = "预测市场"),
-            ),
         ),
     )
 
@@ -161,19 +135,12 @@ object ExploreFixtures {
         footnote = s.t("explore.autoRequestHint"),
     )
 
+    /** E3: the start page's two sections (issue #465), each with its eye. */
     fun groupManage(s: VelaStrings) = ExploreSheet.GroupManage(
         title = s.t("explore.manageGroups"),
-        newGroup = s.t("explore.newGroup"),
         rows = listOf(
-            GroupManageRow(
-                "favorites", s.t("explore.favorites"),
-                s.t("explore.siteCount", mapOf("n" to "8")), system = true,
-            ),
-            GroupManageRow("recent", s.t("explore.recent"), s.t("explore.systemGroup"), true),
-            GroupManageRow("trading", "交易", s.t("explore.siteCount", mapOf("n" to "4")), false),
-            GroupManageRow(
-                "prediction", "预测市场", s.t("explore.siteCount", mapOf("n" to "2")), false,
-            ),
+            GroupManageRow("favorites", s.t("explore.favorites"), s.t("explore.siteCount", 8)),
+            GroupManageRow("recent", s.t("explore.recent"), meta = null),
         ),
     )
 

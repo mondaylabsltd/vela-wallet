@@ -19,12 +19,15 @@
 	interface Props {
 		panel: RelayUnreachableModel;
 		onprimary?: () => void;
+		/**
+		 * "Report this" (issue 466): the in-app report, in this same sheet,
+		 * seeded with the core's account of the stop and filed under its
+		 * marker — as on the treasury sheet. Absent in the gallery.
+		 */
+		onreport?: () => void;
 	}
 
-	let { panel, onprimary }: Props = $props();
-
-	/** Where it gets reported — the same destination as the treasury sheet's. */
-	const REPORT_URL = 'https://github.com/mondaylabsltd/vela-wallet/issues/new';
+	let { panel, onprimary, onreport }: Props = $props();
 </script>
 
 <div class="unreachable">
@@ -40,9 +43,10 @@
 	{/if}
 
 	{#if panel.report}
-		<a class="report" href={REPORT_URL} target="_blank" rel="noopener noreferrer">
-			{panel.report.label}
-		</a>
+		<!-- The same hook as the treasury sheet's, and the phones'. -->
+		<button type="button" class="report" data-testid="relay-report" onclick={onreport}
+			>{panel.report.label}</button
+		>
 	{/if}
 
 	<Button variant="primary" shape="rounded" onclick={onprimary}>{panel.primary}</Button>
@@ -88,11 +92,13 @@
 		align-items: center;
 		justify-content: center;
 		min-height: var(--size-control-md);
+		border: none;
 		border-radius: var(--radius-lg);
 		background: var(--color-bg-sunken);
+		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		color: var(--color-fg-base);
-		text-decoration: none;
+		cursor: pointer;
 	}
 </style>

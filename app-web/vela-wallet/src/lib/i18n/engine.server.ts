@@ -27,6 +27,7 @@ import type { SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import { UNREACHABLE_LINE_KEYS, type SettingsMessages } from '$lib/settings/messages';
 import type { AppPromptMessages } from '$lib/app-prompt/messages';
+import type { PluralCopy } from './plural';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
 const CATALOGS = import.meta.glob('../../../../../assets/i18n/*.json', {
@@ -146,7 +147,15 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			unreachable: k('onboarding.common.networkBody'),
 			noPrice: k('home.balanceDetailNoPrice'),
 			a11yHide: k('home.a11yHideBalance'),
-			a11yShow: k('home.a11yShowBalance')
+			a11yShow: k('home.a11yShowBalance'),
+			lastUpdated: k('home.lastUpdated'),
+			updating: k('home.updating'),
+			refreshBalance: k('home.refreshBalance'),
+			ago: {
+				now: k('time.now'),
+				minutes: k('time.minutesShort'),
+				hours: k('time.hoursShort')
+			}
 		},
 		actions: {
 			receive: k('componentsUi.dock.receive'),
@@ -741,6 +750,21 @@ export function resolveWalletFlowMessages(locale: Locale): WalletFlowMessages {
 	) as WalletFlowMessages;
 }
 
+/**
+ * A plural key as the forms `locale` has — the core's categories for it, the
+ * same set `resolveFlowMessages` ships — for a screen that knows the count
+ * only when it draws (`pluralForm`).
+ */
+function pluralCopy(locale: Locale, key: string): PluralCopy {
+	activate(locale);
+	return {
+		locale,
+		forms: Object.fromEntries(
+			i18nPluralSuffixes(locale).map((suffix) => [suffix, t(locale, `${key}${suffix}`)])
+		)
+	};
+}
+
 /** Direct engine access for the differential test only. */
 export function rawResolve(locale: Locale, key: string): string {
 	activate(locale);
@@ -824,20 +848,14 @@ export function resolveExploreMessages(locale: Locale): ExploreMessages {
 		done: k('explore.done'),
 		add: k('explore.add'),
 		clear: k('explore.clear'),
-		groupOptions: k('explore.groupOptions'),
 		manageGroups: k('explore.manageGroups'),
-		newGroup: k('explore.newGroup'),
 		rename: k('explore.rename'),
 		hide: k('explore.hide'),
 		show: k('explore.show'),
 		delete: k('explore.delete'),
-		moveToGroup: k('explore.moveToGroup'),
 		openInNewTab: k('explore.openInNewTab'),
 		removeFromFavorites: k('explore.removeFromFavorites'),
-		systemGroup: k('explore.systemGroup'),
-		hiddenTag: k('explore.hiddenTag'),
-		siteCount: k('explore.siteCount'),
-		hiddenCount: k('explore.hiddenCount'),
+		siteCount: pluralCopy(locale, 'explore.siteCount'),
 		tabs: k('explore.tabs'),
 		newTab: k('explore.newTab'),
 		startPage: k('explore.startPage'),
@@ -902,7 +920,7 @@ export const CONFIRM_BLOCK_KEYS = [
 	'componentsUi.signing.confirmBlock.feeMeasuring',
 	'componentsUi.signing.confirmBlock.feeFailed'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
-	// coin, and the slide said it again.
+	// coin, and the confirm's note said it again.
 ] as const;
 
 /** Spec 099 R8: the signer's three failures, by `SignErrorKind`. */
@@ -920,8 +938,6 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signingAccount: k('componentsUi.signing.signingAccount'),
 		advancedToggle: k('componentsUi.signing.advancedToggle'),
 		close: k('componentsUi.signing.close'),
-		slideToConfirm: k('componentsUi.signing.slideToConfirm'),
-		slideConfirmAction: k('componentsUi.signing.slideConfirmAction'),
 		confirmSend: k('componentsUi.signing.confirmSend'),
 		confirmSwap: k('componentsUi.signing.confirmSwap'),
 		confirmDeposit: k('componentsUi.signing.confirmDeposit'),
@@ -1064,11 +1080,6 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 				fast: k('send.gasTier.fast'),
 				standard: k('send.gasTier.standard'),
 				slow: k('send.gasTier.slow')
-			},
-			hints: {
-				fast: k('send.gasTierHintFast'),
-				standard: k('send.gasTierHintStandard'),
-				slow: k('send.gasTierHintSlow')
 			}
 		},
 		feeEstimated: k('componentsUi.signing.feeEstimated'),
@@ -1082,10 +1093,6 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
 		terms: Object.fromEntries(CLEAR_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])),
-		backupIntent: k('settingsModals.backup.intent'),
-		backupRegisteredAs: k('settingsModals.backup.registeredAs'),
-		backupAddress: k('contacts.addressLabel'),
-		backupPublicKeys: k('settingsModals.backup.publicKeys'),
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.
 		receipt: {

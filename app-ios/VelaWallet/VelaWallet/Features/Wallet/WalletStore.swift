@@ -45,6 +45,12 @@ final class WalletStore {
     /// When `autoRefresh` runs: the wallet home on screen, the app active.
     /// Installed after the store exists, since it closes over it.
     @ObservationIgnored private(set) var homePoller: HomeBalancePoller!
+    /// The hero's refresh control's spin (issue 462): the core's
+    /// `refreshing`, held for at least `RefreshSpin.minimumMs`. ONE spin for
+    /// the control and the pull gesture, here rather than in the screen, so
+    /// the pull's spinner and the control's glyph start and stop together.
+    private(set) var spin = RefreshSpin()
+    @ObservationIgnored private var spinRelease: Task<Void, Never>?
 
     /// `registry`: the token registry the balance read plan takes its
     /// stablecoins and wrapped coin from (spec 082 RE9); `nil` reads the
@@ -70,6 +76,11 @@ final class WalletStore {
 
     private func viewArrived(_ view: BalanceViewWire) {
         balance = view
+        let held = spin.core(busy: view.refreshing, now: Self.uptimeMs())
+        if held != spin {
+            spin = held
+            scheduleSpinRelease()
+        }
         guard let at = view.lastRefreshedAtMs, at != countedRefreshAt,
               let address = view.address, !address.isEmpty
         else { return }
@@ -110,10 +121,45 @@ final class WalletStore {
     /// Pull to refresh. `pull` is carried so the core can tell a person's own
     /// gesture from a background refresh and answer it differently.
     func refresh(pull: Bool = true) {
-        core.dispatch(CoreJSON.string([
-            "type": "refresh_requested", "force": true, "pull": pull,
-        ]))
+        core.dispatch(Self.refreshEvent(pull: pull))
     }
+
+    static func refreshEvent(pull: Bool) -> String {
+        CoreJSON.string(["type": "refresh_requested", "force": true, "pull": pull])
+    }
+
+    /// The person asked for fresh figures (issue 462): the hero's "↻ Updated"
+    /// control, or the pull gesture. Every chain read again past the
+    /// background gate (`force`), marked as the person's own (`pull`, so the
+    /// core's `refreshing` holds until THIS round settles) — and the spin
+    /// starts with the tap, not when the view comes back.
+    ///
+    /// `false` while the spin is already turning: the control is inert then,
+    /// and nothing is dispatched (the caller skips the activity tick too).
+    @discardableResult
+    func pullRefresh() -> Bool {
+        guard let started = spin.tapped(now: Self.uptimeMs()) else { return false }
+        spin = started
+        refresh(pull: true)
+        scheduleSpinRelease()
+        return true
+    }
+
+    /// Stop the spin once its release time comes — re-armed on every change,
+    /// so the one pending release is always the current spin's.
+    private func scheduleSpinRelease() {
+        spinRelease?.cancel()
+        guard let at = spin.releaseAt else { return }
+        let wait = max(0, at - Self.uptimeMs())
+        spinRelease = Task { [weak self] in
+            if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000)) }
+            guard !Task.isCancelled, let self else { return }
+            self.spin = self.spin.settle(now: Self.uptimeMs())
+        }
+    }
+
+    /// A monotonic clock in ms — the spin's only time source.
+    static func uptimeMs() -> Double { ProcessInfo.processInfo.systemUptime * 1000 }
 
     /// The home's 10-minute refresh, as the web sends it: NOT forced, not a
     /// pull — the core's own cache rules decide whether it reads anything.
@@ -127,22 +173,20 @@ final class WalletStore {
 
     /// Hold a pull gesture open until the refresh it started is done.
     ///
-    /// `refresh(pull:)` dispatches and returns, so awaiting nothing would snap
+    /// `pullRefresh()` dispatches and returns, so awaiting nothing would snap
     /// the spinner away before a single chain had answered — which reads as
-    /// "already up to date" over stale figures. Two waits, because the core
-    /// does not flip `refreshing` until its first effect resolves: first for
-    /// the refresh to START, then for it to finish.
+    /// "already up to date" over stale figures. The spin started with the
+    /// pull, so this waits on IT: the pull's spinner and the hero control's
+    /// glyph stop together, after the round settles and never before the
+    /// minimum spin (issue 462).
     ///
     /// The cap is a give-up, not a decision: twelve chains can genuinely be
     /// slow, but a spinner that never stops is worse than a figure that is a
     /// few seconds old.
     func settled(timeout: TimeInterval = 20) async {
         let started = Date()
-        while Date().timeIntervalSince(started) < 2, balance?.refreshing != true {
+        while Date().timeIntervalSince(started) < timeout, spin.spinning {
             try? await Task.sleep(nanoseconds: 100_000_000)
-        }
-        while Date().timeIntervalSince(started) < timeout, balance?.refreshing == true {
-            try? await Task.sleep(nanoseconds: 200_000_000)
         }
     }
 

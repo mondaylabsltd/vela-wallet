@@ -25,10 +25,18 @@
 //
 //  ## What may never be in a report
 //
-//  Addresses, balances, endpoint or RPC URLs, raw `vela.*` values. The payload
-//  is ASSEMBLED from what the person typed and the preview lines the sheet
-//  shows — which `SettingsLive.withFeedback` builds from an allowlist and
-//  redacts — so there is no road from the wallet's shelf to the wire.
+//  The PERSON's addresses and balances, endpoint or RPC URLs, raw `vela.*`
+//  values. The payload is ASSEMBLED from what the person typed and the
+//  preview lines the sheet shows — which `SettingsLive.withFeedback` builds
+//  from an allowlist and redacts — so there is no road from the wallet's
+//  shelf to the wire.
+//
+//  One exception, and it is not the person's: a relay stop's report (issue
+//  #466) names the relay's TREASURY — its full address and what it holds
+//  against its floor. That account is the operator's and public on-chain, and
+//  the operator needs it to refill it. It rides in `what`, which the person
+//  reads in the sheet before sending and which the server keeps as written;
+//  moved into `environment` it would be redacted to "[address]".
 //
 
 import Foundation
@@ -107,17 +115,35 @@ enum BugReport {
         case unreachable
     }
 
+    /// Where a report comes from when the app, not the person, knows what it
+    /// is about (issue #466): the core's words to start the sheet with, the
+    /// area it files under, and the fingerprint that makes every report of one
+    /// outage a +1 on one issue — `relay-gas-130`, stable across balance
+    /// refreshes and app versions, where a word-derived one would open a new
+    /// issue per version.
+    struct Seed: Equatable, Identifiable {
+        let what: String
+        let steps: String
+        let area: String
+        let fingerprint: String
+        var id: String { fingerprint }
+    }
+
     /// The whole payload, from the person's words and the shown lines only.
+    ///
+    /// `fingerprint` overrides the word-derived one — a seeded report's, so
+    /// an edit to the seeded words still lands on the same issue.
     static func build(what: String, steps: String, area: String = areaOther,
                       environmentLines: [String], version: String, os: String = deviceOS,
-                      screenshots: [Data] = []) -> Payload {
+                      screenshots: [Data] = [], fingerprint override: String? = nil) -> Payload {
         let what = what.trimmingCharacters(in: .whitespacesAndNewlines)
         return Payload(
             what: what,
             steps: steps.trimmingCharacters(in: .whitespacesAndNewlines),
             area: area,
             environment: environmentLines.joined(separator: "\n"),
-            fingerprint: fingerprint(what: what, area: area, version: version),
+            fingerprint: override.flatMap { $0.isEmpty ? nil : $0 }
+                ?? fingerprint(what: what, area: area, version: version),
             client: client,
             os: os,
             appVersion: version,

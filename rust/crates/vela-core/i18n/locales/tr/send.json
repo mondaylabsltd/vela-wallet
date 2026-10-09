@@ -80,7 +80,7 @@
     "recipientCount_other": "{{count}} alıcı",
     "removeRecipient": "Kaldır",
     "alertInsufficientBalanceBody": "Toplam bakiyenizi aşıyor.",
-    "recipientPickAria": "Alıcı seç veya tara",
+    "recipientPickAria": "Kişilerden seç",
     "multiSendNoFundsAfterGas": "Gas rezervinden sonra bakiye yetersiz.",
     "gasReserved": "Gas ayrıldı",
     "txErrorGeneric": "İşlem gönderilemedi. Fonlarınız güvende — lütfen tekrar deneyin.",

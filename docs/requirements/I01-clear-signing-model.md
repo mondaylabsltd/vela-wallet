@@ -41,7 +41,7 @@ says so — a fake summary would be worse than honest uncertainty.
 
 ## 6. UX / flow notes
 
-`SigningRequestModal` / `SigningSheet`. Risk color follows I08. Balance-change preview (J02) sits alongside the decoded intent. Slide-to-confirm (M04) + biometric (B02) gate the signature.
+`SigningRequestModal` / `SigningSheet`. Risk color follows I08. Balance-change preview (J02) sits alongside the decoded intent. A tap on the confirm button (the same primary button the Send screen uses; #461 retired the slide) + biometric (B02) gate the signature.
 
 ## 7. Acceptance criteria
 

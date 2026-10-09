@@ -225,12 +225,12 @@ class SignRequest {
 					approvedAtMs: (id) => this.#approvedAt.get(id) ?? null,
 					recordsWritten: () => feed.reconciled(1),
 					assetSim: () => this.#assetSim,
-					// The wallet's own request (the key backup) is from this very
-					// origin, and names no site: the Trusted Signer draws an empty
-					// origin as the wallet itself, as the sheet does (spec 071).
+					// The wallet's own request (the key backup, `first_party`)
+					// names no site: the Trusted Signer draws an empty origin as
+					// the wallet itself, as the sheet does (spec 071).
 					requestOrigin: (id) => {
 						const request = this.view.request;
-						if (request?.id !== id || request.origin === window.location.origin) return '';
+						if (request?.id !== id || request.first_party) return '';
 						return request.origin;
 					},
 					switchActiveAccount: async (index: number) => {
@@ -268,7 +268,7 @@ class SignRequest {
 			// each state change; on the web the session is app-resident state, so
 			// the mirror is an effect on it. Without this the machine has NO
 			// accounts, and `approve_with` finds no signer and returns silently:
-			// the slide commits, the gate is open, and nothing is ever signed
+			// the confirm commits, the gate is open, and nothing is ever signed
 			// (027's SC-304 finding).
 			this.syncAccounts();
 			this.#stopAccountsMirror?.();

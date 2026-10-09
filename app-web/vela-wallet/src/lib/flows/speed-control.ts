@@ -24,10 +24,13 @@ export interface SpeedWords {
 	free: string;
 	single: string;
 	gasPriceLabel: string;
-	/** What each speed is CALLED — the speed itself, never a number. */
+	/**
+	 * What each speed is CALLED — the speed itself, never a number. What it
+	 * buys is not said here: each option's own fee and gas bid say it, so the
+	 * per-transaction picker draws no description (2026-10-08). The Settings
+	 * default-speed sheet, which has neither figure, keeps its descriptions.
+	 */
 	names: Record<OfferedTier, string>;
-	/** …and what each one buys, the line under the name. */
-	hints: Record<OfferedTier, string>;
 }
 
 /** The dead `rapid` reads as the factory `fast` — the core's own answer for it. */
@@ -63,7 +66,6 @@ export function speedControlModel(
 			return {
 				id: tier,
 				label: words.names[tier],
-				detail: words.hints[tier],
 				// "…" while this tier's own quote is out, "—" when there is none
 				// to be had. Never another tier's figure wearing this tier's name.
 				value: line ? line.coin : option.measuring ? '…' : '—',

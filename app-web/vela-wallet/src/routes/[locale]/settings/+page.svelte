@@ -91,18 +91,11 @@
 		AREA_OTHER,
 		buildBugReport,
 		readWorkerFailureLines,
-		sendBugReport,
-		webClient,
-		webOs,
-		webPlatform,
 		type DeviceFacts
 	} from '$lib/services/bug-report';
 	import { reportSend } from '$lib/settings/report-send.svelte';
-	import { BUILD_COMMIT, BUILD_VERSION } from '$lib/build/info';
-	import { netCounters } from '$lib/services/metrics';
-	import { getFailedRpcChains } from '$lib/services/rpc-pool';
-	import { chainName } from '$lib/services/networks';
-	import type { FeedbackResult } from '$lib/settings/model';
+	import { deviceFacts as currentDeviceFacts } from '$lib/settings/device-facts';
+	import { fileReport } from '$lib/settings/file-report';
 	import type { SettingsPrefEvent } from '$lib/settings/pref-events';
 	import { LOCALE_ENDONYMS } from '$lib/settings/fixtures';
 	import type { SettingsNetEvent } from '$lib/settings/net-events';
@@ -224,25 +217,9 @@
 	onMount(() => {
 		void readWorkerFailureLines().then((lines) => (workerFailures = lines));
 	});
-	const deviceFacts = $derived.by<DeviceFacts>(() => {
-		const failures: string[] = [];
-		for (const [key, count] of netCounters()) {
-			if (key.endsWith(':final_failure') && count > 0) failures.push(`${key} ×${count}`);
-		}
-		failures.push(...workerFailures);
-		return {
-			version: BUILD_VERSION,
-			// 078 §E: the issue title's "[Web]" / "[Extension]", and the short
-			// "Chrome 151 on macOS" its Platform line reads.
-			client: webClient(),
-			os: webOs(),
-			commit: BUILD_COMMIT,
-			platform: webPlatform(),
-			language: data.locale,
-			unreachable: [...getFailedRpcChains()].map((id) => chainName(id)),
-			failures
-		};
-	});
+	const deviceFacts = $derived.by<DeviceFacts>(() =>
+		currentDeviceFacts(data.locale, workerFailures)
+	);
 
 	/**
 	 * Send it, and say what happened.
@@ -276,22 +253,7 @@
 			facts: deviceFacts,
 			screenshots: report.screenshots
 		});
-		await reportSend.send(async (): Promise<FeedbackResult> => {
-			const outcome = await sendBugReport(payload);
-			return outcome.ok
-				? {
-						filed: true,
-						number: outcome.number,
-						url: outcome.url,
-						deduped: outcome.deduped,
-						screenshotsDropped: outcome.screenshotsDropped
-					}
-				: {
-						filed: false,
-						fallbackUrl: outcome.fallbackUrl,
-						withScreenshots: report.screenshots.length > 0
-					};
-		}, copy);
+		await reportSend.send(() => fileReport(payload), copy);
 	}
 
 	// --- The Ethereum backup row (spec 062) ---------------------------------

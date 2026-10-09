@@ -168,7 +168,7 @@ class SigningFeeCoinTest {
         val settled = withTimeout(20_000) {
             c.fee.first { !it.busy && it.fee != null && it.fee_token.equals(PUSD, ignoreCase = true) }
         }
-        assertTrue("the slide opens: $settled", settled.confirm_fee_ready)
+        assertTrue("the confirm opens: $settled", settled.confirm_fee_ready)
         val asset = settled.fee!!.fee_asset as FeeAssetView.Erc20
         assertTrue(asset.token.equals(PUSD, ignoreCase = true))
         assertEquals("pUSD", asset.symbol)

@@ -6,6 +6,7 @@ import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.FeeTierPrefView
 import app.getvela.wallet.feature.settings.core.SignPrefView
 import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.wallet.components.tokenGlyph
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.browser.ExploreLive
 import app.getvela.wallet.feature.send.core.SendTreasuryStatus
@@ -738,7 +739,7 @@ object SettingsLive {
         val amount = SendLive.fromBase(short.max(java.math.BigDecimal.ZERO).toPlainString(), decimals)
         return model.copy(
             relayer = model.relayer.copy(
-                mark = ChainMarkModel(symbol.take(3).uppercase(), WalletLive.badge(chainId.toLong()).value.toLong() and 0xFFFFFFFFL, Marks.chainLogoUrl(chainId.toInt())),
+                mark = ChainMarkModel(tokenGlyph(symbol), WalletLive.badge(chainId.toLong()).value.toLong() and 0xFFFFFFFFL, Marks.chainLogoUrl(chainId.toInt())),
                 name = chainName,
                 amountHint = strings.t(I18nKeys.SettingsUi.RELAYER_AMOUNT_HINT, mapOf("amount" to amount, "symbol" to (if (status.asset == SendTreasuryAsset.PathUsd) "pathUSD" else symbol))),
                 addressDisplay = ExploreLive.shortAddress(status.address),

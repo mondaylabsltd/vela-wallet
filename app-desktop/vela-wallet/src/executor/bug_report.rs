@@ -13,11 +13,20 @@
 //!
 //! ## What may never be in a report
 //!
-//! Addresses, balances, endpoint or RPC URLs (a self-hosted endpoint carries
-//! its API key in its path often enough), raw stored values. The payload is
-//! ASSEMBLED from [`DeviceFacts`]' named fields and nothing else; [`redact`]
-//! is the second line, for the one field a person can name themselves — a
-//! custom network's display name reaches the unreachable list.
+//! The PERSON's addresses and balances, endpoint or RPC URLs (a self-hosted
+//! endpoint carries its API key in its path often enough), raw stored values.
+//! The payload's device facts are ASSEMBLED from [`DeviceFacts`]' named
+//! fields and nothing else; [`redact`] is the second line, for the one field
+//! a person can name themselves — a custom network's display name reaches
+//! the unreachable list.
+//!
+//! One report names an address and a balance on purpose (issue 466): a relay
+//! stop's "Report this" files the core's `SendRelayReport`, whose `what`
+//! carries the relay TREASURY's address and what it holds against its floor.
+//! Those are the operator's, and public (the relay serves them), never the
+//! person's — which is why they ride in `what`, filed as written, and never
+//! in the facts this module scrubs. Such a report also files under the
+//! area and dedup key the core chose ([`ReportOrigin`]), not this module's.
 //!
 //! ## Screenshots (078 round 3)
 //!
@@ -107,6 +116,29 @@ pub struct BugReportPayload {
     /// byte what it was before screenshots existed.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub screenshots: Vec<String>,
+}
+
+/// Who chose a report's area and its dedup key, when it was not the person
+/// (issue 466): a relay stop's "Report this" files under the core's area
+/// (`"Send"`, bug.yml's option) and fingerprint (`relay-gas-130`), so every
+/// report of one outage on one chain lands on ONE open issue as +1s —
+/// whatever words, build or balance each reporter saw. The person's own
+/// report has none: [`AREA_OTHER`] and a fingerprint of their words.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReportOrigin {
+    pub area: String,
+    pub fingerprint: String,
+}
+
+impl BugReportPayload {
+    /// The same report filed under `origin`'s area and dedup key — the
+    /// override the core's relay report needs; everything else is as built.
+    #[must_use]
+    pub fn filed_as(mut self, origin: &ReportOrigin) -> Self {
+        origin.area.clone_into(&mut self.area);
+        origin.fingerprint.clone_into(&mut self.fingerprint);
+        self
+    }
 }
 
 /// How a send ended.
@@ -918,6 +950,70 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// Issue 466: the core's relay report reaches the endpoint as the core
+    /// wrote it — the operator's treasury address whole in `what` (it is
+    /// public, and the operator's), under the core's area and dedup key —
+    /// and the fallback form carries the same area and title. Filed against
+    /// a loopback stand-in, never the real endpoint.
+    #[test]
+    fn a_relay_report_files_under_the_cores_area_and_key() {
+        const TREASURY: &str = "0x3e59292e18417f814112f731e7163534c6d2fe3c";
+        let origin = ReportOrigin {
+            area: "Send".into(),
+            fingerprint: "relay-gas-130".into(),
+        };
+        let what = format!(
+            "Relayer out of gas on Unichain (130)\n\nTreasury: {TREASURY}\nHas 0 ETH of its \
+             0.0001 ETH floor (short 0.0001 ETH)."
+        );
+        let payload = build_bug_report(
+            &what,
+            "1. Send on Unichain (130)\n2. Continue: the relay's treasury check stopped the send",
+            &origin.area,
+            &labels(),
+            &DeviceFacts {
+                version: "0.9.7".into(),
+                os: "macOS 26.0".into(),
+                ..DeviceFacts::default()
+            },
+            Vec::new(),
+        )
+        .filed_as(&origin);
+        assert_eq!(payload.area, "Send");
+        assert_eq!(payload.fingerprint, "relay-gas-130");
+
+        let (endpoint, received) = stub(
+            200,
+            r#"{"number":4243,"url":"https://x.test/4243","deduped":true}"#,
+        );
+        assert!(matches!(
+            send_bug_report(&payload, &endpoint),
+            BugReportOutcome::Filed {
+                number: 4243,
+                deduped: true,
+                ..
+            }
+        ));
+        let body: serde_json::Value = received
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .ok()
+            .and_then(|body| serde_json::from_str(&body).ok())
+            .unwrap_or_else(|| unreachable!("the stub received no JSON"));
+        assert_eq!(body["area"], "Send");
+        assert_eq!(body["fingerprint"], "relay-gas-130");
+        assert_eq!(body["client"], "desktop");
+        assert!(
+            body["what"]
+                .as_str()
+                .is_some_and(|what| what.contains(TREASURY)),
+            "{body}"
+        );
+
+        let url = prefilled_issue_url(&payload);
+        assert!(url.contains("&title=%5BDesktop%5D+Relayer+out+of+gas+on+Unichain+%28130%29&"));
+        assert!(url.ends_with("&area=Send"), "{url}");
     }
 
     #[test]

@@ -47,7 +47,7 @@ intent: string | null,
 unlimited_approved: boolean, 
 /**
  * What the wallet's OWN simulation said this operation moves, exactly as
- * the sheet drew it under "Balance changes" when the slide fired
+ * the sheet drew it under "Balance changes" when the confirm fired
  * (083 F1): `token_trust`'s judgments, in the sheet's order — an
  * unverified token's line carries no figure here either. Kept on the
  * record so Activity can say what was approved. It rides the approve and

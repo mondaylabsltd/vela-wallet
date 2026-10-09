@@ -6,10 +6,12 @@
 import { describe, expect, it } from 'vitest';
 import { rawResolve, resolveExploreMessages } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { pluralForm } from '$lib/i18n/plural';
 import {
 	buildDesktopState,
 	buildMobileState,
 	DESKTOP_STATES,
+	fill,
 	MOBILE_STATES,
 	SITES
 } from './fixtures';
@@ -17,9 +19,12 @@ import {
 const IDENTICON_STUB = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const messages = resolveExploreMessages('zh');
 
+/** The plural keys: no bare value, a form per category the locale has. */
+const PLURAL_KEYS = ['siteCount'];
+
 /** Every corpus key this layer names, derived from the resolver's own output. */
 const EXPLORE_KEYS = Object.keys(resolveExploreMessages('en')).filter(
-	(k) => k !== 'nav' && k !== 'closeLabel'
+	(k) => k !== 'nav' && k !== 'closeLabel' && !PLURAL_KEYS.includes(k)
 );
 
 describe('explore messages', () => {
@@ -29,6 +34,29 @@ describe('explore messages', () => {
 			expect(value, `explore.${key} in ${locale}`).not.toBe(`explore.${key}`);
 			expect(value.trim()).not.toBe('');
 		}
+		// A plural key ships every form the locale has, each counting.
+		const forms = resolveExploreMessages(locale).siteCount.forms;
+		expect(Object.keys(forms)).toContain('_other');
+		for (const [suffix, form] of Object.entries(forms)) {
+			expect(form, `explore.siteCount${suffix} in ${locale}`).toContain('{{count}}');
+		}
+	});
+
+	// "explore.siteCount" became plural forms with {{count}}: one site is not
+	// "1 sites", and Russian's 2–4 is not its 5.
+	it('counts sites in the form the count takes', () => {
+		const count = (locale: Parameters<typeof resolveExploreMessages>[0], n: number) =>
+			fill(pluralForm(resolveExploreMessages(locale).siteCount, n), { count: String(n) });
+		expect(count('en', 1)).toBe('1 site');
+		expect(count('en', 8)).toBe('8 sites');
+		expect(count('ru', 1)).toBe('1 сайт');
+		expect(count('ru', 3)).toBe('3 сайта');
+		expect(count('ru', 8)).toBe('8 сайтов');
+		expect(count('zh', 8)).toBe('8 个网站');
+		// The E3 board's Favorites row reads its eight sites that way too.
+		const row = buildMobileState('e3', resolveExploreMessages('ru'), IDENTICON_STUB).menus
+			.groupManage.rows[0];
+		expect(row.meta).toBe('8 сайтов');
 	});
 });
 
@@ -60,12 +88,14 @@ describe('what each state is FOR', () => {
 		expect(e1.tabCountLabel).toBeUndefined();
 	});
 
-	it('E2 carries the eight favourites plus the add tile, and three groups', () => {
+	it('E2 carries the favourites plus the add tile, and Recent dApps — no groups of its own (issue 465)', () => {
 		const e2 = buildMobileState('e2', messages, IDENTICON_STUB);
 		expect(e2.empty).toBeUndefined();
 		expect(e2.favorites?.tiles).toHaveLength(8);
 		expect(e2.favorites?.tiles.at(-1)?.kind).toBe('add');
-		expect(e2.groups.map((g) => g.id)).toEqual(['recent', 'trading', 'prediction']);
+		expect(e2.groups.map((g) => g.id)).toEqual(['recent']);
+		const desktop = buildDesktopState('de2', messages, IDENTICON_STUB);
+		expect(desktop.start.groups.map((g) => g.id)).toEqual(['recent']);
 	});
 
 	it('E3/E6/E7/E8 open on a sheet; E1/E2/E4/E5 do not', () => {
@@ -102,20 +132,29 @@ describe('what each state is FOR', () => {
 		for (const state of MOBILE_STATES) {
 			const { menus } = buildMobileState(state, messages, IDENTICON_STUB);
 			expect(menus.siteMenu.items).toHaveLength(7);
-			expect(menus.groupManage.rows).toHaveLength(4);
+			expect(menus.groupManage.rows).toHaveLength(2);
 			expect(menus.connection.connection.explainer.length).toBeGreaterThan(0);
 		}
 	});
 
-	it('the group manager can hide a system group but never delete one', () => {
-		const rows = buildMobileState('e3', messages, IDENTICON_STUB).menus.groupManage.rows;
-		const system = rows.filter((r) => r.system).map((r) => r.id);
-		expect(system).toEqual(['favorites', 'recent']);
+	it('the group manager is the two sections and an eye each — nothing to make, move or delete (issue 465)', () => {
+		const sheet = buildMobileState('e3', messages, IDENTICON_STUB).menus.groupManage;
+		expect(sheet.rows.map((r) => [r.id, r.title, r.hidden])).toEqual([
+			['favorites', messages.favorites, false],
+			['recent', messages.recent, false]
+		]);
+		// No "System" tag: with no groups of the person's own, there is
+		// nothing to tell the two apart from.
+		expect(sheet.rows[1].meta).toBeUndefined();
+		expect(Object.keys(sheet).sort()).toEqual(['kind', 'rows', 'title']);
 	});
 
 	it('DE1 is empty, DE2 carries the tile context menu, DE3 opens the connection', () => {
 		expect(buildDesktopState('de1', messages, IDENTICON_STUB).start.empty).toBeDefined();
-		expect(buildDesktopState('de2', messages, IDENTICON_STUB).contextMenu?.items).toHaveLength(4);
+		// Open in new tab, Rename, Remove — no "Move to group…" (issue 465).
+		expect(
+			buildDesktopState('de2', messages, IDENTICON_STUB).contextMenu?.items.map((i) => i.id)
+		).toEqual(['new-tab', 'rename', 'remove']);
 		expect(buildDesktopState('de3', messages, IDENTICON_STUB).initialPanel).toBe('connection');
 		expect(buildDesktopState('de4', messages, IDENTICON_STUB).initialPanel).toBe('signing');
 	});
@@ -125,12 +164,6 @@ describe('fixture content is the mock, verbatim (FR-012)', () => {
 	it('site names, hosts and letters', () => {
 		expect(SITES.uniswap).toMatchObject({ name: 'Uniswap', host: 'app.uniswap.org', letter: 'U' });
 		expect(SITES.hyperliquid.host).toBe('app.hyperliquid.xyz');
-		expect(SITES.limitless.name).toBe('Limitless');
-	});
-
-	it('the custom groups keep the names a person typed, untranslated', () => {
-		const groups = buildMobileState('e2', messages, IDENTICON_STUB).groups;
-		expect(groups.map((g) => g.title).slice(1)).toEqual(['交易', '预测市场']);
 	});
 
 	it('the stand-in page is the site’s content, not our chrome', () => {

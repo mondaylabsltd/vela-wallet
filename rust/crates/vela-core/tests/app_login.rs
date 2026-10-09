@@ -413,6 +413,97 @@ fn a_cancelled_ceremony_is_silent() {
     assert!(!sut.view().busy);
 }
 
+/// Issue #459: dismissing the "Scan a code" sheet is how a person changes
+/// their mind about signing in with a phone. The shell answers the phone
+/// ceremony with `cancelled`, and that is as silent as a dismissed OS sheet —
+/// even though every other failure on the phone route is the link's
+/// (`phone_link`, issue #446) — and it frees Welcome at once.
+#[test]
+fn a_cancelled_phone_ceremony_is_silent_too() {
+    let mut sut = mounted();
+    sut.dispatch(Event::SignIn {
+        method: KeyMethod::Hybrid,
+    });
+    let next = sut.resolve(ShellResult::PasskeySupport { supported: true });
+    assert_eq!(
+        next,
+        vec![ShellOperation::AuthenticatePasskey {
+            method: KeyMethod::Hybrid
+        }],
+        "the phone route shows a code"
+    );
+    assert!(sut.view().busy, "busy while the code is up");
+
+    // Whatever words the shell attaches, a cancel is a cancel.
+    let next = sut.resolve(ShellResult::PasskeyFailed {
+        kind: FailureKind::Cancelled,
+        message: Some("The code was dismissed".to_owned()),
+    });
+    assert!(
+        next.is_empty(),
+        "no phone_link prompt, no error state: {next:?}"
+    );
+    assert!(!sut.view().busy, "Welcome's buttons are live again");
+
+    // The cancel belonged to that ceremony: the next phone sign-in starts
+    // afresh and can still succeed.
+    sut.dispatch(Event::SignIn {
+        method: KeyMethod::Hybrid,
+    });
+    let next = sut.resolve(ShellResult::PasskeySupport { supported: true });
+    assert_eq!(
+        next,
+        vec![ShellOperation::AuthenticatePasskey {
+            method: KeyMethod::Hybrid
+        }]
+    );
+    let next = sut.resolve(ShellResult::PasskeyAuthenticated {
+        assertion: support::assertion(CRED),
+        now_iso: NOW.to_owned(),
+    });
+    assert!(
+        matches!(next.as_slice(), [ShellOperation::LoadAccounts]),
+        "{next:?}"
+    );
+}
+
+/// The recovery's second signature rides the same phone route (issue #459):
+/// dismissing its code leaves the person where they were, with no
+/// "recovery failed" sheet.
+#[test]
+fn a_cancelled_phone_recovery_signature_is_silent() {
+    let mut sut = mounted();
+    sut.dispatch(Event::SignIn {
+        method: KeyMethod::Hybrid,
+    });
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(ShellResult::PasskeyAuthenticated {
+        assertion: support::assertion(CRED),
+        now_iso: NOW.to_owned(),
+    });
+    sut.resolve(ShellResult::AccountsLoaded { accounts: vec![] });
+    walk_to_recover_offer(&mut sut);
+    let next = sut.resolve(ShellResult::PromptAnswered { accepted: true });
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::SignProof {
+                method: KeyMethod::Hybrid,
+                purpose: ProofPurpose::RecoverSecond,
+                ..
+            }]
+        ),
+        "the second signature asks the phone again: {next:?}"
+    );
+
+    let next = sut.resolve(ShellResult::PasskeyFailed {
+        kind: FailureKind::Cancelled,
+        message: None,
+    });
+    assert!(next.is_empty(), "no RecoverFailed, no phone_link: {next:?}");
+    assert!(!sut.view().busy);
+}
+
 /// Issue #446: an iPad's sign-in with a phone failed because the tunnel was
 /// cancelled under it, and the sheet said to set up Face ID. A failure of the
 /// link to the other device — as `cable::conn` words it — is flagged so the

@@ -58,6 +58,10 @@ struct SettingsSheet: View {
     /// sheet is closed mid-send still lands and is still told (2026-09-27).
     /// Absent in the gallery, where the sheet makes its own.
     var feedbackSender: FeedbackSender?
+    /// A report the app started (issue #466: a relay stop's "Report this"):
+    /// the sheet opens on the core's words, and files under the core's area
+    /// and fingerprint. Absent, the sheet is the blank one Settings opens.
+    var feedbackSeed: BugReport.Seed?
 
     /// Where "suggest a fix" goes — the issue tracker the web links (its
     /// `SelectSheetBody`), since the corpus lives in that repository.
@@ -164,7 +168,8 @@ struct SettingsSheet: View {
                         onCancel: onDismiss
                     )
                 case .feedback:
-                    FeedbackSheetBody(model: model.feedback, sender: feedbackSender, onDone: onDismiss)
+                    FeedbackSheetBody(model: model.feedback, sender: feedbackSender,
+                                      seed: feedbackSeed, onDone: onDismiss)
                 case .rpcFix:
                     RpcFixSheetBody(
                         model: model.rpcFix,
@@ -464,11 +469,14 @@ struct FeedbackSheetBody: View {
     @ScaledMetric(relativeTo: .footnote) private var chevronGlyph = LucideIconSize.smallChevron
     let model: FeedbackModel
     var onDone: () -> Void = {}
+    /// A report the app started (issue #466): its words fill the form, and
+    /// its area and fingerprint ride with the send.
+    private let seed: BugReport.Seed?
 
     @State private var sender: FeedbackSender
     @State private var what: String
-    @State private var steps = ""
-    @State private var stepsOpen = false
+    @State private var steps: String
+    @State private var stepsOpen: Bool
     @State private var previewOpen = true
     @State private var picked: [PhotosPickerItem] = []
     /// Where VoiceOver goes when the outcome changes (v3 B6/B7): a fallback's
@@ -504,12 +512,17 @@ struct FeedbackSheetBody: View {
     private static let fallbackAnchor = "feedback.fallbackBlock"
 
     /// `sender` and `what` are seams for a render of a given state; the sheet
-    /// itself passes neither.
-    init(model: FeedbackModel, sender: FeedbackSender? = nil, what: String = "", onDone: @escaping () -> Void = {}) {
+    /// itself passes neither. `seed` starts the form on a report the app
+    /// wrote — editable, and still filed under the seed's fingerprint.
+    init(model: FeedbackModel, sender: FeedbackSender? = nil, what: String = "",
+         seed: BugReport.Seed? = nil, onDone: @escaping () -> Void = {}) {
         self.model = model
         self.onDone = onDone
+        self.seed = seed
         _sender = State(initialValue: sender ?? FeedbackSender())
-        _what = State(initialValue: what)
+        _what = State(initialValue: seed?.what ?? what)
+        _steps = State(initialValue: seed?.steps ?? "")
+        _stepsOpen = State(initialValue: !(seed?.steps ?? "").isEmpty)
     }
 
     var body: some View {
@@ -640,7 +653,11 @@ struct FeedbackSheetBody: View {
             typing = nil
             let lines = model.previewLines
             let typed = (what, steps)
-            Task { await sender.send(what: typed.0, steps: typed.1, previewLines: lines, version: BuildInfo.version) }
+            let seed = seed
+            Task {
+                await sender.send(what: typed.0, steps: typed.1, previewLines: lines,
+                                  version: BuildInfo.version, seed: seed)
+            }
         }
         .accessibilityIdentifier("feedback.send")
         // The fallback block already offers the form; a second way to the

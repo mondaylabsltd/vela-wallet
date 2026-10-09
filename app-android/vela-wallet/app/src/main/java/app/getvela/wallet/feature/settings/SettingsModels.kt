@@ -412,6 +412,15 @@ data class DebugModeRowModel(
     val mode: DebugMode = DebugMode.Hidden,
 )
 
+/**
+ * Issue #466: what a report sheet opens with when something else wrote it —
+ * a relay stop's "Report this" seeds the core's `what` and `steps` (snapshot
+ * at the tap). The person reads them, may edit them, and sends; the area and
+ * fingerprint ride beside, never in the boxes.
+ */
+@Immutable
+data class FeedbackSeed(val what: String, val steps: String)
+
 @Immutable
 data class FeedbackModel(
     val title: String,

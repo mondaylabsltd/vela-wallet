@@ -1,5 +1,5 @@
 <script lang="ts">
-	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
+	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
 	import type { AmountLine } from '../model';
 
 	interface Props {
@@ -41,7 +41,14 @@
 			>{#each groups as group, i (i)}{group}{#if i < groups.length - 1}<wbr />{/if}{/each}</span
 		>
 		{#if line.token}
-			<LetterAvatar letter={line.token.letter} tint={line.token.tint} size={compact ? 20 : 22} />
+			<TokenIcon
+				ticker={line.token.ticker}
+				badgeColor={line.token.badgeColor}
+				logoUrls={line.token.logoUrls}
+				badgeLogoUrl={line.token.badgeLogoUrl}
+				badgeHidden={line.token.badgeHidden}
+				size="inline"
+			/>
 		{/if}
 		<span class="symbol">{line.symbol}</span>
 	</p>

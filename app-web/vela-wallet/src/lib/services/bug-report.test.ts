@@ -530,6 +530,55 @@ describe('the dedup marker', () => {
 	});
 });
 
+/**
+ * Issue 466: a relay stop's "Report this" files the core's report — its
+ * words, its area, and its dedup marker, so every report of one outage lands
+ * on one issue whatever was typed, and at whatever version or balance.
+ */
+describe('a relay stop’s report', () => {
+	const TREASURY = '0x3e59292e18417f814112f731e7163534c6d2fe3c';
+	const report = {
+		what: `Relayer out of gas on Ethereum (1)\n\nTreasury: ${TREASURY}\nHas 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH).`,
+		steps: '1. Send on Ethereum (1)\n2. Continue: the relay’s treasury check stopped the send',
+		area: 'Send',
+		fingerprint: 'relay-gas-1'
+	};
+
+	it('carries the core’s area and marker, and the operator’s treasury in its words', () => {
+		const payload = buildBugReport({ ...report, labels: LABELS, facts: FACTS });
+		expect(payload.area).toBe('Send');
+		expect(payload.fingerprint).toBe('relay-gas-1');
+		// The operator's public treasury rides in `what` — never scrubbed.
+		expect(payload.what).toContain(TREASURY);
+		expect(payload.what).toContain('0.0001 ETH');
+		// The device's own lines still carry no address.
+		expect(payload.environment).not.toMatch(/0x[0-9a-f]{40}/i);
+		// An edited text, another version: the same issue.
+		const edited = buildBugReport({
+			...report,
+			what: `${report.what}\nStill stuck an hour later.`,
+			labels: LABELS,
+			facts: { ...FACTS, version: '9.9.9' }
+		});
+		expect(edited.fingerprint).toBe('relay-gas-1');
+	});
+
+	it('prefills the fallback form with its area and its words', () => {
+		const url = new URL(
+			prefilledIssueURL(buildBugReport({ ...report, labels: LABELS, facts: FACTS }))
+		);
+		expect(url.searchParams.get('area')).toBe('Send');
+		expect(url.searchParams.get('title')).toBe('[Web] Relayer out of gas on Ethereum (1)');
+		expect(url.searchParams.get('what')).toContain(TREASURY);
+		expect(url.searchParams.get('steps')).toBe(report.steps);
+	});
+
+	it('without a marker of its own, a report keeps the one its words make', () => {
+		const payload = buildBugReport({ what: 'x', area: AREA_OTHER, labels: LABELS, facts: FACTS });
+		expect(payload.fingerprint).toBe(fingerprintOf('x', AREA_OTHER, FACTS.version));
+	});
+});
+
 describe('the extension worker’s counters (spec 082 RB14)', () => {
 	it('become `sw:<event>.<cause> ×N` lines, the failures only', () => {
 		expect(

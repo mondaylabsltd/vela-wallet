@@ -1,5 +1,7 @@
 > **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期；该应用及其 `src/**` 已退役并删除，文中的实现引用请对照 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 与 `rust/crates/vela-core`。需求本身仍有效，正文按原样保留。
 
+> **勘误（2026-10-08，#461）**：签名页的滑动确认（`SlideToConfirmButton` 及各壳的对应实现）已在四个壳上删除；签名页与发送确认页一样，是一次点按的主按钮，按钮只写动作本身，点按后弹出的 passkey 是那一道刻意的第二步。下文 FR-1 与 AC-1 中关于滑动确认的部分不再适用。
+
 # M04 · Bespoke UI Primitives & Semantic Haptics
 
 | | |

@@ -15,6 +15,7 @@ import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.designsystem.components.VelaDangerButton
 import app.getvela.wallet.core.platform.Clipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
@@ -143,6 +144,26 @@ private fun FundAddress(model: FundAddressModel, modifier: Modifier = Modifier) 
         )
     }
 }
+
+/**
+ * Issue #466: a relay stop's "Report this" — the operator's lead says telling
+ * them is the fastest fix, and this is how. It opens the app's own report
+ * sheet with the core's words already in it (the person reads, can edit, and
+ * sends), never a blank GitHub form. A quiet full-width button, as the web
+ * draws it, under the address it is about.
+ */
+@Composable
+private fun RelayReportButton(label: String, onReport: () -> Unit, modifier: Modifier = Modifier) {
+    FlowCta(
+        label = label,
+        onClick = onReport,
+        accent = false,
+        modifier = modifier.fillMaxWidth().testTag(RELAY_REPORT_TAG),
+    )
+}
+
+/** The relay stop's "Report this" — a stable hook for tests. */
+const val RELAY_REPORT_TAG = "relay-report"
 
 /** The 150 ms copy tick the SPEC sheet specifies, as reusable screen state. */
 @Composable
@@ -1135,6 +1156,8 @@ fun SendFormBody(
     onRefreshFee: (() -> Unit)? = null,
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
+    /** Issue #466: a relay stop's "Report this" — the in-app report, seeded with the core's. */
+    onReport: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val haptic = rememberVelaHaptic()
@@ -1222,6 +1245,7 @@ fun SendFormBody(
                 modifier = Modifier.padding(bottom = VelaSpacing.lg),
             )
             model.fund?.let { fund -> FundAddress(fund, Modifier.padding(bottom = VelaSpacing.lg)) }
+            model.report?.let { report -> RelayReportButton(report, onReport, Modifier.padding(bottom = VelaSpacing.lg)) }
         }
         model.recipient?.let {
             RecipientField(
@@ -1311,6 +1335,7 @@ fun SendFormBody(
                 )
             }
             model.fund?.let { fund -> FundAddress(fund, Modifier.padding(bottom = VelaSpacing.md)) }
+            model.report?.let { report -> RelayReportButton(report, onReport, Modifier.padding(bottom = VelaSpacing.md)) }
         }
         FlowCta(
             label = model.cta,
@@ -1336,16 +1361,17 @@ fun ContactPickBody(
     modifier: Modifier = Modifier,
     onScan: () -> Unit = {},
     onGroup: (Int) -> Unit = {},
-    onSelect: (Int) -> Unit = {},
+    /** Issue #467: the picked person's ADDRESS — never a position in a list the core re-sorts. */
+    onSelect: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var query by remember { mutableStateOf("") }
     val shown = remember(query, model.contacts) {
         if (query.isBlank()) {
-            model.contacts.withIndex().toList()
+            model.contacts
         } else {
-            model.contacts.withIndex().filter {
-                "${it.value.name} ${it.value.addressDisplay}".contains(query.trim(), true)
+            model.contacts.filter {
+                "${it.name} ${it.addressDisplay}".contains(query.trim(), true)
             }
         }
     }
@@ -1436,7 +1462,10 @@ fun ContactPickBody(
         }
         SectionCaption(model.contactsTitle)
         shown.forEach { entry ->
-            ContactPickRow(contact = entry.value, onSelect = { onSelect(entry.index) })
+            // Keyed by the person, so a row that moves keeps its own state.
+            key(entry.address) {
+                ContactPickRow(contact = entry, onSelect = { onSelect(entry.address) })
+            }
         }
     }
 }
@@ -1778,6 +1807,8 @@ fun SendConfirmBody(
     onConfirm: () -> Unit = {},
     onNoticeAction: () -> Unit = {},
     onNoticeSecondary: () -> Unit = {},
+    /** Issue #466: the stop's "Report this". */
+    onReport: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1933,6 +1964,10 @@ fun SendConfirmBody(
                 model.noticeFund?.let { fund ->
                     Spacer(modifier = Modifier.height(VelaSpacing.md))
                     FundAddress(fund)
+                }
+                model.noticeReport?.let { report ->
+                    Spacer(modifier = Modifier.height(VelaSpacing.md))
+                    RelayReportButton(report, onReport)
                 }
                 model.noticeAction?.let { action ->
                     Spacer(modifier = Modifier.height(VelaSpacing.md))

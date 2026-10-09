@@ -38,7 +38,7 @@ use gpui::{
 
 use super::*;
 use crate::executor::bug_report::{self, BugReportOutcome};
-use crate::executor::screenshot_prep::{self, Refusal, Tray};
+use crate::executor::screenshot_prep::{self, Refusal, Shot, Tray};
 
 /// The tile, square (v2 A6: `min(72, (row − 4 gaps) / 5)`; the settings
 /// column is never narrower than five of them, so it is always 72 here).
@@ -79,6 +79,18 @@ enum ShotSource {
     Bytes(Vec<u8>),
 }
 
+/// The person's own report, set aside while one the app opened is on the
+/// form (issue 466) — the web's and iOS's separate relay-report draft, on a
+/// shell whose reporter is one page.
+pub(super) struct SetAside<T> {
+    what: String,
+    steps: String,
+    steps_open: bool,
+    /// Its tiles, moved out of the tray that keeps counting ids
+    /// ([`Tray::take_shots`]); one still being prepared is finished here.
+    shots: Vec<Shot<T>>,
+}
+
 /// What the report says and how its last send ended — the part every rule
 /// about a stale outcome is written against. Generic over what a ready tile
 /// holds, so those rules are tested without drawing a picture.
@@ -87,6 +99,17 @@ pub(super) struct Report<T> {
     steps: String,
     tray: Tray<T>,
     result: Option<BugReportOutcome>,
+    /// A report the app wrote, not the person (issue 466): the core's area
+    /// and dedup key, which it files under. `None`: the person's own report,
+    /// filed as "Other" under a fingerprint of their words.
+    origin: Option<bug_report::ReportOrigin>,
+    /// The seeded report's title line — the line that names the outage.
+    /// Once the title changes, what is on the form is the person's own.
+    seed_title: Option<String>,
+    /// `Some` while the form holds a report the app opened ("Report this"):
+    /// what was on it before — the person's own unsent words and tiles, or
+    /// nothing — which comes back when that visit ends ([`Report::end_visit`]).
+    set_aside: Option<SetAside<T>>,
 }
 
 impl<T> Default for Report<T> {
@@ -96,6 +119,9 @@ impl<T> Default for Report<T> {
             steps: String::new(),
             tray: Tray::default(),
             result: None,
+            origin: None,
+            seed_title: None,
+            set_aside: None,
         }
     }
 }
@@ -114,8 +140,130 @@ impl<T> Report<T> {
 
     fn set_what(&mut self, text: String) {
         if text != self.what {
+            // The seed's title line changed — every word gone, a select-all
+            // overwrite, a paste over it: what is on the form now is the
+            // person's own complaint, and must not be filed — and deduped —
+            // as the relay outage the seed was about. Words added under the
+            // title keep the core's area and key.
+            let title = text.lines().next().map_or("", str::trim);
+            if text.trim().is_empty()
+                || self
+                    .seed_title
+                    .as_deref()
+                    .is_some_and(|seeded| seeded.trim() != title)
+            {
+                self.origin = None;
+                self.seed_title = None;
+            }
             self.what = text;
             self.edited();
+        }
+    }
+
+    /// Open the app's report (issue 466): its words, its area and key, no
+    /// tiles, no outcome. What the person had on the form — unsent words and
+    /// tiles, and whether the steps were open — is set aside, not lost, and
+    /// comes back when this visit ends; a report of theirs already filed is
+    /// done and is not. A second seed in the same visit replaces the first
+    /// and keeps what was set aside. The tiles move out of a tray that keeps
+    /// counting, so a picture still being prepared can never land under a
+    /// new tile's id.
+    fn seed(
+        &mut self,
+        what: String,
+        steps: String,
+        origin: bug_report::ReportOrigin,
+        steps_open: bool,
+    ) {
+        if self.set_aside.is_none() {
+            let filed = self.filed();
+            let shots = self.tray.take_shots();
+            self.set_aside = Some(if filed {
+                SetAside {
+                    what: String::new(),
+                    steps: String::new(),
+                    steps_open: false,
+                    shots: Vec::new(),
+                }
+            } else {
+                SetAside {
+                    what: std::mem::take(&mut self.what),
+                    steps: std::mem::take(&mut self.steps),
+                    steps_open,
+                    shots,
+                }
+            });
+        } else {
+            self.tray.clear();
+        }
+        self.seed_title = what.lines().next().map(|title| title.trim().to_owned());
+        self.what = what;
+        self.steps = steps;
+        self.result = None;
+        self.origin = Some(origin);
+    }
+
+    /// Whether the form holds a report the app opened (issue 466).
+    fn in_visit(&self) -> bool {
+        self.set_aside.is_some()
+    }
+
+    /// The visit to the app's report ends — filed and done, or left unsent:
+    /// the seed goes (its words, tiles, area, key and outcome) and the
+    /// person's own report comes back as they left it. `Some(steps_open)` to
+    /// restore; `None` when no visit was on.
+    fn end_visit(&mut self) -> Option<bool> {
+        let own = self.set_aside.take()?;
+        self.what = own.what;
+        self.steps = own.steps;
+        self.tray.restore_shots(own.shots);
+        self.result = None;
+        self.origin = None;
+        self.seed_title = None;
+        Some(own.steps_open)
+    }
+
+    /// A tile's picture came back: on the form, or on a tile set aside with
+    /// the person's own report — never on another tile. `false` when that
+    /// tile is gone.
+    fn finish(&mut self, id: u64, prepared: Option<T>) -> bool {
+        if self.tray.shots().iter().any(|shot| shot.id == id) {
+            return self.tray.finish(id, prepared);
+        }
+        let Some(own) = self.set_aside.as_mut() else {
+            return false;
+        };
+        let Some(at) = own.shots.iter().position(|shot| shot.id == id) else {
+            return false;
+        };
+        match prepared {
+            Some(ready) => own.shots[at].ready = Some(ready),
+            // It could not be prepared: it goes, as it would on the form.
+            None => {
+                own.shots.remove(at);
+            }
+        }
+        true
+    }
+
+    /// What Send files: the words, the device facts and the tiles — under
+    /// "Other" and a fingerprint of the words, or, for a seeded report,
+    /// under the area and dedup key the core chose.
+    fn payload(
+        &self,
+        labels: &bug_report::EnvironmentLabels,
+        facts: &bug_report::DeviceFacts,
+        screenshots: Vec<String>,
+    ) -> bug_report::BugReportPayload {
+        let area = self
+            .origin
+            .as_ref()
+            .map_or(bug_report::AREA_OTHER, |origin| origin.area.as_str());
+        let payload =
+            bug_report::build_bug_report(&self.what, &self.steps, area, labels, facts, screenshots);
+        match &self.origin {
+            Some(origin) => payload.filed_as(origin),
+            None => payload,
         }
     }
 
@@ -471,14 +619,11 @@ impl WalletPage {
             .into_iter()
             .map(|shot| shot.base64.to_string())
             .collect();
-        let payload = bug_report::build_bug_report(
-            &self.feedback.report.what,
-            &self.feedback.report.steps,
-            bug_report::AREA_OTHER,
-            &self.settings.bug_labels,
-            &self.feedback_facts(cx),
-            screenshots,
-        );
+        let facts = self.feedback_facts(cx);
+        let payload = self
+            .feedback
+            .report
+            .payload(&self.settings.bug_labels, &facts, screenshots);
         self.feedback.sending = true;
         self.feedback.report.result = None;
         cx.notify();
@@ -536,7 +681,7 @@ impl WalletPage {
     /// One tile's picture came back — or could not be made, and the tile goes
     /// with the unsupported line. A send waiting on it goes once none is left.
     fn feedback_prepared(&mut self, id: u64, ready: Option<ReadyShot>, cx: &mut Context<Self>) {
-        self.feedback.report.tray.finish(id, ready);
+        self.feedback.report.finish(id, ready);
         if self.feedback.waiting && !self.feedback.report.tray.is_processing() {
             self.feedback.waiting = false;
             self.send_feedback_now(cx);
@@ -756,15 +901,104 @@ impl WalletPage {
         true
     }
 
-    /// 完成 on the filed state: an empty form for the next report.
+    /// 完成 on the filed state: an empty form for the next report — or,
+    /// after the app's report (issue 466), the person's own as they left it.
     fn feedback_done(&mut self, cx: &mut Context<Self>) {
         let draft = &mut self.feedback;
-        draft.report.what.clear();
-        draft.report.steps.clear();
-        draft.steps_open = false;
-        draft.report.tray.clear();
-        draft.report.result = None;
+        if let Some(steps_open) = draft.report.end_visit() {
+            draft.steps_open = steps_open;
+            // …and a send parked under it is where 完成 lands: back on the
+            // stop the report was about, as the web's sheet returns to it.
+            if self.send_parked && self.send_host.is_some() {
+                self.section = Section::Wallet;
+                self.panel = PanelId::None;
+                self.menu = None;
+            }
+        } else {
+            draft.report.what.clear();
+            draft.report.steps.clear();
+            draft.steps_open = false;
+            draft.report.tray.clear();
+            draft.report.result = None;
+            draft.report.origin = None;
+            draft.report.seed_title = None;
+        }
+        draft.viewer = None;
         draft.tile_focus.clear();
+        cx.notify();
+    }
+
+    /// The person left the app's report unsent (issue 466): the seed never
+    /// outlives its visit — its area and key go with it — and their own
+    /// report is back on the form for the next time they open it. A report
+    /// still going, or filed and not yet put away with 完成, stays: its
+    /// outcome lands on the words it was sent with.
+    pub(super) fn settle_relay_report_visit(&mut self) {
+        let draft = &self.feedback;
+        if !draft.report.in_visit() || self.feedback_on_screen() || draft.busy() || draft.filed() {
+            return;
+        }
+        let draft = &mut self.feedback;
+        if let Some(steps_open) = draft.report.end_visit() {
+            draft.steps_open = steps_open;
+        }
+        draft.viewer = None;
+        draft.tile_focus.clear();
+        draft.keyboard_focus = false;
+    }
+
+    /// "Report this" on a relay stop (issue 466): the Feedback page — this
+    /// app's one reporter, with its preview, consent line, Send and both
+    /// endings — opened on the core's report as it stood at the press, filed
+    /// under the core's area and key. A page, not a second sheet over the
+    /// send: the desktop's reporter is a Settings page, and going there is a
+    /// section switch. The send column leaves the screen but the send is
+    /// parked, not closed: the way back to the wallet (or 完成 on the filed
+    /// report) returns to it with the recipient and amount as they were, and
+    /// any other switch closes it, as a switch always has. The words can be
+    /// edited; the key stays the core's so every report of this outage stays
+    /// one issue — until its title line is rewritten, when it is the
+    /// person's own. What the person had on the form is set aside, and comes
+    /// back once this report is filed and put away, or left unsent.
+    ///
+    /// A report still going is left alone: the page opens on its progress,
+    /// and pressing Report again once it ends starts this one.
+    pub(super) fn open_relay_report(
+        &mut self,
+        report: vela_core::app::send::SendRelayReport,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.feedback.busy() {
+            let vela_core::app::send::SendRelayReport {
+                what,
+                steps,
+                area,
+                fingerprint,
+            } = report;
+            let draft = &mut self.feedback;
+            let steps_open = draft.steps_open;
+            draft.report.seed(
+                what,
+                steps,
+                bug_report::ReportOrigin { area, fingerprint },
+                steps_open,
+            );
+            // The steps are part of what is sent: shown, not folded away.
+            draft.steps_open = true;
+            draft.viewer = None;
+            draft.tile_focus.clear();
+            draft.keyboard_focus = false;
+        }
+        self.close_switcher(cx);
+        self.section = Section::Settings;
+        self.settings_page = SettingsPage::Feedback;
+        self.settings_dialog = None;
+        self.settings_probed_panel = None;
+        // The send waits under the report rather than going with the column
+        // (`parked_send_after`).
+        self.send_parked = self.send_host.is_some();
+        self.panel = PanelId::None;
+        self.menu = None;
         cx.notify();
     }
 
@@ -777,6 +1011,8 @@ impl WalletPage {
     /// and `autosend` / `autosend-away`, which are not pictures but a real
     /// send through the real code (tiles prepared, the endpoint called,
     /// whatever it answers shown), `-away` leaving for the Wallet as it goes.
+    /// `relay` is the form a relay stop's "Report this" opens (issue 466),
+    /// and `relay-autosend` that report sent for real, the same way.
     pub(super) fn pin_feedback_state(&mut self, state: &str) {
         self.section = Section::Settings;
         self.settings_page = SettingsPage::Feedback;
@@ -912,6 +1148,17 @@ impl WalletPage {
             }
             "autosend" => draft.autosend = Some(false),
             "autosend-away" => draft.autosend = Some(true),
+            // Issue 466: seeded as the press seeds it, with the core's words
+            // for Unichain's empty treasury, its area and its key.
+            "relay" | "relay-autosend" => {
+                let (what, steps, origin) = relay_report_sample();
+                let steps_open = draft.steps_open;
+                draft.report.seed(what, steps, origin, steps_open);
+                draft.steps_open = true;
+                if state == "relay-autosend" {
+                    draft.autosend = Some(false);
+                }
+            }
             _ => {}
         }
     }
@@ -2091,6 +2338,25 @@ impl WalletPage {
     }
 }
 
+/// The report the core builds for Unichain's empty relay treasury (issue
+/// 466), word for word — what the `relay` pins open the form on. A sample
+/// for a screenshot pass, which has no relay to stop it.
+fn relay_report_sample() -> (String, String, bug_report::ReportOrigin) {
+    (
+        "Relayer out of gas on Unichain (130)\n\n\
+         Treasury: 0x3e59292e18417f814112f731e7163534c6d2fe3c\n\
+         Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH)."
+            .to_owned(),
+        "1. Send on Unichain (130)\n\
+         2. Continue: the relay's treasury check stopped the send — its relayer is out of gas"
+            .to_owned(),
+        bug_report::ReportOrigin {
+            area: vela_core::app::send::RELAY_REPORT_AREA.to_owned(),
+            fingerprint: "relay-gas-130".to_owned(),
+        },
+    )
+}
+
 /// Read, decode, turn, scale, encode, and draw the tile — all off the
 /// frame. `None` for anything that is not an image this machine can open.
 fn prepare_shot(source: ShotSource) -> Option<ReadyShot> {
@@ -2176,5 +2442,197 @@ mod tests {
         report.set_what("more".into());
         report.add(1, 0);
         assert!(report.filed());
+    }
+
+    fn relay_origin() -> bug_report::ReportOrigin {
+        bug_report::ReportOrigin {
+            area: "Send".into(),
+            fingerprint: "relay-gas-130".into(),
+        }
+    }
+
+    /// Issue 466: a relay stop's report takes the form — words, tiles, an old
+    /// outcome go from view — and files under the core's area and key
+    /// through edits of its words; once its title line is rewritten (every
+    /// word gone, or a select-all overwrite that never passes through
+    /// empty) it is the person's own report, filed as "Other" under a
+    /// fingerprint of their words.
+    #[test]
+    fn a_seeded_report_files_under_the_cores_area_and_key() {
+        let facts = bug_report::DeviceFacts {
+            version: "0.9.7".into(),
+            ..bug_report::DeviceFacts::default()
+        };
+        let labels = bug_report::EnvironmentLabels::default();
+        let seed = |report: &mut Report<&'static str>| {
+            report.seed(
+                "Relayer out of gas on Unichain (130)\n\nTreasury: 0x3e59".into(),
+                "1. Send on Unichain (130)".into(),
+                relay_origin(),
+                false,
+            );
+        };
+
+        let mut report = fallen();
+        report.add(2, 0);
+        seed(&mut report);
+        assert!(report.result.is_none(), "the old outcome went");
+        assert_eq!(report.tray.len(), 0, "the old tiles went");
+        let ids = report.add(1, 0);
+        assert_eq!(ids.len(), 1);
+        assert!(ids[0] >= 2, "a fresh tile never reuses an old one's id");
+
+        let payload = report.payload(&labels, &facts, Vec::new());
+        assert_eq!(payload.area, "Send");
+        assert_eq!(payload.fingerprint, "relay-gas-130");
+        assert_eq!(payload.steps, "1. Send on Unichain (130)");
+        assert!(
+            payload
+                .what
+                .starts_with("Relayer out of gas on Unichain (130)")
+        );
+
+        // A word added: still the outage, still its key.
+        report.set_what(format!("{}\nSeen twice today.", report.what));
+        assert_eq!(
+            report.payload(&labels, &facts, Vec::new()).fingerprint,
+            "relay-gas-130"
+        );
+
+        // Every word gone and new ones typed: the person's own report now.
+        report.set_what(String::new());
+        report.set_what("The fee looked wrong".into());
+        let own = report.payload(&labels, &facts, Vec::new());
+        assert_eq!(own.area, bug_report::AREA_OTHER);
+        assert_eq!(
+            own.fingerprint,
+            bug_report::fingerprint_of("The fee looked wrong", bug_report::AREA_OTHER, "0.9.7")
+        );
+
+        // A select-all overwrite never passes through empty: the title line
+        // changing is what makes it the person's.
+        let mut report: Report<&str> = Report::default();
+        seed(&mut report);
+        report.set_what("The fee looked wrong".into());
+        let own = report.payload(&labels, &facts, Vec::new());
+        assert_eq!(own.area, bug_report::AREA_OTHER);
+        assert_eq!(
+            own.fingerprint,
+            bug_report::fingerprint_of("The fee looked wrong", bug_report::AREA_OTHER, "0.9.7")
+        );
+        // …and typing the outage's title back does not make it the outage's.
+        report.set_what("Relayer out of gas on Unichain (130)".into());
+        assert_eq!(
+            report.payload(&labels, &facts, Vec::new()).area,
+            bug_report::AREA_OTHER
+        );
+
+        // A word typed INTO the title line is a new title too.
+        let mut report: Report<&str> = Report::default();
+        seed(&mut report);
+        report.set_what(report.what.replacen("Unichain", "Unichain mainnet", 1));
+        assert_eq!(
+            report.payload(&labels, &facts, Vec::new()).area,
+            bug_report::AREA_OTHER
+        );
+
+        // And a report never seeded is the person's from the start.
+        let plain: Report<&str> = Report {
+            what: "Send froze".into(),
+            ..Report::default()
+        };
+        assert_eq!(
+            plain.payload(&labels, &facts, Vec::new()).area,
+            bug_report::AREA_OTHER
+        );
+    }
+
+    /// Issue 466: "Report this" never costs the person the report they were
+    /// writing. Their words, their steps (open or folded) and their tiles —
+    /// one still being prepared included — are set aside while the app's
+    /// report is on the form, and come back as they left them when that
+    /// visit ends; nothing of the seed comes with them.
+    #[test]
+    fn the_persons_own_draft_comes_back_after_the_apps_report() {
+        let mut report: Report<&'static str> = Report::default();
+        report.set_what("Swap screen flickers".into());
+        report.set_steps("1. open swap".into());
+        let ids = report.add(2, 0);
+        assert!(report.finish(ids[0], Some("first")));
+        // ids[1] is still being prepared.
+
+        report.seed(
+            "Relayer out of gas on Unichain (130)".into(),
+            "1. Send on Unichain (130)".into(),
+            relay_origin(),
+            true,
+        );
+        assert!(report.in_visit());
+        assert_eq!(report.tray.len(), 0, "the seed opens with no tiles");
+        // A tile added to the app's report never takes an id of theirs…
+        let visit = report.add(1, 0);
+        assert!(!ids.contains(&visit[0]));
+        // …and their tile's picture lands on THEIR tile, set aside.
+        assert!(report.finish(ids[1], Some("second")));
+        assert!(
+            report.tray.shots()[0].ready.is_none(),
+            "a picture landed on the seed's tile"
+        );
+        // A second "Report this" in the same visit keeps what was set aside.
+        report.seed(
+            "Relay can't reach Unichain (130)".into(),
+            String::new(),
+            relay_origin(),
+            true,
+        );
+
+        assert_eq!(report.end_visit(), Some(true), "their steps were open");
+        assert!(!report.in_visit());
+        assert_eq!(report.what, "Swap screen flickers");
+        assert_eq!(report.steps, "1. open swap");
+        let back: Vec<_> = report
+            .tray
+            .shots()
+            .iter()
+            .map(|shot| (shot.id, shot.ready))
+            .collect();
+        assert_eq!(
+            back,
+            vec![(ids[0], Some("first")), (ids[1], Some("second"))]
+        );
+        assert!(report.origin.is_none() && report.seed_title.is_none());
+        assert!(report.result.is_none());
+        assert_eq!(report.end_visit(), None, "one visit, one return");
+
+        // A report of theirs already filed is done: nothing of it returns.
+        let mut filed: Report<&str> = Report {
+            what: "Old".into(),
+            result: Some(BugReportOutcome::Filed {
+                number: 1,
+                url: "u".into(),
+                deduped: false,
+                screenshots_dropped: 0,
+            }),
+            ..Report::default()
+        };
+        filed.seed(
+            "Relayer out of gas".into(),
+            String::new(),
+            relay_origin(),
+            false,
+        );
+        assert_eq!(filed.end_visit(), Some(false));
+        assert!(filed.what.is_empty() && filed.result.is_none());
+
+        // Nothing on the form before: an empty form after.
+        let mut blank: Report<&str> = Report::default();
+        blank.seed(
+            "Relayer out of gas".into(),
+            String::new(),
+            relay_origin(),
+            false,
+        );
+        assert_eq!(blank.end_visit(), Some(false));
+        assert!(blank.what.is_empty() && blank.tray.is_empty());
     }
 }

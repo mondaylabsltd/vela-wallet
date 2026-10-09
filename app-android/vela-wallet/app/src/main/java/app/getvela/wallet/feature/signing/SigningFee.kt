@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -26,13 +27,14 @@ import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
-import app.getvela.wallet.feature.explore.components.LetterAvatar
 import app.getvela.wallet.feature.flows.components.FeeSpeedControl
 import app.getvela.wallet.feature.signing.components.SigningPositive
+import app.getvela.wallet.feature.wallet.components.TokenIcon
+import app.getvela.wallet.feature.wallet.components.WalletMetrics
 
 /**
  * The fee row, and its expanded fee-token selector (mock CS33) — the last thing
- * between the request and the slide. Under the row, inside the same card, the
+ * between the request and the confirm. Under the row, inside the same card, the
  * speed control the send form draws (spec 069).
  */
 @Composable
@@ -55,15 +57,20 @@ fun SigningFee(
         is FeeModel.OffChain -> SigningPositive(fee.note, modifier, quiet = true)
         is FeeModel.OnChain -> Column(modifier = modifier.fillMaxWidth()) {
             SigningFeeBody(fee, onFee, onPick, onToggleSpeed, onPickSpeed, onRefresh)
-            // Issue #262: the reason the slide below is shut, said where the fix is.
-            fee.warning?.let {
+            // Issue #262: the reason the confirm below is shut, said where the
+            // fix is. While the fee is measured again the last words keep
+            // their line's height, unsaid: invisible, and silent to TalkBack.
+            (fee.warning ?: fee.heldWarning)?.let {
+                val said = fee.warning != null
                 Text(
                     text = it,
                     color = colors.errorBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.medium,
                     fontSize = VelaTextSize.sm,
-                    modifier = Modifier.padding(top = VelaSpacing.sm, start = VelaSpacing.xl, end = VelaSpacing.xl),
+                    modifier = Modifier
+                        .padding(top = VelaSpacing.sm, start = VelaSpacing.xl, end = VelaSpacing.xl)
+                        .then(if (said) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}),
                 )
             }
         }
@@ -181,9 +188,7 @@ private fun SigningFeeBody(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
                         ) {
-                            LetterAvatar(
-                                option.mark.letter, option.mark.tint, size = VelaSpacing.xl4,
-                            )
+                            TokenIcon(mark = option.mark)
                             Column(
                                 Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
@@ -217,7 +222,7 @@ private fun SigningFeeBody(
                         }
                         // Issue #408: why a greyed coin cannot pay, under its row and
                         // at full strength — the row's dimming is not a reason. Set
-                        // in from the row's edge past the mark, under the name.
+                        // in from the row's edge past the coin's mark, under the name.
                         option.reason?.let { reason ->
                             Text(
                                 text = reason,
@@ -226,7 +231,7 @@ private fun SigningFeeBody(
                                 fontWeight = VelaFontWeight.medium,
                                 fontSize = VelaTextSize.sm,
                                 modifier = Modifier.padding(
-                                    start = VelaSpacing.md + VelaSpacing.xl4 + VelaSpacing.lg,
+                                    start = VelaSpacing.md + WalletMetrics.avatarSize + VelaSpacing.lg,
                                     end = VelaSpacing.md,
                                     bottom = VelaSpacing.sm,
                                 ),

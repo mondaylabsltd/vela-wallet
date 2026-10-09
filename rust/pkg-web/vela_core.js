@@ -3030,6 +3030,43 @@ export function canonicalizeSignature(sig) {
 }
 
 /**
+ * `{base}/chainlogos/eip155-{chainId}.png` on the person's chain-data
+ * endpoint ("" = the built-in one); `undefined` for chain 0, which names no
+ * network.
+ * @param {string} ethereum_data_url
+ * @param {number} chain_id
+ * @returns {string | undefined}
+ */
+export function chainLogoUrl(ethereum_data_url, chain_id) {
+    const ptr0 = passStringToWasm0(ethereum_data_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.chainLogoUrl(ptr0, len0, chain_id);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * A NETWORK drawn as itself, a `MarkView` (`remote_mark::chain_mark`): its
+ * own logo, never a badge.
+ * @param {string} ethereum_data_url
+ * @param {number} chain_id
+ * @param {string} native_symbol
+ * @returns {any}
+ */
+export function chainMark(ethereum_data_url, chain_id, native_symbol) {
+    const ptr0 = passStringToWasm0(ethereum_data_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(native_symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.chainMark(ptr0, len0, chain_id, ptr1, len1);
+    return ret;
+}
+
+/**
  * @param {string} address_hex
  * @returns {string}
  */
@@ -3679,6 +3716,59 @@ export function feeRequoteTimeoutMs() {
 export function feeSignalsCacheTtlMs() {
     const ret = wasm.feeSignalsCacheTtlMs();
     return ret >>> 0;
+}
+
+/**
+ * The core's compact relative time — `"now"`, `"2m"`, `"3h"`, a short
+ * weekday under a week, else the date — spelt with the words the caller
+ * holds (`I18n::format_relative_time`'s rule, `format_relative_time_with`).
+ *
+ * For the web client, which carries no catalog: `now` / `minutes` /
+ * `hours` are `time.now`, `time.minutesShort` and `time.hoursShort` as the
+ * prerendered messages hold them (`{{n}}` in place); `language` the page's
+ * locale, which names the weekday. `ts_seconds` is the moment in WHOLE
+ * SECONDS (`Math.floor(atMs / 1000)` — milliseconds there read as the
+ * future, which is "now"); `now_ms` the clock; `utc_offset_minutes` what to
+ * add to UTC for local time (`-new Date(atMs).getTimezoneOffset()`);
+ * `date_format` the person's preset as stored (`resolvedFormatKeys().date`),
+ * `auto` already resolved.
+ * @param {number} ts_seconds
+ * @param {number} now_ms
+ * @param {number} utc_offset_minutes
+ * @param {string} date_format
+ * @param {string} language
+ * @param {string} now
+ * @param {string} minutes
+ * @param {string} hours
+ * @returns {string}
+ */
+export function formatRelativeTime(ts_seconds, now_ms, utc_offset_minutes, date_format, language, now, minutes, hours) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(date_format, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(language, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(now, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(minutes, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(hours, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.formatRelativeTime(ts_seconds, now_ms, utc_offset_minutes, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
 }
 
 /**
@@ -4701,7 +4791,7 @@ export function signAnswered(payload_json) {
 /**
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
- * May the signing slide arm, and if not why (spec 099 R7) — the one gate
+ * May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
  * every client reads: the four views' JSON, the speed in force, a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
  * @param {string} sign_json
@@ -5034,6 +5124,31 @@ export function toQuantity(value) {
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
+}
+
+/**
+ * A COIN's mark, a `MarkView` (`remote_mark::token_mark`):
+ * `ethereumDataUrl` is the person's chain-data endpoint ("" = the built-in
+ * one), `tokenAddress` `undefined`/`null` for the chain's native coin, `named`
+ * the logo URLs an index already gave (tried first).
+ * @param {string} ethereum_data_url
+ * @param {number} chain_id
+ * @param {string} symbol
+ * @param {string | null | undefined} token_address
+ * @param {string[]} named
+ * @returns {any}
+ */
+export function tokenMark(ethereum_data_url, chain_id, symbol, token_address, named) {
+    const ptr0 = passStringToWasm0(ethereum_data_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(token_address) ? 0 : passStringToWasm0(token_address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArrayJsValueToWasm0(named, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.tokenMark(ptr0, len0, chain_id, ptr1, len1, ptr2, len2, ptr3, len3);
+    return ret;
 }
 
 /**

@@ -596,8 +596,45 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (the core's `PromptKind::NotSupported{Create,Login}.security_key`), where
 //   it said "biometric authentication is not available". 1791 leaves, 99
 //   branches.
-if (PATHS.length !== 1890) fail(`expected 1890 paths (1791 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1791) fail(`expected 1791 leaf paths, got ${leafSet.size}`);
+// 1891 (signing-sheet polish, 2026-10-08): the registry backup's words are
+//   ClearTerms, so they live under `componentsUi.signing` — `settingsModals.
+//   backup.{intent,publicKeys}` move to `componentsUi.signing.
+//   {intentBackUpPublicKeys,labelPublicKeys}`, + `componentsUi.signing.
+//   {labelNetwork,labelAddress}` (the backup's rows now say the network the
+//   wallet's own sheet no longer draws as a header chip; values are each
+//   locale's existing `addToken.labelNetwork` / `contacts.addressLabel`), and
+//   − `settingsModals.backup.registeredAs` (the footer's signing account
+//   already names the wallet). 1791 − 3 + 4 = 1792 leaves, 99 branches.
+// 1889 (issue #461, 2026-10-08): − `componentsUi.signing.{slideToConfirm,
+//   slideConfirmAction}` — the signing sheet confirms with the shells' shared
+//   primary button, labelled with the action alone ("Confirm swap", "Sign",
+//   "Back up public keys"), as the Send confirm screen always did; the slide
+//   and its "Slide to confirm ·" prefix are gone. 1790 leaves, 99 branches.
+// 1890 (issue #462, 2026-10-08): + `home.updating` — every shell draws the
+//   same "↻ Updated <ago>" control under the total, and while the refresh a
+//   person asked for is out (`BalanceView.refreshing`) its label reads
+//   "Updating…" with the glyph spinning. No existing key said exactly that
+//   (`home.balanceStale` is a sentence about some balances, not a label).
+//   1791 leaves, 99 branches.
+// 1884 (issue #465, 2026-10-08): − `explore.{groupOptions,newGroup,
+//   moveToGroup,hiddenTag,hiddenCount,systemGroup}` — Explore has no custom
+//   groups any more (the core dropped them; a stored document's `groups` is
+//   ignored and not written back), and the Manage groups sheet keeps two
+//   rows, Favorites and Recent dApps, each with its eye and no "System"
+//   meta. `explore.manageGroups`, `siteCount`, `hide`, `show` and `edit`
+//   stay: that sheet still uses them. Contact groups are another feature and
+//   keep every key. 1785 leaves, 99 branches.
+// 1888 (review of #462/#465/#468, 2026-10-08): + `home.refreshBalance` —
+//   the refresh control's name before any balance read has settled, when it
+//   is the glyph alone and screen readers announced a bare "button" (or,
+//   on iOS, "Updating…" over a control at rest). `explore.siteCount` becomes
+//   `siteCount_{one,few,many,other}` with `{{count}}`, each locale its own
+//   CLDR categories — the Manage groups row read "1 sites". And
+//   `send.recipientPickAria` keeps its path but now names the contact pick
+//   alone: scanning has its own door on every shell (#468). 1789 leaves,
+//   99 branches.
+if (PATHS.length !== 1888) fail(`expected 1888 paths (1789 leaf + 99 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1789) fail(`expected 1789 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

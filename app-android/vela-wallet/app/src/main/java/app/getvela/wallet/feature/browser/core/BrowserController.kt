@@ -1205,9 +1205,6 @@ class BrowserController(
     }
 
     fun removeFavorite(origin: String) = exploreHost.dispatch(ExploreEvent.FavoriteRemoved(origin), ExploreEvent.serializer())
-    fun createGroup(name: String) = exploreHost.dispatch(ExploreEvent.GroupCreated(name = name, now_ms = now()), ExploreEvent.serializer())
-    fun deleteGroup(id: String) = exploreHost.dispatch(ExploreEvent.GroupDeleted(id), ExploreEvent.serializer())
-    fun setGroupHidden(id: String, hidden: Boolean) = exploreHost.dispatch(ExploreEvent.GroupHiddenSet(id, hidden), ExploreEvent.serializer())
     fun setSystemGroupHidden(group: ExploreSystemGroup, hidden: Boolean) =
         exploreHost.dispatch(ExploreEvent.SystemGroupHiddenSet(group, hidden), ExploreEvent.serializer())
     fun clearRecent() = bhistHost.dispatch(BhistEvent.ClearAll, BhistEvent.serializer())

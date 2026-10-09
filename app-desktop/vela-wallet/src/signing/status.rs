@@ -1,7 +1,7 @@
 //! The signing column once the person has approved (spec 079 US1).
 //!
 //! The owner, on the phone: "签完后，回到签名提示框，似乎没有任何提示". The desktop
-//! kept the whole form — and a slide dimmed to 45% — for up to ninety seconds
+//! kept the whole form — and its confirm dimmed to 45% — for up to ninety seconds
 //! after the passkey, and only then, once the core had closed the sheet, drew a
 //! receipt that read "submitted" for every tracker status but two. From the
 //! approval on, the column is the send receipt instead: the same stages, the
@@ -746,7 +746,8 @@ mod tests {
     }
 
     /// The passkey, the submission and the wait are each named in the send's
-    /// own words, and the slide is gone from the first of them.
+    /// own words, and the confirm is gone from the first of them — so it is
+    /// never seen busy or faded after the tap (issue #461).
     #[test]
     fn signing_submitting_and_waiting_read_as_the_send_receipt() {
         let s = strings();

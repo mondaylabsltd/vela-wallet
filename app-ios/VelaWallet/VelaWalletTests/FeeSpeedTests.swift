@@ -11,7 +11,9 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
+import UIKit
 import VelaCore
 @testable import VelaWallet
 
@@ -121,5 +123,52 @@ struct FeeSpeedTests {
         #expect(RelayClient.submitParams(op, tier: "slow").last as? String == "slow")
         #expect(RelayClient.submitParams(op, tier: nil).count == 2)
         #expect(RelayClient.submitParams(op, tier: "rapid").count == 2)
+    }
+
+    // MARK: - The per-payment picker draws no descriptions, and never jumps
+
+    private func speedModel(bids: [String?], values: [String]) -> FeeSpeedModel {
+        let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+        let tiers = ["fast", "standard", "slow"]
+        return FeeSpeedModel(
+            label: loc.t("send.feeSpeedLabel"), value: SendLive.tierName("fast", loc: loc), open: true,
+            onceNote: loc.t("send.feeSpeedOnce"), freeNote: nil, singleNote: nil,
+            gasPriceLabel: loc.t("send.gasPriceLabel"), gasPriceLine: true,
+            options: tiers.indices.map { index in
+                FeeSpeedOptionModel(
+                    id: tiers[index], label: SendLive.tierName(tiers[index], loc: loc),
+                    value: values[index], gasPrice: bids[index], selected: index == 0
+                )
+            }
+        )
+    }
+
+    private func height(_ model: FeeSpeedModel, width: CGFloat = 343) -> CGFloat {
+        let host = UIHostingController(rootView: FeeSpeedControlView(speed: model).themed(.light))
+        return host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height
+    }
+
+    /// The speeds are a name, a price and — on a chain with an honest bid —
+    /// the Gas Bid under the price. A tier still measuring has no bid yet, and
+    /// its second line keeps its height: picking a speed or refreshing re-prices
+    /// every option, and a row that shrank and grew on each one jumped under
+    /// the finger (the tier description used to hold that line).
+    @Test func aMeasuringSpeedKeepsItsBidLinesHeight() {
+        let priced = speedModel(bids: ["0.012 – 0.020 Gwei", "0.010 Gwei", "0.008 Gwei"],
+                                values: ["~0.0021 ETH ≈ $5.40", "~0.0019 ETH ≈ $4.90", "~0.0017 ETH ≈ $4.40"])
+        let measuring = speedModel(bids: ["0.012 – 0.020 Gwei", nil, nil],
+                                   values: ["~0.0021 ETH ≈ $5.40", "…", "…"])
+        let pricedHeight = height(priced)
+        #expect(pricedHeight > 0)
+        #expect(height(measuring) == pricedHeight, "the picker changed height while a tier measured")
+
+        // A chain with no honest bid draws no second line at all — one line
+        // per speed, also steady.
+        let bare = FeeSpeedModel(
+            label: priced.label, value: priced.value, open: true, onceNote: priced.onceNote,
+            freeNote: nil, singleNote: nil, gasPriceLabel: priced.gasPriceLabel, gasPriceLine: false,
+            options: priced.options
+        )
+        #expect(height(bare) < pricedHeight)
     }
 }

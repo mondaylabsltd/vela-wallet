@@ -711,7 +711,7 @@ pub enum Event {
     /// The shell's simulation of the operation answered (spec 083 fee): what
     /// it moves, per asset. From here on a fee coin pays only from what the
     /// operation leaves of it — the coins the picker offers, the coin the
-    /// machine picks when nobody chose, and the slide's gate all read it. A
+    /// machine picks when nobody chose, and the confirm's gate all read it. A
     /// shell that has no simulation never sends it and nothing changes. Kept
     /// until the next [`Event::QuoteRequested`], which the shell follows
     /// with this again; ignored on Tempo, whose fee model is its own.
@@ -821,7 +821,7 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
 pub const ROW_SHORT_KEY: &str = "componentsUi.gas.rowShort";
 
 /// The line under the fee when not one coin on offer can pay it
-/// ([`FeeView::no_coin_pays`], issue #408) — and the shut slide's, which would
+/// ([`FeeView::no_coin_pays`], issue #408) — and the disabled confirm's, which would
 /// otherwise say to pick another coin.
 pub const NO_COIN_PAYS_KEY: &str = "componentsUi.gas.noCoinPays";
 
@@ -1866,7 +1866,7 @@ pub struct FeeShortfall {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct FeeView {
-    /// Estimating or requoting — the confirm slide must stay disabled
+    /// Estimating or requoting — the confirm must stay disabled
     /// (invariant ⑦, `SigningSheet.tsx:576-583`).
     pub busy: bool,
     pub failed: Option<FeeFailure>,

@@ -314,7 +314,7 @@ pub struct SignApproveOpts {
     #[serde(default)]
     pub unlimited_approved: bool,
     /// What the wallet's OWN simulation said this operation moves, exactly as
-    /// the sheet drew it under "Balance changes" when the slide fired
+    /// the sheet drew it under "Balance changes" when the confirm fired
     /// (083 F1): `token_trust`'s judgments, in the sheet's order — an
     /// unverified token's line carries no figure here either. Kept on the
     /// record so Activity can say what was approved. It rides the approve and
@@ -838,6 +838,17 @@ pub enum Event {
         requested_address: Option<String>,
         request_ts_ms: Option<f64>,
         now_ms: f64,
+        /// The wallet asked itself: the request was raised by the wallet's
+        /// own code (the passkey-registry backup, spec 062), never by a page.
+        /// The shell sets it in the ONE place it raises such a request and
+        /// sends `false` everywhere else; it is never inferred from the
+        /// reading, because any site can submit the same calldata. A
+        /// first-party sheet draws no requester header (no mark, no name,
+        /// no network chip) — its reading's rows say the network instead.
+        /// Absent on the wire = `false`, so a shell that predates the field
+        /// keeps today's third-party header.
+        #[serde(default)]
+        first_party: bool,
     },
     /// `wallet_switchEthereumChain` (dApp-driven when `id` is present) or an
     /// in-wallet chain switch (`id: None`). `chain_id_param` is the raw
@@ -848,7 +859,7 @@ pub enum Event {
         transport_id: Option<String>,
         chain_id_param: Option<String>,
     },
-    /// The slide-to-confirm fired.
+    /// The confirm button was tapped.
     ApproveTapped { opts: SignApproveOpts },
     /// Explicit reject (sheet closed pre-submit).
     RejectTapped,
@@ -1342,6 +1353,8 @@ struct Pending {
     dedicated_transport: bool,
     per_request_chain: Option<u32>,
     dapp: Option<SignDappIdentity>,
+    /// [`Event::RequestArrived`]'s `first_party`, kept for the view.
+    first_party: bool,
     /// An error response was already sent for this id — a later approve must
     /// never produce a second response for the same id (invariant ① family).
     responded: bool,
@@ -1648,6 +1661,11 @@ pub struct SignRequestView {
     /// global chain — live, like `reqChainId(incomingRequest, chainId)`.
     pub chain_id: u32,
     pub signer_address: Option<String>,
+    /// The wallet asked itself ([`Event::RequestArrived`]'s `first_party`):
+    /// no requester header — no mark, no "Vela Wallet", no network chip; the
+    /// headline is the intent beside the close, and the reading's rows say
+    /// the network. `false` for every request a page raised.
+    pub first_party: bool,
 }
 
 /// Why a request is refused outright, for the sheet to explain (spec 081).
@@ -1779,6 +1797,7 @@ impl App for SignRequest {
                 requested_address,
                 request_ts_ms,
                 now_ms,
+                first_party,
             } => on_request_arrived(
                 model,
                 Arrival {
@@ -1794,6 +1813,7 @@ impl App for SignRequest {
                     requested_address,
                     request_ts_ms,
                     now_ms,
+                    first_party,
                 },
             ),
             Event::ChainSwitchRequested {
@@ -1942,6 +1962,7 @@ impl App for SignRequest {
                 .accounts
                 .get(model.active_index as usize)
                 .map(|a| a.address.clone()),
+            first_party: p.first_party,
         });
 
         let surface = if model.pending.is_none() {
@@ -2109,6 +2130,7 @@ struct Arrival {
     requested_address: Option<String>,
     request_ts_ms: Option<f64>,
     now_ms: f64,
+    first_party: bool,
 }
 
 fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect, Event> {
@@ -2346,6 +2368,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             dedicated_transport: arrival.dedicated_transport,
             per_request_chain: arrival.per_request_chain,
             dapp: arrival.dapp,
+            first_party: arrival.first_party,
             responded: false,
             held: None,
         });
@@ -2366,6 +2389,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         dedicated_transport: arrival.dedicated_transport,
         per_request_chain: arrival.per_request_chain,
         dapp: arrival.dapp,
+        first_party: arrival.first_party,
         responded: false,
         held: None,
     });
@@ -2938,7 +2962,7 @@ fn dismiss(model: &mut Model) -> Command<SignEffect, Event> {
 
 /// "Try again" (spec 096 F8): a failure that sent nothing goes back to
 /// review — the held answer is dropped, the request is unanswered again and
-/// the slide is live once more. A refusal, or a failure with no held answer,
+/// the confirm is live once more. A refusal, or a failure with no held answer,
 /// has nothing to retry.
 fn retry(model: &mut Model) -> Command<SignEffect, Event> {
     if !model.failure_retryable() {

@@ -92,7 +92,7 @@ struct ExploreScreen: View {
 
     @State private var viewOverride: ExploreView?
     /// **Which** sheet is open — never a snapshot of what it said when it
-    /// opened. A sheet holding a captured model shows the group you deleted,
+    /// opened. A sheet holding a captured model shows the section you hid,
     /// the site you unpinned, and — the one that matters — a CONNECTED panel
     /// for a site that is still asking. Android found the same bug on its
     /// group sheet; this one was device-found here.
@@ -107,15 +107,9 @@ struct ExploreScreen: View {
     /// once it is really gone — presenting one sheet in the same breath as
     /// dismissing another is how iOS ends up showing neither.
     @State private var signingHeld = false
-    /// Groups hidden here rather than in the fixture: hiding is something a
+    /// Sections hidden here rather than in the fixture: hiding is something a
     /// person does, and the sheet has to show it happening.
     @State private var hidden: Set<String> = []
-    /// Naming a new group. The drawn sheet has a 新建分组 row and **no field**
-    /// to type into, so the name is asked for with the platform's own prompt
-    /// — the same call the document picker and the share sheet make elsewhere.
-    /// Recorded as a deviation from the drawing.
-    @State private var namingGroup = false
-    @State private var groupName = ""
     /// The open sheet is a site ASKING to connect, not a review of one that
     /// already is. Kept so a swipe can be read as the refusal it is.
     @State private var consentOpen = false
@@ -494,16 +488,6 @@ struct ExploreScreen: View {
             signingHeld = true
             sheet = nil
         }
-        .alert(loc.t("explore.newGroup"), isPresented: $namingGroup) {
-            TextField(loc.t("explore.newGroup"), text: $groupName)
-            Button(loc.t("explore.close"), role: .cancel) { groupName = "" }
-            Button(loc.t("explore.done")) {
-                let name = groupName.trimmingCharacters(in: .whitespacesAndNewlines)
-                groupName = ""
-                guard !name.isEmpty else { return }
-                controller?.createGroup(name: name)
-            }
-        }
         .alert(loc.t("explore.scan"), isPresented: $walletConnectRefused) {
             Button(loc.t("explore.close"), role: .cancel) {}
         } message: {
@@ -792,16 +776,13 @@ struct ExploreScreen: View {
                 }
 
                 ForEach(visibleGroups) { group in
+                    // The one section under Favorites is Recent, and its
+                    // heading clears it (issue #465: no custom groups, so no
+                    // ⋯ that opened Manage groups).
                     WalletSectionHeader(
                         title: group.title,
-                        action: group.action == .clear ? loc.t("explore.clear") : "⋯",
-                        onAction: {
-                            if group.action == .clear {
-                                controller?.clearRecent()
-                            } else {
-                                sheet = .groupManage
-                            }
-                        }
+                        action: loc.t("explore.clear"),
+                        onAction: { controller?.clearRecent() }
                     )
                     ForEach(group.sites) { site in
                         SiteRowView(site: site) { id in open(siteId: id) }
@@ -905,7 +886,7 @@ struct ExploreScreen: View {
     private func sheetContent(_ kind: ExploreSheetKind) -> some View {
         // Read the CURRENT model, every render. See `sheet`'s own comment.
         switch kind.resolved(in: model) {
-        case .groupManage(let title, let rows, let newGroup):
+        case .groupManage(let title, let rows):
             ScrollView {
                 GroupManageSheetView(
                     title: title,
@@ -914,27 +895,19 @@ struct ExploreScreen: View {
                         copy.hidden = hidden.contains(row.id) || row.hidden
                         return copy
                     },
-                    newGroup: newGroup,
                     closeLabel: loc.t("explore.close"),
                     hideLabel: loc.t("explore.hide"),
                     showLabel: loc.t("explore.show"),
-                    deleteLabel: loc.t("explore.delete"),
                     onClose: { self.sheet = nil },
                     onToggle: { id in
                         guard let controller else {
                             if hidden.contains(id) { hidden.remove(id) } else { hidden.insert(id) }
                             return
                         }
+                        // Favorites and Recent dApps are the only rows.
                         let isHidden = rows.first { $0.id == id }?.hidden ?? false
-                        switch id {
-                        case "favorites", "recent":
-                            controller.setSystemGroupHidden(id, hidden: !isHidden)
-                        default:
-                            controller.setGroupHidden(id: id, hidden: !isHidden)
-                        }
-                    },
-                    onDelete: { id in controller?.deleteGroup(id: id) },
-                    onNew: { namingGroup = true }
+                        controller.setSystemGroupHidden(id, hidden: !isHidden)
+                    }
                 )
             }
         case .siteMenu(let site, let statusLine, let items):

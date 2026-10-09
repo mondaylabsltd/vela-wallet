@@ -106,21 +106,42 @@ final class OnboardingModel {
 
     /// A swipe-to-dismiss on the shared sheet. Cancels whatever the active
     /// prompt is waiting for; the PIN and wallet picker answer nil (cancel), the
-    /// flow prompt answers false, the method picker just closes. The touch and
-    /// the connecting hold are non-dismissable (their sheet content disables the
-    /// interactive dismiss), so they never reach here.
+    /// flow prompt answers false, the method picker just closes, and the
+    /// phone's code — or "look at your phone" once it connected — cancels that
+    /// ceremony (issue #459). A security key's touch and the connecting hold
+    /// are non-dismissable (their sheet content disables the interactive
+    /// dismiss), so they never reach here. Same priority as the sheet's
+    /// content (`RootView.onboardingSheetContent`).
     func dismissOnboardingSheet() {
         if pendingPin != nil {
             answerPin(nil)
         } else if pendingWalletPick != nil {
             answerWalletPick(nil)
+        } else if let touch = usbTouch {
+            if touch.remote { cancelCable() }
         } else if pendingInsertKey != nil {
             answerInsertKey(false)
+        } else if cableQr != nil {
+            cancelCable()
         } else if pending != nil {
             answerPrompt(false)
         } else if showSignInMethods {
             showSignInMethods = false
         }
+    }
+
+    /// The person dismissed the phone's code — swiped it away, tapped
+    /// outside, or pressed Cancel — or Cancel on "look at your phone" (issue
+    /// #459). The ceremony ends as a cancel the core takes quietly: sign-in
+    /// goes idle with no error, create returns to its keys. The sheet goes at
+    /// once, not when the ceremony has wound down — and the connecting hold
+    /// with it, or the shared sheet would come straight back as that
+    /// non-dismissable hold until the core went idle.
+    func cancelCable() {
+        cableQr = nil
+        if usbTouch?.remote == true { usbTouch = nil }
+        signInConnecting = false
+        passkey.hybrid?.cancel()
     }
 
     /// A method was chosen in the sign-in picker. Platform hands off to the
@@ -159,6 +180,10 @@ final class OnboardingModel {
         let kind: String
         let product: String
         let id = UUID()
+
+        /// Over caBLE the "authenticator" is the person's phone: the approval
+        /// happens THERE, and this sheet can be cancelled (issue #459).
+        var remote: Bool { product == HybridCeremony.hybridProduct }
     }
 
     struct PendingInsertKey: Identifiable {

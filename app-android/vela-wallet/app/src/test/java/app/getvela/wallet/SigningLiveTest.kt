@@ -347,9 +347,9 @@ class SigningLiveTest {
         assertEquals("USDC", cards[0].rows.single { it.label == interacting }.value)
     }
 
-    /** F7: every machine says yes and the request is still being read — the slide stays shut, under "Loading…". */
+    /** F7: every machine says yes and the request is still being read — the confirm stays shut, under "Loading…". */
     @Test
-    fun `the slide waits for the reading (096 F7)`() {
+    fun `the confirm waits for the reading (096 F7)`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
         val reading = ClearSigningView(resolving = true, surface = ClearSurface.Loading)
@@ -392,7 +392,7 @@ class SigningLiveTest {
     }
 
     @Test
-    fun `the slide waits for the guard and the fee, and a contract call with bytes stays blind`() {
+    fun `the confirm waits for the guard and the fee, and a contract call with bytes stays blind`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
         val clear = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.Confirm)
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
@@ -472,11 +472,16 @@ class SigningLiveTest {
         assertEquals("…", control.options[1].value)
         assertTrue(control.options[2].value, control.options[2].value.startsWith("0.001 XDAI"))
         assertEquals("1 ~ 2 gwei", control.options[0].gasPrice)
+        // What each speed buys is Settings' to say, not this payment's: the
+        // options carry their price and bid, never the tier's description.
+        listOf(I18nKeys.Flows.GAS_TIER_HINT_FAST, I18nKeys.Flows.GAS_TIER_HINT_STANDARD, I18nKeys.Flows.GAS_TIER_HINT_SLOW).forEach { key ->
+            assertFalse("$key on the per-payment picker", control.toString().contains(strings.t(key)))
+        }
         assertTrue(model.confirmEnabled)
     }
 
     @Test
-    fun `a speed just picked says estimating, and the slide waits for its own figure (issue 681)`() {
+    fun `a speed just picked says estimating, and the confirm waits for its own figure (issue 681)`() {
         val params = """[{"to":"$founder","value":"0x38d7ea4c68000"}]"""
         val clear = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.ConfirmIntent("send"))
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
@@ -485,8 +490,8 @@ class SigningLiveTest {
         val picked = SendLive.SpeedInputs(FeeSpeedView(tier = FeeTier.Slow, picked = true)) { null }
         val model = SigningLive.model(drawn, request(params), sign, clear, GuardView(), left, ctx, speed = picked)
         assertEquals(strings.t("componentsUi.gas.estimating"), (model.fee as FeeModel.OnChain).value)
-        assertFalse("the slide never signs the speed walked away from", model.confirmEnabled)
-        // Its own figure lands: the row and the slide follow.
+        assertFalse("the confirm never signs the speed walked away from", model.confirmEnabled)
+        // Its own figure lands: the row and the confirm follow.
         val landed = FeeView(fee = estimate(FeeTier.Slow, "1000000000000000"), confirm_fee_ready = true)
         val settled = SigningLive.model(drawn, request(params), sign, clear, GuardView(), landed, ctx, speed = picked)
         assertTrue((settled.fee as FeeModel.OnChain).value.startsWith("~0.001 XDAI"))
@@ -650,8 +655,8 @@ class SigningLiveTest {
 
     /**
      * Issue #314: the wallet's own key backup leads with its outcome. Its
-     * intent is the headline (the sheet draws `dappOwn` that way) and a
-     * simulation that moves nothing is folded into the technical details — it
+     * intent is the header's title beside the ✕ (not said again below it) and
+     * a simulation that moves nothing is folded into the technical details — it
      * was a bordered "Balance changes · No asset changes" card weighing as much
      * as the outcome. A dApp's sheet keeps the card, and a simulation that has
      * something to say is never folded away, not even on the wallet's own.
@@ -661,17 +666,23 @@ class SigningLiveTest {
         val registry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
         val call = org.json.JSONObject().put("to", registry).put("data", "0xcd438f9b").put("value", "0x0")
         val params = org.json.JSONArray().put(call).toString()
-        val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://getvela.app", null, 1, null), confirm_gate_open = true)
+        fun sign(firstParty: Boolean) = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://getvela.app", null, 1, null, first_party = firstParty),
+            confirm_gate_open = true,
+        )
         val backup = ClearSigningView(
             resolved = true,
             surface = ClearSurface.ClearSign,
+            // The core's reading of the backup: every word is a term.
             result = ClearSignResult(
                 intent = "Back up public keys",
+                intent_term = "intentBackUpPublicKeys",
                 contract_name = "Vela passkey registry",
                 fields = listOf(
-                    ClearSignField("Registered as", "Parallel space"),
-                    ClearSignField("Address", "0x88cCA0Ee…266894", format = "addressName", address = founder.lowercase()),
-                    ClearSignField("Public keys", "1"),
+                    ClearSignField("Network", "Ethereum", label_term = "labelNetwork"),
+                    ClearSignField("Address", "0x88cCA0…266894", format = "addressName", address = founder.lowercase(), label_term = "labelAddress"),
+                    ClearSignField("Public keys", "1", label_term = "labelPublicKeys"),
                 ),
                 risk = ClearRisk.Safe,
                 contract_address = registry,
@@ -682,11 +693,13 @@ class SigningLiveTest {
         val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
         val nothingMoves = SigningController.SimOutcome.Ready(emptyList())
         fun sheet(request: IncomingRequest, sim: SigningController.SimOutcome) =
-            SigningLive.model(drawn, request, sign, backup, GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+            SigningLive.model(drawn, request, sign(request == own), backup, GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
 
         val ownSheet = sheet(own, nothingMoves)
         assertTrue(ownSheet.dappOwn)
-        assertEquals(strings.t("settingsModals.backup.intent"), (ownSheet.blocks.first() as SigningBlock.Intent).text)
+        assertEquals(strings.t("componentsUi.signing.intentBackUpPublicKeys"), ownSheet.headline)
+        assertTrue("the title is not said again under it", ownSheet.blocks.none { it is SigningBlock.Intent })
+        assertNull("no \"· Vela passkey registry\" on the wallet's own request", ownSheet.tech.summary)
         assertTrue("the no-change card is still on the sheet", ownSheet.blocks.none { it is SigningBlock.Balances })
         assertEquals(strings.t("componentsUi.signing.simResultLabel"), ownSheet.tech.simResult?.label)
         assertEquals(strings.t("componentsUi.signing.simResultNoChange"), ownSheet.tech.simResult?.value)
@@ -695,6 +708,9 @@ class SigningLiveTest {
         val dappSheet = sheet(request(params), nothingMoves)
         assertTrue("a dApp keeps its balance card", dappSheet.blocks.any { it is SigningBlock.Balances })
         assertNull(dappSheet.tech.simResult)
+        assertNull(dappSheet.headline)
+        assertTrue("a site's sheet keeps its intent", dappSheet.blocks.first() is SigningBlock.Intent)
+        assertEquals("Vela passkey registry", dappSheet.tech.summary)
 
         val reverts = sheet(own, SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFail"))
         assertTrue("a revert is never folded away", reverts.blocks.any { it is SigningBlock.Warning && it.tone == SigningTone.Danger })
@@ -702,6 +718,45 @@ class SigningLiveTest {
         val moves = sheet(own, SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000"))))
         assertTrue("a balance that would move stays on the sheet", moves.blocks.any { it is SigningBlock.Balances })
         assertNull(moves.tech.simResult)
+    }
+
+    /**
+     * The wallet's own key backup (spec 062) as the REAL core reads the bytes
+     * the backup sends: every word on it is a core term, so the sheet says it
+     * in the reader's language with no relabel of its own — the network first,
+     * then the address and the keys, no "Registered as" — and the confirm
+     * reads the intent. Positional relabelling used to call the core's new
+     * Network row "Registered as".
+     */
+    @Test
+    fun `the wallet's own backup is the core's words, network first, in the reader's language`() {
+        val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
+        val zh = I18nRuntime { tag -> File(root, "assets/i18n/$tag.json").readBytes() }.apply { initialize("zh") }
+        val registry = "0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9"
+        val data = "0x" + File(root, "rust/crates/vela-core/tests/fixtures/registry-register-unit10.hex").readText().trim()
+        val params = org.json.JSONArray().put(org.json.JSONObject().put("to", registry).put("data", data).put("value", "0x0")).toString()
+        val clear = clearOf("eth_sendTransaction", params, chainId = 1)
+        val sign = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://getvela.app", null, 1, null, first_party = true),
+            confirm_gate_open = true,
+        )
+        val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
+        val sheet = SigningLive.model(
+            drawn, own, sign, clear, GuardView(), FeeView(confirm_fee_ready = true),
+            ctx.copy(strings = zh, chainName = "Ethereum", nativeSymbol = "ETH", chainId = 1),
+        )
+        fun term(leaf: String) = zh.t("componentsUi.signing.$leaf")
+        val rows = sheet.blocks.filterIsInstance<SigningBlock.Rows>().single().rows
+        assertEquals(
+            listOf(term("labelNetwork") to "Ethereum", term("labelAddress") to "0x88cCA0…266894", term("labelPublicKeys") to "3"),
+            rows.map { it.label to it.value },
+        )
+        assertEquals(term("intentBackUpPublicKeys"), sheet.confirmAction)
+        assertEquals("the header's title is the intent", term("intentBackUpPublicKeys"), sheet.headline)
+        listOf("labelNetwork", "labelAddress", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
+            assertFalse("$leaf is said in Chinese", term(leaf).startsWith("componentsUi.") || term(leaf) == strings.t("componentsUi.signing.$leaf"))
+        }
     }
 
     /**
@@ -775,6 +830,39 @@ class SigningLiveTest {
         assertFalse(open.options[1].disabled)
     }
 
+    /**
+     * Each coin in the list wears its real mark — the send form's fee-coin
+     * sheet's: its logo on the REQUEST's chain over its drawn ticker, the
+     * chain's badge hidden where it would repeat the coin. It was the first
+     * letter on a disc, and USDC and USDT were both "U".
+     */
+    @Test
+    fun `the fee coins wear their real marks on the request's chain`() {
+        app.getvela.wallet.core.marks.Marks.base = "https://data.example/"
+        try {
+            val usdc = usdt.copy(symbol = "USDC", contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", selected = false)
+            // No estimate in hand: the request's chain still names the logos.
+            val fee = FeeView(options = listOf(eth, usdt, usdc))
+            val open = SigningLive.feeModel(ClearSigningView(), fee, ctx.copy(feeOpen = true, chainId = 1)) as FeeModel.OnChain
+            val (ethMark, usdtMark, usdcMark) = open.options.map { it.mark }
+            assertEquals(listOf("ETH", "USDT", "USDC"), listOf(ethMark, usdtMark, usdcMark).map { it.ticker })
+            assertEquals(listOf("https://data.example/chainlogos/eip155-1.png"), ethMark.logoUrls)
+            assertTrue("ETH on Ethereum: no badge repeating it", ethMark.badgeHidden)
+            assertEquals(
+                "https://data.example/assets/eip155-1/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
+                usdtMark.logoUrls.first(),
+            )
+            assertEquals(
+                "https://data.example/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+                usdcMark.logoUrls.first(),
+            )
+            assertEquals("a token is badged with its chain", "https://data.example/chainlogos/eip155-1.png", usdcMark.badgeLogoUrl)
+            assertTrue(open.options.none { "eip155-0" in it.mark.logoUrls.joinToString() })
+        } finally {
+            app.getvela.wallet.core.marks.Marks.base = ""
+        }
+    }
+
     // -- Issue #408: a coin that cannot pay says why ---------------------------
 
     /**
@@ -834,12 +922,12 @@ class SigningLiveTest {
 
     /**
      * Issue #438 (v0.9.6, the same key backup): "No token can pay this fee"
-     * in red under the fee and again in grey under the slide. The core's gate
+     * in red under the fee and again in grey under the confirm. The core's gate
      * names no line for a short coin — the fee section says it, where the
-     * other coins are — so the slide stays shut with nothing repeated under it.
+     * other coins are — so the confirm stays shut with nothing repeated under it.
      */
     @Test
-    fun `issue 438 - a short coin is said under the fee and not again under the slide`() {
+    fun `issue 438 - a short coin is said under the fee and not again under the confirm`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
         val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
         val read = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction)
@@ -868,7 +956,7 @@ class SigningLiveTest {
         assertEquals(strings.t("send.warnInsufficientGas", mapOf("sym" to "ETH")), (oneShort.fee as FeeModel.OnChain).warning)
         assertNull(oneShort.confirmBlockLine)
 
-        // A fee still being measured has no line under the fee, so the slide says why.
+        // A fee still being measured has no line under the fee, so the confirm says why.
         val measuring = SigningLive.model(drawn, request(params), sign, read, GuardView(), FeeView(busy = true), ctx)
         assertEquals(strings.t("componentsUi.signing.confirmBlock.feeMeasuring"), measuring.confirmBlockLine)
     }
