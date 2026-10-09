@@ -392,7 +392,8 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         model: TrustedSignerSheetModel
     ) async -> TrustedSignerChannel.Ending {
         let channel = TrustedSignerChannel(
-            signerUrl: page, launch: TrustedSignerChannel.launcher(admission), first: ask
+            signerUrl: page, launch: TrustedSignerChannel.launcher(admission, lang: loc.resolvedLanguage),
+            first: ask
         )
         self.channel = channel
         // The flow's later requests are their own visits, and the channel has

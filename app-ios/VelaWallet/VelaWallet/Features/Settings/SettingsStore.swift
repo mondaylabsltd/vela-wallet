@@ -181,6 +181,46 @@ final class SettingsStore {
         signingPagesCore.dispatch(CoreJSON.string(["type": "page_removed", "url": url]))
     }
 
+    /// "Trust this version" (D-15): `version` (the full sha256 the check
+    /// served) of the page at `url`, on this device — stored on THAT page by
+    /// the machine (an unsaved page is saved by it; the official page never
+    /// is). Answers once it is written, so a check that follows reads it.
+    func trustSigningPage(url: String, version: String) async {
+        openSigningPages()
+        // The machine takes no edit before it has read the list.
+        var waited = 0
+        while signingPages?.loaded != true, waited < 100 {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            waited += 1
+        }
+        signingPagesCore.dispatch(CoreJSON.string(["type": "version_trusted", "url": url, "version": version]))
+        waited = 0
+        while waited < 100, !(signingPagesCore.isIdle && trusts(url: url, version: version)) {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            waited += 1
+        }
+    }
+
+    /// Does the list as the machine last drew it trust `version` on `url`?
+    private func trusts(url: String, version: String) -> Bool {
+        signingPages?.pages.contains {
+            SignerPageChecks.key($0.url) == SignerPageChecks.key(url)
+                && $0.trusted.contains(version.lowercased())
+        } ?? false
+    }
+
+    /// The saved pages' addresses once the list has been read (a moment's
+    /// wait at most) — the background refresh's "every saved page" (D-14).
+    func savedSigningPageUrls() async -> [String] {
+        openSigningPages()
+        var waited = 0
+        while signingPages?.loaded != true, waited < 50 {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            waited += 1
+        }
+        return signingPages?.saved.map(\.url) ?? []
+    }
+
     /// USD → that currency, through the display machine's own waterfall.
     ///
     /// The payroll importer's rate port (spec 054 US3). Exposed here rather

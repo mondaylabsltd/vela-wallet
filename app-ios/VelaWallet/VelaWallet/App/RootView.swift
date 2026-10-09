@@ -370,10 +370,16 @@ struct RootView: View {
         // sheets racing to present over each other. It opens nothing this
         // phone did not check first (`SignerPageChecks`, R6).
         let trustedSigner = TrustedSigner(loc: loc, checks: .shared)
+        // "Trust this version" — on Settings → Signing pages, the hand-off
+        // card or the page's own sheet — is stored on that page by the one
+        // signing pages machine (D-15), never in a list of the checker's own.
+        SignerPageChecks.shared.recordTrust = { [settingsStore] url, version in
+            await settingsStore.trustSigningPage(url: url, version: version)
+        }
         spine.trustedSigner = trustedSigner
         onboarding.trustedSigner = trustedSigner
         onboarding.words = { [loc] key in loc.t(key) }
-        // Spec 102: the choosers' "Use my own signing page" lists the pages
+        // Spec 102: the choosers' "Use a trusted signing page" lists the pages
         // Settings keeps — read by the same machine, so the two never differ.
         onboarding.signingPages = { [settingsStore] in settingsStore.signingPages }
         onboarding.openSigningPages = { [settingsStore] in settingsStore.openSigningPages() }
@@ -1034,7 +1040,19 @@ struct RootView: View {
                 // the next launch picks it up here.
                 tracker.boot()
             }
+            // D-14: every signing page in use is re-checked in the background
+            // when the core says it is due — on start, and hourly while the
+            // app runs (and on every return to the foreground, below) — so
+            // Open almost never waits for a check.
+            .task {
+                let poll = SignerPageChecks.pollMs
+                while !Task.isCancelled {
+                    await refreshSigningPages()
+                    try? await Task.sleep(nanoseconds: poll * 1_000_000)
+                }
+            }
             .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await refreshSigningPages() } }
                 wallet.homePoller.sceneActive(phase == .active)
                 // A failed page retries by itself only while the app is in
                 // front (spec 079).
@@ -3602,6 +3620,8 @@ struct RootView: View {
                 onAddPage: { settings.addSigningPage(url: $0) },
                 onRenamePage: { settings.renameSigningPage(url: $0, name: $1) },
                 onRemovePage: { settings.removeSigningPage(url: $0) },
+                // "Trust this version": stored on that page by the signing
+                // pages machine (D-15), then the page is checked again.
                 onTrustPage: { url, version in
                     Task { await SignerPageChecks.shared.trust(url, version: version) }
                 },
@@ -3837,6 +3857,16 @@ struct RootView: View {
                 if signingPlan?.plan?.venue == venue { break }
             }
         }
+    }
+
+    /// The background refresh (D-14): each account's page venue and every
+    /// saved page, handed to the checker, which checks those the core says
+    /// are due (`signerPageRefreshDue`).
+    private func refreshSigningPages() async {
+        let venues = await sendAccountPort.allAccountJsons()
+            .compactMap { SigningPlanWire.of(accountJson: $0)?.venue.pageUrl }
+        let saved = await settings.savedSigningPageUrls()
+        SignerPageChecks.shared.refresh(venues + saved)
     }
 
     /// Every page a signing surface lists, checked unless a fresh ruling

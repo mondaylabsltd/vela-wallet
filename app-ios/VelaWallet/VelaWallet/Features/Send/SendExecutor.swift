@@ -773,6 +773,14 @@ struct SendAccountPort: UserOpSpine.AccountPort {
         return String(decoding: data, as: UTF8.self)
     }
 
+    /// Every stored account's record, as `accountJson` gives one — what the
+    /// signing pages' background refresh reads each account's venue from.
+    func allAccountJsons() async -> [String] {
+        await accounts.loadAccounts().compactMap { record in
+            (try? JSONSerialization.data(withJSONObject: record)).map { String(decoding: $0, as: UTF8.self) }
+        }
+    }
+
     func keys(of address: String) async -> [WalletKeyRecord] {
         guard let record = await record(for: address) else { return [] }
         let keys = (record["keys"] as? [[String: Any]] ?? []).compactMap { key -> WalletKeyRecord? in

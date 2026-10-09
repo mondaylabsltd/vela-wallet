@@ -209,13 +209,14 @@ final class TrustedSignerChannel: TrustedSignerConversation {
         )
     }
 
-    /// The launcher for an admitted page: the core's, at this moment's clock.
-    /// A refused admission — or one whose check is now too old — builds
+    /// The launcher for an admitted page: the core's, at this moment's clock,
+    /// in `lang` — the language the app shows (`zh-HK`), so the page speaks it
+    /// too. A refused admission — or one whose check is now too old — builds
     /// nothing, and nothing opens.
-    static func launcher(_ admission: SignerPageAdmission) -> Launcher {
+    static func launcher(_ admission: SignerPageAdmission, lang: String) -> Launcher {
         { requestJson, token in
             try? admission.urlLaunch(
-                requestJson: requestJson, token: token,
+                requestJson: requestJson, token: token, lang: lang,
                 nowMs: UInt64(Date().timeIntervalSince1970 * 1000)
             )
         }

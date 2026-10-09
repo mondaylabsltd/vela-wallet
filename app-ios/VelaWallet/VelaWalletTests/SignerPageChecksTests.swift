@@ -25,29 +25,47 @@ struct SignerPageChecksTests {
     private let bytes = Data("<!doctype html><title>a page somebody built</title>".utf8)
     private var hash: String { signerPageHash(bytes: bytes) }
 
-    /// Records what was fetched, and answers from a script.
+    /// Records what was fetched, and answers from a script. A page fetch can
+    /// be held open (`hold`) to look at the checker while a check runs.
     @MainActor
     final class Server {
         var index: Data?
         var page: Data?
         private(set) var indexAsked: [URL] = []
         private(set) var pageAsked: [URL] = []
+        /// Set: the next page fetch waits until `release()`.
+        var hold = false
+        private var held: CheckedContinuation<Void, Never>?
 
-        func checks(trusted: [String] = [], blocked: [String] = [], clock: @escaping () -> UInt64) -> SignerPageChecks {
+        func release() {
+            hold = false
+            held?.resume()
+            held = nil
+        }
+
+        func checks(
+            trusted: [String] = [], blocked: [String] = [], clock: @escaping () -> UInt64
+        ) -> SignerPageChecks {
             SignerPageChecks(
                 fetchIndex: { [self] url in indexAsked.append(url); return index },
-                fetchPage: { [self] url in pageAsked.append(url); return page },
-                lists: { (trusted, blocked) },
+                fetchPage: { [self] url in
+                    pageAsked.append(url)
+                    if hold { await withCheckedContinuation { held = $0 } }
+                    return page
+                },
+                trusted: { _ in trusted },
+                blocked: { blocked },
                 clock: clock
             )
         }
     }
 
     private static let start: UInt64 = 1_800_000_000_000
+    private static let hour: UInt64 = 60 * 60 * 1000
 
     /// A person's own build, listed by its index and trusted on this device:
     /// the bytes ARE the version the URL names, so the page opens — at the
-    /// address that was fetched, and nowhere else.
+    /// address that was fetched, and nowhere else — in the app's language.
     @Test func aPageWhoseBytesAreTheVersionItNamesOpensAtTheCheckedUrl() async throws {
         let server = Server()
         server.index = Data(#"{"versions":["\#(hash)"]}"#.utf8)
@@ -64,12 +82,17 @@ struct SignerPageChecksTests {
         #expect(fetched.absoluteString == custom + "b/\(hash)/sign.html")
 
         // R6: the launch is built from the SAME admission, so it opens the
-        // URL that was fetched.
+        // URL that was fetched — and tells the page the app's language
+        // (core round 6), so it speaks it too.
         let launch = try admission.urlLaunch(
-            requestJson: #"{"intent":{},"context":{}}"#, token: "t", nowMs: Self.start
+            requestJson: #"{"intent":{},"context":{}}"#, token: "t", lang: "zh-HK", nowMs: Self.start
         )
         #expect(launch.hasPrefix(fetched.absoluteString))
+        #expect(launch.contains("lang=zh-HK"))
         #expect(checks.openable(custom) != nil)
+        // The channel's launcher carries the language it is given.
+        let viaChannel = TrustedSignerChannel.launcher(admission, lang: "ja")(#"{"intent":{},"context":{}}"#, "t")
+        #expect(viaChannel?.contains("lang=ja") == true)
     }
 
     /// Bytes that are not the version the URL names are refused: nothing
@@ -88,7 +111,9 @@ struct SignerPageChecksTests {
         #expect(line.key == "componentsUi.signing.integrity.mismatch")
         #expect(checks.openable(official) == nil)
         #expect(throws: (any Error).self) {
-            try admission.urlLaunch(requestJson: #"{"intent":{},"context":{}}"#, token: "t", nowMs: Self.start)
+            try admission.urlLaunch(
+                requestJson: #"{"intent":{},"context":{}}"#, token: "t", lang: "en", nowMs: Self.start
+            )
         }
         // An index that could not be read did not stop the check: the
         // official page's launch version was asked for directly.
@@ -133,12 +158,78 @@ struct SignerPageChecksTests {
         await checks.ensure(custom)
         #expect(server.pageAsked.count == 1, "a fresh ruling was fetched again")
 
-        now += 25 * 60 * 60 * 1000
+        now += 25 * Self.hour
         #expect(checks.line(for: custom).state == .checking)
         #expect(checks.openable(custom) == nil, "a day-old check still opened the page")
         await checks.ensure(custom)
         #expect(server.pageAsked.count == 2)
         #expect(checks.openable(custom) != nil)
+    }
+
+    /// D-14: a page in use is checked again in the background once its check
+    /// is half a day old — not before; an offline refresh keeps the ruling
+    /// that still vouches (Open does not wait), and rests before it tries
+    /// again; a refresh that completes replaces it.
+    @Test func theBackgroundRefreshKeepsAGoodCheckThroughAnOfflineAttempt() async throws {
+        let server = Server()
+        server.index = Data(#"{"versions":["\#(hash)"]}"#.utf8)
+        server.page = bytes
+        var now = Self.start
+        let checks = server.checks(trusted: [hash], clock: { now })
+
+        // Nothing stands yet: due at once.
+        #expect(checks.refreshDue(custom))
+        await checks.ensure(custom)
+        #expect(!checks.refreshDue(custom), "a fresh check was due again")
+        checks.refresh([custom, custom + "/"])
+        await Task.yield()
+        #expect(server.pageAsked.count == 1, "a fresh page was fetched in the background")
+
+        // Thirteen hours on: due, and an attempt that cannot complete keeps
+        // the standing check — it still opens, its line unchanged.
+        now += 13 * Self.hour
+        #expect(checks.refreshDue(custom))
+        server.page = nil
+        let kept = await checks.check(custom)
+        #expect(kept.isFresh(nowMs: now))
+        #expect(checks.openable(custom) != nil, "an offline refresh threw away a good check")
+        #expect(checks.line(for: custom).state == .trustedHere)
+        // …and the core rests it before the next try.
+        #expect(!checks.refreshDue(custom), "an offline page was asked again at once")
+        now += 11 * 60 * 1000
+        #expect(checks.refreshDue(custom))
+
+        // A refresh that completes wins — a mismatch included.
+        server.page = Data("other bytes".utf8)
+        await checks.check(custom)
+        #expect(checks.line(for: custom).state == .mismatch)
+        #expect(checks.openable(custom) == nil)
+    }
+
+    /// While a check runs, a line that still vouches stays as it is (no
+    /// flicker); with nothing standing, it reads "checking".
+    @Test func aRunningCheckKeepsAGoodLineAndOtherwiseSaysChecking() async throws {
+        let server = Server()
+        server.index = Data(#"{"versions":["\#(hash)"]}"#.utf8)
+        server.page = bytes
+        var now = Self.start
+        let checks = server.checks(trusted: [hash], clock: { now })
+
+        server.hold = true
+        let first = Task { await checks.check(custom) }
+        while !checks.isChecking(custom) { await Task.yield() }
+        #expect(checks.line(for: custom).state == .checking)
+        server.release()
+        _ = await first.value
+        #expect(checks.line(for: custom).state == .trustedHere)
+
+        now += 13 * Self.hour
+        server.hold = true
+        let refresh = Task { await checks.check(custom) }
+        while !checks.isChecking(custom) { await Task.yield() }
+        #expect(checks.line(for: custom).state == .trustedHere, "a background refresh made a good line flicker")
+        server.release()
+        _ = await refresh.value
     }
 
     /// A version this device blocked is never fetched as the page to open.
@@ -152,34 +243,70 @@ struct SignerPageChecksTests {
         #expect(checks.openable(custom) == nil)
     }
 
-    /// D-7: a custom page's index proposes its own build, which nobody here
-    /// knows — the line asks, nothing opens, and "Confirm" trusts exactly that
-    /// version on this device; the page is checked again and opens. The
-    /// official page never asks.
-    @Test func aCustomPagesOwnBuildIsTrustedOnlyWhenThePersonSaysSo() async throws {
+    /// D-15: a self-hosted page's index proposes its own build, which nobody
+    /// here knows — the line asks, nothing opens, and "Trust this version"
+    /// stores exactly that version on THAT page (`version_trusted`); the page
+    /// is checked again and opens. Another page serving the same bytes still
+    /// asks. The official page never asks.
+    @Test func aSelfHostedBuildIsTrustedOnThatPageOnly() async throws {
         let server = Server()
         server.index = Data(#"{"versions":["\#(hash)"]}"#.utf8)
         server.page = bytes
-        final class Box { var trusted: [String] = [] }
+        final class Box { var byPage: [String: [String]] = [:]; var recorded: [(String, String)] = [] }
         let box = Box()
         let checks = SignerPageChecks(
             fetchIndex: { [server] _ in server.index },
             fetchPage: { [server] _ in server.page },
-            lists: { (box.trusted, []) },
-            addTrusted: { box.trusted.append($0) },
+            trusted: { box.byPage[SignerPageChecks.key($0)] ?? [] },
+            blocked: { [] },
+            recordTrust: { url, version in
+                box.recorded.append((url, version))
+                box.byPage[SignerPageChecks.key(url), default: []].append(version)
+            },
             clock: { Self.start }
         )
+        let other = "https://sign.other.example/"
         await checks.ensure(custom)
+        await checks.ensure(other)
         #expect(checks.line(for: custom).state == .askToTrust)
         #expect(!checks.line(for: custom).opens)
         let asked = try #require(checks.versionAskingTrust(custom))
-        #expect(asked == hash)
+        #expect(asked == hash, "the version to trust is the full sha256")
 
-        await checks.trust(custom, version: asked)
-        #expect(box.trusted == [hash])
+        await checks.trustAsked(custom)
+        #expect(box.recorded.count == 1 && box.recorded.first?.0 == custom && box.recorded.first?.1 == hash)
         #expect(checks.line(for: custom).state == .trustedHere)
         #expect(checks.openable(custom) != nil)
         #expect(checks.versionAskingTrust(custom) == nil)
+        // Trust vouches for that deployment, not for the bytes anywhere.
+        await checks.check(other)
+        #expect(checks.line(for: other).state == .askToTrust)
+    }
+
+    /// The trusted versions are read from the saved page itself
+    /// (`vela.signingPages`, through the core); the device-wide list is not.
+    @Test func trustIsReadFromTheSavedPage() {
+        let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        let h = String(repeating: "cd", count: 32)
+        store.writeString(VelaStore.Key.signingPages, #"[{"url":"https://sign.example.com/","name":"","trusted":["\#(h)"]}]"#)
+        store.writeString("vela.signerPage.trusted", #"["\#(String(repeating: "ef", count: 32))"]"#)
+        #expect(SignerPageChecks.storedTrusted(store, url: custom) == [h])
+        #expect(SignerPageChecks.storedTrusted(store, url: "https://sign.other.example/").isEmpty)
+        #expect(SignerPageChecks.storedTrusted(store, url: official).isEmpty, "the official page is never trusted into anything")
+        store.writeString(SignerPageChecks.blockedKey, #"["\#(h)","not a hash"]"#)
+        #expect(SignerPageChecks.storedBlocked(store) == [h])
+    }
+
+    /// The check fetches what a browser gets: exactly the core's headers.
+    @Test func theCheckSendsTheCoresHeaders() throws {
+        let headers = signerPageCheckHeaders()
+        #expect(!headers.isEmpty)
+        let request = SignerPageChecks.request(try #require(URL(string: custom)), headers: headers)
+        for header in headers {
+            #expect(request.value(forHTTPHeaderField: header.name) == header.value)
+        }
+        #expect(request.value(forHTTPHeaderField: "Accept")?.hasPrefix("text/html") == true)
+        #expect(request.httpMethod == "GET")
     }
 
     /// The index is read as the desktop reads it: `{"versions": […]}` or a
@@ -193,14 +320,28 @@ struct SignerPageChecksTests {
         #expect(SignerPageChecks.indexUrl("https://a.example/x/")?.absoluteString == "https://a.example/x/index.json")
     }
 
-    /// The device's two lists are read from their keys, hashes only.
-    @Test func theDevicesListsAreReadFromTheirKeys() {
-        let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
-        let h = String(repeating: "cd", count: 32)
-        store.writeString(SignerPageChecks.trustedKey, #"["\#(h)","not a hash"]"#)
-        let lists = SignerPageChecks.storedLists(store)
-        #expect(lists.trusted == [h])
-        #expect(lists.blocked.isEmpty)
+    /// D-13: "checked {{time}}" is the core's moment — the clock time in the
+    /// person's format today, with its date when the check was not today.
+    @Test func checkedTimeIsTheCoresMomentInThePersonsFormat() throws {
+        let saved = Formats.current
+        defer { Formats.current = saved }
+        Formats.current = Formats.Current(number: .commaDot, date: .iso, time: .h24)
+        var parts = DateComponents()
+        (parts.year, parts.month, parts.day, parts.hour, parts.minute) = (2026, 6, 13, 12, 0)
+        let noon = try #require(Calendar(identifier: .gregorian).date(from: parts))
+        let now = UInt64(noon.timeIntervalSince1970 * 1000)
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let line = { (at: UInt64) in
+            SignerIntegrityLine(state: .matches, version: "0ba8ee8c", checkedAtMs: at,
+                                key: "componentsUi.signing.integrity.matches", opens: true)
+        }
+        let today = line(now - 2 * 60 * 1000).text(loc, nowMs: now)
+        #expect(today.hasSuffix("checked 11:58"), "\(today)")
+        let yesterday = line(now - 24 * Self.hour - 2 * 60 * 1000).text(loc, nowMs: now)
+        #expect(yesterday.contains("2026-06-12") && yesterday.contains("11:58"), "\(yesterday)")
+        #expect(!today.contains("{{") && !yesterday.contains("{{"))
+        let zh = line(now - 2 * 60 * 1000).text(Loc(overrideTag: "zh", preferredLanguages: []), nowMs: now)
+        #expect(zh.hasSuffix("检查于 11:58"), "\(zh)")
     }
 }
 

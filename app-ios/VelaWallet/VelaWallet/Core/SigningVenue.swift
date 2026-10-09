@@ -216,18 +216,22 @@ struct SigningPlanWire: Decodable, Equatable {
 struct SigningPageWire: Codable, Equatable, Hashable {
     let url: String
     var name: String = ""
+    /// Versions of THIS page the person trusted on this device (D-15).
+    var trusted: [String] = []
 
-    private enum CodingKeys: String, CodingKey { case url, name }
+    private enum CodingKeys: String, CodingKey { case url, name, trusted }
 
-    init(url: String, name: String = "") {
+    init(url: String, name: String = "", trusted: [String] = []) {
         self.url = url
         self.name = name
+        self.trusted = trusted
     }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         url = try values.decodeIfPresent(String.self, forKey: .url) ?? ""
         name = try values.decodeIfPresent(String.self, forKey: .name) ?? ""
+        trusted = try values.decodeIfPresent([String].self, forKey: .trusted) ?? []
     }
 }
 
@@ -293,8 +297,30 @@ struct SigningPageRowWire: Decodable, Equatable, Identifiable {
     let domain: String
     /// Always first, never removed or renamed.
     let official: Bool
+    /// Versions of this page trusted on this device — always empty for the
+    /// official page.
+    var trusted: [String] = []
 
     var id: String { url }
+
+    private enum CodingKeys: String, CodingKey { case url, name, domain, official, trusted }
+
+    init(url: String, name: String, domain: String, official: Bool, trusted: [String] = []) {
+        self.url = url
+        self.name = name
+        self.domain = domain
+        self.official = official
+        self.trusted = trusted
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        url = try values.decodeIfPresent(String.self, forKey: .url) ?? ""
+        name = try values.decodeIfPresent(String.self, forKey: .name) ?? ""
+        domain = try values.decodeIfPresent(String.self, forKey: .domain) ?? ""
+        official = try values.decodeIfPresent(Bool.self, forKey: .official) ?? false
+        trusted = try values.decodeIfPresent([String].self, forKey: .trusted) ?? []
+    }
 }
 
 /// `app::signing_pages::SigningPagesView`.

@@ -129,7 +129,7 @@ enum TestAdmissions {
     }
 
     static func launcher(_ base: String = official) -> TrustedSignerChannel.Launcher {
-        TrustedSignerChannel.launcher(admitted(base))
+        TrustedSignerChannel.launcher(admitted(base), lang: "en")
     }
 }
 
@@ -250,7 +250,9 @@ struct TrustedSignerChannelTests {
         // (`/b/<sha256>/sign`) — the very URL the check fetched — never the
         // root page.
         #expect(launch.hasPrefix("https://sign.getvela.app/b/"))
-        #expect(launch.components(separatedBy: "#")[0].hasSuffix("/sign?ch=url"))
+        // …told the app's language in its query (core round 6), so the page
+        // speaks it; the request itself stays in the fragment.
+        #expect(launch.components(separatedBy: "#")[0].hasSuffix("/sign?ch=url&lang=en"))
         let version = launch.dropFirst("https://sign.getvela.app/b/".count).prefix { $0 != "/" }
         #expect(version.count == 64 && version.allSatisfy(\.isHexDigit), "a sha-256 names the version")
         let checked = SignerPageTarget.choose(base: fixture.signerUrl, index: nil, trusted: [], blocked: [])
