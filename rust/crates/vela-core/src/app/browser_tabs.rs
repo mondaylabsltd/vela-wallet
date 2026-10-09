@@ -70,9 +70,11 @@
 //!    wallet, a tab restored at launch — is left intact.
 //! 5. Unless the strip is full ([`TABS_CAP`]): the explore machine refuses a
 //!    tab past the cap, so a new tab would be an open that silently does
-//!    nothing. The selected tab — the one the person last had in front —
-//!    takes the address instead, as the desktop's open did at the cap
-//!    before this rule was the core's.
+//!    nothing. An open tab takes the address instead, and never the dApp
+//!    the person just left while another will do: a start-page tab (the
+//!    one used most recently first) — nothing in it is lost; else the tab
+//!    used longest ago that is not the selected one; the selected tab only
+//!    when no other is there. The shell selects the tab it is given.
 //!
 //! A site PICKED (a favourite, a recent dApp, a featured tile) and an address
 //! TYPED differ in rule 2 only. A site is an origin — the explore machine and
@@ -287,8 +289,9 @@ pub enum ExploreOpenKind {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum ExploreOpenTarget {
-    /// Load the address in this tab: the page on screen, or a start-page
-    /// tab's first page. The shell sends `tab_navigated`.
+    /// Load the address in this tab: the page on screen, a start-page tab's
+    /// first page, or the tab a full strip gives up. The shell sends
+    /// `tab_selected` when it is not the selected tab, then `tab_navigated`.
     Load { id: String },
     /// Show this tab as it was left — it is already on the site. A live
     /// engine comes to the front with no load; a suspended one loads its
@@ -296,8 +299,8 @@ pub enum ExploreOpenTarget {
     Resume { id: String },
     /// A new tab onto the address (`tab_opened`): nothing open is replaced.
     /// Never answered for a full strip ([`TABS_CAP`]) — the machine would
-    /// drop that `tab_opened` — which gets [`Self::Load`] of the selected
-    /// tab instead.
+    /// drop that `tab_opened` — which gets [`Self::Load`] of the tab it can
+    /// spare instead (module doc, rule 5).
     NewTab,
 }
 
@@ -345,16 +348,40 @@ pub fn open_target(
         return ExploreOpenTarget::Load { id };
     }
     if view.tabs.len() >= TABS_CAP {
-        if let Some(id) = in_front(view) {
+        if let Some(id) = spare_tab(view) {
             return ExploreOpenTarget::Load { id };
         }
     }
     ExploreOpenTarget::NewTab
 }
 
-/// The tab in front of a full strip (rule 5): the selected one, else — a
-/// view whose selection names no tab, which the machine never publishes but
-/// a shell's re-encoded copy might — the one used most recently.
+/// The tab a full strip gives an open (rule 5). Never the one in front — the
+/// dApp the person just left — while any other will do: a start-page tab,
+/// the one used most recently first, has nothing in it to lose; else the tab
+/// used longest ago (the last in the resume rows' order, [`by_recency`]);
+/// the one in front only when it is the only tab there is.
+///
+/// [`by_recency`]: super::explore_sites::by_recency
+fn spare_tab(view: &ExploreView) -> Option<String> {
+    let front = in_front(view);
+    let by_use: Vec<&ExploreTab> =
+        super::explore_sites::by_recency(&view.tabs, &view.recent_tabs).collect();
+    let start_page = by_use.iter().find(|tab| tab.url.is_none());
+    let longest_ago = || {
+        by_use
+            .iter()
+            .rev()
+            .find(|tab| Some(tab.id.as_str()) != front.as_deref())
+    };
+    start_page
+        .or_else(longest_ago)
+        .map(|tab| tab.id.clone())
+        .or(front)
+}
+
+/// The tab in front: the selected one, else — a view whose selection names
+/// no tab, which the machine never publishes but a shell's re-encoded copy
+/// might — the one used most recently.
 fn in_front(view: &ExploreView) -> Option<String> {
     let selected = view
         .selected_tab

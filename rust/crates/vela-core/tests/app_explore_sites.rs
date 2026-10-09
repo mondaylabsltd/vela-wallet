@@ -528,11 +528,13 @@ fn a_new_tab_is_the_selected_one() {
 }
 
 /// The strip holds TABS_CAP tabs and refuses the next `tab_opened`, so an
-/// open into a full strip must not ask for one: the core's open target
-/// answers the selected tab, and its `tab_navigated` puts the address in
-/// the strip — the open is never silently lost.
+/// open into a full strip must not ask for one: the core's open target names
+/// a tab already open, the shell selects it and its `tab_navigated` puts the
+/// address in the strip — the open is never silently lost. And that tab is
+/// never the dApp the person just left (the selected one): the tab used
+/// longest ago takes it, or, when there is one, a start-page tab.
 #[test]
-fn an_open_into_a_full_strip_lands_in_the_selected_tab() {
+fn an_open_into_a_full_strip_never_replaces_the_dapp_just_left() {
     use vela_core::app::browser_tabs::{open_target, ExploreOpenKind, ExploreOpenTarget};
     let mut sut = ready(None);
     for i in 0..TABS_CAP {
@@ -544,9 +546,12 @@ fn an_open_into_a_full_strip_lands_in_the_selected_tab() {
             now_ms: at,
         }));
     }
+    let ids = ids_of(&sut.view().tabs);
+    // The person is on the sixth tab's dApp, then goes to the wallet.
+    let dapp = ids[5].clone();
+    written(sut.dispatch(Event::TabSelected { id: dapp.clone() }));
     let view = sut.view();
     assert!(view.tabs_full);
-    let selected = view.selected_tab.clone().expect("a strip has a selection");
 
     // The machine refuses a tab past the cap: nothing written.
     assert!(sut
@@ -558,7 +563,8 @@ fn an_open_into_a_full_strip_lands_in_the_selected_tab() {
         .is_empty());
     assert_eq!(sut.view().tabs.len(), TABS_CAP);
 
-    // So the open target never says "new tab" here.
+    // So the open target never says "new tab" here — nor the dApp: the
+    // first tab opened was used longest ago.
     let target = open_target(
         &view,
         None,
@@ -566,25 +572,60 @@ fn an_open_into_a_full_strip_lands_in_the_selected_tab() {
         "https://late.example/",
         ExploreOpenKind::Address,
     );
-    assert_eq!(
-        target,
-        ExploreOpenTarget::Load {
-            id: selected.clone()
-        }
-    );
+    let ExploreOpenTarget::Load { id: spare } = target else {
+        panic!("a full strip loads in a tab it has, got {target:?}");
+    };
+    assert_eq!(spare, ids[0]);
+
+    // What every shell sends for that answer: select it, then the address.
+    written(sut.dispatch(Event::TabSelected { id: spare.clone() }));
     let doc = written(sut.dispatch(Event::TabNavigated {
-        id: selected.clone(),
+        id: spare.clone(),
         url: "https://late.example/".to_owned(),
         title: None,
     }));
     assert_eq!(doc.tabs.len(), TABS_CAP);
-    let tab = doc
-        .tabs
-        .iter()
-        .find(|t| t.id == selected)
-        .expect("still there");
-    assert_eq!(tab.url.as_deref(), Some("https://late.example/"));
-    assert_eq!(sut.view().selected_tab.as_deref(), Some(selected.as_str()));
+    let url_of = |id: &str| {
+        doc.tabs
+            .iter()
+            .find(|t| t.id == id)
+            .and_then(|t| t.url.clone())
+    };
+    assert_eq!(url_of(&spare).as_deref(), Some("https://late.example/"));
+    assert_eq!(
+        url_of(&dapp).as_deref(),
+        Some("https://site5.example/"),
+        "the dApp left for the wallet is as it was"
+    );
+    let view = sut.view();
+    assert_eq!(view.selected_tab.as_deref(), Some(spare.as_str()));
+    assert_eq!(
+        view.resumable[0].id, spare,
+        "the open is what was used last"
+    );
+    assert_eq!(view.resumable[1].id, dapp);
+
+    // A start-page tab in a full strip has nothing to lose: it is the one.
+    written(sut.dispatch(Event::TabClosed { id: ids[9].clone() }));
+    written(sut.dispatch(Event::TabOpened {
+        url: None,
+        title: None,
+        now_ms: T0 + 200.0,
+    }));
+    let start = sut.view().selected_tab.clone().expect("the new tab");
+    written(sut.dispatch(Event::TabSelected { id: dapp.clone() }));
+    let view = sut.view();
+    assert!(view.tabs_full);
+    assert_eq!(
+        open_target(
+            &view,
+            None,
+            false,
+            "https://later.example/",
+            ExploreOpenKind::Site
+        ),
+        ExploreOpenTarget::Load { id: start }
+    );
 }
 
 /// Closing the selected tab hands selection to its right-hand neighbour, and

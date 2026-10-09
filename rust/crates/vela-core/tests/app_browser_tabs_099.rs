@@ -388,19 +388,23 @@ mod navigation {
 
     /// A full strip (TABS_CAP) has no room for a new tab — the explore
     /// machine drops that `tab_opened`, so "new tab" would be an open that
-    /// silently does nothing. The selected tab takes the address instead
-    /// (the tab the person last had in front, as the desktop's open did at
-    /// the cap). The other rules still come first: a picked site already
-    /// open is resumed, a selected start-page tab gets its first page, and
-    /// on a page the address loads there. One short of the cap is a new tab.
+    /// silently does nothing. An open tab takes the address instead, and
+    /// never the dApp the person just left (the selected tab) while another
+    /// will do: a start-page tab first, the one used most recently of them;
+    /// else the tab used longest ago. The other rules still come first: a
+    /// picked site already open is resumed, a selected start-page tab gets
+    /// its first page, and on a page the address loads there. One short of
+    /// the cap is a new tab.
     #[test]
-    fn a_full_strip_loads_in_the_selected_tab_rather_than_doing_nothing() {
+    fn a_full_strip_never_gives_up_the_dapp_just_left() {
         let ids: Vec<String> = (1..=TABS_CAP).map(|i| format!("t{i}")).collect();
-        let full = |selected: &str, start_page: Option<&str>| {
+        // Every tab on a page but `start_pages`; t1 on Uniswap. Recency:
+        // `recent` as given, the rest in strip order after it.
+        let full = |selected: &str, start_pages: &[&str], recent: &[&str]| {
             let tabs: Vec<(&str, Option<&str>)> = ids
                 .iter()
                 .map(|id| {
-                    let url = if Some(id.as_str()) == start_page {
+                    let url = if start_pages.contains(&id.as_str()) {
                         None
                     } else if id == "t1" {
                         Some(UNISWAP)
@@ -410,60 +414,110 @@ mod navigation {
                     (id.as_str(), url)
                 })
                 .collect();
-            strip(&tabs, Some(selected), &[selected])
+            strip(&tabs, Some(selected), recent)
         };
 
-        let view = full("t7", None);
+        // The dApp just left is t7, and every tab is known: t24 was used
+        // longest ago.
+        let mut recent: Vec<&str> = vec!["t7", "t3"];
+        recent.extend(
+            ids.iter()
+                .map(String::as_str)
+                .filter(|id| !["t7", "t3", "t24"].contains(id)),
+        );
+        recent.push("t24");
+        let view = full("t7", &[], &recent);
         for kind in [ExploreOpenKind::Site, ExploreOpenKind::Address] {
             assert_eq!(
                 open_target(&view, None, false, AAVE, kind),
-                load("t7"),
-                "{kind:?} over the home"
+                load("t24"),
+                "{kind:?}: the tab used longest ago, never the dApp just left"
             );
             assert_eq!(
                 open_target(&view, Some("t3"), false, AAVE, kind),
-                load("t7"),
-                "{kind:?}: the selected tab, not the one last shown"
+                load("t24"),
+                "{kind:?}: over the home, the tab last shown is no reason"
             );
         }
+        // Recency that knows only the selected tab (a launch): the others
+        // follow in strip order, so the last of the strip is the oldest.
+        let view = full("t7", &[], &["t7"]);
+        assert_eq!(
+            open_target(&view, None, false, AAVE, ExploreOpenKind::Address),
+            load("t24")
+        );
+        // The tab used longest ago is the selected one: the next oldest.
+        let view = full("t24", &[], &["t1", "t2"]);
+        assert_eq!(
+            open_target(&view, None, false, AAVE, ExploreOpenKind::Address),
+            load("t23")
+        );
+        // A start-page tab has nothing to lose: it goes first, the one used
+        // most recently of several.
+        let view = full("t7", &["t5", "t12"], &["t7", "t12", "t5"]);
+        assert_eq!(
+            open_target(&view, None, false, AAVE, ExploreOpenKind::Address),
+            load("t12")
+        );
+        let view = full("t7", &["t5", "t12"], &["t7"]);
+        assert_eq!(
+            open_target(&view, None, false, AAVE, ExploreOpenKind::Address),
+            load("t5"),
+            "recency unknown: strip order"
+        );
         // Rule 2 before rule 5: a picked site already open comes back.
+        let view = full("t7", &[], &["t7"]);
         assert_eq!(
             open_target(&view, None, false, UNISWAP, ExploreOpenKind::Site),
             resume("t1")
         );
         // Rule 3 before rule 5: a selected start-page tab gets the page.
-        let view = full("t9", Some("t9"));
+        let view = full("t9", &["t9", "t5"], &["t5"]);
         assert_eq!(
             open_target(&view, None, false, AAVE, ExploreOpenKind::Address),
             load("t9")
         );
         // Rule 1: on a page, that page.
-        let view = full("t7", None);
+        let view = full("t7", &[], &["t7"]);
         assert_eq!(
             open_target(&view, Some("t3"), true, AAVE, ExploreOpenKind::Address),
             load("t3")
         );
         // A selection that names no tab (a shell's own copy): the tab used
-        // most recently.
-        let mut stale = full("t7", None);
+        // most recently stands in for the one in front; the oldest goes.
+        let mut stale = full("t7", &[], &["t5", "t24"]);
         stale.selected_tab = Some("gone".to_owned());
-        stale.recent_tabs = vec!["gone".to_owned(), "t5".to_owned()];
         assert_eq!(
             open_target(&stale, None, false, AAVE, ExploreOpenKind::Address),
-            load("t5")
+            load("t23"),
+            "t24 was used, so the strip's last unknown tab is the oldest"
         );
         // One short of the cap there is still room: a new tab.
-        let mut room = full("t7", None);
+        let mut room = full("t7", &[], &["t7"]);
         room.tabs.pop();
         assert_eq!(
             open_target(&room, None, false, AAVE, ExploreOpenKind::Address),
             ExploreOpenTarget::NewTab
         );
         // The same answer over the wire.
-        let json = serde_json::to_string(&full("t7", None)).expect("a view serializes");
+        let json = serde_json::to_string(&full("t7", &[], &["t7"])).expect("a view serializes");
         assert_eq!(
             open_target_json(&json, None, false, AAVE, "address").as_deref(),
-            Some(r#"{"type":"load","id":"t7"}"#)
+            Some(r#"{"type":"load","id":"t24"}"#)
+        );
+    }
+
+    /// The selected tab is given up only when it is the only tab there is —
+    /// a shell's copy of a strip the machine never publishes (one tab, yet
+    /// full), the one way rule 5 can have no other.
+    #[test]
+    fn a_full_strip_of_one_tab_gives_up_the_selected_one() {
+        let mut view = strip(&[("t1", Some(UNISWAP))], Some("t1"), &["t1"]);
+        // Duplicated past the cap under one id: there is no other tab.
+        view.tabs = std::iter::repeat_n(view.tabs[0].clone(), TABS_CAP).collect();
+        assert_eq!(
+            open_target(&view, None, false, AAVE, ExploreOpenKind::Address),
+            load("t1")
         );
     }
 

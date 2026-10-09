@@ -138,8 +138,9 @@ client says and logs it the same way.
   resumes that tab, otherwise the selected start-page tab gets its first page,
   otherwise a new tab — a live dApp is never replaced from the home. A typed
   address never takes the same-site rule. A full strip (24 tabs) has no room
-  for a new tab, so the selected tab takes the address rather than the open
-  doing nothing.
+  for a new tab, so an open tab takes the address rather than the open doing
+  nothing — a start-page tab, else the tab used longest ago, never the dApp
+  just left while another tab will do; the shell selects the tab it is given.
 - **Every read settles** by `READ_DEADLINE_MS` (30 s), whatever the endpoints
   are doing.
 - **The landing** counts the chain's usual time from when the relay put the
