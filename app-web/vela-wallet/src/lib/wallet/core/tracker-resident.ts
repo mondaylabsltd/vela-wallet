@@ -53,6 +53,14 @@ import { loadCore } from '$lib/core/client';
 import { inFlightOps } from '$lib/core/kernels';
 import { createTxTrackerSession } from './tracker-session';
 import { trackerLogLines } from './tracker-executor';
+import {
+	browserShareDeps,
+	startFollower,
+	startVoice,
+	type Follower,
+	type ShareDeps,
+	type Voice
+} from './tracker-share';
 
 import type { InFlightOp } from '$lib/core/generated/InFlightOp';
 import type { SendReceiptOutcome } from '$lib/core/generated/SendReceiptOutcome';
@@ -211,6 +219,93 @@ function syncTicker(view: TrackView): void {
 }
 
 /**
+ * PR 2 note 12: one tracker for the whole extension (`tracker-share.ts`). The
+ * documents that run the wallet are its voices; the request window follows
+ * one when one is up, instead of sweeping and polling every stored pending
+ * record a second time. Outside the extension nothing is shared — every page
+ * runs its own, as before.
+ */
+let followShared = false;
+let shareDeps: ShareDeps | null = null;
+let follower: Follower | null = null;
+let voice: Voice | null = null;
+
+/**
+ * The extension's request window: follow the one tracker the wallet's
+ * documents run (PR 2 note 12) — mirror its views, hand it this window's
+ * operations — and run one here only while none is up. Call before anything
+ * boots the tracker (the request page's script runs before its components).
+ */
+export function followSharedTracker(deps: ShareDeps = browserShareDeps()): void {
+	followShared = true;
+	shareDeps = deps;
+}
+
+/** Whether this document is one of the extension's (its own origin). */
+function extensionDocument(): boolean {
+	return typeof location !== 'undefined' && location.protocol === 'chrome-extension:';
+}
+
+/** A voice's seams: the extension's documents only, unless a test sets them. */
+let voiceDeps: () => ShareDeps | null = () => (extensionDocument() ? browserShareDeps() : null);
+
+/** Test seam: run this document as a voice over `deps` (`null`: never). */
+export function _voiceDepsForTest(deps: ShareDeps | null): void {
+	voiceDeps = () => deps;
+}
+
+/** A committed view — this document's own tracker's, or a followed voice's. */
+function commit(view: TrackView, own: boolean): void {
+	// Every status change is a console line (spec 082 G61) — once, by the
+	// tracker that saw it.
+	if (own) for (const line of trackerLogLines(current, view)) console.log(line);
+	current = view;
+	deliver(view);
+	if (own) syncTicker(view);
+	listeners.forEach((listener) => listener(view));
+	// Read from THIS view, as the resident received it: the core's own JSON,
+	// `sender` and `stalled` included.
+	currentOps = opsOf(view);
+	opsListeners.forEach((listener) => listener(currentOps));
+	if (own) voice?.view(view);
+}
+
+/** This document's own tracker: built, swept (`app_resumed`), then told `replay`. */
+function bootSession(replay: TrackEvent[] = []): void {
+	session = createTxTrackerSession({
+		onView: (view: TrackView) => commit(view, true),
+		onError: (error) => console.error('[tx_tracker] core fault:', error),
+		ports: {
+			feedReconciled: (count: number) => feed.reconciled(count),
+			receiptLogsConfirmed: notifyReceiptLogsConfirmed,
+			// Money left: the hero total refetches past the token cache, so
+			// the figure follows a send the moment its receipt lands (issue 188).
+			// A dropped dispatch (balance not booted yet) costs nothing — the
+			// boot's own `account_changed` fetches fresh anyway.
+			confirmed: () => balance.refresh(true)
+		}
+	});
+	// `start` commits the pristine view first (the frame `INITIAL_VIEW`
+	// mirrors), then sweeps the store: this IS the cross-restart recovery that
+	// `dapp-connection.tsx`'s `resumedRef` scan and the reconciler's launch run
+	// used to do separately (invariant ⑥).
+	session.start({ type: 'app_resumed' });
+	// A takeover: the hand-offs this document made while it followed another
+	// tracker. The core takes them idempotently by hash.
+	for (const event of replay) session.dispatch(event);
+}
+
+/** A voice runs the one tracker now: this document's stops asking anything. */
+function stopSession(): void {
+	session?.dispose();
+	session = null;
+	if (ticker) {
+		clearInterval(ticker);
+		ticker = null;
+	}
+}
+
+/**
  * Boot the machine. The core is fetched asynchronously on web, so this is a
  * promise — every caller either awaits it or fires and forgets (the dispatches
  * below queue behind the same promise, so nothing is lost).
@@ -221,30 +316,6 @@ export function ensureTxTracker(): Promise<void> {
 	if (booting) return booting;
 	booting = (async () => {
 		await loadCore();
-		session = createTxTrackerSession({
-			onView: (view: TrackView) => {
-				// Every status change is a console line (spec 082 G61).
-				for (const line of trackerLogLines(current, view)) console.log(line);
-				current = view;
-				deliver(view);
-				syncTicker(view);
-				listeners.forEach((listener) => listener(view));
-				// Read from THIS view, as the resident received it: the core's
-				// own JSON, `sender` and `stalled` included.
-				currentOps = opsOf(view);
-				opsListeners.forEach((listener) => listener(currentOps));
-			},
-			onError: (error) => console.error('[tx_tracker] core fault:', error),
-			ports: {
-				feedReconciled: (count: number) => feed.reconciled(count),
-				receiptLogsConfirmed: notifyReceiptLogsConfirmed,
-				// Money left: the hero total refetches past the token cache, so
-				// the figure follows a send the moment its receipt lands (issue 188).
-				// A dropped dispatch (balance not booted yet) costs nothing — the
-				// boot's own `account_changed` fetches fresh anyway.
-				confirmed: () => balance.refresh(true)
-			}
-		});
 
 		// The `sign_request` seam is bound in Phase 5, where that resident lands:
 		// a dApp tx that reached the relay is handed over the moment its view
@@ -252,23 +323,40 @@ export function ensureTxTracker(): Promise<void> {
 
 		// Foregrounding is a reconcile trigger, as `AppState` 'active' was for the
 		// TS reconciler. Guarded for the static render pass, which has no document.
+		// A document that follows another's tracker has none to wake.
 		if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
 			document.addEventListener('visibilitychange', () => {
 				if (!document.hidden) session?.dispatch({ type: 'app_resumed' });
 			});
 		}
 
-		// `start` commits the pristine view first (the frame `INITIAL_VIEW`
-		// mirrors), then sweeps the store: this IS the cross-restart recovery that
-		// `dapp-connection.tsx`'s `resumedRef` scan and the reconciler's launch run
-		// used to do separately (invariant ⑥).
-		session.start({ type: 'app_resumed' });
+		if (followShared && shareDeps) {
+			follower = await startFollower(shareDeps, {
+				own: (replay) => bootSession(replay),
+				disown: stopSession,
+				mirror: (view) => commit(view, false)
+			});
+			return;
+		}
+		bootSession();
+		const deps = voiceDeps();
+		if (deps) {
+			voice = startVoice(deps, {
+				current: () => current,
+				// A follower's hand-off, into this tracker.
+				dispatch: (event) => session?.dispatch(event)
+			});
+		}
 	})();
 	return booting;
 }
 
 export function dispatchTxTracker(event: TrackEvent): void {
-	void ensureTxTracker().then(() => session?.dispatch(event));
+	void ensureTxTracker().then(() => {
+		// Following another document's tracker: it is handed there.
+		if (follower?.forward(event)) return;
+		session?.dispatch(event);
+	});
 }
 
 /**
