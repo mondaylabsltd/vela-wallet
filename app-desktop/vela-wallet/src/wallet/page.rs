@@ -1069,8 +1069,6 @@ pub struct WalletPage {
     /// (078 C-07).
     export_scope: Option<ContactExportScope>,
     pick_query_focus: gpui::FocusHandle,
-    /// The contact whose address is being shown as a code, if any.
-    contact_qr: Option<(SharedString, SharedString)>,
     /// The group name sheet: `Some((id, name))`, with `None` for a new group.
     /// One dialog for 新建分组 and 重命名分组, because they are one question.
     group_form: Option<(Option<String>, String)>,
@@ -1639,7 +1637,6 @@ impl WalletPage {
             pick: None,
             export_scope: None,
             pick_query_focus: cx.focus_handle(),
-            contact_qr: None,
             group_form: None,
             group_form_focus: cx.focus_handle(),
             contact_form_name_focus: cx.focus_handle(),
@@ -2466,145 +2463,6 @@ impl WalletPage {
             )
             .into_any_element(),
         )
-    }
-
-    /// A contact's address as a code, the way the receive card does our own.
-    ///
-    /// The three pills on the contact panel were drawn in 018 and none of them
-    /// did anything until 2026-09-23. 转账 and 收款 had another route (the row's
-    /// context menu); **二维码 had none at all**, which is why it needed a
-    /// surface rather than a handler. The web's sheet is the model: their
-    /// identicon, their name, their address encoded — a picture somebody can
-    /// hold up to a phone.
-    ///
-    /// The identicon is not decoration. It is the anti-forgery mark the receive
-    /// redesign leans on: two addresses that read alike do not draw alike.
-    fn contact_qr_dialog(
-        &mut self,
-        theme: &Theme,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> Option<gpui::AnyElement> {
-        let (name, address) = self.contact_qr.clone()?;
-        let s = &self.contacts;
-        let title = s.action_qr.clone();
-        let copy_label = if self.copied.as_deref() == Some(CONTACT_QR_COPY) {
-            s.copied.clone()
-        } else {
-            s.copy_address.clone()
-        };
-
-        // 21 modules for a 42-character address is not a given, so the module
-        // size is derived from the code's own width rather than assumed.
-        let code = qrcode::QrCode::new(address.as_bytes()).ok();
-        let matrix: Div = match code {
-            Some(code) => {
-                let width = code.width();
-                let module = (220.0 / width as f32).floor().max(2.0);
-                let colors = code.to_colors();
-                let mut grid = div().flex().flex_col().p(px(12.)).bg(gpui::rgb(0xffffff));
-                for row in 0..width {
-                    let mut line = div().flex().flex_row();
-                    for col in 0..width {
-                        let dark =
-                            matches!(colors.get(row * width + col), Some(qrcode::Color::Dark));
-                        let mut cell = div().size(px(module));
-                        if dark {
-                            cell = cell.bg(gpui::rgb(0x000000));
-                        }
-                        line = line.child(cell);
-                    }
-                    grid = grid.child(line);
-                }
-                grid
-            }
-            // An address that cannot be encoded is a bug elsewhere; drawing a
-            // fake pattern would be worse than drawing nothing, because a fake
-            // one gets photographed.
-            None => div(),
-        };
-
-        // The web's `ContactQr`: the code, the name at 17 bold, the address in
-        // full in the mono face, and a hairline pill that copies it.
-        let body = div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(8.))
-            .pb(px(16.))
-            .child(crate::wallet::components::identicon_avatar(
-                &mut self.identicons,
-                &address,
-                56.,
-            ))
-            .child(
-                div()
-                    .mt(px(8.))
-                    .rounded(px(14.))
-                    .overflow_hidden()
-                    .child(matrix),
-            )
-            .child(
-                div()
-                    .mt(px(8.))
-                    .text_size(theme::text_button())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(name),
-            )
-            .child(
-                div()
-                    .max_w(px(300.))
-                    .font_family(theme::font_mono())
-                    .text_size(theme::text_label())
-                    .text_color(theme.fg_muted)
-                    .text_center()
-                    .child(address.clone()),
-            )
-            .child(
-                div()
-                    .id("contact-qr-copy")
-                    .h(px(36.))
-                    .px(px(16.))
-                    .flex()
-                    .items_center()
-                    .rounded_full()
-                    .border_1()
-                    .border_color(theme.border_card)
-                    .bg(theme.bg_raised)
-                    .cursor_pointer()
-                    .hover(|el| el.opacity(0.92))
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.copy_text(
-                            CONTACT_QR_COPY,
-                            address.to_string(),
-                            CONTACTS_COPY_HOLD,
-                            cx,
-                        );
-                    }))
-                    .child(copy_label),
-            );
-
-        Some(
-            crate::ui::dialog::dialog(
-                "contact-qr",
-                theme,
-                window,
-                title,
-                None,
-                self.dialog_close_icon(theme),
-                body,
-                &self.dialog_scroll("contact-qr"),
-                Self::closer(cx, |this, _| this.close_contact_qr()),
-            )
-            .into_any_element(),
-        )
-    }
-
-    fn close_contact_qr(&mut self) {
-        self.contact_qr = None;
     }
 
     /// The add/edit contact form — the third column, as the web draws it
@@ -3577,8 +3435,6 @@ impl WalletPage {
             self.explore_form = None;
         } else if self.explore_groups {
             self.explore_groups = false;
-        } else if self.contact_qr.is_some() {
-            self.close_contact_qr();
         } else if self.contact_form.is_some() {
             self.contact_form = None;
         } else if self.import_result.is_some() {
@@ -4589,7 +4445,6 @@ impl WalletPage {
             || self.export_scope.is_some()
             || self.explore_form.is_some()
             || self.explore_groups
-            || self.contact_qr.is_some()
             || self.balance_detail_open
             || self.unreachable_open
             || self.feedback.viewer_open()
@@ -5460,8 +5315,6 @@ impl WalletPage {
         let delete = self.contacts.delete_contact.clone();
         let delete_name = model.name.clone();
         let send = self.contacts.action_send.clone();
-        let receive = self.contacts.action_receive.clone();
-        let qr = self.contacts.action_qr.clone();
 
         // The membership chips, and the web's `+` chip after them — 移入分组
         // from where the groups are shown, not only from a right-click
@@ -5581,75 +5434,38 @@ impl WalletPage {
                     .child(chips),
             );
 
-        // What the three pills DO. They have been drawn since 018 and did
-        // nothing at all; 转账 and 收款 at least had the row's context menu,
-        // and 二维码 had no other route anywhere in the app.
+        // The page's one action (issue 479): Send, to this person. Receive
+        // (the wallet's OWN code, which is not about this contact) and the
+        // QR pill are gone — a person on someone's page is there to pay them,
+        // and the address above stays copyable. One pill takes the row's
+        // whole width, in the place the first of three used to start.
         let send_to = model.address_full.to_string();
-        let qr_name = model.name.clone();
-        let qr_address = SharedString::from(model.address_full.to_string());
-        let actions = div()
-            .flex()
-            // Three words in a long language at the largest text size are
-            // wider than this panel: unwrapped, 二维码 was drawn half off the
-            // right edge of the window. The chips above wrap for the same
-            // reason.
-            .flex_wrap()
-            .gap(px(8.))
-            .child(
-                contacts_components::detail_action(
-                    "contact-send",
-                    theme,
-                    &mut self.icons,
-                    Icon::ArrowUpRight,
-                    send,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    // The same route the row's 转账 takes: the send flow with
-                    // this person prefilled. The core takes the prefill; the
-                    // shell does not type into its own screen.
-                    this.section = Section::Wallet;
-                    this.send_sweeping = false;
-                    this.flows = FlowPanel::entry(FlowEntry::Send);
-                    this.panel = PanelId::Flow;
-                    this.open_send(
-                        SendOpenParams {
-                            prefilled_recipient: Some(send_to.clone()),
-                            ..SendOpenParams::default()
-                        },
-                        cx,
-                    );
-                    cx.notify();
-                })),
+        let actions = div().flex().child(
+            contacts_components::detail_action(
+                "contact-send",
+                theme,
+                &mut self.icons,
+                Icon::ArrowUpRight,
+                send,
             )
-            .child(
-                contacts_components::detail_action(
-                    "contact-receive",
-                    theme,
-                    &mut self.icons,
-                    Icon::ArrowDownLeft,
-                    receive,
-                )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    // My own address — what a person needs when the answer to
-                    // "how do I pay you" is asked of them.
-                    this.section = Section::Wallet;
-                    this.enter_flow(FlowEntry::Receive, cx);
-                    cx.notify();
-                })),
-            )
-            .child(
-                contacts_components::detail_action(
-                    "contact-qr",
-                    theme,
-                    &mut self.icons,
-                    Icon::QrCode,
-                    qr,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
-                    cx.notify();
-                })),
-            );
+            .on_click(cx.listener(move |this, _, _, cx| {
+                // The same route the row's 转账 takes: the send flow with
+                // this person prefilled. The core takes the prefill; the
+                // shell does not type into its own screen.
+                this.section = Section::Wallet;
+                this.send_sweeping = false;
+                this.flows = FlowPanel::entry(FlowEntry::Send);
+                this.panel = PanelId::Flow;
+                this.open_send(
+                    SendOpenParams {
+                        prefilled_recipient: Some(send_to.clone()),
+                        ..SendOpenParams::default()
+                    },
+                    cx,
+                );
+                cx.notify();
+            })),
+        );
 
         let mut activity = div().flex().flex_col().child(
             div()
@@ -20190,10 +20006,10 @@ impl WalletPage {
                     },
                 )) as contacts_components::MenuAction),
             ],
-            // The contact's own menu, in the order it is drawn: send, receive,
-            // copy, edit, move to a group, delete. Every one of them has
-            // somewhere to go on this shell — which is why it is opened at
-            // last.
+            // The contact's own menu, in the order it is drawn: send, copy,
+            // edit, move to a group, delete (no 收款 — issue 479). The menu
+            // is POSITIONAL: action N belongs to drawn row N, so this list
+            // and `contacts_fixtures::contact_context` change together.
             ContactsMenu::Contact => {
                 let view = resident::resident::<Contacts>(cx).read(cx).view();
                 let Some(row) = contacts_live::rows(&view).into_iter().nth(self.contact) else {
@@ -20210,7 +20026,10 @@ impl WalletPage {
                 } else {
                     name.clone()
                 });
-                vec![
+                // An array of the menu's own length: one action too many or
+                // too few is a compile error, not a handler on the wrong row.
+                let actions: [Option<contacts_components::MenuAction>;
+                    contacts_fixtures::CONTACT_CONTEXT_ROWS] = [
                     // 转账 — the send flow, opened with this person in the
                     // recipient field. The core takes the prefill; the shell
                     // does not type into its own screen.
@@ -20231,14 +20050,6 @@ impl WalletPage {
                             cx.notify();
                         })) as contacts_components::MenuAction,
                     ),
-                    // 收款 — my own address, which is what a person needs when
-                    // the answer to "how do I pay you" is asked of them.
-                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                        this.menu = None;
-                        this.section = Section::Wallet;
-                        this.enter_flow(FlowEntry::Receive, cx);
-                        cx.notify();
-                    })) as contacts_components::MenuAction),
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
@@ -20272,7 +20083,8 @@ impl WalletPage {
                             cx.notify();
                         })) as contacts_components::MenuAction,
                     ),
-                ]
+                ];
+                Vec::from(actions)
             }
 
             // One row per network, in the order the menu drew them. The site
@@ -20700,7 +20512,6 @@ impl Render for WalletPage {
         let export_format = self.export_format_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
         let explore_groups = self.explore_groups_dialog(&theme, window, cx);
-        let contact_qr = self.contact_qr_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
         let unreachable = self.unreachable_dialog(&theme, window, cx);
         let mut root = div()
@@ -20761,9 +20572,6 @@ impl Render for WalletPage {
         }
         if let Some(export_format) = export_format {
             root = root.child(export_format);
-        }
-        if let Some(contact_qr) = contact_qr {
-            root = root.child(contact_qr);
         }
         if let Some(explore_form) = explore_form {
             root = root.child(explore_form);
@@ -20942,7 +20750,6 @@ fn confirmed_sends(
 
 /// The technical details' address copy (078 G-05).
 const SIGNING_TECH_COPY: &str = "signing-tech-copy";
-const CONTACT_QR_COPY: &str = "contact-qr";
 const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
 
 /// The Ethereum key backup, as a request for the SHARED signing sheet.
@@ -21372,7 +21179,6 @@ mod tests {
             ("export_format_dialog", "self.export_scope"),
             ("explore_form_dialog", "self.explore_form"),
             ("explore_groups_dialog", "self.explore_groups"),
-            ("contact_qr_dialog", "self.contact_qr"),
             ("balance_detail_dialog", "self.balance_detail_open"),
             ("unreachable_dialog", "self.unreachable_open"),
             ("sign_out_dialog", ".sign_out"),
