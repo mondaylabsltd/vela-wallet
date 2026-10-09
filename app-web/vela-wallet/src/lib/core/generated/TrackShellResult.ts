@@ -16,4 +16,9 @@ stage: string | null, now_ms: number,
 /**
  * The relay's bundle tx, when it names one ([`TrackStatusAnswer`]).
  */
-tx_hash: string | null, } | { "type": "status_unavailable", user_op_hash: string, now_ms: number, } | { "type": "records_loaded", records: Array<TrackPendingRecord>, now_ms: number, } | { "type": "op_event", user_op_hash: string, now_ms: number, logs_json: string | null, error_json: string | null, head_block: number | null, } | { "type": "records_patched" } | { "type": "notified" } | { "type": "tx_receipt", user_op_hash: string, now_ms: number, receipt_json: string | null, };
+tx_hash: string | null, 
+/**
+ * [`TrackStatusAnswer::rejection_reason`], passed through. Absent
+ * (an older shell or relay): the reason is read from `stage`.
+ */
+rejection_reason?: string, } | { "type": "status_unavailable", user_op_hash: string, now_ms: number, } | { "type": "records_loaded", records: Array<TrackPendingRecord>, now_ms: number, } | { "type": "op_event", user_op_hash: string, now_ms: number, logs_json: string | null, error_json: string | null, head_block: number | null, } | { "type": "records_patched" } | { "type": "notified" } | { "type": "tx_receipt", user_op_hash: string, now_ms: number, receipt_json: string | null, };

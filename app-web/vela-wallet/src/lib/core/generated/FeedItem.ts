@@ -99,4 +99,13 @@ dapp?: FeedDapp | null,
  * and joins them with " · ". Decided here for every row, so no shell
  * keeps its own "status · site/contract/chain" rule.
  */
-subtitle: Array<FeedLine>, };
+subtitle: Array<FeedLine>, 
+/**
+ * The row's own figure is money, so it draws as the mask while the
+ * balance is hidden ([`super::privacy::figure_maskable`]): an amount, a
+ * batch's count, a capped allowance. `false` for an unlimited allowance
+ * (a risk to see) and for a row with no figure. Decided in the view;
+ * what the model holds is not read. A dApp row's `received` masks
+ * whenever the balance is hidden, whatever this says.
+ */
+figure_maskable: boolean, };

@@ -4168,6 +4168,28 @@ export function identiconSvgCircular(seed) {
 }
 
 /**
+ * Every operation in flight on this device: the tracker's view (JSON) in, an
+ * `InFlightOp` JSON array out. Forward it on every tracker render to the send
+ * and signing machines (`InFlightOps`). See `vela_core::app::tx_tracker`.
+ * @param {string} track_view_json
+ * @returns {string}
+ */
+export function inFlightOps(track_view_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(track_view_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.inFlightOps(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {Uint8Array}
  */

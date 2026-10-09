@@ -5,6 +5,7 @@ import type { FailureKind } from "./FailureKind";
 import type { Registration } from "./Registration";
 import type { RegistryProof } from "./RegistryProof";
 import type { RegistryUnitMember } from "./RegistryUnitMember";
+import type { VerifiedBy } from "./VerifiedBy";
 
 /**
  * What the shell observed. Failures arrive as *variants*, never as exceptions:
@@ -27,7 +28,16 @@ message: string | null, } | { "type": "accounts_loaded", accounts: Array<Account
  * The ids of the groups (Units) this key is a founding member of,
  * ascending. Empty for a registered key predating groups.
  */
-unit_ids: Array<number>, } | { "type": "registry_unit", metadata_hex: string, members: Array<RegistryUnitMember>, } | { "type": "index_failed", message: string, 
+unit_ids: Array<number>, 
+/**
+ * Who vouched for this answer — the resolver's `Done.verified_by`,
+ * passed through untouched. Only `gnosis` (the record's home) can
+ * make a "no record" or a "registered, no groups" answer a verdict;
+ * anything else is "nobody could say". Absent reads `none`: a shell
+ * that predates the field fails closed (no rebuild is offered on an
+ * answer nobody checked).
+ */
+verified_by: VerifiedBy, } | { "type": "registry_unit", metadata_hex: string, members: Array<RegistryUnitMember>, } | { "type": "index_failed", message: string, 
 /**
  * True when the request never reached the server (transport failure or
  * abort). Only the shell can tell that from a 4xx, so this one bit of

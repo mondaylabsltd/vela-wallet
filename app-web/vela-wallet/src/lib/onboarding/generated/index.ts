@@ -25,3 +25,4 @@ export * from './SignInKey';
 export * from './SigningVenue';
 export * from './StatusKey';
 export * from './SubmitLabel';
+export * from './VerifiedBy';

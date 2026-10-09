@@ -4,4 +4,4 @@
  * The two error wordings the confirm screen may show (invariant ⑮: semantic
  * keys only — a raw RPC/library message never reaches this enum).
  */
-export type SendTxErrorKey = "generic" | "bundler_fund" | "venue_blocked";
+export type SendTxErrorKey = "generic" | "previous_pending" | "bundler_fund" | "venue_blocked";

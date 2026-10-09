@@ -51,4 +51,12 @@ no_coin_pays: boolean,
  * does the same. `#[serde(default)]`: a reader that predates it reads
  * `false`.
  */
-nothing_to_pay_from: boolean, };
+nothing_to_pay_from: boolean, 
+/**
+ * The figure on screen was switched to another coin and is being
+ * measured again with that coin's fee leg ([`Origin::Remeasure`]): drawn
+ * as it is, with the measuring sign, and never confirmable until the
+ * new figure lands (`busy` holds meanwhile too). `#[serde(default)]`: a
+ * reader that predates it reads `false`.
+ */
+provisional: boolean, };

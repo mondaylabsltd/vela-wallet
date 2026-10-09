@@ -968,6 +968,13 @@ export function identiconSvg(seed: string): string;
  */
 export function identiconSvgCircular(seed: string): string;
 
+/**
+ * Every operation in flight on this device: the tracker's view (JSON) in, an
+ * `InFlightOp` JSON array out. Forward it on every tracker render to the send
+ * and signing machines (`InFlightOps`). See `vela_core::app::tx_tracker`.
+ */
+export function inFlightOps(track_view_json: string): string;
+
 export function keccak256(data: Uint8Array): Uint8Array;
 
 /**
@@ -1721,6 +1728,7 @@ export interface InitOutput {
     readonly identiconParams: (a: number, b: number) => [number, number, number];
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
+    readonly inFlightOps: (a: number, b: number) => [number, number];
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];

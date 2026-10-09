@@ -28,4 +28,12 @@ auto_fee_token: boolean,
  * ([`FeeOptionView::short`], issue 408). `#[serde(default)]`: a
  * shell that does not send it reads `1,234.56`.
  */
-number: NumberPreset, } | { "type": "select_fee_asset", token: string | null, } | { "type": "requote" } | { "type": "leave_confirm" } | { "type": "chain_changed", chain_id: number, } | { "type": "quote_expired" } | { "type": "balance_changes_measured", changes: Array<FeeBalanceChange>, };
+number: NumberPreset, 
+/**
+ * Read the account's deployment here, first
+ * ([`FeeOperation::ReadDeployment`]), instead of trusting `deployed`
+ * — the read's failure is then the fee's, with the fee's words and
+ * retry (issue #483). Absent (or `false`): the shell reads the
+ * deployment itself and passes `deployed`, as before.
+ */
+read_deployment?: boolean, } | { "type": "select_fee_asset", token: string | null, } | { "type": "requote" } | { "type": "leave_confirm" } | { "type": "chain_changed", chain_id: number, } | { "type": "quote_expired" } | { "type": "balance_changes_measured", changes: Array<FeeBalanceChange>, };

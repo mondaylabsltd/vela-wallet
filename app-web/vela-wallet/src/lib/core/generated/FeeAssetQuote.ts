@@ -44,4 +44,17 @@ usd_price: string | null,
  * `#[serde(default)]`: a shell with no price to offer simply omits it and
  * gets exactly the answer it got before issue 682.
  */
-native_usd_floor_price: string | null, };
+native_usd_floor_price: string | null, 
+/**
+ * The relay's own minimum for this row, in base units (`minimumAmount`
+ * on `vela_getInBandGasQuote`, relay `fix/held-nonce-and-floor` §3) —
+ * passed through as the relay wrote it, a hex quantity (a decimal
+ * string reads too). Native: exactly $0.01 of the coin at the relay's
+ * price, or its 0.000001-coin safety floor when it has none; a
+ * stablecoin: 0.01 of it. When present, the wallet floors at THIS, not
+ * at its own 0.00001-coin rule, which on a coin dearer than $1,000 was
+ * more than a cent. `#[serde(default)]`: an older (or self-hosted) relay
+ * publishes none, and today's rule stands — it is what such a relay
+ * admits.
+ */
+minimum_amount: string | null, };
