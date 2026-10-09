@@ -425,6 +425,14 @@ enum SigningPageNames {
         return parsed.port.map { "\(host):\($0)" } ?? host
     }
 
+    /// The host to draw under (or beside) a page's name — `nil` when the name
+    /// already says it ("Self-hosted · sign.example.com"), so a row never
+    /// names the same address twice.
+    static func hostLine(url: String, name: String) -> String? {
+        let host = host(url)
+        return name.contains(host) ? nil : host
+    }
+
     /// Is `url` Vela's official page?
     static func isOfficial(_ url: String) -> Bool {
         SignerPageChecks.key(url) == SignerPageChecks.key(trustedSignerDefaultUrl())

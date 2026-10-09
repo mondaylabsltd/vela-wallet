@@ -401,13 +401,15 @@ extension SignerIntegrityLine {
     }
 
     /// How the line is drawn: a quiet check for a page that may open, a
-    /// warning for one that will not, and a spinner while the check runs.
+    /// warning for one that will not, and a spinner while the check runs. A
+    /// self-hosted build asking to be trusted is a question for the person —
+    /// cautioned, never drawn as a refusal.
     var tone: SignerIntegrityTone {
         switch state {
         case .checking: .checking
         case .matches, .trustedHere: .ok
-        case .unchecked: .caution
-        case .mismatch, .blocked, .askToTrust, .couldNotCheck, .noVersion, .allBlocked: .refused
+        case .unchecked, .askToTrust: .caution
+        case .mismatch, .blocked, .couldNotCheck, .noVersion, .allBlocked: .refused
         }
     }
 }

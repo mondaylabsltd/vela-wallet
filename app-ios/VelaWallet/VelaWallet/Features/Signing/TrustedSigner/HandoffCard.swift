@@ -56,11 +56,20 @@ struct IntegrityLineView: View {
             glyph
                 .frame(width: LucideIconSize.rowGlyph)
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + Tokens.Space.s4 }
-            words
-                .typeRole(Typography.flowCaption)
-                .foregroundStyle(line.tone == .refused ? theme.errorBase : theme.fgMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("integrity.\(Self.id(line.state))")
+            ZStack(alignment: .topLeading) {
+                // Two lines' room — what a verdict usually takes — so the
+                // check landing ("checking" → "… checked 14:32") does not
+                // move what is under it.
+                Text(verbatim: "\u{00A0}\n\u{00A0}")
+                    .typeRole(Typography.flowCaption)
+                    .hidden()
+                    .accessibilityHidden(true)
+                words
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(line.tone == .refused ? theme.errorBase : theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("integrity.\(Self.id(line.state))")
+            }
         }
     }
 
@@ -229,16 +238,16 @@ struct HandoffCardView: View {
 
             // What is trusted, in one place: the page, and what was checked.
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-                HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
-                    Text(model.pageName)
-                        .typeRole(Typography.bodyStrong)
-                        .foregroundStyle(theme.fgBase)
-                    if model.pageName != model.page {
-                        Text(model.page)
-                            .typeRole(Typography.monoSmall)
-                            .foregroundStyle(theme.fgSubtle)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                // The name, and the host beside it — under it when the two do
+                // not fit on one line; never the host twice.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                        pageName.fixedSize()
+                        pageHost.fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                        pageName
+                        pageHost
                     }
                 }
                 if let fee = model.fee {
@@ -290,6 +299,22 @@ struct HandoffCardView: View {
         .padding(.top, Tokens.Space.s16)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("handoff.card")
+    }
+
+    private var pageName: some View {
+        Text(model.pageName)
+            .typeRole(Typography.bodyStrong)
+            .foregroundStyle(theme.fgBase)
+    }
+
+    @ViewBuilder private var pageHost: some View {
+        if !model.pageName.contains(model.page) {
+            Text(model.page)
+                .typeRole(Typography.monoSmall)
+                .foregroundStyle(theme.fgSubtle)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
     }
 
     private var mark: some View {

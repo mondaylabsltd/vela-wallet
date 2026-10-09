@@ -299,8 +299,10 @@ private struct SigningPageSettingsRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Tokens.Space.s12) {
+            // One accent on the page (D7): the official page's lock is a
+            // shape, not a colour.
             LucideIcon(row.official ? .lock : .globe, size: LucideIconSize.action)
-                .foregroundStyle(row.official ? theme.accentBase : theme.fgMuted)
+                .foregroundStyle(theme.fgMuted)
                 .frame(width: LucideIconSize.action)
                 .padding(.top, Tokens.Space.s2)
                 .accessibilityHidden(true)
@@ -309,11 +311,13 @@ private struct SigningPageSettingsRow: View {
                     .typeRole(Typography.fieldLabel)
                     .fontWeight(.semibold)
                     .foregroundStyle(theme.fgBase)
-                Text(row.host)
-                    .typeRole(Typography.monoSmall)
-                    .foregroundStyle(theme.fgMuted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                if let host = SigningPageNames.hostLine(url: row.url, name: row.title) {
+                    Text(host)
+                        .typeRole(Typography.monoSmall)
+                        .foregroundStyle(theme.fgMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
                 Text(row.domainLine)
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.fgSubtle)
@@ -443,9 +447,12 @@ private struct VenueChoiceRow: View {
                         Text(row.title)
                             .typeRole(Typography.rowTitle)
                             .foregroundStyle(theme.fgBase)
-                        Text(row.subtitle)
-                            .typeRole(row.venue == .inVela ? Typography.flowCaption : Typography.monoSmall)
-                            .foregroundStyle(theme.fgMuted)
+                        // A page's host, unless its name already says it.
+                        if row.venue == .inVela || !row.title.contains(row.subtitle) {
+                            Text(row.subtitle)
+                                .typeRole(row.venue == .inVela ? Typography.flowCaption : Typography.monoSmall)
+                                .foregroundStyle(theme.fgMuted)
+                        }
                         if row.reason == nil, let line = row.line {
                             IntegrityLineView(loc: loc, line: line)
                                 .padding(.top, Tokens.Space.s2)

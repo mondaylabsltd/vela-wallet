@@ -214,10 +214,13 @@ struct SigningPageChoiceRow: View {
                     Text(choice.title)
                         .typeRole(Typography.rowTitle)
                         .foregroundStyle(theme.fgBase)
-                    Text(choice.subtitle)
-                        .typeRole(choice.url == nil ? Typography.flowCaption : Typography.monoSmall)
-                        .foregroundStyle(theme.fgMuted)
-                        .lineLimit(2)
+                    // A page's host, unless its name already says it.
+                    if choice.url == nil || !choice.title.contains(choice.subtitle) {
+                        Text(choice.subtitle)
+                            .typeRole(choice.url == nil ? Typography.flowCaption : Typography.monoSmall)
+                            .foregroundStyle(theme.fgMuted)
+                            .lineLimit(2)
+                    }
                     if let domain = choice.domainLine {
                         Text(domain)
                             .typeRole(Typography.flowCaption)
@@ -261,9 +264,11 @@ struct ChosenSigningPageCard: View {
                 Text(choice.title)
                     .typeRole(Typography.rowTitle)
                     .foregroundStyle(theme.fgBase)
-                Text(choice.subtitle)
-                    .typeRole(Typography.monoSmall)
-                    .foregroundStyle(theme.fgMuted)
+                if !choice.title.contains(choice.subtitle) {
+                    Text(choice.subtitle)
+                        .typeRole(Typography.monoSmall)
+                        .foregroundStyle(theme.fgMuted)
+                }
                 if let domain = choice.domainLine {
                     Text(domain)
                         .typeRole(Typography.flowCaption)
