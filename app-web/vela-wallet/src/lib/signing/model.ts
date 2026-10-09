@@ -366,7 +366,8 @@ export interface SigningModel {
 	 * Spec 102 (D4): this account reviews and signs on a trusted page, so the
 	 * sheet is a HAND-OFF, not a second preview — the page is the authority,
 	 * and two previews that could disagree left people unsure which to trust.
-	 * Drawn instead of the body; `blocks` stay empty. Only the apps open pages
+	 * Drawn instead of the preview; `blocks` stay empty, while the fee row and
+	 * the signing account stay above the card (D-18). Only the apps open pages
 	 * (P2-05); the web never sets this, and the gallery draws it as the design
 	 * the phones build to.
 	 */
@@ -375,18 +376,22 @@ export interface SigningModel {
 	panelTitle: string;
 }
 
-/** The hand-off card (spec 102, D4): the key, the page, what was checked, Open. */
+/**
+ * The hand-off card (spec 102, D4): the key, the page, what was checked, Open.
+ *
+ * No fee: the sheet's own fee row — with its speed control and fee-coin
+ * picker — stays on screen above the card, where the fee was chosen before
+ * the page opens (D-18), so the fee is said once on the screen.
+ */
 export interface HandoffModel {
-	/** "Review and sign on your trusted page". */
+	/** "Review and sign on a trusted signing page". */
 	title: string;
-	/** "Confirm with {{key}}" — the sign-in key's name, or its place (`SigningPlan.key_label`). */
-	key: string;
 	/**
-	 * The fee and speed chosen on the sheet, as one quiet row — the core's
-	 * `handoff_fee`, absent while the fee is not settled for the speed in
-	 * force. No control: a different fee is a different operation (D-18).
+	 * The key row, drawn as the sheet's own label | value rows
+	 * (「确认方式 | 手机或平板」): `label` is `KeyLabel.label_key`'s words, `value`
+	 * the key's own name or, failing that, its place (`SigningPlan.key_label`).
 	 */
-	fee?: { label: string; value: string };
+	key: { label: string; value: string };
 	/** The page that opens: its name ("Vela's official signing page", or the person's) and host. */
 	page: { name: string; host: string };
 	/** The one line that backs the word "trusted" (R6). */

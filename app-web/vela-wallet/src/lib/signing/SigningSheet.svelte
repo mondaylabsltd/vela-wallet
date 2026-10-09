@@ -1,7 +1,6 @@
 <script lang="ts">
 	import SigningHeader from './ui/SigningHeader.svelte';
 	import SigningBody from './ui/SigningBody.svelte';
-	import HandoffCard from './ui/HandoffCard.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -97,10 +96,9 @@
 		closeDisabled={!dismissible}
 		onclose={onclose && !model.dismissOnly ? closeNow : undefined}
 	/>
-	{#if model.handoff}
-		<!-- Spec 102 (D4): reviewed on the trusted page — a hand-off, not a preview. -->
-		<HandoffCard handoff={model.handoff} onopen={onopenpage} />
-	{:else if model.status}
+	<!-- Spec 102 (D4): a hand-off is drawn by the body, under the sheet's own
+	     fee row and signing account (`SigningBody`). -->
+	{#if model.status && model.handoff === undefined}
 		<div class="status" data-testid="signing-status" aria-live="polite">
 			<StatusHero
 				stage={model.status.stage}
@@ -134,6 +132,7 @@
 			{onspeed}
 			{onspeedpick}
 			{onfeerefresh}
+			{onopenpage}
 		/>
 	{/if}
 </BottomSheet>

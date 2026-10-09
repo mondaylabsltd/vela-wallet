@@ -17,8 +17,6 @@ import type { SigningPlan } from '$lib/core/generated/SigningPlan';
 import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { HandoffFee } from '$lib/core/generated/HandoffFee';
 import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
@@ -776,20 +774,6 @@ export function signerIntegrityTime(
 		formats.time,
 		language
 	);
-}
-
-/**
- * The hand-off card's quiet fee + speed row (`sign_confirm::handoff_fee`,
- * D-18) from the SAME fee and speed views the sheet drives, or `null` for no
- * row (the fee is not settled for the speed in force). The web draws no
- * hand-off card; its gallery boards do.
- */
-export function handoffFeeRow(fee: FeeView | null, speed: FeeSpeedView | null): HandoffFee | null {
-	const row = wasm.handoffFeeRow(
-		fee === null ? undefined : JSON.stringify(fee),
-		speed === null ? undefined : JSON.stringify(speed)
-	);
-	return row === undefined ? null : (JSON.parse(row) as HandoffFee);
 }
 
 // ---------------------------------------------------------------------------

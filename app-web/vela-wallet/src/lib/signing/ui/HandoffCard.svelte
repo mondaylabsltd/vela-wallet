@@ -7,11 +7,14 @@
 	 * and is the authority; a second summary here, drawn from the app's own
 	 * (many-library) reading, could disagree with it and leave a person unsure
 	 * which to believe. So the card says four things and nothing else: that the
-	 * request is reviewed on the page, which key will confirm it, the one line
-	 * that backs the word "trusted" (what was checked, and when), and Open —
-	 * which a page that failed its check never gets. Under the key, one quiet
-	 * row restates the fee and speed the sheet settled (D-18) — no control:
-	 * the page signs the operation as it was priced.
+	 * request is reviewed on the page, which key will confirm it (a row, as the
+	 * sheet draws "Signing account": 「确认方式 | 手机或平板」), the one line that
+	 * backs the word "trusted" (what was checked, and when), and Open — which a
+	 * page that failed its check never gets.
+	 *
+	 * No fee: the sheet's own fee row stays above the card, where the fee and
+	 * speed are chosen before the page opens (D-18), so the screen says the fee
+	 * once.
 	 *
 	 * After Open it is a wait: where to look, and a way back to the page.
 	 */
@@ -27,6 +30,11 @@
 	}
 
 	let { handoff, onopen }: Props = $props();
+
+	/** The page's host, unless its name already says it ("Self-hosted · sign.example.com"). */
+	const host = $derived(
+		handoff.page.name.includes(handoff.page.host) ? undefined : handoff.page.host
+	);
 </script>
 
 <section class="handoff" aria-labelledby="handoff-title">
@@ -35,25 +43,27 @@
 		><Icon
 			icon={handoff.integrity.tone === 'ok'
 				? UTILITY_ICONS['shield-check']
-				: UTILITY_ICONS['triangle-alert']}
+				: handoff.integrity.tone === 'checking'
+					? UTILITY_ICONS.clock
+					: UTILITY_ICONS['triangle-alert']}
 			size="xl"
 		/></span
 	>
 	<h2 id="handoff-title" class="title">{handoff.waiting?.title ?? handoff.title}</h2>
-	<p class="key">{handoff.waiting?.hint ?? handoff.key}</p>
-	{#if handoff.fee !== undefined && handoff.waiting === undefined}
-		<!-- What the sheet settled, restated; no control (D-18). -->
-		<p class="fee">
-			<span class="fee-label">{handoff.fee.label}</span>
-			<span class="fee-value">{handoff.fee.value}</span>
-		</p>
+	{#if handoff.waiting}
+		<p class="hint">{handoff.waiting.hint}</p>
+	{:else}
+		<!-- The sheet's own row, label | value — "Signing account" is drawn so. -->
+		<div class="key">
+			<span class="key-label">{handoff.key.label}</span>
+			<span class="key-value">{handoff.key.value}</span>
+		</div>
 	{/if}
 
 	<div class="page">
 		<span class="where">
 			<span class="name">{handoff.page.name}</span>
-			{#if handoff.page.name !== handoff.page.host}<span class="host">{handoff.page.host}</span
-				>{/if}
+			{#if host !== undefined}<span class="host">{host}</span>{/if}
 		</span>
 		<IntegrityLine line={handoff.integrity} />
 	</div>
@@ -97,6 +107,12 @@
 		color: var(--color-success-base);
 	}
 
+	/* A check still running: no verdict, so no colour. */
+	.mark[data-tone='checking'] {
+		background: var(--color-bg-sunken);
+		color: var(--color-fg-subtle);
+	}
+
 	.mark[data-tone='warn'] {
 		background: var(--color-warning-soft);
 		color: var(--color-warning-base);
@@ -115,27 +131,35 @@
 		color: var(--color-fg-base);
 	}
 
-	.key {
+	.hint {
 		margin: 0;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		color: var(--color-fg-muted);
 	}
 
-	.fee {
+	/* The signing sheet's label | value row (`SignerRow`): same sizes, colours
+	   and alignment, across the card's whole width. */
+	.key {
 		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		column-gap: var(--space-md);
-		margin: 0;
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
+		align-self: stretch;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-lg);
+		margin-block-start: var(--space-lg);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		text-align: start;
 	}
 
-	.fee-value {
+	.key-label {
 		color: var(--color-fg-muted);
-		font-variant-numeric: tabular-nums;
+	}
+
+	.key-value {
+		min-width: 0;
+		color: var(--color-fg-base);
+		text-align: end;
+		overflow-wrap: anywhere;
 	}
 
 	/* What is trusted, in one place: the page and what was checked about it. */

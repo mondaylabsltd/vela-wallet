@@ -357,29 +357,26 @@ function venueBlockWords(k: (key: string) => string): Record<VenueBlockKey, stri
 export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
+	const table = (keys: string[]) => Object.fromEntries(keys.map((key) => [key, k(key)]));
 	return {
 		title: k('componentsUi.signing.handoffTitle'),
-		key: k('componentsUi.signing.handoffKey'),
+		// The labels a `KeyLabel.label_key` can name (the core's
+		// `CONFIRM_WITH_LABEL` / `NEW_KEY_ON_LABEL`).
+		keyLabels: table([
+			'componentsUi.signing.confirmWithLabel',
+			'componentsUi.signing.newKeyOnLabel'
+		]),
 		open: k('componentsUi.signing.openSigner'),
 		waiting: k('componentsUi.signing.trustedSignerWaiting'),
 		waitingHint: k('componentsUi.signing.trustedSignerWaitingHint'),
 		reopen: k('componentsUi.signing.trustedSignerReopen'),
 		official: k('settings.signing.pageOfficial'),
 		integrity: resolveSettingsMessages(locale).integrity,
-		places: Object.fromEntries(
-			[
-				'onboarding.create.methodPlatformTitle',
-				'onboarding.create.methodHybridTitle',
-				'onboarding.create.methodSecurityKeyTitle'
-			].map((key) => [key, k(key)])
-		),
-		feeLabel: k('componentsUi.gas.networkFee'),
-		tiers: Object.fromEntries(
-			['fast', 'standard', 'slow'].map((tier) => [
-				`send.gasTier.${tier}`,
-				k(`send.gasTier.${tier}`)
-			])
-		)
+		places: table([
+			'onboarding.create.methodPlatformTitle',
+			'onboarding.create.methodHybridTitle',
+			'onboarding.create.methodSecurityKeyTitle'
+		])
 	};
 }
 

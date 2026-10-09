@@ -25,10 +25,14 @@ import type { SettingsMessages } from '$lib/settings/messages';
  * signing host carries). The apps draw the same card from the same keys.
  */
 export interface HandoffMessages {
-	/** "Review and sign on your trusted page". */
+	/** "Review and sign on a trusted signing page". */
 	title: string;
-	/** "Confirm with {{key}}". */
-	key: string;
+	/**
+	 * The key row's label, by the corpus key a `KeyLabel` names (`label_key`):
+	 * 「确认方式」 / "Confirm with" — and 「新钥匙存在」 / "New key on" while a
+	 * ceremony makes the key. The signing page's own row labels.
+	 */
+	keyLabels: Record<string, string>;
 	/** Open — the sheet's "Continue to signing page". */
 	open: string;
 	/** After Open: "Waiting for the signing page…", where to look, and the way back. */
@@ -40,13 +44,10 @@ export interface HandoffMessages {
 	integrity: SettingsMessages['integrity'];
 	/**
 	 * The three places a key lives, by the corpus key a `KeyLabel` names
-	 * (`place_key`) — "Confirm with Phone or tablet" for a key that carries
-	 * the wallet's name (D-17).
+	 * (`place_key`) — the key row's value for a key that carries the wallet's
+	 * name (D-17).
 	 */
 	places: Record<string, string>;
-	/** The quiet fee + speed row (D-18): its label and the speeds' names, by `tier_key`. */
-	feeLabel: string;
-	tiers: Record<string, string>;
 }
 
 export interface SigningMessages {
