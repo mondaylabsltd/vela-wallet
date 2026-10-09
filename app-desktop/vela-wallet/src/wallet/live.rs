@@ -156,8 +156,10 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
 
     // Nothing could be read and nothing is known (`unreachable`: a fetch that
     // threw, or a round where every chain it asked failed, with no cache):
-    // a skeleton and the reason, never a settled-looking $0.00 — the core
-    // still hands a zero total then, since the round did end.
+    // a skeleton and the reason, never a settled-looking $0.00. The core's
+    // figure is `None` then too (PR 2 polish); `unreachable` is still read
+    // here, so a cached total can never stand in for a round that read
+    // nothing.
     let known = (!view.unreachable)
         .then(|| view.display_total_usd.or(view.cached_total_usd))
         .flatten();
@@ -422,8 +424,13 @@ pub fn balance_detail(
         &s.detail_total,
         "amount",
         &match total {
-            Some(usd) if !view.hidden => money.text(usd, locale),
-            _ => crate::wallet::fixtures::MASK.to_owned(),
+            _ if view.hidden => crate::wallet::fixtures::MASK.to_owned(),
+            Some(usd) => money.text(usd, locale),
+            // Nothing read and nothing kept — the core hands no figure while
+            // `unreachable` (PR 2 polish), where it used to hand a zero this
+            // line printed as "$0.00": the dash, which is no amount, and not
+            // the privacy mask, which hides one.
+            None => "—".to_owned(),
         },
     );
 
@@ -715,6 +722,10 @@ mod tests {
         // "Deposit your first asset" under it.
         let nothing = run_cached(None, &settled(vec![1, 56], vec![1, 56]));
         assert!(nothing.unreachable, "the core says nothing is known");
+        assert_eq!(nothing.display_total_usd, None, "no figure, not a zero");
+        let detail = balance_detail(&nothing, &s, "en", money);
+        assert!(!detail.summary.contains('0'), "{}", detail.summary);
+        assert!(detail.summary.contains('—'), "{}", detail.summary);
         let hero = balance(&nothing, &s, "en", money);
         assert_eq!(hero.state, crate::wallet::fixtures::BalanceState::Loading);
         assert!(hero.integer.is_empty(), "no figure: {}", hero.integer);
@@ -729,6 +740,7 @@ mod tests {
         // A chain down beside it instead: still nothing known, the network's line.
         let down = run_cached(None, &settled(vec![1, 56], Vec::new()));
         assert!(down.unreachable);
+        assert_eq!(down.display_total_usd, None);
         assert!(balance(&down, &s, "en", money).integer.is_empty());
         assert!(!assets_strip_empty(&down, None));
         // One chain answered with nothing: a real zero, and the empty strip.
