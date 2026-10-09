@@ -61,9 +61,22 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // The answer goes to the Vela wallet and nowhere else (spec 102 R7, Phase
+    // 0). Every earlier page signs for whoever opens it: a signature's answer
+    // went to any `cb=` the link named and to any postMessage opener, so a
+    // phishing site could open the real page with its own operation and
+    // receive a usable signature. This one answers only to
+    // `velawallet://sign-result` (signatures and every ceremony on the URL
+    // channel), sends nothing anywhere else, and does nothing inside a frame
+    // (the host adds `frame-ancestors 'none'` and `X-Frame-Options: DENY`).
+    // LAUNCH (spec 102 Phase 0) — valid only once `dist/` is deployed and
+    // `/b/364b8737…/sign` answers 200 + immutable with these bytes.
+    "364b8737d0646aa87be17162bf8af6621e1aeb31f8f96d19a7613edf562c2b23",
     // Both of the next two, in one page: 085's typed-data reader and 082's
     // site and plain-send fixes (the merge of the two branches, 2026-10-01).
-    // LAUNCH since 2026-10-01: deployed, 200 + immutable, bytes hash to it.
+    // LAUNCH from 2026-10-01 until 364b8737 (spec 102): deployed, 200 +
+    // immutable, bytes hash to it. Still answers any `cb=` — kept so a build
+    // that knows only this hash keeps working.
     "0ba8ee8cc9bb7490a1f31d9d2059a93f6796beec6185a8b76e3db0184b290242",
     // The preview and the digest read a typed-data request's ONE document by
     // the same strict reader, and refuse two documents, a missing account or
@@ -152,7 +165,7 @@ pub const ENFORCE: bool = true;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "0ba8ee8cc9bb7490a1f31d9d2059a93f6796beec6185a8b76e3db0184b290242";
+pub const LAUNCH: &str = "364b8737d0646aa87be17162bf8af6621e1aeb31f8f96d19a7613edf562c2b23";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).

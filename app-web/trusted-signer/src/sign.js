@@ -129,7 +129,7 @@
     // rather than a name the requester handed over.
     waitingState.requesterVerified = !!(session && session.channel === 'post')
       || !!(session && session.channel === 'ext')
-      || !!(session && session.channel === 'url' && ns.resolve.answersToWallet({ callback: session.callback }));
+      || !!(session && ns.resolve.answersToWallet({ channel: session.channel, callback: session.callback }));
     window.__slider = null;
     draw(ns.render.waiting(waitingState));
     phase('waiting');
@@ -209,6 +209,13 @@
 
   function confirmSigning(request, digest, slider, context) {
     if (request.answered || request.busy) return;
+    // Spec 102 R7 once more, at the last moment before a passkey prompt: the
+    // card refused already if the answer would not reach the wallet, so this
+    // is unreachable unless that refusal is ever lost on the way here.
+    if (!ns.resolve.answersToWallet(context)) {
+      refused(request);
+      return;
+    }
     request.busy = true;
     slider.classList.add('slide-off');
     say('ui.waitingAuthenticator');
@@ -486,5 +493,29 @@
       });
   }
 
-  startSession();
+  /**
+   * Inside another page this page does nothing at all (spec 102 R7).
+   *
+   * A frame lets the page around it draw over this one — hide the card, cover
+   * it with its own words, lay a "continue" exactly where the slide is — while
+   * the passkey prompt still says Vela's domain. The host forbids framing
+   * (`frame-ancestors 'none'` and `X-Frame-Options: DENY` in `dist/_headers`);
+   * this covers a host that does not send those headers, and a browser that
+   * ignores them. Checked before the session opens, so the request in the
+   * address is never read, shown or answered.
+   */
+  function framed() {
+    try {
+      return window.top !== window.self;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  if (framed()) {
+    say('ui.framed');
+    phase('framed');
+  } else {
+    startSession();
+  }
 })(window.VelaCS);

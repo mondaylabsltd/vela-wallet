@@ -941,8 +941,13 @@ window.VelaCS = window.VelaCS || {};
     try { return new URL(url).protocol; } catch (e) { return ''; }
   }
 
-  /** The scheme a Vela wallet's answer goes back on (`trusted_signer::CALLBACK_URL`). */
-  var WALLET_SCHEME = 'velawallet:';
+  /**
+   * The one address this page sends an answer to: the Vela wallet on this
+   * device (`trusted_signer::CALLBACK_URL`, which every app passes). The whole
+   * address, not just the scheme — `velawallet://open?url=…` is the wallet
+   * too, and an answer appended to it would go wherever that link points.
+   */
+  var WALLET_CALLBACK = 'velawallet://sign-result';
 
   /**
    * Is the requester a Vela wallet? Three kinds of evidence count:
@@ -958,12 +963,13 @@ window.VelaCS = window.VelaCS || {};
    *    clients have — nothing can tell this page who opened it, and a fragment
    *    is no evidence: any site can open this page with one. But the page does
    *    know the address it will send the answer to, because sending it is what
-   *    the page will do. If that address is the wallet's own scheme, then
-   *    whoever asked, the answer reaches a Vela wallet and nobody else.
+   *    the page will do. If that address is the wallet's own
+   *    (`answersToWallet`), then whoever asked, the answer reaches a Vela
+   *    wallet and nobody else.
    *
    * Why that is protection and not a rubber stamp: somebody who wants the key
    * this page creates has to RECEIVE it, so they have to name a callback they
-   * can receive on. Name the wallet's scheme and the key goes to the wallet,
+   * can receive on. Name the wallet's address and the key goes to the wallet,
    * which is no use to them; name their own and this returns false. The way
    * round it is to register `velawallet://` on the device and win the
    * collision — which is precisely the limit the transport documents, and
@@ -974,16 +980,52 @@ window.VelaCS = window.VelaCS || {};
    */
   function walletRequester(ctx) {
     if (ctx.channel === 'ws' || ctx.channel === 'relay' || ctx.channel === 'ble') return true;
-    if (ctx.channel === 'url') return answersToWallet(ctx);
+    if (ctx.channel === 'url') return ns.resolve.answersToWallet(ctx);
     if (ctx.originVerified !== true || typeof ctx.requester !== 'string') return false;
     var host = hostOf(ctx.requester);
     if (LOOPBACK_HOST.test(host)) return true;
     return schemeOf(ctx.requester) === 'https:' && (host === 'getvela.app' || /\.getvela\.app$/.test(host));
   }
 
-  /** Will this request's answer go to a Vela wallet on this device? */
+  /**
+   * Will this request's answer reach the Vela wallet on this device, and
+   * nothing else? (spec 102 R7)
+   *
+   * Only the URL channel can say yes, and only when its answer address is
+   * exactly the wallet's. postMessage answers whoever opened this page — any
+   * site can — and the loopback socket is retired (the published page's
+   * `default-src 'none'` cannot open it).
+   *
+   * ONE rule, used everywhere the answer's destination matters: a signature
+   * is refused without it (`resolve`), so is every key ceremony on the URL
+   * channel (`walletRequester`), and lib/intake.js sends nothing — not even
+   * a refusal code — to an address it rejects. Everyone calls it as
+   * `ns.resolve.answersToWallet`, this file included, so the rule has one
+   * name. The desktop demo's harness page (`samples/loopback-sign.html`)
+   * replaces it with one that also accepts the demo's loopback listener;
+   * that file is outside `src/`, so no published page contains it
+   * (`build-single.mjs` reads only what `src/sign.html` names).
+   */
   function answersToWallet(ctx) {
-    return schemeOf(ctx.callback) === WALLET_SCHEME;
+    return !!ctx && ctx.channel === 'url' && ctx.callback === WALLET_CALLBACK;
+  }
+
+  /**
+   * Where a refused answer would have gone, in words a person can check — the
+   * host of a web address, the scheme and host of any other link, the site
+   * that opened the page — or null when there is nothing to name.
+   */
+  function answerDestination(ctx) {
+    var target = ctx.channel === 'url' ? ctx.callback
+      : ctx.channel === 'post' && ctx.originVerified === true ? ctx.requester
+      : null;
+    if (typeof target !== 'string' || !target) return null;
+    var parsed = null;
+    try { parsed = new URL(target); } catch (e) { return null; }
+    var shown = parsed.protocol === 'https:' || parsed.protocol === 'http:'
+      ? parsed.host
+      : parsed.protocol + '//' + parsed.host;
+    return shown && shown.length <= 80 && !UNREADABLE.test(shown) ? shown : null;
   }
 
   // Anything that could be the bytes to sign, anywhere the requester controls:
@@ -1037,7 +1079,7 @@ window.VelaCS = window.VelaCS || {};
       // and a self-reported name beside a mark reads as an identity the page
       // checked (owner, 2026-09-24: the page answers a `velawallet://` and
       // nothing else, so 「某个钱包」 and its logo were both inappropriate).
-      return answersToWallet(ctx)
+      return ns.resolve.answersToWallet(ctx)
         ? { originKey: 'value.answerToThisWallet', verified: true }
         : { origin: schemeOf(ctx.callback) || null, originKey: schemeOf(ctx.callback) ? null : 'value.answerToNobody', verified: false, elsewhere: true };
     }
@@ -1230,16 +1272,25 @@ window.VelaCS = window.VelaCS || {};
       view.refuse = true;
       view.risk = 'danger';
       view.warnings.push({ tone: 'danger', key: 'refuse.suppliedChallenge' });
+    } else if (ctx.channel === 'url' && !fromWallet) {
+      // On the url channel the answer goes to the address in the link, and
+      // this page sends one only to the wallet's (spec 102 R7; lib/intake.js
+      // sends nothing anywhere else). So EVERY ceremony is refused here, not
+      // only a create: a sign-in or a proof would raise a passkey prompt and
+      // then deliver nothing. The reason is where the answer would go, not
+      // who asked — on this channel nothing can prove who asked.
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({
+        tone: 'danger',
+        key: kind === 'create' ? 'refuse.createNotForWallet'
+          : kind === 'memberProof' ? 'refuse.memberNotForWallet'
+          : 'refuse.ceremonyNotForWallet',
+      });
     } else if ((kind === 'create' || kind === 'memberProof') && !fromWallet) {
       view.refuse = true;
       view.risk = 'danger';
-      // The reason has to be the real one for THIS channel: on the url channel
-      // nothing can prove who asked, so saying "nothing proves it" would send
-      // a person looking for proof that cannot exist.
-      var why = ctx.channel === 'url'
-        ? (kind === 'create' ? 'refuse.createNotForWallet' : 'refuse.memberNotForWallet')
-        : (kind === 'create' ? 'refuse.createNotWallet' : 'refuse.memberNotWallet');
-      view.warnings.push({ tone: 'danger', key: why });
+      view.warnings.push({ tone: 'danger', key: kind === 'create' ? 'refuse.createNotWallet' : 'refuse.memberNotWallet' });
     } else if (bad) {
       view.refuse = true;
       view.risk = 'danger';
@@ -1457,6 +1508,24 @@ window.VelaCS = window.VelaCS || {};
 
     if (!view.dapp.originVerified && view.dapp.origin) {
       view.warnings.push({ tone: 'caution', key: 'warn.claimedOrigin' });
+    }
+
+    // Spec 102 R7: a signature goes to the Vela wallet on this device and
+    // nowhere else. Any site can open this page with an operation of its
+    // choosing and its own answer address; the card would describe that
+    // operation truthfully, and a person who slid would hand a usable
+    // signature to whoever named the address. So nothing is offered — no
+    // slide, no passkey prompt — and the card says where the answer would
+    // have gone. Fails closed: a context that does not say the answer
+    // reaches the wallet is refused, previews included (they pass the
+    // address the apps send).
+    if (!ns.resolve.answersToWallet(ctx)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      var destination = answerDestination(ctx);
+      view.warnings.unshift(destination
+        ? { tone: 'danger', key: 'refuse.answerElsewhere', params: { to: destination } }
+        : { tone: 'danger', key: 'refuse.answerNotToWallet' });
     }
     return view;
   }

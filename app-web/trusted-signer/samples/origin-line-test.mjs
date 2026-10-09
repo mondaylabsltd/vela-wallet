@@ -52,7 +52,7 @@ const signing = (origin, dappName, extra = {}) => {
     params: [{ to: USDC, value: '0x0', data: transferCall }],
   };
   const ctx = {
-    account: ACCOUNT, chainId: 100, channel: 'url', originVerified: false,
+    account: ACCOUNT, chainId: 100, channel: 'url', callback: 'velawallet://sign-result', originVerified: false,
     ...(dappName === undefined ? {} : { dapp: { name: dappName, origin, source: 'vela_browser' } }),
     ...extra,
   };

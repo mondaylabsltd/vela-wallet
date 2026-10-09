@@ -21,9 +21,16 @@
     });
   }
 
-  // The JSON carries integers as strings — JSON has no bigint.
+  // The JSON carries integers as strings — JSON has no bigint. A case that
+  // names no channel is drawn as the apps send it: over the URL, answered to
+  // the wallet's own address. Without one the page refuses every signature
+  // (spec 102 R7), which is right for the page and useless for a gallery.
   function reviveContext(context) {
     var ctx = Object.assign({}, context);
+    if (ctx.channel === undefined) {
+      ctx.channel = 'url';
+      ctx.callback = 'velawallet://sign-result';
+    }
     if (typeof ctx.currentAllowance === 'string') ctx.currentAllowance = BigInt(ctx.currentAllowance);
     return ctx;
   }

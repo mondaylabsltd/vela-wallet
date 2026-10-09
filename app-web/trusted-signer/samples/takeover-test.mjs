@@ -68,7 +68,9 @@ function executeUserOp(to, data, operation) {
 }
 
 const tx = (to, data) => ({ method: 'eth_sendTransaction', origin: 'https://site.test', params: [{ to, data, value: '0x0' }] });
-const ctx = { account: ACCOUNT, chainId: 100 };
+// Over the URL, answered to the wallet's own address, as the apps send it —
+// otherwise every signature is refused for that alone (spec 102 R7).
+const ctx = { account: ACCOUNT, chainId: 100, channel: 'url', callback: 'velawallet://sign-result' };
 const refusal = (view, key) => view.refuse && view.warnings.some((w) => w.key === key);
 const noTakeover = (view) =>
   !view.warnings.some((w) => ['refuse.selfCall', 'refuse.delegateCall', 'refuse.safeTx'].includes(w.key));
