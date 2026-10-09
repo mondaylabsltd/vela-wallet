@@ -390,6 +390,7 @@ describe('liveAccountsSheet', () => {
 				rows,
 				activeIndex: 1,
 				balances,
+				hidden: false,
 				currency: usd,
 				identicon: (a) => `<svg data-seed="${a}"/>`
 			},
@@ -410,10 +411,33 @@ describe('liveAccountsSheet', () => {
 	it('leaves an unpriced row blank rather than inventing a figure', async () => {
 		const { liveAccountsSheet } = await import('./live');
 		const sheet = liveAccountsSheet(
-			{ rows, activeIndex: 0, balances: new Map(), currency: usd, identicon: () => '' },
+			{
+				rows,
+				activeIndex: 0,
+				balances: new Map(),
+				hidden: false,
+				currency: usd,
+				identicon: () => ''
+			},
 			m.accounts
 		);
 		expect(sheet.rows.map((r) => r.amount)).toEqual(['', '']);
+	});
+
+	it('hidden: every row and the total are the mask — even a figure somebody still holds', async () => {
+		const { liveAccountsSheet } = await import('./live');
+		const { MASK } = await import('$lib/wallet/fixtures');
+		const balances = new Map<string, number>([[rows[0]!.account.address.toLowerCase(), 3262.4]]);
+		const sheet = liveAccountsSheet(
+			{ rows, activeIndex: 0, balances, hidden: true, currency: usd, identicon: () => '' },
+			m.accounts
+		);
+		expect(sheet.rows.map((r) => r.amount)).toEqual([MASK, MASK]);
+		expect(sheet.summary).toContain(MASK);
+		expect(sheet.summary).not.toContain('3,262');
+		expect(sheet.summary).not.toContain('3262');
+		// The count is not money: it stays.
+		expect(sheet.summary).toContain('2');
 	});
 });
 
@@ -573,7 +597,7 @@ describe('the unreachable-networks list (spec 092)', () => {
 		unreachable_key: key,
 		holdings_loading: false,
 		cached_total_usd: null,
-		switcher: { open: false, loading: false, balances: [] }
+		switcher: { open: false, loading: false, balances: [], hidden: false }
 	});
 	const three = [
 		row(1, 'assets.lastSeen', 4500),

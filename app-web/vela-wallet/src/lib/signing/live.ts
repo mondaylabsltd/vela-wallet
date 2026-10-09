@@ -708,7 +708,12 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// refresh control, turning while a measurement is out — the same generic
 	// busy flag the "estimating" value reads, so the row can never claim to be
 	// both settled and measuring. The chevron only where a tap opens a list.
-	const refresh = { refreshLabel: m.feeRefresh, refreshing: fee.busy, chevron: choosable };
+	// A figure switched to another coin and not yet measured with that coin's
+	// fee leg (`provisional`, correctness batch item 4 — a chip tap or the
+	// sheet's own re-pick) is drawn as it is, with the measuring sign, until
+	// the new figure lands; the core's gate holds the confirm meanwhile.
+	const measuring = fee.busy || fee.provisional;
+	const refresh = { refreshLabel: m.feeRefresh, refreshing: measuring, chevron: choosable };
 	// Spec 079: WHY there is no fee, when it is something a retry can clear,
 	// and that the sheet will ask again by itself (`FeeRequoteTimer`, on the
 	// core's schedule). Spec 082 RJ13: the CORE picks the words
@@ -818,9 +823,9 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	const selected = fee.options.find((option) => option.selected);
 	const warning = fee.no_coin_pays
 		? m.feeNoCoinPays
-		: !fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
+		: !measuring && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
 			? fill(m.feeShort, { sym: selected.symbol })
-			: !fee.busy && selected?.spent_by_operation === true
+			: !measuring && selected?.spent_by_operation === true
 				? fill(m.feeCoinSpent, { sym: selected.symbol })
 				: undefined;
 	return {
@@ -834,7 +839,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		...refresh,
 		// The send form's rule (spec 068): a quote past its TTL is OLD, not
 		// wrong — said calmly, and not while a fresh measurement is out.
-		staleNote: fee.stale && !fee.busy ? m.feeStale : undefined
+		staleNote: fee.stale && !measuring ? m.feeStale : undefined
 	};
 }
 

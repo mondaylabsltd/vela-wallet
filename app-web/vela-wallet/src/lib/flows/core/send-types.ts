@@ -125,13 +125,18 @@ export type SendFeeQuoteOutcome = SendFeeOutcome | { type: 'failed'; kind: FeeFa
 
 /**
  * The fee port's answer in the send core's vocabulary: a chain read that got
- * no answer (`ChainRead`) is, for the send form, a quote it could not get.
+ * no answer (`ChainRead`) is, for the send form, a quote it could not get. Two
+ * fee failures have no send word: a fault inside Vela (`Internal`, issue 483 —
+ * the account read never left the app) is `other`, and a relay simulation that
+ * says the operation would revert (`WouldFail`) is an estimate that failed.
+ * Passed through unmapped, either would be a word the send core cannot read.
  */
 export function toSendFeeOutcome(outcome: SendFeeQuoteOutcome): SendFeeOutcome {
-	if (outcome.type === 'failed' && typeof outcome.kind === 'object') {
-		return { type: 'failed', kind: 'quote_unavailable' };
-	}
-	return outcome as SendFeeOutcome;
+	if (outcome.type !== 'failed') return outcome;
+	if (typeof outcome.kind === 'object') return { type: 'failed', kind: 'quote_unavailable' };
+	if (outcome.kind === 'internal') return { type: 'failed', kind: 'other' };
+	if (outcome.kind === 'would_fail') return { type: 'failed', kind: 'estimate_failed' };
+	return { type: 'failed', kind: outcome.kind };
 }
 
 /** What `EstimateFee` asks for, in the shell's own vocabulary. */

@@ -50,7 +50,7 @@
 		landingPace,
 		typicalInclusionSeconds
 	} from '$lib/core/kernels';
-	import { FeeRequoteTimer, heldFeeFailure, withLostContext } from '$lib/signing/fee-requote';
+	import { FeeRequoteTimer, heldFeeFailure } from '$lib/signing/fee-requote';
 	import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
@@ -448,17 +448,13 @@
 	 * relay down and stayed that way after it came back.
 	 */
 	/**
-	 * The fee in force as this sheet reads it — a quote the chain could not
-	 * even be asked about (`contextLost`) is a recoverable failure here, said
-	 * and retried, never an idle row over an open confirm (`withLostContext`).
+	 * The fee in force, as the core says it (issue 483): an account the chain
+	 * could not be read for is the fee's own failure in its view —
+	 * `chain_read`, or `internal` when the read never left the app — so the
+	 * row, the footer and the retry all name the same cause, with nothing
+	 * laid over the view here.
 	 */
-	const feeShown = $derived(
-		withLostContext(
-			speedControl.feeInForce,
-			speedControl.feeQuote.contextLost,
-			speedControl.feeQuote.contextRateLimited
-		)
-	);
+	const feeShown = $derived(speedControl.feeInForce);
 	const requoter = new FeeRequoteTimer({
 		delayMs: feeRequoteDelayMs,
 		requote: () => speedControl.refresh(),
@@ -635,12 +631,22 @@
 			const token = id === 'native' ? null : id;
 			const last = fee.lastRequest;
 			if (last && (last.feeToken !== token || last.autoFeeToken)) {
-				void fee.requestQuote({
-					...last,
-					feeToken: token,
-					autoFeeToken: false,
-					tier: speedControl.tier
-				});
+				if ((last.tier ?? speedControl.tier) === speedControl.tier) {
+					// Correctness batch item 4: the core switches the figure to that
+					// coin at once — provisional, drawn with the measuring sign —
+					// and measures it again with that coin's fee leg; the confirm
+					// holds until it lands (`select_fee_asset`). Nothing blanks to
+					// "estimating". `selectAsset` re-points the request on record
+					// too, so every speed's preview prices in the coin picked.
+					fee.selectAsset(token);
+				} else {
+					void fee.requestQuote({
+						...last,
+						feeToken: token,
+						autoFeeToken: false,
+						tier: speedControl.tier
+					});
+				}
 			}
 			feeOpen = false;
 		}}

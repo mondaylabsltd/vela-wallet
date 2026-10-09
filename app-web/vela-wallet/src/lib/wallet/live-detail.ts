@@ -275,7 +275,9 @@ function dappFacts(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): FactRo
 				return [
 					{
 						label: m['componentsUi.signingApprove.spendingCap'],
-						value: hidden && figure.maskable ? MASK : `${figure.amount} ${figure.unit}`.trim(),
+						// The row's own figure is this cap: the core says whether it
+						// is money (`figure_maskable` — an unlimited one is not).
+						value: hidden && item.figure_maskable ? MASK : `${figure.amount} ${figure.unit}`.trim(),
 						...(figure.danger ? { tone: 'danger' as const } : {})
 					}
 				];
@@ -404,7 +406,7 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 		fiat = fiatText(item, ctx);
 	} else if (dapp.allowance !== null) {
 		const figure = allowanceFigure(dapp.allowance, wm);
-		amount = hidden && figure.maskable ? MASK : `${figure.amount} ${figure.unit}`.trim();
+		amount = hidden && item.figure_maskable ? MASK : `${figure.amount} ${figure.unit}`.trim();
 		danger = figure.danger;
 	} else if (back !== null) {
 		// Spec 097 N5: nothing left, something came back (a borrow) — what

@@ -947,6 +947,19 @@ export interface SendConfirmModel {
 	recipientTag?: string;
 	/** The core's last refusal, worded — see `SendFormModel.alert`. */
 	alert?: string;
+	/**
+	 * The confirm is held while the account's previous transaction on this
+	 * network is in flight (`SendView.previous_pending`, correctness batch
+	 * item 3): its one line, drawn plainly under the held confirm for as long
+	 * as it holds — no countdown, nothing in its place.
+	 */
+	held?: string;
+	/**
+	 * The last submit did not go (`SendView.tx_error`): why, in the core's
+	 * chosen words, and "Try again" (`retry_after_error`) — absent where trying
+	 * again would meet the same refusal (spec 102's venue block).
+	 */
+	error?: { text: string; retry?: string };
 	cta: string;
 }
 

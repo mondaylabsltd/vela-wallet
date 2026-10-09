@@ -17,9 +17,20 @@
 	interface Props {
 		model: SendConfirmModel;
 		onconfirm?: () => void;
+		/**
+		 * The core's gate is shut (`SendView.can_confirm`): a fee being
+		 * measured, the previous transaction on this network in flight, a
+		 * submit that did not go. A disabled control, not a dead one — a tap
+		 * the core would refuse is not offered.
+		 */
+		ctaDisabled?: boolean;
+		/** Signing or submitting: the button is what the person waits on. */
+		ctaBusy?: boolean;
+		/** The failed submit's "Try again" (`retry_after_error`). */
+		onretry?: () => void;
 	}
 
-	let { model, onconfirm }: Props = $props();
+	let { model, onconfirm, ctaDisabled = false, ctaBusy = false, onretry }: Props = $props();
 </script>
 
 <div class="confirm">
@@ -71,7 +82,30 @@
 	{/if}
 
 	<div class="cta">
-		<Button variant="primary" shape="rounded" onclick={onconfirm}>{model.cta}</Button>
+		{#if model.error !== undefined}
+			<!-- The last submit did not go: why, and the retry that clears it.
+			     Above the confirm it unblocks, so the eye meets the cause first. -->
+			<div class="error" role="alert">
+				<p>{model.error.text}</p>
+				{#if model.error.retry !== undefined && onretry !== undefined}
+					<Button variant="secondary" shape="rounded" onclick={onretry}>{model.error.retry}</Button>
+				{/if}
+			</div>
+		{/if}
+		<Button
+			variant="primary"
+			shape="rounded"
+			disabled={ctaDisabled && !ctaBusy}
+			loading={ctaBusy}
+			testid="send-confirm"
+			onclick={onconfirm}>{model.cta}</Button
+		>
+		<!-- One plain line under the held confirm while the account's last
+		     transaction on this network is in flight — no countdown, nothing in
+		     its place; it goes when the core lets the confirm open. -->
+		{#if model.held !== undefined}
+			<p class="held" role="status">{model.held}</p>
+		{/if}
 	</div>
 </div>
 
@@ -147,8 +181,34 @@
 	   and the mocks leave the space between the facts and the button empty
 	   rather than filling it. */
 	.cta {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
 		margin-top: auto;
 		padding-block: var(--space-3xl) var(--space-xl);
+	}
+	/* The held confirm's one line: quiet and centred under the button it
+	   explains — a wait, not an error. */
+	.held {
+		margin: 0;
+		text-align: center;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
+	}
+	/* A submit that did not go: the reason in the error colour, its retry
+	   right under it. */
+	.error {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
+	}
+	.error p {
+		margin: 0;
+		text-align: center;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-error-base);
 	}
 	/* Why a fact reads as it does (issue 686: a speed taken because it was
 	   free). Quiet, under its row and inside the same card, so the reason is

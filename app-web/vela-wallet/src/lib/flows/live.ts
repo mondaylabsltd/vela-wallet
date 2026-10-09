@@ -191,7 +191,8 @@ function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel
 	// The same narrowing the home applies (`narrowedFeed`), so the pushed
 	// list and the page's row index walk one feed.
 	const feed = narrowedFeed(inputs.feed, inputs.chainFilter ?? null);
-	const groups = liveActivityGroups(feed, m, view.hidden);
+	// The feed's own flag (`FeedView.hidden`), as every feed surface reads it.
+	const groups = liveActivityGroups(feed, m, feed.hidden);
 	return {
 		...model,
 		header,
@@ -376,7 +377,9 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 	const items = (inputs.feed?.rows ?? [])
 		.flatMap((row) => (row.type === 'item' ? [row.item] : []))
 		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol);
-	const rows = items.map((item) => liveActivityRow(item, m, hidden));
+	// Its activity rows are the feed's, masked on the feed's own flag.
+	const feedHidden = inputs.feed?.hidden ?? hidden;
+	const rows = items.map((item) => liveActivityRow(item, m, feedHidden));
 	// Each row can open its own detail — through the history's own index,
 	// so it is the same screen, reached the same way (spec 038 #E2).
 	const rowTargets = items.map((item) => feedPositionOf(inputs.feed, item.id));

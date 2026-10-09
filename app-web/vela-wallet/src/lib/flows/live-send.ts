@@ -333,7 +333,11 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		// only supersede a run already in flight, whoever started it. The cost
 		// is that the icon also turns for the form's own re-quotes; that is the
 		// truth about the row, and a still icon over a moving number would not be.
-		refreshing: send.fee_busy || fee.busy,
+		// …and a figure switched to another coin, drawn as it is while that
+		// coin's fee leg is measured (`provisional`, correctness batch item 4):
+		// the measuring sign stays on it until the new figure lands, and the
+		// send machine's `fee_busy` mirror holds the confirm meanwhile.
+		refreshing: send.fee_busy || fee.busy || fee.provisional,
 		// `FeeView.stale` had NO consumer in this shell (spec 068): the 30s TTL
 		// elapsed and nothing on screen said so, while the person spent their
 		// drift budget on think-time. Not said while a fresh measurement is out,
@@ -341,7 +345,9 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		// no figure on it: "from a while ago" is a fact about a number, and the
 		// tier just changed under this one (issue 681).
 		staleNote:
-			fee.stale && !fee.busy && !send.fee_busy && !ofAnotherTier ? m['send.feeStale'] : undefined
+			fee.stale && !fee.busy && !fee.provisional && !send.fee_busy && !ofAnotherTier
+				? m['send.feeStale']
+				: undefined
 	};
 }
 
@@ -1069,9 +1075,54 @@ function recipientLine(send: SendView, m: WalletFlowMessages): string | undefine
 	return recipientNote(send, m);
 }
 
+/**
+ * The confirm's two states the core holds it in, worded (correctness batch
+ * item 3): a submit that did not go — why, and Try again — and, otherwise,
+ * the account's previous transaction on this network still in flight, as its
+ * one line. Never both: a submit refused for that same reason says it once.
+ */
+function confirmHolds(
+	send: SendView,
+	m: WalletFlowMessages
+): Pick<SendConfirmModel, 'held' | 'error'> {
+	if (send.tx_status === 'error' && send.tx_error !== null) {
+		switch (send.tx_error) {
+			case 'previous_pending':
+				// Another operation of this account holds the nonce: not a failure
+				// of the network. Try again waits for it like any held confirm.
+				return {
+					error: {
+						text: m['componentsUi.signing.confirmBlock.previousPending'],
+						retry: m['send.txRetryBtn']
+					}
+				};
+			case 'bundler_fund':
+				return { error: { text: m['send.txErrorBundlerFund'], retry: m['send.txRetryBtn'] } };
+			case 'venue_blocked':
+				// Spec 102: trying again would meet the same refusal — no retry.
+				return {
+					error: {
+						text: send.tx_venue_block
+							? venueBlockText(send.tx_venue_block, m)
+							: m['send.txErrorGeneric']
+					}
+				};
+			case 'generic':
+				return { error: { text: m['send.txErrorGeneric'], retry: m['send.txRetryBtn'] } };
+		}
+	}
+	const held = send.previous_pending;
+	if (held === null || held === undefined) return {};
+	// The core names the line (`SendPreviousPending.key`); a key this build
+	// does not carry falls back to the same sentence rather than a dotted key.
+	const words = (m as Readonly<Record<string, string>>)[held.key];
+	return { held: words ?? m['componentsUi.signing.confirmBlock.previousPending'] };
+}
+
 /** SD3 — the confirm screen: what is about to be signed. */
 export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
 	const { send, m, currency, identity, identicon } = inputs;
+	const holds = confirmHolds(send, m);
 	const token = send.selected_token;
 	const usd =
 		token?.price_usd != null ? (parseFloat(send.confirm_amount) || 0) * token.price_usd : null;
@@ -1170,6 +1221,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			breakdown,
 			recipientTag,
 			alert: alertWords(inputs.alert, m),
+			...holds,
 			cta: m['send.confirmSendBtn']
 		};
 	}
@@ -1210,6 +1262,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
 			alert: alertWords(inputs.alert, m),
+			...holds,
 			cta: m['send.confirmSendBtn']
 		};
 	}
@@ -1227,6 +1280,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		breakdown: undefined,
 		recipientTag,
 		alert: alertWords(inputs.alert, m),
+		...holds,
 		cta: m['send.confirmSendBtn']
 	};
 }
@@ -1319,6 +1373,25 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				// is looked up in them as it is named.
 				venueBlockText(send.tx_venue_block, m)
 			],
+			hash: undefined,
+			cta: m['componentsTx.receipt.done'],
+			ctaAccent: false
+		};
+	}
+
+	// The relay refused it (correctness batch item 3): said by its reason —
+	// the fee sentence only for a fee refusal, "another transaction from this
+	// account went first" for a spent nonce, else the plain refusal. Nothing
+	// was sent, so no "try again" sentence over it.
+	const refusal = send.receipt?.refusal_key ?? null;
+	if (status === 'failed' && refusal !== null) {
+		const words = (m as Readonly<Record<string, string>>)[refusal];
+		return {
+			...model,
+			header,
+			stage: 'failed',
+			title: m['componentsTx.receipt.statusFailed'],
+			captions: [words ?? m['componentsUi.signing.refused']],
 			hash: undefined,
 			cta: m['componentsTx.receipt.done'],
 			ctaAccent: false

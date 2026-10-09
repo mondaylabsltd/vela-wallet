@@ -207,6 +207,19 @@ export const WALLET_FLOW_KEYS = [
 	// Spec 096 F12: the recipient is a token's own contract (`send` core).
 	'send.recipientTokenContract',
 	'send.txErrorGeneric',
+	// A submit the relay could not take, said on the confirm with its retry
+	// (`SendView.tx_error`): the relay's gas account, and Try again.
+	'send.txErrorBundlerFund',
+	'send.txRetryBtn',
+	// Correctness batch item 3: the account's previous transaction on this
+	// network still holds the nonce — the held confirm's one line
+	// (`SendView.previous_pending.key`), and the submit refused for it.
+	'componentsUi.signing.confirmBlock.previousPending',
+	// …and a refusal told by its reason (`SendReceiptView.refusal_key`): the
+	// fee sentence only for a fee refusal, "another transaction went first"
+	// for a spent nonce, else the plain refusal (listed with the dApp rows).
+	'send.txRejectedFees',
+	'componentsUi.signing.wentFirst',
 	// Spec 102: why this account cannot sign on the web (`SendView.tx_venue_block`).
 	...VENUE_BLOCK_KEYS,
 	'send.scanAria',

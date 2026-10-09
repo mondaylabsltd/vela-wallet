@@ -97,6 +97,10 @@
 		/** One amount into every split row that has none. */
 		fillEmptyAmounts?(amount: string): void;
 		confirmDisabled: boolean;
+		/** Signing or submitting: the confirm is what the person waits on. */
+		confirmBusy?: boolean;
+		/** A failed submit's "Try again" — back to a confirm the core can open. */
+		retryAfterError?: () => void;
 	}
 
 	interface BatchActions {
@@ -224,6 +228,9 @@
 		<SendConfirm
 			model={body.model}
 			onconfirm={() => (send ? send.confirm() : go('send-receipt'))}
+			ctaDisabled={send?.confirmDisabled ?? false}
+			ctaBusy={send?.confirmBusy ?? false}
+			onretry={send?.retryAfterError ? () => send.retryAfterError?.() : undefined}
 		/>
 	{:else if body.kind === 'contact-pick'}
 		<ContactPick

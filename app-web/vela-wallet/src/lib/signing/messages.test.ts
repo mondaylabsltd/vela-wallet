@@ -5,7 +5,12 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
-import { FEE_REASON_KEYS, rawResolve, resolveSigningMessages } from '$lib/i18n/engine.server';
+import {
+	FEE_REASON_KEYS,
+	REFUSAL_KEYS,
+	rawResolve,
+	resolveSigningMessages
+} from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { feeFailureReasonKey } from '$lib/core/kernels';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
@@ -52,6 +57,8 @@ describe('every fee reason the core can name resolves (RJ13)', () => {
 		'gas_quote_too_high',
 		'missing_public_key',
 		'calculation_failed',
+		'would_fail',
+		'internal',
 		{ chain_read: { rate_limited: true } },
 		{ chain_read: { rate_limited: false } }
 	];
@@ -65,6 +72,12 @@ describe('every fee reason the core can name resolves (RJ13)', () => {
 		expect(feeFailureReasonKey({ chain_read: { rate_limited: true } })).toBe(
 			'home.balanceDetailStatusRetrying'
 		);
+		// Issue 483: the fee's own words — a chain out of reach, and a fault
+		// inside Vela, which is never "can't reach the chain".
+		expect(feeFailureReasonKey({ chain_read: { rate_limited: false } })).toBe(
+			'componentsUi.gas.reasonChainDown'
+		);
+		expect(feeFailureReasonKey('internal')).toBe('componentsUi.gas.reasonInternal');
 	});
 
 	it.each(SUPPORTED_LOCALES)('%s: each reason is a sentence', (locale) => {
@@ -74,12 +87,31 @@ describe('every fee reason the core can name resolves (RJ13)', () => {
 			expect(m.feeReasons[key]?.trim(), `${key} in ${locale}`).not.toBe('');
 		}
 		// `{{chain}}` is left for the sheet to fill with the chain's name.
-		expect(m.feeReasons['explore.chainDown']).toContain('{{chain}}');
+		expect(m.feeReasons['componentsUi.gas.reasonChainDown']).toContain('{{chain}}');
+		expect(m.feeReasons['componentsUi.gas.reasonInternal']).not.toContain('{{chain}}');
 	});
 
 	it('the revert warning with its reason resolves (RJ19)', () => {
 		const m = resolveSigningMessages('en');
 		expect(m.warnWillFailReason).toContain('{{reason}}');
 		expect(m.warnWillFail).not.toBe('componentsUi.signing.simWillFail');
+	});
+});
+
+/**
+ * Correctness batch item 3: a refusal is told by its reason, and the held
+ * confirm says the previous transaction is still on its way — every sentence
+ * the core can name resolves in every locale.
+ */
+describe('the refusal reasons and the held confirm resolve', () => {
+	it.each(SUPPORTED_LOCALES)('%s: each is a sentence, not its key', (locale) => {
+		const m = resolveSigningMessages(locale);
+		for (const key of REFUSAL_KEYS) {
+			expect(m.receipt.refusals[key], `${key} in ${locale}`).toBe(rawResolve(locale, key));
+			expect(m.receipt.refusals[key], `${key} in ${locale}`).not.toBe(key);
+		}
+		const held = 'componentsUi.signing.confirmBlock.previousPending';
+		expect(m.confirmBlock[held], locale).toBe(rawResolve(locale, held));
+		expect(m.confirmBlock[held], locale).not.toBe(held);
 	});
 });

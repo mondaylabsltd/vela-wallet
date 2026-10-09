@@ -15,6 +15,7 @@ import { dappRequestDisplay } from '$lib/core/kernels';
 import type { TxTechnicalRow } from '$lib/flows/model';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { feedItemsThroughCore } from './core/feed-through-core';
+import { withFigureMaskable } from './testing/figure-maskable';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
 import { buildDesktopState } from './fixtures';
 import { balanceTokenId, withLiveWalletDesktop } from './live';
@@ -52,7 +53,7 @@ function token(
 }
 
 function item(id: string, partial: Partial<FeedItem> = {}): FeedItem {
-	return {
+	return withFigureMaskable({
 		id,
 		direction: 'in',
 		counterparty: '0x' + 'b1'.repeat(20),
@@ -73,7 +74,7 @@ function item(id: string, partial: Partial<FeedItem> = {}): FeedItem {
 		counterparty_role: 'recipient',
 		subtitle: [],
 		...partial
-	};
+	});
 }
 
 const FEED: FeedView = {
@@ -82,6 +83,7 @@ const FEED: FeedView = {
 	toast: null,
 	history_empty_key: 'history.emptyTitle',
 	home_empty_key: 'home.emptyNoActivity',
+	hidden: false,
 	contact_rows: [],
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
@@ -111,7 +113,7 @@ function view(tokens: BalanceToken[]): BalanceView {
 		unreachable_key: null,
 		holdings_loading: false,
 		cached_total_usd: 1000,
-		switcher: { open: false, loading: false, balances: [] }
+		switcher: { open: false, loading: false, balances: [], hidden: false }
 	};
 }
 

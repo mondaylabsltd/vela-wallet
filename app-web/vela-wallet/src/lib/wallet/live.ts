@@ -557,7 +557,10 @@ export function liveActivityRow(
 				: 'sent';
 	const received = kind === 'received';
 	const figure = rowFigure(item, received, m);
-	const masked = hidden && figure.maskable;
+	// Whether this row's figure is money is the core's (`FeedItem.figure_maskable`,
+	// `app::privacy`): an amount, a batch count or a capped allowance masks; an
+	// unlimited allowance or a figureless signature does not.
+	const masked = hidden && item.figure_maskable;
 	const back = item.dapp?.received ?? null;
 	return {
 		id: item.id,
@@ -598,40 +601,40 @@ function rowFigure(
 	item: FeedItem,
 	received: boolean,
 	m: RowMessages
-): { amount: string; unit: string; danger: boolean; maskable: boolean } {
+): { amount: string; unit: string; danger: boolean } {
 	if (item.value !== null) {
 		const about = item.dapp?.estimated ? '≈ ' : '';
 		return {
 			amount: `${about}${received ? '+' : '−'}${trimBalance(item.value)}`,
 			unit: item.symbol,
-			danger: false,
-			maskable: true
+			danger: false
 		};
 	}
 	const allowance = item.dapp?.allowance ?? null;
 	if (allowance !== null) return allowanceFigure(allowance, m);
-	if (item.dapp != null) return { amount: '', unit: '', danger: false, maskable: false };
+	if (item.dapp != null) return { amount: '', unit: '', danger: false };
 	return {
 		amount: String(item.batch?.count ?? ''),
 		unit: item.symbol,
-		danger: false,
-		maskable: true
+		danger: false
 	};
 }
 
-/** An allowance as a row figure (spec 093): the core's cap and symbol, worded. */
+/**
+ * An allowance as a row figure (spec 093): the core's cap and symbol, worded.
+ * Whether it masks is the core's (`FeedItem.figure_maskable`), never this.
+ */
 export function allowanceFigure(
 	allowance: FeedAllowance,
 	m: RowMessages
-): { amount: string; unit: string; danger: boolean; maskable: boolean } {
+): { amount: string; unit: string; danger: boolean } {
 	if (allowance.unlimited) {
-		return { amount: m.activity.unlimited, unit: allowance.symbol, danger: true, maskable: false };
+		return { amount: m.activity.unlimited, unit: allowance.symbol, danger: true };
 	}
 	return {
 		amount: allowance.value === null ? '' : trimBalance(allowance.value),
 		unit: allowance.symbol,
-		danger: false,
-		maskable: allowance.value !== null
+		danger: false
 	};
 }
 
@@ -840,7 +843,9 @@ function liveSections(inputs: WalletLiveInputs) {
 				: assetsMode(view),
 		assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
 		activityMode: activityMode(view, feed),
-		activityGroups: feed ? liveActivityGroups(feed, m, view.hidden) : [],
+		// The feed masks on its own flag (`FeedView.hidden`), never the
+		// balance machine's threaded through (`app::privacy`).
+		activityGroups: feed ? liveActivityGroups(feed, m, feed.hidden) : [],
 		// Spec 082 RG5: which empty line the home says is the core's
 		// (`FeedView.home_empty_key`) — "no activity" or "none on this network".
 		activityEmpty: {

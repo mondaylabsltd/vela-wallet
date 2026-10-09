@@ -43,7 +43,12 @@ const copy: DappReceiptCopy = {
 	closeBackground: 'Close · keep running',
 	notSentHint: 'Your funds are safe.',
 	submitting: 'Submitting to network...',
-	refused: 'The network refused it — nothing was sent.'
+	refused: 'The network refused it — nothing was sent.',
+	refusals: {
+		'send.txRejectedFees': 'Network fees stayed above the amount you approved.',
+		'componentsUi.signing.wentFirst': 'Another transaction from this account went first.',
+		'componentsUi.signing.refused': 'The network refused it — nothing was sent.'
+	}
 };
 
 const OP = '0x' + 'a1'.repeat(32);
@@ -120,6 +125,18 @@ describe('the receipt a dApp transaction lands on', () => {
 			kind: 'refused',
 			opHash: OP
 		});
+	});
+
+	it('refused, by its reason: the fee words only for a fee refusal (correctness batch item 3)', () => {
+		const said = (refusalKey?: string) =>
+			dappReceiptModel({ kind: 'refused', opHash: OP, refusalKey }, copy, explorer).captions;
+		expect(said('componentsUi.signing.wentFirst')).toEqual([
+			copy.refusals!['componentsUi.signing.wentFirst']
+		]);
+		expect(said('send.txRejectedFees')).toEqual([copy.refusals!['send.txRejectedFees']]);
+		// No reason, or one this build has no words for: the plain refusal.
+		expect(said()).toEqual([copy.refused]);
+		expect(said('componentsUi.signing.somethingNew')).toEqual([copy.refused]);
 	});
 
 	it('not sent: failed, "your funds are safe", nothing to look up', () => {
@@ -340,6 +357,19 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 			kind: 'refused',
 			opHash: OP
 		});
+		// …told by its reason, as the core read it off the relay (item 3).
+		expect(
+			landingFor(
+				entry({
+					status: 'rejected',
+					outcome: 'final',
+					refusal: 'nonce_used',
+					refusal_key: 'componentsUi.signing.wentFirst'
+				}),
+				OP,
+				true
+			)
+		).toEqual({ kind: 'refused', opHash: OP, refusalKey: 'componentsUi.signing.wentFirst' });
 		expect(landingFor(entry({ outcome: 'maybe_sent' }), OP, true)).toEqual({
 			kind: 'maybe_sent',
 			opHash: OP

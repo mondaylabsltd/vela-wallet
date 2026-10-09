@@ -71,6 +71,15 @@ vi.mock('$lib/services/platform', () => ({ hapticError: vi.fn(), hapticSuccess: 
 vi.mock('$lib/services/recipient-identity', () => ({ resolveRecipientIdentity: vi.fn() }));
 vi.mock('$lib/services/recipient-risk', () => ({ resolveRecipientRisk: vi.fn() }));
 vi.mock('$lib/services/safe-transaction', () => ({
+	// The submit's own refusal, as `submitUserOp` throws it.
+	UserOpNotSentError: class extends Error {
+		constructor(
+			readonly rejection: unknown,
+			message: string
+		) {
+			super(message);
+		}
+	},
 	keySetOf: vi.fn(),
 	sendBatchCalls: vi.fn(),
 	accountIsDeployed: seams.deployed,
@@ -260,6 +269,7 @@ describe('EstimateFee — the fee coin nobody chose', () => {
  */
 describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	const OP = '0x' + '7d'.repeat(32);
+	const SENDER = '0x' + 'a1'.repeat(20);
 	const submit = {
 		id: 1,
 		operation: {
@@ -398,6 +408,38 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		expect(posted).not.toHaveBeenCalled();
 	});
 
+	/**
+	 * Correctness batch item 3: another operation of this account still holds
+	 * the nonce — the relay's `nonce_in_flight`, or an older relay's
+	 * `[existingHash:…]` marker, both read by the core as `NonceHeld`. Not a
+	 * failure of the network: the core says "waiting for your last
+	 * transaction" and Try again waits for it like any held confirm.
+	 */
+	it('a submit held behind the account’s previous op fails as previous_pending', async () => {
+		const { UserOpNotSentError } = await import('$lib/services/safe-transaction');
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new UserOpNotSentError(
+				{ nonce_held: { user_op_hash: '0x' + 'ee'.repeat(32) } },
+				'Waiting for an earlier transaction'
+			)
+		);
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: () => {}
+		});
+		await expect(executor.execute(submit)).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'previous_pending' }
+		});
+		// Any other refusal is still the relay's words.
+		vi.mocked(sendBatchCalls).mockRejectedValueOnce(
+			new UserOpNotSentError({ other: 'AA21 didn’t pay prefund' }, 'AA21 didn’t pay prefund')
+		);
+		await expect(executor.execute(submit)).resolves.toMatchObject({
+			type: 'submit_failed',
+			failure: { type: 'other' }
+		});
+	});
+
 	it('no clearance in time → zero POSTs, and the send fails as not sent', async () => {
 		vi.useFakeTimers();
 		try {
@@ -440,10 +482,13 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 					chain_id: 100,
 					maybe_sent: false,
 					submit_block: 9,
-					admitted: true
+					admitted: true,
+					sender: SENDER
 				}
 			});
-			// Straight to the tracker, with `admitted` — the page's sink forwards none.
+			// Straight to the tracker, with `admitted` — the page's sink forwards none —
+			// and who signed it, so the account's next confirm waits for this one
+			// (correctness batch item 3).
 			expect(seams.trackSubmitted).toHaveBeenCalledWith(
 				OP,
 				[`${OP}-0`, `${OP}-1`],
@@ -451,7 +496,8 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 				undefined,
 				false,
 				9,
-				true
+				true,
+				SENDER
 			);
 		} finally {
 			setSendTrackerSink(null);
@@ -526,7 +572,8 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 					chain_id: 100,
 					maybe_sent: false,
 					submit_block: 9,
-					admitted: true
+					admitted: true,
+					sender: SENDER
 				}
 			});
 			const watch = seams.trackSubmitted.mock.calls[0]?.[3] as

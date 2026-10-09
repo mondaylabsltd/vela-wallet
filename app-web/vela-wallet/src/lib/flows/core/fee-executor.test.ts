@@ -18,7 +18,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const seams = vi.hoisted(() => ({
 	inBandQuotes: vi.fn(),
 	nativePrice: vi.fn((): number | null => null),
-	measureCallGas: vi.fn()
+	measureCallGas: vi.fn(),
+	deployed: vi.fn(),
+	gasSignals: vi.fn()
 }));
 
 vi.mock('$lib/services/bundler-service', () => ({
@@ -31,8 +33,9 @@ vi.mock('$lib/services/wallet-api', () => ({
 }));
 
 vi.mock('$lib/services/safe-transaction', () => ({
+	accountIsDeployed: seams.deployed,
 	fetchRawBundlerQuote: vi.fn(),
-	fetchRawGasSignals: vi.fn(),
+	fetchRawGasSignals: seams.gasSignals,
 	keySetOf: vi.fn(),
 	measureCallGasForQuote: seams.measureCallGas,
 	simulateUserOpGas: vi.fn()
@@ -41,6 +44,7 @@ vi.mock('$lib/services/safe-transaction', () => ({
 vi.mock('$lib/services/accounts', () => ({ findAccountByAddress: vi.fn() }));
 
 import { createFeeExecutor, feeOperationFailure } from './fee-executor';
+import { DeploymentInternalError, DeploymentReadError } from '$lib/services/deployment-read';
 
 const ACCOUNT = '0x1111111111111111111111111111111111111111';
 const XLAYER = 196;
@@ -54,7 +58,8 @@ function row(asset: 'native' | 'erc20', usdPrice: string | null) {
 		decimals: asset === 'erc20' ? 6 : 18,
 		symbol: asset === 'erc20' ? 'USDC' : 'OKB',
 		usdBalance: '0',
-		usdPrice
+		usdPrice,
+		minimumAmount: null as string | null
 	};
 }
 
@@ -150,6 +155,106 @@ describe('the native floor price the executor hands the core (issue 682)', () =>
 			decimals: 18,
 			symbol: 'OKB',
 			usd_balance: '0'
+		});
+	});
+});
+
+/**
+ * Correctness batch item 5: the relay publishes its own minimum per row
+ * (`minimumAmount`, relay contract §3), and the core floors at it. Passed
+ * VERBATIM — the relay's hex — and absent from an older relay.
+ */
+describe('the relay’s own minimum (item 5)', () => {
+	beforeEach(() => vi.clearAllMocks());
+
+	it('rides on its row exactly as the relay wrote it', async () => {
+		const [native, stable] = await quotes([
+			{ ...row('native', '120'), minimumAmount: '0x14d1120d7b16' },
+			{ ...row('erc20', '1'), minimumAmount: '0x2710' }
+		]);
+		expect(native.minimum_amount).toBe('0x14d1120d7b16');
+		expect(stable.minimum_amount).toBe('0x2710');
+	});
+
+	it('an older relay publishes none: absent, and today’s rule stands', async () => {
+		const [native] = await quotes([row('native', '120')]);
+		expect(native.minimum_amount).toBeNull();
+	});
+});
+
+/**
+ * Issue 483: the account read is the fee's own. Every read is answered —
+ * never thrown — as the chain's word, the chain out of reach, or a fault
+ * inside Vela, which is never told as "can't reach the chain".
+ */
+describe('read_deployment (issue 483)', () => {
+	const read = (fresh = false) => ({
+		id: 1,
+		operation: { type: 'read_deployment' as const, chain_id: 137, account: ACCOUNT, fresh }
+	});
+	const execute = () =>
+		createFeeExecutor({ onView: () => {}, onError: () => {}, publicKeyHex: () => undefined });
+
+	beforeEach(() => vi.clearAllMocks());
+
+	it('the chain’s answer, either way', async () => {
+		seams.deployed.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+		expect(await execute()(read(), new AbortController().signal)).toEqual({
+			type: 'deployment',
+			read: { type: 'read', deployed: true }
+		});
+		expect(await execute()(read(), new AbortController().signal)).toEqual({
+			type: 'deployment',
+			read: { type: 'read', deployed: false }
+		});
+		expect(seams.deployed).toHaveBeenCalledWith(ACCOUNT, 137, { fresh: false });
+	});
+
+	it('nobody answered, or only with rate limits: the chain is out of reach', async () => {
+		seams.deployed.mockRejectedValueOnce(new DeploymentReadError(false));
+		expect((await execute()(read(), new AbortController().signal)).type).toBe('deployment');
+		seams.deployed.mockRejectedValueOnce(new DeploymentReadError(true));
+		expect(await execute()(read(), new AbortController().signal)).toEqual({
+			type: 'deployment',
+			read: { type: 'unreachable', rate_limited: true }
+		});
+	});
+
+	it('a read that never left the app is internal — never the chain’s', async () => {
+		seams.deployed.mockRejectedValueOnce(new DeploymentInternalError('rpc: before_boot'));
+		expect(await execute()(read(), new AbortController().signal)).toEqual({
+			type: 'deployment',
+			read: { type: 'internal', kind: 'rpc: before_boot' }
+		});
+		// Anything this shell did not classify is its own fault too.
+		seams.deployed.mockRejectedValueOnce(new TypeError('session is null'));
+		const unknown = await execute()(read(), new AbortController().signal);
+		expect(unknown).toMatchObject({ type: 'deployment', read: { type: 'internal' } });
+	});
+
+	it('a retry is a real new read: `fresh` reaches the account read and the gas signals', async () => {
+		seams.deployed.mockResolvedValueOnce(true);
+		await execute()(read(true), new AbortController().signal);
+		expect(seams.deployed).toHaveBeenCalledWith(ACCOUNT, 137, { fresh: true });
+		seams.gasSignals.mockResolvedValueOnce({
+			ethGasPrice: '1',
+			baseFee: '1',
+			priorityFee: '0'
+		});
+		await execute()(
+			{
+				id: 2,
+				operation: { type: 'fetch_gas_price', chain_id: 137, want_tip: true, fresh: true }
+			},
+			new AbortController().signal
+		);
+		expect(seams.gasSignals).toHaveBeenCalledWith(137, true, true);
+	});
+
+	it('fails as Vela’s own fault, never as the chain’s', () => {
+		expect(feeOperationFailure(read())).toEqual({
+			type: 'deployment',
+			read: { type: 'internal', kind: 'shell: executor threw' }
 		});
 	});
 });

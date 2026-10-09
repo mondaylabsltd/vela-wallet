@@ -131,3 +131,40 @@ describe('a security key that cannot run', () => {
 		);
 	});
 });
+
+/**
+ * The registry could not be asked which wallet a passkey opens (correctness
+ * batch item 1): never the rebuild offer — a free retry from the signature
+ * already made, and Cancel. Every word comes from the serialized flow copy,
+ * so each key must be one the login page is handed (`FLOW_KEYS`), or the
+ * sheet would print a dotted key.
+ */
+describe('a registry nobody could reach', () => {
+	it('offers Try again and Cancel, in the registry’s words or the network’s', async () => {
+		const { promptCopy } = await import('./copy');
+		const { FLOW_KEYS } = await import('$lib/i18n/messages');
+		const t = (key: string) => key;
+		const away = promptCopy({ type: 'registry_unreachable', local: false }, t);
+		expect(away).toEqual({
+			title: 'onboarding.login.registryUnreachableTitle',
+			message: 'onboarding.login.registryUnreachableBody',
+			confirm: { confirmLabel: 'common.tryAgain', cancelLabel: 'common.cancel' }
+		});
+		const local = promptCopy({ type: 'registry_unreachable', local: true }, t);
+		expect([local.title, local.message]).toEqual([
+			'onboarding.common.networkTitle',
+			'onboarding.common.networkBody'
+		]);
+		expect(local.confirm).toEqual(away.confirm);
+		for (const copy of [away, local]) {
+			for (const key of [
+				copy.title,
+				copy.message,
+				copy.confirm!.confirmLabel,
+				copy.confirm!.cancelLabel
+			]) {
+				expect(FLOW_KEYS as readonly string[], key).toContain(key);
+			}
+		}
+	});
+});

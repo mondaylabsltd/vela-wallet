@@ -11,9 +11,8 @@ import { describe, expect, it } from 'vitest';
 import '$lib/i18n/wasm-init.server';
 import { feeRequoteDelayMs, feeRequoteTimeoutMs } from '$lib/core/kernels';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import { feeFailureCause, FeeRequoteTimer, heldFeeFailure, withLostContext } from './fee-requote';
+import { feeFailureCause, FeeRequoteTimer, heldFeeFailure } from './fee-requote';
 import { _resetPanelFailuresForTest, panelFailureLines } from '$lib/services/bug-report';
-import { IDLE_FEE_VIEW } from '$lib/flows/core/fee-quote.svelte';
 
 /** A timer whose clock is the test's: `advance(ms)` fires what is due. */
 function harness(bounded = false) {
@@ -208,25 +207,22 @@ describe('heldFeeFailure — the reason stays put while the sheet asks again', (
 	});
 });
 
-describe('withLostContext — a chain that could not be read is a failure the sheet says and retries', () => {
-	it('an idle view after a lost context reads as the chain read that failed, confirm shut (RJ13)', () => {
-		const view = withLostContext(IDLE_FEE_VIEW, true);
-		expect(view.failed).toEqual({ chain_read: { rate_limited: false } });
-		expect(view.confirm_fee_ready).toBe(false);
-		// …which the core's schedule retries, like every other one of its kind.
-		expect(feeRequoteDelayMs(view.failed!, 1)).toBe(3000);
-		// A node refusing for load is said as that, not as "unreachable".
-		expect(withLostContext(IDLE_FEE_VIEW, true, true).failed).toEqual({
-			chain_read: { rate_limited: true }
-		});
+describe('an account the chain could not be read for is the core’s failure, retried on its schedule (issue 483)', () => {
+	it('a chain out of reach and a fault inside Vela are both asked again by themselves', () => {
+		// The core fails the fee with the account read's own cause; nothing is
+		// laid over its view here any more, so the timer must retry both.
+		expect(feeRequoteDelayMs({ chain_read: { rate_limited: false } }, 1)).toBe(3000);
+		expect(feeRequoteDelayMs({ chain_read: { rate_limited: true } }, 1)).toBe(3000);
+		expect(feeRequoteDelayMs('internal', 1)).not.toBeNull();
+		const h = harness(true);
+		h.timer.observe(failed('internal'), true);
+		h.advance(feeRequoteDelayMs('internal', 1)!);
+		expect(h.requotes()).toBe(1);
 	});
 
-	it('changes nothing while measuring, over a quote, over a real failure, or with the context in hand', () => {
-		const busy = { ...IDLE_FEE_VIEW, busy: true };
-		expect(withLostContext(busy, true)).toBe(busy);
-		const failed = { ...IDLE_FEE_VIEW, failed: 'missing_public_key' as const };
-		expect(withLostContext(failed, true)).toBe(failed);
-		expect(withLostContext(IDLE_FEE_VIEW, false)).toBe(IDLE_FEE_VIEW);
+	it('names the fault inside Vela by its own word in the `fee:` lines', () => {
+		expect(feeFailureCause('internal')).toBe('internal');
+		expect(feeFailureCause({ chain_read: { rate_limited: false } })).toBe('chain_read');
 	});
 });
 

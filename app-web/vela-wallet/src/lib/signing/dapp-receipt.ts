@@ -87,6 +87,12 @@ export interface DappReceiptCopy {
 	 * nothing was sent. No "try again": the same op is refused the same way.
 	 */
 	refused: string;
+	/**
+	 * A refusal told by its reason (correctness batch item 3): corpus key →
+	 * sentence, for each key a refusal can be told by. Absent or missing a
+	 * key: the plain `refused`.
+	 */
+	refusals?: Readonly<Record<string, string>>;
 }
 
 /** Where the transaction stands, as the tracker reports it. */
@@ -106,8 +112,12 @@ export type DappReceiptState =
 	| { kind: 'reverted'; opHash: string; txHash: string }
 	/** Spec 082 RA4: the relay never admitted it (two `not_found` past 60 s) — nothing left. */
 	| { kind: 'not_sent'; opHash: string }
-	/** Spec 082 RJ3: the relay refused it — nothing was sent, and retrying sends the same refusal. */
-	| { kind: 'refused'; opHash: string }
+	/**
+	 * Spec 082 RJ3: the relay refused it — nothing was sent, and retrying sends
+	 * the same refusal. `refusalKey`: the tracker entry's reason, as a corpus
+	 * key (correctness batch item 3); absent, the plain refusal.
+	 */
+	| { kind: 'refused'; opHash: string; refusalKey?: string }
 	/** Spec 082 RA2: the reply was lost; followed under the local hash. */
 	| { kind: 'maybe_sent'; opHash: string }
 	/** Spec 079: a message signature — nothing went to the chain; the tick, then gone. */
@@ -190,12 +200,16 @@ export function dappReceiptModel(
 				cta: copy.done
 			};
 		case 'refused':
-			// A cross, "failed", and why — the network said no and nothing left.
+			// A cross, "failed", and why — the network said no and nothing left,
+			// told by its reason: never every refusal as the fee sentence.
 			// No explorer (there is no transaction) and no Retry words (RJ3).
 			return {
 				stage: 'failed',
 				title: copy.failed,
-				captions: [copy.refused],
+				captions: [
+					(state.refusalKey !== undefined ? copy.refusals?.[state.refusalKey] : undefined) ??
+						copy.refused
+				],
 				hash: { label: copy.opHashLabel, value: state.opHash },
 				cta: copy.done
 			};
@@ -297,6 +311,10 @@ export function landingFor(
 	// "don't send it again".
 	const matched = entry !== undefined && entry.user_op_hash.toLowerCase() === opHash.toLowerCase();
 	const state = landingFromEnding(ending, opHash, maybeSent && !matched);
+	// Refused: why, as the core read it off the relay (`refusal_key`).
+	if (state.kind === 'refused' && matched && entry?.refusal_key) {
+		return { ...state, refusalKey: entry.refusal_key };
+	}
 	// Spec 099 R6: on its way, but not yet on the network — the relay has it.
 	if (state.kind === 'submitted' && !(matched && entry?.relay_sent_at_ms != null)) {
 		return { ...state, sending: true };

@@ -43,6 +43,9 @@ const net = vi.hoisted(() => {
 		PUSD: '0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a',
 		answer(operation: { type: string; calls?: unknown[] }): Promise<unknown> {
 			switch (operation.type) {
+				case 'read_deployment':
+					// The account read is the fee's own (issue 483): a deployed Safe.
+					return Promise.resolve({ type: 'deployment', read: { type: 'read', deployed: true } });
 				case 'fetch_gas_price':
 					return Promise.resolve({
 						type: 'gas_price',
@@ -190,9 +193,38 @@ describe('#411 — the swap the simulation measured pays its fee in a coin that 
 
 		quote.balanceChangesMeasured(CALLS, CHANGES);
 		expect(paidIn(quote.view)).toBe(net.PUSD);
+		// Correctness batch item 4: the figure switched to pUSD is provisional
+		// until the gas is measured again with pUSD's fee leg — drawn, with the
+		// measuring sign, and never confirmable meanwhile.
+		expect(quote.view.provisional).toBe(true);
+		expect(quote.view.busy).toBe(true);
+		expect(quote.view.confirm_fee_ready).toBe(false);
+		await vi.waitFor(() => expect(quote.view.busy).toBe(false));
+		expect(quote.view.provisional).toBe(false);
+		expect(paidIn(quote.view)).toBe(net.PUSD);
 		expect(quote.view.confirm_fee_ready).toBe(true);
 		expect(coin(quote.view, null)?.selected).toBe(false);
 		expect(quote.view.fee?.fee_asset).toMatchObject({ type: 'erc20', symbol: 'pUSD' });
+		quote.dispose();
+	});
+
+	it('a chip tap to another coin is measured again before it can be confirmed (item 4)', async () => {
+		const quote = new FeeQuote();
+		quote.balanceChangesMeasured(CALLS, CHANGES);
+		await quote.requestQuote(REQUEST);
+		await vi.waitFor(() => expect(quote.view.busy).toBe(false));
+		expect(paidIn(quote.view)).toBe(net.PUSD);
+		expect(quote.view.confirm_fee_ready).toBe(true);
+		// The person taps USDC: the figure moves to USDC at once, provisional.
+		quote.selectAsset(net.USDC);
+		expect(paidIn(quote.view)).toBe(net.USDC.toLowerCase());
+		expect(quote.view.fee).not.toBeNull();
+		expect(quote.view.provisional).toBe(true);
+		expect(quote.view.confirm_fee_ready).toBe(false);
+		await vi.waitFor(() => expect(quote.view.busy).toBe(false));
+		expect(quote.view.provisional).toBe(false);
+		expect(paidIn(quote.view)).toBe(net.USDC.toLowerCase());
+		expect(quote.view.confirm_fee_ready).toBe(true);
 		quote.dispose();
 	});
 

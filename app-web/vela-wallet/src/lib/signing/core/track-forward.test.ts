@@ -143,7 +143,8 @@ describe('the hand-off keys (contract §4)', () => {
 		chain_id: 100,
 		maybe_sent: true,
 		submit_block: 7,
-		admitted: false
+		admitted: false,
+		sender: '0x' + 'a1'.repeat(20)
 	};
 
 	it('the admitted hand-off is a new key, though its op and records are the write-ahead’s', () => {

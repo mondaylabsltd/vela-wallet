@@ -14,7 +14,12 @@
  */
 
 import { loadCore } from '$lib/core/client';
-import { rpcLatencyMs, rpcShouldFail, rpcShouldRateLimit } from './fault-injection';
+import {
+	poolShouldFault,
+	rpcLatencyMs,
+	rpcShouldFail,
+	rpcShouldRateLimit
+} from './fault-injection';
 import { recordNet } from './metrics';
 import {
 	collectBundlerUrls,
@@ -42,11 +47,21 @@ export { getBuiltinBundlerUrl, getLogsRangeCap } from './rpc-pool-endpoints';
 export class PoolFailedError extends Error {
 	readonly maybeDelivered: boolean;
 	readonly rateLimited: boolean;
-	constructor(message: string, facts: { maybeDelivered: boolean; rateLimited: boolean }) {
+	/**
+	 * The pool itself failed (its core faulted), not the chain's nodes: the
+	 * call never got an answer from anyone outside the app (issue 483). Never
+	 * told as "can't reach the chain".
+	 */
+	readonly internal: boolean;
+	constructor(
+		message: string,
+		facts: { maybeDelivered: boolean; rateLimited: boolean; internal?: boolean }
+	) {
 		super(message);
 		this.name = 'PoolFailedError';
 		this.maybeDelivered = facts.maybeDelivered;
 		this.rateLimited = facts.rateLimited;
+		this.internal = facts.internal ?? false;
 	}
 }
 
@@ -194,7 +209,8 @@ function abandonInFlight(error: unknown): void {
 		call.reject(
 			new PoolFailedError(`RPC pool fault for chain ${call.chainId}: ${message}`, {
 				maybeDelivered: true,
-				rateLimited: false
+				rateLimited: false,
+				internal: true
 			})
 		);
 	}
@@ -217,7 +233,7 @@ let ready: Promise<void> | null = null;
 
 function ensureReady(): Promise<void> {
 	if (!ready) {
-		ready = (async () => {
+		const booting = (async () => {
 			await loadCore();
 			const created = createRpcPoolSession({
 				onView: (view: RpcPoolView) => {
@@ -236,6 +252,13 @@ function ensureReady(): Promise<void> {
 			const entries = await readStoredBans().catch(() => []);
 			created.start({ type: 'bans_loaded', entries });
 		})();
+		// A boot that failed is not kept (issue 483): the next call boots again,
+		// so a retry is a real retry rather than the same failure handed back.
+		const attempt: Promise<void> = booting.catch((error: unknown) => {
+			if (ready === attempt) ready = null;
+			throw error;
+		});
+		ready = attempt;
 	}
 	return ready;
 }
@@ -296,6 +319,14 @@ export async function poolRpcCall(
 		faultHardFailedChains.add(chainId);
 		faultRateLimitedChains.delete(chainId);
 		throw new Error(`[fault] RPC forced to fail for chain ${chainId}`);
+	}
+	if (poolShouldFault(chainId)) {
+		// The pool failed inside the app (issue 483): nothing left the device.
+		throw new PoolFailedError(`[fault] RPC pool fault for chain ${chainId}`, {
+			maybeDelivered: false,
+			rateLimited: false,
+			internal: true
+		});
 	}
 	if (rpcShouldRateLimit(chainId)) {
 		faultFailedChains.add(chainId);

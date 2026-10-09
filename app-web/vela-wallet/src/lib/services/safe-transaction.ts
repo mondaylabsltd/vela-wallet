@@ -55,9 +55,9 @@ import { maybeDeliveredOf, PoolFailedError } from './rpc-pool';
 import { assertChallengeSigned, attestedSafeOpHash } from './sign-attest';
 import { requestUserOpReceipt, USER_OP_RECEIPT_POLL_INTERVAL_MS } from './tx-reconciler';
 import { clearEstimateReverts, recordEstimateReverts } from './estimate-verdict';
-import { DeploymentReadError } from './deployment-read';
+import { DeploymentInternalError, DeploymentReadError } from './deployment-read';
 
-export { DeploymentReadError } from './deployment-read';
+export { DeploymentInternalError, DeploymentReadError } from './deployment-read';
 import { gasQuoteShouldZero } from './fault-injection';
 import {
 	fetchBundlerAccountInfo,
@@ -1293,14 +1293,25 @@ export function _resetFeeSignalsCache(): void {
  */
 export async function fetchRawGasSignals(
 	chainId: number,
-	wantTip: boolean
+	wantTip: boolean,
+	/**
+	 * A retry after a failure (the fee core's `FetchGasPrice.fresh`, issue
+	 * 483): past the held reading and past a read already out — a retry is a
+	 * real new read, never the answer that just failed.
+	 */
+	fresh = false
 ): Promise<RawGasSignals> {
 	const cached = _rawGasSignalsCache.get(chainId);
-	if (cached && cached.wantTip === wantTip && Date.now() - cached.at < feeSignalsCacheTtlMs()) {
+	if (
+		!fresh &&
+		cached &&
+		cached.wantTip === wantTip &&
+		Date.now() - cached.at < feeSignalsCacheTtlMs()
+	) {
 		return { ...cached.signals };
 	}
 	const key = `${chainId}:${wantTip}`;
-	const pending = _rawGasSignalsRequests.get(key);
+	const pending = fresh ? undefined : _rawGasSignalsRequests.get(key);
 	// Each caller gets its own copy, as a cache hit does.
 	if (pending) return pending.then((signals) => ({ ...signals }));
 	const epoch = _feeSignalsEpoch.get(chainId) ?? 0;
@@ -2726,8 +2737,18 @@ const _deployedCache = new Map<string, true>();
  */
 const _deployedRequests = new Map<string, Promise<boolean>>();
 
-function isDeployed(address: string, chainId: number): Promise<boolean> {
+function isDeployed(
+	address: string,
+	chainId: number,
+	/**
+	 * A retry after a failure (the fee core's `ReadDeployment.fresh`): read the
+	 * chain again, past the held answer and past a read already out — a retry
+	 * is a real new read, never the answer that just failed.
+	 */
+	options: { fresh?: boolean } = {}
+): Promise<boolean> {
 	const key = `${chainId}:${address.toLowerCase()}`;
+	if (options.fresh === true) return readIsDeployed(address, chainId, key);
 	if (_deployedCache.has(key)) return Promise.resolve(true);
 	const pending = _deployedRequests.get(key);
 	if (pending) return pending;
@@ -2752,23 +2773,17 @@ async function readIsDeployed(address: string, chainId: number, key: string): Pr
 		response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
 	} catch (err) {
 		console.error('[UserOp] eth_getCode failed:', err instanceof Error ? err.message : String(err));
-		// Whether the chain's nodes turned it away for load is the pool's fact
-		// (spec 082 RJ13): the fee row says "rate-limited, retrying", not
-		// "can't reach Vela".
-		throw new DeploymentReadError(err instanceof PoolFailedError && err.rateLimited);
+		throw deploymentReadFailure(err);
 	}
+	// A node answered, but not with code: the chain's side, never Vela's.
 	if (response.error) {
 		console.error('[UserOp] eth_getCode RPC error:', JSON.stringify(response.error));
-		throw new Error(
-			'Could not verify the account deployment status — the network may be unstable. Please try again.'
-		);
+		throw new DeploymentReadError(false);
 	}
 	const result = response.result as string | undefined;
 	if (typeof result !== 'string') {
 		console.error('[UserOp] eth_getCode returned no result:', JSON.stringify(response));
-		throw new Error(
-			'Could not verify the account deployment status — the network may be unstable. Please try again.'
-		);
+		throw new DeploymentReadError(false);
 	}
 	const deployed = result !== '0x' && result.length > 2;
 	console.log('[UserOp] isDeployed:', deployed, 'code length:', result.length);
@@ -2776,15 +2791,51 @@ async function readIsDeployed(address: string, chainId: number, key: string): Pr
 	return deployed;
 }
 
-// Cache: nonce is valid briefly (invalidated after each tx)
-const _nonceCache = new Map<string, { nonce: string; at: number }>();
-const NONCE_CACHE_TTL = 10_000; // 10s
+/**
+ * Why an `eth_getCode` that threw got no answer (issue 483): the chain's nodes
+ * did not answer — or answered only with rate limits, the pool's fact (spec
+ * 082 RJ13), so the fee row says "rate-limited, retrying" — or the read never
+ * left the app (the pool could not boot, its core faulted), which is Vela's
+ * own fault and is never told as "can't reach the chain".
+ */
+function deploymentReadFailure(err: unknown): DeploymentReadError | DeploymentInternalError {
+	if (err instanceof PoolFailedError) {
+		return err.internal
+			? new DeploymentInternalError('rpc: pool_fault')
+			: new DeploymentReadError(err.rateLimited);
+	}
+	const message = err instanceof Error ? err.message : String(err);
+	// The fault switches (spec 026 T223) stand in for a chain that is away or
+	// rate-limiting: they are the network's, as what they imitate is.
+	if (message.startsWith('[fault]')) {
+		return new DeploymentReadError(/rate-limited/i.test(message));
+	}
+	return new DeploymentInternalError(`rpc: ${message.slice(0, 80)}`);
+}
 
-async function getNonce(safeAddress: string, chainId: number): Promise<string> {
+/**
+ * Nonce reads in flight, shared — the prewarm, the estimate and the build ask
+ * within a moment of each other. Nothing is HELD past its answer (correctness
+ * batch item 3): the 10 s nonce cache and its "+1 after an accepted op" are
+ * gone. A second operation of the account on a network now waits for the
+ * first in the core (`ConfirmBlock::PreviousPending`, `SendView.
+ * previous_pending`), so the chain's own nonce is the right one when it
+ * signs; the local bump could only ever park an op at N+1 behind a refused N.
+ */
+const _nonceRequests = new Map<string, Promise<string>>();
+
+function getNonce(safeAddress: string, chainId: number): Promise<string> {
 	const key = `${chainId}:${safeAddress.toLowerCase()}`;
-	const cached = _nonceCache.get(key);
-	if (cached && Date.now() - cached.at < NONCE_CACHE_TTL) return cached.nonce;
+	const pending = _nonceRequests.get(key);
+	if (pending) return pending;
+	const request = readNonce(safeAddress, chainId).finally(() => {
+		if (_nonceRequests.get(key) === request) _nonceRequests.delete(key);
+	});
+	_nonceRequests.set(key, request);
+	return request;
+}
 
+async function readNonce(safeAddress: string, chainId: number): Promise<string> {
 	const selector = toHex(functionSelector('getNonce(address,uint192)'));
 	const addressEncoded = toHex(abiEncodeAddress(safeAddress));
 	const keyEncoded = toHex(abiEncodeUint256(0n));
@@ -2807,23 +2858,7 @@ async function getNonce(safeAddress: string, chainId: number): Promise<string> {
 			'Could not fetch the account nonce — the network may be unstable. Please try again.'
 		);
 	}
-	const nonce = response.result as string;
-	_nonceCache.set(key, { nonce, at: Date.now() });
-	return nonce;
-}
-
-/**
- * Optimistically increment the cached nonce after submitting a UserOp.
- * Prevents concurrent transactions from reusing the same nonce.
- * If the cache is stale or missing, the next getNonce() will fetch fresh.
- */
-function incrementNonceCache(safeAddress: string, chainId: number): void {
-	const key = `${chainId}:${safeAddress.toLowerCase()}`;
-	const cached = _nonceCache.get(key);
-	if (!cached) return;
-	const currentNonce = BigInt(cached.nonce);
-	const nextNonce = '0x' + (currentNonce + 1n).toString(16);
-	_nonceCache.set(key, { nonce: nextNonce, at: Date.now() });
+	return response.result as string;
 }
 
 // Cache: gas prices are stable enough for 15s
@@ -3312,33 +3347,24 @@ interface SubmittedOp {
 }
 
 /**
- * Submit a signed op and account for it: the local nonce moves on ONLY when
- * the relay has the op (spec 082 RA5). A may-have-been-sent op leaves nonce N
- * where it was, so a new attempt reuses it and the EntryPoint lets at most one
- * land — the double payment needs two different nonces. Exported for the
- * submit tests; every send path goes through here.
+ * Submit a signed op. No local nonce moves (correctness batch item 3): every
+ * op signs the chain's own nonce, and a second one waits in the core until the
+ * first is final. A may-have-been-sent op therefore leaves nonce N where it
+ * was, so a new attempt reuses it and the EntryPoint lets at most one land —
+ * the double payment needs two different nonces (spec 082 RA5). Exported for
+ * the submit tests; every send path goes through here.
  */
 export async function submitSigned(
 	userOp: UserOperation,
 	chainId: number,
+	/** The sender — the op names it too; no nonce of its is held here any more. */
 	safeAddress: string,
 	extra?: Record<string, string>,
 	tier?: Exclude<GasTier, 'rapid'>,
 	beforePost?: BeforePost
 ): Promise<SubmitResult> {
 	const submitted = await submitUserOp(userOp, chainId, extra, tier, beforePost);
-	if (submitted.accepted) incrementNonceCache(safeAddress, chainId);
 	return submitResultOf(submitted, chainId);
-}
-
-/** The nonce this module would sign next for `safeAddress` — tests only. */
-export function _cachedNonceForTest(safeAddress: string, chainId: number): string | undefined {
-	return _nonceCache.get(`${chainId}:${safeAddress.toLowerCase()}`)?.nonce;
-}
-
-/** Plant a cached nonce — tests only. */
-export function _seedNonceForTest(safeAddress: string, chainId: number, nonce: string): void {
-	_nonceCache.set(`${chainId}:${safeAddress.toLowerCase()}`, { nonce, at: Date.now() });
 }
 
 function submitResultOf(submitted: SubmittedOp, chainId: number): SubmitResult {
