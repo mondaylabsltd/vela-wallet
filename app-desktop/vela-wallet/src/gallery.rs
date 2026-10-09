@@ -404,7 +404,19 @@ fn base_view() -> CreateView {
         signing_page: None,
         can_choose_page: true,
         add_methods: KeyMethod::ALL.to_vec(),
+        add_heading_key: vela_core::app::create_wallet::ADD_HEADING_FIRST.to_owned(),
+        methods_pinned: true,
     }
+}
+
+/// The keys screen's heading and fold as the core decides them from this
+/// shape (issue 475) — every fixture sets its keys, and the two fields follow
+/// them rather than being a second opinion the gallery keeps by hand.
+fn settle_heading(mut view: CreateView) -> CreateView {
+    view.add_heading_key =
+        vela_core::app::create_wallet::add_heading_key(view.keys.len()).to_owned();
+    view.methods_pinned = view.keys.is_empty() && view.can_add_key;
+    view
 }
 
 /// The self-hosted page the fixtures that need one are made on.
@@ -465,7 +477,7 @@ fn entries() -> Vec<Entry> {
         out.push(Entry {
             group: "Create",
             code,
-            fixture: Fixture::Flow(view),
+            fixture: Fixture::Flow(settle_heading(view)),
         });
     };
 
@@ -1013,7 +1025,10 @@ impl GalleryView {
             loc,
             entries,
             selected,
-            picker_open: false,
+            // `VELA_PICKER_OPEN=1`: the keys screen's "Add another" fold
+            // starts open (issue 475), so the three places under it can be
+            // looked at without a click — the `VELA_GALLERY_STATE` family.
+            picker_open: crate::dev_env::flag!("VELA_PICKER_OPEN"),
             copied: false,
             details_expanded: false,
             pin_value: String::new(),

@@ -312,12 +312,19 @@ pub fn own_page_row(
                             .text_color(theme.fg_base)
                             .child(loc.t(words.title_key)),
                     )
-                    .child(body(
-                        theme,
-                        words
-                            .line_key()
-                            .map_or_else(SharedString::default, |key| loc.t(key)),
-                    )),
+                    // One line, always (issue 475): the entry's line is
+                    // short in every language now, and a row that wraps is
+                    // taller than the three places over it.
+                    .child(
+                        body(
+                            theme,
+                            words
+                                .line_key()
+                                .map_or_else(SharedString::default, |key| loc.t(key)),
+                        )
+                        .whitespace_nowrap()
+                        .truncate(),
+                    ),
             )
             .child(
                 div()
