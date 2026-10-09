@@ -642,6 +642,8 @@ fun StatusHero(
         ReceiptStage.Submitted -> colors.bgSunken to colors.fgMuted
         ReceiptStage.Confirmed -> colors.successSoft to colors.successBase
         ReceiptStage.Failed -> colors.errorSoft to colors.errorBase
+        // Calm: the submitted wait's own quiet disc, never the failure's tint.
+        ReceiptStage.NotSent -> colors.bgSunken to colors.fgMuted
     }
     Column(
         modifier = modifier
@@ -743,6 +745,14 @@ fun StatusHero(
                 // Issue #460: a failure is said with !, never the close glyph.
                 ReceiptStage.Failed -> Icon(
                     imageVector = VelaIcons.Exclamation,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(VelaIconSize.xl2),
+                )
+                // "Not sent yet": a still clock — a wait, with no ring and no
+                // breathing (nothing of this transaction is in flight).
+                ReceiptStage.NotSent -> Icon(
+                    imageVector = VelaIcons.Clock,
                     contentDescription = null,
                     tint = tint,
                     modifier = Modifier.size(VelaIconSize.xl2),
@@ -1214,7 +1224,8 @@ fun FeeRow(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(onClick = onOpen)
+                    // A row whose tap does nothing is no control (PR 2 polish).
+                    .clickable(enabled = fee.opens, onClick = onOpen)
                     .padding(VelaSpacing.lg),
             ) {
                 // Stacked (a large text size), the value starts under the
@@ -1242,13 +1253,18 @@ fun FeeRow(
                                 fontSize = VelaTextSize.base,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
+                            // The chevron promises a tap; a row with none keeps its room, unmarked.
                             Spacer(modifier = Modifier.width(VelaSpacing.sm))
-                            Icon(
-                                imageVector = VelaIcons.ChevronRight,
-                                contentDescription = fee.openLabel,
-                                tint = colors.fgMuted,
-                                modifier = Modifier.size(VelaIconSize.sm),
-                            )
+                            if (fee.opens) {
+                                Icon(
+                                    imageVector = VelaIcons.ChevronRight,
+                                    contentDescription = fee.openLabel,
+                                    tint = colors.fgMuted,
+                                    modifier = Modifier.size(VelaIconSize.sm),
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.size(VelaIconSize.sm))
+                            }
                         }
                     },
                 )

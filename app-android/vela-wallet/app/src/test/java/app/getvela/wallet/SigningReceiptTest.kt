@@ -443,16 +443,28 @@ class SigningReceiptTest {
         assertEquals(null, receipt.retry)
         assertEquals(wentFirst, SigningLive.statusBlocks(tracked, strings).filterIsInstance<SigningBlock.Warning>().single().text)
 
+        // PR 2 polish: the relay turned it back — the previous operation holds
+        // the nonce. The core's view: `failure_not_sent`, its sentence, retryable.
         val held = SignView(
             surface = SignSurface.Sheet,
             error = SignErrorNotice(SignErrorKind.SubmitFailed, "previous transaction pending"),
             failure_retryable = true,
-            failure_refusal_key = I18nKeys.Flows.PREVIOUS_PENDING,
+            failure_refusal_key = I18nKeys.Flows.NOT_SENT_BODY,
+            failure_not_sent = true,
         )
         val retry = SigningLive.receipt(held, blocks, ctx)!!
-        assertTrue(retry.captions.toString(), retry.captions.contains(strings.t(I18nKeys.Flows.PREVIOUS_PENDING)))
+        assertEquals("its own calm state, never \"Failed\"", ReceiptStage.NotSent, retry.stage)
+        assertEquals(strings.t(I18nKeys.Flows.NOT_SENT_TITLE), retry.title)
+        assertTrue(retry.captions.toString(), retry.captions.contains(strings.t(I18nKeys.Flows.NOT_SENT_BODY)))
         assertTrue("never the generic \"try again\" sentence", !retry.captions.contains(strings.t("send.txErrorGeneric")))
         assertEquals("Try again stays", strings.t(I18nKeys.Flows.TX_RETRY), retry.retry)
+        // Its sentence on the form is the sheet's neutral voice, never a warning.
+        val status = SigningLive.statusBlocks(held, strings)
+        assertTrue(status.toString(), status.none { it is SigningBlock.Warning })
+        assertTrue(status.any { it is SigningBlock.Sentence && it.text == strings.t(I18nKeys.Flows.NOT_SENT_BODY) && it.tone == SigningTone.Neutral })
+        // A core that predates the field reads `false`: the old failure, as before.
+        val before = app.getvela.wallet.core.crux.Wire.json.decodeFromString(SignView.serializer(), "{}")
+        assertFalse(before.failure_not_sent)
     }
 
     /**

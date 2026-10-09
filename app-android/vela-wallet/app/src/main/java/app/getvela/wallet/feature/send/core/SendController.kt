@@ -356,7 +356,9 @@ class SendController(
                 // The fee card has failed (or is re-asking after a failure)
                 // and holds no figure: the confirm is held, and never opens
                 // on the figure the fee machine discarded (PR 2 integration).
-                tellFeeFailed(view.failure != null)
+                // A failure for another chain's question is no failure of
+                // this form's (PR 2 polish) — read against the form as it is.
+                tellFeeFailed()
                 val estimate = view.fee
                 if (estimate != null && estimate !== lastFee) {
                     lastFee = estimate
@@ -375,15 +377,26 @@ class SendController(
             combine(fee, speedControl.pricingChainId, sendHost.commits) { view, pricing, _ -> view.fee_token to pricing }
                 .collect { (feeToken, pricing) -> tellFeeToken(feeToken, pricing) }
         }
+        // The form moving to another chain changes whether the card's failure
+        // is this form's (PR 2 polish): right after a token switch the old
+        // chain's failure stops counting before the fee machine is asked again.
+        scope.launch {
+            sendHost.commits.collect { tellFeeFailed() }
+        }
     }
 
     private fun dispatch(event: SendEvent) {
         sendHost.dispatch(event, SendEvent.serializer())
     }
 
-    /** `FeeFailedChanged` when the word changes — under its lock with the dispatch, so it never overtakes an Open. */
-    private fun tellFeeFailed(failed: Boolean) = synchronized(feeFailedWord) {
-        feeFailedWord.news(failed)?.let(::dispatch)
+    /**
+     * `FeeFailedChanged` when the word changes — under its lock with the
+     * dispatch, so it never overtakes an Open. Read from the card and the form
+     * as they are now ([FeeFailedWord.failed]): a failure for another chain's
+     * question does not count (PR 2 polish).
+     */
+    private fun tellFeeFailed() = synchronized(feeFailedWord) {
+        feeFailedWord.news(FeeFailedWord.failed(fee.value, send.value))?.let(::dispatch)
     }
 
     /** What this send journey was last told of the fee card's coin; [open] forgets it. */
@@ -470,7 +483,7 @@ class SendController(
         // its first word goes, whatever it is — after the Open, never before.
         synchronized(feeFailedWord) {
             feeFailedWord.forget()
-            feeFailedWord.news(fee.value.failure != null)?.let(::dispatch)
+            feeFailedWord.news(FeeFailedWord.failed(fee.value, send.value))?.let(::dispatch)
         }
     }
 
@@ -511,14 +524,19 @@ class SendController(
     fun refreshFee() = speedControl.refresh()
 
     /**
-     * A tap on the fee row. Over a failed fee it is the retry — at once, a
-     * real new read, the core's own timer for the next one dropped (PR 2
-     * note 1) — and `true`; otherwise `false`, and the row opens its coins.
+     * A tap on the fee row — the form's, or the confirm's fee line over a
+     * failure — doing exactly what its words say (PR 2 polish, the core's
+     * `FeeFailureView.tap`): over a failure a tap asks again, the retry — at
+     * once, a real new read, the core's own timer for the next one dropped
+     * (PR 2 note 1); after "would fail" with another coin on offer it opens
+     * the coins; when nothing helps, nothing. No failure for this form's
+     * chain: the row opens its coins. Returns what the screen still has to
+     * do — [FeeFailureRow.Tap.OpenCoins] is the coin sheet.
      */
-    fun feeTapped(): Boolean {
-        if (fee.value.failure == null) return false
-        speedControl.refresh()
-        return true
+    fun feeTapped(): FeeFailureRow.Tap {
+        val tap = FeeFailureRow.tap(FeeFailureRow.forChain(fee.value, formChain(send.value)))
+        if (tap == FeeFailureRow.Tap.Retry) speedControl.refresh()
+        return tap
     }
 
     fun displayChanged(display: SendDisplayContext) = dispatch(SendEvent.DisplayChanged(display))
@@ -783,6 +801,16 @@ internal class FeeTokenWord {
  * the controller holds its lock.
  */
 internal class FeeFailedWord {
+    companion object {
+        /**
+         * Whether the fee card has failed for THIS form: a failure whose
+         * `chain_id` names another chain than the form's (`formChain`) is the
+         * old chain's, said before the fee machine was asked about the new one
+         * (PR 2 polish) — it is not drawn, and it holds nothing.
+         */
+        fun failed(fee: FeeView, form: SendView): Boolean = FeeFailureRow.forChain(fee, formChain(form)) != null
+    }
+
     private var told: Boolean? = null
 
     /** The event that tells [failed], or `null` when this journey already knows it. */

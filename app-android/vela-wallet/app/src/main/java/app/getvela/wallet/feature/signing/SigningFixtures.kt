@@ -269,6 +269,9 @@ object SigningFixtures {
             SigningScreenState.CS49 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.Internal)
             SigningScreenState.CS51 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.Retrying)
             SigningScreenState.CS52 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.TapOnly)
+            // PR 2 polish: the relay answered that it would fail in USDC.
+            SigningScreenState.CS54, SigningScreenState.CS56 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailChooseCoin)
+            SigningScreenState.CS55 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailNothing)
             else -> app.getvela.wallet.feature.send.core.FeeView()
         }
         val block = when (state) {
@@ -280,13 +283,15 @@ object SigningFixtures {
         }
         val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
         if (state == SigningScreenState.CS53) {
-            // The relay would not take it: another of this account's
-            // operations holds the nonce — said by its reason, with Try again.
+            // The relay turned it back: another of this account's operations
+            // holds the nonce. Nothing was sent — "Not sent yet", calmly, its
+            // sentence, and Try again (the core's view of it).
             val sign = SignView(
                 surface = SignSurface.Sheet,
                 error = SignErrorNotice(SignErrorKind.SubmitFailed, "previous transaction pending"),
                 failure_retryable = true,
-                failure_refusal_key = I18nKeys.Flows.PREVIOUS_PENDING,
+                failure_refusal_key = I18nKeys.Flows.NOT_SENT_BODY,
+                failure_not_sent = true,
             )
             return base.copy(receipt = SigningLive.receipt(sign, base.blocks, ctx))
         }
@@ -301,7 +306,8 @@ object SigningFixtures {
             return base.copy(receipt = SigningLive.aftercareReceipt(SignEndingState.Refused, summary, ctx.copy(track = entry)))
         }
         return base.copy(
-            fee = SigningLive.feeModel(ClearSigningView(), fee, ctx),
+            // CS56: the row's tap opened the coins.
+            fee = SigningLive.feeModel(ClearSigningView(), fee, ctx.copy(feeOpen = state == SigningScreenState.CS56)),
             confirmEnabled = block == null,
             confirmBlockLine = block?.let { t(it) },
         )
@@ -1223,7 +1229,8 @@ object SigningFixtures {
 
             SigningScreenState.CS45, SigningScreenState.CS46, SigningScreenState.CS47,
             SigningScreenState.CS48, SigningScreenState.CS49, SigningScreenState.CS50,
-            SigningScreenState.CS51, SigningScreenState.CS52, SigningScreenState.CS53 -> correctness(state)
+            SigningScreenState.CS51, SigningScreenState.CS52, SigningScreenState.CS53,
+            SigningScreenState.CS54, SigningScreenState.CS55, SigningScreenState.CS56 -> correctness(state)
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,

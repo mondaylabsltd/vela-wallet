@@ -165,6 +165,10 @@ class I18nEngineSmokeTest {
         I18nKeys.Flows.FEE_RETRYING,
         I18nKeys.Flows.FEE_FAILED,
         I18nKeys.Flows.FEE_TAP_TO_RETRY,
+        I18nKeys.Flows.FEE_PAY_WITH_ANOTHER_COIN,
+        I18nKeys.Flows.FEE_WOULD_FAIL,
+        I18nKeys.Flows.NOT_SENT_TITLE,
+        I18nKeys.Flows.NOT_SENT_BODY,
         I18nKeys.Flows.ALERT_ESTIMATE_CHAIN_DOWN_BODY,
         I18nKeys.Flow.HEADER_SHARED,
         I18nKeys.Flow.STEP_COUNTER,
@@ -290,7 +294,11 @@ class I18nEngineSmokeTest {
         runtime.initialize("en")
         for (tag in LocaleResolver.SUPPORTED) {
             runtime.setLocale(tag)
-            for (key in listOf(I18nKeys.Flows.FEE_RETRYING, I18nKeys.Flows.FEE_REASON_INTERNAL, I18nKeys.Flows.ALERT_ESTIMATE_CHAIN_DOWN_BODY)) {
+            for (key in listOf(
+                I18nKeys.Flows.FEE_RETRYING, I18nKeys.Flows.FEE_REASON_INTERNAL, I18nKeys.Flows.ALERT_ESTIMATE_CHAIN_DOWN_BODY,
+                // PR 2 polish: "Not sent yet", and a fee that would fail.
+                I18nKeys.Flows.NOT_SENT_TITLE, I18nKeys.Flows.NOT_SENT_BODY, I18nKeys.Flows.FEE_PAY_WITH_ANOTHER_COIN, I18nKeys.Flows.FEE_WOULD_FAIL,
+            )) {
                 val value = runtime.t(key, mapOf("chain" to "Gnosis"))
                 assertNotEquals("key echoed for locale $tag", key, value)
                 assertTrue("blank or unfilled $key for locale $tag: $value", value.isNotBlank() && !value.contains("{{"))
@@ -298,6 +306,11 @@ class I18nEngineSmokeTest {
         }
         runtime.setLocale("en")
         assertEquals("Couldn't work out the fee yet. Retrying…", runtime.t(I18nKeys.Flows.FEE_RETRYING))
+        assertEquals("Not sent yet", runtime.t(I18nKeys.Flows.NOT_SENT_TITLE))
+        assertEquals("Pay with another coin", runtime.t(I18nKeys.Flows.FEE_PAY_WITH_ANOTHER_COIN))
+        runtime.setLocale("zh")
+        assertEquals("暂未发送", runtime.t(I18nKeys.Flows.NOT_SENT_TITLE))
+        runtime.setLocale("en")
         assertTrue(runtime.t(I18nKeys.Flows.ALERT_ESTIMATE_CHAIN_DOWN_BODY, mapOf("chain" to "Gnosis")).startsWith("Can't reach Gnosis"))
     }
 

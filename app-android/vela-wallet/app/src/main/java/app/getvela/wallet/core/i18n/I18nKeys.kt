@@ -823,6 +823,26 @@ object I18nKeys {
         const val FEE_FAILED = "componentsUi.signing.confirmBlock.feeFailed"
         /** The fee row's figure when only a tap asks again ("Tap to retry"): `FeeFailureView.figure_key`. */
         const val FEE_TAP_TO_RETRY = "componentsUi.gas.estimateFailed"
+        /**
+         * PR 2 polish: the fee row's figure when the relay answered that the
+         * operation fails with the coin in force and a tap opens the coins
+         * ("Pay with another coin") — `FeeFailureView.figure_key` with
+         * `tap = choose_coin`.
+         */
+        const val FEE_PAY_WITH_ANOTHER_COIN = "componentsUi.gas.payWithAnotherCoin"
+        /**
+         * The line under the held confirm for that answer ("This would fail
+         * if sent as it is.") — a fact, asking for no tap: `footer_key`.
+         */
+        const val FEE_WOULD_FAIL = "componentsUi.signing.confirmBlock.feeWouldFail"
+        /**
+         * PR 2 polish: a submit the relay turned back because the account's
+         * previous transaction on this network still holds the nonce — "Not
+         * sent yet", calmly, over its sentence, with Try again: the signing
+         * sheet's `failure_not_sent`, Send's `tx_error = previous_pending`.
+         */
+        const val NOT_SENT_TITLE = "componentsUi.signing.notSentTitle"
+        const val NOT_SENT_BODY = "componentsUi.signing.notSentBody"
         const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"

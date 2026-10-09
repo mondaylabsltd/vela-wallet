@@ -878,6 +878,8 @@ class CoreWireDriftTest {
         assertTrue("minimum_amount" in serializer<FeeAssetQuote>().descriptor.elementNames)
         // PR 2 note 1: the failure said once for the row and the footer — every field.
         assertFieldsExhaustive<app.getvela.wallet.feature.send.core.FeeFailureView>("FeeFailureView")
+        // PR 2 polish: what a tap on the failed row does — every word.
+        assertStringUnion<app.getvela.wallet.feature.send.core.FeeFailureTap>("FeeFailureTap")
     }
 
     @Test

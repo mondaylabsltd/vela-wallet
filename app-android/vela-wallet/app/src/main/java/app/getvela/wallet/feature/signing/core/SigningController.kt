@@ -464,17 +464,22 @@ class SigningController(
     val feeOpen = MutableStateFlow(false)
 
     /**
-     * A tap on the fee row: a failed quote is asked again at once (the core's
-     * own timer for the next re-ask goes with the attempt, PR 2 note 1) —
-     * also while the core retries by itself; with more than one coin, the
-     * list opens or closes.
+     * A tap on the fee row, doing exactly what its words say (PR 2 polish,
+     * the core's `FeeFailureView.tap`): over a failure a tap asks again at
+     * once (the core's own timer for the next re-ask goes with the attempt,
+     * PR 2 note 1) — "Tap to retry", or the dash while the core retries by
+     * itself; after "would fail" with another coin on offer it opens the
+     * coins ("Pay with another coin"); when nothing helps, nothing. No
+     * failure: with more than one coin, the list opens or closes.
      */
     fun feeTapped() {
         val view = fee.value
-        when {
+        when (app.getvela.wallet.feature.send.core.FeeFailureRow.tap(view.failure)) {
             // Measured again for real — the held readings dropped first.
-            view.failure != null -> speedControl.refresh()
-            view.options.size > 1 -> feeOpen.value = !feeOpen.value
+            app.getvela.wallet.feature.send.core.FeeFailureRow.Tap.Retry -> speedControl.refresh()
+            app.getvela.wallet.feature.send.core.FeeFailureRow.Tap.OpenCoins ->
+                if (view.options.size > 1) feeOpen.value = !feeOpen.value
+            app.getvela.wallet.feature.send.core.FeeFailureRow.Tap.Ignore -> Unit
         }
     }
 

@@ -580,6 +580,21 @@ object SigningLive {
         return when {
             // A refusal after the approval (the submission failed): the core's
             // reason, the sheet's own sentence for it.
+            // PR 2 polish: the relay turned the submit back because the
+            // account's previous transaction on this network still holds the
+            // nonce. Nothing was sent and nothing went wrong — "Not sent
+            // yet", calmly (a still clock, never the failure's red), over
+            // the core's sentence, with Try again beside Done.
+            sign.failure_not_sent && sign.error != null && sign.error.kind != SignErrorKind.UserRejected ->
+                SendReceiptModel(
+                    header = header,
+                    stage = ReceiptStage.NotSent,
+                    title = s.t(I18nKeys.Flows.NOT_SENT_TITLE),
+                    captions = listOfNotNull(summary, failureWords(sign, s)),
+                    cta = s.t(I18nKeys.Flows.DONE),
+                    ctaAccent = !sign.failure_retryable,
+                    retry = if (sign.failure_retryable) s.t(I18nKeys.Flows.TX_RETRY) else null,
+                )
             sign.error != null && sign.error.kind != SignErrorKind.UserRejected && (sign.pending_op_hash != null || sign.error.kind in SUBMIT_FAILURES) ->
                 SendReceiptModel(
                     header = header,
@@ -922,7 +937,13 @@ object SigningLive {
                 SignErrorKind.UserRejected, SignErrorKind.WalletSwitchedChains -> ""
                 else -> failureWords(sign, s)
             }
-            if (text.isNotEmpty()) add(SigningBlock.Warning(SigningTone.Danger, text))
+            when {
+                text.isEmpty() -> Unit
+                // "Not sent yet" (PR 2 polish) is no failure: its sentence is
+                // said in the sheet's neutral voice, never as a warning.
+                sign.failure_not_sent -> add(SigningBlock.Sentence(text, SigningTone.Neutral))
+                else -> add(SigningBlock.Warning(SigningTone.Danger, text))
+            }
         }
         when {
             sign.pending_op_hash != null -> add(SigningBlock.Positive(s.s("submitted")))
@@ -1233,9 +1254,11 @@ object SigningLive {
         // "Estimating…" and back while the core retries by itself.
         val failure = fee.failure
         val value = when {
-            // The figure: "Tap to retry" only when a tap is the one way,
-            // else the dash — never a tap asked for while the core retries.
-            failure != null -> failure.figure_key?.let { ctx.strings.t(it) } ?: "—"
+            // The figure says what a tap does (PR 2 polish): "Tap to retry"
+            // only when a tap is the one way, "Pay with another coin" when it
+            // opens the coins, else the dash — never a tap asked for while
+            // the core retries.
+            failure != null -> app.getvela.wallet.feature.send.core.FeeFailureRow.figure(failure, ctx.strings)
             // The send screens' own line (issue 201): the coin that is ACTUALLY
             // paying — an in-band ERC-20 fee is its own amount under its own
             // ticker, never the native figure — and what it costs in money.
@@ -1278,8 +1301,10 @@ object SigningLive {
             value = value,
             selectorTitle = if (options.isEmpty()) null else ctx.strings.s("feeTokenTitle"),
             options = options,
-            // A failed fee's row is its retry — at once, also while the core retries.
-            tappable = failure != null || choosable,
+            // A failed fee's row does what its figure says — a retry at once
+            // (also while the core retries), or the coins — and is no control
+            // when the core says a tap does nothing.
+            tappable = if (failure != null) app.getvela.wallet.feature.send.core.FeeFailureRow.isControl(failure) else choosable,
             warning = when {
                 noCoinPays -> ctx.strings.t(I18nKeys.Flows.FEE_NO_COIN_PAYS)
                 short -> ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol))
@@ -1305,7 +1330,10 @@ object SigningLive {
             // The core knows the first figure will land as "no coin can pay":
             // its line's room is held from now (iPhone pass 2026-10-09).
             reserve = ctx.strings.t(I18nKeys.Flows.FEE_NO_COIN_PAYS).takeIf { fee.nothing_to_pay_from },
-            chevron = choosable,
+            // Only where a tap opens the coin list: never over a failure a tap
+            // retries, nor one a tap cannot help.
+            chevron = choosable && (failure == null || failure.tap == app.getvela.wallet.feature.send.core.FeeFailureTap.ChooseCoin),
+            chevronRoom = choosable,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->
                 SendLive.speedModel(inputs, ctx.strings) { quote, view -> feeLine(quote, view ?: fee, ctx) }

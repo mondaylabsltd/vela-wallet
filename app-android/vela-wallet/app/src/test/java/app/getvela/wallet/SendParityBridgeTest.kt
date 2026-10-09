@@ -247,7 +247,7 @@ class SendParityBridgeTest {
         assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_CHAIN_DOWN, mapOf("chain" to "Gnosis")), row.reason)
         assertTrue("the core retries it by itself", failed.failure!!.auto_retry)
         // A tap on the failed row is the retry, not the coin list.
-        assertTrue(send.feeTapped())
+        assertEquals(app.getvela.wallet.feature.send.core.FeeFailureRow.Tap.Retry, send.feeTapped())
         send.left()
     }
 

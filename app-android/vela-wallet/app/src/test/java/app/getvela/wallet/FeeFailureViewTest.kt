@@ -11,7 +11,10 @@ import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.FeeBoards
 import app.getvela.wallet.feature.send.core.FeeCall
 import app.getvela.wallet.feature.send.core.FeeExecutor
+import app.getvela.wallet.feature.send.core.FeeFailedWord
 import app.getvela.wallet.feature.send.core.FeeFailure
+import app.getvela.wallet.feature.send.core.FeeFailureRow
+import app.getvela.wallet.feature.send.core.FeeFailureTap
 import app.getvela.wallet.feature.send.core.FeeSpeedView
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.FeeView
@@ -187,6 +190,172 @@ class FeeFailureViewTest {
         val previous = held.copy(previous_pending = SendPreviousPending(chain_id = 100, user_op_hash = "0x" + "f1".repeat(32), key = I18nKeys.Flows.PREVIOUS_PENDING))
         assertEquals("the previous transaction's line comes first", strings.t(I18nKeys.Flows.PREVIOUS_PENDING), SendLive.confirm(drawn, previous, sendCtx(), fee).ctaHold)
         assertNull("no failure, no hold: no line", SendLive.confirm(drawn, held.copy(can_confirm = true), sendCtx(), FeeView()).ctaHold)
+    }
+
+    // -- PR 2 polish: a control does exactly what its words say ------------------
+
+    private fun confirmOf(fee: FeeView, chainOfForm: Int = 100): app.getvela.wallet.feature.flows.SendConfirmModel {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val view = formView(fee).copy(
+            stage = SendStage.Confirm,
+            can_confirm = false,
+            selected_token = formView(fee).selected_token!!.copy(chain_id = chainOfForm, network = "chain-$chainOfForm"),
+        )
+        return SendLive.confirm(drawn, view, sendCtx(), fee)
+    }
+
+    private fun feeFact(confirm: app.getvela.wallet.feature.flows.SendConfirmModel) =
+        confirm.facts.single { it.label == strings.t(I18nKeys.Flows.EST_FEE) }
+
+    /**
+     * The relay answered that the operation fails in the coin chosen, and
+     * another coin is on offer: the row says "Pay with another coin" and its
+     * tap opens the coins — on the form, the confirm's fee line and the sheet;
+     * under the held confirm the fact, asking for no tap.
+     */
+    @Test
+    fun `a fee that would fail opens the coins, and says so`() {
+        val fee = board(FeeBoards.Case.WouldFailChooseCoin)
+        val failure = fee.failure!!
+        assertEquals(FeeFailure.WouldFail, failure.failure)
+        assertEquals(FeeFailureTap.ChooseCoin, failure.tap)
+        assertEquals(I18nKeys.Flows.FEE_PAY_WITH_ANOTHER_COIN, failure.figure_key)
+        assertEquals(I18nKeys.Flows.FEE_WOULD_FAIL, failure.footer_key)
+        assertEquals("the question it answered", 100, failure.chain_id)
+        assertEquals(FeeBoards.USDC, failure.fee_token)
+        assertEquals(FeeFailureRow.Tap.OpenCoins, FeeFailureRow.tap(failure))
+
+        val words = strings.t(I18nKeys.Flows.FEE_PAY_WITH_ANOTHER_COIN)
+        val form = formRow(fee)
+        assertEquals(words, form.value)
+        assertTrue("a control", form.opens)
+        assertEquals("the form, holding no confirm, says the fact", strings.t(I18nKeys.Flows.FEE_WOULD_FAIL), form.reason)
+        val sheet = sheetRow(fee)
+        assertEquals(words, sheet.value)
+        assertTrue(sheet.tappable && sheet.chevron)
+        val confirm = confirmOf(fee)
+        assertEquals(words, feeFact(confirm).value)
+        assertTrue("the confirm's fee line is the control too", feeFact(confirm).tap)
+        assertEquals(strings.t(I18nKeys.Flows.FEE_WOULD_FAIL), confirm.ctaHold)
+        assertFalse("never \"Tap it to retry\"", confirm.ctaHold == strings.t(I18nKeys.Flows.FEE_FAILED))
+    }
+
+    /** No other coin left: the dash, and the row is no control anywhere. */
+    @Test
+    fun `a fee that would fail with no other coin is no control`() {
+        val fee = board(FeeBoards.Case.WouldFailNothing)
+        val failure = fee.failure!!
+        assertEquals(FeeFailureTap.None, failure.tap)
+        assertNull(failure.figure_key)
+        assertEquals(FeeFailureRow.Tap.Ignore, FeeFailureRow.tap(failure))
+        val form = formRow(fee)
+        assertEquals("—", form.value)
+        assertFalse("no tap target, no chevron", form.opens)
+        assertEquals("never a dash with no why", strings.t(I18nKeys.Flows.FEE_WOULD_FAIL), form.reason)
+        val sheet = sheetRow(fee)
+        assertEquals("—", sheet.value)
+        assertFalse(sheet.tappable)
+        assertFalse(sheet.chevron)
+        val confirm = confirmOf(fee)
+        assertEquals("—", feeFact(confirm).value)
+        assertFalse(feeFact(confirm).tap)
+        assertEquals(strings.t(I18nKeys.Flows.FEE_WOULD_FAIL), confirm.ctaHold)
+    }
+
+    /**
+     * Only a tap fixes it, and the confirm's footer says "Tap it to retry":
+     * the line that shows the failure on the confirm is the retry, as the
+     * form's row is — never a dash nobody can tap under a line asking for one.
+     */
+    @Test
+    fun `the tap-only footer's line is a retry on the confirm`() {
+        val fee = board(FeeBoards.Case.TapOnly)
+        assertEquals(FeeFailureTap.Retry, fee.failure!!.tap)
+        assertEquals(FeeFailureRow.Tap.Retry, FeeFailureRow.tap(fee.failure))
+        val confirm = confirmOf(fee)
+        assertEquals(strings.t(I18nKeys.Flows.FEE_FAILED), confirm.ctaHold)
+        assertEquals(strings.t(I18nKeys.Flows.FEE_TAP_TO_RETRY), feeFact(confirm).value)
+        assertTrue("tappable, as its footer says", feeFact(confirm).tap)
+        // While the core's own re-ask is out a second tap asks nothing.
+        assertEquals(FeeFailureRow.Tap.Ignore, FeeFailureRow.tap(board(FeeBoards.Case.Retrying).failure))
+        // No failure: the row's own tap, the coins.
+        assertEquals(FeeFailureRow.Tap.OpenCoins, FeeFailureRow.tap(null))
+        assertFalse("no failure, no tap on the confirm's fee line", feeFact(confirmOf(FeeView())).tap)
+    }
+
+    /** A retried failure's row is a retry: no chevron saying "coins" over it, its room kept. */
+    @Test
+    fun `a failure the row retries draws no coin chevron`() {
+        val withCoins = board(FeeBoards.Case.ChainDown).copy(
+            options = board(FeeBoards.Case.WouldFailChooseCoin).options,
+        )
+        val sheet = sheetRow(withCoins)
+        assertTrue(sheet.tappable)
+        assertFalse(sheet.chevron)
+        assertTrue("its room kept, so the figure does not move", sheet.chevronRoom)
+    }
+
+    /** A key this build does not know draws the dash, never a dotted path; an unknown footer draws nothing. */
+    @Test
+    fun `an unknown key is the dash, never a dotted path`() {
+        val failure = board(FeeBoards.Case.TapOnly).failure!!.copy(figure_key = "componentsUi.gas.somethingNew", footer_key = "componentsUi.signing.confirmBlock.somethingNew")
+        assertEquals("—", FeeFailureRow.figure(failure, strings))
+        assertNull(FeeFailureRow.footer(failure, strings))
+        assertEquals(strings.t(I18nKeys.Flows.FEE_PAY_WITH_ANOTHER_COIN), FeeFailureRow.figure(failure.copy(figure_key = I18nKeys.Flows.FEE_PAY_WITH_ANOTHER_COIN), strings))
+    }
+
+    /**
+     * Right after a token switch the form names another chain before the fee
+     * machine is asked about it: the old chain's failure is dropped whole —
+     * no figure, no reason, no line, no tap of its own — and it does not hold
+     * the send machine's confirm.
+     */
+    @Test
+    fun `another chain's failure is dropped whole`() {
+        val fee = board(FeeBoards.Case.TapOnly)
+        assertEquals(100, fee.failure!!.chain_id)
+        // The form on chain 1 now; the failure is chain 100's.
+        val onOther = formView(fee).copy(selected_token = formView(fee).selected_token!!.copy(chain_id = 1, network = "chain-1"))
+        val row = SendLive.form(
+            (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model,
+            onOther,
+            fee,
+            sendCtx(),
+            SendLive.SpeedInputs(FeeSpeedView(), feeViewOf = { null }),
+        ).fee
+        assertNull("no reason line", row.reason)
+        assertFalse("no \"Tap to retry\"", row.value == strings.t(I18nKeys.Flows.FEE_TAP_TO_RETRY))
+        assertTrue("the row's own tap, the coins", row.opens)
+        val confirm = confirmOf(fee, chainOfForm = 1)
+        assertNull("no line under the confirm", confirm.ctaHold)
+        assertNull(feeFact(confirm).note)
+        assertFalse(feeFact(confirm).tap)
+        assertNull(FeeFailureRow.forChain(fee, 1))
+        assertEquals(fee.failure, FeeFailureRow.forChain(fee, 100))
+        // The bridge to the send machine: not failed for this form.
+        assertFalse(FeeFailedWord.failed(fee, onOther))
+        assertTrue(FeeFailedWord.failed(fee, formView(fee)))
+        // A failure built without a run (no chain) is taken as it is.
+        val unchained = fee.copy(failure = fee.failure!!.copy(chain_id = null))
+        assertTrue(FeeFailedWord.failed(unchained, onOther))
+    }
+
+    /** The new fields cross the wire; a core that predates them reads `retry`, no chain, no coin. */
+    @Test
+    fun `the failure's tap, chain and coin decode, with the old defaults`() {
+        val json = app.getvela.wallet.core.crux.Wire.json
+        val full = json.decodeFromString(
+            app.getvela.wallet.feature.send.core.FeeFailureView.serializer(),
+            """{"failure":"would_fail","reason_key":null,"auto_retry":false,"retrying":false,"figure_key":"componentsUi.gas.payWithAnotherCoin","footer_key":"componentsUi.signing.confirmBlock.feeWouldFail","tap":"choose_coin","chain_id":4217,"fee_token":"0x20c0000000000000000000000000000000000000"}""",
+        )
+        assertEquals(FeeFailureTap.ChooseCoin, full.tap)
+        assertEquals(4217, full.chain_id)
+        assertEquals("0x20c0000000000000000000000000000000000000", full.fee_token)
+        assertEquals(FeeFailureTap.None, json.decodeFromString(app.getvela.wallet.feature.send.core.FeeFailureView.serializer(), """{"failure":"would_fail","footer_key":"x","tap":"nothing"}""").tap)
+        val old = json.decodeFromString(app.getvela.wallet.feature.send.core.FeeFailureView.serializer(), """{"failure":"missing_public_key","footer_key":"componentsUi.signing.confirmBlock.feeFailed"}""")
+        assertEquals(FeeFailureTap.Retry, old.tap)
+        assertNull(old.chain_id)
+        assertNull(old.fee_token)
     }
 
     /** PR 2 note 13: Continue's alert, worded by the fee machine's own failure, passed through as it is. */

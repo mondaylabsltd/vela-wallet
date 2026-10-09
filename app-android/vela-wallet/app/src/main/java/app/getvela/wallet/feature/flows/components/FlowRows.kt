@@ -177,9 +177,11 @@ fun FactRow(
     modifier: Modifier = Modifier,
     copied: Boolean = false,
     onCopy: () -> Unit = {},
+    /** The row's own tap, when it is a control ([FactRowModel.tap]); `null` — not one. */
+    onTap: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

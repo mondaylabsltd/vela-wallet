@@ -1226,8 +1226,11 @@ fun VelaNavHost(
                         onOpenUrl = { context.openUrl(it) },
                         onNavigate = { step ->
                             when (step) {
-                                // A failed fee's row is its retry, at once (PR 2 note 1); else the coins.
-                                FlowStep.FeeToken -> if (!send.feeTapped()) feeSheetOpen = true
+                                // The row does exactly what its words say (PR 2 polish): a
+                                // failed fee's "Tap to retry" asks again at once, "Pay with
+                                // another coin" opens the coins, a dash nothing; no failure,
+                                // the coins.
+                                FlowStep.FeeToken -> if (send.feeTapped() == app.getvela.wallet.feature.send.core.FeeFailureRow.Tap.OpenCoins) feeSheetOpen = true
                                 FlowStep.ContactPick -> send.openContactPicker()
                                 FlowStep.Chains -> chainSheetOpen = true
                                 else -> Unit
@@ -2928,7 +2931,7 @@ private val RECEIVE_STATES = setOf(FlowState.R1, FlowState.R2)
 private val SEND_STATES = setOf(
     FlowState.S1,
     FlowState.SD1, FlowState.SD1B, FlowState.SD2, FlowState.SD2B, FlowState.SD2C, FlowState.SD2D,
-    FlowState.SD2E, FlowState.SD2F, FlowState.SD3, FlowState.SD3B, FlowState.SD3C,
+    FlowState.SD2E, FlowState.SD2F, FlowState.SD3, FlowState.SD3B, FlowState.SD3C, FlowState.SD3F,
     FlowState.SD4A, FlowState.SD4B, FlowState.SD4C,
 )
 

@@ -1820,6 +1820,8 @@ fun SendConfirmBody(
      * a fee is on screen once). `null`: the confirm.
      */
     handoff: SendHandoff? = null,
+    /** PR 2 polish: a tap on the fee line over a failure ([FactRowModel.tap]) — the form row's own tap. */
+    onFee: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1886,7 +1888,7 @@ fun SendConfirmBody(
         ) {
             model.facts.forEachIndexed { index, fact ->
                 if (index > 0) HairlineDivider()
-                FactRow(fact = fact)
+                FactRow(fact = fact, onTap = if (fact.tap) onFee else null)
             }
         }
         model.recipientTag?.let {
@@ -1968,9 +1970,32 @@ fun SendConfirmBody(
                     .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
                     .padding(VelaSpacing.lg),
             ) {
+                // "Not sent yet" (PR 2 polish): a title with a still clock and
+                // the sentence in the page's quiet voice — a wait, not a fault.
+                model.noticeTitle?.let { title ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (model.noticeCalm) {
+                            Icon(
+                                imageVector = VelaIcons.Clock,
+                                contentDescription = null,
+                                tint = colors.fgMuted,
+                                modifier = Modifier.size(VelaIconSize.sm),
+                            )
+                            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                        }
+                        Text(
+                            text = title,
+                            color = colors.fgBase,
+                            fontFamily = VelaFontFamily,
+                            fontWeight = VelaFontWeight.semibold,
+                            fontSize = VelaTextSize.base,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(VelaSpacing.xs))
+                }
                 Text(
                     text = notice,
-                    color = colors.warningBase,
+                    color = if (model.noticeCalm) colors.fgMuted else colors.warningBase,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.sm,
                     lineHeight = VelaTextSize.sm * VelaLeading.normal,
