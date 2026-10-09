@@ -917,7 +917,16 @@ struct RootView: View {
         case .flowsGallery:
             FlowGalleryScreen(loc: loc)
         case .settings:
+            #if DEBUG
+            if let board = SigningSettingsFixtures.board(PageOverride.state, loc: loc) {
+                // Spec 102's signing surfaces, with their controls drawn.
+                SettingsScreen(model: board, loc: loc, signingActions: SigningSettingsActions())
+            } else {
+                SettingsScreen(model: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+            }
+            #else
             SettingsScreen(model: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+            #endif
         case .settingsGallery:
             SettingsGalleryScreen(loc: loc)
         case .explore:

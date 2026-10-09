@@ -515,4 +515,46 @@ enum SigningSettingsFixtures {
             plan: plan, pages: pages, line: SigningPageFixtures.line, on: model, loc: loc
         )
     }
+
+    #if DEBUG
+    /// `VELA_PAGE=settings VELA_STATE=signing-pages | signing-venue`: the two
+    /// signing surfaces through the live builders, with every control they
+    /// offer drawn (the actions are no-ops) — the official page; a self-hosted
+    /// page whose own build asks to be trusted, with "Trust this version"; a
+    /// self-hosted page the person named, trusted here; and the account's
+    /// venue with the rows that cannot reach its keys, each with its reason.
+    static func board(_ state: String?, loc: Loc) -> SettingsScreenModel? {
+        guard state == "signing-pages" || state == "signing-venue" else { return nil }
+        let work = "https://sign.work.example/"
+        let version = "3f9a1c22aabbccddeeff00112233445566778899aabbccddeeff001122334455"
+        let checkedAt = UInt64(Date().timeIntervalSince1970 * 1000) - 120_000
+        let view = SigningPagesViewWire(
+            pages: SigningPageFixtures.pages + [
+                SigningPageRowWire(url: work, name: "Work", domain: "sign.work.example",
+                                   official: false, trusted: [version]),
+            ],
+            saved: [SigningPageWire(url: SigningPageFixtures.selfHosted),
+                    SigningPageWire(url: work, name: "Work", trusted: [version])],
+            loaded: true
+        )
+        let line: (String) -> SignerIntegrityLine = { url in
+            switch url {
+            case SigningPageFixtures.selfHosted:
+                SignerIntegrityLine(state: .askToTrust, version: "3f9a1c22", checkedAtMs: checkedAt,
+                                    key: "componentsUi.signing.integrity.askTrust", opens: false)
+            case work:
+                SignerIntegrityLine(state: .trustedHere, version: "3f9a1c22", checkedAtMs: checkedAt,
+                                    key: "componentsUi.signing.integrity.trusted", opens: true)
+            default: SigningPageFixtures.line(url)
+            }
+        }
+        var model = SettingsLive.withSigning(
+            plan: plan, pages: view, line: line,
+            asksTrust: { $0 == SigningPageFixtures.selfHosted ? version : nil },
+            on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        )
+        if state == "signing-pages" { model.page = .signingPages }
+        return model
+    }
+    #endif
 }

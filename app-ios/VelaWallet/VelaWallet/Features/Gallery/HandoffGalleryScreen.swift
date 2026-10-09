@@ -140,8 +140,9 @@ struct HandoffGalleryScreen: View {
         context.handoffPage = page
         context.handoffKeyLabel = KeyLabelWire(name: "YubiKey 5C", placeKey: "onboarding.create.methodSecurityKeyTitle")
         context.handoffLine = line
-        // The fee the sheet settled, through the core's own row.
-        context.handoffFee = state == "sheet-checking" ? nil : HandoffFeeModel.of(
+        // The fee the sheet settled, through the core's own row — there while
+        // the page is still being checked, and Open shut all the same.
+        context.handoffFee = HandoffFeeModel.of(
             feeJson: HandoffFeeFixtures.feeJson, speedJson: HandoffFeeFixtures.speedJson,
             fee: nil, display: .usd, networks: .builtin, loc: loc
         )
