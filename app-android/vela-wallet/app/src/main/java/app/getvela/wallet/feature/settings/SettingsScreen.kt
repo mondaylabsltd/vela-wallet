@@ -106,8 +106,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -300,6 +302,9 @@ fun SettingsRoute(
     // Spec 048: keyed on the model's page too, so a page another route asked for (the add-token 原生代币 tab) wins over a remembered one.
     var page by rememberSaveable(model.state, model.page) { mutableStateOf(model.page) }
     LaunchedEffect(page) { actions.onPageShown(page) }
+    // The system Back steps out of a pushed page the way its ‹ does; on the
+    // home it is the app's, as before (SettingsPage.back).
+    BackHandler(enabled = page.back != null) { page.back?.let { page = it } }
     // Spec 072: the network a trash tap asked about, until the sheet answers.
     var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
@@ -361,7 +366,7 @@ fun SettingsRoute(
                 else -> CommunityLinks.urlFor(id)?.let(actions.onOpenLink)
             }
         },
-        onBack = { page = SettingsPage.Home },
+        onBack = { page.back?.let { page = it } },
         onToggleAdvanced = { advancedOpen = !advancedOpen },
         onOpenOverlay = { overlay = it },
         onDismissOverlay = { overlay = SettingsOverlay.None },
@@ -608,11 +613,16 @@ fun SettingsScreen(
                 detectTapGestures(onTap = { focusManager.clearFocus() })
             },
     ) {
+        // A scroll per page (SettingsPage.keepsItsPlace): the home's, kept
+        // for the way back, and a pushed page's, new each time it opens —
+        // keyed on the page, so 网络 → 网络详情 starts over too.
+        val homeScroll = rememberScrollState()
+        val pageScroll = key(page) { rememberScrollState() }
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(if (page.keepsItsPlace) homeScroll else pageScroll)
                     .padding(horizontal = VelaSizing.screenPaddingX),
             ) {
                 when {

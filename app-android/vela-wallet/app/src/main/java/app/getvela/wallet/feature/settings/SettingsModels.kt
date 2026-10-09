@@ -33,6 +33,26 @@ enum class SettingsScreenState {
 /** Which page the settings surface is showing (`Home` plus the pushed pages). */
 enum class SettingsPage {
     Home, Networks, NetworkDetail, AddNetwork, RpcProviders, Endpoints, Storage, About,
+    ;
+
+    /**
+     * Where Back goes from this page — the system Back and the page's own ‹
+     * alike: a pushed page goes back to the Settings home. `null` on the home,
+     * whose Back is not Settings' to answer (it leaves for the wallet).
+     *
+     * Device pass 2026-10-09: the system Back on 设置 → 高级 → 网络 left
+     * Settings for 钱包, because nothing inside Settings answered it.
+     */
+    val back: SettingsPage? get() = if (this == Home) null else Home
+
+    /**
+     * Whether this page keeps its scroll across a visit to another. Only the
+     * home does — Back lands where the person left it; a pushed page opens at
+     * its top every time (device pass 2026-10-09: 网络 opened part-way down,
+     * at the offset the home had been scrolled to, because every page shared
+     * the home's one scroll).
+     */
+    val keepsItsPlace: Boolean get() = this == Home
 }
 
 /** Which sheet is over it. `None` is a real state, not an absence of one. */
