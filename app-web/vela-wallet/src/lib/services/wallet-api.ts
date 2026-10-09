@@ -21,7 +21,7 @@ import { loadCustomTokens } from './records';
 import { poolRpcCall, getFailedRpcChains, PoolFailedError } from './rpc-pool';
 import { priceShouldNull } from './fault-injection';
 import { balanceChainReadDeadlineMs, balanceReadPlan } from '$lib/core/kernels';
-import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
+import { readChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
 // The platform seam for the native-coin price rules (spec 017 wave C): web
 // resolves to `native-price.web.ts` and the CORE decides; iOS/Android resolve
 // to `native-price.ts`, the TypeScript twin, because Hermes has no wasm.
@@ -479,7 +479,8 @@ async function queryChainAssets(
 	chainlinkPrices: Record<string, number>
 ): Promise<APIToken[]> {
 	// 1. Discover tokens on this chain
-	const chainData = await fetchChainTokens(chainId);
+	const registry = await readChainTokens(chainId);
+	const chainData = registry.kind === 'doc' ? registry.data : null;
 	const nativeCurrency = chainData?.nativeCurrency ?? {
 		name: nativeSymbol(chainId),
 		symbol: nativeSymbol(chainId),
@@ -512,6 +513,17 @@ async function queryChainAssets(
 			decimals: ct.decimals
 		}))
 	);
+	// PR 2 polish: a chain with no native coin (Tempo) is read from its
+	// registry document alone — its stablecoins are what it holds. When that
+	// document could not be read (offline, timed out, 5xx — not a 404, which
+	// is the server saying there is none), there is nothing to read the chain
+	// FOR: it did not answer, like a chain whose node is down — its last
+	// holdings carried, and it is in the round's failed chains — never
+	// "answered, holds nothing" ($0.00). A chain with a coin of its own still
+	// reads that coin (the native-only degrade, as before).
+	if (registry.kind === 'unread' && !plan.some((slot) => slot.kind === 'native')) {
+		throw new ChainUnreachableError(chainId, { cause: registry.cause });
+	}
 	for (const slot of plan) {
 		switch (slot.kind) {
 			case 'native':
