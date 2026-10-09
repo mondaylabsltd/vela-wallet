@@ -10895,6 +10895,66 @@ public func FfiConverterTypeUserOpEstimateFailure_lower(_ value: UserOpEstimateF
 
 
 /**
+ * The words of a venue refusal (spec 102): the corpus key `VenueBlock::key()`
+ * names and the values its line takes, by the corpus's names (`domain`,
+ * `pageDomain`). Translate `key` with `vars` and the sentence is the core's
+ * whole — no shell decides which fact fills which placeholder.
+ */
+public struct VenueBlockLine: Equatable, Hashable {
+    public var key: String
+    public var vars: [String: String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: String, vars: [String: String]) {
+        self.key = key
+        self.vars = vars
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension VenueBlockLine: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVenueBlockLine: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VenueBlockLine {
+        return
+            try VenueBlockLine(
+                key: FfiConverterString.read(from: &buf), 
+                vars: FfiConverterDictionaryStringString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VenueBlockLine, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterDictionaryStringString.write(value.vars, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVenueBlockLine_lift(_ buf: RustBuffer) throws -> VenueBlockLine {
+    return try FfiConverterTypeVenueBlockLine.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVenueBlockLine_lower(_ value: VenueBlockLine) -> RustBuffer {
+    return FfiConverterTypeVenueBlockLine.lower(value)
+}
+
+
+/**
  * One tap's answer: the count to keep, and whether this tap revealed the
  * debug-mode switch (store `prefs_debug_mode_value(false)` and say so once).
  */
@@ -13534,6 +13594,30 @@ fileprivate struct FfiConverterOptionTypeUserOpDraft: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeVenueBlockLine: FfiConverterRustBuffer {
+    typealias SwiftType = VenueBlockLine?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeVenueBlockLine.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeVenueBlockLine.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeRelayRejection: FfiConverterRustBuffer {
     typealias SwiftType = RelayRejection?
 
@@ -15921,10 +16005,10 @@ public func signingPageTrusted(savedJson: String, url: String) -> [String]  {
  * `{"type":"page","url":…}`), already able to reach its keys; `blocked` is
  * set only when nothing on this device can; `key` is the key route
  * (`{credential_id, method, transports, hints}`), absent for a record
- * written before the sign-in key was kept; `key_label` is "Confirm with
- * {key}"'s name — `{name?, place_key}`: draw `name` when set, else the
- * translation of `place_key` (the key's own label when it is not the
- * wallet's name, else its place). `None` for a record this build cannot
+ * written before the sign-in key was kept; `key_label` is the "Confirm with
+ * | {key}" row — `{name?, place_key, label_key}`: the translation of
+ * `label_key` beside `name` when set, else the translation of `place_key`
+ * (the key's own label when it is not the wallet's name, else its place). `None` for a record this build cannot
  * read. See `vela_core::app::Account::signing_plan`.
  */
 public func signingPlan(accountJson: String) -> String?  {
@@ -16312,6 +16396,18 @@ public func validateClientData(kind: ClientDataKind, clientDataJson: Data, authe
         FfiConverterData.lower(authenticatorData),uniffiCallStatus
     )
 }
+}
+/**
+ * A `VenueBlock` (JSON — a plan's `blocked`, a choice's `blocked`, a
+ * notice's `venue_block`) in words; `None` for anything else.
+ */
+public func venueBlockLine(blockJson: String) -> VenueBlockLine?  {
+    return try!  FfiConverterOptionTypeVenueBlockLine.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_venue_block_line(
+        FfiConverterString.lower(blockJson),uniffiCallStatus
+    )
+})
 }
 /**
  * A venue row's words (spec 102): `"in_vela"`, `"page"`, or `"signing_page"`
@@ -17026,6 +17122,21 @@ public func trustedSignerCallbackUrl() -> String  {
 })
 }
 /**
+ * The key row of a ceremony's card while it waits on its page (spec 102), as
+ * JSON `KeyLabel` — `{place_key, label_key}`: draw the translation of
+ * `label_key` ("New key on" while a key is made, "Confirm with" when one
+ * signs in or proves) beside the translation of `place_key`, as the page
+ * draws its own row. `None` for an operation that is not a ceremony.
+ */
+public func trustedSignerCeremonyKeyLabel(operationJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_trusted_signer_ceremony_key_label(
+        FfiConverterString.lower(operationJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The page request for a machine operation (`RegisterPasskey`,
  * `AuthenticatePasskey`, `SignProof`, `SignMemberProof` as their wire JSON)
  * whose `page` is set — a wallet on a custom domain, whose keys only its page
@@ -17559,7 +17670,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_signing_page_trusted() != 57487) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_signing_plan() != 56092) {
+    if (uniffi_vela_core_uniffi_checksum_func_signing_plan() != 7464) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signing_venue_choices() != 64039) {
@@ -17641,6 +17752,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_validate_client_data() != 34255) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_venue_block_line() != 54921) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_venue_words() != 23081) {
@@ -17791,6 +17905,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_callback_url() != 46246) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_ceremony_key_label() != 58976) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_ceremony_request() != 25152) {
