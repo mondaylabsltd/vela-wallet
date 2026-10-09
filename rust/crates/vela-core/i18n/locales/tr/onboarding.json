@@ -146,8 +146,6 @@
       "addMethodLabel": "Bir tane daha ekleyin",
       "addSecondKeyBtn": "Önce ikinci anahtarı ekleyin",
       "alertErrorTitle": "Hata",
-      "alertNotDiscoverableBody": "Cihazınız bu geçiş anahtarını yalnızca bu cihaza kaydetti; oturum açarken görünmez ve cüzdanınızı daha sonra kurtaramaz. Güvenliğiniz için cüzdan henüz oluşturulmadı — hiçbir şey kaybetmediniz.\n\nSistem ayarlarından geçiş anahtarı sağlayıcısı olarak Google Password Manager veya iCloud Keychain'i seçin ve yeniden deneyin.",
-      "alertNotDiscoverableTitle": "Geçiş anahtarı eşitlenmedi",
       "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
       "alertNotSupportedTitle": "Desteklenmiyor",
       "confirmKeyBtn": "Onayla",
@@ -172,8 +170,6 @@
       "keysSubtitleFull": "7 anahtar sınırına ulaşıldı.",
       "keysTitle": "Passkey ekleyin",
       "keysTitleBlocked": "Oluşturmak için bir anahtar daha gerekli",
-      "methodBlockedHint": "Bu cüzdanın anahtarlarının tümü {{party}} alanına ait.",
-      "methodBlockedSigner": "Trusted Signer sayfan {{page}}, anahtarları {{pageParty}} alanına ait. Buradan eklemek için Ayarlar'da {{party}} sayfasını seç.",
       "methodHybridBody": "Kodu tarayın, yakındaki cihazda oluşturun",
       "methodHybridTitle": "Telefon veya tablet",
       "methodHybridUnavailable": "Yakında",
@@ -186,6 +182,8 @@
       "needSecondKeyHint": "Bu anahtarın hiçbir yerde yedeği yok. Kaybolursa cüzdan açılmaz. İkinci bir anahtar ekleyin.",
       "nextBtn": "Devam",
       "openSettings": "Ayarları Aç",
+      "ownPageTitle": "Kendi imza sayfamı kullan",
+      "ownPageBody": "Gelişmiş: anahtarlar sayfanızın alan adına ait olur ve yalnızca orada imzalar",
       "pinAttemptsLeft": "Kalan deneme: {{attempts}}",
       "pinBody": "{{product}} parmak izi sensörüne sahip değil; sizi PIN ile doğrular. PIN yalnızca elinizdeki anahtara gider — bu bilgisayarın diskine de bir sunucuya da asla gitmez.",
       "pinLabel": "PIN",
@@ -232,8 +230,7 @@
       "touchFingerprintBody": "{{product}} yanıp sönüyor. Siz olduğunuzu doğrulamak için parmağınızı sensörüne koyun.",
       "touchSelectBody": "Birden fazla güvenlik anahtarı takılı ve hepsi yanıp sönüyor. Kullanmak istediğinize dokunun.",
       "touchTitle": "Güvenlik anahtarınıza dokunun",
-      "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
-      "verifyStuckHint": "Doğrulama sürekli başarısız mı oluyor? Cihazınız bu geçiş anahtarını düzgün kaydetmemiş olabilir. Baştan başlamak güvenli — henüz hiçbir şey oluşturulmadı."
+      "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır."
     },
     "login": {
       "alertNotSupportedTitle": "Desteklenmiyor",

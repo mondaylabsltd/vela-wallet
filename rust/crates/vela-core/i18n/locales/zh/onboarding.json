@@ -146,8 +146,6 @@
       "addMethodLabel": "再添加一把",
       "addSecondKeyBtn": "先添加第 2 把密钥",
       "alertErrorTitle": "错误",
-      "alertNotDiscoverableBody": "您的设备把这枚通行密钥只保存在了本机，之后登录时它不会出现，也无法用来找回钱包。为了保护您，钱包还没有创建，您没有任何损失。\n\n只需在系统设置中将通行密钥提供方改为 Google 密码管理器或 iCloud 钥匙串，再试一次就好。",
-      "alertNotDiscoverableTitle": "通行密钥未能同步",
       "alertNotSupportedBody": "此设备不支持生物识别认证。",
       "alertNotSupportedTitle": "不支持",
       "confirmKeyBtn": "确认",
@@ -172,8 +170,6 @@
       "keysSubtitleFull": "已达上限 7 把。",
       "keysTitle": "添加通行密钥",
       "keysTitleBlocked": "再加一把才能创建",
-      "methodBlockedHint": "这个钱包的钥匙都属于 {{party}}。",
-      "methodBlockedSigner": "你的可信签名器页面是 {{page}}，它的钥匙属于 {{pageParty}}。在设置里换成 {{party}} 的页面才能添加。",
       "methodHybridBody": "扫码，用附近设备创建",
       "methodHybridTitle": "手机或平板",
       "methodHybridUnavailable": "即将支持",
@@ -186,6 +182,8 @@
       "needSecondKeyHint": "这把密钥没有任何备份。一旦丢失，钱包就打不开了。再加一把吧。",
       "nextBtn": "继续",
       "openSettings": "打开设置",
+      "ownPageTitle": "使用我自己的签名页",
+      "ownPageBody": "高级：钥匙属于你页面的域名，只能在那里签名",
       "pinAttemptsLeft": "剩余尝试次数：{{attempts}}",
       "pinBody": "{{product}} 没有指纹传感器，因此用 PIN 码确认是你本人。PIN 码只发送到你手中的密钥——不会写入这台电脑，也不会上传服务器。",
       "pinLabel": "PIN 码",
@@ -232,8 +230,7 @@
       "touchFingerprintBody": "{{product}} 正在闪烁。把手指放在它的传感器上，确认是你本人。",
       "touchSelectBody": "插着多个安全密钥，它们都在闪烁。触摸你想使用的那一个。",
       "touchTitle": "触摸你的安全密钥",
-      "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。",
-      "verifyStuckHint": "验证一直失败？您的设备可能没有正确保存这枚通行密钥。可以放心重新开始——目前还没有创建任何内容。"
+      "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。"
     },
     "login": {
       "alertNotSupportedTitle": "不支持",

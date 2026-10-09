@@ -146,8 +146,6 @@
       "addMethodLabel": "Adicionar mais uma",
       "addSecondKeyBtn": "Adicione primeiro uma segunda chave",
       "alertErrorTitle": "Erro",
-      "alertNotDiscoverableBody": "Seu dispositivo salvou esta passkey apenas neste aparelho, então ela não apareceria ao entrar nem poderia recuperar sua carteira depois. Para sua segurança, a carteira ainda não foi criada — você não perdeu nada.\n\nNas configurações do sistema, escolha o Gerenciador de Senhas do Google ou o Chaveiro do iCloud como provedor de passkeys e tente de novo.",
-      "alertNotDiscoverableTitle": "A passkey não foi sincronizada",
       "alertNotSupportedBody": "A autenticação biométrica não está disponível neste dispositivo.",
       "alertNotSupportedTitle": "Não compatível",
       "confirmKeyBtn": "Confirmar",
@@ -172,8 +170,6 @@
       "keysSubtitleFull": "Você atingiu o limite de 7.",
       "keysTitle": "Adicione passkeys",
       "keysTitleBlocked": "Falta mais uma chave para criar",
-      "methodBlockedHint": "As chaves desta carteira pertencem todas a {{party}}.",
-      "methodBlockedSigner": "Sua página do Trusted Signer é {{page}}, e as chaves dela são de {{pageParty}}. Troque para uma página {{party}} nos ajustes para adicionar aqui.",
       "methodHybridBody": "Escaneie um código e crie num aparelho por perto",
       "methodHybridTitle": "Celular ou tablet",
       "methodHybridUnavailable": "Em breve",
@@ -186,6 +182,8 @@
       "needSecondKeyHint": "Esta chave não tem cópia em lugar nenhum. Se você perdê-la, a carteira não abre. Adicione uma segunda.",
       "nextBtn": "Continuar",
       "openSettings": "Abrir configurações",
+      "ownPageTitle": "Usar minha própria página de assinatura",
+      "ownPageBody": "Avançado: as chaves pertencem ao domínio da sua página e só assinam lá",
       "pinAttemptsLeft": "Tentativas restantes: {{attempts}}",
       "pinBody": "A {{product}} não tem sensor de impressão digital, então usa o PIN para confirmar que é você. O PIN vai apenas para a chave na sua mão — nunca para o disco deste computador nem para um servidor.",
       "pinLabel": "PIN",
@@ -233,8 +231,7 @@
       "touchFingerprintBody": "A {{product}} está piscando. Apoie o dedo no sensor dela para confirmar que é você.",
       "touchSelectBody": "Há várias chaves de segurança conectadas e todas estão piscando. Toque naquela que você quer usar.",
       "touchTitle": "Toque na sua chave de segurança",
-      "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto.",
-      "verifyStuckHint": "A verificação continua falhando? Seu dispositivo pode não ter salvado esta passkey corretamente. É seguro recomeçar — nada foi criado ainda."
+      "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto."
     },
     "login": {
       "alertNotSupportedTitle": "Não compatível",

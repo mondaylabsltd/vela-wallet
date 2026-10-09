@@ -639,9 +639,33 @@ for (let i = 1; i < PATHS.length; i++) {
 //   CLDR categories, as `siteCount` did: the most common case, one tab,
 //   read "1 tabs open". Shells pass the count. 1789 − 1 + 4 = 1792 leaves,
 //   99 branches.
-if (PATHS.length !== 1891) fail(`expected 1891 paths (1792 leaf + 99 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1792) fail(`expected 1792 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 99) fail(`expected 99 branch paths, got ${branchSet.size}`);
+// 1905 (spec 102, 2026-10-09): where you review and sign — in Vela, or on a
+//   page you trust. The Trusted Signer stops being a fourth key method and
+//   becomes each account's signing VENUE. + the `settings.venue` branch (title,
+//   subtitle, the two rows and their lines, the two reasons a venue cannot
+//   reach an account's keys), + `componentsUi.signing.{handoffTitle,handoffKey}`
+//   (the hand-off card), + the `componentsUi.signing.integrity` branch (ten
+//   lines: checking, matches the published build list · checked, trusted here,
+//   unchecked, mismatch, blocked, ask to trust, could not check, no version,
+//   all blocked), + `settings.signing.{pageAdd,pageDuplicate,keysOn}` (the
+//   saved-pages list that replaces the free-text page field), +
+//   `onboarding.create.{ownPageTitle,ownPageBody}` ("Use my own signing
+//   page"). `settings.signing.{title,subtitle}` and the waiting / closed /
+//   refused / mismatch / timeout lines are reworded (they promised a choice per
+//   signature, and named a "Trusted Signer"). Minus what only served the fourth
+//   method or the free-text field — `componentsUi.signing.{trustedSignerTitle,
+//   trustedSignerBody,signWith,trustedSignerDoneTab}`, `settings.signing.
+//   {pageTitle,pageSubtitle,pageForeign,pageReset}`, `onboarding.create.
+//   {methodBlockedHint,methodBlockedSigner}` — and three dead duplicates of
+//   `onboarding.common` lines no client reads (git grep: neither the full path
+//   nor the leaf name appears outside the corpus and the generated tables):
+//   `onboarding.create.{alertNotDiscoverableTitle,alertNotDiscoverableBody,
+//   verifyStuckHint}` — the ja + en room the new lines need under SC-005,
+//   instead of a budget move. 1792 − 13 + 25 = 1804 leaves, 99 + 2 = 101
+//   branches.
+if (PATHS.length !== 1905) fail(`expected 1905 paths (1804 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1804) fail(`expected 1804 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

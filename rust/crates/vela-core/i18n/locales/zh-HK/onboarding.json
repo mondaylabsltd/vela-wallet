@@ -146,8 +146,6 @@
       "addMethodLabel": "再加多一條",
       "addSecondKeyBtn": "先加多一條密鑰",
       "alertErrorTitle": "錯誤",
-      "alertNotDiscoverableBody": "你的裝置只將這個通行密鑰儲存在本機，之後登入時它不會出現，也無法用來取回錢包。為保障你，錢包尚未建立，你沒有任何損失。\n\n只需於系統設定將通行密鑰提供者改為 Google 密碼管理工具或 iCloud 鑰匙圈，然後再試一次即可。",
-      "alertNotDiscoverableTitle": "通行密鑰未能同步",
       "alertNotSupportedBody": "此裝置不支援生物辨識認證。",
       "alertNotSupportedTitle": "不支援",
       "confirmKeyBtn": "確認",
@@ -172,8 +170,6 @@
       "keysSubtitleFull": "已經去到上限 7 條。",
       "keysTitle": "加通行密鑰",
       "keysTitleBlocked": "再加多一條先建立得到",
-      "methodBlockedHint": "這個錢包的鑰匙都屬於 {{party}}。",
-      "methodBlockedSigner": "你的可信簽署器頁面是 {{page}}，它的鑰匙屬於 {{pageParty}}。在設定裡換成 {{party}} 的頁面才能新增。",
       "methodHybridBody": "掃個碼，用附近部機建立",
       "methodHybridTitle": "手機或者平板",
       "methodHybridUnavailable": "就快得",
@@ -186,6 +182,8 @@
       "needSecondKeyHint": "呢條密鑰冇任何備份。一旦唔見咗，個錢包就開唔到。再加多一條啦。",
       "nextBtn": "繼續",
       "openSettings": "開啟設定",
+      "ownPageTitle": "用我自己嘅簽名頁",
+      "ownPageBody": "進階：鎖匙屬於你頁面嘅網域，只可以喺嗰度簽名",
       "pinAttemptsLeft": "剩餘嘗試次數：{{attempts}}",
       "pinBody": "{{product}} 冇指紋感應器，所以用 PIN 碼確認係你本人。PIN 碼只會傳去你手上嘅金鑰——唔會寫入呢部電腦，亦唔會上傳伺服器。",
       "pinLabel": "PIN 碼",
@@ -232,8 +230,7 @@
       "touchFingerprintBody": "{{product}} 正喺度閃緊。將手指放喺佢嘅感應器上面，確認係你本人。",
       "touchSelectBody": "插咗幾個安全金鑰，全部都喺度閃緊。掂一掂你想用嗰個。",
       "touchTitle": "掂一掂你嘅安全金鑰",
-      "verifyHint": "你的通行密鑰已驗證，密鑰已同步——一切就緒。",
-      "verifyStuckHint": "驗證一直失敗？你的裝置可能沒有正確儲存這個通行密鑰。可以放心重新開始——目前尚未建立任何東西。"
+      "verifyHint": "你的通行密鑰已驗證，密鑰已同步——一切就緒。"
     },
     "login": {
       "alertNotSupportedTitle": "不支援",

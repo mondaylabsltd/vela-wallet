@@ -146,8 +146,6 @@
       "addMethodLabel": "Añadir otra",
       "addSecondKeyBtn": "Añade primero una segunda llave",
       "alertErrorTitle": "Error",
-      "alertNotDiscoverableBody": "Tu dispositivo guardó esta passkey solo en este equipo, así que no aparecería al iniciar sesión ni podría recuperar tu billetera después. Por tu seguridad, aún no se creó la billetera — no perdiste nada.\n\nEn los ajustes del sistema, elige el Administrador de contraseñas de Google o el Llavero de iCloud como proveedor de passkeys e inténtalo de nuevo.",
-      "alertNotDiscoverableTitle": "Tu passkey no se sincronizó",
       "alertNotSupportedBody": "La autenticación biométrica no está disponible en este dispositivo.",
       "alertNotSupportedTitle": "No compatible",
       "confirmKeyBtn": "Confirmar",
@@ -172,8 +170,6 @@
       "keysSubtitleFull": "Alcanzaste el límite de 7.",
       "keysTitle": "Añade passkeys",
       "keysTitleBlocked": "Falta una llave más para crear",
-      "methodBlockedHint": "Las llaves de esta cartera pertenecen a {{party}}.",
-      "methodBlockedSigner": "Tu página del Trusted Signer es {{page}}, y sus llaves pertenecen a {{pageParty}}. Cámbiala en Ajustes a {{party}} para agregar una aquí.",
       "methodHybridBody": "Escanea un código y créala en un dispositivo cercano",
       "methodHybridTitle": "Teléfono o tablet",
       "methodHybridUnavailable": "Muy pronto",
@@ -186,6 +182,8 @@
       "needSecondKeyHint": "Esta llave no tiene copia en ningún lado. Si la pierdes, la billetera no se abre. Agrega una segunda.",
       "nextBtn": "Continuar",
       "openSettings": "Abrir Ajustes",
+      "ownPageTitle": "Usar mi propia página de firma",
+      "ownPageBody": "Avanzado: las llaves pertenecen al dominio de tu página y solo firman ahí",
       "pinAttemptsLeft": "Intentos restantes: {{attempts}}",
       "pinBody": "{{product}} no tiene sensor de huella, así que usa su PIN para confirmar que eres tú. El PIN solo llega a la llave que tienes en la mano: nunca al disco de esta computadora ni a un servidor.",
       "pinLabel": "PIN",
@@ -233,8 +231,7 @@
       "touchFingerprintBody": "{{product}} está parpadeando. Apoya el dedo en su sensor para confirmar que eres tú.",
       "touchSelectBody": "Hay varias llaves de seguridad conectadas y todas están parpadeando. Toca la que quieras usar.",
       "touchTitle": "Toca tu llave de seguridad",
-      "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo.",
-      "verifyStuckHint": "¿La verificación sigue fallando? Puede que tu dispositivo no haya guardado bien esta passkey. Es seguro empezar de nuevo — aún no se creó nada."
+      "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo."
     },
     "login": {
       "alertNotSupportedTitle": "No compatible",

@@ -60,16 +60,25 @@
       "subtitle": "Ogni invio che avvii in Vela parte da qui. Puoi comunque cambiarne uno singolo al momento dell'invio."
     },
     "signing": {
-      "title": "Firma con",
-      "subtitle": "Ogni firma che avvii in Vela parte da qui. Per una singola puoi comunque scegliere un altro modo.",
-      "pageTitle": "Pagina del Trusted Signer",
-      "pageSubtitle": "La pagina che apre il Trusted Signer: quella ufficiale o la tua copia della pagina senza dipendenze.",
+      "title": "Pagine di firma",
+      "subtitle": "Pagine di cui ti fidi per mostrare e firmare le richieste.",
       "pageOfficial": "Ufficiale",
       "pageInvalid": "Questo non è un indirizzo web.",
       "pageInsecure": "Usa una pagina https o una sul loopback di questo dispositivo: altrove il browser non firmerà.",
-      "pageForeign": "Le tue passkey appartengono a getvela.app. Una pagina su un altro dominio può mostrare una richiesta ma non firmarla.",
-      "pageReset": "Usa la pagina ufficiale",
-      "pageSave": "Salva"
+      "pageSave": "Salva",
+      "pageAdd": "Aggiungi una pagina",
+      "pageDuplicate": "Questa pagina è già salvata.",
+      "keysOn": "Chiavi su {{domain}}"
+    },
+    "venue": {
+      "title": "Dove controlli e firmi",
+      "subtitle": "Per le transazioni e i messaggi di questo account. Le tue chiavi non cambiano.",
+      "inVela": "In Vela",
+      "inVelaBody": "La schermata di firma di Vela",
+      "page": "Su una pagina di fiducia",
+      "pageBody": "Una pagina senza dipendenze mostra esattamente ciò che firmi",
+      "blockedApp": "Vela non può usare le chiavi su {{domain}}.",
+      "blockedPage": "Questa pagina è su {{pageDomain}}; le chiavi di questo account sono su {{domain}}."
     },
     "advanced": {
       "networksTitle": "Reti",

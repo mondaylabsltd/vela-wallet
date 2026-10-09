@@ -60,16 +60,25 @@
       "subtitle": "Mọi lượt gửi bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể đổi riêng từng lần gửi."
     },
     "signing": {
-      "title": "Ký bằng",
-      "subtitle": "Mọi chữ ký bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể chọn cách khác cho từng lần ký.",
-      "pageTitle": "Trang Trusted Signer",
-      "pageSubtitle": "Trang mà Trusted Signer mở: trang chính thức, hoặc bản sao trang không phụ thuộc do bạn tự triển khai.",
+      "title": "Trang ký",
+      "subtitle": "Những trang bạn tin cậy để hiển thị và ký yêu cầu.",
       "pageOfficial": "Chính thức",
       "pageInvalid": "Đây không phải là địa chỉ web.",
       "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
-      "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
-      "pageReset": "Dùng trang chính thức",
-      "pageSave": "Lưu"
+      "pageSave": "Lưu",
+      "pageAdd": "Thêm trang",
+      "pageDuplicate": "Trang này đã được lưu.",
+      "keysOn": "Khóa trên {{domain}}"
+    },
+    "venue": {
+      "title": "Nơi bạn xem lại và ký",
+      "subtitle": "Áp dụng cho giao dịch và tin nhắn của tài khoản này. Khóa của bạn không đổi.",
+      "inVela": "Trong Vela",
+      "inVelaBody": "Màn hình ký của chính Vela",
+      "page": "Trên trang tin cậy",
+      "pageBody": "Trang không phụ thuộc hiển thị đúng những gì bạn ký",
+      "blockedApp": "Vela không dùng được khóa trên {{domain}}.",
+      "blockedPage": "Trang này ở {{pageDomain}}; khóa của tài khoản này ở {{domain}}."
     },
     "advanced": {
       "networksTitle": "Mạng lưới",

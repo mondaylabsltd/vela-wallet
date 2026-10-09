@@ -146,8 +146,6 @@
       "addMethodLabel": "Thêm một khoá nữa",
       "addSecondKeyBtn": "Thêm khoá thứ hai trước",
       "alertErrorTitle": "Lỗi",
-      "alertNotDiscoverableBody": "Thiết bị của bạn chỉ lưu passkey này trên máy này, nên nó sẽ không xuất hiện khi đăng nhập và không thể khôi phục ví sau này. Để bảo vệ bạn, ví chưa được tạo — bạn không mất gì cả.\n\nTrong cài đặt hệ thống, hãy chọn Google Password Manager hoặc iCloud Keychain làm nơi lưu passkey rồi thử lại nhé.",
-      "alertNotDiscoverableTitle": "Passkey chưa được đồng bộ",
       "alertNotSupportedBody": "Thiết bị này không hỗ trợ xác thực sinh trắc học.",
       "alertNotSupportedTitle": "Không hỗ trợ",
       "confirmKeyBtn": "Xác nhận",
@@ -172,8 +170,6 @@
       "keysSubtitleFull": "Đã đạt giới hạn 7 khoá.",
       "keysTitle": "Thêm passkey",
       "keysTitleBlocked": "Cần thêm một khoá nữa mới tạo được",
-      "methodBlockedHint": "Mọi khoá của ví này đều thuộc {{party}}.",
-      "methodBlockedSigner": "Trang Trusted Signer của bạn là {{page}}, khoá của nó thuộc {{pageParty}}. Đổi sang trang {{party}} trong Cài đặt để thêm ở đây.",
       "methodHybridBody": "Quét mã và tạo trên thiết bị gần đó",
       "methodHybridTitle": "Điện thoại hoặc máy tính bảng",
       "methodHybridUnavailable": "Sắp có",
@@ -186,6 +182,8 @@
       "needSecondKeyHint": "Khoá này không có bản sao lưu ở đâu cả. Mất nó là không mở được ví. Hãy thêm một khoá nữa.",
       "nextBtn": "Tiếp tục",
       "openSettings": "Mở Cài đặt",
+      "ownPageTitle": "Dùng trang ký của riêng tôi",
+      "ownPageBody": "Nâng cao: khóa thuộc tên miền của trang và chỉ ký ở đó",
       "pinAttemptsLeft": "Số lần thử còn lại: {{attempts}}",
       "pinBody": "{{product}} không có cảm biến vân tay nên dùng mã PIN để xác nhận đúng là bạn. Mã PIN chỉ được gửi tới chiếc khoá trên tay bạn — không bao giờ lưu vào máy này, cũng không gửi lên máy chủ.",
       "pinLabel": "Mã PIN",
@@ -232,8 +230,7 @@
       "touchFingerprintBody": "{{product}} đang nhấp nháy. Đặt ngón tay lên cảm biến để xác nhận đúng là bạn.",
       "touchSelectBody": "Có nhiều khoá bảo mật đang cắm và tất cả đều nhấp nháy. Hãy chạm vào khoá bạn muốn dùng.",
       "touchTitle": "Chạm vào khoá bảo mật của bạn",
-      "verifyHint": "Passkey của bạn đã được xác minh và khóa đã được đồng bộ — mọi thứ đã sẵn sàng.",
-      "verifyStuckHint": "Xác minh cứ thất bại? Thiết bị của bạn có thể chưa lưu passkey này đúng cách. Bạn có thể yên tâm bắt đầu lại — chưa có gì được tạo cả."
+      "verifyHint": "Passkey của bạn đã được xác minh và khóa đã được đồng bộ — mọi thứ đã sẵn sàng."
     },
     "login": {
       "alertNotSupportedTitle": "Không hỗ trợ",

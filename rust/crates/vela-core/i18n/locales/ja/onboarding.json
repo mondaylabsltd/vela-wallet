@@ -146,8 +146,6 @@
       "addMethodLabel": "もう 1 本追加",
       "addSecondKeyBtn": "先に 2 本目を追加",
       "alertErrorTitle": "エラー",
-      "alertNotDiscoverableBody": "お使いの端末はこのパスキーをこの端末内にのみ保存したため、次回のサインイン時に表示されず、ウォレットの復元にも使えません。安全のため、ウォレットはまだ作成されていません。失われたものは何もありませんのでご安心ください。\n\nシステム設定でパスキーの保存先を Google パスワード マネージャーまたは iCloud キーチェーンに切り替えて、もう一度お試しください。",
-      "alertNotDiscoverableTitle": "パスキーが同期されませんでした",
       "alertNotSupportedBody": "この端末では生体認証を利用できません。",
       "alertNotSupportedTitle": "非対応",
       "confirmKeyBtn": "確認",
@@ -172,8 +170,6 @@
       "keysSubtitleFull": "上限の 7 本に達しました。",
       "keysTitle": "パスキーを追加",
       "keysTitleBlocked": "作成にはもう 1 本必要です",
-      "methodBlockedHint": "このウォレットの鍵はすべて {{party}} のものです。",
-      "methodBlockedSigner": "Trusted Signer のページは {{page}} で、その鍵は {{pageParty}} のものです。設定で {{party}} のページに変えると追加できます。",
       "methodHybridBody": "コードを読み取り、近くの端末で作成",
       "methodHybridTitle": "スマホまたはタブレット",
       "methodHybridUnavailable": "近日対応",
@@ -186,6 +182,8 @@
       "needSecondKeyHint": "この鍵はどこにもバックアップされていません。失うとウォレットは開けません。もう 1 本追加してください。",
       "nextBtn": "続ける",
       "openSettings": "設定を開く",
+      "ownPageTitle": "自分の署名ページを使う",
+      "ownPageBody": "上級:キーはページのドメインに属し、そこでのみ署名",
       "pinAttemptsLeft": "残り試行回数: {{attempts}}",
       "pinBody": "{{product}} には指紋センサーがないため、PIN で本人確認を行います。PIN は手元のキーにのみ送られ、このコンピューターに保存されることもサーバーに送られることもありません。",
       "pinLabel": "PIN",
@@ -232,8 +230,7 @@
       "touchFingerprintBody": "{{product}} が点滅しています。センサーに指を置いて本人確認を行ってください。",
       "touchSelectBody": "複数のセキュリティキーが接続されていて、すべて点滅しています。使いたいものにタッチしてください。",
       "touchTitle": "セキュリティキーにタッチ",
-      "verifyHint": "パスキーの確認と鍵の同期が完了しました。準備完了です。",
-      "verifyStuckHint": "確認が何度も失敗しますか？端末がこのパスキーを正しく保存できていない可能性があります。まだ何も作成されていないので、安心して最初からやり直せます。"
+      "verifyHint": "パスキーの確認と鍵の同期が完了しました。準備完了です。"
     },
     "login": {
       "alertNotSupportedTitle": "非対応",

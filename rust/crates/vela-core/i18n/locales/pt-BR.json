@@ -60,16 +60,25 @@
       "subtitle": "Cada envio que você começa no Vela parte daqui. Você ainda pode mudar um envio específico."
     },
     "signing": {
-      "title": "Assinar com",
-      "subtitle": "Toda assinatura que você inicia no Vela começa aqui. Ainda dá para escolher outro jeito em uma só.",
-      "pageTitle": "Página do Trusted Signer",
-      "pageSubtitle": "A página que o Trusted Signer abre: a oficial ou a sua própria cópia da página sem dependências.",
+      "title": "Páginas de assinatura",
+      "subtitle": "Páginas em que você confia para mostrar e assinar solicitações.",
       "pageOfficial": "Oficial",
       "pageInvalid": "Isso não é um endereço da web.",
       "pageInsecure": "Use uma página https ou uma no loopback deste aparelho — o navegador não assina em nenhum outro lugar.",
-      "pageForeign": "Suas passkeys pertencem a getvela.app. Uma página em outro domínio pode mostrar uma solicitação, mas não consegue assiná-la.",
-      "pageReset": "Usar a página oficial",
-      "pageSave": "Salvar"
+      "pageSave": "Salvar",
+      "pageAdd": "Adicionar página",
+      "pageDuplicate": "Essa página já está salva.",
+      "keysOn": "Chaves em {{domain}}"
+    },
+    "venue": {
+      "title": "Onde você revisa e assina",
+      "subtitle": "Para as transações e mensagens desta conta. Suas chaves não mudam.",
+      "inVela": "Na Vela",
+      "inVelaBody": "A tela de assinatura da própria Vela",
+      "page": "Em uma página confiável",
+      "pageBody": "Uma página sem dependências mostra exatamente o que você assina",
+      "blockedApp": "A Vela não consegue usar as chaves de {{domain}}.",
+      "blockedPage": "Esta página está em {{pageDomain}}; as chaves desta conta estão em {{domain}}."
     },
     "advanced": {
       "networksTitle": "Redes",

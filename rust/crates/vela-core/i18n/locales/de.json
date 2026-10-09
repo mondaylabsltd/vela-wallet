@@ -60,16 +60,25 @@
       "subtitle": "Jede Überweisung, die du in Vela startest, beginnt hier. Eine einzelne kannst du beim Senden trotzdem ändern."
     },
     "signing": {
-      "title": "Signieren mit",
-      "subtitle": "Jede Signatur, die Sie in Vela beginnen, startet hier. Für eine einzelne können Sie trotzdem einen anderen Weg wählen.",
-      "pageTitle": "Clear-Signer-Seite",
-      "pageSubtitle": "Die Seite, die der Trusted Signer öffnet: die offizielle oder Ihre eigene Kopie der abhängigkeitsfreien Seite.",
+      "title": "Signaturseiten",
+      "subtitle": "Seiten, denen du vertraust, um Anfragen anzuzeigen und zu signieren.",
       "pageOfficial": "Offiziell",
       "pageInvalid": "Das ist keine Webadresse.",
       "pageInsecure": "Verwenden Sie eine https-Seite oder eine Seite auf dem Loopback dieses Geräts — anderswo signiert ein Browser nicht.",
-      "pageForeign": "Ihre Passkeys gehören zu getvela.app. Eine Seite auf einer anderen Domain kann eine Anfrage anzeigen, aber nicht signieren.",
-      "pageReset": "Offizielle Seite verwenden",
-      "pageSave": "Speichern"
+      "pageSave": "Speichern",
+      "pageAdd": "Seite hinzufügen",
+      "pageDuplicate": "Diese Seite ist bereits gespeichert.",
+      "keysOn": "Schlüssel auf {{domain}}"
+    },
+    "venue": {
+      "title": "Wo du prüfst und signierst",
+      "subtitle": "Für die Transaktionen und Nachrichten dieses Kontos. Deine Schlüssel bleiben gleich.",
+      "inVela": "In Vela",
+      "inVelaBody": "Velas eigene Signaturansicht",
+      "page": "Auf einer vertrauenswürdigen Seite",
+      "pageBody": "Eine Seite ohne Abhängigkeiten zeigt genau, was du signierst",
+      "blockedApp": "Vela kann Schlüssel auf {{domain}} nicht verwenden.",
+      "blockedPage": "Diese Seite liegt auf {{pageDomain}}, die Schlüssel dieses Kontos auf {{domain}}."
     },
     "advanced": {
       "networksTitle": "Netzwerke",

@@ -146,8 +146,6 @@
       "addMethodLabel": "Aggiungine un'altra",
       "addSecondKeyBtn": "Aggiungi prima una seconda chiave",
       "alertErrorTitle": "Errore",
-      "alertNotDiscoverableBody": "Il tuo dispositivo ha salvato questa passkey solo in locale: non comparirebbe all'accesso e non potrebbe recuperare il wallet in seguito. Per la tua sicurezza il wallet non è stato ancora creato — non hai perso nulla.\n\nNelle impostazioni di sistema scegli Gestore delle password di Google o il Portachiavi iCloud come provider di passkey e riprova.",
-      "alertNotDiscoverableTitle": "Passkey non sincronizzata",
       "alertNotSupportedBody": "L'autenticazione biometrica non è disponibile su questo dispositivo.",
       "alertNotSupportedTitle": "Non supportato",
       "confirmKeyBtn": "Conferma",
@@ -172,8 +170,6 @@
       "keysSubtitleFull": "Hai raggiunto il limite di 7.",
       "keysTitle": "Aggiungi passkey",
       "keysTitleBlocked": "Serve un'altra chiave per creare",
-      "methodBlockedHint": "Le chiavi di questo portafoglio appartengono tutte a {{party}}.",
-      "methodBlockedSigner": "La tua pagina Trusted Signer è {{page}}, le sue chiavi sono di {{pageParty}}. Nelle impostazioni passa a {{party}} per aggiungerne una qui.",
       "methodHybridBody": "Scansiona un codice e creala su un dispositivo vicino",
       "methodHybridTitle": "Telefono o tablet",
       "methodHybridUnavailable": "Prossimamente",
@@ -186,6 +182,8 @@
       "needSecondKeyHint": "Questa chiave non ha un backup da nessuna parte. Se la perdi, il wallet non si apre. Aggiungine una seconda.",
       "nextBtn": "Continua",
       "openSettings": "Apri le impostazioni",
+      "ownPageTitle": "Usa la mia pagina di firma",
+      "ownPageBody": "Avanzato: le chiavi appartengono al dominio della tua pagina e firmano solo lì",
       "pinAttemptsLeft": "Tentativi rimasti: {{attempts}}",
       "pinBody": "{{product}} non ha un sensore di impronte, quindi usa il PIN per confermare che sei tu. Il PIN arriva solo alla chiave che hai in mano: mai sul disco di questo computer, mai a un server.",
       "pinLabel": "PIN",
@@ -233,8 +231,7 @@
       "touchFingerprintBody": "{{product}} sta lampeggiando. Appoggia il dito sul suo sensore per confermare che sei tu.",
       "touchSelectBody": "Sono collegate più chiavi di sicurezza e stanno lampeggiando tutte. Tocca quella che vuoi usare.",
       "touchTitle": "Tocca la tua chiave di sicurezza",
-      "verifyHint": "La tua passkey è verificata e la chiave sincronizzata — tutto pronto.",
-      "verifyStuckHint": "La verifica continua a fallire? Il tuo dispositivo potrebbe non aver salvato correttamente questa passkey. Puoi ricominciare in tutta sicurezza — non è stato ancora creato nulla."
+      "verifyHint": "La tua passkey è verificata e la chiave sincronizzata — tutto pronto."
     },
     "login": {
       "alertNotSupportedTitle": "Non supportato",
