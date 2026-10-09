@@ -256,15 +256,12 @@ fun VelaNavHost(
     // Spec 099 navigation: what brought 探索 up — the core's `explore_landing`
     // question — counted per visit, so a re-tap or a page opened from outside
     // starts the screen again from the core's landing, and kept stable for the
-    // visit (a PageOpened is asked only once its open is in the view).
-    var exploreEntry by rememberSaveable { mutableStateOf(app.getvela.wallet.feature.browser.core.ExploreEntry.Section) }
-    var exploreVisit by rememberSaveable { mutableIntStateOf(0) }
-    /** The tab whose request waited on the person as 探索 was entered (`browser_waiting_tab`) — kept for the visit. */
-    var exploreWaiting by rememberSaveable { mutableStateOf<String?>(null) }
+    // visit (a PageOpened is asked only once its open is in the view). Up here
+    // and saved, with where it landed: 设置 or 通讯录 pushed over the wallet and
+    // Back is the same visit, never landed again (ExploreVisit).
+    var exploreVisit by rememberSaveable(stateSaver = ExploreVisit.Saver) { mutableStateOf(ExploreVisit()) }
     val enterExplore: (app.getvela.wallet.feature.browser.core.ExploreEntry) -> Unit = { entry ->
-        exploreEntry = entry
-        exploreWaiting = application.container.browser.waitingTab()
-        exploreVisit += 1
+        exploreVisit = exploreVisit.entered(entry, waiting = application.container.browser.waitingTab())
         section = VelaTab.Explore
     }
 
@@ -1487,25 +1484,23 @@ fun VelaNavHost(
                         val pageUrl = engineState.url
                         // Spec 099 navigation: where this visit lands — the core's
                         // rule, re-read as its view changes until it settles, then
-                        // kept for the visit; acted on once (the tab it names is
-                        // asked for; landing home asks for none).
-                        val coreLanding = remember(exploreView, exploreEntry, exploreWaiting) {
-                            app.getvela.wallet.feature.browser.core.BrowserTabs.landing(exploreView, exploreEntry, exploreWaiting)
-                        }
-                        var settledLanding by remember { mutableStateOf<Pair<Int, app.getvela.wallet.feature.browser.core.ExploreLanding>?>(null) }
-                        val exploreLanding = settledLanding?.takeIf { it.first == exploreVisit }?.second ?: coreLanding
-                        LaunchedEffect(exploreVisit, coreLanding, exploreView.ready) {
-                            if (settledLanding?.first == exploreVisit) return@LaunchedEffect
+                        // kept for the visit (saved with it, so this composition
+                        // coming back after 设置 is not a new landing); acted on
+                        // once (the tab it names is asked for; landing home asks
+                        // for none).
+                        val exploreLanding = remember(exploreView, exploreVisit) { exploreVisit.landing(exploreView) }
+                        LaunchedEffect(exploreVisit.number, exploreLanding, exploreView.ready) {
                             // The controller's view as it is NOW: the composed copy can
                             // be a frame behind an open that just landed, and a landing
                             // read from it would name the page that was there before.
                             val current = browser.explore.value
                             if (!current.ready) return@LaunchedEffect
-                            val landing = app.getvela.wallet.feature.browser.core.BrowserTabs.landing(current, exploreEntry, exploreWaiting)
-                            settledLanding = exploreVisit to landing
-                            when (landing) {
+                            val settled = exploreVisit.settle(current) ?: return@LaunchedEffect
+                            exploreVisit = settled
+                            when (val landing = settled.settled) {
                                 is app.getvela.wallet.feature.browser.core.ExploreLanding.Tab -> browser.selectTab(landing.id)
                                 app.getvela.wallet.feature.browser.core.ExploreLanding.Home -> browser.landedHome()
+                                null -> Unit
                             }
                         }
                         ExploreScreen(
@@ -1520,7 +1515,7 @@ fun VelaNavHost(
                                 is app.getvela.wallet.feature.browser.core.ExploreLanding.Tab -> app.getvela.wallet.feature.explore.ExploreView.Browsing
                                 app.getvela.wallet.feature.browser.core.ExploreLanding.Home -> app.getvela.wallet.feature.explore.ExploreView.Start
                             },
-                            visit = exploreVisit,
+                            visit = exploreVisit.number,
                             // Typed on the home: an address, never over a live dApp.
                             onOpenUrl = { browser.open(it) },
                             // Typed into the bar of the page on screen: that page's tab.
