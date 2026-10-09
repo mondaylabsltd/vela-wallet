@@ -37,6 +37,11 @@ struct RegisterAck {
 struct KeyStatus {
     let registered: Bool
     let unitIds: [UInt32]
+    /// Who vouched for this answer — the resolver's `Done.verified_by`
+    /// (`gnosis` / `ethereum` / `none`), passed to the core untouched. Only
+    /// Gnosis's "no record" may offer the two-signature rebuild; anything
+    /// else fails closed.
+    var verifiedBy: String = "none"
 }
 
 struct UnitMember {
@@ -298,8 +303,10 @@ actor RegistryClient {
     /// it found?
     func queryByPublicKey(_ publicKeyHex: String) async throws -> KeyStatus {
         let profile: [String: Any]
+        // An answer no resolver walked was vouched for by nobody.
+        var verifiedBy = "none"
         if let resolver {
-            profile = try await resolve(label: "Query", listing: true) { answers in
+            (profile, verifiedBy) = try await resolveVouched(label: "Query", listing: true) { answers in
                 resolver.keyStep(publicKeyHex, answers)
             }
         } else {
@@ -325,7 +332,7 @@ actor RegistryClient {
             unitIds.append(number.uint32Value)
         }
         let registered = !(profile["entry"] is NSNull) && profile["entry"] != nil
-        return KeyStatus(registered: registered, unitIds: unitIds)
+        return KeyStatus(registered: registered, unitIds: unitIds, verifiedBy: verifiedBy)
     }
 
     private func readUnit(_ unitId: UInt32) async throws -> [String: Any] {
@@ -357,6 +364,16 @@ actor RegistryClient {
         listing: Bool,
         step: @Sendable (String) -> String
     ) async throws -> [String: Any] {
+        try await resolveVouched(label: label, listing: listing, step: step).body
+    }
+
+    /// `resolve`, with who vouched for the answer (`Done.verified_by`; absent
+    /// reads `none`, which fails closed in the core).
+    private func resolveVouched(
+        label: String,
+        listing: Bool,
+        step: @Sendable (String) -> String
+    ) async throws -> (body: [String: Any], verifiedBy: String) {
         guard let resolver else { throw RegistryFailure(message: "\(label) failed: no resolver", network: false) }
         var answers: [[String: Any]] = []
         var indexFailure: RegistryFailure?
@@ -414,7 +431,7 @@ actor RegistryClient {
                 NSLog("registry: the index's answer was discarded for %@", source)
             }
             if listing { unitSource = source }
-            return object
+            return (object, next["verified_by"] as? String ?? "none")
         }
         throw indexFailure ?? RegistryFailure(message: "\(label) failed: nobody answered", network: true)
     }

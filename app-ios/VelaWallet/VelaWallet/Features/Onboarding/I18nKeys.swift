@@ -146,6 +146,16 @@ enum I18nKeys {
         static let recoverCancel = "onboarding.login.recoverCancel"
         static let recoverFailedTitle = "onboarding.login.recoverFailedTitle"
         static let recoverFailedBody = "onboarding.login.recoverFailedBody"
+        /// PR 2: the registry could not be asked which wallet this passkey
+        /// opens — a free retry from the signature already made, no new
+        /// passkey (`registry_unreachable { local: false }`).
+        static let registryUnreachableTitle = "onboarding.login.registryUnreachableTitle"
+        static let registryUnreachableBody = "onboarding.login.registryUnreachableBody"
+        /// The same prompt when no lookup left the device (`local: true`).
+        static let networkTitle = "onboarding.common.networkTitle"
+        static let networkBody = "onboarding.common.networkBody"
+        static let tryAgain = "common.tryAgain"
+        static let cancel = "common.cancel"
         // The which-wallet picker for the app-owned CTAP path, shared with the desktop.
         static let pickTitle = "onboarding.login.pickTitle"
         static let pickBody = "onboarding.login.pickBody"
@@ -235,6 +245,8 @@ enum I18nKeys {
         Login.recoverOfferTitle, Login.recoverOfferBody,
         Login.recoverConfirm, Login.recoverCancel,
         Login.recoverFailedTitle, Login.recoverFailedBody,
+        Login.registryUnreachableTitle, Login.registryUnreachableBody,
+        Login.networkTitle, Login.networkBody, Login.tryAgain, Login.cancel,
         Flow.back, Flow.retry, Flow.close, Flow.copyAddress, Flow.copied,
         Flow.confirmInPrompt, Flow.editIndexEndpoint,
         Flow.notDiscoverableTitle, Flow.notDiscoverableBody, Flow.phoneLinkFailed,

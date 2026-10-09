@@ -255,14 +255,22 @@ struct PromptKind: Equatable, Identifiable {
     /// The core's verdict that a not-supported ceremony was a SECURITY KEY's
     /// (issue #450): the sheet talks about the key, never about Face ID.
     let securityKey: Bool
+    /// `registry_unreachable`: every lookup failed without leaving the device
+    /// (no network) — the sheet says "check your network" rather than "Vela
+    /// couldn't check".
+    let local: Bool
 
-    var id: String { detail.map { "\(type)|\($0)" } ?? type }
+    var id: String { detail.map { "\(type)|\($0)" } ?? (local ? "\(type)|local" : type) }
 
-    init(type: String, detail: String? = nil, phoneLink: Bool = false, securityKey: Bool = false) {
+    init(
+        type: String, detail: String? = nil, phoneLink: Bool = false, securityKey: Bool = false,
+        local: Bool = false
+    ) {
         self.type = type
         self.detail = detail
         self.phoneLink = phoneLink
         self.securityKey = securityKey
+        self.local = local
     }
 
     init(json: [String: Any]) {
@@ -270,6 +278,7 @@ struct PromptKind: Equatable, Identifiable {
         self.detail = json["detail"] as? String
         self.phoneLink = json["phone_link"] as? Bool ?? false
         self.securityKey = json["security_key"] as? Bool ?? false
+        self.local = json["local"] as? Bool ?? false
     }
 }
 
