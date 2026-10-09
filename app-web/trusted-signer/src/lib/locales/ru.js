@@ -185,7 +185,7 @@ window.VelaCS.i18n.register('ru', {
   'ui.simClaimed': 'симуляция предоставлена отправителем запроса — эта страница её не запускала',
   'tag.claimed': 'заявлено',
 
-  'intent.create': 'Создать ключ',
+  'intent.create': 'Добавить passkey',
   'intent.signIn': 'Вход',
   'intent.proofVerify': 'Подтвердить ваш ключ',
   'intent.proofRecover': 'Восстановить с помощью ключа',
@@ -256,7 +256,7 @@ window.VelaCS.i18n.register('ru', {
   'button.sign': 'Подписать',
   'button.signIn': 'Вход',
   'button.confirm': 'Подтвердить',
-  'button.create': 'Создать ключ',
+  'button.create': 'Добавить passkey',
   'button.cannotSign': 'Подписать нельзя',
   'button.done': 'Готово',
   'ui.closeRefuses': 'Не то, что вы ожидали? Закройте эту страницу — ничего не будет подписано.',

@@ -165,7 +165,7 @@ for (const [place, attachment, hint] of [['platform', 'platform', 'client-device
   };
   const page = await phoneAt(`${SIGNER}?ch=url&lang=en${fragment(intent, { walletName: 'Mine' }, WALLET, 'tap-3-' + place)}`);
   await page.waitFor('!!window.__slider');
-  check(`create on ${place}: the button says "Create key"`, (await page.ev("document.querySelector('.confirm').textContent")) === 'Create key');
+  check(`create on ${place}: the button says "Add a passkey" (the app's own words)`, (await page.ev("document.querySelector('.confirm').textContent")) === 'Add a passkey');
   await sleep(300);
   await tap(page);
   const calls = (await page.waitFor('(window.__webauthn || []).length > 0', 8000)) ? await page.ev('window.__webauthn') : [];

@@ -185,7 +185,7 @@ window.VelaCS.i18n.register('de', {
   'ui.simClaimed': 'Simulation vom Anfragenden geliefert — nicht von dieser Seite ausgeführt',
   'tag.claimed': 'angegeben',
 
-  'intent.create': 'Schlüssel erstellen',
+  'intent.create': 'Passkey hinzufügen',
   'intent.signIn': 'Anmelden',
   'intent.proofVerify': 'Deinen Schlüssel bestätigen',
   'intent.proofRecover': 'Mit deinem Schlüssel wiederherstellen',
@@ -256,7 +256,7 @@ window.VelaCS.i18n.register('de', {
   'button.sign': 'Signieren',
   'button.signIn': 'Anmelden',
   'button.confirm': 'Bestätigen',
-  'button.create': 'Schlüssel erstellen',
+  'button.create': 'Passkey hinzufügen',
   'button.cannotSign': 'Nicht signierbar',
   'button.done': 'Fertig',
   'ui.closeRefuses': 'Nicht das, was du erwartet hast? Schließ diese Seite — dann wird nichts signiert.',

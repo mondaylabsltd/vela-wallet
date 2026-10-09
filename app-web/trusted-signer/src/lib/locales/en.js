@@ -186,7 +186,7 @@ window.VelaCS.i18n.register('en', {
   'ui.simClaimed': 'simulation supplied by the requester — not run by this page',
   'tag.claimed': 'claimed',
   // --- key ceremonies (spec 075): the page as a passkey route --------------
-  'intent.create': 'Create a key',
+  'intent.create': 'Add a passkey',
   'intent.signIn': 'Sign in',
   'intent.proofVerify': 'Confirm your key',
   'intent.proofRecover': 'Recover with your key',
@@ -269,7 +269,7 @@ window.VelaCS.i18n.register('en', {
   'button.sign': 'Sign',
   'button.signIn': 'Sign in',
   'button.confirm': 'Confirm',
-  'button.create': 'Create key',
+  'button.create': 'Add a passkey',
   'button.cannotSign': 'Can’t sign this',
   'button.done': 'Done',
   'ui.closeRefuses': 'Not what you expected? Close this page — nothing gets signed.',

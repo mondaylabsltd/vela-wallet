@@ -185,7 +185,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'ui.simClaimed': '模擬結果由請求方提供——不是這一頁執行的',
   'tag.claimed': '自稱',
 
-  'intent.create': '建立金鑰',
+  'intent.create': '新增通行密鑰',
   'intent.signIn': '登入',
   'intent.proofVerify': '確認你的金鑰',
   'intent.proofRecover': '用你的金鑰找回',
@@ -256,7 +256,7 @@ window.VelaCS.i18n.register('zh-TW', {
   'button.sign': '簽署',
   'button.signIn': '登入',
   'button.confirm': '確認',
-  'button.create': '建立金鑰',
+  'button.create': '新增通行密鑰',
   'button.cannotSign': '無法簽署',
   'button.done': '完成',
   'ui.closeRefuses': '和你預期的不一樣？關閉這一頁，就不會簽署任何東西。',
