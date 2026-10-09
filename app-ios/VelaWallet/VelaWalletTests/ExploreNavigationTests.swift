@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 import VelaCore
 @testable import VelaWallet
@@ -367,6 +368,32 @@ struct ExploreNavigationTests {
     }
 
     // MARK: - The home's resume section
+
+    /// A resume row names an open tab by its host, and a host too long for
+    /// the row is cut from its START, as the browsing bar's pill cuts it:
+    /// the end of a host is its registrable domain, so
+    /// `app.uniswap.org.evil.xyz` must never read `app.uniswap.or…`. The
+    /// Recent dApps rows keep the end cut (the web board's rule, 542248952).
+    @Test func aResumeRowCutsItsHostFromTheStart() throws {
+        #expect(SiteRowView.secondLineTruncation(hostLine: true) == .head)
+        #expect(SiteRowView.secondLineTruncation(hostLine: false) == .tail)
+        #expect(!SiteRowView(site: SiteModel(id: "x", name: "x", host: "x", letter: "x", tint: .clear)).hostLine,
+                "a site row cuts its end unless it is told otherwise")
+
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("VelaWallet/Features/Explore/ExploreScreen.swift"),
+            encoding: .utf8
+        )
+        let start = try #require(source.range(of: "private func resumeSection"))
+        let end = try #require(source.range(of: "// MARK: - The scanner"))
+        let resume = String(source[start.lowerBound..<end.lowerBound])
+        #expect(resume.contains("SiteRowView(site: row.site, hostLine: true)"), "the resume rows cut the host's end")
+        let rows = source.components(separatedBy: "SiteRowView(").count - 1
+        #expect(rows == 2, "a site row the home draws that this test does not know about")
+        #expect(source.contains("SiteRowView(site: site) {"), "the Recent dApps rows keep the end cut")
+    }
 
     /// The rows are the core's `resumable`, in its order; the header counts
     /// every tab (start pages too) and its action is the switcher. Nothing

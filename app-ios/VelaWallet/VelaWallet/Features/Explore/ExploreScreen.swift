@@ -960,7 +960,8 @@ struct ExploreScreen: View {
             .padding(.vertical, Tokens.Space.s12)
             .accessibilityIdentifier("explore.resume.header")
             ForEach(section.tabs) { row in
-                SiteRowView(site: row.site) { _ in resume(tab: row.id) }
+                // The host is cut from its start, like the pill's.
+                SiteRowView(site: row.site, hostLine: true) { _ in resume(tab: row.id) }
                     .accessibilityIdentifier("explore.resume.row")
             }
         }
