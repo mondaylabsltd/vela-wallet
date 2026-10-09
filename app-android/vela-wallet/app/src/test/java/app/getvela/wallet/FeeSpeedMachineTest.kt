@@ -154,7 +154,8 @@ class FeeSpeedMachineTest {
         assertEquals(FeeTier.Slow, picked.tier)
         assertTrue(picked.options.none { it.tier == FeeTier.Rapid })
         host.dispatch(FeeSpeedEvent.Reset, FeeSpeedEvent.serializer())
-        assertEquals(FeeTier.Fast, host.settle { !it.picked }.tier)
+        // Back to the factory default — `standard` since the Ethereum fee fix.
+        assertEquals(FeeTier.Standard, host.settle { !it.picked }.tier)
     }
 
     @Test
@@ -163,27 +164,28 @@ class FeeSpeedMachineTest {
         val first = prefHost(store)
         first.start()
         first.dispatch(FeeTierPrefEvent.Refresh, FeeTierPrefEvent.serializer())
-        assertEquals(FeeTier.Fast, first.settle { !it.committed }.tier)
-        first.dispatch(FeeTierPrefEvent.UserChose(FeeTier.Standard), FeeTierPrefEvent.serializer())
-        first.settle { it.committed && it.tier == FeeTier.Standard }
+        assertEquals(FeeTier.Standard, first.settle { !it.committed }.tier)
+        first.dispatch(FeeTierPrefEvent.UserChose(FeeTier.Fast), FeeTierPrefEvent.serializer())
+        first.settle { it.committed && it.tier == FeeTier.Fast }
         runBlocking { withTimeout(TIMEOUT_MS) { while (store.values[KeyValueStore.Keys.FEE_TIER] == null) kotlinx.coroutines.delay(10) } }
-        assertEquals("standard", store.values[KeyValueStore.Keys.FEE_TIER])
+        assertEquals("fast", store.values[KeyValueStore.Keys.FEE_TIER])
 
         val next = prefHost(store)
         next.start()
         next.dispatch(FeeTierPrefEvent.Refresh, FeeTierPrefEvent.serializer())
-        assertEquals(FeeTier.Standard, next.settle { it.committed }.tier)
+        // A stored `fast` stays `fast` — the new default never rewrites a choice.
+        assertEquals(FeeTier.Fast, next.settle { it.committed }.tier)
     }
 
     @Test
-    fun `a stored name this build does not offer reads as the factory Fast`() {
+    fun `a stored name this build does not offer reads as the factory Standard`() {
         val store = FakeStore(mapOf(KeyValueStore.Keys.FEE_TIER to "rapid"))
         val host = prefHost(store)
         host.start()
         host.dispatch(FeeTierPrefEvent.Refresh, FeeTierPrefEvent.serializer())
         runBlocking { kotlinx.coroutines.delay(200) }
         val view = host.view.value
-        assertEquals(FeeTier.Fast, view.tier)
+        assertEquals(FeeTier.Standard, view.tier)
         assertFalse(view.committed)
         assertEquals("rapid", store.values[KeyValueStore.Keys.FEE_TIER])
     }

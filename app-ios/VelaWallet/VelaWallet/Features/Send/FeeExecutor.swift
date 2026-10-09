@@ -94,7 +94,7 @@ final class FeeExecutor {
             ])
 
         case "fetch_bundler_quote":
-            let tier = operation["tier"] as? String ?? "fast"
+            let tier = operation["tier"] as? String ?? "standard"
             return CoreJSON.string([
                 "type": "bundler_quote",
                 "quote": await relay.bundlerQuote(chainId: chainId, tier: tier)
@@ -214,7 +214,7 @@ final class FeeExecutor {
             return CoreJSON.string(["type": "user_op_gas", "outcome": ["type": "context_unavailable"]])
         }
         switch await relay.estimateUserOpGas(chainId: chainId, opJson: json) {
-        case .estimated(let verification, let call, let preVerification):
+        case .estimated(let verification, let call, let preVerification, let settlement):
             return CoreJSON.string([
                 "type": "user_op_gas",
                 "outcome": [
@@ -222,6 +222,7 @@ final class FeeExecutor {
                     "verification_gas_limit": verification,
                     "call_gas_limit": call,
                     "pre_verification_gas": preVerification,
+                    "settlement_gas": settlement.map { $0 as Any } ?? NSNull(),
                 ],
             ])
         case .refused:

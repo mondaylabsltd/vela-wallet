@@ -439,7 +439,7 @@ final class SendExecutor {
     /// simply made again by the quote.
     private func prewarmFees(account: String, chainIds: [Int]) {
         guard !account.isEmpty, !chainIds.isEmpty else { return }
-        let tier = fees.speed?.tier ?? "fast"
+        let tier = fees.speed?.tier ?? "standard"
         let relay = self.relay
         prewarming = Task {
             await withTaskGroup(of: Void.self) { group in

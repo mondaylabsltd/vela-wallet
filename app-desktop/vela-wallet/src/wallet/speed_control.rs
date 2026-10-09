@@ -963,6 +963,7 @@ mod tests {
                             max_priority_fee_per_gas: None,
                             network_fee_per_gas: Some("10000000".to_owned()),
                             relayer_fee_per_gas: Some("10000000".to_owned()),
+                            in_band_fee_per_gas: None,
                         }),
                     },
                     FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {

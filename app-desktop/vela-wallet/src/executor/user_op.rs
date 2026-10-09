@@ -40,8 +40,8 @@ use vela_core::ClientDataKind;
 use vela_core::app::fee_policy::{
     AssetPricing, FeeAssetKind, FeeAssetQuote, FeeCall, FeeGasOutcome, FeeTier,
     TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS, calculate_in_band_fee_amount,
-    is_tempo_chain, tempo_call_gas_limit, tempo_expected_gas, tempo_minimum_fee_token_units,
-    tempo_reimbursement,
+    is_tempo_chain, tempo_expected_gas, tempo_minimum_fee_token_units, tempo_reimbursement,
+    user_op_gas_floors,
 };
 use vela_core::app::send::SendSubmitFailure;
 use vela_core::app::tx_tracker::WAIT_WINDOW_MS;
@@ -50,11 +50,11 @@ use vela_core::primitives::{from_hex, to_hex};
 use vela_core::user_op::{
     CALL_GAS_LIMIT, EstimateFailure, MultiSendCall, NOT_SENT_DAPP_DETAIL, PRE_VERIFICATION_GAS,
     RelayRejection, SubmitVerdict, UserOperation, VERIFICATION_GAS_DEPLOYED,
-    VERIFICATION_GAS_UNDEPLOYED, WRITE_AHEAD_WAIT_MS, WalletKey, build_dummy_signature,
-    build_in_band_fee_leg, build_init_code_for_keys, build_multi_send_execute_call_data,
-    build_user_op_signature, calculate_safe_op_hash, compute_safe_message_hash,
-    eip1271_envelope_signature, encode_erc20_transfer, extract_client_data_fields,
-    inner_calls_gas_floor, is_plain_transfer_call, pad_gas_estimate, parse_hex_quantity,
+    VERIFICATION_GAS_UNDEPLOYED, WRITE_AHEAD_WAIT_MS, WalletKey, apply_estimate,
+    build_dummy_signature, build_in_band_fee_leg, build_init_code_for_keys,
+    build_multi_send_execute_call_data, build_user_op_signature, calculate_safe_op_hash,
+    compute_safe_message_hash, eip1271_envelope_signature, encode_erc20_transfer,
+    extract_client_data_fields, inner_calls_gas_floor, is_plain_transfer_call, parse_hex_quantity,
     signer_address_for, user_op_hash,
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
@@ -65,10 +65,6 @@ use crate::executor::passkey::PasskeyFailure;
 use crate::executor::trusted_signer::{self, Ask, Channel};
 use crate::executor::{chain, pool, relay};
 
-/// `TEMPO_VERIFICATION_GAS_UNDEPLOYED` (`tempo.ts:89`) — the one Tempo
-/// constant `fee_policy` does not carry, because only the submit path
-/// requests it.
-const TEMPO_VERIFICATION_GAS_UNDEPLOYED: u128 = 6_000_000;
 /// `MAX_QUOTE_VS_CHAIN_MULTIPLE` (`safe-transaction.ts:521`).
 const MAX_QUOTE_VS_CHAIN_MULTIPLE: u128 = 3;
 
@@ -501,6 +497,7 @@ pub fn simulate_gas(
             verification_gas_limit: estimate.verification_gas_limit.to_string(),
             call_gas_limit: estimate.call_gas_limit.to_string(),
             pre_verification_gas: estimate.pre_verification_gas.to_string(),
+            settlement_gas: estimate.settlement_gas.map(|gas| gas.to_string()),
         },
         Err(error) if error.refuses() => {
             vlog!(
@@ -696,6 +693,11 @@ fn usable(quoted: Option<QuotedFee>) -> Option<QuotedFee> {
     })
 }
 
+/// The person's calls plus the fee leg — what Tempo's call floor grows with.
+fn sub_call_count(inner: &[MultiSendCall]) -> u32 {
+    u32::try_from(inner.len() + 1).unwrap_or(u32::MAX)
+}
+
 /// The send-time quote for a caller that displayed none (`sendUserOpInBand`'s
 /// fallback branch): the relay's rows, its outer quote checked against the
 /// chain's own price, and `fee_policy`'s amount rule.
@@ -791,18 +793,17 @@ fn submit_in_band(
         );
         build_multi_send_execute_call_data(&calls).map_err(|e| other(e.to_string()))
     };
-    let verification_floor = if deployed {
-        VERIFICATION_GAS_DEPLOYED
-    } else {
-        VERIFICATION_GAS_UNDEPLOYED
-    };
+    // What the draft asks the estimator about, and the rule its answer is
+    // signed by — the core's (`fee_policy::user_op_gas_floors`), one for every
+    // shell.
+    let floors = user_op_gas_floors(chain_id, deployed, sub_call_count(inner));
     let mut op = UserOperation {
         sender: safe.to_owned(),
         nonce,
         init_code,
         call_data: batch(1, safe)?,
-        verification_gas_limit: verification_floor,
-        call_gas_limit: CALL_GAS_LIMIT,
+        verification_gas_limit: floors.verification,
+        call_gas_limit: floors.call,
         pre_verification_gas: PRE_VERIFICATION_GAS,
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
@@ -816,10 +817,10 @@ fn submit_in_band(
     let has_contract_call = inner.iter().any(|call| !is_plain_transfer_call(&call.data));
     match relay::estimate_user_op_gas(&op, chain_id) {
         Ok(estimate) => {
-            let padded = pad_gas_estimate(estimate, verification_floor, CALL_GAS_LIMIT);
-            op.verification_gas_limit = padded.verification_gas_limit;
-            op.call_gas_limit = padded.call_gas_limit;
-            op.pre_verification_gas = padded.pre_verification_gas;
+            // The relay's limits as returned (`user_op::in_band_gas_limits`):
+            // no second ×1.5, no 300k verification floor; an undeployed
+            // Safe's floors; then the inner calls' own measured floor.
+            apply_estimate(&mut op, estimate, floors);
             raise_to_measured_floor(&mut op, chain_id, safe, inner, has_contract_call);
         }
         Err(error) => {
@@ -879,14 +880,10 @@ fn submit_tempo(
 
     let (deployed, nonce, init_code) = account_context(chain_id, safe, keys)?;
     let gas_price = chain::chain_gas_price(chain_id).gas_price;
-    let sub_calls = u32::try_from(inner.len() + 1).unwrap_or(u32::MAX);
+    let sub_calls = sub_call_count(inner);
     let static_gas = tempo_expected_gas(deployed, sub_calls);
-    let call_floor = tempo_call_gas_limit(sub_calls);
-    let verification_floor = if deployed {
-        VERIFICATION_GAS_DEPLOYED
-    } else {
-        TEMPO_VERIFICATION_GAS_UNDEPLOYED
-    };
+    // Tempo's floors and padding rule, the core's.
+    let floors = user_op_gas_floors(chain_id, deployed, sub_calls);
 
     let batch = |reimbursement: u128| -> Result<Vec<u8>, SubmitFailure> {
         let mut calls = inner.to_vec();
@@ -903,8 +900,8 @@ fn submit_tempo(
         nonce,
         init_code,
         call_data: batch(1)?,
-        verification_gas_limit: verification_floor,
-        call_gas_limit: call_floor,
+        verification_gas_limit: floors.verification,
+        call_gas_limit: floors.call,
         pre_verification_gas: PRE_VERIFICATION_GAS,
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
@@ -921,10 +918,7 @@ fn submit_tempo(
                     + estimate.call_gas_limit
                     + estimate.pre_verification_gas,
             );
-            let padded = pad_gas_estimate(estimate, verification_floor, call_floor);
-            op.verification_gas_limit = padded.verification_gas_limit;
-            op.call_gas_limit = padded.call_gas_limit;
-            op.pre_verification_gas = padded.pre_verification_gas;
+            apply_estimate(&mut op, estimate, floors);
             raise_to_measured_floor(&mut op, chain_id, safe, inner, has_contract_call);
         }
         Err(error) => {

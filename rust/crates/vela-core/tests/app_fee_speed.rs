@@ -684,8 +684,9 @@ fn the_fastest_default_prices_nothing_beside_itself() {
 #[test]
 fn an_unconfigured_machine_runs_at_the_factory_default() {
     let sut = Sut::new();
-    assert_eq!(sut.view().tier, FeeTier::Fast);
-    assert_eq!(sut.view().preferred, FeeTier::Fast);
+    // Standard since the Ethereum fee fix (2026-10-09): a tier's tip is real.
+    assert_eq!(sut.view().tier, FeeTier::Standard);
+    assert_eq!(sut.view().preferred, FeeTier::Standard);
 }
 
 #[test]
@@ -923,14 +924,14 @@ fn rapid_is_never_offered_nor_in_force() {
     let mut sut = on_form(FeeTier::Rapid);
     assert_eq!(
         sut.view().tier,
-        FeeTier::Fast,
+        FeeTier::Standard,
         "a dead tier reads as the default"
     );
     sut.dispatch(Event::Pick {
         tier: FeeTier::Rapid,
     });
     let view = sut.view();
-    assert_eq!(view.tier, FeeTier::Fast);
+    assert_eq!(view.tier, FeeTier::Standard);
     assert!(!view.picked);
     assert!(view.options.iter().all(|o| o.tier != FeeTier::Rapid));
     assert_eq!(

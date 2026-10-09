@@ -154,7 +154,7 @@ class FeeMachineTest {
      * short. The preset the shell sends rides the request, and the view
      * comes back with each coin's need and have written in it, and with the
      * sheet's "no coin pays" — the words the signing sheet draws.
-     * Gnosis at 1.1 gwei and 660k gas is under a cent, so both fees sit at the
+     * Gnosis at 1.1 gwei and 350k gas is under a cent, so both fees sit at the
      * $0.01 floor: 0.01 XDAI, 0.01 USDC.
      */
     @Test
@@ -192,7 +192,8 @@ class FeeMachineTest {
      * Issue #262 follow-up: a contract call's own gas, measured from the Safe,
      * raises the `callGasLimit` the fee is priced on — the same raise the
      * submit spine makes, so the signed fee covers the op it signs.
-     * Relay: vgl 100k → 300k floor, cgl 200k × 1.5 = 300k, pvg 50k + 10k.
+     * Relay: vgl 100k, cgl 200k, pvg 50k — priced as returned (the core's
+     * one limits rule: no ×1.5 on top, no 300k floor, no +10k).
      */
     @Test
     fun `a contract call is priced on its measured gas, not the relay's figure`() = runBlocking {
@@ -203,14 +204,14 @@ class FeeMachineTest {
         val plain = host()
         plain.dispatch(contract, FeeEvent.serializer())
         val unmeasured = withTimeout(15_000) { plain.view.first { !it.busy && (it.fee != null || it.failed != null) } }
-        assertEquals("nobody measured: the relay's figure", "660000", unmeasured.fee?.total_gas)
+        assertEquals("nobody measured: the relay's figure", "350000", unmeasured.fee?.total_gas)
 
         measured.clear()
         val measuring = host(measure = "0x41bc9d") // 4,308,125
         measuring.dispatch(contract, FeeEvent.serializer())
         val raised = withTimeout(15_000) { measuring.view.first { !it.busy && (it.fee != null || it.failed != null) } }
-        // 4,308,125 × 1.25 + 60,000 + 50,000 = 5,495,156; + 300,000 + 60,000.
-        assertEquals("5855156", raised.fee?.total_gas)
+        // 4,308,125 × 1.25 + 60,000 + 50,000 = 5,495,156; + 100,000 + 50,000.
+        assertEquals("5645156", raised.fee?.total_gas)
         assertEquals(listOf("$safe|${call.to}|0x0|0x4e71d92d"), measured.toList())
     }
 }

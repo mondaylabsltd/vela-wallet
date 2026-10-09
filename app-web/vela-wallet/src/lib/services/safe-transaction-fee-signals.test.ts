@@ -92,13 +92,13 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-describe('fetchRawGasSignals — one measurement per 15 s (issue #212)', () => {
+describe('fetchRawGasSignals — one measurement per 5 s (issue #212)', () => {
 	it('a second ask inside the window reuses the first measurement, even if the endpoint now disagrees', async () => {
 		chainAnswers(GWEI_0_05);
 		const first = await fetchRawGasSignals(BSC, true);
 		// The next endpoint in the pool runs BSC's OLD 0.1 gwei minimum — the 2×.
 		chainAnswers(GWEI_0_1);
-		vi.advanceTimersByTime(14_000);
+		vi.advanceTimersByTime(4_000);
 		const second = await fetchRawGasSignals(BSC, true);
 		expect(first.ethGasPrice).toBe('50000000');
 		expect(second).toEqual(first);
@@ -246,7 +246,7 @@ describe('fetchRawGasSignals — one measurement per 15 s (issue #212)', () => {
 	});
 });
 
-describe('fetchRawBundlerQuote — one relay quote per 15 s (issue #212)', () => {
+describe('fetchRawBundlerQuote — one relay quote per 5 s (issue #212)', () => {
 	it('a second ask inside the window reuses the quote; invalidate asks again', async () => {
 		relayAnswers('0x' + (61_200_000).toString(16));
 		const first = await fetchRawBundlerQuote(BSC, 'fast');
@@ -258,7 +258,8 @@ describe('fetchRawBundlerQuote — one relay quote per 15 s (issue #212)', () =>
 			// its whole price IS the tip and the two coincide.
 			maxPriorityFeePerGas: '61200000',
 			networkFeePerGas: null,
-			relayerFeePerGas: null
+			relayerFeePerGas: null,
+			inBandFeePerGas: null
 		});
 		expect(second).toEqual(first);
 		expect(count('pimlico_getUserOperationGasPrice')).toBe(1);
@@ -374,7 +375,8 @@ describe('the speed rows share one relay quote and one simulation', () => {
 			kind: 'estimated',
 			verificationGasLimit: 100_000n,
 			callGasLimit: 50_000n,
-			preVerificationGas: 40_000n
+			preVerificationGas: 40_000n,
+			settlementGas: null
 		});
 		expect(b).toEqual(a);
 		expect(c).toEqual(a);
@@ -389,6 +391,53 @@ describe('the speed rows share one relay quote and one simulation', () => {
 		vi.advanceTimersByTime(15_001);
 		await simulation();
 		expect(count('eth_estimateUserOperationGas')).toBe(3);
+	});
+
+	it("carries the relay's settlementGas when it publishes one — and nothing in its place when not", async () => {
+		answers.set('eth_call', () => ({ result: '0x' + '0'.repeat(64) }));
+		answers.set('eth_estimateUserOperationGas', () => ({
+			result: {
+				verificationGasLimit: hex(100_000),
+				callGasLimit: hex(114_894),
+				preVerificationGas: hex(101_613),
+				settlementGas: hex(198_764)
+			}
+		}));
+		expect(await simulation()).toEqual({
+			kind: 'estimated',
+			verificationGasLimit: 100_000n,
+			callGasLimit: 114_894n,
+			preVerificationGas: 101_613n,
+			settlementGas: 198_764n
+		});
+		// A figure that is not a positive quantity is no figure.
+		vi.advanceTimersByTime(15_001);
+		answers.set('eth_estimateUserOperationGas', () => ({
+			result: {
+				verificationGasLimit: hex(100_000),
+				callGasLimit: hex(114_894),
+				preVerificationGas: hex(101_613),
+				settlementGas: '0x0'
+			}
+		}));
+		expect((await simulation()) as { settlementGas: bigint | null }).toMatchObject({
+			settlementGas: null
+		});
+	});
+
+	it("reads each tier's published in-band price beside its cap", async () => {
+		answers.set('pimlico_getUserOperationGasPrice', () => ({
+			result: {
+				standard: {
+					maxFeePerGas: '0x' + (6_558_607_918).toString(16),
+					maxPriorityFeePerGas: '0x' + (1_000_000_000).toString(16),
+					inBandFeePerGas: '0x' + (8_854_120_690).toString(16)
+				},
+				fast: { maxFeePerGas: GWEI_0_05 }
+			}
+		}));
+		expect((await fetchRawBundlerQuote(BSC, 'standard'))?.inBandFeePerGas).toBe('8854120690');
+		expect((await fetchRawBundlerQuote(BSC, 'fast'))?.inBandFeePerGas).toBeNull();
 	});
 
 	it('a refused simulation is shared while out, but never held', async () => {

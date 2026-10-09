@@ -219,7 +219,7 @@ describe('PrewarmFees — the fee caches read ahead while the person chooses', (
 			})
 		).resolves.toEqual({ type: 'fees_prewarmed' });
 		// Without a tier port the factory default is warmed.
-		expect(seams.bundlerQuote).toHaveBeenCalledWith(1, 'fast');
+		expect(seams.bundlerQuote).toHaveBeenCalledWith(1, 'standard');
 	});
 });
 

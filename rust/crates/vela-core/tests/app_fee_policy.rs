@@ -170,6 +170,7 @@ fn bundler_ok() -> Res {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("1000000000".to_owned()),
             relayer_fee_per_gas: Some("1000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     }
 }
@@ -181,16 +182,24 @@ fn quotes_ok() -> Res {
 }
 
 fn estimated() -> Res {
-    // Padded (`safe-transaction.ts:697-702`): vgl 100k×1.5 → floor 300k,
-    // cgl 50k×1.5 → floor 100k, pvg 40k+10k → 50k. Total = 450_000.
+    // A relay that publishes no `settlementGas`: its limits are priced as
+    // returned (`user_op::in_band_gas_limits`, no ×1.5, no 300k floor on a
+    // deployed Safe): 100k + 310k + 40k = 450_000.
     Res::UserOpGas {
         outcome: FeeGasOutcome::Estimated {
             verification_gas_limit: "100000".to_owned(),
-            call_gas_limit: "50000".to_owned(),
+            call_gas_limit: "310000".to_owned(),
             pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
         },
     }
 }
+
+/// How long a quote on Ethereum (`CHAIN`) stays before it is priced again —
+/// one 12 s slot (`fee_policy::requote_interval_ms`).
+const TICK_MS: u32 = 12_000;
+/// The same on Tempo, whose blocks are under the 6 s floor.
+const TEMPO_TICK_MS: u32 = 6_000;
 
 /// The happy-path gas basis the fixtures above produce.
 const TOTAL_GAS: u128 = 450_000;
@@ -200,8 +209,8 @@ const NATIVE_FEE_WEI: u128 = 1_350_000_000_000_000;
 /// The same fee converted to USDC at $1868.70 / $1 (= $2.522745).
 const USDC_FEE_UNITS: u128 = 2_522_745;
 
-/// Drive a fresh machine to a settled native quote; the 30s TTL timer is left
-/// outstanding (as it is in production).
+/// Drive a fresh machine to a settled native quote; the block-time tick is
+/// left outstanding (as it is in production).
 fn quoted_native(calls: Vec<FeeCall>) -> Sut {
     let mut sut = Sut::new();
     let ops = sut.dispatch(request(CHAIN, calls));
@@ -227,7 +236,7 @@ fn quoted_native(calls: Vec<FeeCall>) -> Sut {
     let ops = sut.resolve(quotes_ok());
     assert_eq!(ops.len(), 1, "context complete → one estimate simulation");
     let ops = sut.resolve(estimated());
-    assert_eq!(ops, vec![Op::StartTtl { ms: 30_000 }]);
+    assert_eq!(ops, vec![Op::StartTtl { ms: TICK_MS }]);
     sut
 }
 
@@ -1636,6 +1645,7 @@ fn issue_408_quote(request: Event, rows: Vec<FeeAssetQuote>) -> Sut {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
             relayer_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(Res::InBandQuotes { quotes: Some(rows) });
@@ -2186,38 +2196,223 @@ fn requote_reuses_the_same_transaction_shape() {
     }
 }
 
-/// The 30s TTL: the displayed quote goes stale (advisory), and a superseded
-/// run's timer can never mark a newer quote stale.
+/// The gathering reads a run asks for, in order (the deadline filtered).
+fn gathering_reads() -> Vec<Op> {
+    vec![
+        Op::FetchGasPrice {
+            chain_id: CHAIN,
+            want_tip: true,
+        },
+        Op::FetchBundlerQuote {
+            chain_id: CHAIN,
+            tier: FeeTier::Fast,
+        },
+        Op::FetchInBandQuotes {
+            chain_id: CHAIN,
+            account: ACCOUNT.to_owned(),
+        },
+    ]
+}
+
+fn gas_at(wei: u128) -> Res {
+    Res::GasPrice {
+        eth_gas_price: Some(wei.to_string()),
+        base_fee: Some("0".to_owned()),
+        priority_fee: Some("0".to_owned()),
+    }
+}
+
+fn gas_unread() -> Res {
+    Res::GasPrice {
+        eth_gas_price: None,
+        base_fee: None,
+        priority_fee: None,
+    }
+}
+
+/// Freshness (CONTRACT v2): one block on, the same operation is priced again
+/// in the background. While it runs the figure on screen is the one in force
+/// — confirmable, not busy, unchanged — and the new figure replaces it when it
+/// lands, arming the next tick. A quote that sat on screen for 30 s used to
+/// be signed as it stood.
 #[test]
-fn quote_ttl_marks_stale_and_superseded_timers_are_dropped() {
+fn a_quote_is_priced_again_every_block_in_the_background() {
     let mut sut = quoted_native(vec![]);
-    assert!(!sut.view().stale);
-    assert!(sut.resolve(Res::TtlElapsed).is_empty());
-    assert!(sut.view().stale, "TTL elapsed → refresh affordance");
+    let before = sut.view();
+    assert_eq!(sut.resolve(Res::TtlElapsed), gathering_reads());
+    let during = sut.view();
+    assert!(!during.busy, "a background pricing is not busy");
     assert!(
-        sut.view().confirm_fee_ready,
-        "staleness is advisory, not a gate"
+        during.confirm_fee_ready,
+        "the figure on screen stays confirmable"
+    );
+    assert_eq!(
+        during.fee, before.fee,
+        "nothing on screen changes until it lands"
+    );
+    assert!(!during.stale);
+
+    // The chain moved: 2 gwei now.
+    sut.resolve(gas_at(2 * NETWORK_FEE));
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    assert_eq!(
+        sut.resolve(estimated()),
+        vec![Op::StartTtl { ms: TICK_MS }],
+        "the next tick is armed"
+    );
+    let after = sut.view();
+    assert_eq!(
+        after.fee.expect("quoted").total_wei,
+        (2 * NATIVE_FEE_WEI).to_string()
+    );
+    assert!(after.confirm_fee_ready && !after.busy && !after.stale);
+}
+
+/// A background pricing that fails leaves a figure older than a block — older
+/// than the drift its price allows for. It is priced again AT ONCE, visibly
+/// (busy: every confirm gate waits for it, the figure stays on screen), and a
+/// catch-up that fails too takes the figure away and says why, rather than
+/// leave a quote the relay may refuse confirmable.
+#[test]
+fn a_failed_tick_catches_up_visibly_and_a_failed_catch_up_takes_the_figure_away() {
+    let mut sut = quoted_native(vec![]);
+    sut.resolve(Res::TtlElapsed);
+    let ops = sut.resolve(gas_unread());
+    assert_eq!(ops, gathering_reads(), "the catch-up starts at once");
+    // The failed tick's two other reads were superseded: drop them.
+    sut.drop_oldest();
+    sut.drop_oldest();
+    let catching_up = sut.view();
+    assert!(catching_up.busy, "the confirm waits for the catch-up");
+    assert!(!catching_up.confirm_fee_ready);
+    assert!(catching_up.stale);
+    assert!(
+        catching_up.fee.is_some(),
+        "the old figure stays on screen meanwhile"
     );
 
-    // Refresh: the new quote resets staleness and arms a NEW timer.
-    sut.dispatch(Event::Requote);
+    sut.resolve(gas_unread());
+    let failed = sut.view();
+    assert_eq!(failed.failed, Some(FeeFailure::QuoteUnavailable));
+    assert_eq!(
+        failed.fee, None,
+        "a figure older than a block is not left to sign"
+    );
+    assert!(!failed.confirm_fee_ready);
+}
+
+/// The catch-up that succeeds puts a fresh figure up and ticking resumes.
+#[test]
+fn a_catch_up_that_lands_restores_a_fresh_quote() {
+    let mut sut = quoted_native(vec![]);
+    sut.resolve(Res::TtlElapsed);
+    sut.resolve(gas_unread());
+    sut.drop_oldest();
+    sut.drop_oldest();
     sut.resolve(gas_ok());
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
-    let ops = sut.resolve(estimated());
-    assert_eq!(ops, vec![Op::StartTtl { ms: 30_000 }]);
-    assert!(!sut.view().stale);
-    assert!(sut.resolve(Res::TtlElapsed).is_empty());
-    assert!(
-        sut.view().stale,
-        "the second timer belongs to the new quote"
+    assert_eq!(sut.resolve(estimated()), vec![Op::StartTtl { ms: TICK_MS }]);
+    let view = sut.view();
+    assert!(view.confirm_fee_ready && !view.busy && !view.stale);
+    assert_eq!(
+        view.fee.expect("quoted").total_wei,
+        NATIVE_FEE_WEI.to_string()
     );
 }
 
-/// `QuoteExpired` (external staleness, e.g. app resume) only applies to a
-/// settled quote.
+/// A refresh the person asks for while a background pricing runs IS that
+/// pricing, now visible; it is not a second one.
 #[test]
-fn external_expiry_only_applies_to_a_settled_quote() {
+fn a_requote_during_a_tick_makes_it_the_visible_refresh() {
+    let mut sut = quoted_native(vec![]);
+    sut.resolve(Res::TtlElapsed);
+    assert!(sut.dispatch(Event::Requote).is_empty(), "no second run");
+    assert!(sut.view().busy);
+    assert!(!sut.view().confirm_fee_ready);
+}
+
+/// A chip tap acts on the figure on screen: a background pricing stops for
+/// it, the switch is the local recompute it always was, and ticking resumes.
+#[test]
+fn a_chip_tap_during_a_tick_switches_the_figure_on_screen_and_resumes_ticking() {
+    let mut sut = quoted_native(vec![]);
+    sut.resolve(Res::TtlElapsed);
+    let ops = sut.dispatch(Event::SelectFeeAsset {
+        token: Some(USDC.to_owned()),
+    });
+    assert_eq!(ops, vec![Op::StartTtl { ms: TICK_MS }]);
+    let view = sut.view();
+    assert!(!view.busy && view.confirm_fee_ready);
+    assert_eq!(
+        view.fee.expect("quoted").fee_asset,
+        FeeAssetView::Erc20 {
+            token: USDC.to_owned(),
+            decimals: 6,
+            amount: USDC_FEE_UNITS.to_string(),
+            symbol: Some("USDC".to_owned()),
+        }
+    );
+    // The stopped tick's answers are dropped.
+    assert!(sut.resolve(gas_at(5 * NETWORK_FEE)).is_empty());
+    assert_eq!(
+        sut.view().fee.expect("quoted").fee_asset,
+        FeeAssetView::Erc20 {
+            token: USDC.to_owned(),
+            decimals: 6,
+            amount: USDC_FEE_UNITS.to_string(),
+            symbol: Some("USDC".to_owned()),
+        }
+    );
+}
+
+/// A tick never moves the fee coin under a figure that is still confirmable:
+/// the machine's own pick is made again only by a run the person can see. A
+/// coin that no longer pays fails the tick, and the catch-up picks again.
+#[test]
+fn a_tick_keeps_the_coin_on_screen_and_the_catch_up_picks_again() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![]));
+    let rich = || Res::InBandQuotes {
+        quotes: Some(vec![native_row("1000000000000000000"), usdc_row("5000000")]),
+    };
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(rich());
+    sut.resolve(estimated());
+    let picked = sut.view().fee_token;
+    assert_eq!(picked.as_deref(), Some(USDC), "the machine's pick");
+
+    sut.resolve(Res::TtlElapsed);
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    // The USDC is gone by the time the tick reads. No pick is made in the
+    // background: the coin in force stays the one on screen.
+    sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![native_row("1000000000000000000"), usdc_row("0")]),
+    });
+    assert_eq!(sut.view().fee_token, picked);
+    assert!(!sut.view().busy);
+    // Priced: the USDC cannot pay → the tick fails → a visible catch-up.
+    assert_eq!(sut.resolve(estimated()), gathering_reads());
+    assert!(sut.view().busy);
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![native_row("1000000000000000000"), usdc_row("0")]),
+    });
+    sut.resolve(estimated());
+    let view = sut.view();
+    assert_eq!(view.fee_token, None, "the catch-up moved to ETH");
+    assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
+    assert!(view.confirm_fee_ready);
+}
+
+/// `QuoteExpired` (the app resumed after a long background): the figure is
+/// priced again at once, visibly. Inert before anything settled.
+#[test]
+fn external_expiry_catches_up_a_settled_quote() {
     let mut sut = Sut::new();
     sut.dispatch(request(CHAIN, vec![]));
     assert!(
@@ -2229,8 +2424,44 @@ fn external_expiry_only_applies_to_a_settled_quote() {
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
     sut.resolve(estimated());
-    sut.dispatch(Event::QuoteExpired);
-    assert!(sut.view().stale);
+    assert_eq!(sut.dispatch(Event::QuoteExpired), gathering_reads());
+    let view = sut.view();
+    assert!(view.stale && view.busy && !view.confirm_fee_ready);
+}
+
+/// A superseded run's tick can never re-price a newer request.
+#[test]
+fn a_superseded_tick_is_dropped() {
+    let mut sut = quoted_native(vec![]);
+    // A new request supersedes the quote whose tick is outstanding.
+    sut.dispatch(request(CHAIN, vec![]));
+    assert!(
+        sut.resolve(Res::TtlElapsed).is_empty(),
+        "the old quote's tick belongs to nobody now"
+    );
+}
+
+/// The tick is the chain's block time, held to 6–30 s: Ethereum and its
+/// testnets 12 s; every other built-in network makes a block in 6 s or less,
+/// and a network somebody added has no known block time.
+#[test]
+fn the_tick_is_the_block_time_held_to_six_to_thirty_seconds() {
+    use vela_core::app::fee_policy::{
+        requote_interval_ms, REQUOTE_INTERVAL_MAX_MS, REQUOTE_INTERVAL_MIN_MS,
+    };
+    assert_eq!(requote_interval_ms(1), 12_000);
+    assert_eq!(requote_interval_ms(11_155_111), 12_000);
+    for chain in [8_453, 42_161, 10, 137, 56, 100, 43_114, 4_217, 999_999_999] {
+        assert_eq!(
+            requote_interval_ms(chain),
+            REQUOTE_INTERVAL_MIN_MS,
+            "{chain}"
+        );
+    }
+    assert_eq!(
+        (REQUOTE_INTERVAL_MIN_MS, REQUOTE_INTERVAL_MAX_MS),
+        (6_000, 30_000)
+    );
 }
 
 /// A result arriving in a phase that no longer expects it is inert — the
@@ -2346,6 +2577,7 @@ fn zero_bundler_quote_falls_back_locally() {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("0".to_owned()),
             relayer_fee_per_gas: Some("0".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -2438,6 +2670,7 @@ fn rejects_a_bundler_quote_far_above_the_chain_rate() {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("4000000000".to_owned()),
             relayer_fee_per_gas: Some("4000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -2462,6 +2695,7 @@ fn accepts_a_bundler_quote_at_the_three_times_boundary() {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("3000000000".to_owned()), // exactly 3×
             relayer_fee_per_gas: Some("3000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -2486,6 +2720,7 @@ fn a_bundler_under_report_is_floored_at_the_chain_measurement() {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("500000000".to_owned()),
             relayer_fee_per_gas: Some("500000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -2873,7 +3108,7 @@ fn tempo_transfer_prices_the_stablecoin_reimbursement_statically() {
     let ops = sut.resolve(Res::InBandQuotes {
         quotes: Some(vec![pathusd_row("5000000")]),
     });
-    assert_eq!(ops, vec![Op::StartTtl { ms: 30_000 }]);
+    assert_eq!(ops, vec![Op::StartTtl { ms: TEMPO_TICK_MS }]);
 
     let view = sut.view();
     let fee = view.fee.expect("tempo quote");
@@ -2951,6 +3186,7 @@ fn tempo_contract_call_refines_off_the_real_estimate() {
             verification_gas_limit: "2000000".to_owned(),
             call_gas_limit: "1500000".to_owned(),
             pre_verification_gas: "100000".to_owned(),
+            settlement_gas: None,
         },
     });
     let fee = sut.view().fee.expect("refined quote");
@@ -3028,7 +3264,7 @@ fn tempo_undeployed_contract_call_keeps_the_static_model() {
     let ops = sut.resolve(Res::InBandQuotes {
         quotes: Some(vec![pathusd_row("5000000")]),
     });
-    assert_eq!(ops, vec![Op::StartTtl { ms: 30_000 }]);
+    assert_eq!(ops, vec![Op::StartTtl { ms: TEMPO_TICK_MS }]);
     // 1 call + 2 reimbursement legs (contract call) = 3 sub-calls, deploy fixed cost.
     let expected = tempo_expected_gas(false, 3);
     assert_eq!(
@@ -3238,6 +3474,7 @@ fn a_quote_that_reports_its_tip_publishes_the_gas_price_that_speed_buys() {
             max_priority_fee_per_gas: Some("52000200406".to_owned()),
             network_fee_per_gas: Some("445661310562".to_owned()),
             relayer_fee_per_gas: Some("297107540375".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -3294,6 +3531,7 @@ fn a_measured_zero_gas_price_is_published_as_zero() {
             max_priority_fee_per_gas: Some("0".to_owned()),
             network_fee_per_gas: Some("1000000000".to_owned()),
             relayer_fee_per_gas: Some("1000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -3326,6 +3564,7 @@ fn an_unreported_base_fee_publishes_no_gas_price_rather_than_the_fallback() {
             max_priority_fee_per_gas: Some("500000000".to_owned()),
             network_fee_per_gas: Some("1000000000".to_owned()),
             relayer_fee_per_gas: Some("1000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -3488,6 +3727,7 @@ fn a_quote_that_reports_its_tip_publishes_both_ends_of_the_range() {
             max_priority_fee_per_gas: Some("52000200406".to_owned()),
             network_fee_per_gas: Some("445661310562".to_owned()),
             relayer_fee_per_gas: Some("297107540375".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -3560,6 +3800,7 @@ fn relay_trivial_estimate() -> Res {
             verification_gas_limit: "100000".to_owned(),
             call_gas_limit: "118000".to_owned(),
             pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
         },
     }
 }
@@ -3611,30 +3852,32 @@ fn undeployed_contract_call_is_priced_on_the_measured_floor() {
     );
     assert!(sut.view().busy);
     let ops = sut.resolve(measured(&[Some(&MEASURED_REGISTRY_CALL.to_string())]));
-    assert_eq!(ops, vec![Op::StartTtl { ms: 30_000 }]);
+    assert_eq!(ops, vec![Op::StartTtl { ms: TICK_MS }]);
 
     // The floor the submit raises to (`user_op_raise_call_gas`): 5,495,156.
     let floor =
         vela_core::user_op::inner_calls_gas_floor(&[MEASURED_REGISTRY_CALL], 1).expect("a floor");
     assert_eq!(floor, 5_495_156);
-    // Displayed = signed: the submit's padded relay figure is under the floor,
-    // so the op carries exactly `floor` — the quote must price exactly that.
-    let submit_cgl = vela_core::user_op::pad_gas_estimate(
+    // Displayed = signed: the submit's limits (`in_band_gas_limits`, the one
+    // rule) put the relay's figure under the floor, so the op carries exactly
+    // `floor` — the quote must price exactly that.
+    let submit = vela_core::user_op::in_band_gas_limits(
         vela_core::user_op::GasEstimate {
             verification_gas_limit: 100_000,
             call_gas_limit: 118_000,
             pre_verification_gas: 40_000,
+            settlement_gas: None,
         },
-        2_000_000,
-        200_000,
-    )
-    .call_gas_limit
-    .max(floor);
-    assert_eq!(submit_cgl, floor);
+        false,
+        Some(floor),
+    );
+    assert_eq!(submit.call_gas_limit, floor);
 
     let fee = sut.view().fee.expect("quoted");
-    // 2,000,000 (undeployed vgl floor) + 5,495,156 + (40,000 + 10,000).
-    let total = 2_000_000 + submit_cgl + 50_000;
+    // 2,000,000 (undeployed vgl floor, a relay without `settlementGas`) +
+    // 5,495,156 + 40,000 (the relay's own preVerificationGas, as returned).
+    let total = 2_000_000 + floor + 40_000;
+    assert_eq!(submit.total(), total);
     assert_eq!(fee.total_gas, total.to_string());
     assert_eq!(fee.total_wei, (total * NETWORK_FEE * 3).to_string());
 }
@@ -3652,7 +3895,7 @@ fn the_measurement_may_answer_before_the_simulation() {
     sut.resolve(relay_trivial_estimate());
     assert_eq!(
         sut.view().fee.expect("quoted").total_gas,
-        (2_000_000 + 5_495_156 + 50_000u128).to_string()
+        (2_000_000 + 5_495_156 + 40_000u128).to_string()
     );
 }
 
@@ -3660,8 +3903,8 @@ fn the_measurement_may_answer_before_the_simulation() {
 /// behaviour, which drops its floor the same way.
 #[test]
 fn an_unmeasurable_call_keeps_the_relay_figure() {
-    // Relay: 118k × 1.5 = 177k.
-    let relay_total = (2_000_000 + 177_000 + 50_000u128).to_string();
+    // The relay's 118k as returned (above the undeployed 100k call floor).
+    let relay_total = (2_000_000 + 118_000 + 40_000u128).to_string();
 
     let mut sut = Sut::new();
     to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
@@ -3689,7 +3932,7 @@ fn an_unmeasurable_call_keeps_the_relay_figure() {
 
 /// The web submit measures every contract call, deployed or not, so the
 /// quote does too: a small call on a DEPLOYED Safe whose floor (×1.25 + 60k +
-/// 50k/call) out-grows the relay's padded figure is priced on the floor.
+/// 50k/call) out-grows the relay's figure is priced on the floor.
 #[test]
 fn a_deployed_safe_contract_call_is_measured_too() {
     let mut sut = Sut::new();
@@ -3701,14 +3944,15 @@ fn a_deployed_safe_contract_call_is_measured_too() {
             verification_gas_limit: "100000".to_owned(),
             call_gas_limit: "80000".to_owned(),
             pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
         },
     });
     sut.resolve(measured(&[Some("46000")]));
-    // Floor 46,000 × 1.25 + 60,000 + 50,000 = 167,500 > 80,000 × 1.5.
-    // 300,000 (deployed vgl floor) + 167,500 + 50,000.
-    assert_eq!(sut.view().fee.expect("quoted").total_gas, "517500");
+    // Floor 46,000 × 1.25 + 60,000 + 50,000 = 167,500 > the relay's 80,000.
+    // 100,000 (the relay's verification, as returned) + 167,500 + 40,000.
+    assert_eq!(sut.view().fee.expect("quoted").total_gas, "307500");
 
-    // A floor BELOW the relay's padded figure changes nothing.
+    // A floor BELOW the relay's figure changes nothing.
     let mut sut = Sut::new();
     to_estimating(&mut sut, request(CHAIN, vec![contract_call()]));
     sut.resolve(Res::UserOpGas {
@@ -3716,12 +3960,13 @@ fn a_deployed_safe_contract_call_is_measured_too() {
             verification_gas_limit: "100000".to_owned(),
             call_gas_limit: "400000".to_owned(),
             pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
         },
     });
     sut.resolve(measured(&[Some("46000")]));
     assert_eq!(
         sut.view().fee.expect("quoted").total_gas,
-        (300_000 + 600_000 + 50_000u128).to_string()
+        (100_000 + 400_000 + 40_000u128).to_string()
     );
 }
 
@@ -3762,7 +4007,7 @@ fn only_contract_calls_are_measured() {
     // 5,385,156 + 60,000 + 50,000 × 2 inner calls = 5,545,156.
     assert_eq!(
         sut.view().fee.expect("quoted").total_gas,
-        (2_000_000 + 5_545_156 + 50_000u128).to_string()
+        (2_000_000 + 5_545_156 + 40_000u128).to_string()
     );
 }
 
@@ -3827,9 +4072,14 @@ mod fee_signal_cache {
         bundler_quote_cacheable, gas_signals_cacheable, FEE_SIGNALS_CACHE_TTL_MS,
     };
 
+    /// Shorter than the shortest tick, so every block's re-pricing reads the
+    /// chain again rather than the reading the previous one held.
     #[test]
-    fn the_window_is_fifteen_seconds() {
-        assert_eq!(FEE_SIGNALS_CACHE_TTL_MS, 15_000);
+    fn the_window_is_shorter_than_a_tick() {
+        assert_eq!(FEE_SIGNALS_CACHE_TTL_MS, 5_000);
+        const {
+            assert!(FEE_SIGNALS_CACHE_TTL_MS < vela_core::app::fee_policy::REQUOTE_INTERVAL_MIN_MS);
+        }
     }
 
     /// Only a complete, real reading is held — every leg that was asked for.
@@ -4119,9 +4369,11 @@ fn a_pick_the_real_gas_outgrows_is_made_again() {
         vec![native_row("1000000000000000000"), usdc_row("3500000")],
         Res::UserOpGas {
             outcome: FeeGasOutcome::Estimated {
-                verification_gas_limit: "400000".to_owned(), // ×1.5 = 600k
-                call_gas_limit: "50000".to_owned(),          // → 100k floor
-                pre_verification_gas: "40000".to_owned(),    // +10k = 50k
+                // The relay's limits, as returned: 400k + 310k + 40k = 750k.
+                verification_gas_limit: "400000".to_owned(),
+                call_gas_limit: "310000".to_owned(),
+                pre_verification_gas: "40000".to_owned(),
+                settlement_gas: None,
             },
         },
     );
@@ -5390,6 +5642,7 @@ fn polygon_gather_with(sut: &mut Sut, rows: Vec<FeeAssetQuote>) -> Vec<Op> {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("2185000000000".to_owned()),
             relayer_fee_per_gas: Some("2185000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(Res::InBandQuotes { quotes: Some(rows) })

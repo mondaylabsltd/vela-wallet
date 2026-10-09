@@ -39,15 +39,13 @@ import { createFeeSession, type FeeSession } from './fee-session';
 import { resolveFee } from './send-estimates';
 
 /**
- * The tier a request that names none is priced at.
- *
- * `fast` is the core's own factory default (`fee_tier_pref::FACTORY_DEFAULT`)
- * and what every flow hard-coded before spec 068, so a caller that does not
- * care gets exactly today's quote. Callers that DO care — the send form and
- * the signing sheet, which show the person a speed — pass `tier` on the
- * request, and what is quoted is then what the row they are looking at says.
+ * The tier a request that names none is priced at: the core's own factory
+ * default (`fee_tier_pref::FACTORY_DEFAULT`), `standard` since the Ethereum
+ * fee fix. Callers that DO care — the send form and the signing sheet, which
+ * show the person a speed — pass `tier` on the request, and what is quoted is
+ * then what the row they are looking at says.
  */
-const DEFAULT_TIER: FeeTier = 'fast';
+export const DEFAULT_TIER: FeeTier = 'standard';
 
 /** The machine's own initial view, mirrored until the session commits its first. */
 export const IDLE_FEE_VIEW: FeeView = {
@@ -96,7 +94,7 @@ export interface FeeQuoteRequest {
 	 * `feeToken`: the core prices the tier it is given, and the submit path
 	 * names the tier the settled estimate carries — so the speed on screen and
 	 * the speed on the wire are the same fact, read from one place. Omitted =
-	 * {@link DEFAULT_TIER}, which is today's behaviour exactly.
+	 * {@link DEFAULT_TIER}, the factory default.
 	 */
 	tier?: FeeTier;
 }

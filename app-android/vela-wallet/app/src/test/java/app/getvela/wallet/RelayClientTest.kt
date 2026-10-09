@@ -269,6 +269,41 @@ class RelayClientTest {
         assertEquals(RelayClient.EstimateAnswer.Unreachable, relay.estimateUserOpGas(100, "{}"))
     }
 
+    /**
+     * The Ethereum fee fix: a relay that publishes `settlementGas` has it
+     * carried beside the limits; "0x0" is no figure, and a relay that omits it
+     * crosses `null` — never "0" in its place.
+     */
+    @Test
+    fun `an estimate carries the relay's settlement gas or nothing`() = runBlocking {
+        val limits = { settlement: String? ->
+            JSONObject().put("verificationGasLimit", "0x186a0").put("callGasLimit", "0x1c0ce")
+                .put("preVerificationGas", "0x18cf5").also { if (settlement != null) it.put("settlementGas", settlement) }
+        }
+        port.answer("eth_estimateUserOperationGas", body(limits("0x3086c")), body(limits("0x0")), body(limits(null)))
+        assertEquals(
+            RelayClient.EstimateAnswer.Estimated("100000", "114894", "101621", settlementGas = "198764"),
+            relay.estimateUserOpGas(1, "{}"),
+        )
+        assertEquals(RelayClient.EstimateAnswer.Estimated("100000", "114894", "101621"), relay.estimateUserOpGas(1, "{}"))
+        assertEquals(RelayClient.EstimateAnswer.Estimated("100000", "114894", "101621"), relay.estimateUserOpGas(1, "{}"))
+    }
+
+    /** The Ethereum fee fix: each tier's published in-band price crosses beside its cap. */
+    @Test
+    fun `the bundler quote carries the tier's published in-band price`() = runBlocking {
+        port.answer(
+            "pimlico_getUserOperationGasPrice",
+            body(
+                JSONObject()
+                    .put("standard", JSONObject().put("maxFeePerGas", "0x186f6d82e").put("inBandFeePerGas", "0x20fbf28f2"))
+                    .put("fast", JSONObject().put("maxFeePerGas", "0x10")),
+            ),
+        )
+        assertEquals("8854120690", relay.bundlerQuote(1, FeeTier.Standard)!!.in_band_fee_per_gas)
+        assertNull(relay.bundlerQuote(1, FeeTier.Fast)!!.in_band_fee_per_gas)
+    }
+
     @Test
     fun `a receipt without a transaction hash is pending, with one it is resolved with its logs`() = runBlocking {
         port.answer(

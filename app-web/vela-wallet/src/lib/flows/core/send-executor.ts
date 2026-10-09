@@ -411,7 +411,7 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			case 'prewarm_fees': {
 				// Fire-and-forget: the reads run on into the fee caches while the
 				// person chooses; the core hears back at once and waits for none.
-				prewarmFees(operation.account, operation.chain_ids, ports.feeTier?.() ?? 'fast');
+				prewarmFees(operation.account, operation.chain_ids, ports.feeTier?.() ?? 'standard');
 				return { type: 'fees_prewarmed' };
 			}
 

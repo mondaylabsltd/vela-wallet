@@ -28,12 +28,11 @@ import {
 
 /**
  * The machine's own initial view, mirrored until the core rules: the factory
- * default, uncommitted. `fast` because that is what every shell hard-coded
- * before this preference existed — a surface that renders before the read
- * lands must show today's behaviour, not a guess.
+ * default (`fee_tier_pref::FACTORY_DEFAULT`, `standard`), uncommitted — a
+ * surface that renders before the read lands shows the default, not a guess.
  */
 const INITIAL: FeeTierPrefView = {
-	tier: 'fast',
+	tier: 'standard',
 	committed: false,
 	offered: ['fast', 'standard', 'slow']
 };

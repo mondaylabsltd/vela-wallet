@@ -737,9 +737,9 @@ enum SendLive {
     }
 
     /// A tier as one this build offers: the dead `rapid` reads as the factory
-    /// `fast`, the core's own answer for it.
+    /// default, `standard` — the core's own answer for it.
     static func offered(_ tier: String) -> String {
-        ["fast", "standard", "slow"].contains(tier) ? tier : "fast"
+        ["fast", "standard", "slow"].contains(tier) ? tier : "standard"
     }
 
     /// A tier's NAME — the speed itself, never a number.

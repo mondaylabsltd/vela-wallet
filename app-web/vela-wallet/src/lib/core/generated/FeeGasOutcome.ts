@@ -6,4 +6,13 @@
  * nonce failure is not permission to simulate as nonce 0"
  * (`safe-transaction.ts:585-588, 1177`).
  */
-export type FeeGasOutcome = { "type": "estimated", verification_gas_limit: string, call_gas_limit: string, pre_verification_gas: string, } | { "type": "simulation_failed" } | { "type": "context_unavailable" } | { "type": "refused" };
+export type FeeGasOutcome = { "type": "estimated", verification_gas_limit: string, call_gas_limit: string, pre_verification_gas: string, 
+/**
+ * `settlementGas` as the relay answered it (decimal): the gas it
+ * bills the operation against — simulated gas used plus its
+ * documented buffer (`user_op::GasEstimate::settlement_gas`). `None`
+ * from a relay older than the field, and the fee is then priced on
+ * the operation's limits as before. `#[serde(default)]`: a shell that
+ * does not send it keeps working unchanged.
+ */
+settlement_gas: string | null, } | { "type": "simulation_failed" } | { "type": "context_unavailable" } | { "type": "refused" };

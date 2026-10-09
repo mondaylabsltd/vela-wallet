@@ -110,7 +110,8 @@ struct FeeSpeedTests {
     @Test func theDefaultSpeedMachineDecodesAndReadsBack() throws {
         let core = FeeTierPrefCore()
         let initial = try CoreJSON.decode(FeeTierPrefViewWire.self, from: try CoreJSON.object(core.view()))
-        #expect(initial.tier == "fast")
+        // The factory default is `standard` since the Ethereum fee fix.
+        #expect(initial.tier == "standard")
         #expect(!initial.committed)
         #expect(initial.offered == ["fast", "standard", "slow"])
     }

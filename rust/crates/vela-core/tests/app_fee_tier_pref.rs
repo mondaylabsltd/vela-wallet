@@ -27,19 +27,20 @@ fn stored(raw: Option<&str>) -> Res {
 // The factory default
 // ---------------------------------------------------------------------------
 
-/// Before anything is read, the view is `fast` — what every shell hard-coded
-/// before this machine existed — and it says out loud that nobody chose it.
+/// Before anything is read, the view is `standard` — the factory default
+/// since a tier's tip is real (the Ethereum fee fix, 2026-10-09) — and it
+/// says out loud that nobody chose it.
 #[test]
 fn initial_view_is_the_factory_default_and_uncommitted() {
     let sut = Sut::new();
     let view = sut.view();
-    assert_eq!(view.tier, FeeTier::Fast);
-    assert_eq!(FACTORY_DEFAULT, FeeTier::Fast);
+    assert_eq!(view.tier, FeeTier::Standard);
+    assert_eq!(FACTORY_DEFAULT, FeeTier::Standard);
     assert!(!view.committed);
 }
 
-/// A fresh install: the key is absent, so the send screen starts exactly where
-/// it started yesterday.
+/// A fresh install: the key is absent, so the send screen starts at the
+/// factory default, `standard`.
 #[test]
 fn an_absent_key_is_the_factory_default() {
     let mut sut = Sut::new();
@@ -48,7 +49,7 @@ fn an_absent_key_is_the_factory_default() {
     sut.resolve(stored(None));
 
     let view = sut.view();
-    assert_eq!(view.tier, FeeTier::Fast);
+    assert_eq!(view.tier, FeeTier::Standard);
     assert!(!view.committed, "nothing was chosen, so nothing is claimed");
 }
 

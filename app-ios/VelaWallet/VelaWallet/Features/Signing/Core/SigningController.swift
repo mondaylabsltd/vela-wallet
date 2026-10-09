@@ -259,7 +259,7 @@ final class SigningController {
         spine: UserOpSpine,
         store: VelaStore,
         pool: RpcPool,
-        preferredTier: @escaping () -> String = { "fast" },
+        preferredTier: @escaping () -> String = { "standard" },
         numberPreset: @escaping () -> String = { "comma_dot" },
         ports: Ports,
         firstDeploymentReadMs: UInt32 = SigningController.firstDeploymentReadMs

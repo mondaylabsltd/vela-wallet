@@ -141,6 +141,7 @@ class FeeExecutor(
                 verification_gas_limit = answer.verificationGasLimit,
                 call_gas_limit = answer.callGasLimit,
                 pre_verification_gas = answer.preVerificationGas,
+                settlement_gas = answer.settlementGas,
             )
             is RelayClient.EstimateAnswer.Refused -> {
                 VelaLog.event("send.fee", "estimate refused", "why" to answer.message.take(120))

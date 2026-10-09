@@ -8,6 +8,12 @@
 | **Depends on** | G01 |
 | **Related** | G04, G05, H01 |
 
+> **Superseded in part, 2026-10-09 (the Ethereum fee fix).** On every in-band network the limits an
+> operation is signed with are the relay's estimate **as returned** — the relay already pads it — raised
+> only to the inner calls' measured floor, with an undeployed account's floors (100k call; 2M verification
+> only against a relay that does not publish `settlementGas`). One core rule, `user_op::in_band_gas_limits`,
+> for every shell. Tempo keeps the ×1.5 below. The refusal of an un-estimable large op stands.
+
 ## 1. Summary
 
 Gas limits are estimated then **inflated 1.5× with hard floors** (300k deployed / 2M undeployed

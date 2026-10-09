@@ -156,7 +156,10 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 								// per-tier gas price the speed picker shows.
 								max_priority_fee_per_gas: quote.maxPriorityFeePerGas,
 								network_fee_per_gas: quote.networkFeePerGas,
-								relayer_fee_per_gas: quote.relayerFeePerGas
+								relayer_fee_per_gas: quote.relayerFeePerGas,
+								// The relay's published in-band price for the tier; the
+								// core pays it on the settlement gas (`fee_policy`).
+								in_band_fee_per_gas: quote.inBandFeePerGas
 							}
 						: null
 				};
@@ -221,7 +224,8 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 							type: 'estimated',
 							verification_gas_limit: outcome.verificationGasLimit.toString(),
 							call_gas_limit: outcome.callGasLimit.toString(),
-							pre_verification_gas: outcome.preVerificationGas.toString()
+							pre_verification_gas: outcome.preVerificationGas.toString(),
+							settlement_gas: outcome.settlementGas?.toString() ?? null
 						}
 					};
 				}

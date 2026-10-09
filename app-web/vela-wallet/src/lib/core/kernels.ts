@@ -990,6 +990,55 @@ export function userOpHash(op: AttestOp, chainId: number): string {
 	return translated(() => wasm.userOpHash(attestOpJson(op), BigInt(chainId)));
 }
 
+/** The gas limits an operation is signed with. */
+export interface SignedGasLimits {
+	verificationGasLimit: bigint;
+	callGasLimit: bigint;
+	preVerificationGas: bigint;
+}
+
+/**
+ * The gas limits a submit signs, from the relay's estimate — the core's ONE
+ * rule (`user_op::in_band_gas_limits`, or Tempo's own padding on a Tempo
+ * chain), raised to the inner calls' measured floor when there is one. No
+ * shell pads the relay's answer itself: the limits it signs are the limits the
+ * fee was priced on. `subCalls` is the person's calls plus the fee leg (Tempo's
+ * call floor grows with it); `settlementGas` is the relay's, `null` when it
+ * published none.
+ */
+export function userOpGasLimits(
+	chainId: number,
+	deployed: boolean,
+	subCalls: number,
+	estimate: {
+		verificationGasLimit: bigint;
+		callGasLimit: bigint;
+		preVerificationGas: bigint;
+		settlementGas: bigint | null;
+	},
+	innerFloor: bigint | null
+): SignedGasLimits {
+	const limits = JSON.parse(
+		translated(() =>
+			wasm.userOpGasLimits(
+				chainId,
+				deployed,
+				subCalls,
+				estimate.verificationGasLimit.toString(),
+				estimate.callGasLimit.toString(),
+				estimate.preVerificationGas.toString(),
+				estimate.settlementGas?.toString() ?? undefined,
+				innerFloor?.toString() ?? undefined
+			)
+		)
+	) as Record<'verificationGasLimit' | 'callGasLimit' | 'preVerificationGas', string>;
+	return {
+		verificationGasLimit: BigInt(limits.verificationGasLimit),
+		callGasLimit: BigInt(limits.callGasLimit),
+		preVerificationGas: BigInt(limits.preVerificationGas)
+	};
+}
+
 /** What one POST of `eth_sendUserOperation` came back with (`SubmitReply`). */
 export type SubmitReply =
 	| { hash: string }

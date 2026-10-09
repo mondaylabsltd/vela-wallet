@@ -1794,6 +1794,58 @@ pub fn user_op_hash(op_json: &str, chain_id: u64) -> JsResult<String> {
     user_op_hash_inner(op_json, chain_id).map_err(err)
 }
 
+/// The gas limits a submit signs, from the relay's estimate — the core's one
+/// rule (`vela_core::user_op::in_band_gas_limits`, or Tempo's padding on a
+/// Tempo chain; `fee_policy::user_op_gas_floors` chooses), raised to the inner
+/// calls' measured floor (`inner_floor`, from `innerCallsGasFloor`) when there
+/// is one. Quantities are decimal strings; `settlement_gas` is the relay's
+/// `settlementGas`, `None` when it published none. Answers
+/// `{"verificationGasLimit","callGasLimit","preVerificationGas"}` as decimal
+/// strings.
+#[wasm_bindgen(js_name = userOpGasLimits)]
+#[allow(clippy::too_many_arguments)]
+pub fn user_op_gas_limits(
+    chain_id: u32,
+    deployed: bool,
+    sub_calls: u32,
+    verification_gas_limit: &str,
+    call_gas_limit: &str,
+    pre_verification_gas: &str,
+    settlement_gas: Option<String>,
+    inner_floor: Option<String>,
+) -> JsResult<String> {
+    let quantity = |text: &str, what: &str| {
+        text.trim().parse::<u128>().map_err(|_| {
+            err(vela_core::CoreError::InvalidQuantity(format!(
+                "{what} is not a base-unit integer: `{text}`"
+            )))
+        })
+    };
+    let estimate = vela_core::user_op::GasEstimate {
+        verification_gas_limit: quantity(verification_gas_limit, "verificationGasLimit")?,
+        call_gas_limit: quantity(call_gas_limit, "callGasLimit")?,
+        pre_verification_gas: quantity(pre_verification_gas, "preVerificationGas")?,
+        // A figure that does not read is no figure — the undeployed floor
+        // then stays, the safe side.
+        settlement_gas: settlement_gas
+            .as_deref()
+            .and_then(|gas| gas.trim().parse::<u128>().ok())
+            .filter(|gas| *gas > 0),
+    };
+    let floor = match inner_floor.as_deref() {
+        Some(text) => quantity(text, "inner calls' floor")?,
+        None => 0,
+    };
+    let limits = vela_core::app::fee_policy::user_op_gas_floors(chain_id, deployed, sub_calls)
+        .limits(estimate);
+    Ok(serde_json::json!({
+        "verificationGasLimit": limits.verification_gas_limit.to_string(),
+        "callGasLimit": limits.call_gas_limit.max(floor).to_string(),
+        "preVerificationGas": limits.pre_verification_gas.to_string(),
+    })
+    .to_string())
+}
+
 /// The reply as the core's `SubmitReply`. The core's own JSON is accepted
 /// (`{"hash":"0x…"}`, `{"error":"<error member as JSON text>"}`,
 /// `"no_answer"`), and so is an `error` member handed over as the object

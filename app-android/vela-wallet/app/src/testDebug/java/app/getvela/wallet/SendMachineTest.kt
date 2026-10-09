@@ -140,6 +140,10 @@ class SendMachineTest {
             signer = { fixtureSigner },
             haptic = { kind -> events += "haptic:$kind" },
             refreshBalances = { events += "refresh" },
+            // A person whose stored speed is `fast` (the factory default is
+            // `standard`): on this script every tier sits at the $0.01 floor,
+            // and a slower default would be upgraded to `fast` mid-test.
+            preferredTier = { FeeTier.Fast },
         ).also { controller ->
             controller.onTrackSubmitted = { handoff ->
                 // Invariant ⑥: the pending row is on disk before tracking begins.
@@ -183,7 +187,7 @@ class SendMachineTest {
         // A record from before the sign-in key: the first key, over its stored route.
         assertEquals(listOf(Triple(fixtureAccounts().first().credentialIdHex, "internal", KeyMethod.Platform)), routes)
         assertEquals(1, port.calls.count { it.endsWith("eth_sendUserOperation") })
-        // The stored default (the factory Fast, here) priced the quote, and the
+        // The stored default (a stored Fast, here) priced the quote, and the
         // same tier is named on the wire beside the fee it priced (spec 069).
         assertEquals(FeeTier.Fast, confirm.fee!!.tier)
         assertTrue("the wire names the tier: $events", "relay.tier:fast" in events)

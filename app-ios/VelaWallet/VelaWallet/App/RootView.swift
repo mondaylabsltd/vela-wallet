@@ -1803,7 +1803,7 @@ struct RootView: View {
             spine: userOpSpine,
             store: shelf,
             pool: pool,
-            preferredTier: { [settings] in settings.feeTier?.tier ?? "fast" },
+            preferredTier: { [settings] in settings.feeTier?.tier ?? "standard" },
             numberPreset: { Formats.resolve(Formats.current.number).rawValue },
             ports: SigningController.Ports(
                 respond: { transportId, id, payload, userOpHash in
@@ -2970,7 +2970,7 @@ struct RootView: View {
     /// core (spec 069). Repeating it is free.
     private func configureSpeed() {
         fees.configureSpeed(
-            preferred: settings.feeTier?.tier ?? "fast",
+            preferred: settings.feeTier?.tier ?? "standard",
             number: Formats.resolve(Formats.current.number).rawValue
         )
     }

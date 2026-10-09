@@ -392,11 +392,16 @@ class UserOpSpine(
         val hasContractCall = userOpHasContractCall(calls)
         when (val estimate = relay.estimateUserOpGas(chainId, userOpRelayJson(draft, feeToken.takeIf { tempo }))) {
             is RelayClient.EstimateAnswer.Estimated -> {
+                // The core's one rule for the limits signed: the relay's as
+                // returned (an undeployed Safe's floors; the 2M verification
+                // floor only for a relay without `settlementGas`), then the
+                // inner calls' own measured floor below.
                 draft = userOpApplyEstimate(
                     draft,
                     estimate.verificationGasLimit,
                     estimate.callGasLimit,
                     estimate.preVerificationGas,
+                    estimate.settlementGas,
                     floors,
                 )
                 draft = raisedToMeasuredFloor(draft, chainId, account, calls)

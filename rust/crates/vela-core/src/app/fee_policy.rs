@@ -89,7 +89,10 @@ use crate::l10n::number::{group_digits, NumberPreset, MAX_TOKEN_DECIMALS};
 const BUNDLER_MARGIN_NUM: u128 = 200;
 const BUNDLER_MARGIN_DEN: u128 = 100;
 
-/// In-band reimbursement markup: gas basis × 3 (`safe-transaction.ts:336`).
+/// In-band reimbursement markup: gas basis × 3 (`safe-transaction.ts:336`) —
+/// the fee as it is priced against a relay that publishes no in-band price
+/// (`Charge::Marked`). A relay that does publishes its own markup inside the
+/// price ([`IN_BAND_PRICE`]), and this one is not applied on top.
 const INBAND_MARKUP: u128 = 3;
 
 /// A bundler gas quote is refused, not signed, when it exceeds the client's
@@ -157,13 +160,42 @@ pub const fn min_gas_price_wei(chain_id: u32) -> u128 {
     }
 }
 
-/// Quote TTL. The inventory's `Timer(8s/30s TTL)`: the 8s response cache is
-/// the shell's; this 30s marks a *displayed* quote stale so the surface can
-/// offer a refresh. Staleness is advisory — it does not disable confirm,
-/// because today's UI does not either; the submit-side guards
-/// (`tempo_quote_is_stale`, the bundler's in-band gate) reject a genuinely
-/// expired quote loudly.
-const QUOTE_TTL_MS: u32 = 30_000;
+/// The shortest wait between two pricings of a quote on screen.
+pub const REQUOTE_INTERVAL_MIN_MS: u32 = 6_000;
+/// The longest.
+pub const REQUOTE_INTERVAL_MAX_MS: u32 = 30_000;
+/// Ethereum and its public testnets (Sepolia, Holešky, Hoodi): a block every
+/// 12-second slot.
+const TWELVE_SECOND_SLOT_CHAINS: [u32; 4] = [1, 11_155_111, 17_000, 560_048];
+
+/// How long a quote on screen stays as it is before the machine prices the
+/// same operation again: the chain's block time, held to
+/// [`REQUOTE_INTERVAL_MIN_MS`]–[`REQUOTE_INTERVAL_MAX_MS`] — 12 s on Ethereum.
+///
+/// A signed in-band fee is never re-priced before it goes out, so all the
+/// drift it must survive is the market's move between the quote and the
+/// submit. The relay's published price carries a `drift_allowance` of ONE
+/// block of EIP-1559 rise ([`IN_BAND_PRICE`]); a quote kept on screen longer
+/// than that is priced again instead of signed, which is what lets the
+/// allowance stay that small. The shell's timer answers
+/// [`FeeOperation::StartTtl`] after this long and the machine prices again in
+/// the background: the figure on screen stays confirmable while it does, and
+/// is replaced when the new one lands. A background pricing that fails leaves
+/// a figure older than a block, which is priced again at once — visibly, so
+/// the confirm waits for it — and a second failure takes the figure away
+/// (see [`Origin::Tick`]).
+///
+/// Every other network Vela ships makes a block in 6 s or less
+/// (`network_admin::BUILTIN_CHAINS`), and a network somebody added has no
+/// known block time; both take the shortest wait.
+pub fn requote_interval_ms(chain_id: u32) -> u32 {
+    let block_ms = if TWELVE_SECOND_SLOT_CHAINS.contains(&chain_id) {
+        12_000
+    } else {
+        0
+    };
+    block_ms.clamp(REQUOTE_INTERVAL_MIN_MS, REQUOTE_INTERVAL_MAX_MS)
+}
 
 // Tempo gas model (`src/services/tempo.ts`, constants kept verbatim).
 /// Tempo mainnet (4217) + Moderato testnet (42431) (`tempo.ts:33`).
@@ -213,7 +245,12 @@ pub const TEMPO_SPLIT_SAFETY_BPS: u128 = 300;
 /// (`pimlico_getUserOperationGasPrice` returns slow, standard and fast
 /// together), so a shell holds the whole answer per chain and every tier's
 /// session reads its row from it — three speed rows, one request.
-pub const FEE_SIGNALS_CACHE_TTL_MS: u32 = 15_000;
+///
+/// Shorter than [`REQUOTE_INTERVAL_MIN_MS`], so that every pricing of a quote
+/// on screen (one per block, [`requote_interval_ms`]) reads the chain and the
+/// relay again instead of the answer the previous one held; the three tier
+/// sessions priced at the same moment still share one read.
+pub const FEE_SIGNALS_CACHE_TTL_MS: u32 = 5_000;
 
 /// How long a shell may hold the relay's simulation of one exact operation
 /// (`EstimateUserOpGas`: chain, account, deployed, the calls byte for byte).
@@ -373,16 +410,16 @@ fn is_hex_address(s: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Gas speed tier (`safe-transaction.ts:242-249`). Labels are UI words and
-/// stay in the shell. Both flows run `fast` today; the vocabulary is kept
-/// because the multiplier table is load-bearing math.
+/// stay in the shell. The default is `standard`, the factory default of the
+/// speed preference (`fee_tier_pref::FACTORY_DEFAULT`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum FeeTier {
     Slow,
+    #[default]
     Standard,
     Rapid,
-    #[default]
     Fast,
 }
 
@@ -503,6 +540,17 @@ pub struct FeeBundlerQuote {
     /// `None` when a generic bundler omits the Vela extension fields.
     pub network_fee_per_gas: Option<String>,
     pub relayer_fee_per_gas: Option<String>,
+    /// The relay's PUBLISHED in-band price for this tier (`inBandFeePerGas`,
+    /// CONTRACT v2): the wei a client pays per unit of the operation's
+    /// `settlementGas` — `relay_markup × drift_allowance × (cap × base_fee +
+    /// tip)`, see [`IN_BAND_PRICE`]. The markup and one block of drift are
+    /// inside it, so nothing is multiplied on top.
+    ///
+    /// `None` from a relay older than the field: the fee is then priced the
+    /// way it always was (`Charge::Marked`). `#[serde(default)]`: a shell
+    /// that does not send it keeps working unchanged.
+    #[serde(default)]
+    pub in_band_fee_per_gas: Option<String>,
 }
 
 /// `eth_estimateUserOperationGas` outcome. `ContextUnavailable` is the shell
@@ -517,6 +565,14 @@ pub enum FeeGasOutcome {
         verification_gas_limit: String,
         call_gas_limit: String,
         pre_verification_gas: String,
+        /// `settlementGas` as the relay answered it (decimal): the gas it
+        /// bills the operation against — simulated gas used plus its
+        /// documented buffer (`user_op::GasEstimate::settlement_gas`). `None`
+        /// from a relay older than the field, and the fee is then priced on
+        /// the operation's limits as before. `#[serde(default)]`: a shell that
+        /// does not send it keeps working unchanged.
+        #[serde(default)]
+        settlement_gas: Option<String>,
     },
     /// No simulation came back — the relay refused it, could not be reached,
     /// or answered nothing usable. A shell that cannot tell those apart says
@@ -946,6 +1002,33 @@ pub fn calculate_in_band_fee_amount(
     fee_asset: &AssetPricing,
     native_asset: &AssetPricing,
 ) -> Option<u128> {
+    let charged = mul_wide(total_gas, gas_price).checked_mul(w(INBAND_MARKUP))?;
+    in_band_amount(charged, fee_asset, native_asset)
+}
+
+/// The in-band fee at the relay's PUBLISHED per-gas price (CONTRACT v2):
+/// `total_gas × per_gas`, with the relay's markup and one block of drift
+/// already inside `per_gas` ([`IN_BAND_PRICE`]) — so, unlike
+/// [`calculate_in_band_fee_amount`], nothing is multiplied on top. Floored at
+/// the same $0.01 / admission minimum and converted to a stablecoin the same
+/// way, through the same code.
+pub fn published_in_band_fee_amount(
+    total_gas: u128,
+    per_gas: u128,
+    fee_asset: &AssetPricing,
+    native_asset: &AssetPricing,
+) -> Option<u128> {
+    in_band_amount(mul_wide(total_gas, per_gas), fee_asset, native_asset)
+}
+
+/// The fee for a native charge of `charged` wei: floored at the native
+/// minimum, then — for a stablecoin fee — converted at the two USD prices and
+/// floored at a cent of the coin. Exact in 256 bits; `None` refuses.
+fn in_band_amount(
+    charged: U256,
+    fee_asset: &AssetPricing,
+    native_asset: &AssetPricing,
+) -> Option<u128> {
     if !native_asset.is_native {
         return None;
     }
@@ -1013,9 +1096,7 @@ pub fn calculate_in_band_fee_amount(
         // Nobody can value the coin: the blind floor is the last resort.
         (None, None) => blind_minimum,
     };
-    let native_amount = mul_wide(total_gas, gas_price)
-        .checked_mul(w(INBAND_MARKUP))?
-        .max(native_minimum);
+    let native_amount = charged.max(native_minimum);
     if fee_asset.is_native {
         return narrow(native_amount);
     }
@@ -1033,6 +1114,116 @@ pub fn calculate_in_band_fee_amount(
     let stable_minimum =
         ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(fee_unit)?, w(fee_usd))?;
     narrow(converted.max(stable_minimum))
+}
+
+// ---------------------------------------------------------------------------
+// The relay's published in-band price (CONTRACT v2) — one table
+// ---------------------------------------------------------------------------
+
+/// Basis points: 10,000 = 1×.
+const BPS: u128 = 10_000;
+
+/// The price a relay publishes per tier as `inBandFeePerGas` (vela-relay
+/// `docs/fees.md` §2b–§3), the formula the wallet checks it with:
+///
+/// ```text
+/// cap[tier]     = ⌊cap_bps[tier] × base_fee⌋ + tip[tier]          the tier's maxFeePerGas
+/// per_gas[tier] = ⌈relay_markup × drift_allowance × cap[tier]⌉    its inBandFeePerGas
+///
+/// fee = max( settlementGas × max(inBandFeePerGas[tier], the wallet's floor) ,
+///            the $0.01 / admission minimum )
+/// ```
+///
+/// - `relay_markup`: what the relay requires over the gas it bills at the
+///   cap it signs — `required = relay_markup × settlementGas × cap_signed` —
+///   its guaranteed worst-case margin (it is configurable on the relay, which
+///   is why the wallet pays the relay's PUBLISHED price rather than this
+///   table's). In a calm market it keeps far more, because the chain charges
+///   `base_fee + tip`, never the cap.
+/// - `drift_allowance`: none. The gap between a tier's cap and the relay's
+///   inclusion floor (1.25 × the base fee) already absorbs a quote's drift —
+///   a base fee 20% higher at `slow` and `standard`, 40% at `fast`, before a
+///   cent more is needed — and [`requote_interval_ms`] keeps the quote on
+///   screen a block young.
+/// - `cap_bps[tier]`: the tier's submit cap over the NEXT block's base fee
+///   (the relay's `SubmissionTier::base_fee_bps`). `tip[tier]` is the tip the
+///   relay signs the tier with — the median over a minute of blocks (at least
+///   20) of each block's 25th / 50th / 70th percentile reward, or the node's
+///   own tip × 1.00 / 1.25 / 2.00 on a chain whose blocks run under 30% full —
+///   as its quote reports it.
+///
+/// The numbers are the relay's, chosen by replaying 10.4 days of Ethereum
+/// mainnet (74,752 blocks, `docs/fees.md` §2c): the cheapest set that accepts
+/// `standard` and `fast` at the first pass ≥ 99% for a 12 s-old quote and ≥
+/// 97% at 30 s, keeps `fast` within about twice `slow`, and never leaves the
+/// relay short. The person pays the published price on the gas the relay
+/// bills — not `3 ×` the operation's padded LIMITS on top of a relay markup
+/// on a cap, which is what made an Ethereum send cost 12–24× its gas
+/// (2026-10-08).
+///
+/// ONE table, read by the pricing and its tests alike; it must say what the
+/// relay's `gas_math` does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InBandPriceFormula {
+    pub relay_markup_bps: u128,
+    pub drift_allowance_bps: u128,
+    pub slow_cap_bps: u128,
+    pub standard_cap_bps: u128,
+    pub fast_cap_bps: u128,
+}
+
+/// The formula's parameters — see [`InBandPriceFormula`]: vela-relay's
+/// defaults since its backtest (`docs/fees.md` §2c, 2026-10-09).
+pub const IN_BAND_PRICE: InBandPriceFormula = InBandPriceFormula {
+    // `VELA_RELAY_EXECUTOR_SETTLEMENT_MARKUP_BPS`'s default, 1.1×.
+    relay_markup_bps: 11_000,
+    // `IN_BAND_DRIFT_BPS`, 1.0×.
+    drift_allowance_bps: 10_000,
+    // 1.5 / 1.5 / 1.75 × the next block's base fee.
+    slow_cap_bps: 15_000,
+    standard_cap_bps: 15_000,
+    fast_cap_bps: 17_500,
+};
+
+impl InBandPriceFormula {
+    /// The tier's cap multiple. The dead `rapid` (never offered, never on the
+    /// wire) prices as `fast`, the dearer neighbour — never cheaper.
+    #[must_use]
+    pub fn cap_bps(&self, tier: FeeTier) -> u128 {
+        match tier {
+            FeeTier::Slow => self.slow_cap_bps,
+            FeeTier::Standard => self.standard_cap_bps,
+            FeeTier::Rapid | FeeTier::Fast => self.fast_cap_bps,
+        }
+    }
+
+    /// `cap[tier]` over `base_fee` and `tip` (wei) — the base-fee term rounded
+    /// down, exactly as the relay's `tier_outer_fee` rounds it. `None` only
+    /// for a figure no chain could charge.
+    #[must_use]
+    pub fn cap(&self, tier: FeeTier, base_fee: u128, tip: u128) -> Option<u128> {
+        let scaled = narrow(mul_wide(self.cap_bps(tier), base_fee) / w(BPS))?;
+        scaled.checked_add(tip)
+    }
+
+    /// `per_gas[tier]` over `base_fee` and `tip` (wei): the markup and the
+    /// drift allowance on the cap, rounded UP as the relay's
+    /// `in_band_fee_per_gas` rounds it — a price that reads low is the one the
+    /// relay refuses. Exact in 256 bits; `None` only for a figure no chain
+    /// could charge.
+    #[must_use]
+    pub fn per_gas(&self, tier: FeeTier, base_fee: u128, tip: u128) -> Option<u128> {
+        let cap = self.cap(tier, base_fee, tip)?;
+        let numerator =
+            mul_wide(cap, self.relay_markup_bps).checked_mul(w(self.drift_allowance_bps))?;
+        narrow(ceil_div_wide(numerator, mul_wide(BPS, BPS))?)
+    }
+}
+
+/// The lowest the next block's base fee can be, given a block's: EIP-1559
+/// moves it by at most an eighth a block.
+fn next_base_fee_floor(base_fee: u128) -> u128 {
+    base_fee - base_fee / 8
 }
 
 /// Invariant ⑧ (`FeeTokenSelector.tsx:74`): a fee asset that cannot cover this
@@ -1309,6 +1500,25 @@ pub fn is_tempo_chain(chain_id: u32) -> bool {
     TEMPO_CHAIN_IDS.contains(&chain_id)
 }
 
+/// The gas a submit's draft asks the estimator about on `chain_id`, and the
+/// rule that turns the answer into the limits it signs: Tempo's, with a call
+/// floor that grows with `sub_calls` (the person's calls plus the
+/// reimbursement leg), or the in-band one (`user_op::in_band_gas_limits`).
+/// Every shell's submit reads it — the UniFFI `user_op_floors`, the wasm
+/// `userOpGasLimits`, the desktop executor.
+#[must_use]
+pub fn user_op_gas_floors(
+    chain_id: u32,
+    deployed: bool,
+    sub_calls: u32,
+) -> crate::user_op::GasFloors {
+    if is_tempo_chain(chain_id) {
+        crate::user_op::GasFloors::tempo(deployed, tempo_call_gas_limit(sub_calls))
+    } else {
+        crate::user_op::GasFloors::in_band(deployed)
+    }
+}
+
 /// The smallest representable $0.01 fee (`tempo.ts:53-61`): rounds UP to a
 /// transferable unit for low-decimal tokens rather than undercharge.
 pub fn tempo_minimum_fee_token_units(decimals: u32) -> u128 {
@@ -1531,9 +1741,13 @@ pub struct FeeEstimate {
     pub network_fee_per_gas: u128,
     pub relayer_fee_per_gas: u128,
     pub bundler_gas_price: u128,
-    /// `max(chain gas price, bundler network fee)` — the gas basis the in-band
-    /// reimbursement was priced against (and re-priced against when the fee
-    /// asset is switched). See `MAX_QUOTE_VS_CHAIN_MULTIPLE`.
+    /// The per-gas figure the in-band reimbursement was priced against (and
+    /// is re-priced against when the fee asset is switched). Against a relay
+    /// that publishes its in-band price, that price as checked against the
+    /// wallet's own reading — the fee is `total_gas ×` it, nothing on top
+    /// (`Charge::Published`). Otherwise `max(chain gas price, bundler
+    /// network fee)`, and the fee is `3 × total_gas ×` it
+    /// (`Charge::Marked`). See `MAX_QUOTE_VS_CHAIN_MULTIPLE`.
     pub in_band_gas_basis: u128,
     /// What the chain will actually charge per gas at this tier — the number
     /// the speed picker shows beside each option (issue 684). See
@@ -1551,6 +1765,8 @@ pub struct FeeEstimate {
     /// without it: the two are one range, and half a range is a number
     /// without the thing it is compared against. Display only.
     pub max_gas_price: Option<u128>,
+    /// The gas the fee is priced on: the relay's `settlementGas` against a
+    /// relay that publishes its in-band price, else the operation's limits.
     pub total_gas: u128,
     pub deployed: bool,
     pub tier: FeeTier,
@@ -1558,6 +1774,46 @@ pub struct FeeEstimate {
     pub fee_asset: FeeAsset,
     /// The quote's transfer recipient — the submit path signs THIS verbatim.
     pub fee_recipient: Option<String>,
+}
+
+/// How a generic in-band fee is charged for the gas it is priced on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Charge {
+    /// A relay that publishes no in-band price or no `settlementGas` (one
+    /// older than CONTRACT v2): `INBAND_MARKUP × gas × basis`, on the
+    /// operation's limits — the fee as it always was, which such a relay
+    /// accepts.
+    Marked { basis: u128 },
+    /// The relay's published per-gas price, checked against the wallet's own
+    /// reading ([`IN_BAND_PRICE`]): `gas × per_gas`, on `settlementGas`.
+    Published { per_gas: u128 },
+}
+
+impl Charge {
+    /// The fee in `fee_asset` for `gas`.
+    fn amount(
+        self,
+        gas: u128,
+        fee_asset: &AssetPricing,
+        native_asset: &AssetPricing,
+    ) -> Option<u128> {
+        match self {
+            Charge::Marked { basis } => {
+                calculate_in_band_fee_amount(gas, basis, fee_asset, native_asset)
+            }
+            Charge::Published { per_gas } => {
+                published_in_band_fee_amount(gas, per_gas, fee_asset, native_asset)
+            }
+        }
+    }
+
+    /// The per-gas figure, as [`FeeEstimate::in_band_gas_basis`] reports it.
+    fn basis(self) -> u128 {
+        match self {
+            Charge::Marked { basis } => basis,
+            Charge::Published { per_gas } => per_gas,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1627,6 +1883,15 @@ struct RequestCtx {
 /// surfaces its failure; a refresh swallows it (the old quote keeps showing,
 /// `GasFeeCard.handleRefresh`'s `catch {}`); a chip-switch reverts the
 /// selection (`handleFeeTokenSelect`'s `catch → onFeeTokenChange(prev)`).
+///
+/// [`Origin::Tick`] and [`Origin::Catchup`] keep the quote on screen young
+/// ([`requote_interval_ms`]). A tick prices again in the background: nothing
+/// on screen changes until it lands, the figure stays confirmable meanwhile,
+/// and it is never `busy`. A tick that fails leaves a figure older than a
+/// block, which may no longer be signed as it stands: it is priced again at
+/// once, as a catch-up — `busy`, so every confirm waits for it — and a
+/// catch-up that fails too takes the figure away and says so, rather than
+/// leave a quote on screen that the relay may refuse.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 enum Origin {
     #[default]
@@ -1635,6 +1900,11 @@ enum Origin {
     Select {
         previous: Option<String>,
     },
+    /// The block-time re-pricing, in the background.
+    Tick,
+    /// The figure on screen is older than a block: priced again before
+    /// anything signs it.
+    Catchup,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1681,6 +1951,11 @@ enum PricePlan {
         /// The tier's cap, the high end of the same range (issue 685). `Some`
         /// exactly when `effective_gas_price` is.
         max_gas_price: Option<u128>,
+        /// The relay's published in-band price for the tier, raised to the
+        /// wallet's own reading of the same formula (CONTRACT v2) — `None`
+        /// when the relay published none. Used only when the simulation
+        /// also brings `settlementGas` (`Charge::Published`).
+        published: Option<u128>,
         quoted: bool,
         est_calldata_len: usize,
     },
@@ -1733,9 +2008,13 @@ pub struct Model {
     /// `(None = native | token, signed base units)`. `None` = not measured,
     /// and then only the decoded calls say what it moves — exactly as before.
     measured: Option<Vec<(Option<String>, i128)>>,
-    /// The in-band gas basis of the last generic run, kept so balance
-    /// changes that land on a FAILED quote can still weigh the coins.
-    last_basis: Option<u128>,
+    /// How the last generic run would charge before its simulation answered,
+    /// kept so balance changes that land on a FAILED quote can still weigh
+    /// the coins.
+    last_charge: Option<Charge>,
+    /// How the generic estimate on screen was charged — what a chip switch,
+    /// and every coin's figure, re-prices it with. `None` on Tempo.
+    charge: Option<Charge>,
     /// The coins the relay refused this run's operation with
     /// ([`FeeGasOutcome::Refused`]), in the order tried — the first is the
     /// coin the run began with. A run that ends in failure lands on one of
@@ -1950,12 +2229,31 @@ impl App for FeePolicy {
             }
             Event::BalanceChangesMeasured { changes } => balance_changes_measured(model, &changes),
             Event::Requote => {
+                if model.ctx.is_none() {
+                    return Command::done();
+                }
+                // A background re-pricing is already doing what was asked:
+                // it becomes the refresh the person sees.
+                if ticking(model) {
+                    model.origin = if model.stale {
+                        Origin::Catchup
+                    } else {
+                        Origin::Refresh
+                    };
+                    return render();
+                }
                 // `GasFeeCard.handleRefresh`: ignored while one is running.
-                if model.ctx.is_none() || is_busy(&model.phase) {
+                if is_busy(&model.phase) {
                     return Command::done();
                 }
                 model.attempt += 1;
-                model.origin = Origin::Refresh;
+                // A figure already older than a block is not kept on a
+                // failed refresh ([`Origin::Catchup`]).
+                model.origin = if model.stale {
+                    Origin::Catchup
+                } else {
+                    Origin::Refresh
+                };
                 begin_pipeline(model)
             }
             Event::SelectFeeAsset { token } => select_fee_asset(model, token),
@@ -1966,6 +2264,7 @@ impl App for FeePolicy {
                 // never reads 0. A native estimate survives, as today.
                 model.attempt += 1; // in-flight card work is abandoned
                 model.pending = Pending::default();
+                model.origin = Origin::Initial;
                 model.fee_token = None;
                 if matches!(
                     model.estimate.as_ref().map(|e| &e.fee_asset),
@@ -1988,6 +2287,7 @@ impl App for FeePolicy {
                 model.attempt += 1;
                 model.form_chain_id = Some(chain_id);
                 model.pending = Pending::default();
+                model.origin = Origin::Initial;
                 model.quotes.clear();
                 model.fee_token = None;
                 model.phase = if model.estimate.is_some() {
@@ -1997,12 +2297,21 @@ impl App for FeePolicy {
                 };
                 render()
             }
+            // The shell says the figure is old (the app resumed after a long
+            // background): it is priced again before anything signs it.
             Event::QuoteExpired => {
-                if model.phase != Phase::Quoted {
+                if ticking(model) {
+                    model.stale = true;
+                    model.origin = Origin::Catchup;
+                    return render();
+                }
+                if model.phase != Phase::Quoted || model.ctx.is_none() {
                     return Command::done();
                 }
                 model.stale = true;
-                render()
+                model.attempt += 1;
+                model.origin = Origin::Catchup;
+                begin_pipeline(model)
             }
             Event::ShellCompleted { attempt, result } => {
                 if attempt != model.attempt {
@@ -2017,7 +2326,9 @@ impl App for FeePolicy {
     }
 
     fn view(&self, model: &Model) -> FeeView {
-        let busy = is_busy(&model.phase);
+        // The background re-pricing is not "busy": the figure on screen is
+        // the one in force, and confirmable, until the new one lands.
+        let busy = is_busy(&model.phase) && model.origin != Origin::Tick;
         let failed = match &model.phase {
             Phase::Failed(kind) => Some(*kind),
             _ => None,
@@ -2177,9 +2488,16 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
             model.pending.inner_floor = Some(floor);
             try_price(model)
         }
+        // One block on (`requote_interval_ms`): the same operation is priced
+        // again in the background, the figure on screen staying confirmable
+        // until the new one lands.
         (Phase::Quoted, FeeShellResult::TtlElapsed) => {
-            model.stale = true;
-            render()
+            if model.ctx.is_none() || model.estimate.is_none() {
+                return Command::done();
+            }
+            model.attempt += 1;
+            model.origin = Origin::Tick;
+            begin_pipeline(model)
         }
         // The run did not price in time (spec 094 S9): it ends here, and
         // whatever it was still waiting for is dropped when it comes.
@@ -2282,6 +2600,9 @@ fn try_advance(model: &mut Model) -> Command<FeeEffect, Event> {
 struct AcceptedQuote {
     network_fee_per_gas: u128,
     relayer_fee_per_gas: u128,
+    /// The relay's published in-band price for the tier, when it published
+    /// a positive one ([`FeeBundlerQuote::in_band_fee_per_gas`]).
+    in_band_fee_per_gas: Option<u128>,
     /// The cap the relay will submit at, and the tip it will sign with — the
     /// two halves of [`effective_gas_price`] (issue 684). The tip is `None`
     /// when the row did not report one; nothing derives a price from that.
@@ -2365,6 +2686,13 @@ fn accept_bundler_quote(
     Some(AcceptedQuote {
         network_fee_per_gas,
         relayer_fee_per_gas,
+        // A zero price is degenerate, not authoritative — like a zero
+        // `maxFeePerGas` — and prices nothing.
+        in_band_fee_per_gas: raw
+            .in_band_fee_per_gas
+            .as_deref()
+            .and_then(parse_units)
+            .filter(|price| *price > 0),
         max_fee_per_gas: max_fee,
         max_priority_fee_per_gas: raw
             .max_priority_fee_per_gas
@@ -2393,6 +2721,10 @@ fn advance_generic(
     // neither can be published without the other. The high end is the cap
     // the relay REPORTED — never `local_max` below, which is our own guess and
     // would put a made-up ceiling beside a measured bid.
+    // The tip the relay will sign this tier with, as its quote reports it.
+    let tier_tip = accepted
+        .as_ref()
+        .and_then(|quote| quote.max_priority_fee_per_gas);
     let range = accepted
         .as_ref()
         .zip(measured_base_fee)
@@ -2402,7 +2734,7 @@ fn advance_generic(
                 .map(|tip| gas_price_range(base_fee, quote.max_fee_per_gas, tip))
         });
     let (effective, max_gas_price) = (range.map(|(low, _)| low), range.map(|(_, high)| high));
-    let (network_fee_per_gas, relayer_fee_per_gas, bundler_gas_price) = match accepted {
+    let (network_fee_per_gas, relayer_fee_per_gas, bundler_gas_price) = match &accepted {
         Some(quote) => (
             quote.network_fee_per_gas,
             quote.relayer_fee_per_gas,
@@ -2421,6 +2753,9 @@ fn advance_generic(
     // `MAX_QUOTE_VS_CHAIN_MULTIPLE` times our own on-chain gas measurement is
     // refused, not signed. Only a real bundler quote is vetted — the local
     // fallback derives from the same measurement and cannot be "too high".
+    // `networkFeePerGas` keeps its meaning from before the tiers tipped by
+    // reward percentiles (vela-relay `docs/fees.md` §2b, "frozen"), so a real
+    // tier tip never pushes it over this bound.
     let chain_gas_price = gas.gas_price;
     if quoted
         && chain_gas_price > 0
@@ -2428,6 +2763,53 @@ fn advance_generic(
     {
         return fail(model, FeeFailure::GasQuoteTooHigh);
     }
+    // The relay's published in-band price for the tier (`docs/fees.md` §2b–§3)
+    // is the price paid: it carries the markup the relay is configured with.
+    // Our own reading of the chain is a FLOOR under it and a BOUND on it,
+    // never a second price:
+    //
+    // - the floor: the relay prices on the next block's base fee, which can
+    //   be no lower than seven eighths of the base fee we read. A relay whose
+    //   cap says otherwise read a market that has moved on, and its price is
+    //   raised by the cap that lowest possible base fee implies — whatever
+    //   markup it applies.
+    // - the bound: a price more than `MAX_QUOTE_VS_CHAIN_MULTIPLE` times the
+    //   same formula over our reading is refused like any other.
+    //
+    // The tier's tip is taken as the relay reports it on both sides: it is a
+    // percentile of recent blocks' rewards, a statistic we do not measure
+    // (our node's `eth_maxPriorityFeePerGas` reads 0 on Ethereum while blocks
+    // tip ~1 gwei), and the relay signs it on to the builder whole.
+    let published = match accepted
+        .as_ref()
+        .and_then(|quote| quote.in_band_fee_per_gas.map(|price| (price, quote)))
+    {
+        Some((relay_price, quote)) => {
+            let tip = tier_tip.unwrap_or(0);
+            let (Some(own), Some(lowest_cap)) = (
+                IN_BAND_PRICE.per_gas(ctx.tier, gas.base_fee, tip),
+                IN_BAND_PRICE.cap(ctx.tier, next_base_fee_floor(gas.base_fee), tip),
+            ) else {
+                return fail(model, FeeFailure::CalculationFailed);
+            };
+            if own > 0 && relay_price > own.saturating_mul(MAX_QUOTE_VS_CHAIN_MULTIPLE) {
+                return fail(model, FeeFailure::GasQuoteTooHigh);
+            }
+            let floor = if lowest_cap > quote.max_fee_per_gas {
+                let Some(raised) =
+                    ceil_div_wide(mul_wide(relay_price, lowest_cap), w(quote.max_fee_per_gas))
+                        .and_then(narrow)
+                else {
+                    return fail(model, FeeFailure::CalculationFailed);
+                };
+                raised
+            } else {
+                relay_price
+            };
+            Some(relay_price.max(floor))
+        }
+        None => None,
+    };
     // Anchor the in-band reimbursement on the LARGER of our own measurement and
     // the bundler's quote: never underpay when the bundler under-reports the
     // network fee, and never let the 3× buffer ride on an unvetted quote alone.
@@ -2438,17 +2820,23 @@ fn advance_generic(
     let Some(rows) = quotes else {
         return fail(model, missing_quote_failure(model.fee_token.is_some()));
     };
-    model.last_basis = Some(in_band_gas_basis);
+    // Before the simulation answers, the charge is the published price when
+    // there is one — the price a relay that publishes it will settle on.
+    let provisional = match published {
+        Some(per_gas) => Charge::Published { per_gas },
+        None => Charge::Marked {
+            basis: in_band_gas_basis,
+        },
+    };
+    model.last_charge = Some(provisional);
     // Nobody chose the coin: choose, before the simulation, because the coin
     // decides the fee leg being simulated. The gas is not known yet, so the
     // coins are measured against the static model — above a plain transfer's
     // real gas, so a coin that passes here pays for real. `price_generic`
     // checks again on the real figure.
-    if model.auto_fee_token {
+    if picks_coin(model) {
         let measured = measured_for(ctx, model.measured.as_deref());
-        if let Some(choice) =
-            static_auto_pick(ctx, &rows, measured, in_band_gas_basis, &model.refused)
-        {
+        if let Some(choice) = static_auto_pick(ctx, &rows, measured, provisional, &model.refused) {
             model.fee_token = choice;
         }
     }
@@ -2496,6 +2884,7 @@ fn advance_generic(
         in_band_gas_basis,
         effective_gas_price: effective,
         max_gas_price,
+        published,
         quoted,
         est_calldata_len,
     });
@@ -2937,19 +3326,12 @@ fn static_auto_pick(
     ctx: &RequestCtx,
     rows: &[ParsedQuote],
     measured: Option<&Measured>,
-    in_band_gas_basis: u128,
+    charge: Charge,
     excluded: &[Option<String>],
 ) -> Option<Option<String>> {
     let provisional = static_total_gas(ctx, None);
     let native = find_quote(rows, None)?;
-    let fee_for = |row: &ParsedQuote| {
-        calculate_in_band_fee_amount(
-            provisional,
-            in_band_gas_basis,
-            &row.pricing(),
-            &native.pricing(),
-        )
-    };
+    let fee_for = |row: &ParsedQuote| charge.amount(provisional, &row.pricing(), &native.pricing());
     pick_coin(rows, &ctx.calls, measured, fee_for, excluded)
 }
 
@@ -3039,7 +3421,7 @@ fn advance_tempo(
     let static_gas = tempo_expected_gas(ctx.deployed, sub_call_count);
     // Every Tempo fee coin is a TIP-20 stablecoin and the default one is
     // often not held at all: nobody chose, so pay in one that is.
-    if model.auto_fee_token {
+    if picks_coin(model) {
         // Tempo weighs coins by the calls alone (spec 083 leaves it as it was).
         let spend = Spend::new(&ctx.calls, None);
         let fee_for = |row: &ParsedQuote| {
@@ -3105,12 +3487,16 @@ fn accept_gas_outcome(
     };
     match plan {
         PricePlan::Generic {
-            est_calldata_len, ..
+            est_calldata_len,
+            in_band_gas_basis,
+            published,
+            ..
         } => match outcome {
             FeeGasOutcome::Estimated {
                 verification_gas_limit,
                 call_gas_limit,
                 pre_verification_gas,
+                settlement_gas,
             } => {
                 let (Some(vgl), Some(cgl), Some(pvg)) = (
                     parse_units(&verification_gas_limit),
@@ -3119,24 +3505,50 @@ fn accept_gas_outcome(
                 ) else {
                     return fail(model, FeeFailure::EstimateFailed);
                 };
-                // Padding (`safe-transaction.ts:697-702`): ×1.5 with floors —
-                // 2M for an undeployed account's deploy.
-                // ×1.5 exactly: a clamped `vgl × 15` divided by 10 would
-                // UNDER-count the gas the fee is priced from.
-                let est_vgl = narrow_saturating(mul_wide(vgl, 15) / w(10)).max(if ctx.deployed {
-                    VERIFICATION_GAS_DEPLOYED
-                } else {
-                    2_000_000
-                });
-                // …and raised to the inner calls' measured floor, the same
-                // raise the submit applies (`user_op_raise_call_gas`): the fee
-                // is priced on the `callGasLimit` the op will carry.
-                let est_cgl = narrow_saturating(mul_wide(cgl, 15) / w(10))
-                    .max(100_000)
-                    .max(inner_floor.unwrap_or(0));
-                let est_pvg = add(pvg, 10_000);
-                let total_gas = add(add(est_vgl, est_cgl), est_pvg);
-                price_generic(model, &ctx, plan, total_gas)
+                // A settlement figure that does not read as a positive
+                // quantity is no figure: the operation is priced the way a
+                // relay without one is, which every relay accepts.
+                let settlement = settlement_gas
+                    .as_deref()
+                    .and_then(parse_units)
+                    .filter(|gas| *gas > 0);
+                // The limits the submit signs (`user_op::in_band_gas_limits`,
+                // the one rule every shell's submit calls), raised to the
+                // inner calls' measured floor exactly as the submit raises
+                // them (`user_op_raise_call_gas`).
+                let limits = crate::user_op::in_band_gas_limits(
+                    crate::user_op::GasEstimate {
+                        verification_gas_limit: vgl,
+                        call_gas_limit: cgl,
+                        pre_verification_gas: pvg,
+                        settlement_gas: settlement,
+                    },
+                    ctx.deployed,
+                    inner_floor,
+                );
+                let (total_gas, charge) = match (settlement, *published) {
+                    // The gas the relay bills, at the price it published —
+                    // both or neither: a relay publishes them together, on a
+                    // chain where it bills the gas an operation USES
+                    // (`docs/fees.md` §1a). It measures an undeployed Safe's
+                    // calls with the Safe's code in place, and leaves
+                    // `settlementGas` out when it cannot.
+                    (Some(settlement), Some(per_gas)) => {
+                        (settlement, Charge::Published { per_gas })
+                    }
+                    // A relay older than CONTRACT v2: its limits, as
+                    // returned, at `3 ×` the basis — no 1.5× on top of the
+                    // relay's own 1.5×, no 300k verification floor; the 2M
+                    // floor for an undeployed Safe stays, because such a
+                    // relay answers its verification as 100k.
+                    _ => (
+                        limits.total(),
+                        Charge::Marked {
+                            basis: *in_band_gas_basis,
+                        },
+                    ),
+                };
+                price_generic(model, &ctx, plan, total_gas, charge)
             }
             FeeGasOutcome::ContextUnavailable => fail(model, FeeFailure::EstimateFailed),
             failed @ (FeeGasOutcome::SimulationFailed | FeeGasOutcome::Refused) => {
@@ -3150,9 +3562,13 @@ fn accept_gas_outcome(
                     return fail(model, FeeFailure::EstimateFailed);
                 }
                 // A small op keeps the static fallback whichever way the
-                // simulation failed — exactly as before spec 083's fee fix.
+                // simulation failed — exactly as before spec 083's fee fix —
+                // charged the old way: nothing settled it.
                 let total_gas = static_total_gas(&ctx, inner_floor);
-                price_generic(model, &ctx, plan, total_gas)
+                let charge = Charge::Marked {
+                    basis: *in_band_gas_basis,
+                };
+                price_generic(model, &ctx, plan, total_gas, charge)
             }
         },
         PricePlan::Tempo { static_gas, .. } => match outcome {
@@ -3160,6 +3576,7 @@ fn accept_gas_outcome(
                 verification_gas_limit,
                 call_gas_limit,
                 pre_verification_gas,
+                ..
             } => {
                 let (Some(vgl), Some(cgl), Some(pvg)) = (
                     parse_units(&verification_gas_limit),
@@ -3186,12 +3603,12 @@ fn price_generic(
     ctx: &RequestCtx,
     plan: &PricePlan,
     total_gas: u128,
+    charge: Charge,
 ) -> Command<FeeEffect, Event> {
     let PricePlan::Generic {
         network_fee_per_gas,
         relayer_fee_per_gas,
         bundler_gas_price,
-        in_band_gas_basis,
         effective_gas_price,
         max_gas_price,
         quoted,
@@ -3203,19 +3620,13 @@ fn price_generic(
     let Some(native) = find_quote(&model.quotes, None).cloned() else {
         return fail(model, FeeFailure::CalculationFailed);
     };
-    if model.auto_fee_token {
+    if picks_coin(model) {
         // The real gas is in: the coin picked on the static model must still
         // pay. When it does not, pick again on this figure — and when nothing
         // can, the requested coin stands and says so, as it would have.
         let measured = measured_for(ctx, model.measured.as_deref());
-        let fee_for = |row: &ParsedQuote| {
-            calculate_in_band_fee_amount(
-                total_gas,
-                *in_band_gas_basis,
-                &row.pricing(),
-                &native.pricing(),
-            )
-        };
+        let fee_for =
+            |row: &ParsedQuote| charge.amount(total_gas, &row.pricing(), &native.pricing());
         let next = if measured.is_some() {
             // Measured (spec 083 fee): the coin that pays from what the
             // operation leaves — the same answer whether the simulation
@@ -3250,12 +3661,7 @@ fn price_generic(
     let Some(selected) = find_quote(&model.quotes, model.fee_token.as_deref()).cloned() else {
         return fail(model, FeeFailure::CalculationFailed);
     };
-    let Some(fee_amount) = calculate_in_band_fee_amount(
-        total_gas,
-        *in_band_gas_basis,
-        &selected.pricing(),
-        &native.pricing(),
-    ) else {
+    let Some(fee_amount) = charge.amount(total_gas, &selected.pricing(), &native.pricing()) else {
         return fail(model, FeeFailure::CalculationFailed);
     };
     // Invariant ⑧ (`FeeTokenSelector.tsx:74`), applied to a REQUESTED fee
@@ -3309,7 +3715,7 @@ fn price_generic(
         network_fee_per_gas: *network_fee_per_gas,
         relayer_fee_per_gas: *relayer_fee_per_gas,
         bundler_gas_price: *bundler_gas_price,
-        in_band_gas_basis: *in_band_gas_basis,
+        in_band_gas_basis: charge.basis(),
         effective_gas_price: *effective_gas_price,
         max_gas_price: *max_gas_price,
         total_gas,
@@ -3319,6 +3725,7 @@ fn price_generic(
         fee_asset,
         fee_recipient: Some(selected.recipient),
     });
+    model.charge = Some(charge);
     settle_quoted(model)
 }
 
@@ -3336,7 +3743,7 @@ fn price_tempo(
             fee_token,
             ..
         },
-    ) = (model.auto_fee_token, &mut plan)
+    ) = (picks_coin(model), &mut plan)
     {
         // The simulation can price above the static model; the coin picked
         // on that model must still pay, or the pick is made again here.
@@ -3406,6 +3813,7 @@ fn price_tempo(
         // instruction (`safe-transaction.ts:545`).
         fee_recipient: recipient.clone().filter(|r| is_hex_address(r)),
     });
+    model.charge = None;
     settle_quoted(model)
 }
 
@@ -3413,7 +3821,45 @@ fn settle_quoted(model: &mut Model) -> Command<FeeEffect, Event> {
     model.phase = Phase::Quoted;
     model.stale = false;
     model.origin = Origin::Initial;
-    requests(model, vec![FeeOperation::StartTtl { ms: QUOTE_TTL_MS }])
+    resume_ticking(model)
+}
+
+/// Wait one [`requote_interval_ms`] before pricing the quote on screen again.
+fn resume_ticking(model: &Model) -> Command<FeeEffect, Event> {
+    let chain_id = model.ctx.as_ref().map_or(0, |ctx| ctx.chain_id);
+    requests(
+        model,
+        vec![FeeOperation::StartTtl {
+            ms: requote_interval_ms(chain_id),
+        }],
+    )
+}
+
+/// Whether this run may choose the fee coin for the person. Never in the
+/// background ([`Origin::Tick`]): the figure on screen stays confirmable
+/// while a tick runs, and its coin must not change under it — a tick whose
+/// coin no longer pays fails, and the catch-up that follows chooses again.
+fn picks_coin(model: &Model) -> bool {
+    model.auto_fee_token && model.origin != Origin::Tick
+}
+
+/// Whether the background re-pricing is running.
+fn ticking(model: &Model) -> bool {
+    model.origin == Origin::Tick && is_busy(&model.phase)
+}
+
+/// Stop a background re-pricing so something the person did can act on the
+/// figure on screen instead; `true` when one was stopped. The caller resumes
+/// the ticking once it is done ([`resume_ticking`]).
+fn cancel_tick(model: &mut Model) -> bool {
+    if !ticking(model) {
+        return false;
+    }
+    model.attempt += 1;
+    model.pending = Pending::default();
+    model.phase = Phase::Quoted;
+    model.origin = Origin::Initial;
+    true
 }
 
 /// A pipeline step failed. What happens depends on who started the run:
@@ -3444,6 +3890,30 @@ fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
             } else {
                 Phase::Failed(kind)
             };
+        }
+        // The background re-pricing failed: the figure on screen is now
+        // older than a block, which is older than the drift its price
+        // allows for. It is priced again at once, as a catch-up the confirm
+        // waits for.
+        Origin::Tick => {
+            if model.estimate.is_none() {
+                model.phase = Phase::Failed(kind);
+                return render();
+            }
+            keep_quote_coin(model);
+            model.stale = true;
+            model.attempt += 1;
+            model.origin = Origin::Catchup;
+            return begin_pipeline(model);
+        }
+        // Older than a block and it could not be priced again: nothing on
+        // screen may be signed. The figure goes, the failure is said, and the
+        // shell's retry asks again.
+        Origin::Catchup => {
+            model.estimate = None;
+            model.charge = None;
+            model.stale = false;
+            model.phase = Phase::Failed(kind);
         }
     }
     render()
@@ -3504,6 +3974,12 @@ fn refused_by_relay(
     ctx: &RequestCtx,
     plan: &PricePlan,
 ) -> Command<FeeEffect, Event> {
+    // The relay now says the operation on screen fails: the background run
+    // becomes one the person sees before it tries another coin, so no coin
+    // changes under a figure that is still confirmable.
+    if model.origin == Origin::Tick {
+        model.origin = Origin::Catchup;
+    }
     model.refused.push(model.fee_token.clone());
     if model.auto_fee_token {
         if let Some(next) = next_coin_to_try(model, ctx) {
@@ -3513,9 +3989,11 @@ fn refused_by_relay(
     if let Some(landing) = landing_coin(model, ctx) {
         model.fee_token = landing;
     }
-    if model.origin == Origin::Refresh {
+    if matches!(model.origin, Origin::Refresh | Origin::Catchup) {
         model.estimate = None;
         model.stale = false;
+        // An answer, not an outage: said as the failure it is.
+        model.origin = Origin::Refresh;
     }
     fail(model, FeeFailure::WouldFail)
 }
@@ -3614,6 +4092,20 @@ fn balance_changes_measured(
     model: &mut Model,
     changes: &[FeeBalanceChange],
 ) -> Command<FeeEffect, Event> {
+    // Weighed against the figure on screen, as a chip tap is: a background
+    // re-pricing stops for it and resumes after.
+    let cancelled = cancel_tick(model);
+    let command = balance_changes_measured_now(model, changes);
+    if cancelled && model.phase == Phase::Quoted {
+        return Command::all([command, resume_ticking(model)]);
+    }
+    command
+}
+
+fn balance_changes_measured_now(
+    model: &mut Model,
+    changes: &[FeeBalanceChange],
+) -> Command<FeeEffect, Event> {
     model.measured = Some(
         changes
             .iter()
@@ -3652,13 +4144,14 @@ fn repick_quoted(model: &mut Model, ctx: &RequestCtx) {
     if estimate.chain_id != ctx.chain_id {
         return;
     }
-    let (total_gas, basis) = (estimate.total_gas, estimate.in_band_gas_basis);
+    let total_gas = estimate.total_gas;
+    let Some(charge) = model.charge else {
+        return;
+    };
     let Some(native) = find_quote(&model.quotes, None).cloned() else {
         return;
     };
-    let fee_for = |row: &ParsedQuote| {
-        calculate_in_band_fee_amount(total_gas, basis, &row.pricing(), &native.pricing())
-    };
+    let fee_for = |row: &ParsedQuote| charge.amount(total_gas, &row.pricing(), &native.pricing());
     let target = pick_coin(
         &model.quotes,
         &ctx.calls,
@@ -3683,14 +4176,14 @@ fn repick_quoted(model: &mut Model, ctx: &RequestCtx) {
 /// pay, the operation is priced again from the start — once; the machine
 /// picks with what it now knows.
 fn retry_with_a_coin_that_pays(model: &mut Model, ctx: &RequestCtx) -> Command<FeeEffect, Event> {
-    let Some(basis) = model.last_basis else {
+    let Some(charge) = model.last_charge else {
         return render();
     };
     if model.quotes.is_empty() {
         return render();
     }
     let measured = measured_for(ctx, model.measured.as_deref());
-    let pick = static_auto_pick(ctx, &model.quotes, measured, basis, &model.refused);
+    let pick = static_auto_pick(ctx, &model.quotes, measured, charge, &model.refused);
     let Some(pick) = pick else {
         return render();
     };
@@ -3743,6 +4236,17 @@ fn switch_estimate(model: &mut Model, option: &ParsedQuote) -> bool {
 /// shared gas basis — no RPC; an unknown one (and EVERY Tempo one) falls back
 /// to a full re-estimate whose failure reverts the selection.
 fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffect, Event> {
+    // A tap acts on the figure on screen: a background re-pricing stops for
+    // it, and resumes once the tap has been answered locally.
+    let cancelled = cancel_tick(model);
+    let command = select_fee_asset_now(model, token);
+    if cancelled && model.phase == Phase::Quoted {
+        return Command::all([command, resume_ticking(model)]);
+    }
+    command
+}
+
+fn select_fee_asset_now(model: &mut Model, token: Option<String>) -> Command<FeeEffect, Event> {
     // Spec 083 fee: an operation the relay answered would fail has no figure
     // to switch locally, but the coins stay choosable — the pick is priced
     // from the start, and a failure reverts it.
@@ -3849,12 +4353,9 @@ fn fee_amount_for_option(model: &Model, option: &ParsedQuote) -> Option<u128> {
         ));
     }
     let native = find_quote(&model.quotes, None)?;
-    calculate_in_band_fee_amount(
-        estimate.total_gas,
-        estimate.in_band_gas_basis,
-        &option.pricing(),
-        &native.pricing(),
-    )
+    model
+        .charge?
+        .amount(estimate.total_gas, &option.pricing(), &native.pricing())
 }
 
 // ---------------------------------------------------------------------------

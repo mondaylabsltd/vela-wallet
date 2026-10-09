@@ -73,14 +73,14 @@ mod tests {
         host.view()
     }
 
-    /// A fresh install starts where every send started before there was a
-    /// choice, and says nobody chose it.
+    /// A fresh install starts at the factory default — `standard` since the
+    /// Ethereum fee fix — and says nobody chose it.
     #[test]
-    fn a_fresh_install_is_the_factory_fast() {
+    fn a_fresh_install_is_the_factory_standard() {
         with_temp_state("fee-tier-fresh", || {
             let mut host = CoreHost::<FeeTierPref>::new();
             let view = drive(&mut host, Event::Refresh);
-            assert_eq!(view.tier, FeeTier::Fast);
+            assert_eq!(view.tier, FeeTier::Standard);
             assert!(!view.committed);
         });
     }
@@ -120,7 +120,7 @@ mod tests {
             );
             let mut host = CoreHost::<FeeTierPref>::new();
             let view = drive(&mut host, Event::Refresh);
-            assert_eq!(view.tier, FeeTier::Fast);
+            assert_eq!(view.tier, FeeTier::Standard);
             assert!(!view.committed);
             assert_eq!(
                 storage::read_value(storage::KEY_FEE_TIER).ok().flatten(),

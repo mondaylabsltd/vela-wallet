@@ -83,8 +83,8 @@ data class FeeSpeedOptionView(
 @Serializable
 data class FeeSpeedView(
     /** The tier THIS send runs at — the session in force prices it, the submit names it. */
-    val tier: FeeTier = FeeTier.Fast,
-    val preferred: FeeTier = FeeTier.Fast,
+    val tier: FeeTier = FeeTier.Standard,
+    val preferred: FeeTier = FeeTier.Standard,
     /** The other tiers to keep priced. */
     val previews: List<FeeTier> = emptyList(),
     val open: Boolean = false,
