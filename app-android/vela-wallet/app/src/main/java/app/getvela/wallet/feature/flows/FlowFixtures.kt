@@ -1057,6 +1057,68 @@ object FlowFixtures {
             )
             FlowState.SD4B -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Submitted)))
             FlowState.SD4C -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Confirmed)))
+            FlowState.SD3D -> screen(FlowBase.SendConfirm(heldConfirm(s)))
+            FlowState.SD4D -> screen(FlowBase.SendReceipt(refusedReceipt(s)))
         }
     }
+
+    /** The send the boards drive through the live builders: 120 USDT on Ethereum to Alice. */
+    private fun boardSend(): app.getvela.wallet.feature.send.core.SendView = app.getvela.wallet.feature.send.core.SendView(
+        selected_token = app.getvela.wallet.feature.send.core.SendToken(
+            network = "chain-1", chain_id = 1, symbol = "USDT", balance = "1520.5", decimals = 6,
+            token_address = "0xdac17f958d2ee523a2206206994597c13d831ec7", price_usd = 1.0,
+        ),
+        recipient = ALICE_FULL,
+        confirm_amount = "120",
+        token_amount = "120",
+    )
+
+    private fun boardContext(s: VelaStrings) = app.getvela.wallet.feature.send.SendLive.Context(
+        strings = s,
+        chainNames = mapOf(1 to NETWORKS[0].name),
+        explorers = emptyMap(),
+        money = app.getvela.wallet.feature.wallet.WalletLive.Money.dollars(),
+        fromName = WalletFixtures.NAME,
+        fromAddress = WalletFixtures.ADDRESS_FULL,
+    )
+
+    /**
+     * SD3D: one transaction in flight per account and network — the confirm
+     * is held, and the core's one line sits under it until the previous
+     * transaction is final (or has stalled for ten minutes).
+     */
+    private fun heldConfirm(s: VelaStrings): SendConfirmModel = app.getvela.wallet.feature.send.SendLive.confirm(
+        sendConfirm(s, SendFormMode.Single),
+        boardSend().copy(
+            stage = app.getvela.wallet.feature.send.core.SendStage.Confirm,
+            // A settled fee: what holds the confirm is the previous transaction, not the fee.
+            fee = app.getvela.wallet.feature.send.core.FeeEstimateView(
+                chain_id = 1, total_wei = "123000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+                relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+                deployed = true, tier = app.getvela.wallet.feature.send.core.FeeTier.Standard, quoted = true,
+                fee_asset = app.getvela.wallet.feature.send.core.FeeAssetView.Native,
+            ),
+            can_confirm = false,
+            previous_pending = app.getvela.wallet.feature.send.core.SendPreviousPending(
+                chain_id = 1, user_op_hash = "0x" + "f1".repeat(32), key = I18nKeys.Flows.PREVIOUS_PENDING,
+            ),
+        ),
+        boardContext(s),
+    )
+
+    /** SD4D: the relay refused the send — told by its reason (`refusal_key`), never "the fee rose". */
+    private fun refusedReceipt(s: VelaStrings): SendReceiptModel = app.getvela.wallet.feature.send.SendLive.receipt(
+        sendReceipt(s, ReceiptStage.Submitted),
+        boardSend().copy(
+            stage = app.getvela.wallet.feature.send.core.SendStage.Receipt,
+            user_op_hash = "0x" + "5c".repeat(32),
+            receipt = app.getvela.wallet.feature.send.core.SendReceiptView(
+                status = app.getvela.wallet.feature.send.core.SendReceiptStatus.Failed,
+                refusal_key = I18nKeys.Flows.SIGN_WENT_FIRST,
+                amount = "120",
+                usd_value = 120.0,
+            ),
+        ),
+        boardContext(s),
+    )
 }

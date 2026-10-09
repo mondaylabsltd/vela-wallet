@@ -103,8 +103,9 @@ class SigningFixturesTest {
     fun everyScenarioBuilds() {
         // The 33 of the canon, CS36 — the wallet's own backup — CS37–CS42,
         // spec 102's hand-off card (CS40/CS41: the card a send raises on its
-        // own), and CS43/CS44, a key ceremony waiting on its page.
-        assertEquals(42, SigningScreenState.entries.size)
+        // own), CS43/CS44, a key ceremony waiting on its page, and CS45–CS50,
+        // the correctness batch's boards (drawn through the live builders).
+        assertEquals(48, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
@@ -222,6 +223,47 @@ class SigningFixturesTest {
         val speed = (model.fee as FeeModel.OnChain).speed!!
         assertTrue(speed.open && speed.gasPriceLine)
         assertTrue("a tier still measuring", speed.options.any { it.gasPrice == null })
+    }
+
+    /**
+     * CS45–CS50, the correctness batch's boards, say what the live builders
+     * say: the held confirm's one line; a switched coin's figure kept with the
+     * measuring sign while the confirm waits, then settled; the fee row and
+     * the footer naming one cause — the chain out of reach, or a fault inside
+     * the app, never the chain for that; a refusal told by its reason.
+     */
+    @Test
+    fun theCorrectnessBoardsSayWhatTheLiveBuildersSay() {
+        val en = enStrings()
+        fun board(state: SigningScreenState) = SigningFixtures.build(state, en)
+        fun row(state: SigningScreenState) = board(state).fee as FeeModel.OnChain
+
+        val held = board(SigningScreenState.CS45)
+        assertFalse(held.confirmEnabled)
+        assertEquals(en.t("componentsUi.signing.confirmBlock.previousPending"), held.confirmBlockLine)
+
+        val provisional = row(SigningScreenState.CS46)
+        assertTrue("the switched figure stays: ${provisional.value}", provisional.value.startsWith("~") && provisional.value.contains("USDC"))
+        assertTrue("with the measuring sign", provisional.measuring && provisional.refreshing)
+        assertFalse(board(SigningScreenState.CS46).confirmEnabled)
+        val settled = row(SigningScreenState.CS47)
+        assertEquals(provisional.value, settled.value)
+        assertFalse(settled.measuring)
+        assertTrue(board(SigningScreenState.CS47).confirmEnabled)
+
+        val chainDown = row(SigningScreenState.CS48)
+        assertEquals(en.t("componentsUi.gas.reasonChainDown", mapOf("chain" to "Ethereum")), chainDown.warning)
+        val internal = row(SigningScreenState.CS49)
+        assertEquals(en.t("componentsUi.gas.reasonInternal"), internal.warning)
+        assertFalse("never the chain's words for a fault of the app's", internal.warning!!.contains("Ethereum"))
+        for (state in listOf(SigningScreenState.CS48, SigningScreenState.CS49)) {
+            assertEquals("the footer names the fee failure", en.t("componentsUi.signing.confirmBlock.feeFailed"), board(state).confirmBlockLine)
+            assertTrue("and the row is the retry", row(state).tappable)
+        }
+
+        val refused = board(SigningScreenState.CS50).receipt!!
+        assertTrue(refused.captions.toString(), refused.captions.contains(en.t("componentsUi.signing.wentFirst")))
+        assertFalse(refused.captions.contains(en.t("send.txRejectedFees")))
     }
 
     @Test

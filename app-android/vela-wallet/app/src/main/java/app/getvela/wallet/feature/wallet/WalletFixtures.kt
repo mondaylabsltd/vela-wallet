@@ -3,6 +3,8 @@ package app.getvela.wallet.feature.wallet
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.wallet.core.FeedLine
+import app.getvela.wallet.feature.wallet.core.FeedTxKind
 
 /**
  * Canonical wallet-home fixtures (spec 015, data-model.md — the single canon
@@ -443,6 +445,86 @@ object WalletFixtures {
                     rows = chainRows(strings),
                 ),
             )
+
+            WalletScreenState.H10 -> liveHidden(base, strings)
         }
+    }
+
+    /**
+     * H10 — balance privacy through the LIVE builder: the hidden half of the
+     * core's privacy fixture (`rust/crates/vela-core/tests/fixtures/privacy-hidden.json`,
+     * its digits and rows; dated today and yesterday so the headers read as a
+     * person would see them) into [WalletLive.home]. Every money figure is
+     * the mask — the total, each holding's amount AND worth, each row whose
+     * figure the core calls money, a swap's "received"; an unlimited
+     * allowance (a risk to see) and a signature with no figure keep what they
+     * draw.
+     */
+    private fun liveHidden(base: WalletHomeModel, strings: VelaStrings): WalletHomeModel {
+        val now = System.currentTimeMillis()
+        val today = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis.toDouble()
+        val yesterday = today - 24 * 60 * 60 * 1000.0
+        val usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        val view = app.getvela.wallet.feature.wallet.core.BalanceView(
+            address = ADDRESS_FULL,
+            hidden = true,
+            last_refreshed_at_ms = now - 120_000.0,
+            tokens = listOf(
+                app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54321", decimals = 6, token_address = usdc, price_usd = 1.0),
+            ),
+            switcher = app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(hidden = true),
+        )
+        fun item(
+            id: String, kind: app.getvela.wallet.feature.wallet.core.FeedTxKind, direction: app.getvela.wallet.feature.wallet.core.FeedDirection,
+            value: String?, symbol: String, chain: Int, day: Double, maskable: Boolean,
+            subtitle: List<app.getvela.wallet.feature.wallet.core.FeedLine>, dapp: app.getvela.wallet.feature.wallet.core.FeedDapp? = null,
+        ) = app.getvela.wallet.feature.wallet.core.FeedRow.Item(
+            app.getvela.wallet.feature.wallet.core.FeedItem(
+                id = id, direction = direction, value = value, symbol = symbol, chain_id = chain, timestamp = (day + 36_000_000) / 1000,
+                day_start_ms = day, kind = kind, status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Confirmed,
+                priced = value != null, usd_value = value?.toDoubleOrNull() ?: 0.0, dapp = dapp, subtitle = subtitle, figure_maskable = maskable,
+            ),
+        )
+        fun header(day: Double) = app.getvela.wallet.feature.wallet.core.FeedRow.Header(id = "day-${day.toLong()}", day_start_ms = day, timestamp = day / 1000)
+        val In = app.getvela.wallet.feature.wallet.core.FeedDirection.In
+        val Out = app.getvela.wallet.feature.wallet.core.FeedDirection.Out
+        fun dapp(term: String, allowance: app.getvela.wallet.feature.wallet.core.FeedAllowance? = null, received: app.getvela.wallet.feature.wallet.core.FeedDappChange? = null, offChain: Boolean = false) =
+            app.getvela.wallet.feature.wallet.core.FeedDapp(
+                intent_term = term, place = "swap.example", site = "swap.example", allowance = allowance,
+                received = received, estimated = received != null, off_chain = offChain,
+            )
+        val feed = app.getvela.wallet.feature.wallet.core.FeedView(
+            hidden = true,
+            rows = listOf(
+                header(today),
+                item("received", FeedTxKind.Receive, In, "289.5", "USDT", 1, today, true, listOf(FeedLine.From(address = "0xcccccccccccccccccccccccccccccccccccccccc"))),
+                header(yesterday),
+                item("sent", FeedTxKind.Send, Out, "163.25", "USDC", 1, yesterday, true, listOf(FeedLine.To(address = "0xdddddddddddddddddddddddddddddddddddddddd", name = "Bea"))),
+                item(
+                    "swap", FeedTxKind.DappTx, Out, "237.5", "USDC", 100, yesterday, true, listOf(FeedLine.Network(100)),
+                    dapp("intentContractCall", received = app.getvela.wallet.feature.wallet.core.FeedDappChange(direction = In, verified = true, symbol = "xDAI", value = "128.75", decimals = 18)),
+                ),
+                item(
+                    "permit", FeedTxKind.SignTypedData, Out, null, "", 1, yesterday, true, listOf(FeedLine.Network(1)),
+                    dapp("permitIntent", allowance = app.getvela.wallet.feature.wallet.core.FeedAllowance(symbol = "USDC", token = usdc, decimals = 6, value = "352"), offChain = true),
+                ),
+                item(
+                    "permit-unlimited", FeedTxKind.SignTypedData, Out, null, "", 1, yesterday, false, listOf(FeedLine.Network(1)),
+                    dapp("permitIntent", allowance = app.getvela.wallet.feature.wallet.core.FeedAllowance(symbol = "USDC", token = usdc, unlimited = true), offChain = true),
+                ),
+                item("signature", FeedTxKind.SignMessage, Out, null, "", 1, yesterday, false, listOf(FeedLine.Network(1)), dapp("messageIntent", offChain = true)),
+            ),
+        )
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        return WalletLive.home(
+            base, view, feed, app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD"), strings, chains, now = now,
+        ).copy(state = WalletScreenState.H10)
     }
 }
