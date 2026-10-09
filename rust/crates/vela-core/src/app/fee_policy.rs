@@ -506,6 +506,18 @@ pub struct FeeAssetQuote {
     /// gets exactly the answer it got before issue 682.
     #[serde(default)]
     pub native_usd_floor_price: Option<String>,
+    /// The relay's own minimum for this row, in base units (`minimumAmount`
+    /// on `vela_getInBandGasQuote`, relay `fix/held-nonce-and-floor` §3) —
+    /// passed through as the relay wrote it, a hex quantity (a decimal
+    /// string reads too). Native: exactly $0.01 of the coin at the relay's
+    /// price, or its 0.000001-coin safety floor when it has none; a
+    /// stablecoin: 0.01 of it. When present, the wallet floors at THIS, not
+    /// at its own 0.00001-coin rule, which on a coin dearer than $1,000 was
+    /// more than a cent. `#[serde(default)]`: an older (or self-hosted) relay
+    /// publishes none, and today's rule stands — it is what such a relay
+    /// admits.
+    #[serde(default)]
+    pub minimum_amount: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1023,21 +1035,60 @@ pub fn published_in_band_fee_amount(
     in_band_amount(mul_wide(total_gas, per_gas), fee_asset, native_asset)
 }
 
-/// The fee for a native charge of `charged` wei: floored at the native
-/// minimum, then — for a stablecoin fee — converted at the two USD prices and
-/// floored at a cent of the coin. Exact in 256 bits; `None` refuses.
+/// The minimums a relay published on its quote rows (`minimumAmount`, relay
+/// `fix/held-nonce-and-floor` §3), base units. `None`: the relay published
+/// none (an older or self-hosted one), and the wallet's own rule stands.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Minimums {
+    native: Option<u128>,
+    fee: Option<u128>,
+}
+
+/// The fee for a native charge of `charged` wei with no published minimum —
+/// [`in_band_amount_with`] under today's rule.
 fn in_band_amount(
     charged: U256,
     fee_asset: &AssetPricing,
     native_asset: &AssetPricing,
 ) -> Option<u128> {
+    in_band_amount_with(charged, fee_asset, native_asset, Minimums::default())
+}
+
+/// The fee for a native charge of `charged` wei.
+///
+/// - **Native:** floored at the native minimum. Today's rule: $0.01 of the
+///   coin, never under the older relay's 0.00001-coin admission floor (more
+///   than a cent on any coin dearer than $1,000 — 2.5¢ on ETH at $2,500). A
+///   relay that publishes its minimum (`minimumAmount`) admits and settles
+///   at that — exactly $0.01 of the coin at its price, or its 0.000001-coin
+///   dust floor without one, raised to the wallet's own cent when only the
+///   shell can price the coin — so the wallet floors at that instead.
+/// - **Stablecoin:** the CHARGE converted at the two USD prices — never the
+///   native minimum converted: a stablecoin fee is admitted at 0.01 of the
+///   coin and the relay's stable settlement asks no native floor, so the
+///   converted native floor charged ~2.5¢ on every ETH L2 for a rule that
+///   was never the stablecoin's. Floored at $0.01 of the coin, at 0.01 of the
+///   coin (what any relay admits) and at the relay's published minimum.
+///
+/// **A published minimum only ever LOWERS what today's rule charges, never
+/// raises it**: a relay that raised its floor past today's rule is a change
+/// to the two-repo contract, not something a quote row may impose — a
+/// compromised or broken relay must not be able to name the fee through it.
+///
+/// Exact in 256 bits; `None` refuses.
+fn in_band_amount_with(
+    charged: U256,
+    fee_asset: &AssetPricing,
+    native_asset: &AssetPricing,
+    minimums: Minimums,
+) -> Option<u128> {
     if !native_asset.is_native {
         return None;
     }
     let native_unit = pow10_wide(native_asset.decimals)?;
-    // 0.00001 native coin — the relay's admission floor (`admission.rs`); the
-    // client never reimburses below it. Below 5 decimals it collapses to one
-    // base unit.
+    // 0.00001 native coin — the older relay's admission floor (`admission.rs`
+    // before `fix/held-nonce-and-floor`); today's rule never reimburses below
+    // it. Below 5 decimals it collapses to one base unit.
     let admission_floor = if native_asset.decimals >= 5 {
         pow10_wide(native_asset.decimals - 5)?
     } else {
@@ -1061,7 +1112,7 @@ fn in_band_amount(
     // the same. Priced by the relay stays first and unchanged, so nothing about
     // a priced send moves.
     //
-    // FLOOR ONLY. The stablecoin conversion below reads `native_usd` — this
+    // FLOOR ONLY. The stablecoin conversion reads `native_usd` alone — this
     // value is deliberately not merged into it, because its absence there is a
     // refusal we mean to keep, and a shell-derived price must never quietly
     // become a conversion rate.
@@ -1076,7 +1127,7 @@ fn in_band_amount(
     let cent_worth = |price: u128| -> Option<U256> {
         ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(native_unit)?, w(price))
     };
-    let native_minimum = match (native_usd, shell_usd) {
+    let today = match (native_usd, shell_usd) {
         // The relay priced it: unchanged, and this arm is the only one a priced
         // send ever reaches.
         (Some(price), _) => cent_worth(price)?.max(admission_floor),
@@ -1098,24 +1149,59 @@ fn in_band_amount(
         // Nobody can value the coin: the blind floor is the last resort.
         (None, None) => blind_minimum,
     };
-    let native_amount = charged.max(native_minimum);
+    // The relay published its minimum: what it admits and settles at. Plus
+    // the wallet's own cent when the relay could not price the coin and the
+    // shell can (the published one is then the relay's dust floor), and
+    // never above today's rule.
+    let native_minimum = match minimums.native {
+        Some(published) => {
+            let shell_cent = match (native_usd, shell_usd) {
+                (None, Some(price)) => cent_worth(price)?.min(blind_minimum),
+                _ => U256::ZERO,
+            };
+            U256::from(published).max(shell_cent).min(today)
+        }
+        None => today,
+    };
     if fee_asset.is_native {
-        return narrow(native_amount);
+        return narrow(charged.max(native_minimum));
     }
     // Stablecoin path needs the native USD price (parsed above) and the fee
     // token's; either absent/zero is "cannot quote", never rate 1.
     let native_usd = native_usd?;
     let fee_usd = usd_price_scaled(fee_asset.usd_price.as_deref(), false).filter(|v| *v != 0)?;
     let fee_unit = pow10_wide(fee_asset.decimals)?;
-    let converted = ceil_div_wide(
-        native_amount
-            .checked_mul(w(native_usd))?
-            .checked_mul(fee_unit)?,
-        native_unit.checked_mul(w(fee_usd))?,
-    )?;
-    let stable_minimum =
-        ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(fee_unit)?, w(fee_usd))?;
-    narrow(converted.max(stable_minimum))
+    let convert = |native: U256| -> Option<U256> {
+        ceil_div_wide(
+            native.checked_mul(w(native_usd))?.checked_mul(fee_unit)?,
+            native_unit.checked_mul(w(fee_usd))?,
+        )
+    };
+    let cent_of_coin = ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(fee_unit)?, w(fee_usd))?;
+    // 0.01 of the coin: what every relay's admission takes for a stablecoin,
+    // whatever its price says — so a dollar coin priced a hair above $1 is
+    // not quoted a hair under it. Only for a dollar-like coin (0.01 of it
+    // worth at most two cents): on anything dearer it would not be a cent.
+    let hundredth = if fee_asset.decimals >= 2 {
+        pow10_wide(fee_asset.decimals - 2)?
+    } else {
+        U256::from(1u64)
+    };
+    let hundredth = if hundredth <= cent_of_coin.checked_mul(U256::from(2u64))? {
+        hundredth
+    } else {
+        U256::ZERO
+    };
+    // What today's rule charged in this coin — the ceiling a published
+    // minimum may not lift the fee past.
+    let today_stable = convert(charged.max(today))?.max(cent_of_coin);
+    let published = U256::from(minimums.fee.unwrap_or(0)).min(today_stable);
+    narrow(
+        convert(charged)?
+            .max(cent_of_coin)
+            .max(hundredth)
+            .max(published),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1792,21 +1878,24 @@ enum Charge {
 }
 
 impl Charge {
-    /// The fee in `fee_asset` for `gas`.
-    fn amount(
-        self,
-        gas: u128,
-        fee_asset: &AssetPricing,
-        native_asset: &AssetPricing,
-    ) -> Option<u128> {
-        match self {
-            Charge::Marked { basis } => {
-                calculate_in_band_fee_amount(gas, basis, fee_asset, native_asset)
-            }
-            Charge::Published { per_gas } => {
-                published_in_band_fee_amount(gas, per_gas, fee_asset, native_asset)
-            }
-        }
+    /// The fee in `fee_row`'s coin for `gas`, floored at the minimums the
+    /// relay published on the two rows (when it did).
+    fn amount(self, gas: u128, fee_row: &ParsedQuote, native_row: &ParsedQuote) -> Option<u128> {
+        let charged = match self {
+            Charge::Marked { basis } => mul_wide(gas, basis).checked_mul(w(INBAND_MARKUP))?,
+            Charge::Published { per_gas } => mul_wide(gas, per_gas),
+        };
+        in_band_amount_with(
+            charged,
+            &fee_row.pricing(),
+            &native_row.pricing(),
+            Minimums {
+                native: native_row.minimum_amount,
+                fee: (!fee_row.is_native)
+                    .then_some(fee_row.minimum_amount)
+                    .flatten(),
+            },
+        )
     }
 
     /// The per-gas figure, as [`FeeEstimate::in_band_gas_basis`] reports it.
@@ -1840,6 +1929,8 @@ struct ParsedQuote {
     usd_balance: String,
     usd_price: Option<String>,
     native_usd_floor_price: Option<String>,
+    /// The relay's published minimum for this row, base units.
+    minimum_amount: Option<u128>,
 }
 
 impl ParsedQuote {
@@ -2631,7 +2722,23 @@ fn parse_quote_row(row: &FeeAssetQuote) -> ParsedQuote {
         usd_balance: row.usd_balance.clone(),
         usd_price: row.usd_price.clone(),
         native_usd_floor_price: row.native_usd_floor_price.clone(),
+        minimum_amount: row
+            .minimum_amount
+            .as_deref()
+            .and_then(parse_published_minimum),
     }
+}
+
+/// A relay's `minimumAmount`: a hex quantity (`0x…`, as the relay writes it)
+/// or a decimal string. Zero or unreadable is no minimum at all — today's
+/// rule then stands, never a floor of nothing.
+fn parse_published_minimum(text: &str) -> Option<u128> {
+    let text = text.trim();
+    let value = match text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+        Some(hex) => u128::from_str_radix(hex, 16).ok()?,
+        None => text.parse::<u128>().ok()?,
+    };
+    (value > 0).then_some(value)
 }
 
 fn try_advance(model: &mut Model) -> Command<FeeEffect, Event> {
@@ -3403,7 +3510,7 @@ fn static_auto_pick(
 ) -> Option<Option<String>> {
     let provisional = static_total_gas(ctx, None);
     let native = find_quote(rows, None)?;
-    let fee_for = |row: &ParsedQuote| charge.amount(provisional, &row.pricing(), &native.pricing());
+    let fee_for = |row: &ParsedQuote| charge.amount(provisional, row, &native);
     pick_coin(rows, &ctx.calls, measured, fee_for, excluded)
 }
 
@@ -3699,8 +3806,7 @@ fn price_generic(
         // pay. When it does not, pick again on this figure — and when nothing
         // can, the requested coin stands and says so, as it would have.
         let measured = measured_for(ctx, model.measured.as_deref());
-        let fee_for =
-            |row: &ParsedQuote| charge.amount(total_gas, &row.pricing(), &native.pricing());
+        let fee_for = |row: &ParsedQuote| charge.amount(total_gas, row, &native);
         let next = if measured.is_some() {
             // Measured (spec 083 fee): the coin that pays from what the
             // operation leaves — the same answer whether the simulation
@@ -3744,7 +3850,7 @@ fn price_generic(
     let Some(selected) = find_quote(&model.quotes, model.fee_token.as_deref()).cloned() else {
         return fail(model, FeeFailure::CalculationFailed);
     };
-    let Some(fee_amount) = charge.amount(total_gas, &selected.pricing(), &native.pricing()) else {
+    let Some(fee_amount) = charge.amount(total_gas, &selected, &native) else {
         return fail(model, FeeFailure::CalculationFailed);
     };
     // Invariant ⑧ (`FeeTokenSelector.tsx:74`), applied to a REQUESTED fee
@@ -4276,7 +4382,7 @@ fn repick_quoted(model: &mut Model, ctx: &RequestCtx) {
     let Some(native) = find_quote(&model.quotes, None).cloned() else {
         return;
     };
-    let fee_for = |row: &ParsedQuote| charge.amount(total_gas, &row.pricing(), &native.pricing());
+    let fee_for = |row: &ParsedQuote| charge.amount(total_gas, row, &native);
     let target = pick_coin(
         &model.quotes,
         &ctx.calls,
@@ -4484,9 +4590,7 @@ fn fee_amount_for_option(model: &Model, option: &ParsedQuote) -> Option<u128> {
         ));
     }
     let native = find_quote(&model.quotes, None)?;
-    model
-        .charge?
-        .amount(estimate.total_gas, &option.pricing(), &native.pricing())
+    model.charge?.amount(estimate.total_gas, option, &native)
 }
 
 // ---------------------------------------------------------------------------

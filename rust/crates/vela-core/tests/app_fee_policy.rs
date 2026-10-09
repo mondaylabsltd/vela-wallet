@@ -94,6 +94,7 @@ const COLLECTOR: &str = "0x4444444444444444444444444444444444444444";
 
 fn native_row(balance: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: NATIVE_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Native,
         fee_token: None,
@@ -108,6 +109,7 @@ fn native_row(balance: &str) -> FeeAssetQuote {
 
 fn usdc_row(balance: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: USDC_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(USDC.to_owned()),
@@ -122,6 +124,7 @@ fn usdc_row(balance: &str) -> FeeAssetQuote {
 
 fn pathusd_row(balance: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: COLLECTOR.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(TEMPO_DEFAULT_FEE_TOKEN.to_owned()),
@@ -441,7 +444,8 @@ fn conversion_rounds_native_up_fee_token_down_never_undercharging() {
         Some(186_870_000_000)
     );
 
-    // And the conversion itself ceils: $18687.1 worth of fee units → 18688.
+    // And the conversion itself ceils: 3e13 wei (gas 1e13 × 1 × 3) is
+    // 0.00003 ETH × $1868.71 = $0.0560613 = 56061.3 fee units → 56062.
     let native = AssetPricing {
         is_native: true,
         decimals: 18,
@@ -455,8 +459,8 @@ fn conversion_rounds_native_up_fee_token_down_never_undercharging() {
         native_usd_floor_price: None,
     };
     assert_eq!(
-        calculate_in_band_fee_amount(1, 1, &usdc, &native),
-        Some(18_688)
+        calculate_in_band_fee_amount(10_000_000_000_000, 1, &usdc, &native),
+        Some(56_062)
     );
 }
 
@@ -676,9 +680,11 @@ fn a_relay_priced_coin_ignores_the_floor_price_entirely() {
             calculate_in_band_fee_amount(200_000, 1_000_000_000, &usdc, &native),
             Some(1_121_220)
         );
+        // A stablecoin fee is the charge converted, floored at its own cent —
+        // never the native 0.00001-coin floor converted (W-F1).
         assert_eq!(
             calculate_in_band_fee_amount(1, 1, &usdc, &native),
-            Some(18_687)
+            Some(10_000)
         );
     }
 }
@@ -826,10 +832,12 @@ fn in_band_fee_converts_to_stable_with_cent_floor() {
         calculate_in_band_fee_amount(200_000, 1_000_000_000, &usdc, &native),
         Some(1_121_220)
     );
-    // 1 wei × 3 is below the 0.00001 ETH floor; $0.018687 exceeds $0.01.
+    // 1 wei × 3 is dust: a stablecoin fee floors at its own $0.01 — not at
+    // the native 0.00001 ETH floor converted ($0.018687 here, 2.5¢ at ETH
+    // $2,500), which no relay ever asked of a stablecoin (W-F1).
     assert_eq!(
         calculate_in_band_fee_amount(1, 1, &usdc, &native),
-        Some(18_687)
+        Some(10_000)
     );
     // If the native floor converts below one cent, stablecoin payment still
     // floors at $0.01.
@@ -4324,6 +4332,7 @@ const USDT: &str = "0x5555555555555555555555555555555555555555";
 
 fn usdt_row(balance: &str, usd: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: USDC_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(USDT.to_owned()),
@@ -5529,6 +5538,7 @@ fn bnb_row(balance: &str) -> FeeAssetQuote {
 /// A BNB Chain stablecoin row: 18 decimals, $1.
 fn bsc_stable_row(token: &str, symbol: &str, balance: &str, usd: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: USDC_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(token.to_owned()),
@@ -5813,6 +5823,7 @@ fn pol_row(balance: &str) -> FeeAssetQuote {
 
 fn polygon_stable_row(token: &str, symbol: &str, balance: &str, usd: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: USDC_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(token.to_owned()),
@@ -6201,4 +6212,190 @@ fn a_priced_quote_ignores_its_deadline_and_a_refresh_keeps_the_one_on_screen() {
         view.fee.is_some(),
         "the quote on screen survives a hung refresh"
     );
+}
+
+// ===========================================================================
+// The floor (relay `fix/held-nonce-and-floor` §3): $0.01, not 0.00001 ETH
+// ===========================================================================
+
+/// ETH at $2,500, dust gas: a USDC fee is exactly $0.01 — not the 0.00001 ETH
+/// native floor converted ($0.025), which no relay ever asked of a
+/// stablecoin (W-F1).
+#[test]
+fn a_usdc_fee_on_an_eth_l2_floors_at_one_cent_not_at_the_native_floor() {
+    let eth = AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: Some("2500".to_owned()),
+        native_usd_floor_price: None,
+    };
+    let usdc = AssetPricing {
+        is_native: false,
+        decimals: 6,
+        usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
+    };
+    assert_eq!(
+        calculate_in_band_fee_amount(1, 1, &usdc, &eth),
+        Some(10_000)
+    );
+    // A dollar coin priced a hair over $1 still pays 0.01 of it — what every
+    // relay admits for a stablecoin — never a hair under.
+    let dear_usdc = AssetPricing {
+        usd_price: Some("1.0001".to_owned()),
+        ..usdc.clone()
+    };
+    assert_eq!(
+        calculate_in_band_fee_amount(1, 1, &dear_usdc, &eth),
+        Some(10_000)
+    );
+    // The native fee keeps today's rule with no published minimum: an older
+    // relay admits nothing under 0.00001 ETH.
+    assert_eq!(
+        calculate_in_band_fee_amount(1, 1, &eth, &eth),
+        Some(10_000_000_000_000)
+    );
+}
+
+/// The quote machine on dust gas, with rows as `rows` say.
+fn dust_quote(rows: Vec<FeeAssetQuote>, fee_token: Option<&str>) -> Sut {
+    let mut sut = Sut::new();
+    sut.dispatch(request_in(CHAIN, vec![], fee_token));
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some("1".to_owned()),
+        base_fee: Some("0".to_owned()),
+        priority_fee: Some("0".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote {
+        quote: Some(FeeBundlerQuote {
+            max_fee_per_gas: "2".to_owned(),
+            max_priority_fee_per_gas: None,
+            network_fee_per_gas: Some("1".to_owned()),
+            relayer_fee_per_gas: Some("1".to_owned()),
+            in_band_fee_per_gas: None,
+        }),
+    });
+    sut.resolve(Res::InBandQuotes { quotes: Some(rows) });
+    sut.resolve(estimated());
+    sut
+}
+
+fn priced_at(mut row: FeeAssetQuote, usd: &str, minimum: Option<&str>) -> FeeAssetQuote {
+    row.usd_price = Some(usd.to_owned());
+    row.minimum_amount = minimum.map(str::to_owned);
+    row
+}
+
+fn amount_of(sut: &Sut) -> String {
+    let fee = sut.view().fee.expect("quoted");
+    match fee.fee_asset {
+        FeeAssetView::Native => fee.total_wei,
+        FeeAssetView::Erc20 { amount, .. } => amount,
+    }
+}
+
+/// A relay that publishes its minimum is floored at THAT — $0.01 of ETH at
+/// its price, 0.000004 ETH at $2,500 — not at the 0.00001 ETH an older relay
+/// needed. An older relay (no field) keeps today's rule, which it admits.
+#[test]
+fn a_published_native_minimum_is_the_floor() {
+    let rich = || native_row("1000000000000000000");
+    // $0.01 at $2,500 is 4e12 wei = 0x3a352944000, as the relay writes it.
+    let sut = dust_quote(
+        vec![
+            priced_at(rich(), "2500", Some("0x3a352944000")),
+            usdc_row("5000000"),
+        ],
+        None,
+    );
+    assert_eq!(amount_of(&sut), "4000000000000", "$0.01 of ETH");
+    // A decimal string reads too.
+    let sut = dust_quote(
+        vec![
+            priced_at(rich(), "2500", Some("4000000000000")),
+            usdc_row("5000000"),
+        ],
+        None,
+    );
+    assert_eq!(amount_of(&sut), "4000000000000");
+    // An older relay: no minimum published, today's 0.00001 ETH.
+    let sut = dust_quote(
+        vec![priced_at(rich(), "2500", None), usdc_row("5000000")],
+        None,
+    );
+    assert_eq!(amount_of(&sut), "10000000000000");
+    // Zero or garbage is no minimum at all.
+    for nothing in ["0x0", "0", "lots"] {
+        let sut = dust_quote(
+            vec![
+                priced_at(rich(), "2500", Some(nothing)),
+                usdc_row("5000000"),
+            ],
+            None,
+        );
+        assert_eq!(amount_of(&sut), "10000000000000", "{nothing}");
+    }
+}
+
+/// A published minimum only ever LOWERS today's rule: a relay naming 1 ETH as
+/// its minimum does not get 1 ETH.
+#[test]
+fn a_published_minimum_never_raises_the_fee() {
+    let sut = dust_quote(
+        vec![
+            priced_at(
+                native_row("1000000000000000000"),
+                "2500",
+                Some("0xde0b6b3a7640000"),
+            ),
+            usdc_row("5000000"),
+        ],
+        None,
+    );
+    assert_eq!(amount_of(&sut), "10000000000000", "today's rule, no more");
+
+    let mut usdc = usdc_row("5000000");
+    usdc.minimum_amount = Some("0x3b9aca00".to_owned()); // 1,000 USDC
+    let sut = dust_quote(
+        vec![
+            priced_at(native_row("1000000000000000000"), "2500", None),
+            usdc,
+        ],
+        Some(USDC),
+    );
+    // Today's rule in USDC was the 0.00001 ETH floor converted: $0.025.
+    assert_eq!(amount_of(&sut), "25000", "never past today's rule");
+}
+
+/// The stablecoin's own published minimum floors it (0.01 USDC as the relay
+/// publishes it), and the native one does not touch it.
+#[test]
+fn a_published_stable_minimum_floors_the_stable_fee() {
+    let mut usdc = usdc_row("5000000");
+    usdc.minimum_amount = Some("0x2710".to_owned()); // 0.01 USDC
+    let sut = dust_quote(
+        vec![
+            priced_at(
+                native_row("1000000000000000000"),
+                "2500",
+                Some("0x3a352944000"),
+            ),
+            usdc,
+        ],
+        Some(USDC),
+    );
+    assert_eq!(amount_of(&sut), "10000", "$0.01 of USDC");
+}
+
+/// Unpriced by the relay, priced by the shell: the published dust floor is
+/// raised to the wallet's own cent (issue 682's price), and capped as before.
+#[test]
+fn an_unpriced_coin_with_a_published_dust_floor_still_pays_a_cent() {
+    let mut okb = native_row("1000000000000000000");
+    okb.usd_price = None;
+    okb.native_usd_floor_price = Some("125".to_owned());
+    okb.minimum_amount = Some("0xe8d4a51000".to_owned()); // 1e12 = 0.000001 OKB
+    let sut = dust_quote(vec![okb], None);
+    // $0.01 at $125 = 0.00008 OKB.
+    assert_eq!(amount_of(&sut), "80000000000000");
 }

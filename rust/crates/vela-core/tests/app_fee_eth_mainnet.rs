@@ -257,6 +257,7 @@ impl Sut {
 
 fn native_row() -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: RELAY_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Native,
         fee_token: None,
