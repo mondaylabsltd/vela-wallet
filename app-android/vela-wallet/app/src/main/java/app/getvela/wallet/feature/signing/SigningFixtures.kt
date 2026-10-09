@@ -314,7 +314,8 @@ object SigningFixtures {
 
     /**
      * CS43/CS44: a key ceremony waiting on a self-hosted page — the core's
-     * own title (`trustedSignerCeremonyTitleKey`) and key row
+     * own title (`trustedSignerCeremonyTitleKey`, the card's line under the
+     * wait) and key row
      * (`trustedSignerCeremonyKeyLabel`) over the operation as the machines
      * write it: a key made on a phone (CS43), a sign-in with this device's
      * key (CS44). `null` for every other board.

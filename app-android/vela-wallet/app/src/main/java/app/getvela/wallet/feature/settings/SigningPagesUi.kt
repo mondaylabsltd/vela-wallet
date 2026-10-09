@@ -72,7 +72,7 @@ internal fun SigningPagesPageBody(
             } else {
                 {
                     SigningPageTextAction(model.rename) { onRename(row.url) }
-                    SigningPageTextAction(model.remove, danger = true) { onRemove(row.url) }
+                    SigningPageTextAction(model.remove) { onRemove(row.url) }
                 }
             },
         )
