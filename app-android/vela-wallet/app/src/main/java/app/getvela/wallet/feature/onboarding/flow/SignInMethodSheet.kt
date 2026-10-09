@@ -38,6 +38,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.LocalVelaStrings
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
+import app.getvela.wallet.feature.settings.components.SettingsDivider
 
 /**
  * The ways to sign in — this device, a nearby device by scan, a hardware
@@ -110,41 +111,16 @@ fun SignInMethodSheet(
                 VelaSecondaryButton(strings.t("common.cancel"), onClick = { picking = false }, modifier = Modifier.fillMaxWidth())
                 return@Column
             }
-            KeyMethod.entries.forEach { method ->
+            // The keys screen's rows (issue #475): one design for "a place a
+            // key lives" — a hairline between them, one line under the title.
+            KeyMethod.entries.forEachIndexed { index, method ->
+                if (index > 0) SettingsDivider()
                 val (title, body) = methodCopy(method, KeyChooser.SignIn, strings)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(method, chosen) }
-                        .padding(vertical = VelaSpacing.lg),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            color = colors.fgBase,
-                            fontFamily = VelaFontFamily,
-                            fontWeight = VelaFontWeight.semibold,
-                            fontSize = VelaTextSize.lg,
-                        )
-                        Text(
-                            text = body,
-                            color = colors.fgMuted,
-                            fontFamily = VelaFontFamily,
-                            fontSize = VelaTextSize.sm,
-                            lineHeight = VelaLeading.normal * VelaTextSize.sm,
-                        )
-                    }
-                    Icon(
-                        imageVector = VelaIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = colors.fgSubtle,
-                        modifier = Modifier.size(VelaIconSize.lg),
-                    )
-                }
+                KeyPlaceRow(title = title, body = body) { onPick(method, chosen) }
             }
             if (ownPage != null) {
-                HorizontalDivider(color = colors.borderBase, thickness = VelaBorder.hairline)
+                Spacer(modifier = Modifier.height(VelaSpacing.lg))
+                SettingsDivider()
                 OwnPageEntry(
                     chosen = chosen?.let { url -> ownPage.pages.firstOrNull { it.url == url } },
                     onOpen = {

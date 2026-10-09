@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.feature.onboarding.core.CreateStage
 import app.getvela.wallet.feature.onboarding.core.CreateView
@@ -124,8 +125,23 @@ object FlowFixtures {
         )
     }
 
+    /**
+     * The two words the core sends with a keys screen (issue #475), for a
+     * hand-built board: the heading by the count (`create_wallet::add_heading_key`)
+     * and `methods_pinned` (no key yet, and one may be added). Boards only —
+     * the live screen reads both off `CreateView` and decides neither.
+     */
+    private fun CreateView.withKeysHeading(): CreateView = copy(
+        addHeadingKey = when {
+            keys.isEmpty() -> I18nKeys.Create.ADD_KEY_BTN
+            keys.size < MAX_KEYS -> I18nKeys.Create.ADD_METHOD_LABEL
+            else -> I18nKeys.Create.KEY_LIMIT_REACHED
+        },
+        methodsPinned = keys.isEmpty() && canAddKey,
+    )
+
     val all: List<StateFixture> = buildList {
-        fun flow(code: String, view: CreateView) = add(StateFixture("Create", code, Fixture.Flow(view)))
+        fun flow(code: String, view: CreateView) = add(StateFixture("Create", code, Fixture.Flow(view.withKeysHeading())))
         fun sheet(code: String, kind: String, detail: String? = null, confirmable: Boolean = false, local: Boolean = false) =
             add(StateFixture("Failures", code, Fixture.Sheet(PromptKind(kind, detail, local = local), confirmable)))
 

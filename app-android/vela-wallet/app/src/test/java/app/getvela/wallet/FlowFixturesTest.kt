@@ -229,6 +229,24 @@ class FlowFixturesTest {
         assertTrue("the first key commits the set: no page may be chosen", !set.canChoosePage)
     }
 
+    /**
+     * Issue #475: every keys board carries the core's heading for its count —
+     * "Add a passkey" (and the places pinned open) with none, "Add another"
+     * folded with one or more, "Limit of 7 reached" at the cap.
+     */
+    @Test
+    fun theKeysBoardsCarryTheCoresHeading() {
+        val (_, none) = flows().first { it.first == "keys · signing page offered" }
+        assertEquals("onboarding.create.addKeyBtn", none.addHeadingKey)
+        assertTrue(none.methodsPinned)
+        val (_, one) = flows().first { it.first == "keys · one, needs a second" }
+        assertEquals("onboarding.create.addMethodLabel", one.addHeadingKey)
+        assertTrue(!one.methodsPinned)
+        val (_, full) = flows().first { it.first == "keys · at the cap" }
+        assertEquals("onboarding.create.keyLimitReached", full.addHeadingKey)
+        assertTrue(!full.methodsPinned)
+    }
+
     /** The cap fixture sits exactly at the core's `MAX_MULTI_KEYS`, not near it. */
     @Test
     fun theCapFixtureIsAtTheCap() {

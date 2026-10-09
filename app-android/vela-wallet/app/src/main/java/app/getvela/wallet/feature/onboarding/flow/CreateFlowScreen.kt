@@ -143,6 +143,8 @@ fun CreateFlowScreen(
                 canFinish = view.canFinish,
                 needsSecondKey = view.needsSecondKey,
                 busy = view.busy,
+                addHeadingKey = view.addHeadingKey,
+                methodsPinned = view.methodsPinned,
                 addMethods = view.addMethods,
                 signingPage = chosenPage,
                 canChoosePage = view.canChoosePage,
