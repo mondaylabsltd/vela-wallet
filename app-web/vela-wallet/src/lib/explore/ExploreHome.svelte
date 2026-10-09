@@ -86,7 +86,10 @@
 		else onselect?.(id);
 	}
 
-	/** A resume row as a site row: the tab's own title over its host. */
+	/**
+	 * A resume row as a site row: the tab's own title over its host, the host
+	 * cut from its start like the browsing bar's pill (`hostLine`).
+	 */
 	function resumeRow(tab: ResumeTabModel): SiteModel {
 		return { ...tab.site, id: tab.id, name: tab.title, host: tab.host, subtitle: tab.host };
 	}
@@ -252,7 +255,13 @@
 					/>
 					<ul>
 						{#each model.resume.tabs as tab (tab.id)}
-							<li><SiteRow site={resumeRow(tab)} onopen={() => (viewOverride = 'browsing')} /></li>
+							<li>
+								<SiteRow
+									site={resumeRow(tab)}
+									hostLine
+									onopen={() => (viewOverride = 'browsing')}
+								/>
+							</li>
 						{/each}
 					</ul>
 				</section>

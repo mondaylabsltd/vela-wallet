@@ -160,6 +160,11 @@ export type ExploreView = 'start' | 'browsing' | 'tabs';
 /**
  * One row of the home's resume section: a tab that has a page, as the core's
  * `ExploreView.resumable` hands it over (`ExploreTab` — id, title, host).
+ * Drawn as a site row, its title over its host; a host too long for the row
+ * is cut from its START, as the browsing bar's pill cuts it (the end of a
+ * host is the registrable domain): `…uniswap.org.evil.xyz`, never
+ * `app.uniswap.or…` — iOS `.truncationMode(.head)`, Android
+ * `TextOverflow.StartEllipsis`.
  */
 export interface ResumeTabModel {
 	/** The tab's id: a tap selects it and shows its page as it was left. */
