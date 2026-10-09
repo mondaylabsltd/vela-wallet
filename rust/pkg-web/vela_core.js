@@ -4913,6 +4913,29 @@ export function signEndingState(ending_json, entry_json) {
 }
 
 /**
+ * The message a dApp reads when signing ended in the error the core named
+ * `kind` (a `SignErrorKind`'s wire name), with the notice's `detail` — the
+ * core's `dapp_rpc::sign_error_words`. `null` for a kind it does not know.
+ * For the developer, not the person: EIP-1193 messages are not UI.
+ * @param {string} kind
+ * @param {string | null} [detail]
+ * @returns {string | undefined}
+ */
+export function signErrorWords(kind, detail) {
+    const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    var ptr1 = isLikeNone(detail) ? 0 : passStringToWasm0(detail, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.signErrorWords(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
  * What a site's message request asks the account to sign, before the
  * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
  * @param {string} method
@@ -5341,6 +5364,46 @@ export function tokenMark(ethereum_data_url, chain_id, symbol, token_address, na
 }
 
 /**
+ * The key row of a ceremony's card, as JSON `KeyLabel`
+ * (`{place_key, label_key}`): "New key on | This device" while a key is made,
+ * "Confirm with | USB security key" when one signs in or proves — the page's
+ * own row. `null` for an operation that is not a ceremony.
+ * @param {string} operation_json
+ * @returns {string | undefined}
+ */
+export function trustedSignerCeremonyKeyLabel(operation_json) {
+    const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.trustedSignerCeremonyKeyLabel(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * The corpus key of the title a key ceremony on a self-hosted page is drawn
+ * under while it waits (spec 102) — `componentsUi.signing.ceremonyCreate`,
+ * `.ceremonySignIn` or `.ceremonyConfirm` — or `null` for an operation that is
+ * not a ceremony. The web runs none; its gallery draws the apps' card.
+ * @param {string} operation_json
+ * @returns {string | undefined}
+ */
+export function trustedSignerCeremonyTitleKey(operation_json) {
+    const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.trustedSignerCeremonyTitleKey(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * The relying party a key minted behind `signerOrigin` belongs to, or `null`
  * for a key this wallet's own authenticators made (spec 075).
  *
@@ -5703,6 +5766,26 @@ export function validateClientData(kind, client_data_json, authenticator_data) {
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
+}
+
+/**
+ * The words of a venue refusal (spec 102), as JSON `{key, vars}`: the corpus
+ * key `VenueBlock::key()` names and the values its line takes by name
+ * (`domain`, `pageDomain`) — translate `key` with `vars` and the sentence is
+ * the core's whole. `null` for something that is not a `VenueBlock`.
+ * @param {string} block_json
+ * @returns {string | undefined}
+ */
+export function venueBlockLine(block_json) {
+    const ptr0 = passStringToWasm0(block_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.venueBlockLine(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
 }
 
 /**
