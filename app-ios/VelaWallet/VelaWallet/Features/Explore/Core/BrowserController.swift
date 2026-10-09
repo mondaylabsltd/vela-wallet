@@ -346,8 +346,9 @@ final class BrowserController {
     /// selected tab whatever it held, so a site opened from the home
     /// replaced the dApp the person had left there. A picked site (`.site`)
     /// that a tab is already on comes back as it was left. A full strip
-    /// (24 tabs) has no room for a new one, and the core then answers the
-    /// selected tab.
+    /// (24 tabs) has no room for a new one, and the core then names a tab it
+    /// can spare — a start page, else the one used longest ago, never the
+    /// dApp just left — which is selected before it loads.
     func open(_ text: String, kind: ExploreOpenKind = .address, onPage: Bool = false) {
         guard let url = dappBrowserInput(text: text) else { return }
         pageWanted = true
@@ -355,7 +356,7 @@ final class BrowserController {
             guard let self else { return }
             let shown = onPage ? explore.selectedTab : nil
             // A full strip is the core's too: it never answers a new tab
-            // the explore machine would drop, but the selected tab.
+            // the explore machine would drop, but a tab it can spare.
             let target = Self.openTarget(view: explore, shown: shown, onPage: onPage, url: url, kind: kind)
             switch target {
             case .load(let id):

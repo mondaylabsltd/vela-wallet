@@ -210,13 +210,15 @@ struct ExploreNavigationTests {
     }
 
     /// A full strip takes no new tab (the core drops `tab_opened` at its
-    /// cap), so the core's open target answers the selected tab: an open
-    /// from the home loads there, as the desktop does, rather than doing
-    /// nothing at all. The shell has no rule of its own for it.
-    @Test func aFullStripIsAnsweredWithTheSelectedTab() {
-        func strip(tabs count: Int) -> ExploreViewWire {
+    /// cap), so the core's open target names a tab it can spare rather than
+    /// doing nothing at all — never t3, the dApp just left: the tab used
+    /// longest ago (recency knows only t3, the rest follow in strip order,
+    /// t24 last), or a start-page tab. The shell has no rule of its own.
+    @Test func aFullStripIsAnsweredWithATabItCanSpare() {
+        func strip(tabs count: Int, startPage: String? = nil) -> ExploreViewWire {
             var view = ExploreViewWire(
-                favorites: [], tabs: (1...count).map { tab("t\($0)", "https://site\($0).example/") },
+                favorites: [],
+                tabs: (1...count).map { "t\($0)" == startPage ? tab("t\($0)", nil) : tab("t\($0)", "https://site\($0).example/") },
                 selectedTab: "t3", favoritesHidden: false, recentHidden: false,
                 favoritesFull: false, tabsFull: count >= 24, ready: true
             )
@@ -226,8 +228,10 @@ struct ExploreNavigationTests {
         let full = strip(tabs: 24)
         for kind in [ExploreOpenKind.address, .site] {
             #expect(BrowserController.openTarget(view: full, shown: nil, onPage: false,
-                                                 url: "https://late.example/", kind: kind) == .load("t3"))
+                                                 url: "https://late.example/", kind: kind) == .load("t24"))
         }
+        #expect(BrowserController.openTarget(view: strip(tabs: 24, startPage: "t9"), shown: nil, onPage: false,
+                                             url: "https://late.example/", kind: .address) == .load("t9"))
         // A picked site already in the strip still comes back as it was left.
         #expect(BrowserController.openTarget(view: full, shown: nil, onPage: false,
                                              url: "https://site7.example/", kind: .site) == .resume("t7"))
@@ -237,7 +241,8 @@ struct ExploreNavigationTests {
     }
 
     /// The same, end to end through the controller and the real explore
-    /// machine: the open lands in the selected tab of a full strip.
+    /// machine: the open lands in the tab a full strip can spare, which is
+    /// selected; the dApp in front keeps its page.
     @Test(.timeLimit(.minutes(5)))
     func aFullStripStillOpens() async throws {
         let tabs: [[String: Any]] = (1...24).map { n in
@@ -251,9 +256,10 @@ struct ExploreNavigationTests {
         #expect(h.browser.explore.tabsFull)
 
         h.browser.open("http://127.0.0.1:9/full")
-        await Wait.until { h.browser.explore.tabs.first { $0.id == "t3" }?.url == "http://127.0.0.1:9/full" }
+        await Wait.until { h.browser.explore.tabs.first { $0.id == "t24" }?.url == "http://127.0.0.1:9/full" }
         #expect(h.browser.explore.tabs.count == 24)
-        #expect(h.browser.explore.selectedTab == "t3")
+        #expect(h.browser.explore.selectedTab == "t24")
+        #expect(h.browser.explore.tabs.first { $0.id == "t3" }?.url == "https://site3.example/")
     }
 
     // MARK: - The home's resume section
