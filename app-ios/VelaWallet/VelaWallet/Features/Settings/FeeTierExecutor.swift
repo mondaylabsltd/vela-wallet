@@ -8,7 +8,7 @@
 //
 //  The stored value goes back RAW — whether a string is a tier is the core's
 //  call (`parse_stored`), so a name this build does not know reads as the
-//  factory `fast` instead of being coerced here into something that would then
+//  factory `standard` instead of being coerced here into something that would then
 //  go on the wire. `vela.feeTier` survives sign-out, which clears only the
 //  accounts and the active index: a speed preference belongs to the person
 //  and the device.

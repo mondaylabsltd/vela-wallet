@@ -5,7 +5,7 @@
 //! store, so there is one way a committed preference reaches disk here. The
 //! stored value goes back to the core RAW — whether a string is a tier is
 //! `fee_tier_pref::parse_stored`'s call, so a name this build does not know
-//! reads as "never chose" (the factory `fast`) instead of being coerced into
+//! reads as "never chose" (the factory `standard`) instead of being coerced into
 //! something that would then go on the wire.
 //!
 //! `vela.feeTier` survives sign-out, which clears only the accounts and the

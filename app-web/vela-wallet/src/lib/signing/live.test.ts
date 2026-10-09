@@ -782,6 +782,22 @@ describe('the speed under the fee', () => {
 		);
 		expect(model?.confirm.enabled).toBe(true);
 	});
+
+	// The dead `rapid` reads as the factory default, Standard — the core's
+	// answer, and the desktop's, iOS's and Android's. Read as Fast, a quote
+	// naming it under a Standard speed was "another tier's figure": the row
+	// said "estimating" and the confirm stayed shut.
+	it('takes a quote at the dead `rapid` as Standard’s own', () => {
+		const view = speedView('standard');
+		expect(view.tier).toBe('standard');
+		const rapid: FeeView = { ...QUOTED_FEE, fee: { ...QUOTED_FEE.fee!, tier: 'rapid' } };
+		const model = buildSigningModel(inputs({ fee: rapid, speed: { view, feeOptions: () => [] } }));
+		const fee = model?.fee;
+		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
+		expect(fee.value).not.toBe(m.feeEstimating);
+		expect(fee.speed?.value).toBe(m.speed.names.standard);
+		expect(model?.confirm.enabled).toBe(true);
+	});
 });
 
 describe('when there is nothing to sign', () => {

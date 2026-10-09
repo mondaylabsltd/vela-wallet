@@ -1308,7 +1308,7 @@ if (Symbol.dispose) FeeSpeedCore.prototype[Symbol.dispose] = FeeSpeedCore.protot
 
 /**
  * r" The default transaction speed (spec 068): the stored tier a send
- * r" starts at, the factory `fast` when nothing was chosen.
+ * r" starts at, the factory `standard` when nothing was chosen.
  */
 export class FeeTierPrefCore {
     __destroy_into_raw() {

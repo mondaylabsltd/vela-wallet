@@ -82,7 +82,7 @@ class SigningController(
     /**
      * The stored default speed (spec 069): a dApp transaction is priced — and,
      * through the quoted fee, submitted — at the speed Settings names, which
-     * is `fast` for everybody who never chose, until the sheet's own speed
+     * is `standard` for everybody who never chose, until the sheet's own speed
      * control picks another. The number preset writes each speed's gas bid.
      */
     private val preferredTier: () -> FeeTier = { FeeTier.Standard },
@@ -575,17 +575,9 @@ class SigningController(
             scope.launch {
                 _sim.value = simulated(request.chainId, calls.map { SimDeltas.Call(it.to, it.value, it.data) }, feeCalls) ?: return@launch
             }
-            // A quote goes stale while the person reads (the policy's TTL);
-            // while the sheet is still up and nothing is signing, ask again —
-            // otherwise the confirm stays shut with no way to open it.
-            scope.launch {
-                fee.collect { fee ->
-                    val view = signHost.view.value
-                    if (fee.stale && !fee.busy && view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && !answered) {
-                        speedControl.requoteStale()
-                    }
-                }
-            }
+            // A quote on the sheet is priced again by the fee core itself, once
+            // a block (`requote_interval_ms`) and at once when that fails —
+            // `stale` is only ever up while it does — so nothing here re-asks.
             // Spec 079: a quote that failed for a reason that can pass (the
             // relay unreachable, a busy estimate, the chain's node) is asked
             // again on the core's schedule while the sheet is up and nothing
