@@ -66,6 +66,7 @@ use crate::executor::passkey::{CredentialChoice, PinRequest, WindowHandle};
 use crate::executor::send::{self as send_executor, SendAnswer, SendContext};
 use crate::executor::trusted_signer;
 use crate::executor::{balance_dashboard, batch, storage, tracker};
+use crate::flows::live::form_chain;
 use crate::resident::{self, ResidentCore};
 use vela_core::app::network_admin::{
     Event as NetEvent, NetView, NetWizardErrorKind, NetWizardPhase, NetworkAdmin,
@@ -154,15 +155,6 @@ impl FeeFailedTold {
             failed
         })
     }
-}
-
-/// The chain the send form is on: the selected token's, else the sweep's
-/// (the core's `form_chain`).
-fn form_chain(view: &SendView) -> Option<u32> {
-    view.selected_token
-        .as_ref()
-        .map(|token| token.chain_id)
-        .or(view.multi_chain_id)
 }
 
 pub struct SendHost {
@@ -439,7 +431,9 @@ impl SendHost {
         self.sync_stage(cx);
         self.sync_batch(cx);
         self.ensure_watcher(cx);
-        // The form may have just reached the chain the fee session prices.
+        // The form may have just reached the chain the fee session prices —
+        // or left the chain its failure was for.
+        self.sync_fee_failed(cx);
         self.sync_fee_token(cx);
         // Back on the picker from the form: a round that settled meanwhile
         // was held back (`on_holdings`), and is due now.
@@ -1039,27 +1033,34 @@ impl SendHost {
             self.last_fee_busy = busy;
             self.dispatch(SendEvent::FeeBusyChanged { busy }, cx);
         }
-        // The card failed (or is re-asking after a failure) and holds no
-        // figure: the send machine holds its confirm and, on the confirm
-        // page, drops the figure it kept from Continue — never a confirm open
-        // on a discarded figure between two of the core's re-asks.
-        if let Some(failed) = self
-            .fee_failed_told
-            .news(self.speed.fee_view().failure.is_some())
-        {
-            if failed {
-                // The figure the machine just dropped is told again when it
-                // comes back, even the same one.
-                self.last_fee = None;
-            }
-            self.dispatch(SendEvent::FeeFailedChanged { failed }, cx);
-        }
+        self.sync_fee_failed(cx);
         self.sync_fee_token(cx);
         if let Some(fee) = self.speed.fee_view().fee.clone()
             && self.last_fee.as_ref() != Some(&fee)
         {
             self.last_fee = Some(fee.clone());
             self.dispatch(SendEvent::FeeUpdated { estimate: fee }, cx);
+        }
+    }
+
+    /// The card failed (or is re-asking after a failure) and holds no
+    /// figure: the send machine holds its confirm and, on the confirm page,
+    /// drops the figure it kept from Continue — never a confirm open on a
+    /// discarded figure between two of the core's re-asks. Only a failure
+    /// for the form's own chain counts (PR 2 polish): right after a token
+    /// switch the old chain's failure is no failure of this form. Run when
+    /// the fee session moves AND when the send form does — a switch to
+    /// another chain clears it before the card is asked anything.
+    fn sync_fee_failed(&mut self, cx: &mut Context<Self>) {
+        let failed =
+            crate::flows::live::form_fee_failure(self.speed.fee_view(), &self.view).is_some();
+        if let Some(failed) = self.fee_failed_told.news(failed) {
+            if failed {
+                // The figure the machine just dropped is told again when it
+                // comes back, even the same one.
+                self.last_fee = None;
+            }
+            self.dispatch(SendEvent::FeeFailedChanged { failed }, cx);
         }
     }
 
@@ -1509,6 +1510,34 @@ mod tests {
             });
             Some(news)
         }
+    }
+
+    /// PR 2 polish: the bridge counts the card's failure only for the chain
+    /// the form is on (`SendHost::sync_fee_failed`). Right after a token
+    /// switch the form names BNB Chain while the card still holds
+    /// Ethereum's failure — the send machine hears "not failed" then, not a
+    /// failure that was never this form's; back on Ethereum it hears it
+    /// again. Through the real send core and the real fee core's failure.
+    #[test]
+    fn another_chains_fee_failure_is_not_told_as_this_forms() {
+        let failures = crate::signing::fixtures::fee_failures();
+        let failed_here =
+            |view: &SendView| crate::flows::live::form_fee_failure(&failures.down, view).is_some();
+        let mut told = FeeFailedTold::default();
+        let mut journey = Journey::open();
+        journey.pick(&Journey::eth());
+        assert_eq!(told.news(failed_here(&journey.view())), Some(true));
+        journey.drive(SendEvent::ChangeToken);
+        journey.pick(&Journey::bnb());
+        assert_eq!(form_chain(&journey.view()), Some(56));
+        assert_eq!(
+            told.news(failed_here(&journey.view())),
+            Some(false),
+            "Ethereum's failure is not BNB Chain's"
+        );
+        journey.drive(SendEvent::ChangeToken);
+        journey.pick(&Journey::eth());
+        assert_eq!(told.news(failed_here(&journey.view())), Some(true));
     }
 
     /// The card's failure reaches the send machine once per change, and a

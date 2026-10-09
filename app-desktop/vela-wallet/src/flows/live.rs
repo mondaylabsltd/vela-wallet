@@ -1621,18 +1621,44 @@ fn fee_mark(send: &SendView) -> TokenMark {
     }
 }
 
+/// The chain the send form is on: the selected token's, else the sweep's
+/// (the core's `form_chain`). `None` while the form names no chain.
+#[must_use]
+pub fn form_chain(send: &SendView) -> Option<u32> {
+    send.selected_token
+        .as_ref()
+        .map(|token| token.chain_id)
+        .or(send.multi_chain_id)
+}
+
+/// The fee card's failure as Send may draw it — only for the form's own
+/// chain (PR 2 polish). Right after a token switch the form names another
+/// chain before the fee machine has been asked about it: the old chain's
+/// failure is no failure here — no reason line, no figure, no footer, and
+/// not "failed" to the send machine (`FeeFailedChanged`).
+#[must_use]
+pub fn form_fee_failure(
+    fee: &FeeView,
+    send: &SendView,
+) -> Option<vela_core::app::fee_policy::FeeFailureView> {
+    crate::flows::fee_failure_of(fee, form_chain(send))
+}
+
+/// The chain Send's fee is for, by name: the form's chain, else the fee
+/// coin's.
+fn fee_chain_name(send: &SendView) -> String {
+    chain_name(
+        form_chain(send)
+            .or(send.fee_coin.as_ref().map(|coin| coin.chain_id))
+            .unwrap_or(1),
+    )
+}
+
 /// The fee's failure on Send, drawn (PR 2 note 1): the core's one state for
 /// the row and the line under the confirm, on the chain the fee is for.
 fn send_fee_failure(i: &SendInputs<'_>) -> Option<crate::flows::FeeFailureLines> {
-    let failure = crate::flows::fee_failure_of(i.fee)?;
-    let chain_id = i
-        .send
-        .selected_token
-        .as_ref()
-        .map(|token| token.chain_id)
-        .or(i.send.fee_coin.as_ref().map(|coin| coin.chain_id))
-        .unwrap_or(1);
-    Some(i.s.fee_failure.row(&failure, &chain_name(chain_id)))
+    let failure = form_fee_failure(i.fee, i.send)?;
+    Some(i.s.fee_failure.row(&failure, &fee_chain_name(i.send)))
 }
 
 pub(crate) fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
@@ -1687,6 +1713,21 @@ pub(crate) fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
             && quote.is_some()
             && failure.is_none())
         .then(|| i.s.fee_stale.clone()),
+        // PR 2 polish: a failed fee whose tap does nothing (`would_fail`
+        // with no other coin left) is no control — no chevron promising a
+        // list, no click. Every other row opens the coins or asks again.
+        control: failure.as_ref().is_none_or(|failure| {
+            failure.tap != vela_core::app::fee_policy::FeeFailureTap::Nothing
+        }),
+        // The line under the row keeps room for the longest sentence it can
+        // come to say on this chain, so a reason that wraps (the English
+        // "Something went wrong inside Vela…" is two lines in this column)
+        // moves nothing under it — the speed control and Continue stay put.
+        room: {
+            let mut room = i.s.fee_failure.reasons(&fee_chain_name(i.send));
+            room.push(i.s.fee_stale.clone());
+            room
+        },
         reason: failure.and_then(|failure| failure.reason),
     }
 }
@@ -3677,6 +3718,15 @@ pub(crate) fn confirm_fee_fact(i: &SendInputs<'_>) -> FactRow {
     }
 }
 
+/// Whether the confirm's fee line is a control (PR 2 polish): the fee
+/// failed and a tap on it does something (`FeeFailureView.tap` — ask again,
+/// or open the fee coins), exactly as the form's row does. The footer says
+/// "Tap it to retry" only then, so the line it names must answer a tap.
+pub(crate) fn confirm_fee_control(i: &SendInputs<'_>) -> bool {
+    send_fee_failure(i)
+        .is_some_and(|failure| failure.tap != vela_core::app::fee_policy::FeeFailureTap::Nothing)
+}
+
 /// The ONE line under the held confirm: the account's previous transaction
 /// on this network still going through (correctness batch item 3) — whatever
 /// `fee_busy` says — else the fee's failure in the same words the signing
@@ -3761,8 +3811,11 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
     // Who is paid (spec 097 F, S2): the payee the core names, with the short
     // address under any name — never a name alone, and never the stale
     // single `recipient` on a split, whose people are the rows below.
+    // The fee line, third: From, the network, the fee.
+    let mut fee_at = 2;
     if let Some(payee) = single_payee(send) {
         facts.insert(1, payee_fact(&s.to_label, &payee, s));
+        fee_at += 1;
     }
     // The speed, but only when it was CHOSEN for this send, or taken because
     // it was free (spec 068 / issue 686). The confirm is the last screen
@@ -3920,6 +3973,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             CtaState::Disabled
         },
         held,
+        fee_fact: confirm_fee_control(i).then_some(fee_at),
         handoff: None,
     }
 }
@@ -5425,6 +5479,8 @@ mod tests {
         let failures = crate::signing::fixtures::fee_failures();
         let mut send = CoreHost::<Send>::new().view();
         send.stage = SendStage::Confirm;
+        // On Ethereum, the chain the failures are for.
+        send.selected_token = Some(eth_on(1));
         let draw = |send: &SendView, fee: &vela_core::app::fee_policy::FeeView| {
             let i = SendInputs {
                 send,
@@ -5486,6 +5542,7 @@ mod tests {
         assert_eq!(row.value, loc.t(ESTIMATE_FAILED_KEY));
         assert_eq!(fact.value, loc.t(ESTIMATE_FAILED_KEY));
         assert_eq!(held, Some(loc.t(FEE_FAILED_KEY)));
+        assert!(row.control, "the row asks again");
 
         send.previous_pending = Some(SendPreviousPending {
             chain_id: 1,
@@ -5498,6 +5555,158 @@ mod tests {
             Some(s.previous_pending.clone()),
             "one line: the hold's"
         );
+    }
+
+    /// One Ethereum-family coin on `chain_id`, for the form's chain.
+    fn eth_on(chain_id: u32) -> vela_core::app::send::SendToken {
+        vela_core::app::send::SendToken {
+            network: "ethereum".to_owned(),
+            chain_id,
+            symbol: "ETH".to_owned(),
+            balance: "1".to_owned(),
+            decimals: 18,
+            token_address: None,
+            price_usd: Some(2_500.0),
+            logo_urls: Vec::new(),
+            spam: false,
+        }
+    }
+
+    fn inputs_for<'a>(
+        send: &'a SendView,
+        fee: &'a vela_core::app::fee_policy::FeeView,
+        s: &'a FlowStrings,
+        wallet: &'a crate::wallet::WalletStrings,
+    ) -> SendInputs<'a> {
+        SendInputs {
+            send,
+            fee,
+            s,
+            wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: "Golden",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
+            relay_sent_at_ms: None,
+        }
+    }
+
+    /// PR 2 polish, on Send: after the relay answered that it fails, the
+    /// form's row and the confirm's fee line say what a tap does — "Pay with
+    /// another coin" while a coin is left (a control, as is the confirm's
+    /// line), the dash and no control once none is — and the line under the
+    /// confirm states the fact, asking for no tap. Through the real fee
+    /// core.
+    #[test]
+    fn a_fee_that_would_fail_says_what_a_tap_does() {
+        use vela_core::app::fee_policy::{FEE_WOULD_FAIL_KEY, PAY_WITH_ANOTHER_COIN_KEY};
+        use vela_core::app::send::{Send, SendStage};
+        let loc = crate::loc::Loc::from_env();
+        let s = strings();
+        let wallet = wallet_strings();
+        let [choose, nothing] = crate::signing::fixtures::fee_would_fail();
+        let mut send = CoreHost::<Send>::new().view();
+        send.stage = SendStage::Confirm;
+        send.selected_token = Some(eth_on(1));
+
+        let i = inputs_for(&send, &choose, &s, &wallet);
+        let row = send_fee_row(&i);
+        assert_eq!(row.value, loc.t(PAY_WITH_ANOTHER_COIN_KEY));
+        assert!(row.control, "a tap opens the coins");
+        assert_eq!(confirm_fee_fact(&i).value, loc.t(PAY_WITH_ANOTHER_COIN_KEY));
+        assert!(confirm_fee_control(&i));
+        assert_eq!(confirm_held_line(&i), Some(loc.t(FEE_WOULD_FAIL_KEY)));
+        let confirm = send_confirm(&i);
+        let at = confirm
+            .fee_fact
+            .unwrap_or_else(|| unreachable!("the confirm's fee line answers a tap"));
+        assert_eq!(
+            confirm.facts[at].label, s.est_fee,
+            "the fee line, not another"
+        );
+
+        let i = inputs_for(&send, &nothing, &s, &wallet);
+        let row = send_fee_row(&i);
+        assert_eq!(row.value.as_ref(), "—");
+        assert!(!row.control, "nothing a tap could do: no chevron, no click");
+        assert!(!confirm_fee_control(&i));
+        assert_eq!(send_confirm(&i).fee_fact, None);
+        assert_eq!(confirm_held_line(&i), Some(loc.t(FEE_WOULD_FAIL_KEY)));
+    }
+
+    /// PR 2 polish: "Tap it to retry" under the confirm names a line that
+    /// answers a tap — the confirm's fee line is a control whenever its
+    /// failure asks again (the core retrying by itself too: a tap asks at
+    /// once), and only then.
+    #[test]
+    fn the_confirms_fee_line_answers_the_tap_its_footer_asks_for() {
+        use vela_core::app::fee_policy::FEE_FAILED_KEY;
+        use vela_core::app::send::{Send, SendStage};
+        let loc = crate::loc::Loc::from_env();
+        let s = strings();
+        let wallet = wallet_strings();
+        let failures = crate::signing::fixtures::fee_failures();
+        let mut send = CoreHost::<Send>::new().view();
+        send.stage = SendStage::Confirm;
+        send.selected_token = Some(eth_on(1));
+        let i = inputs_for(&send, &failures.tap, &s, &wallet);
+        assert_eq!(confirm_held_line(&i), Some(loc.t(FEE_FAILED_KEY)));
+        let confirm = send_confirm(&i);
+        assert_eq!(
+            confirm.fee_fact.map(|at| confirm.facts[at].label.clone()),
+            Some(s.est_fee.clone())
+        );
+        for fee in [&failures.down, &failures.retrying, &failures.internal] {
+            assert!(confirm_fee_control(&inputs_for(&send, fee, &s, &wallet)));
+        }
+        // A settled fee is a plain fact on the confirm.
+        let settled = crate::signing::fixtures::fee_coin_switch()[0].clone();
+        assert_eq!(
+            send_confirm(&inputs_for(&send, &settled, &s, &wallet)).fee_fact,
+            None
+        );
+    }
+
+    /// PR 2 polish: a failure for another chain than the form's is not drawn
+    /// — no reason, no figure, no footer, no control promise — and is no
+    /// failure to the send machine: right after a token switch the form names
+    /// another chain before the fee machine has been asked about it.
+    #[test]
+    fn another_chains_fee_failure_is_not_this_forms() {
+        use vela_core::app::send::{Send, SendStage};
+        let s = strings();
+        let wallet = wallet_strings();
+        let failures = crate::signing::fixtures::fee_failures();
+        let mut send = CoreHost::<Send>::new().view();
+        send.stage = SendStage::Confirm;
+        // The failure is Ethereum's; the form moved to Gnosis.
+        send.selected_token = Some(eth_on(100));
+        assert!(form_fee_failure(&failures.tap, &send).is_none());
+        let i = inputs_for(&send, &failures.tap, &s, &wallet);
+        let row = send_fee_row(&i);
+        assert_eq!(row.reason, None);
+        assert_ne!(
+            row.value,
+            crate::loc::Loc::from_env().t(vela_core::app::fee_policy::ESTIMATE_FAILED_KEY)
+        );
+        assert!(
+            row.control,
+            "the row opens the coins, as a settled one does"
+        );
+        let fact = confirm_fee_fact(&i);
+        assert_eq!(fact.note, None);
+        assert_eq!(confirm_held_line(&i), None);
+        assert!(!confirm_fee_control(&i));
+        // A form on no chain at all draws no chain's failure.
+        send.selected_token = None;
+        assert!(form_fee_failure(&failures.tap, &send).is_none());
+        // Back on Ethereum it is this form's again; a sweep's chain counts.
+        send.multi_chain_id = Some(1);
+        assert!(form_fee_failure(&failures.tap, &send).is_some());
+        send.multi_chain_id = None;
+        send.selected_token = Some(eth_on(1));
+        assert!(form_fee_failure(&failures.tap, &send).is_some());
     }
 
     /// PR 2 note 13: Continue's alert is worded by its cause — the chain out

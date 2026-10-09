@@ -10,8 +10,8 @@ use gpui::IntoElement as _;
 use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Div, ElementId, Hsla, InteractiveElement as _, ParentElement, SharedString,
-    StatefulInteractiveElement as _, Styled, div, px,
+    Div, ElementId, Hsla, InteractiveElement as _, ParentElement, Pixels, SharedString,
+    StatefulInteractiveElement as _, Styled, Window, div, px,
 };
 use qrcode::{Color as QrColorModule, QrCode};
 
@@ -1096,13 +1096,17 @@ pub fn fee_row(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
                 .text_color(theme.fg_base)
                 .child(fee.value.clone()),
         )
-        .child(icon_img(
-            icons,
-            Icon::ChevronRight,
-            false,
-            theme.fg_muted,
-            12.,
-        ))
+        // The chevron promises a tap; a row that is no control (a failure a
+        // tap cannot help, PR 2 polish) makes none.
+        .when(fee.control, |row| {
+            row.child(icon_img(
+                icons,
+                Icon::ChevronRight,
+                false,
+                theme.fg_muted,
+                12.,
+            ))
+        })
 }
 
 /// The refresh control's face: the icon, or — while a measurement is out,
@@ -1135,18 +1139,66 @@ pub fn fee_refresh_icon(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> D
 /// full height so Continue never moves under a pointer when it appears. A
 /// failed fee says why in the same room (PR 2 note 1), in the warning tone —
 /// the line the row already keeps, so nothing jumps when it fails or while
-/// the core asks again.
+/// the core asks again. As tall as what it says now ([`fee_line_room`]);
+/// the rest of the room it may need waits under the speed control
+/// ([`fee_line_spare`]).
 pub fn fee_stale_line(theme: &Theme, fee: &FeeRow) -> Div {
+    let size = theme::text_label();
+    let line_h = fee_line_height(size);
     let line = div()
-        .min_h(px(16.))
+        .min_h(line_h)
         .px(px(12.))
-        .text_size(theme::text_label());
+        .text_size(size)
+        .line_height(line_h);
     match fee.reason.clone() {
         Some(reason) => line.text_color(theme.warning).child(reason),
         None => line
             .text_color(theme.fg_subtle)
             .child(fee.stale_note.clone().unwrap_or_default()),
     }
+}
+
+/// The room the line under the fee row may yet need, kept under the speed
+/// control (PR 2 polish): the tallest sentence it can come to say here
+/// ([`FeeRow::room`]) less what it says now, in lines. One line held for any
+/// of them let a reason that wraps — the English "Something went wrong
+/// inside Vela. If it keeps happening, reopen the app." is two lines in this
+/// column — push Continue down a line as it landed. Kept below the speed
+/// control rather than under the row, so the form at rest reads as it
+/// always did — the speed control right under its fee — and the room is
+/// air above Continue until a long reason takes it.
+pub fn fee_line_spare(window: &Window, fee: &FeeRow) -> Div {
+    let size = theme::text_label();
+    let (now, room) = fee_line_room(window, fee, size);
+    #[allow(clippy::cast_precision_loss, reason = "a handful of lines")]
+    let spare = fee_line_height(size) * room.saturating_sub(now) as f32;
+    div().flex_none().h(spare)
+}
+
+/// What the line under the fee row says now, and the most it can come to
+/// say here, in lines of this column ([`FEE_LINE_TEXT_W`]).
+fn fee_line_room(window: &Window, fee: &FeeRow, size: Pixels) -> (usize, usize) {
+    let lines = |text: &SharedString| {
+        crate::wallet::components::text_lines(window, text, size, px(FEE_LINE_TEXT_W))
+    };
+    let now = fee
+        .reason
+        .as_ref()
+        .or(fee.stale_note.as_ref())
+        .map_or(1, lines);
+    let room = fee.room.iter().map(lines).max().unwrap_or(1).max(now);
+    (now, room)
+}
+
+/// The text width of the line under the Send form's fee row: the third
+/// column, less its border and its 24 on each side, less the line's own 12
+/// on each side.
+const FEE_LINE_TEXT_W: f32 = theme::THIRD_PANEL_W - 1. - 48. - 24.;
+
+/// One line under the fee row, for `size`: set, not left to the face's
+/// default, so the room [`fee_line_spare`] keeps is the room the text takes.
+fn fee_line_height(size: Pixels) -> Pixels {
+    px((f32::from(size) * 1.5).round())
 }
 
 /// The speed control's folded summary: the word, the tier in force, and the

@@ -1227,6 +1227,36 @@ pub fn kinsoku_width(window: &Window, text: &SharedString, size: Pixels, max: Pi
     max
 }
 
+/// How many lines `text` takes wrapped at `width`, in the UI face at `size`
+/// — what a room kept for it must hold. One for a text that cannot be
+/// shaped: a room is never zero lines.
+pub fn text_lines(window: &Window, text: &SharedString, size: Pixels, width: Pixels) -> usize {
+    let run = TextRun {
+        len: text.len(),
+        font: theme::ui_font(),
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    window
+        .text_system()
+        .shape_text(
+            text.clone(),
+            size,
+            std::slice::from_ref(&run),
+            Some(width),
+            None,
+        )
+        .map_or(1, |shaped| {
+            shaped
+                .iter()
+                .map(|line| line.wrap_boundaries().len() + 1)
+                .sum::<usize>()
+                .max(1)
+        })
+}
+
 /// How wide `text` is on one line, in the UI face at `size`.
 pub fn text_width(window: &Window, text: &str, size: Pixels) -> Pixels {
     let run = TextRun {

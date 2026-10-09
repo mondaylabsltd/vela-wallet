@@ -544,6 +544,17 @@ pub struct FeeRow {
     /// inside Vela…". Drawn in the stale line's own room, in its place —
     /// kept through the re-ask, so nothing jumps while it retries.
     pub reason: Option<SharedString>,
+    /// The row is a control — a tap opens the fee coins or, on a failed fee,
+    /// does what the failure says (`FeeFailureView.tap`). `false` only for a
+    /// failure a tap cannot help (the relay answered that it fails, and no
+    /// other coin is left): no chevron, no click (PR 2 polish).
+    pub control: bool,
+    /// Every sentence the line under the row can come to say here (each
+    /// failure's reason on this chain, the stale note): the line keeps the
+    /// room of the tallest, so a reason that wraps moves nothing under it
+    /// (PR 2 polish — the English internal reason is two lines in the
+    /// desktop's column, and Continue dropped a line when it landed).
+    pub room: Vec<SharedString>,
 }
 
 /// One option of the speed control (spec 068).
@@ -846,6 +857,12 @@ pub struct SendConfirm {
     /// one line says why, under it — plainly, for as long as it holds, with
     /// no countdown and nothing else in its place.
     pub held: Option<SharedString>,
+    /// The fee line's place in `facts` when it is a control (PR 2 polish):
+    /// a failed fee whose tap does something (`FeeFailureView.tap` — ask
+    /// again, or open the fee coins). Drawn with the form row's chevron and
+    /// bound to the same tap, so "Tap it to retry" under the confirm names a
+    /// line that answers a tap. `None` — a plain fact.
+    pub fee_fact: Option<usize>,
     /// Spec 102 D4: the account reviews and signs on a trusted page — the
     /// page, the key and the integrity line, drawn above the CTA, which then
     /// says where it goes and opens only when the page may. `None` in Vela.
@@ -1387,6 +1404,13 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         refreshing: false,
         stale_note: None,
         reason: None,
+        control: true,
+        // The room the live row keeps on the mock's Ethereum.
+        room: {
+            let mut room = s.fee_failure.reasons("Ethereum");
+            room.push(s.fee_stale.clone());
+            room
+        },
     };
     // Folded, as every send starts: the word and the tier in force.
     let speed = FeeSpeedModel {
@@ -1698,6 +1722,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
         cta: s.confirm_send.clone(),
         cta_state: CtaState::Enabled,
         held: None,
+        fee_fact: None,
         handoff: None,
     }
 }

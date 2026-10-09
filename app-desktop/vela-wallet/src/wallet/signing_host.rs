@@ -641,14 +641,16 @@ impl SigningHost {
         .detach();
     }
 
-    /// The fee row, tapped: with another coin to pay in, the list opens (or
-    /// closes) here in the sheet — the web's `onfee` — even over a failed
-    /// quote (spec 083 fee: the relay refused the operation with USDC paying,
-    /// and ETH could pay); a failed quote with nothing else to choose is
-    /// asked again. One coin and a quote: nothing to choose.
+    /// The fee row, tapped: a failed quote does what its failure says a tap
+    /// does (`FeeFailureView.tap`, PR 2 polish) — asks again, or opens the
+    /// coin list here in the sheet (the web's `onfee`) after the relay
+    /// answered that it fails with the coin in force (spec 083 fee) — and
+    /// a settled one opens the list when there is another coin to pay in.
     pub fn fee_tapped(&mut self, cx: &mut Context<Self>) {
         use crate::signing::live::{FeeTap, fee_tap};
-        match fee_tap(self.speed.fee_view()) {
+        let fee = self.speed.fee_view();
+        let failure = crate::flows::fee_failure_of(fee, Some(self.chain_id));
+        match fee_tap(fee, failure.as_ref()) {
             FeeTap::Coins => {
                 self.fee_open = !self.fee_open;
                 cx.notify();

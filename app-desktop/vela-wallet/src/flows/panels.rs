@@ -21,10 +21,10 @@ use crate::wallet::components::{
 
 use super::components::{
     CopyButton, GhostPill, accent_button, address_card, danger_button, disabled_accent_button,
-    fact_row, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option, fee_speed_summary,
-    fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row, max_chip, mono_field,
-    network_pill, network_row, qr_card, quiet_button, recipient_card, search_empty, search_matches,
-    segmented_toggle, status_chip, token_header_card,
+    fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option,
+    fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row,
+    max_chip, mono_field, network_pill, network_row, qr_card, quiet_button, recipient_card,
+    search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -491,6 +491,8 @@ pub fn render(
                 report: actions.notice_report,
             },
             (actions.handoff_recheck, actions.handoff_trust),
+            // The fee line's tap is the form row's (PR 2 polish).
+            actions.open_fee_token,
         ),
         FlowBody::SendReceipt(model) => send_receipt(
             model,
@@ -2529,6 +2531,9 @@ fn send_form_parts(
     // the fee-coin sheet, and the refresh at its end — two controls side by
     // side, not one inside the other, so measuring again never opens the
     // sheet.
+    // A failed fee a tap cannot help (PR 2 polish) is no control: no
+    // chevron, and no click to bind.
+    let open_fee = actions.open_fee_token.take().filter(|_| model.fee.control);
     let mut fee_line = div()
         .flex()
         .items_center()
@@ -2536,7 +2541,7 @@ fn send_form_parts(
         .bg(theme.bg_raised)
         .child(div().flex_1().min_w(px(0.)).child(clickable(
             "flow-fee-row",
-            actions.open_fee_token.take(),
+            open_fee,
             fee_row(theme, icons, &model.fee),
         )));
     if model.fee.refresh.is_some() {
@@ -2547,11 +2552,17 @@ fn send_form_parts(
         ));
     }
     let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee_line);
-    if model.fee.refresh.is_some() || model.fee.reason.is_some() {
+    let stale_line = model.fee.refresh.is_some() || model.fee.reason.is_some();
+    if stale_line {
         fee_block = fee_block.child(fee_stale_line(theme, &model.fee));
     }
     if let Some(speed) = &model.speed {
         fee_block = fee_block.child(speed_control(theme, icons, speed, toggle_speed, pick_speed));
+    }
+    // The room a longer reason may yet take, under the speed control, so
+    // Continue stays where it is when one lands (PR 2 polish).
+    if stale_line {
+        fee_block = fee_block.child(fee_line_spare(window, &model.fee));
     }
     let foot = foot.child(div().pt(px(8.)).pb(px(16.)).child(cta_button(
         "flow-form-cta",
@@ -3441,6 +3452,7 @@ fn batch_total_line(
         })
 }
 
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 fn send_confirm(
     model: &SendConfirm,
     theme: &Theme,
@@ -3449,6 +3461,7 @@ fn send_confirm(
     advance: Option<Click>,
     notice_clicks: NoticeClicks,
     (handoff_recheck, handoff_trust): (Option<Click>, Option<Click>),
+    mut fee_tap: Option<Click>,
 ) -> Div {
     let mut hero = div()
         .flex()
@@ -3504,6 +3517,23 @@ fn send_confirm(
     for (i, fact) in model.facts.iter().enumerate() {
         if i > 0 {
             card = card.child(divider(theme));
+        }
+        // The fee line, when a tap on it does something (PR 2 polish): the
+        // form row's chevron and the form row's tap — "Tap it to retry"
+        // under the confirm names a line that answers it.
+        if model.fee_fact == Some(i) {
+            card = card.child(clickable(
+                "flow-confirm-fee",
+                fee_tap.take(),
+                fact_row(theme, icons, identicons, fact, None).child(icon_img(
+                    icons,
+                    Icon::ChevronRight,
+                    false,
+                    theme.fg_muted,
+                    12.,
+                )),
+            ));
+            continue;
         }
         card = card.child(fact_row(theme, icons, identicons, fact, None));
     }

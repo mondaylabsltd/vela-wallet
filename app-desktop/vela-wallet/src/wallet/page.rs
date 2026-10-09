@@ -7632,26 +7632,7 @@ impl WalletPage {
                         actions.add_recipient = Some(to_host(SendEvent::EnterSplitMode));
                     }
                     actions.open_batch_import = Some(to_host(SendEvent::OpenBatchImport));
-                    actions.open_fee_token = Some(Box::new(cx.listener({
-                        let host = host.clone();
-                        move |this, _: &gpui::ClickEvent, _, cx| {
-                            // A failed fee with no other coin to choose is
-                            // asked again at once (PR 2 note 1) — a real new
-                            // read, as the signing sheet's row does — never
-                            // a sheet with nothing in it to pick.
-                            // While the re-ask is out, the tap waits for it.
-                            use crate::signing::live::{FeeTap, fee_tap};
-                            let fee = host.read(cx).fee_view();
-                            match fee_tap(fee) {
-                                FeeTap::Requote => host.update(cx, SendHost::refresh_fee),
-                                FeeTap::Nothing if fee.failure.is_some() => {}
-                                FeeTap::Coins | FeeTap::Nothing => {
-                                    this.send_fee_picker = true;
-                                    cx.notify();
-                                }
-                            }
-                        }
-                    })));
+                    actions.open_fee_token = Some(send_fee_tap(host.clone(), cx));
                     // Spec 069: measure again, and the speed control — every
                     // decision behind it is the `fee_speed` core's.
                     let on_host =
@@ -7805,6 +7786,9 @@ impl WalletPage {
                 }
                 FlowPanel::Dsd3 => {
                     actions.advance = Some(to_host(SendEvent::SlideConfirm));
+                    // The confirm's fee line, when its failure answers a tap
+                    // (PR 2 polish): the form row's own tap.
+                    actions.open_fee_token = Some(send_fee_tap(host.clone(), cx));
                     // Spec 102: the hand-off's own two actions, on its page.
                     if let Some(page) = send.handoff_page.clone() {
                         let again = page.clone();
@@ -20959,6 +20943,30 @@ fn backup_request(
         chain_id: call.chain_id,
         granted_address: None,
     }
+}
+
+/// A tap on Send's fee row — the form's, and the confirm's fee line when it
+/// is a control (PR 2 polish): EXACTLY what the row says it does. A failed
+/// fee does what its failure says (`FeeFailureView.tap`, only for the form's
+/// own chain): asks again at once — a real new read, as the signing sheet's
+/// row does; while the re-ask is out the tap waits for it — or opens the fee
+/// coins ("Pay with another coin"); one no tap can help does nothing. A
+/// settled fee opens the coins.
+fn send_fee_tap(host: gpui::Entity<SendHost>, cx: &mut Context<WalletPage>) -> panels::Click {
+    Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+        use crate::signing::live::{FeeTap, fee_tap};
+        let read = host.read(cx);
+        let fee = read.fee_view();
+        let failure = flows_live::form_fee_failure(fee, &read.view);
+        match fee_tap(fee, failure.as_ref()) {
+            FeeTap::Requote => host.update(cx, SendHost::refresh_fee),
+            FeeTap::Nothing if failure.is_some() => {}
+            FeeTap::Coins | FeeTap::Nothing => {
+                this.send_fee_picker = true;
+                cx.notify();
+            }
+        }
+    }))
 }
 
 /// The host of a signer page address, for its badge — the address itself is

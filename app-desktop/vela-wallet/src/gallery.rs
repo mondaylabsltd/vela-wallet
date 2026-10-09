@@ -115,6 +115,9 @@ enum Fixture {
 /// through the real fee core (`signing::fixtures::fee_failures`) and Send's
 /// live builders — the form's row (its figure, its reason, its measuring
 /// sign) and the confirm's fee line and the one line under its confirm.
+/// `fee-would-fail|fee-would-fail-none` (PR 2 polish): the relay answered
+/// that it fails (`signing::fixtures::fee_would_fail`) — "Pay with another
+/// coin" while a coin is left, the dash and no control when none is.
 ///
 /// `not-sent` (PR 2 polish) — with the mock confirm (`VELA_FLOW=DSD3`): the
 /// relay turned the submit back because the account's previous transaction
@@ -137,10 +140,25 @@ pub fn send_state_pin(
         "fee-internal" | "alert-internal" => Some(failures().internal),
         "fee-retrying" => Some(failures().retrying),
         "fee-tap" => Some(failures().tap),
+        "fee-would-fail" => Some(crate::signing::fixtures::fee_would_fail()[0].clone()),
+        "fee-would-fail-none" => Some(crate::signing::fixtures::fee_would_fail()[1].clone()),
         _ => None,
     };
     if let Some(fee) = failed_fee {
-        let send = crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+        // The mock's USDT on Ethereum: the chain the failure is for — a
+        // failure for another chain than the form's is not drawn at all.
+        let mut send = crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+        send.selected_token = Some(vela_core::app::send::SendToken {
+            network: "ethereum".to_owned(),
+            chain_id: 1,
+            symbol: "USDT".to_owned(),
+            balance: "53.4836".to_owned(),
+            decimals: 6,
+            token_address: Some("0xdAC17F958D2ee523a2206206994597C13D831ec7".to_owned()),
+            price_usd: Some(1.0),
+            logo_urls: Vec::new(),
+            spam: false,
+        });
         let inputs = crate::flows::live::SendInputs {
             send: &send,
             fee: &fee,
@@ -162,12 +180,16 @@ pub fn send_state_pin(
                 form.fee.refreshing = row.refreshing;
                 form.fee.stale_note = row.stale_note;
                 form.fee.reason = row.reason;
+                form.fee.control = row.control;
+                form.fee.room = row.room;
                 FlowBody::SendForm(form)
             }
             FlowBody::SendConfirm(mut confirm) => {
-                for fact in &mut confirm.facts {
+                let control = crate::flows::live::confirm_fee_control(&inputs);
+                for (at, fact) in confirm.facts.iter_mut().enumerate() {
                     if fact.label == s.est_fee {
                         *fact = crate::flows::live::confirm_fee_fact(&inputs);
+                        confirm.fee_fact = control.then_some(at);
                     }
                 }
                 confirm.held = crate::flows::live::confirm_held_line(&inputs);
