@@ -67,6 +67,13 @@ pub enum Event {
     SignIn {
         #[serde(default)]
         method: KeyMethod,
+        /// Spec 102: "Sign in on my own signing page" — a saved page, normalised
+        /// by the core. A page on a custom domain is where the ceremony runs
+        /// (its keys answer nowhere else, R3) and the account is locked to it
+        /// (R2); a `getvela.app` page signs in in the app and becomes the
+        /// account's venue. `None`: the app, and the account's venue as it was.
+        #[serde(default)]
+        page: Option<String>,
     },
     /// Internal: a sign-in effect resolved, tagged with the attempt that asked.
     #[serde(skip)]
@@ -156,6 +163,8 @@ pub struct Model {
     /// The authenticator the person chose on the sign-in screen. Carried so the
     /// "who are you?" ceremony runs on the route they asked for.
     method: KeyMethod,
+    /// Spec 102: the signing page the person chose to sign in on, normalised.
+    page: Option<String>,
     /// Entering as the stored account at this index, whose record is being
     /// re-saved to name the key that just signed in ([`enter_known`]).
     entering: Option<usize>,
@@ -202,7 +211,7 @@ impl App for Login {
                 model.health = Health::default();
                 Command::all([probe_health(), render()])
             }
-            Event::SignIn { method } => sign_in(model, method),
+            Event::SignIn { method, page } => sign_in(model, method, page),
             Event::HealthCompleted { result } => accept_health(model, result),
             Event::HealIgnored => Command::done(),
             Event::ShellCompleted { attempt, result } => {
@@ -267,10 +276,19 @@ fn probe_health() -> Command<Effect, Event> {
 // Sign-in
 // ---------------------------------------------------------------------------
 
-fn sign_in(model: &mut Model, method: KeyMethod) -> Command<Effect, Event> {
+fn sign_in(model: &mut Model, method: KeyMethod, page: Option<String>) -> Command<Effect, Event> {
     if model.stage != Stage::Idle {
         return Command::done(); // one ceremony at a time
     }
+    // An address no browser would sign on is not a page to sign in on.
+    let page = match page {
+        None => None,
+        Some(url) => match crate::trusted_signer::signer_url(&url) {
+            Ok(url) => Some(url),
+            Err(_) => return Command::done(),
+        },
+    };
+    model.page = page;
     model.attempt += 1;
     model.assertion = None;
     model.pending = None;
@@ -288,10 +306,12 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         (Stage::CheckingSupport, ShellResult::PasskeySupport { supported }) => {
             if supported {
                 model.stage = Stage::Authenticating;
+                let page = ceremony_page(model);
                 request(
                     model,
                     ShellOperation::AuthenticatePasskey {
                         method: model.method,
+                        page,
                     },
                 )
             } else {
@@ -360,7 +380,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                     // security key that was never plugged in, and no QR would show).
                     method: model.method,
                     purpose: ProofPurpose::RecoverSecond,
-                    signer_origin: assertion.signer_origin.clone(),
+                    page: ceremony_page(model),
                 },
             )
         }
@@ -579,8 +599,11 @@ fn account_from_key(assertion: &Assertion, public_key_hex: &str, now_iso: &str) 
             transports: transports_from_attachment(&assertion.authenticator_attachment),
             signer_origin: assertion.signer_origin.clone(),
         }],
-        // Named as it is saved (`begin_save`), with the route the sign-in took.
-        signed_in_with: None,
+        // Named as it is saved (`begin_save`): the key, and how the account
+        // signs.
+        sign_in_key: None,
+        signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
+        signing_venue: crate::signing_venue::SigningVenue::InVela,
     })
 }
 
@@ -657,13 +680,17 @@ fn begin_save(model: &mut Model, mut account: Account) -> Command<Effect, Event>
         model.pending = None;
         return enter_known(model, active_index);
     }
-    account.signed_in_with = sign_in_key(model);
+    account.sign_in_key = sign_in_key(model);
+    let (domain, venue) = super::new_signing(model.page.as_deref());
+    account.signing_domain = domain;
+    account.signing_venue = venue;
+    account.stamp_page_origin();
     model.pending = Some(account.clone());
     model.stage = Stage::Saving;
     request(model, ShellOperation::SaveAccount { account })
 }
 
-/// The key that just signed in, over the route the person chose for it — how
+/// The key that just signed in, in the place the person chose for it — how
 /// this device signs for the account from now on ([`SignInKey`]).
 fn sign_in_key(model: &Model) -> Option<SignInKey> {
     let assertion = model.assertion.as_ref()?;
@@ -671,8 +698,13 @@ fn sign_in_key(model: &Model) -> Option<SignInKey> {
         credential_id: assertion.credential_id.clone(),
         method: model.method,
         transports: transports_from_attachment(&assertion.authenticator_attachment),
-        signer_origin: assertion.signer_origin.clone(),
     })
+}
+
+/// R3: the page this sign-in's ceremonies run on — the chosen page, when it is
+/// on a custom domain.
+fn ceremony_page(model: &Model) -> Option<String> {
+    crate::signing_venue::ceremony_page(model.page.as_deref())
 }
 
 /// Enter as an account this device already holds, found by credential or by
@@ -682,17 +714,32 @@ fn sign_in_key(model: &Model) -> Option<SignInKey> {
 /// itself succeeded, and the stored record keeps the key it named before. A
 /// record that does not list the credential (found by address) keeps its key
 /// too: a signature from a key the record does not hold could not be verified.
+///
+/// Spec 102: a sign-in on a chosen page also makes that page the account's
+/// venue, when it can reach the account's keys; a sign-in in the app leaves
+/// the venue the person chose before.
 fn enter_known(model: &mut Model, active_index: usize) -> Command<Effect, Event> {
     let key = sign_in_key(model);
+    let venue = model
+        .page
+        .as_deref()
+        .and_then(crate::signing_venue::SigningVenue::page);
     if let (Some(account), Some(key)) = (model.known.get_mut(active_index), key) {
-        if account.matches_credential(&key.credential_id)
-            && account.signed_in_with.as_ref() != Some(&key)
-        {
-            account.signed_in_with = Some(key);
-            let account = account.clone();
-            model.entering = Some(active_index);
-            model.stage = Stage::Saving;
-            return request(model, ShellOperation::SaveAccount { account });
+        if account.matches_credential(&key.credential_id) {
+            let mut changed = account.sign_in_key.as_ref() != Some(&key);
+            account.sign_in_key = Some(key);
+            if let Some(venue) = venue {
+                if !account.signing_venue.same_as(&venue) && account.choose_venue(venue).is_ok() {
+                    changed = true;
+                }
+            }
+            if changed {
+                account.stamp_page_origin();
+                let account = account.clone();
+                model.entering = Some(active_index);
+                model.stage = Stage::Saving;
+                return request(model, ShellOperation::SaveAccount { account });
+            }
         }
     }
     complete_known(model, active_index)
@@ -804,9 +851,9 @@ fn reconstruct_account(
             } else {
                 String::new()
             },
-            // Spec 075: the key that answered through the Trusted Signer lives
-            // behind that page. The others are unknown here, as their
-            // transports are.
+            // The key that answered on a signing page carries that page's
+            // origin; on a custom domain every other key gets it too, once the
+            // account's venue is settled (`stamp_page_origin`).
             signer_origin: if member.credential_id == assertion.credential_id {
                 assertion.signer_origin.clone()
             } else {
@@ -826,8 +873,11 @@ fn reconstruct_account(
             metadata.created_at_iso.clone()
         },
         keys,
-        // Named as it is saved (`begin_save`), with the route the sign-in took.
-        signed_in_with: None,
+        // Named as it is saved (`begin_save`): the key, and how the account
+        // signs.
+        sign_in_key: None,
+        signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
+        signing_venue: crate::signing_venue::SigningVenue::InVela,
     })
 }
 
@@ -893,7 +943,7 @@ fn begin_publish(model: &mut Model) -> Command<Effect, Event> {
         .as_ref()
         .map(|assertion| assertion.authenticator_attachment.clone())
         .unwrap_or_default();
-    match registry_publish_op(&account, &attachment, model.method) {
+    match registry_publish_op(&account, &attachment, model.method, ceremony_page(model)) {
         Ok(operation) => {
             model.stage = Stage::Publishing;
             request(model, operation)
@@ -907,6 +957,7 @@ fn registry_publish_op(
     account: &Account,
     authenticator_attachment: &str,
     method: KeyMethod,
+    page: Option<String>,
 ) -> Result<ShellOperation, CoreError> {
     let metadata = RegistryMetadata {
         version: REGISTRY_METADATA_VERSION,
@@ -930,14 +981,6 @@ fn registry_publish_op(
             // this member live (one prompt) — recovery has no creation-time
             // proof to replay.
             proof: None,
-            // …and that live signature must reach the page this key lives
-            // behind, if it lives behind one (spec 075).
-            signer_origin: account
-                .keys
-                .iter()
-                .find(|key| key.credential_id == account.id)
-                .or_else(|| account.keys.first())
-                .and_then(|key| key.signer_origin.clone()),
         }],
         group_seed_hex: String::new(),
         group_public_key_hex: String::new(),
@@ -948,6 +991,9 @@ fn registry_publish_op(
         // was: issue #409 changed when a CREATED one-key wallet is entered,
         // and a sign-in writes no pending record a landing watch could settle.
         answer_when_accepted: false,
+        // …and that live signature is made on the page the sign-in ran on,
+        // when it ran on one (R3).
+        page,
     })
 }
 

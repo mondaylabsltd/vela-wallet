@@ -3,11 +3,16 @@
 //!
 //! The create and sign-in machines speak to a shell in passkey operations
 //! (`RegisterPasskey`, `AuthenticatePasskey`, `SignProof`, `SignMemberProof`).
-//! With `method = trusted_signer` the shell hands the operation here, sends the
-//! request this builds to the signer page, and hands the page's answer back
-//! to [`verify`] — whose result it reports exactly as a platform ceremony's
-//! (`PasskeyRegistered`, `PasskeyAuthenticated`, `ProofSigned`,
+//! When the operation names a `page` — a wallet on a custom domain, whose keys
+//! only its page can mint or use (spec 102 R3) — the shell hands the operation
+//! here, sends the request this builds to that page, and hands the page's
+//! answer back to [`verify`] — whose result it reports exactly as a platform
+//! ceremony's (`PasskeyRegistered`, `PasskeyAuthenticated`, `ProofSigned`,
 //! `MemberProofSigned`).
+//!
+//! The operation's key place rides along (R5): `place` and the WebAuthn
+//! `hints` for it, and for a proof the key's transports, so the browser goes
+//! to the authenticator the person chose instead of asking again.
 //!
 //! The page signs only challenges it derived itself; this side checks that it
 //! did:
@@ -25,7 +30,7 @@ use serde_json::{json, Value};
 use super::ws::origin_of;
 use super::TrustedSignerError;
 use crate::app::shell::{ProofPurpose, ShellOperation};
-use crate::app::{Assertion, Registration};
+use crate::app::{Assertion, KeyMethod, Registration};
 use crate::types::ClientDataKind;
 use crate::webauthn::validate_client_data;
 
@@ -46,11 +51,20 @@ pub enum Ceremony {
         name: String,
         #[serde(default)]
         exclude_credential_ids: Vec<String>,
+        #[serde(default)]
+        method: KeyMethod,
     },
-    AuthenticatePasskey {},
+    AuthenticatePasskey {
+        #[serde(default)]
+        method: KeyMethod,
+    },
     SignProof {
         credential_id: String,
         purpose: ProofPurpose,
+        #[serde(default)]
+        method: KeyMethod,
+        #[serde(default)]
+        transports: String,
     },
     SignMemberProof {
         credential_id: String,
@@ -58,6 +72,10 @@ pub enum Ceremony {
         #[serde(default)]
         attestation_hex: String,
         group_public_key_hex: String,
+        #[serde(default)]
+        method: KeyMethod,
+        #[serde(default)]
+        transports: String,
     },
 }
 
@@ -69,31 +87,43 @@ impl Ceremony {
             ShellOperation::RegisterPasskey {
                 name,
                 exclude_credential_ids,
+                method,
                 ..
             } => Self::RegisterPasskey {
                 name: name.clone(),
                 exclude_credential_ids: exclude_credential_ids.clone(),
+                method: *method,
             },
-            ShellOperation::AuthenticatePasskey { .. } => Self::AuthenticatePasskey {},
+            ShellOperation::AuthenticatePasskey { method, .. } => {
+                Self::AuthenticatePasskey { method: *method }
+            }
             ShellOperation::SignProof {
                 credential_id,
                 purpose,
+                method,
+                transports,
                 ..
             } => Self::SignProof {
                 credential_id: credential_id.clone(),
                 purpose: *purpose,
+                method: *method,
+                transports: transports.clone(),
             },
             ShellOperation::SignMemberProof {
                 credential_id,
                 public_key_hex,
                 attestation_hex,
                 group_public_key_hex,
+                method,
+                transports,
                 ..
             } => Self::SignMemberProof {
                 credential_id: credential_id.clone(),
                 public_key_hex: public_key_hex.clone(),
                 attestation_hex: attestation_hex.clone(),
                 group_public_key_hex: group_public_key_hex.clone(),
+                method: *method,
+                transports: transports.clone(),
             },
             _ => return None,
         })
@@ -104,6 +134,26 @@ impl Ceremony {
     pub fn from_json(operation_json: &str) -> Option<Self> {
         serde_json::from_str(operation_json).ok()
     }
+
+    /// Where the key this ceremony makes or uses lives.
+    #[must_use]
+    pub fn place(&self) -> Option<KeyMethod> {
+        Some(match self {
+            Self::RegisterPasskey { method, .. }
+            | Self::AuthenticatePasskey { method }
+            | Self::SignProof { method, .. }
+            | Self::SignMemberProof { method, .. } => *method,
+        })
+    }
+}
+
+/// A comma-joined transports list as the array `allowCredentials` takes.
+fn transport_list(transports: &str) -> Vec<&str> {
+    transports
+        .split(',')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .collect()
 }
 
 fn hex_to_b64url(hex: &str) -> String {
@@ -158,10 +208,11 @@ pub fn request(
     registry: &str,
     deployment: Option<&RegistryDeployment>,
 ) -> Value {
-    let (method, params) = match ceremony {
+    let (method, mut params) = match ceremony {
         Ceremony::RegisterPasskey {
             name,
             exclude_credential_ids,
+            method,
         } => (
             CREATE,
             json!({
@@ -171,17 +222,22 @@ pub fn request(
                     .map(|id| hex_to_b64url(id))
                     .filter(|id| !id.is_empty())
                     .collect::<Vec<_>>(),
+                "place": method.name(),
             }),
         ),
-        Ceremony::AuthenticatePasskey {} => (SIGN_IN, json!({})),
+        Ceremony::AuthenticatePasskey { method } => (SIGN_IN, json!({ "place": method.name() })),
         Ceremony::SignProof {
             credential_id,
             purpose,
+            method,
+            transports,
         } => (
             PROOF,
             json!({
                 "credentialId": hex_to_b64url(credential_id),
                 "purpose": purpose_name(*purpose),
+                "place": method.name(),
+                "transports": transport_list(transports),
             }),
         ),
         Ceremony::SignMemberProof {
@@ -189,6 +245,8 @@ pub fn request(
             public_key_hex,
             attestation_hex,
             group_public_key_hex,
+            method,
+            transports,
         } => (
             MEMBER_PROOF,
             json!({
@@ -202,9 +260,18 @@ pub fn request(
                 // so, rather than signing something it could not check.
                 "chainId": deployment.map(|d| d.chain_id),
                 "registryContract": deployment.map(|d| d.contract.clone()),
+                "place": method.name(),
+                "transports": transport_list(transports),
             }),
         ),
     };
+    // R5: where the person said the key is, in the browser's own words.
+    if let (Some(object), Some(place)) = (params.as_object_mut(), ceremony.place()) {
+        object.insert(
+            "hints".into(),
+            json!(crate::signing_venue::hints_of(place.name())),
+        );
+    }
     json!({
         "id": id,
         "intent": { "method": method, "params": [params], "origin": "" },
@@ -252,7 +319,7 @@ fn same_origin(client: &Value, signer_origin: &str) -> Result<(), TrustedSignerE
         .unwrap_or_default();
     if origin_of(seen).is_empty() || origin_of(seen) != origin_of(signer_origin) {
         return Err(TrustedSignerError::Malformed(format!(
-            "the answer came from {seen}, not from the Trusted Signer page"
+            "the answer came from {seen}, not from the signing page"
         )));
     }
     Ok(())
@@ -325,7 +392,7 @@ pub fn verify(
     }
     let named = match ceremony {
         Ceremony::RegisterPasskey { .. } => return verify_registration(answer, signer_origin),
-        Ceremony::AuthenticatePasskey {} => None,
+        Ceremony::AuthenticatePasskey { .. } => None,
         Ceremony::SignProof { credential_id, .. }
         | Ceremony::SignMemberProof { credential_id, .. } => Some(credential_id),
     };
@@ -348,7 +415,7 @@ pub fn verify(
     same_origin(&client, signer_origin)?;
     let challenge = challenge_bytes(&client)?;
     let allowed = match ceremony {
-        Ceremony::AuthenticatePasskey {} => derived(&challenge, "vela-signin-"),
+        Ceremony::AuthenticatePasskey { .. } => derived(&challenge, "vela-signin-"),
         Ceremony::SignProof {
             purpose: ProofPurpose::Verify,
             ..

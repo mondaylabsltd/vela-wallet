@@ -907,7 +907,9 @@ fn an_expo_era_record_restores_the_session() {
             transports: String::new(),
             signer_origin: None,
         }],
-        signed_in_with: None,
+        sign_in_key: None,
+        signing_domain: "getvela.app".to_owned(),
+        signing_venue: vela_core::signing_venue::SigningVenue::InVela,
     };
     let json = serde_json::to_string(&Res::AccountsLoaded {
         accounts: vec![stored.clone()],
@@ -1060,4 +1062,116 @@ fn an_out_of_range_index_still_lands_on_zero_after_collapsing() {
     assert_eq!(view.accounts.len(), 2);
     assert_eq!(view.active_index, 0);
     assert_eq!(view.address, ADDR_A);
+}
+
+// ---------------------------------------------------------------------------
+// Spec 102: where an account reviews and signs
+// ---------------------------------------------------------------------------
+
+/// D1: the venue is chosen per account, by address, and written at once —
+/// keys untouched.
+#[test]
+fn an_accounts_venue_is_chosen_by_address_and_saved() {
+    use vela_core::signing_venue::SigningVenue;
+    let correct = correct_address();
+    let mut sut = restored(
+        vec![
+            legacy("a", "Ann", ADDR_A),
+            support::account("k", "Kit", &correct),
+        ],
+        0,
+    );
+    let ops = sut.dispatch(Event::SigningVenueChosen {
+        address: correct.to_uppercase().replace("0X", "0x"),
+        venue: SigningVenue::Page {
+            url: "sign.getvela.app".to_owned(),
+        },
+    });
+    match ops.as_slice() {
+        [Op::SaveAccount { account }] => {
+            assert_eq!(
+                account.id, "k",
+                "the row with that address, not the active one"
+            );
+            assert_eq!(
+                account.signing_venue,
+                SigningVenue::official(),
+                "normalised"
+            );
+            assert_eq!(account.keys, support::account("k", "Kit", &correct).keys);
+        }
+        other => panic!("expected the account saved, got {other:?}"),
+    }
+    let rows = sut.view().accounts;
+    assert_eq!(rows[1].account.signing_venue, SigningVenue::official());
+    assert_eq!(
+        rows[0].account.signing_venue,
+        SigningVenue::InVela,
+        "Ann's is hers"
+    );
+
+    // The same venue again: nothing to write.
+    assert!(sut
+        .dispatch(Event::SigningVenueChosen {
+            address: correct.clone(),
+            venue: SigningVenue::official(),
+        })
+        .is_empty());
+}
+
+/// R1: a venue that cannot reach the account's keys is refused, and nothing is
+/// written — a page on another domain, or Vela's sheet for a custom-domain
+/// account (R2: locked to its page).
+#[test]
+fn a_venue_that_cannot_reach_the_keys_is_refused() {
+    use vela_core::signing_venue::SigningVenue;
+    // `legacy`: no public key, so the restore keeps ADDR_B as the address —
+    // otherwise invariant ② would rewrite it and every refusal below would
+    // pass for the wrong reason.
+    let mut own = legacy("o", "Own", ADDR_B);
+    own.signing_domain = "sign.example.com".to_owned();
+    own.signing_venue = SigningVenue::Page {
+        url: "https://sign.example.com/".to_owned(),
+    };
+    let mut sut = restored(vec![legacy("a", "Ann", ADDR_A), own], 0);
+    for (address, venue) in [
+        (
+            ADDR_A,
+            SigningVenue::Page {
+                url: "https://sign.example.com/".to_owned(),
+            },
+        ),
+        (ADDR_B, SigningVenue::InVela),
+        (ADDR_B, SigningVenue::official()),
+        (ADDR_C, SigningVenue::official()),
+    ] {
+        let ops = sut.dispatch(Event::SigningVenueChosen {
+            address: address.to_owned(),
+            venue: venue.clone(),
+        });
+        assert!(ops.is_empty(), "{address} → {venue:?}: {ops:?}");
+    }
+    let rows = sut.view().accounts;
+    assert_eq!(
+        rows[1].account.address, ADDR_B,
+        "the row under test is there"
+    );
+    assert_eq!(rows[0].account.signing_venue, SigningVenue::InVela);
+    assert_eq!(
+        rows[1].account.signing_venue,
+        SigningVenue::Page {
+            url: "https://sign.example.com/".to_owned()
+        }
+    );
+    // Another page on ITS domain is fine (R2: several pages, one active).
+    let ops = sut.dispatch(Event::SigningVenueChosen {
+        address: ADDR_B.to_owned(),
+        venue: SigningVenue::Page {
+            url: "https://sign.example.com/backup/".to_owned(),
+        },
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::SaveAccount { .. }]),
+        "{ops:?}"
+    );
 }

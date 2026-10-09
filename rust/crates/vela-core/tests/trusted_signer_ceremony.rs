@@ -1,6 +1,8 @@
-//! Spec 075: the Trusted Signer's ceremonies besides signing — what the core
-//! asks the page for, and which answers it takes (`contracts/clear-signer-channel.md`
-//! §1.3–1.4). One test per acceptance and per refusal.
+//! Spec 075: a signing page's ceremonies besides signing — what the core asks
+//! the page for, and which answers it takes (`contracts/clear-signer-channel.md`
+//! §1.3–1.4). One test per acceptance and per refusal. Spec 102: these run on
+//! a page only for a custom-domain wallet (R3), and the key's place rides
+//! along so the browser is hinted to it (R5).
 
 #![cfg(feature = "crux")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -15,7 +17,7 @@ use vela_core::app::KeyMethod;
 use vela_core::trusted_signer::ceremony::{request, verify, Answer, Ceremony, RegistryDeployment};
 use vela_core::trusted_signer::TrustedSignerError;
 
-const PAGE: &str = "https://sign.getvela.app";
+const PAGE: &str = "https://sign.example.com";
 const CRED_HEX: &str = "a1b2c3d4";
 const REGISTRY: &str = "https://p256-index-v2.getvela.app";
 
@@ -31,7 +33,8 @@ fn register_op() -> ShellOperation {
     ShellOperation::RegisterPasskey {
         name: "Ann".to_owned(),
         exclude_credential_ids: vec!["0a0b".to_owned()],
-        method: KeyMethod::TrustedSigner,
+        method: KeyMethod::SecurityKey,
+        page: Some(format!("{PAGE}/")),
     }
 }
 
@@ -40,10 +43,10 @@ fn member_op() -> ShellOperation {
         credential_id: CRED_HEX.to_owned(),
         public_key_hex: "04aa".to_owned(),
         attestation_hex: String::new(),
-        transports: String::new(),
-        method: KeyMethod::TrustedSigner,
+        transports: "usb,nfc".to_owned(),
+        method: KeyMethod::SecurityKey,
         group_public_key_hex: "04bb".to_owned(),
-        signer_origin: Some(PAGE.to_owned()),
+        page: Some(format!("{PAGE}/")),
     }
 }
 
@@ -52,13 +55,17 @@ fn register() -> Ceremony {
 }
 
 fn sign_in() -> Ceremony {
-    Ceremony::AuthenticatePasskey {}
+    Ceremony::AuthenticatePasskey {
+        method: KeyMethod::Platform,
+    }
 }
 
 fn proof(purpose: ProofPurpose) -> Ceremony {
     Ceremony::SignProof {
         credential_id: CRED_HEX.to_owned(),
         purpose,
+        method: KeyMethod::Platform,
+        transports: String::new(),
     }
 }
 
@@ -112,7 +119,8 @@ fn a_ceremony_reads_from_the_operation_a_shell_already_holds() {
         register_op(),
         member_op(),
         ShellOperation::AuthenticatePasskey {
-            method: KeyMethod::TrustedSigner,
+            method: KeyMethod::Hybrid,
+            page: Some(format!("{PAGE}/")),
         },
     ] {
         let wire = serde_json::to_string(&operation).unwrap();
@@ -126,6 +134,35 @@ fn a_ceremony_reads_from_the_operation_a_shell_already_holds() {
     // Not a ceremony: nothing to ask.
     assert!(Ceremony::of(&ShellOperation::LoadAccounts).is_none());
     assert!(Ceremony::from_json(r#"{"type":"load_accounts"}"#).is_none());
+}
+
+/// Spec 102 R5: the page is told where the person said the key lives — the
+/// place, its WebAuthn hints, and for a proof the key's transports — so the
+/// browser goes to that authenticator instead of asking again.
+#[test]
+fn a_ceremony_tells_the_page_where_the_key_lives() {
+    let create = request(&register(), "r1", "Ann", REGISTRY, None);
+    let params = &create["intent"]["params"][0];
+    assert_eq!(params["place"], "security_key");
+    assert_eq!(params["hints"], json!(["security-key"]));
+    let member = request(
+        &member(),
+        "r2",
+        "Ann",
+        REGISTRY,
+        Some(&RegistryDeployment {
+            chain_id: 100,
+            contract: "0x01".to_owned(),
+        }),
+    );
+    let params = &member["intent"]["params"][0];
+    assert_eq!(params["transports"], json!(["usb", "nfc"]));
+    assert_eq!(params["hints"], json!(["security-key"]));
+    let signing_in = request(&sign_in(), "r3", "Ann", REGISTRY, None);
+    assert_eq!(
+        signing_in["intent"]["params"][0]["hints"],
+        json!(["client-device"])
+    );
 }
 
 #[test]
@@ -232,6 +269,8 @@ fn a_proof_takes_its_purposes_prefix_and_its_own_key() {
     let other_key = Ceremony::SignProof {
         credential_id: "ffff".to_owned(),
         purpose: ProofPurpose::Verify,
+        method: KeyMethod::Platform,
+        transports: String::new(),
     };
     assert_eq!(
         verify(
