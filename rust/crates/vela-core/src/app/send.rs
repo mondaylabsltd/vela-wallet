@@ -769,6 +769,9 @@ pub struct SendPayee {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SendRecipientRisk {
     pub is_contract: Option<bool>,
+    /// Nothing was ever sent to this address from this account — the
+    /// confirm's 「第一次给这个地址转账」. `None` (unknown, or the person's
+    /// own address, which is never a first transfer) draws nothing.
     pub first_time: Option<bool>,
 }
 
@@ -2853,7 +2856,15 @@ impl Send {
             relay_report: relay_report(model),
             recipient_identity: model.recipient_identity.clone(),
             payees: payees(model),
-            recipient_risk: model.recipient_risk.clone(),
+            recipient_risk: model.recipient_risk.clone().map(|mut risk| {
+                // Money to one's own address is not a first transfer to a
+                // stranger, whatever the history says (the 102 device run
+                // drew 「第一次给这个地址转账」 over the person's own wallet).
+                if sends_to_self(model) {
+                    risk.first_time = None;
+                }
+                risk
+            }),
             recipient_is_token_contract: recipient_is_token_contract(model),
             sim_json: model.sim_json.clone(),
         }
@@ -4548,6 +4559,17 @@ fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
 // ---------------------------------------------------------------------------
 // Recipient identity / confirm-step probes
 // ---------------------------------------------------------------------------
+
+/// The single recipient is the sending account's own address.
+fn sends_to_self(model: &Model) -> bool {
+    let to = model.recipient.trim();
+    !model.split_mode
+        && is_valid_address(to)
+        && model
+            .account
+            .as_ref()
+            .is_some_and(|account| account.address.trim().eq_ignore_ascii_case(to))
+}
 
 /// The `[recipient]` effect (`useSendController.ts:401-410`): clear, then
 /// resolve when the address is well-formed. Risk is confirm-scoped and clears

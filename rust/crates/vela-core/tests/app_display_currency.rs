@@ -60,11 +60,42 @@ fn stored_code_never_surfaces_before_its_rate() {
     let view = sut.view();
     assert_eq!(view.code, "USD", "JPY may not show until its rate arrives");
     assert!(!view.committed);
+    // … but it is named as the money on its way, so no figure is drawn in
+    // the placeholder's dollars meanwhile (the 102 device run).
+    assert_eq!(view.pending.as_deref(), Some("JPY"));
 
     sut.resolve(rate("JPY", Some(155.0)));
     let view = sut.view();
     assert_eq!((view.code.as_str(), view.rate), ("JPY", Some(155.0)));
     assert!(view.committed);
+    assert_eq!(view.pending, None);
+}
+
+/// Nothing is pending before the preference is read, nor while a first
+/// launch prices its region guess — that is not the person's choice yet,
+/// and it may still end on USD. A later re-read keeps the committed pair
+/// on screen and names nothing pending (no flicker on focus).
+#[test]
+fn only_a_stored_choice_is_named_pending() {
+    let mut sut = Sut::new();
+    assert_eq!(sut.view().pending, None);
+    sut.dispatch(Event::Refresh);
+    assert_eq!(sut.view().pending, None, "still reading the preference");
+    sut.resolve(stored(None));
+    sut.resolve(device(Some("CNY")));
+    let view = sut.view();
+    assert!(!view.committed);
+    assert_eq!(view.pending, None, "the seed is a guess, not a choice");
+
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Refresh);
+    sut.resolve(stored(Some("CNY")));
+    sut.resolve(rate("CNY", Some(7.1)));
+    sut.dispatch(Event::Refresh);
+    sut.resolve(stored(Some("CNY")));
+    let view = sut.view();
+    assert!(view.committed, "the pair on screen stays");
+    assert_eq!(view.pending, None);
 }
 
 /// An unpriceable DISPLAY currency commits as unpriceable — `rate: None`, not

@@ -4075,6 +4075,33 @@ fn first_time() -> SendRecipientRisk {
     }
 }
 
+/// The 102 device run: a send to the person's OWN address was tagged
+/// 「第一次给这个地址转账」. The shell's history check said "never sent
+/// here" (true — nobody pays themselves), but a first transfer to oneself is
+/// not the stranger the tag warns about. The core withholds it; the other
+/// half of the risk stays.
+#[test]
+fn a_send_to_ones_own_address_is_never_a_first_transfer() {
+    for (to, tagged) in [(RECIPIENT, true), (ACCOUNT, false)] {
+        let mut sut = boot(vec![usdc("100")]);
+        select_usdc(&mut sut);
+        set_recipient(&mut sut, &to.to_uppercase().replacen("0X", "0x", 1));
+        sut.dispatch(Event::SetAmount {
+            amount: "10".to_owned(),
+        });
+        sut.dispatch(Event::Continue);
+        drain_form_quote(&mut sut);
+        sut.resolve(fee_ok(usdc_fee(1, 1_000_000)));
+        drop_the_precheck_timer(&mut sut);
+        sut.resolve(covered());
+        assert_eq!(sut.view().stage, SendStage::Confirm);
+        answer_confirm_probes(&mut sut);
+        let risk = sut.view().recipient_risk.expect("the risk answered");
+        assert_eq!(risk.first_time == Some(true), tagged, "to {to}");
+        assert_eq!(risk.is_contract, Some(false), "the rest of it stays");
+    }
+}
+
 /// The confirm's quote is priced again once a block while the page is up
 /// (`fee_policy::requote_interval_ms`), and each new figure reaches this
 /// machine. A transfer's calls do not move with the fee, so nothing is asked

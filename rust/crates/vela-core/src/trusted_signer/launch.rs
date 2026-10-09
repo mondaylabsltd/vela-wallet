@@ -128,6 +128,11 @@ pub fn is_fresh_at(checked_at_ms: u64, now_ms: u64) -> bool {
 /// timezone database); `date_format` / `time_format` are the person's
 /// presets as stored (`ymd_slash`… / `h24`, `h12`), `auto` already resolved;
 /// `language` names the day period of a 12-hour clock.
+///
+/// **One unbreakable unit.** Every space inside it is a no-break space
+/// (U+00A0): a moment split over two lines reads as two things — a phone
+/// drew 「检查于 下午」 on one line and 「10:07」 on the next. The line it
+/// fills may still wrap before or after it.
 #[must_use]
 pub fn checked_time(
     checked_at_ms: u64,
@@ -144,11 +149,12 @@ pub fn checked_time(
     let at = Civil::from_unix_millis(millis(checked_at_ms), utc_offset_minutes);
     let now = Civil::from_unix_millis(millis(now_ms), utc_offset_minutes);
     let clock = time_preset_of(time_format);
-    if (at.year, at.month, at.day) == (now.year, now.month, now.day) {
+    let moment = if (at.year, at.month, at.day) == (now.year, now.month, now.day) {
         format_time(&at, clock, language)
     } else {
         format_date_time(&at, date_preset_of(date_format), clock, language)
-    }
+    };
+    moment.replace(' ', "\u{a0}")
 }
 
 /// The page a wallet will fetch, check and open: one version of one

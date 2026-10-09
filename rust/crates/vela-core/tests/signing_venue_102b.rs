@@ -248,6 +248,13 @@ const AT: u64 = 1_791_556_320_000;
 
 #[test]
 fn the_check_time_is_the_clock_today_and_the_date_before() {
+    // Each moment is one unbreakable unit (a no-break space wherever the
+    // format has a space); compared here as written.
+    let checked_time = |at, now, offset, date: &str, time: &str, lang: &str| {
+        let moment = checked_time(at, now, offset, date, time, lang);
+        assert!(!moment.contains(' '), "{moment:?} could break across lines");
+        moment.replace('\u{a0}', " ")
+    };
     let later = AT + 2 * 60 * 1000;
     assert_eq!(
         checked_time(AT, later, 0, "mdy_slash", "h24", "en"),
@@ -278,6 +285,28 @@ fn the_check_time_is_the_clock_today_and_the_date_before() {
     );
     // `auto` and unknown words read as the defaults.
     assert_eq!(checked_time(AT, later, 0, "auto", "auto", "en"), "14:32");
+}
+
+/// The 102 device run: 「检查于 下午」 / 「10:07」 on two lines. The day
+/// period and the clock are glued, and so are a date and its time.
+#[test]
+fn a_checked_time_never_breaks_inside() {
+    let later = AT + 2 * 60 * 1000;
+    let tomorrow = AT + 20 * 60 * 60 * 1000;
+    for (now, language, clock) in [
+        (later, "zh", "h12"),
+        (later, "ja", "h12"),
+        (later, "en", "h12"),
+        (tomorrow, "en", "h24"),
+        (tomorrow, "zh", "h12"),
+    ] {
+        let moment = checked_time(AT, now, 0, "ymd_slash", clock, language);
+        assert!(!moment.contains(' '), "{language} {clock}: {moment:?}");
+    }
+    assert_eq!(
+        checked_time(AT, later, 0, "ymd_slash", "h12", "zh"),
+        "下午\u{a0}2:32"
+    );
 }
 
 // ---------------------------------------------------------------------------

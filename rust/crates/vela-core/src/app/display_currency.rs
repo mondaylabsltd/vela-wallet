@@ -171,7 +171,20 @@ pub struct CurrencyView {
     pub rate: Option<f64>,
     /// `false` ⇒ the USD/1 placeholder is showing. The shell derives the
     /// symbol from its catalog and owns all formatting.
+    ///
+    /// **While `false`, no money figure is drawn** — the home total, the
+    /// holdings, a row's fiat: each shows its loading state instead. The
+    /// placeholder is not the person's currency; drawing it put "$1,234"
+    /// on an iPhone home for a few seconds before it jumped to "¥8,876"
+    /// (the 102 device run). The figure appears once, in the right money.
     pub committed: bool,
+    /// The person's own currency on its way: a stored choice whose rate is
+    /// being fetched while nothing is committed yet. A surface that names
+    /// its currency apart from the figure may name this one while the figure
+    /// waits. `None` once committed, before the preference is read, and
+    /// while the first launch's region guess is priced (not a choice yet).
+    #[serde(default)]
+    pub pending: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +251,7 @@ impl App for DisplayCurrency {
                 code: pair.code.clone(),
                 rate: pair.rate,
                 committed: true,
+                pending: None,
             },
             None => CurrencyView {
                 code: "USD".to_owned(),
@@ -245,6 +259,10 @@ impl App for DisplayCurrency {
                 // this `Some` is a priced pair, not a default.
                 rate: Some(1.0),
                 committed: false,
+                pending: match &model.phase {
+                    Phase::ResolvingDisplay { code } => Some(code.clone()),
+                    _ => None,
+                },
             },
         }
     }
