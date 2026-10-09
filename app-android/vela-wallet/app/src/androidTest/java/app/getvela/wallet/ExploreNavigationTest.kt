@@ -1,5 +1,8 @@
 package app.getvela.wallet
 
+import android.os.Build
+import android.os.SystemClock
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,8 +14,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -149,6 +157,57 @@ class ExploreNavigationTest {
         assertEquals(listOf(VelaTab.Explore), selected)
         compose.onNodeWithText(openTabs).assertExists()
         compose.onNodeWithContentDescription(strings.t("explore.back")).assertDoesNotExist()
+    }
+
+    /**
+     * TalkBack and 探索 while a page is up: Compose hands a screen reader a
+     * SELECTED tab as not clickable and without its click, so a TalkBack user
+     * could not tap 探索 again to reach the home. This one is a Tab with a
+     * click, its selection said in words; on the home, where tapping it again
+     * does nothing, it stays the plain selected tab.
+     */
+    @Test
+    fun theSelectedExploreTabWhileBrowsingIsOneTalkBackCanTapAgain() {
+        show(ExploreScreenState.E4, ExploreView.Browsing)
+        val explore = strings.t("componentsUi.mainNav.explore")
+        compose.onNodeWithContentDescription(explore)
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription))
+        // What TalkBack is handed: clickable, with the click, said to be selected.
+        val node = accessibilityNode(explore)
+        assertTrue("clickable", node.isClickable)
+        assertTrue("with its click", node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
+        if (Build.VERSION.SDK_INT >= 30) assertTrue("said to be selected", !node.stateDescription.isNullOrBlank())
+        // And TalkBack's double-tap does what a tap does: the home, the tab kept.
+        assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        compose.waitForIdle()
+        assertEquals(listOf(VelaTab.Explore), selected)
+        compose.onNodeWithText(openTabs).assertExists()
+        // On the home the selected 探索 does nothing again: the plain selected tab.
+        val home = accessibilityNode(explore)
+        assertTrue("selected", home.isSelected)
+        // The other tabs are unchanged: not selected, clickable.
+        val wallet = accessibilityNode(strings.t("componentsUi.mainNav.wallet"))
+        assertTrue(wallet.isClickable && !wallet.isSelected)
+    }
+
+    /** The node TalkBack would be handed for [description] (via UiAutomation, as a screen reader reads the window). */
+    private fun accessibilityNode(description: String): AccessibilityNodeInfo {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        while (true) {
+            compose.waitForIdle()
+            automation.rootInActiveWindow?.let { root -> find(root, description) }?.let { return it }
+            check(SystemClock.uptimeMillis() < deadline) { "no accessibility node named $description" }
+            Thread.sleep(50)
+        }
+    }
+
+    private fun find(node: AccessibilityNodeInfo, description: String): AccessibilityNodeInfo? {
+        if (node.contentDescription?.toString() == description) return node
+        for (i in 0 until node.childCount) node.getChild(i)?.let { find(it, description) }?.let { return it }
+        return null
     }
 
     @Test

@@ -375,6 +375,8 @@ fun ExploreScreen(
                         .navigationBarsPadding(),
                     selected = VelaTab.Explore,
                     onSelect = selectTab,
+                    // 探索 again is the way home from here: TalkBack can tap it too.
+                    reselectable = true,
                 )
             }
 
