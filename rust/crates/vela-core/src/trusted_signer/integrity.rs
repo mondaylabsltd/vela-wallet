@@ -61,6 +61,16 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // 245c9ea1's page and behaviour, with two wordings from the owner's
+    // review (2026-10-09). The tag beside the fee and beside a chain the page
+    // does not know says WHOSE word it is — 「App 标注」 / "per the app" for
+    // "this payment is the network fee", 「App 提供」 / "named by the app" for
+    // a chain's name — where it said 「自述」 / "claimed"; a chain nobody
+    // names is called by its id, unmarked. The key ceremony's subtitle names
+    // the wallet once: 「Vela 钱包 · 答复只交回给它」. LAUNCH (spec 102 Phase
+    // 3) — valid only once `dist/` is deployed and `/b/f14e755a…/sign`
+    // answers 200 + immutable with these bytes.
+    "f14e755aace5937d245c3debe4318fd7b6640d5c17032c472b976b72509f46a8",
     // The same page, drawn as the apps draw their own signing sheet (owner,
     // 2026-10-09: the page's colours were too loud — keep the in-app signing
     // feel): the app's tokens in light and dark, its face (Plus Jakarta Sans,
@@ -70,8 +80,10 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // hero, and a key ceremony titled in the app's own words ("Add a
     // passkey"). Behaviour is 2d19fa49's: answers only to
     // `velawallet://sign-result`, refuses frames, the key route, the tap.
-    // LAUNCH (spec 102 Phase 3) — valid only once `dist/` is deployed and
-    // `/b/245c9ea1…/sign` answers 200 + immutable with these bytes.
+    // LAUNCH in one commit only, never deployed, replaced by f14e755a before
+    // any release (its words, not its behaviour). Kept: `dist/` carries it,
+    // so a test build that launches it opens a live page once `dist/` is
+    // deployed, and it is as safe to open.
     "245c9ea1a365f85bc9dfa16ff4d67b9242a7936168e7b3dbb3450f5e2301b0f6",
     // The page as the authority (spec 102 Phase 3): what is signed first, the
     // key it will use, then one tap — the WebAuthn call inside the tap, for
@@ -191,7 +203,7 @@ pub const ENFORCE: bool = true;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "245c9ea1a365f85bc9dfa16ff4d67b9242a7936168e7b3dbb3450f5e2301b0f6";
+pub const LAUNCH: &str = "f14e755aace5937d245c3debe4318fd7b6640d5c17032c472b976b72509f46a8";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).
