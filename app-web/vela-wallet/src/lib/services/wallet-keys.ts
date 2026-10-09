@@ -12,7 +12,7 @@
  * a wallet that was just created is exactly the thing a cache would get wrong.
  */
 import { loadCore, walletKeysStep } from '$lib/core/client';
-import { signInRoute } from '$lib/core/kernels';
+import { signingPlan } from '$lib/core/kernels';
 import type { Account } from '$lib/core/generated/Account';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 import { runWalk } from './core-walk';
@@ -34,18 +34,6 @@ export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced' | 'kind' | 'sy
 	attestation_hex: string;
 	/** The authenticator verified the person at registration; `null` = nobody can vouch. */
 	user_verified: boolean | null;
-	/**
-	 * Spec 075: the Trusted Signer page this key lives behind, when it does —
-	 * omitted by the core when it does not (`skip_serializing_if`). The core
-	 * knows it only because [`deviceKeys`] passes it in from the account record:
-	 * the registry stores no origin.
-	 *
-	 * A row with one has `method === 'trusted_signer'`, which OUTRANKS the
-	 * authenticator's report: a page runs its ceremony in a browser, so it
-	 * always answers `platform`, and that names the one side of the page this
-	 * wallet cannot reach.
-	 */
-	signer_origin?: string | null;
 	/**
 	 * The key this device signs with — the one the account signed in with
 	 * (founder, 2026-09-26). Exactly one row, or none for a record from before
@@ -76,10 +64,9 @@ interface KeysDone {
  * The account record's key list in founding order; a legacy record is a list of
  * one.
  *
- * `signer_origin` travels with each key (spec 075): the walk cannot learn it
- * anywhere else — the registry contract stores no origin — so a key behind a
- * Trusted Signer page is drawn as a passkey on some device unless this list says
- * otherwise. A legacy record predates the field and has none.
+ * No page origin travels any more (spec 102): a row is captioned by where its
+ * key LIVES — this device, a phone, a security key — never by a page it was
+ * minted on, because the same key signs in Vela and on a page alike.
  *
  * `credential_id` is how the walk finds the row of the key this device signs
  * with; a legacy record's one credential is its `id`.
@@ -90,8 +77,7 @@ export function deviceKeys(account: Pick<Account, 'id' | 'name' | 'public_key_he
 			credential_id: key.credential_id,
 			public_key_hex: key.public_key_hex,
 			name: key.name,
-			transports: key.transports,
-			signer_origin: key.signer_origin ?? null
+			transports: key.transports
 		}));
 	}
 	return [
@@ -99,8 +85,7 @@ export function deviceKeys(account: Pick<Account, 'id' | 'name' | 'public_key_he
 			credential_id: account.id,
 			public_key_hex: account.public_key_hex,
 			name: account.name,
-			transports: '',
-			signer_origin: null
+			transports: ''
 		}
 	];
 }
@@ -115,7 +100,7 @@ export async function readWalletKeys(account: Account): Promise<WalletKeys> {
 	try {
 		await loadCore();
 		const json = JSON.stringify(device);
-		const signIn = signInRoute(account)?.credential_id ?? '';
+		const signIn = signingPlan(account)?.key?.credential_id ?? '';
 		const done = await runWalk<KeysDone>((answers) =>
 			walletKeysStep(account.address, json, answers, signIn)
 		);

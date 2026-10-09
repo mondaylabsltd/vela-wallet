@@ -251,3 +251,43 @@ describe('Sign Out', () => {
 		expect(signedOut).toEqual(['sign-out']);
 	});
 });
+
+/**
+ * Spec 102: where THIS account reviews and signs is a row under the account
+ * (the venue is the account's, not the device's), and the pages this device
+ * trusts are a row in Advanced. Both push their page.
+ */
+describe('where you review and sign (spec 102)', () => {
+	it('the row under the account says where it signs now, and opens the choice', async () => {
+		const view = await drawn('st1');
+		const row = [...view.root.querySelectorAll<HTMLElement>('button')].find((b) =>
+			b.textContent?.includes(String(m.venue.title))
+		);
+		// One line under the title: where it signs now, and on which host.
+		expect(row?.querySelector('.subtitle')?.textContent).toContain(String(m.venue.page));
+		expect(row?.querySelector('.subtitle')?.textContent).toContain('sign.getvela.app');
+		await view.click(row);
+		expect(view.root.querySelector('[role="radiogroup"]')).not.toBeNull();
+		// Vela's sheet, the official page, and the two self-hosted pages saved here.
+		expect(view.root.querySelectorAll('[role="radio"]')).toHaveLength(4);
+	});
+
+	it('Signing pages sits in Advanced and opens the list', async () => {
+		const view = await drawn('st1b');
+		const row = [...view.root.querySelectorAll<HTMLElement>('button')].find((b) =>
+			b.textContent?.includes(String(m.signing.title))
+		);
+		await view.click(row);
+		// The official page, then the two self-hosted ones.
+		expect(view.root.querySelectorAll('li.page')).toHaveLength(3);
+	});
+
+	it('a model with no Signing pages (the web) has no such page to open', async () => {
+		const model = buildMobileState('st18', m, IDENTICON);
+		const screen = render(SettingsHome, {
+			props: { model: { ...model, signingPages: undefined } }
+		});
+		await tick();
+		expect(screen.container.querySelectorAll('li.page')).toHaveLength(0);
+	});
+});

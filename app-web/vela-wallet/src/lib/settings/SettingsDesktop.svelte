@@ -49,7 +49,9 @@
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SettingsNavList from './ui/SettingsNavList.svelte';
 	import SettingsRow from './ui/SettingsRow.svelte';
+	import SigningPagesPanel from './ui/SigningPagesPanel.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
+	import VenueList from './ui/VenueList.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
 	interface Props {
@@ -170,6 +172,11 @@
 				return { title: model.community.title, description: undefined };
 			case 'about':
 				return { title: model.about.title, description: undefined };
+			case 'signing-pages':
+				return {
+					title: model.signingPages?.title ?? model.title,
+					description: model.signingPages?.subtitle
+				};
 			default:
 				return { title: model.title, description: undefined };
 		}
@@ -263,6 +270,22 @@
 					     them (spec 062). Signed HERE: the page hosts the sheet. -->
 					<hr />
 					<KeysBlock model={model.account.keys} onbackup={() => onethereumbackup?.()} />
+				{/if}
+
+				{#if model.account.venue !== undefined}
+					<!-- Spec 102: where THIS account reviews and signs — under its keys,
+					     which do not change when it does. The wide layout has room to
+					     show the choice itself rather than a row that opens it. -->
+					<hr />
+					<section class="venue" aria-labelledby="settings-venue-title">
+						<h2 id="settings-venue-title">{model.account.venue.title}</h2>
+						<p class="venue-subtitle">{model.account.venue.subtitle}</p>
+						<VenueList
+							venue={model.account.venue}
+							showDomain={model.account.keys?.domain === undefined}
+							onpick={(venue) => onprefevent?.({ kind: 'signing-venue', venue })}
+						/>
+					</section>
 				{/if}
 
 				<hr />
@@ -424,6 +447,8 @@
 						<SettingsRow {row} divider={index < model.community.rows.length - 1} />
 					{/each}
 				</div>
+			{:else if page === 'signing-pages' && model.signingPages !== undefined}
+				<SigningPagesPanel panel={model.signingPages} />
 			{:else if page === 'about'}
 				<AboutPanel
 					panel={model.about}
@@ -604,6 +629,20 @@
 		border: none;
 		border-top: var(--border-hairline) solid var(--color-border-base);
 		margin-block: var(--space-4xl);
+	}
+
+	.venue h2 {
+		margin: 0;
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+
+	.venue-subtitle {
+		margin: var(--space-sm) 0 var(--space-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
 	}
 
 	.sign-out {

@@ -16,6 +16,38 @@
  */
 
 import type { SpeedWords } from '$lib/flows/speed-control';
+import type { SettingsMessages } from '$lib/settings/messages';
+
+/**
+ * Spec 102 (D4): the hand-off card's words. Resolved for the GALLERY only —
+ * the web opens no signing page, so no live page here draws the card, and
+ * these strings stay out of `SigningMessages` (which every page with a
+ * signing host carries). The apps draw the same card from the same keys.
+ */
+export interface HandoffMessages {
+	/** "Review and sign on your trusted page". */
+	title: string;
+	/** "Confirm with {{key}}". */
+	key: string;
+	/** Open — the sheet's "Continue to signing page". */
+	open: string;
+	/** After Open: "Waiting for the signing page…", where to look, and the way back. */
+	waiting: string;
+	waitingHint: string;
+	reopen: string;
+	/** The official page's name. */
+	official: string;
+	integrity: SettingsMessages['integrity'];
+	/**
+	 * The three places a key lives, by the corpus key a `KeyLabel` names
+	 * (`place_key`) — "Confirm with Phone or tablet" for a key that carries
+	 * the wallet's name (D-17).
+	 */
+	places: Record<string, string>;
+	/** The quiet fee + speed row (D-18): its label and the speeds' names, by `tier_key`. */
+	feeLabel: string;
+	tiers: Record<string, string>;
+}
 
 export interface SigningMessages {
 	panelTitle: string;
@@ -207,6 +239,12 @@ export interface SigningMessages {
 	 * it in place of the generic hint.
 	 */
 	signerReasons: Record<string, string>;
+	/**
+	 * Spec 102 (P2b-W1): why this account cannot sign here — the core's
+	 * `VenueBlock`, the same words Settings draws under "Where you review and
+	 * sign". The failed status says it in place of the generic hint.
+	 */
+	venueBlock: { blockedApp: string; blockedPage: string; blockedWeb: string };
 	/**
 	 * The speed control under the fee row (spec 069) — the send form's words,
 	 * so the two surfaces name a speed identically.

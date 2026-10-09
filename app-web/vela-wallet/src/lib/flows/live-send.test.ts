@@ -1217,6 +1217,38 @@ describe('the receipt', () => {
 		expect(failed.title).toBe(m['send.txErrorGeneric']);
 		expect(failed.hash).toBeUndefined();
 	});
+
+	/**
+	 * Spec 102 (P2b-W1): an account that cannot sign on the web. Not the
+	 * network, not the relay — so not "couldn't be submitted… try again": the
+	 * core's reason (`tx_venue_block`), in the person's language.
+	 */
+	it('a venue the web cannot use says the core’s reason, and no "try again"', () => {
+		for (const locale of ['en', 'zh'] as const) {
+			const words = resolveWalletFlowMessages(locale);
+			const failed = liveSendReceipt(receiptModel(), {
+				...inputs({
+					tx_status: 'error',
+					tx_error: 'venue_blocked',
+					tx_venue_block: { type: 'not_on_web' }
+				}),
+				m: words
+			});
+			expect(failed.stage, locale).toBe('failed');
+			expect(failed.title, locale).toBe(words['componentsTx.receipt.statusFailed']);
+			expect(failed.captions, locale).toEqual([words['settings.venue.blockedWeb']]);
+			expect(failed.cta, locale).toBe(words['componentsTx.receipt.done']);
+		}
+		const own = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'error',
+				tx_error: 'venue_blocked',
+				tx_venue_block: { type: 'app_cannot_reach', domain: 'sign.example.com' }
+			})
+		);
+		expect(own.captions).toEqual(["Vela can't reach keys on sign.example.com."]);
+	});
 });
 
 /**

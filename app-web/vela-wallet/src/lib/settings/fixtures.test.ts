@@ -117,15 +117,17 @@ describe('Settings → Community', () => {
 });
 
 describe('state-id inventory (one id per mock in design/settings/)', () => {
-	it('mobile states cover ST1–ST16 and SR1–SR5', () => {
+	it('mobile states cover ST1–ST18 and SR1–SR5', () => {
 		expect(MOBILE_STATES).toEqual(MOBILE_SETTINGS_STATES);
 		// 16 ST mocks — ST1b, ST3b, ST9b, ST10b, ST10c and ST13b are their own
-		// states, so the ST count is 22 — plus SR1, SR2, SR2b, SR3, SR4, SR5.
-		expect(MOBILE_STATES.filter((s) => s.startsWith('st'))).toHaveLength(22);
+		// states, so the ST count is 22 — plus spec 102's ST17/ST17b (where you
+		// review and sign) and ST18/ST18b (signing pages): 26. Then SR1, SR2,
+		// SR2b, SR3, SR4, SR5.
+		expect(MOBILE_STATES.filter((s) => s.startsWith('st'))).toHaveLength(26);
 		expect(MOBILE_STATES.filter((s) => s.startsWith('sr'))).toHaveLength(6);
 	});
 
-	it('desktop states cover DST1–DST8 plus DST4b and DSR1', () => {
+	it('desktop states cover DST1–DST9 plus DST4b and DSR1', () => {
 		expect(DESKTOP_STATES).toEqual(DESKTOP_SETTINGS_STATES);
 		expect(DESKTOP_STATES).toEqual([
 			'dst1',
@@ -137,6 +139,8 @@ describe('state-id inventory (one id per mock in design/settings/)', () => {
 			'dst6',
 			'dst7',
 			'dst8',
+			// Spec 102: Settings → Signing pages.
+			'dst9',
 			'dsr1'
 		]);
 	});
@@ -314,6 +318,9 @@ describe('desktop canon', () => {
 			// Spec 068 — the stored default transaction speed, in the position
 			// the phone's 高级 section gives it (after 服务端点, before 存储).
 			'fee-speed',
+			// Spec 102 — the signing pages this device trusts, in the phone's
+			// 高级 position (just before 存储).
+			'signing-pages',
 			'storage',
 			// 078 — the official accounts, directly above the last group.
 			'community',

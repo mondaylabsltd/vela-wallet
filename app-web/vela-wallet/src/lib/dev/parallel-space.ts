@@ -70,7 +70,10 @@ const FIXTURE_CONTACT = {
  */
 export function fixtureStoredAccounts(): Account[] {
 	const accounts = fixtureAccounts();
-	const single = accounts.map((a) => ({
+	// Spec 102: what the core writes for an account made in the app — keys on
+	// `getvela.app`, reviewed and signed in Vela.
+	const inVela = { signing_domain: 'getvela.app', signing_venue: { type: 'in_vela' as const } };
+	const single = accounts.map((a): Account => ({
 		id: a.id,
 		name: a.name,
 		address: a.address,
@@ -83,7 +86,8 @@ export function fixtureStoredAccounts(): Account[] {
 				name: a.name,
 				transports: 'internal'
 			}
-		]
+		],
+		...inVela
 	}));
 	const primary = fixtureAccount();
 	const multi: Account = {
@@ -97,7 +101,8 @@ export function fixtureStoredAccounts(): Account[] {
 			public_key_hex: a.publicKeyHex,
 			name: a.name,
 			transports: 'internal'
-		}))
+		})),
+		...inVela
 	};
 	return [...single, multi];
 }

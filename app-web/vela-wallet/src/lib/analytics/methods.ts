@@ -1,7 +1,7 @@
 /**
  * The onboarding core's key method, as usage statistics name it — the same
- * three words (`platform` / `hybrid` / `security_key`). The Trusted Signer
- * page is not a method the web offers, so it has no name here and the
+ * three words (`platform` / `hybrid` / `security_key`). Anything else (an
+ * older build's fourth word, spec 102 retired it) has no name here and the
  * property is simply left out.
  */
 import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';

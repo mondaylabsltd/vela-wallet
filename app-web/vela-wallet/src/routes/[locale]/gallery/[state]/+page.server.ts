@@ -8,6 +8,7 @@ import {
 	resolveContactsMessages,
 	resolveWalletFlowMessages,
 	resolveExploreMessages,
+	resolveHandoffMessages,
 	resolveSigningMessages,
 	resolveSettingsMessages,
 	resolveWalletMessages
@@ -45,6 +46,7 @@ import {
 	MOBILE_STATES as EXPLORE_MOBILE_STATES
 } from '$lib/explore/fixtures';
 import { ALL_STATES as SIGNING_STATES, buildSigningState } from '$lib/signing/fixtures';
+import { buildHandoffState, HANDOFF_STATES, type HandoffStateId } from '$lib/signing/handoff';
 import type { ExploreDesktopStateId, ExploreStateId } from '$lib/explore/model';
 import type { SigningStateId } from '$lib/signing/model';
 import {
@@ -88,6 +90,7 @@ export const entries: EntryGenerator = () =>
 			...EXPLORE_MOBILE_STATES,
 			...EXPLORE_DESKTOP_STATES,
 			...SIGNING_STATES,
+			...HANDOFF_STATES,
 			...SETTINGS_MOBILE_STATES,
 			...SETTINGS_DESKTOP_STATES
 		].map((state) => ({ locale, state }))
@@ -203,6 +206,23 @@ export const load: PageServerLoad = ({ params }) => {
 				? buildSettingsMobileState('st1', resolveSettingsMessages(locale), identiconSvgFor)
 				: undefined,
 			signing
+		};
+	}
+	// Spec 102 (D4): the hand-off card — the apps' sheet when an account
+	// reviews and signs on a trusted page. A board only: the web opens no page.
+	if ((HANDOFF_STATES as readonly string[]).includes(params.state)) {
+		const base = buildSigningState('cs1', resolveSigningMessages(locale), identiconSvgFor);
+		return {
+			kind: 'signing' as const,
+			model: buildExploreMobileState('e4', resolveExploreMessages(locale), identiconSvgFor),
+			copy: resolveExploreMessages(locale),
+			settings: undefined,
+			signing: buildHandoffState(
+				params.state as HandoffStateId,
+				base,
+				resolveHandoffMessages(locale),
+				locale
+			)
 		};
 	}
 	error(404, `unknown state "${params.state}"`);

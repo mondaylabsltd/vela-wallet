@@ -49,6 +49,9 @@
 	import SelectRow from '$lib/settings/ui/SelectRow.svelte';
 	import SettingsRow from '$lib/settings/ui/SettingsRow.svelte';
 	import StatusPill from '$lib/settings/ui/StatusPill.svelte';
+	import IntegrityLine from '$lib/settings/ui/IntegrityLine.svelte';
+	import SigningPagesPanel from '$lib/settings/ui/SigningPagesPanel.svelte';
+	import VenueList from '$lib/settings/ui/VenueList.svelte';
 	import StorageBar from '$lib/settings/ui/StorageBar.svelte';
 	import StorageGroup from '$lib/settings/ui/StorageGroup.svelte';
 	import TextScaleSlider from '$lib/settings/ui/TextScaleSlider.svelte';
@@ -569,6 +572,45 @@
 				<SegmentedControl model={st.appearance.theme} />
 			</FormRow>
 		</div>
+	</section>
+
+	<!-- Spec 102: where you review and sign, and what is trusted about a page.
+	     The design the phones build to — every primitive, every tone. -->
+	<section id="gallery-section-settings-venue">
+		<h2>IntegrityLine — what backs the word "trusted"</h2>
+		{#each st.integrity as entry (entry.state)}
+			<div class="cell" id="gallery-settings-integrity-{entry.state}">
+				<IntegrityLine line={entry.line} />
+			</div>
+		{/each}
+
+		<h2>VenueList — an account on getvela.app (apps)</h2>
+		{#if st.venue.app !== undefined}
+			<div class="cell" id="gallery-settings-venue-app"><VenueList venue={st.venue.app} /></div>
+		{/if}
+		<h2>VenueList — an account on its own domain, locked to its page (apps)</h2>
+		{#if st.venue.own !== undefined}
+			<div class="cell" id="gallery-settings-venue-own"><VenueList venue={st.venue.own} /></div>
+		{/if}
+		<h2>VenueList — the web (it opens no page): stated, not offered</h2>
+		<div class="cell" id="gallery-settings-venue-web-app">
+			<VenueList venue={st.venue.webApp} />
+		</div>
+		<div class="cell" id="gallery-settings-venue-web-own">
+			<VenueList venue={st.venue.webOwn} />
+		</div>
+
+		<h2>SigningPagesPanel</h2>
+		{#if st.signingPages !== undefined}
+			<div class="cell" id="gallery-settings-signing-pages">
+				<SigningPagesPanel panel={st.signingPages} />
+			</div>
+		{/if}
+		{#if st.signingPagesRefused !== undefined}
+			<div class="cell" id="gallery-settings-signing-pages-refused">
+				<SigningPagesPanel panel={st.signingPagesRefused} />
+			</div>
+		{/if}
 	</section>
 
 	<section id="gallery-section-settings-rescue">

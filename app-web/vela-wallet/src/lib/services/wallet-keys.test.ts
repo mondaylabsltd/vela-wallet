@@ -24,7 +24,9 @@ import { readWalletKeys } from './wallet-keys';
 const m = resolveSettingsMessages('en');
 
 const KEY = (n: number) => '04' + String(n).repeat(128);
-function wallet(signedInWith?: Account['signed_in_with']): Account {
+/** As stored: a 102 record names its sign-in key `sign_in_key`; an older one `signed_in_with`. */
+type SignIn = { credential_id: string; method: 'platform' | 'hybrid' | 'security_key' };
+function wallet(signIn?: SignIn, legacy = false): Account {
 	return {
 		id: 'aa01',
 		name: 'Ann',
@@ -36,8 +38,10 @@ function wallet(signedInWith?: Account['signed_in_with']): Account {
 			{ credential_id: 'bb02', public_key_hex: KEY(2), name: 'YubiKey', transports: 'usb,nfc' },
 			{ credential_id: 'cc03', public_key_hex: KEY(3), name: 'Phone', transports: 'hybrid' }
 		],
-		...(signedInWith === undefined ? {} : { signed_in_with: signedInWith })
-	};
+		signing_domain: 'getvela.app',
+		signing_venue: { type: 'in_vela' },
+		...(signIn === undefined ? {} : legacy ? { signed_in_with: signIn } : { sign_in_key: signIn })
+	} as Account;
 }
 
 describe('the keys walk', () => {
@@ -47,6 +51,13 @@ describe('the keys walk', () => {
 		);
 		expect(keys.map((key) => key.signs_here)).toEqual([false, true, false]);
 		expect(keys[1].public_key_hex).toBe(KEY(2));
+	});
+
+	it('reads an older record’s `signed_in_with` through the core', async () => {
+		const { keys } = await readWalletKeys(
+			wallet({ credential_id: 'cc03', method: 'hybrid' }, true)
+		);
+		expect(keys.map((key) => key.signs_here)).toEqual([false, false, true]);
 	});
 
 	it('marks none for a record from before the sign-in key', async () => {

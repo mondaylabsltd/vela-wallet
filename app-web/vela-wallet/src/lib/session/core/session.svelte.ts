@@ -19,6 +19,7 @@ import { executeSession, sessionFailure, type SessionEffect } from './executor';
 
 import type { CompletionMode } from '../generated/CompletionMode';
 import type { SessionEvent } from '../generated/SessionEvent';
+import type { SigningVenue } from '../generated/SigningVenue';
 import type { SessionShellResult } from '../generated/SessionShellResult';
 import type { SessionView } from '../generated/SessionView';
 
@@ -167,6 +168,15 @@ class Session {
 	 */
 	removeAccount(index: number): void {
 		this.#loop?.dispatch({ type: 'remove_account', index });
+	}
+
+	/**
+	 * Spec 102 (D1): where the account at `address` reviews and signs on this
+	 * device. By address (invariant ⑨); the core refuses — nothing written — a
+	 * venue that cannot reach the account's keys (R1).
+	 */
+	chooseVenue(address: string, venue: SigningVenue): void {
+		this.#loop?.dispatch({ type: 'signing_venue_chosen', address, venue });
 	}
 
 	signOut(): void {

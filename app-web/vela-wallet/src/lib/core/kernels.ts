@@ -12,8 +12,13 @@
  */
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
-import type { Account } from '$lib/core/generated/Account';
-import type { KeyMethod } from '$lib/core/generated/KeyMethod';
+import type { SigningPage } from '$lib/core/generated/SigningPage';
+import type { SigningPlan } from '$lib/core/generated/SigningPlan';
+import type { SigningVenue } from '$lib/core/generated/SigningVenue';
+import type { VenueBlock } from '$lib/core/generated/VenueBlock';
+import type { VenueChoice } from '$lib/core/generated/VenueChoice';
+import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
+import type { HandoffFee } from '$lib/core/generated/HandoffFee';
 import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
@@ -647,111 +652,147 @@ export function attestSafeMessageHash(
 }
 
 // ---------------------------------------------------------------------------
-// Where a signature goes
+// Where a signature goes (spec 102)
 // ---------------------------------------------------------------------------
 
 /**
- * Where an account's signatures go (founder, 2026-09-26): the key it was
- * created or last signed in with here, over the route the person chose for it
- * then — `vela_core::app::Account::sign_in_route`. `transports` is what makes
- * that route reachable; `signer_origin` is present only for a key behind a
- * Trusted Signer page.
+ * How an account signs on this device — `vela_core::app::Account::
+ * signing_plan`: its signing DOMAIN (the RP ID its keys live under), its
+ * VENUE (where transactions and messages are reviewed and signed: in Vela, or
+ * a trusted page) and its KEY route (the key it was created or last signed in
+ * with here, and the place that reached it).
+ *
+ * `account` is the record as STORED: the core's reader migrates a record
+ * written before spec 102 (`signed_in_with`, a key's `signer_origin`) on the
+ * way in, so this is the one place the web learns any of the three — never
+ * the raw record's fields. `null` for a record this build cannot read.
+ *
+ * `surface: 'web'` is the plan as THIS shell must follow it
+ * (`SigningPlan::on_web`): the web opens no signing page, so a `getvela.app`
+ * account whose venue is a page signs in Vela, and a custom-domain account
+ * comes back `blocked` (`not_on_web`) — sign nothing, and tell the sign/send
+ * core `venue_blocked` so the sheet says why. Without it, the plan an app
+ * would follow (which the web still asks when it only wants the key route).
  */
-export interface SignInRoute {
-	credential_id: string;
-	transports: string;
-	method: KeyMethod;
-	signer_origin?: string;
+export function signingPlan(account: unknown, surface?: 'web'): SigningPlan | null {
+	const plan = wasm.signingPlan(JSON.stringify(account), surface);
+	return plan === undefined ? null : (JSON.parse(plan) as SigningPlan);
 }
 
 /**
- * The stored account's sign-in route, or `null` for a record written before
- * the account named its sign-in key — that one signs as it always did.
+ * Spec 102 R1 + R2: every venue an account on `domain` could pick, each
+ * reachable or not and why. `surface: 'web'` adds the web's own reason: every
+ * page row R1 does not already block is blocked `not_on_web` — the rows are
+ * shown, disabled, with "Signing pages open from the Vela apps" (D-16).
  */
-export function signInRoute(account: Account): SignInRoute | null {
-	const route = wasm.signInRoute(JSON.stringify(account));
-	return route === undefined ? null : (JSON.parse(route) as SignInRoute);
-}
-
-// ---------------------------------------------------------------------------
-// The Trusted Signer (spec 071) — what its page receives, and the verdict on
-// what it answers. The web builds and judges nothing itself.
-// ---------------------------------------------------------------------------
-
-/** One leg of an operation as the request takes it: `value` in base units, decimal. */
-export interface TrustedSignerCall {
-	to: string;
-	value: string;
-	data: string;
+export function signingVenueChoices(
+	domain: string,
+	active: SigningVenue,
+	saved: SigningPage[],
+	surface?: 'web'
+): VenueChoice[] {
+	const choices = wasm.signingVenueChoices(
+		domain,
+		JSON.stringify(active),
+		JSON.stringify(saved),
+		surface
+	);
+	return choices === undefined ? [] : (JSON.parse(choices) as VenueChoice[]);
 }
 
 /**
- * What the shell already holds when it would sign (contract §1). A dApp's
- * own `method` / `params` / `origin`; the wallet's own send says `''` for
- * both and the core makes `calls` the intent. `userOp` is the ASSEMBLED
- * operation in the page's field names, for a transaction only; `calls` are
- * its legs before the fee leg.
+ * Spec 102 R1: why `venue` cannot reach the keys of an account on `domain`,
+ * or `null` when it can. The web asks it of `in_vela` to tell a custom-domain
+ * account in Settings (P2-10: its keys say "Keys on {{domain}}" once). Whether
+ * the web may SIGN for an account is the web plan's (`signingPlan(record,
+ * 'web')`), not this.
  */
-export interface TrustedSignerInput {
-	method: string;
-	params: unknown;
-	origin: string;
-	chainId: number;
-	chainName?: string;
-	nativeSymbol?: string;
-	account: string;
-	accountName?: string;
-	credentialIdsHex: string[];
-	userOp?: Record<string, string>;
-	calls?: TrustedSignerCall[];
+export function signingVenueBlock(domain: string, venue: SigningVenue): VenueBlock | null {
+	const block = wasm.signingVenueBlock(domain, JSON.stringify(venue));
+	return block === undefined ? null : (JSON.parse(block) as VenueBlock);
 }
 
-/** The page's `{intent, context}`, as the core built it. */
-export interface TrustedSignerRequest {
-	intent: unknown;
-	context: unknown;
+/** The domain whose keys a page at `url` can use: its host, or `getvela.app` for `*.getvela.app`. */
+export function signingPageDomain(url: string): string {
+	return wasm.signingPageDomain(url);
 }
 
-/** One of the account's keys, as the verdict checks the answer against them. */
+/** A venue row's corpus keys (`{title_key, line_key, line_name}`), or `null` for a name the core does not know. */
+export interface VenueWords {
+	title_key: string;
+	line_key: string;
+	line_name: string;
+}
+
+/**
+ * `signing_page` is the apps' create / sign-in entry "Use a trusted signing
+ * page" (D6). The web's choosers do not offer it (P2b-W3: it opens no page),
+ * so the web asks only the two venue rows' words.
+ */
+export function venueWords(row: 'in_vela' | 'page' | 'signing_page'): VenueWords | null {
+	const words = wasm.venueWords(row);
+	return words === undefined ? null : (JSON.parse(words) as VenueWords);
+}
+
+/**
+ * `{{time}}` in a signing page's integrity line, "… · checked {{time}}"
+ * (D-13) — `launch::checked_time`: the clock time in the person's format when
+ * the check ran today, else the date and the time. `date` / `time` are the
+ * person's presets with `auto` resolved; `utcOffsetMinutes` is
+ * `-new Date().getTimezoneOffset()`. The web checks no page; its gallery
+ * boards (the design the apps' screens build to) draw their lines with it.
+ */
+export function signerIntegrityTime(
+	checkedAtMs: number,
+	nowMs: number,
+	utcOffsetMinutes: number,
+	formats: { date: string; time: string },
+	language: string
+): string {
+	return wasm.signerIntegrityTime(
+		checkedAtMs,
+		nowMs,
+		utcOffsetMinutes,
+		formats.date,
+		formats.time,
+		language
+	);
+}
+
+/**
+ * The hand-off card's quiet fee + speed row (`sign_confirm::handoff_fee`,
+ * D-18) from the SAME fee and speed views the sheet drives, or `null` for no
+ * row (the fee is not settled for the speed in force). The web draws no
+ * hand-off card; its gallery boards do.
+ */
+export function handoffFeeRow(fee: FeeView | null, speed: FeeSpeedView | null): HandoffFee | null {
+	const row = wasm.handoffFeeRow(
+		fee === null ? undefined : JSON.stringify(fee),
+		speed === null ? undefined : JSON.stringify(speed)
+	);
+	return row === undefined ? null : (JSON.parse(row) as HandoffFee);
+}
+
+// ---------------------------------------------------------------------------
+// Keys and relying parties
+// ---------------------------------------------------------------------------
+
+/** One of the account's keys, as a signature by it is checked against them. */
 export interface TrustedSignerKey {
 	credentialId: string;
 	publicKeyHex: string;
 }
 
-/** The core's verdict: hex fields with `0x`, the credential id bare. */
-export type TrustedSignerVerdict =
-	| {
-			accepted: {
-				credentialIdHex: string;
-				signatureDer: string;
-				authenticatorData: string;
-				clientDataJSON: string;
-			};
-	  }
-	| { refused: { code: string; detail: string } };
-
 /**
- * The relying party a key minted behind `signerOrigin` belongs to, `null` for
- * a key this wallet's own authenticators made (spec 075).
+ * The relying party a ceremony that runs on `page` is filed and proven under,
+ * `null` for the app's own (spec 102 R3: `page` is set only for a wallet on a
+ * custom domain, whose keys only its page can mint or use).
  *
  * A key made on a page is signed under THAT page's domain, so a challenge
- * fetched under the wallet's own could never match the answer — which is what
- * 「可信签名器的回复与这笔请求不符」 means, and how both phones found it.
+ * fetched under the wallet's own could never match the answer.
  */
-export function trustedSignerRegistryRpId(signerOrigin: string | null): string | null {
-	return wasm.trustedSignerRegistryRpId(signerOrigin ?? undefined) ?? null;
-}
-
-/**
- * The ONE relying party a unit is filed under (ruling, 2026-09-23), or a throw
- * naming the parties found when its members do not agree — refused here rather
- * than written on chain and never provable.
- */
-export function trustedSignerUnitRpId(
-	memberOrigins: (string | null)[],
-	walletRpId: string
-): string {
-	return translated(() => wasm.trustedSignerUnitRpId(JSON.stringify(memberOrigins), walletRpId));
+export function trustedSignerRegistryRpId(page: string | null): string | null {
+	return wasm.trustedSignerRegistryRpId(page ?? undefined) ?? null;
 }
 
 // ---------------------------------------------------------------------------

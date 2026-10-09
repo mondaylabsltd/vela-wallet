@@ -34,8 +34,11 @@ import {
 import {
 	buildMobileState as buildSettingsMobileState,
 	DESKTOP_STATES as SETTINGS_DESKTOP_STATES,
-	MOBILE_STATES as SETTINGS_MOBILE_STATES
+	MOBILE_STATES as SETTINGS_MOBILE_STATES,
+	webVenue
 } from '$lib/settings/fixtures';
+import { boardCheckTime } from '$lib/settings/board-check';
+import { integrityLineModel } from '$lib/settings/venue';
 import { fill } from '$lib/wallet/messages';
 import { identiconSvgFor } from '$lib/wallet/identicon.server';
 import type { WalletHomeModel } from '$lib/wallet/model';
@@ -76,6 +79,39 @@ export const load: PageServerLoad = ({ params }) => {
 	const st10c = buildSettingsMobileState('st10c', settingsMessages, identicon);
 	const sr1 = buildSettingsMobileState('sr1', settingsMessages, identicon);
 	const sr2b = buildSettingsMobileState('sr2b', settingsMessages, identicon);
+	// Spec 102: where you review and sign, and the pages this device trusts.
+	const st17 = buildSettingsMobileState('st17', settingsMessages, identicon);
+	const st17b = buildSettingsMobileState('st17b', settingsMessages, identicon);
+	const st18 = buildSettingsMobileState('st18', settingsMessages, identicon);
+	const st18b = buildSettingsMobileState('st18b', settingsMessages, identicon);
+	/**
+	 * The web's own reading of the same two accounts: it opens no page, so the
+	 * page rows are disabled with their reason and nothing is offered (P2-09,
+	 * D-16; P2-11).
+	 */
+	const web = (which: 'app' | 'own') => webVenue(settingsMessages, which);
+	/** Every integrity state the core can name, each in words (spec 102 R6). */
+	const integrity = (
+		[
+			['checking', ''],
+			['matches', '0ba8ee8c'],
+			['trusted', '3f9a1c22'],
+			['unchecked', ''],
+			['askTrust', '9be01d44'],
+			['mismatch', '7d41e0b9'],
+			['blocked', '7d41e0b9'],
+			['couldNotCheck', ''],
+			['noVersion', ''],
+			['allBlocked', '']
+		] as const
+	).flatMap(([state, version]) => {
+		const line = integrityLineModel(
+			{ key: `componentsUi.signing.integrity.${state}`, version },
+			boardCheckTime(locale),
+			settingsMessages
+		);
+		return line === undefined ? [] : [{ state, line }];
+	});
 
 	return {
 		messages,
@@ -108,7 +144,16 @@ export const load: PageServerLoad = ({ params }) => {
 			indexDown: st1b.indexDown,
 			rpcProviders: st1b.rpcProviders,
 			endpoints: st1b.endpoints,
-			feedback: st1b.feedback
+			feedback: st1b.feedback,
+			venue: {
+				app: st17.venue,
+				own: st17b.venue,
+				webApp: web('app'),
+				webOwn: web('own')
+			},
+			signingPages: st18.signingPages,
+			signingPagesRefused: st18b.signingPages,
+			integrity
 		},
 		models,
 		mobileStates: MOBILE_STATES,

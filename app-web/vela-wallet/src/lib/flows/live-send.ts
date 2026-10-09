@@ -38,6 +38,7 @@ import {
 	unitAdornment
 } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
+import { venueBlockText } from '$lib/settings/venue';
 import type { WalletFlowMessages } from './messages';
 import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
@@ -1297,6 +1298,29 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			stage: 'failed',
 			title: m['componentsTx.receipt.statusFailed'],
 			captions: [m['send.txErrorGeneric']],
+			hash: undefined,
+			cta: m['componentsTx.receipt.done'],
+			ctaAccent: false
+		};
+	}
+
+	// Spec 102 (P2b-W1): not a failure of the network or the relay — this
+	// account cannot sign on the web, and nothing was signed or sent. The
+	// core's reason, in the person's words; no "try again", which would meet
+	// the same refusal.
+	if (send.tx_status === 'error' && send.tx_error === 'venue_blocked' && send.tx_venue_block) {
+		return {
+			...model,
+			header,
+			stage: 'failed',
+			title: m['componentsTx.receipt.statusFailed'],
+			captions: [
+				venueBlockText(send.tx_venue_block, {
+					blockedApp: m['settings.venue.blockedApp'],
+					blockedPage: m['settings.venue.blockedPage'],
+					blockedWeb: m['settings.venue.blockedWeb']
+				})
+			],
 			hash: undefined,
 			cta: m['componentsTx.receipt.done'],
 			ctaAccent: false

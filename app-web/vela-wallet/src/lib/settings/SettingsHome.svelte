@@ -52,7 +52,9 @@
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SelectSheetBody from './ui/SelectSheetBody.svelte';
 	import SettingsRow from './ui/SettingsRow.svelte';
+	import SigningPagesPanel from './ui/SigningPagesPanel.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
+	import VenueList from './ui/VenueList.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
 	interface Props {
@@ -170,7 +172,10 @@
 		'add-network': 'add-network',
 		endpoints: 'endpoints',
 		storage: 'storage',
-		about: 'about'
+		about: 'about',
+		// Spec 102: the account's venue, and the pages this device trusts.
+		'signing-venue': 'signing-venue',
+		'signing-pages': 'signing-pages'
 	};
 
 	const OVERLAY_OF: Partial<Record<string, SettingsOverlayId>> = {
@@ -243,6 +248,15 @@
 				return { title: model.storage.title, subtitle: model.storage.subtitle };
 			case 'about':
 				return { title: model.about.title, subtitle: undefined };
+			case 'signing-venue':
+				return model.venue && { title: model.venue.title, subtitle: model.venue.subtitle };
+			case 'signing-pages':
+				return (
+					model.signingPages && {
+						title: model.signingPages.title,
+						subtitle: model.signingPages.subtitle
+					}
+				);
 			default:
 				return undefined;
 		}
@@ -350,6 +364,25 @@
 						<!-- Under the account it belongs to (spec 062). -->
 						<div class="keys-block">
 							<KeysBlock model={model.keys} onbackup={() => onethereumbackup?.()} />
+						</div>
+					{/if}
+
+					{#if model.venue !== undefined}
+						<!-- Spec 102: where THIS account reviews and signs — under its keys,
+						     because it is the account's, and because the keys do not
+						     change when it does. -->
+						<div class="venue-row">
+							<SettingsRow
+								row={{
+									id: 'signing-venue',
+									icon: 'eye',
+									title: model.venue.title,
+									subtitle: model.venue.summary,
+									trailing: 'chevron'
+								}}
+								divider={false}
+								onselect={selectRow}
+							/>
 						</div>
 					{/if}
 
@@ -476,6 +509,13 @@
 							)}
 						onclearcaches={() => (overlay = 'clear-caches')}
 					/>
+				{:else if page === 'signing-venue' && model.venue !== undefined}
+					<VenueList
+						venue={model.venue}
+						onpick={(venue) => onprefevent?.({ kind: 'signing-venue', venue })}
+					/>
+				{:else if page === 'signing-pages' && model.signingPages !== undefined}
+					<SigningPagesPanel panel={model.signingPages} />
 				{:else if page === 'about'}
 					<AboutPanel
 						panel={model.about}
@@ -634,6 +674,10 @@
 <style>
 	.keys-block {
 		margin-top: var(--space-2xl);
+	}
+
+	.venue-row {
+		margin-top: var(--space-md);
 	}
 
 	/* The air a section heading would have given an unlabelled group. */

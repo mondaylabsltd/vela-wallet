@@ -145,14 +145,13 @@ const FLOW_KEYS_SCREEN_KEYS = [
 	// 087 F02: the sign-in sheet's phone row scans — it creates nothing.
 	'explore.scan',
 	'onboarding.create.methodHybridUnavailable',
-	// Why a route is not on offer for THIS key set (spec 075, 2026-09-23).
-	'onboarding.create.methodBlockedHint',
-	'onboarding.create.methodBlockedSigner',
 	'onboarding.create.methodSecurityKeyTitle',
 	'onboarding.create.methodSecurityKeyBody',
-	// Spec 075: the Trusted Signer, the fourth route beside the three above.
-	'componentsUi.signing.trustedSignerTitle',
-	'componentsUi.signing.trustedSignerBody'
+	// Spec 102: what the keys screen draws when the core says a signing page
+	// was chosen ("Keys on {{domain}}"). The web never sends that choice — it
+	// opens no page, and its choosers offer no "Use a trusted signing page"
+	// (P2b-W3) — but the screen draws whatever the core's view holds.
+	'settings.signing.keysOn'
 ] as const;
 
 /** The progress, retry and done screens (spec 019). */

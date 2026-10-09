@@ -14,8 +14,14 @@
  */
 import type { QrCode } from '$lib/wallet/qr';
 import type { UtilityIconId } from '$lib/wallet/icons';
+import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 
-/** Mobile mocks ST1–ST16 plus the SR1–SR5 rescue set. */
+/**
+ * Mobile mocks ST1–ST16 plus the SR1–SR5 rescue set, and spec 102's
+ * ST17/ST17b ("Where you review and sign", a `getvela.app` account and one on
+ * its own domain) and ST18/ST18b (Settings → Signing pages, and an address
+ * refused).
+ */
 export type MobileSettingsStateId =
 	| 'st1'
 	| 'st1b'
@@ -39,6 +45,10 @@ export type MobileSettingsStateId =
 	| 'st14'
 	| 'st15'
 	| 'st16'
+	| 'st17'
+	| 'st17b'
+	| 'st18'
+	| 'st18b'
 	| 'sr1'
 	| 'sr2'
 	| 'sr2b'
@@ -46,9 +56,13 @@ export type MobileSettingsStateId =
 	| 'sr4'
 	| 'sr5';
 
-/** Desktop mocks DST1–DST8 (+ DST4b dialog) and the DSR1 rescue dialog. */
+/**
+ * Desktop mocks DST1–DST8 (+ DST4b dialog), the DSR1 rescue dialog, and spec
+ * 102's DST9 (Settings → Signing pages; DST1's account panel carries "Where
+ * you review and sign").
+ */
 export type DesktopSettingsStateId =
-	'dst1' | 'dst2' | 'dst3' | 'dst4' | 'dst4b' | 'dst5' | 'dst6' | 'dst7' | 'dst8' | 'dsr1';
+	'dst1' | 'dst2' | 'dst3' | 'dst4' | 'dst4b' | 'dst5' | 'dst6' | 'dst7' | 'dst8' | 'dst9' | 'dsr1';
 
 export const MOBILE_SETTINGS_STATES: MobileSettingsStateId[] = [
 	'st1',
@@ -73,6 +87,10 @@ export const MOBILE_SETTINGS_STATES: MobileSettingsStateId[] = [
 	'st14',
 	'st15',
 	'st16',
+	'st17',
+	'st17b',
+	'st18',
+	'st18b',
 	'sr1',
 	'sr2',
 	'sr2b',
@@ -91,6 +109,7 @@ export const DESKTOP_SETTINGS_STATES: DesktopSettingsStateId[] = [
 	'dst6',
 	'dst7',
 	'dst8',
+	'dst9',
 	'dsr1'
 ];
 
@@ -127,6 +146,14 @@ export type SettingsPageId =
 	 * phone's Community group, as a desktop nav destination beside About.
 	 */
 	| 'community'
+	/**
+	 * Spec 102 — where THIS account's transactions and messages are reviewed
+	 * and signed (a pushed page on the phone; part of the account panel on the
+	 * desktop).
+	 */
+	| 'signing-venue'
+	/** Spec 102 — the signing pages this device trusts (Settings → Signing pages). */
+	| 'signing-pages'
 	| 'about';
 
 /**
@@ -145,10 +172,6 @@ export type SettingsOverlayId =
 	| 'time-format'
 	/** Spec 068: the stored default transaction speed. */
 	| 'fee-speed'
-	/** Spec 071: the Trusted Signer's page. */
-	| 'signer-page'
-	/** Spec 075: the tunnel a cross-device pairing goes through. */
-	| 'tunnel-page'
 	| 'clear-caches'
 	/** Spec 058: one storage row's Clear, asked before it happens. */
 	| 'clear-storage-item'
@@ -724,6 +747,106 @@ export interface IndexDownModel {
 	footer: string;
 }
 
+// ---------------------------------------------------------------------------
+// Spec 102 — where you review and sign, and the pages you trust
+// ---------------------------------------------------------------------------
+
+/**
+ * One line about a signing page's integrity, in words: "Version 0ba8ee8c ·
+ * matches Vela's published build list · checked 14:32", or why it will not be
+ * opened. The words and the state are the core's (`IntegrityLine`); the tone
+ * is only how loud the line is drawn.
+ *
+ * `ok` — it matches the published list, or the person trusts it here;
+ * `warn` — not settled (checking, checking off, asking to trust);
+ * `error` — refused: it will not open.
+ */
+export interface IntegrityLineModel {
+	text: string;
+	tone: 'ok' | 'warn' | 'error';
+}
+
+/** One choice of "Where you review and sign" (spec 102 R1, R2). */
+export interface VenueRowModel {
+	/** `in_vela`, or the page's address. */
+	id: string;
+	/** The venue as the core names it — what choosing this row sends back. */
+	venue: SigningVenue;
+	icon: UtilityIconId;
+	/** "In Vela" / "On a trusted page". */
+	title: string;
+	/** What it is: "Vela's own signing sheet" / "A zero-dependency page shows exactly what you sign". */
+	body: string;
+	/**
+	 * A page's name ("Vela's official signing page", the person's label for
+	 * it, else "Self-hosted · {{domain}}") and host — drawn beside the name
+	 * only where the name does not already say it (`hostShown`).
+	 */
+	page?: { name: string; host: string; official: boolean; hostShown: boolean };
+	/** "Keys on getvela.app" — whose keys this choice can use (R1), drawn on every row. */
+	keysOn: string;
+	/** A page's integrity line, where the shell checks pages. */
+	integrity?: IntegrityLineModel;
+	/** Where this account reviews and signs now. */
+	active: boolean;
+	/** The core's reason this choice cannot reach the account's keys, in words — drawn disabled. */
+	blocked?: string;
+}
+
+/** The account's "Where you review and sign" (spec 102, D1: per account, on this device). */
+export interface VenueModel {
+	title: string;
+	subtitle: string;
+	/** The settings row's value: where this account signs now, in two words. */
+	value: string;
+	/** The active page's label and host, or why nothing here can sign. */
+	note?: string;
+	/**
+	 * The settings row's one line under its title: "On a trusted page ·
+	 * sign.getvela.app", "In Vela", or why nothing here can sign.
+	 */
+	summary: string;
+	/** "Keys on {{domain}}" — the account's signing domain. */
+	domainLine: string;
+	rows: VenueRowModel[];
+	/**
+	 * The rows are a statement, not a choice: the web opens no signing page
+	 * (owner, 2026-09-23; D-16), so where it signs is marked, every page row
+	 * is disabled with its reason, and nothing is offered. Absent — a shell
+	 * that opens pages — every reachable row is a choice.
+	 */
+	readOnly?: boolean;
+}
+
+/** One row of Settings → Signing pages. */
+export interface SigningPageRowModel {
+	url: string;
+	/** "Vela's official signing page", the person's label for it, or "Self-hosted · {{domain}}". */
+	name: string;
+	host: string;
+	/** "Keys on {{domain}}" — which accounts it can sign for, seen before choosing it (R1). */
+	keysOn: string;
+	official: boolean;
+	integrity?: IntegrityLineModel;
+	/**
+	 * Its check asks to trust a version it does not know (a self-hosted page
+	 * only): "Trust this version", and the version that answer stores.
+	 */
+	trust?: { label: string; version: string };
+}
+
+/** Settings → Signing pages (spec 102): the official page first, then the self-hosted ones. */
+export interface SigningPagesModel {
+	title: string;
+	subtitle: string;
+	rows: SigningPageRowModel[];
+	/** "Add a page": the address field (its hint is the refusal, when there is one) and its button. */
+	add: UrlFieldModel;
+	addAction: string;
+	renameLabel: string;
+	removeLabel: string;
+}
+
 /** Everything one phone settings state needs. */
 export interface SettingsHomeModel {
 	state: MobileSettingsStateId;
@@ -736,6 +859,10 @@ export interface SettingsHomeModel {
 	account: AccountRowModel;
 	/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
 	keys?: WalletKeysModel;
+	/** Spec 102: where this account reviews and signs — a row under the account, and its page. */
+	venue?: VenueModel;
+	/** Spec 102: Settings → Signing pages. Absent where no page is ever opened (the web). */
+	signingPages?: SigningPagesModel;
 	sections: SettingsSectionModel[];
 	appearance: { theme: SegmentedModel; textScale: TextScaleModel };
 	signOut: { label: string };
@@ -843,6 +970,11 @@ export interface WalletKeysModel {
 	count: string;
 	loading: boolean;
 	note?: string;
+	/**
+	 * Spec 102 (P2-10): "Keys on sign.example.com" — for an account on its own
+	 * signing domain only, whose keys answer nowhere but its page.
+	 */
+	domain?: string;
 	rows: WalletKeyRowModel[];
 	/** The founding record's standing on Ethereum; absent = nothing to draw. */
 	backup?: EthereumBackupRowModel;
@@ -856,17 +988,6 @@ export interface WalletKeyRowModel {
 	name: string;
 	/** Who holds it when the core's catalog knows; else the method's generic line. */
 	holderFallback: string;
-	/**
-	 * Spec 075: the holder line already SETTLED — drawn as it stands, and the
-	 * AAGUID catalog is not asked.
-	 *
-	 * Set for a key behind a Trusted Signer page. The vault on the page's far side
-	 * is the one thing this wallet cannot reach, so letting the catalog name it
-	 * ("Apple Passwords", "Built-in passkey") points the person away from where
-	 * the key is — which is the page. The device pass of 2026-09-22 found
-	 * exactly that row.
-	 */
-	holder?: string;
 	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
 	fingerprint: string;
 	/**
@@ -903,7 +1024,11 @@ export interface SettingsDesktopModel {
 		erase: { title: string; subtitle: string; action: string };
 		/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
 		keys?: WalletKeysModel;
+		/** Spec 102: where this account reviews and signs, under its keys. */
+		venue?: VenueModel;
 	};
+	/** Spec 102: Settings → Signing pages (DST9). Absent where no page is ever opened (the web). */
+	signingPages?: SigningPagesModel;
 	appearance: {
 		title: string;
 		language: FormRowModel;

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import SigningHeader from './ui/SigningHeader.svelte';
 	import SigningBody from './ui/SigningBody.svelte';
+	import HandoffCard from './ui/HandoffCard.svelte';
 	import type { SigningModel } from './model';
 
 	/**
@@ -29,7 +30,11 @@
 	<!-- The column's own title and ✕ are the panel's (`ThirdPanel`): the wallet's
 	     own request draws its headline here and nothing else. -->
 	<SigningHeader dapp={model.dapp} network={model.network} headline={model.headline} />
-	<SigningBody {model} {onconfirm} {onchip} {onfee} {onfeepick} {onspeed} {onspeedpick} />
+	{#if model.handoff}
+		<HandoffCard handoff={model.handoff} />
+	{:else}
+		<SigningBody {model} {onconfirm} {onchip} {onfee} {onfeepick} {onspeed} {onspeedpick} />
+	{/if}
 </div>
 
 <style>

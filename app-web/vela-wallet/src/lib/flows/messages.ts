@@ -205,6 +205,10 @@ export const WALLET_FLOW_KEYS = [
 	// Spec 096 F12: the recipient is a token's own contract (`send` core).
 	'send.recipientTokenContract',
 	'send.txErrorGeneric',
+	// Spec 102: why this account cannot sign on the web (`SendView.tx_venue_block`).
+	'settings.venue.blockedApp',
+	'settings.venue.blockedPage',
+	'settings.venue.blockedWeb',
 	'send.scanAria',
 	'send.splitTotalLabel',
 	'send.continueBtn',

@@ -19,7 +19,7 @@ import { RegistryError } from './registry';
 import * as Storage from './storage';
 import { StorageError } from './storage';
 import { publish } from './publish';
-import { trustedSignerRegistryRpId, trustedSignerUnitRpId } from '$lib/core/kernels';
+import { trustedSignerRegistryRpId } from '$lib/core/kernels';
 import { groupPublicKeyFromSeed, toHex } from './wasm-client';
 
 import type { Assertion as AssertionWire } from '../generated/Assertion';
@@ -51,6 +51,7 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				return { type: 'passkey_support', supported: Passkey.passkeySupported() };
 
 			case 'register_passkey': {
+				onThisPage(operation.page);
 				// `operation.method` selects the ceremony: the person was asked
 				// where the key should live, so it is minted there (founder,
 				// 2026-09-26) — not wherever the browser's own sheet looks first.
@@ -73,6 +74,7 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 			}
 
 			case 'sign_proof': {
+				onThisPage(operation.page);
 				// The purpose only selects which challenge label the core minted;
 				// the shell signs whatever it is handed, with the key just minted
 				// or found, over the method it was minted or found with.
@@ -105,14 +107,11 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				// exists before the rest of the set does), sign against exactly
 				// this credential, assemble the proof in the core. The publish
 				// later replays it without another prompt.
-				// Spec 075: a key minted on a Trusted Signer page belongs to THAT
-				// page's domain and is signed under it, so a challenge fetched
-				// under the wallet's own would never match the answer — which
-				// both phones read as 「可信签名器的回复与这笔请求不符」.
+				// Spec 102 R3: a proof is filed under the domain of the page it
+				// runs on — none on the web, so always the wallet's own.
+				onThisPage(operation.page);
 				const challenge = await Registry.memberChallenge({
-					rpId:
-						trustedSignerRegistryRpId(operation.signer_origin ?? null) ??
-						Passkey.relyingPartyId(),
+					rpId: Passkey.relyingPartyId(),
 					groupPublicKey: operation.group_public_key_hex,
 					publicKey: operation.public_key_hex,
 					attestation: operation.attestation_hex
@@ -138,6 +137,7 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				return { type: 'legacy_name', name: await Registry.legacyName(operation.credential_id) };
 
 			case 'authenticate_passkey': {
+				onThisPage(operation.page);
 				const assertion = await Passkey.authenticate(operation.method);
 				return {
 					type: 'passkey_authenticated',
@@ -163,14 +163,13 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 
 			case 'registry_publish': {
 				const taskId = await publish({
-					// One relying party for the whole unit (ruling, 2026-09-23):
-					// the contract stores a single `rpId` per unit and every
-					// member proves under its own, so a mixed set is refused
-					// here rather than written and never provable.
-					rpId: trustedSignerUnitRpId(
-						operation.members.map((member) => member.signer_origin ?? null),
-						Passkey.relyingPartyId()
-					),
+					// One relying party for the whole unit (ruling, 2026-09-23): the
+					// domain of the page the core names (spec 102 R3, a custom-domain
+					// wallet's), else the wallet's own. The web names none — and a
+					// member that would have to prove itself live on a page is
+					// refused in `publish`, which knows which members sign live.
+					rpId: trustedSignerRegistryRpId(operation.page ?? null) ?? Passkey.relyingPartyId(),
+					page: operation.page ?? null,
 					metadataHex: operation.metadata_hex,
 					members: operation.members,
 					seedHex: operation.group_seed_hex,
@@ -223,6 +222,18 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 			}
 		}
 	};
+}
+
+/**
+ * Spec 102 R3: a ceremony the core sends to a page runs THERE — only a
+ * custom-domain wallet's page can mint or use its keys. The web opens no page
+ * (owner, 2026-09-23) and never asks for one (it sends no `signing_page_chosen`
+ * and signs in with `page: null`), so a page here is refused before any
+ * authenticator is asked: a platform sheet would look under the wallet's own
+ * domain and find nothing, or mint a key for the wrong one.
+ */
+export function onThisPage(page: string | null | undefined): void {
+	if (page) throw new Error(`this ceremony runs on ${page}, which only the Vela app can open`);
 }
 
 /**
