@@ -61,6 +61,18 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // The same page, drawn as the apps draw their own signing sheet (owner,
+    // 2026-10-09: the page's colours were too loud — keep the in-app signing
+    // feel): the app's tokens in light and dark, its face (Plus Jakarta Sans,
+    // carried in the hashed bytes; the CSP gains `font-src data:` and nothing
+    // else), the title / rows / hairline / footer of its sheet, the network
+    // as a row, neutral marks, one accent on a pill confirm, no decorative
+    // hero, and a key ceremony titled in the app's own words ("Add a
+    // passkey"). Behaviour is 2d19fa49's: answers only to
+    // `velawallet://sign-result`, refuses frames, the key route, the tap.
+    // LAUNCH (spec 102 Phase 3) — valid only once `dist/` is deployed and
+    // `/b/245c9ea1…/sign` answers 200 + immutable with these bytes.
+    "245c9ea1a365f85bc9dfa16ff4d67b9242a7936168e7b3dbb3450f5e2301b0f6",
     // The page as the authority (spec 102 Phase 3): what is signed first, the
     // key it will use, then one tap — the WebAuthn call inside the tap, for
     // Safari. It reads the wallet's key route (`context.keyRoute`, a
@@ -70,9 +82,10 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // "0 ?"); speaks the apps' fifteen languages; and says what it is in one
     // line (its version from its own address · zero dependencies · open
     // source · self-hostable). Answers only to `velawallet://sign-result`
-    // and refuses frames, as 364b8737 does.
-    // LAUNCH (spec 102 Phase 3) — valid only once `dist/` is deployed and
-    // `/b/2d19fa49…/sign` answers 200 + immutable with these bytes.
+    // and refuses frames, as 364b8737 does. LAUNCH in one commit only, never
+    // deployed, replaced by 245c9ea1 before any release (its look, not its
+    // behaviour). Kept: `dist/` carries it, so a test build that launches it
+    // opens a live page once `dist/` is deployed, and it is as safe to open.
     "2d19fa497c4131a9341f69248fb68a79c3bbf750aed0559747b0d34ac9fa009d",
     // The answer goes to the Vela wallet and nowhere else (spec 102 R7, Phase
     // 0). Every earlier page signs for whoever opens it: a signature's answer
@@ -82,7 +95,7 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // `velawallet://sign-result` (signatures and every ceremony on the URL
     // channel), sends nothing anywhere else, and does nothing inside a frame
     // (the host adds `frame-ancestors 'none'` and `X-Frame-Options: DENY`).
-    // LAUNCH from spec 102 Phase 0 until 2d19fa49 (Phase 3). Kept: a build
+    // LAUNCH from spec 102 Phase 0 until 245c9ea1 (Phase 3). Kept: a build
     // that knows only this hash keeps working, and it is as safe to open.
     "364b8737d0646aa87be17162bf8af6621e1aeb31f8f96d19a7613edf562c2b23",
     // Both of the next two, in one page: 085's typed-data reader and 082's
@@ -178,7 +191,7 @@ pub const ENFORCE: bool = true;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "2d19fa497c4131a9341f69248fb68a79c3bbf750aed0559747b0d34ac9fa009d";
+pub const LAUNCH: &str = "245c9ea1a365f85bc9dfa16ff4d67b9242a7936168e7b3dbb3450f5e2301b0f6";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).

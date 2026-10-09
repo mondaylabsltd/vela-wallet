@@ -152,8 +152,19 @@ try {
 
 	check('no CSP violation on load', violations.length === 0, violations[0] || '');
 
-	const ownDocumentOnly = requested.every((url) => url.endsWith('/sign.html'));
-	check('the page asks the network for nothing but itself', ownDocumentOnly, requested.join(' '));
+	// The app's face is carried in the page (src/fonts.css, `font-src data:`):
+	// it must load under the page's own CSP, from nowhere but the file.
+	const face = await ev(
+		`document.fonts.load('600 13px "Plus Jakarta Sans"', 'Vela').then((f) => f.map((x) => x.status).join() || 'none', (e) => 'error: ' + e)`
+	);
+	check("the app's face loads from inside the page", face === 'loaded', face);
+
+	// Chrome reports a `data:` URI as a request, but it is bytes already in
+	// the hashed file — nothing leaves the browser. Everything else must be
+	// the document itself.
+	const overNetwork = requested.filter((url) => !url.startsWith('data:'));
+	const ownDocumentOnly = overNetwork.every((url) => url.endsWith('/sign.html'));
+	check('the page asks the network for nothing but itself', ownDocumentOnly, overNetwork.join(' '));
 
 	// The property the constraint exists for: a script in this page cannot send
 	// what the page sees anywhere. Every way out is tried, and then the SERVER
