@@ -1141,14 +1141,16 @@ const BPS: u128 = 10_000;
 ///   table's). In a calm market it keeps far more, because the chain charges
 ///   `base_fee + tip`, never the cap.
 /// - `drift_allowance`: none. The gap between a tier's cap and the relay's
-///   inclusion floor (1.125 × the base fee) already absorbs a quote's drift —
-///   a base fee 33% higher at `slow` and `standard`, 56% at `fast`, before a
+///   inclusion floor (1.25 × the base fee) already absorbs a quote's drift —
+///   a base fee 20% higher at `slow` and `standard`, 40% at `fast`, before a
 ///   cent more is needed — and [`requote_interval_ms`] keeps the quote on
 ///   screen a block young.
 /// - `cap_bps[tier]`: the tier's submit cap over the NEXT block's base fee
 ///   (the relay's `SubmissionTier::base_fee_bps`). `tip[tier]` is the tip the
-///   relay signs the tier with — the median over 20 blocks of each block's
-///   25th / 50th / 70th percentile reward — as its quote reports it.
+///   relay signs the tier with — the median over a minute of blocks (at least
+///   20) of each block's 25th / 50th / 70th percentile reward, or the node's
+///   own tip × 1.00 / 1.25 / 2.00 on a chain whose blocks run under 30% full —
+///   as its quote reports it.
 ///
 /// The numbers are the relay's, chosen by replaying 10.4 days of Ethereum
 /// mainnet (74,752 blocks, `docs/fees.md` §2c): the cheapest set that accepts
