@@ -80,7 +80,7 @@ bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
-node samples/origin-line-test.mjs   # 17/17 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）
+node samples/origin-line-test.mjs   # 24/24 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名
 node samples/plain-send-test.mjs    # 153/153 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）
 bun samples/plain-send-test.mjs     # 153/153 同一套件在 JavaScriptCore（Safari 的引擎）上再跑一遍：JSC 的 BigInt 把 "0x " 读成 0，V8 会抛错，所以页面用自己的读法，BigInt 只见到规整的数字
 ```
