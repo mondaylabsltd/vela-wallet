@@ -364,8 +364,11 @@ window.VelaCS = window.VelaCS || {};
       ? t('ui.feeLegAmount', { amount: view.fee.leg.amount, symbol: view.fee.leg.symbol })
       : t('ui.feeCeiling', { amount: view.fee.gas.max, symbol: view.fee.gas.symbol });
     var fiat = (view.fee.leg && view.fee.leg.fiat) || (view.fee.gas && view.fee.gas.fiat);
-    row.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
-    row.appendChild(el('span', 'fee-chevron', '›'));
+    // The amount and its chevron stay together when a long label wraps.
+    var end = el('span', 'fee-end');
+    end.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
+    end.appendChild(el('span', 'fee-chevron', '›'));
+    row.appendChild(end);
     wrap.appendChild(row);
 
     var note = el('div', 'fee-note');

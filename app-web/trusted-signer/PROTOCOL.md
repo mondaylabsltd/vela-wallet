@@ -24,8 +24,10 @@
 > spec 里「What this costs」。
 
 请求有两类：**签名意图**（dApp 的 EIP-1193 请求、钱包自己的转账，第 4、8 节）和
-**钥匙仪式**（创建、登录、证明，第 10 节）。可信签名器是和「这台设备 / 手机或平板 /
-USB 安全密钥」平级的一条 passkey 通道（创始人，2026-09-22）。
+**钥匙仪式**（创建、登录、证明，第 10 节）。~~可信签名器是和「这台设备 / 手机或平板 /
+USB 安全密钥」平级的一条 passkey 通道（创始人，2026-09-22）。~~ **规格 102 起**它是
+「在哪里预览并签名」：钥匙仍在那三个地方之一，本页是看清楚再签的地方。钥匙仪式只有
+钥匙在自建签名页域名上的钱包才走本页（102 R3）。
 
 ~~没有服务器。没有隧道。跨设备走 BLE。~~ —— 2026-09-22 被创始人推翻，2026-09-23
 **又走了回来，而且更进一步**：没有服务器，没有隧道，**也没有跨设备**。
@@ -141,7 +143,7 @@ url 通道，而 url 通道上**没有任何东西能证明是谁打开了这一
 - **只有 url 通道、且 `cb` 恰好是 `velawallet://sign-result`**，答复才算交给钱包。
   比较的是整串，不是 scheme：`velawallet://open?url=…` 也是钱包，答复拼在它后面
   会被带去那个链接打开的页面。
-- 签名不满足这一条 → 卡片拒签（不给滑条、不弹 passkey），并写明答复本来要去哪里
+- 签名不满足这一条 → 卡片拒签（按钮置灰、不弹 passkey），并写明答复本来要去哪里
   （`refuse.answerElsewhere`，或 `refuse.answerNotToWallet`）。postMessage 上的签名
   一律拒签，哪怕打开者是 `*.getvela.app`；打开者只会收到 `{vela:'error', code:'refused'}`。
 - url 通道上的**每一种**仪式同样如此（不再只是创建与成员证明）：答复送不到，登录、
@@ -162,7 +164,7 @@ url 通道，而 url 通道上**没有任何东西能证明是谁打开了这一
 测试不需要例外：它们用 `velawallet://sign-result`，经 DevTools 的
 `Page.frameRequestedNavigation` 截到页面发往钱包的那次导航。
 
-**不进框架。** 框架里的页面可以被外层网页盖住、改写、在滑条的位置放一个它自己的
+**不进框架。** 框架里的页面可以被外层网页盖住、改写、在确认按钮的位置放一个它自己的
 按钮，而 passkey 弹窗照样写着 Vela 的域名。所以：
 
 - 托管方对所有路径发 `Content-Security-Policy: frame-ancestors 'none'` 和
@@ -172,6 +174,57 @@ url 通道，而 url 通道上**没有任何东西能证明是谁打开了这一
 - 页面自己再查一次：`window.top !== window.self` 就什么都不做 —— 不读片段、不画卡、
   不应答，只说一句「本页不能嵌在别的网页里使用」。这一条管的是不发这些响应头的托管
   方和不认它们的浏览器。
+
+### 钥匙路线、确认按钮、页面自己那一行（规格 102 第 3 阶段，2026-10-09）
+
+**钥匙路线（R5）。** 钱包告诉本页这笔签名用哪一把钥匙、它在哪里，浏览器就直接去找它，
+不再弹「这台设备 / 用手机扫码 / USB 安全密钥」那个通用选择框 —— 那个问题人在钱包里
+已经回答过了。签名请求的 `context` 多一项（vela-core `trusted_signer::request`）：
+
+```json
+"allowCredentials": ["<那一把钥匙的 id>"],
+"keyRoute": { "credentialId": "<base64url>", "place": "platform", "transports": ["internal","hybrid"], "hints": ["client-device"] }
+```
+
+| `place` | 页面上写 | `hints` | 没给 `transports` 时 |
+| --- | --- | --- | --- |
+| `platform` | 这台设备 | `client-device` | `internal` |
+| `hybrid` | 手机或平板 | `hybrid` | `hybrid` |
+| `security_key` | USB 安全密钥 | `security-key` | `usb`, `nfc` |
+
+- `resolve.keyRoute` 逐项检查：id 必须是合法的 base64url，且在 `allowCredentials` 里
+  （不在 = 当作没给路线）；未知的 `place` / `transport` / `hint` 一律丢掉。路线只会**收窄**
+  浏览器的选择：答复回来照旧要是这个账户的钥匙（`sign.js`），钱包照旧再验一遍。
+- 有路线：`navigator.credentials.get` 的 `allowCredentials` 只有这一把，带它注册时报告的
+  `transports`，外加 WebAuthn L3 `hints`。没有路线（旧钱包）：和以前一字不差 —— 只有 id，
+  不带 transports、不带 hints。
+- 钥匙仪式（10.4）用同样的 `place` / `hints` / `transports`；创建另外设
+  `authenticatorSelection.authenticatorAttachment`（`platform` → `platform`，其余 → `cross-platform`）。
+- 卡片在「签名账户」下面写一行「确认方式：这台设备」（仪式里是「新钥匙存在」）。
+
+**确认是一次点按。** 滑块没了，和各 App 一样是一个按钮，上面写动作（确认发送 / 授权 /
+签名 / 登录 / 创建钥匙……，由 `resolve` 的 `confirmKey` 决定）。**WebAuthn 调用必须在点按的
+事件处理函数里同步发起**：Safari 只把 passkey 弹窗给「人手势里正在运行的代码」，中间隔一个
+`await` 或定时器就没了（`samples/confirm-test.mjs` 在调用那一刻核对
+`navigator.userActivation.isActive`）。等待 passkey 时按钮保持原色、转圈、不再接受第二次
+点按；本页拒签时按钮置灰，写「不能签」；签完写「完成」。自动化钩子名不变：
+`window.__slider` 指向那个按钮，`__confirm()` / `__reset()` 照旧。
+
+**代币与网络来自 vela-core 自己的表。** `src/lib/catalog.js` 由 `samples/gen-catalog.mjs`
+从 `app/network_admin.rs`（内置网络）和 `app/token_registry/table.rs`（代币）生成，按**链**
+查：同一个地址换一条链就不是那个代币。以前这里只有一张手写的主网表，Base / Arbitrum 上的
+USDC 都成了未知代币，按猜的 18 位小数读成「0 ?」。本页不认识的代币，金额按最小单位**原样**
+显示整数，并挂一条「小数位数无法核实」，绝不再猜小数位。
+
+**页面自己那一行。** 卡片下面一行小字：「Vela 签名页 · 版本 2d19fa49 · 零依赖 · 开源 · 可自建」。
+版本是**本页地址里** `/b/<sha256>/` 的前 8 位 —— 钱包交接卡上显示的也是这 8 位，人能对得上。
+它是标签，不是证明：页面没法为自己的字节作保（076），证明是钱包打开之前做的那次核对。
+从根地址打开（没有哈希）就不写版本。
+
+**十五种语言，全部编进被哈希的字节里**（`src/lib/locales/*.js`，各 App 的十五种）。
+选哪一种和 App 用同一条规则（vela-core `match_system_tag`，`samples/locales-test.mjs` 直接读
+核心测试里的向量来对）：`?lang=` → 浏览器的语言列表 → 英文。**不再记住**：以前存在
+`localStorage` 里的选择会压过设备后来改的语言，而所有签名页共用一个源。
 
 ### 这一页发不出网络请求（规格 076）
 
@@ -317,10 +370,10 @@ vela-core 的 `trusted_signer::secure`（Rust）。**标签是参数**：BLE 用
 {"v":1,"t":"error", "n":2,"id":"e6f3…","code":"user_rejected"}
 ```
 
-`code` 取值：`user_rejected`（用户没滑）、`expired`（超过 `expires`）、
+`code` 取值：`user_rejected`（用户没有确认）、`expired`（超过 `expires`）、
 `unsupported`（方法不认识）、`refused`（本页规则拒签，例如对整个 NFT 合集的授权、自带挑战码、
 账户对自己改所有者或模块、delegatecall、`SafeTx`）、
-`unavailable`（本页需要的服务没应答，例如成员证明时的注册表）。
+`unavailable`（本页需要的服务没应答；发布页连不出网络，成员证明也不再问注册表，现在用不到）。
 
 钥匙仪式的答复形状不同（第 10.3 节）：字段直接放在信封顶层，不包在 `result` 里。
 
@@ -436,7 +489,7 @@ http://127.0.0.1:<port>/vela?t=<同一个token>&error=user_rejected
 成功签名走导航（页面还活着），拒签走信标。
 
 错误码分两种，对请求方意义完全不同：`refused`（**签名页的规则**拒绝了它，例如对整个
-NFT 合集的授权、操作与请求不符、会交出账户的调用）与 `user_rejected`（**人**没有滑动确认）。
+NFT 合集的授权、操作与请求不符、会交出账户的调用）与 `user_rejected`（**人**没有点确认）。
 无限额授权与 permit 不在此列：2026-09-26 起标红、可原样签。
 
 可运行的参考实现：`samples/desktop-demo.mjs`。
@@ -579,6 +632,9 @@ EntryPoint / 4337 模块地址若不是 Vela 的那两个，会挂一条 danger 
 | 站点名 / 图标 / origin | 请求方 | 是，且始终挂「站点身份由请求方自述」 |
 | 模拟结果 | 请求方 | 是，标注「模拟由请求方提供」 |
 | **收款方的名字** | —— | **不显示**：这是最容易被投毒的一项 |
+| 代币符号与小数位、网络名 | 本页的目录（`lib/catalog.js`，由 vela-core 的表生成），按 chainId | 否；不认识的代币按最小单位原样显示整数 |
+| 「确认方式：这台设备」 | 钱包给的 `keyRoute.place` | 是 —— 它只决定浏览器去哪里找钥匙，答复照旧要是账户的钥匙 |
+| 页面版本 | 本页**地址**里的哈希 | 不是请求方能改的；也不是证明（证明是钱包打开前的核对） |
 | 预渲染的费用字符串 | —— | **不使用** |
 | 请求方给的摘要 | —— | **不使用** |
 
@@ -593,10 +649,12 @@ EntryPoint / 4337 模块地址若不是 Vela 的那两个，会挂一条 danger 
 
 | `intent.method` | `params[0]` | 本页签的挑战码 |
 | --- | --- | --- |
-| `vela_createPasskey` | `{name, excludeCredentialIds}` | 本页生成的 32 个随机字节。注册本来就不证明任何挑战码，别人的字节没有理由进来 |
-| `vela_signIn` | `{}` | UTF-8 `vela-signin-<毫秒>-<16 位十六进制>`：本页的时钟 + 8 个随机字节 |
-| `vela_proof` | `{credentialId?, purpose}`，`purpose` = `verify` / `recover_first` / `recover_second` | UTF-8 `vela-verify-<毫秒>` / `vela-recover-<毫秒>`（各端原生流程的同一格式） |
-| `vela_memberProof` | `{credentialId, publicKey, attestation, groupPublicKey, registry}` | 本页**自己**请求注册表，并且**自己算出**同一个挑战码：`keccak256(abi.encode(chainId, registry, rpId, publicKey, keccak256(abi.encode(groupPublicKey, attestation))))`，`chainId` 与 `registry`（`domainRegistry`）来自注册表的 `GET /api/health`；`POST {registry}/api/challenge {rpId, groupPublicKey, publicKey, attestation?}` 答的必须正是这 32 字节（以及同一个 `binding`），否则拒签 |
+| `vela_createPasskey` | `{name, excludeCredentialIds, place?, hints?}` | 本页生成的 32 个随机字节。注册本来就不证明任何挑战码，别人的字节没有理由进来 |
+| `vela_signIn` | `{place?, hints?}` | UTF-8 `vela-signin-<毫秒>-<16 位十六进制>`：本页的时钟 + 8 个随机字节 |
+| `vela_proof` | `{credentialId?, purpose, place?, transports?, hints?}`，`purpose` = `verify` / `recover_first` / `recover_second` | UTF-8 `vela-verify-<毫秒>` / `vela-recover-<毫秒>`（各端原生流程的同一格式） |
+| `vela_memberProof` | `{credentialId, publicKey, attestation, groupPublicKey, registry, chainId, registryContract, place?, transports?, hints?}` | 本页**在本地算出**：`keccak256(abi.encode(chainId, registryContract, rpId, publicKey, keccak256(abi.encode(groupPublicKey, attestation))))`。`chainId` 与 `registryContract` 由钱包给（发布页连不出网络，076）；本页只签自己算出的这 32 字节，钱包把答复和它自己从注册表取来的挑战码比对，对不上就拒（`expected_member_challenge`）。两样缺一 = 拒签（`refuse.noDeployment`） |
+
+`place` / `hints` / `transports` 见下面 10.4。
 
 - 文本挑战码永远不是 32 字节，Safe 不会把它当操作哈希。成员挑战码是 32 字节，但它是对卡上
   显示的输入、按固定 ABI 布局算的 keccak —— 没人能挑出一组输入让它等于某个 SafeOp 或 EIP-191 哈希。
@@ -642,6 +700,18 @@ postMessage:  {vela:"result", id, registration|assertion, origin}
 
 钱包（vela-core 的 `verify_registration` / `verify_ceremony`）在使用前核对每个答复：类型、origin、
 挑战码的格式（成员证明要和钱包自己取来的相等）、指名的钥匙。
+
+### 10.4 钥匙在哪里（规格 102 R5）
+
+`params[0]` 里的 `place`（`platform` / `hybrid` / `security_key`）和 `hints` 是人在钱包里
+选过的位置；`vela_proof` / `vela_memberProof` 还带那把钥匙的 `transports`。本页据此：
+
+- 创建：`authenticatorSelection.authenticatorAttachment` = `platform`（这台设备）或
+  `cross-platform`（手机或平板、USB 安全密钥），加 `hints`；
+- 登录：不指名钥匙（可发现凭据），只加 `hints`；
+- 证明、成员证明：`allowCredentials` 是指名的那一把，带 `transports`，加 `hints`。
+
+没给这些字段（旧钱包）就和以前一样，由浏览器自己问。
 
 ## 11. 会话：一个通道，多个请求（075）
 

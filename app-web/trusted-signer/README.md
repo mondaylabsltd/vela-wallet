@@ -129,10 +129,11 @@ python3 -m http.server 8099   # → http://localhost:8099/gallery.html
 
 | 文件 | 职责 |
 | --- | --- |
-| `lib/i18n.js` + `lib/locales/*` | 唯一出现人话的地方 |
+| `lib/i18n.js` + `lib/locales/*` | 唯一出现人话的地方；十五种语言，和各 App 一样（规格 102） |
 | `lib/keccak.js` | keccak256 + 选择器推导（信任的锚点） |
 | `lib/abi.js` | ABI 解码（静态类型、动态 bytes/string、数组、元组） |
 | `lib/encode.js` | ABI 编码 —— 样例的 calldata 由签名现算，不手抄十六进制 |
+| `lib/catalog.js` | 内置网络与代币，由 `samples/gen-catalog.mjs` 从 vela-core 的表生成（按链） |
 | `lib/registry.js` | 代币 / 合约 / 通讯录 / ERC-7730 描述符 |
 | `lib/resolve.js` | 意图 → 视图模型：降级阶梯与所有安全闸门都在这里 |
 | `lib/render.js` | 视图模型 → DOM，不做任何判断 |
@@ -140,8 +141,9 @@ python3 -m http.server 8099   # → http://localhost:8099/gallery.html
 | `lib/intake.js` | 通道归一成一个形状（App 用 URL 片段，另有 `postMessage`），并标注来源是否可验证 |
 | `lib/digest.js` | 算得出就签，算不出就拒 |
 | `lib/safeop.js` | SafeOp / SafeMessage 摘要 + 读回操作 calldata |
-| `lib/signer.js` | passkey 仪式（创建 / 断言） |
-| `sign.html` + `sign.js` | 真正的签名入口：滑动确认、拒签即关闭 |
+| `lib/signer.js` | 签名的 passkey 断言；钥匙路线（只问那一把钥匙，带 transports 与 hints，规格 102 R5） |
+| `lib/ceremony.js` | 钥匙仪式：本页的挑战码、创建与断言（按钥匙所在位置） |
+| `sign.html` + `sign.js` | 真正的签名入口：点按确认（WebAuthn 在点按里同步发起）、拒签即关闭、页面版本那一行 |
 | `samples/desktop-demo.mjs` | 本机桌面请求方演示 + 回环回调那一端的参考实现 |
 
 判断全部集中在 `resolve.js`，渲染层不做决定 —— 这样「所见即所签」是**读一个文件**

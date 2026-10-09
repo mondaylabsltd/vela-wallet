@@ -438,8 +438,14 @@ body {
 }
 
 .fee-wrap .fee { margin-top: 0; }
-.fee-label { color: var(--muted); }
-.fee-value { margin-left: auto; }
+/* Each piece whole: a long label or a long amount moves to the next line
+   as a unit instead of breaking inside itself. */
+.fee { flex-wrap: wrap; row-gap: 4px; }
+.fee-label { color: var(--muted); white-space: nowrap; }
+.fee .tag { margin-left: 0; white-space: nowrap; }
+.fee-value { margin-left: auto; white-space: nowrap; }
+.fee-end { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; white-space: nowrap; }
+.fee-end .fee-value { margin-left: 0; }
 .fee-chevron { color: var(--faint); }
 /* Spec 079: the fee row is the summary of its own explanation. */
 summary.fee { list-style: none; cursor: pointer; }
@@ -447,7 +453,7 @@ summary.fee::-webkit-details-marker { display: none; }
 summary.fee .fee-chevron { transition: transform 0.15s ease; }
 details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
 .fee-sponsored { margin-top: 6px; padding: 0 4px; color: var(--muted); font-size: 12px; }
-.fee-off .fee-value { color: var(--muted); }
+.fee-off .fee-value { color: var(--muted); white-space: normal; text-align: right; }
 
 .fee-note {
   margin-top: 6px;
