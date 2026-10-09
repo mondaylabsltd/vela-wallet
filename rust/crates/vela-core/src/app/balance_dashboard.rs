@@ -993,7 +993,8 @@ pub struct BalanceView {
     /// The ONE number the hero may render, in USD (the display-currency
     /// machine owns conversion). `None` while the skeleton shows — never a
     /// fake $0 (invariant ②) — AND while privacy hides: the fiat value is
-    /// withheld by construction, not masked downstream (invariant ⑧).
+    /// withheld by construction, not masked downstream (invariant ⑧) — AND
+    /// while [`Self::unreachable`]: nothing was read, so there is no figure.
     pub display_total_usd: Option<f64>,
     pub balance_unknown: bool,
     pub balance_partial: bool,
@@ -1193,18 +1194,23 @@ impl App for BalanceDashboard {
             .filter(|t| !t.spam && token_balance_double(&t.balance) > 0.0 && t.price_usd.is_none())
             .cloned()
             .collect();
+        // Nothing could be read and nothing is known (spec 038 finding 15).
+        let unreachable =
+            model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none();
         BalanceView {
             address: model.address.clone(),
-            display_total_usd: if model.hidden || unknown {
+            // No figure while nothing is known: the skeleton, privacy — and a
+            // round that read nothing (PR 2 polish). `unreachable` is "a
+            // skeleton and a reason, never a zero"; the figure says the same
+            // rather than a 0 every shell had to know to ignore.
+            display_total_usd: if model.hidden || unknown || unreachable {
                 None
             } else {
                 Some(total)
             },
             balance_unknown: unknown,
             balance_partial: partial,
-            unreachable: model.errored_without_data
-                && model.tokens.is_empty()
-                && model.cached_total.is_none(),
+            unreachable,
             notice,
             hidden: model.hidden,
             refreshing: model.pending_pulls > 0,

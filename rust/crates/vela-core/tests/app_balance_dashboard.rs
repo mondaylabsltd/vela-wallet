@@ -749,6 +749,7 @@ fn an_errored_first_load_is_unreachable_not_zero() {
         "the skeleton closed; the reason is different"
     );
     assert_eq!(view.tokens.len(), 0);
+    assert_eq!(view.display_total_usd, None, "no figure, not a 0 to ignore");
     // A later successful fetch clears it.
     sut.dispatch(Event::RefreshRequested {
         force: true,
@@ -2376,6 +2377,7 @@ fn a_round_where_every_chain_failed_is_no_zero() {
     };
     let view = booted(ADDR_A, None, all_failed).view();
     assert!(view.unreachable, "nothing known: no figure");
+    assert_eq!(view.display_total_usd, None, "unreachable is no $0.00");
     assert!(view.internal_key.is_some());
 
     let one_answered = booted(ADDR_A, None, settled_read(vec![], vec![56], vec![1, 56])).view();
