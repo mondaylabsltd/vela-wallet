@@ -438,17 +438,29 @@ struct FeeTokenRowView: View {
                     Text(verbatim: row.symbol)
                         .typeRole(Typography.rowTitle.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    Text(verbatim: row.insufficient
-                        ? (row.insufficientNote ?? row.balanceLabel)
-                        : row.balanceLabel)
-                        .typeRole(Typography.rowSub.scaled(textScale))
-                        .foregroundStyle(theme.fgMuted)
+                    // A figure is one line, shrunk before it is ever broken
+                    // (iPhone pass 2026-10-09: "0.000300194 / 967818323").
+                    // The note a coin that cannot pay says instead is prose,
+                    // and wraps.
+                    if row.insufficient, let note = row.insufficientNote {
+                        Text(verbatim: note)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                    } else {
+                        Text(verbatim: row.balanceLabel)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
                     Text(verbatim: row.fee)
                         .typeRole(Typography.body.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     Text(verbatim: estimateLabel)
                         .typeRole(Typography.caption.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
