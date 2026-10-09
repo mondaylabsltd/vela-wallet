@@ -1,5 +1,5 @@
-//! The Trusted Signer against the REAL page in a real browser (specs 071 and
-//! 075).
+//! The Trusted Signer against the REAL page in a real browser (specs 071, 075,
+//! 076 and 102).
 //!
 //! Everything here is `#[ignore]`d: it needs Chrome, so it is a local check
 //! and never a CI one. Run it with `scripts/trusted-signer-e2e.sh`, which finds
@@ -8,27 +8,37 @@
 //! several of these can run beside each other and beside anybody else's
 //! browser.
 //!
-//! **Spec 075: the channel is the loopback WebSocket.** The wallet listens on
-//! `127.0.0.1:0`, hands the browser `sign.html?ch=ws#p=<port>&t=<token>`, and
-//! the page connects back and stays connected — so a create and the sign-in
-//! after it run on ONE page visit, which is the whole point of the move off
-//! the URL fragment.
+//! **The channel is the one the desktop ships: the URL fragment out, and the
+//! answer back as `velawallet://sign-result?…`** (spec 076; `SchemeLine`). The
+//! page answers that address and no other (spec 102 R7), so this harness
+//! needs no exception in the page: it watches the tab's navigations through
+//! DevTools (`Page.frameRequestedNavigation`) and hands a `velawallet://`
+//! one to [`trusted_signer::deliver_callback`] — what the OS does with it on
+//! a real machine. One request is one page visit, as on every client.
+//!
+//! (Until spec 102 this file still drove the loopback WebSocket of spec 075,
+//! which the desktop stopped using in 076: every case failed at its first
+//! assertion, unnoticed, because nothing runs it in CI.)
 //!
 //! What is real: the request the core builds (`Ask::request`,
-//! `ceremony::request`), the launch URL (`ws_launch`), the wallet's listener
-//! and the core's own WebSocket framing (`ws::Connection`), the page itself —
-//! decoding, the operation-binding check, the digest and the challenges it
-//! derives on its own, the WebAuthn ceremony in a CDP virtual authenticator —
-//! and the wallet's verification of what comes back (`trusted_signer::verify`,
-//! `ceremony::verify`). What is stood in: the person's slide (the page's
-//! automation hook), the person's answer to "where is your Trusted Signer?", and
-//! `cx.open_url` (a CDP `Target` opened on the same URL).
+//! `ceremony::request`), the launch URL (`url_launch`), the page itself —
+//! decoding, the operation-binding check, the answer-address rule, the
+//! digest and the challenges it derives on its own, the WebAuthn ceremony in
+//! a CDP virtual authenticator — the callback's parsing (`callback_of`,
+//! `parse_callback`) and the wallet's verification of what comes back
+//! (`trusted_signer::verify`, `ceremony::verify`). What is stood in: the
+//! person's slide (the page's automation hook), the person's answer to
+//! "where is your Trusted Signer?", `cx.open_url` (a CDP `Target` opened on
+//! the same URL), and the OS's delivery of the custom scheme.
 //!
-//! The page is served from this repository on `http://localhost:<port>/`, a
-//! secure context whose passkeys live under rpId `localhost`. The wallet
-//! never checks the rpId hash (research R5), so the key signs for the wallet
-//! exactly as it would through the official page — the same stand-in the
-//! phones' device pass uses.
+//! The page is this repository's `dist/` — the deployment, index and
+//! content-addressed builds — served on `http://localhost:<port>/`, a secure
+//! context whose passkeys live under rpId `localhost`; it is checked first,
+//! as the app checks it (spec 102 R6), and the launch opens the version that
+//! check admitted (`/b/<sha256>/sign.html`), in the app's language (`lang=`).
+//! The wallet never checks the rpId hash (research R5), so the key signs for
+//! the wallet exactly as it would through the official page — the same
+//! stand-in the phones' device pass uses.
 
 use std::io::{Read as _, Write as _};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
@@ -50,7 +60,7 @@ use vela_core::app::KeyMethod;
 use vela_core::app::shell::ShellOperation;
 use vela_core::trusted_signer::ceremony::Answer;
 
-use crate::executor::trusted_signer::tests::{page_of_channel, signing_key};
+use crate::executor::trusted_signer::tests::{page_of_channel, signing_key, token_of};
 use crate::executor::trusted_signer::{self, Ask, Channel, Refusal};
 use crate::executor::user_op::{self, Signer};
 
@@ -208,8 +218,12 @@ impl Browser {
             socket,
             next: 0,
             id: target["id"].as_str().unwrap_or_default().to_owned(),
+            delivered: 0,
         };
         tab.call("Runtime.enable", json!({}));
+        // For `Page.frameRequestedNavigation`: how the page's answer to
+        // `velawallet://` is seen leaving.
+        tab.call("Page.enable", json!({}));
         tab
     }
 
@@ -230,10 +244,14 @@ struct Tab {
     socket: tungstenite::WebSocket<TcpStream>,
     next: u64,
     id: String,
+    /// `velawallet://` answers this tab handed the wallet.
+    delivered: usize,
 }
 
 impl Tab {
-    /// One CDP command and its result; events on the way are skipped.
+    /// One CDP command and its result. Events on the way are skipped — except
+    /// the page navigating to the wallet's address, which is delivered the way
+    /// the OS would deliver it.
     fn call(&mut self, method: &str, params: Value) -> Value {
         self.next += 1;
         let id = self.next;
@@ -254,7 +272,25 @@ impl Tab {
                 assert!(reply.get("error").is_none(), "{method}: {reply}");
                 return reply["result"].clone();
             }
+            if reply["method"] == "Page.frameRequestedNavigation" {
+                let url = reply["params"]["url"].as_str().unwrap_or_default();
+                if url.starts_with(vela_core::trusted_signer::CALLBACK_URL)
+                    && trusted_signer::deliver_callback(url)
+                {
+                    self.delivered += 1;
+                }
+            }
         }
+    }
+
+    /// Read what the tab has said so far — an answer it sent is delivered on
+    /// the way (see [`Self::call`]).
+    fn pump(&mut self) {
+        self.eval("0");
+    }
+
+    fn navigate(&mut self, url: &str) {
+        self.call("Page.navigate", json!({ "url": url }));
     }
 
     fn eval(&mut self, expression: &str) -> Value {
@@ -346,7 +382,10 @@ fn encode(url: &str) -> String {
 
 struct Rig {
     browser: Browser,
+    /// What the wallet is told the Trusted Signer is: this checkout's `src/`.
     page: String,
+    /// That page's origin — what a key made there records as its page.
+    origin: String,
     key: p256::ecdsa::SigningKey,
     credential: Vec<u8>,
     keys: Vec<WalletKey>,
@@ -368,7 +407,9 @@ impl Rig {
             crate::executor::trusted_signer::tests::wallet_key(&key, &credential),
         ];
         let channel = Channel::new().0;
-        let page = format!("http://localhost:{}/", serve_page());
+        let origin = format!("http://localhost:{}", serve_page());
+        // The checked deployment (this checkout's `dist/`), at its root.
+        let page = format!("{origin}/");
         // R6: the launch opens only what a check admitted — so check it, as
         // the app does at launch, against the bytes this checkout serves.
         let verdict = crate::executor::signer_integrity::check(&page);
@@ -380,6 +421,7 @@ impl Rig {
         Some(Self {
             browser,
             page,
+            origin,
             key,
             credential,
             keys,
@@ -397,19 +439,32 @@ impl Rig {
     }
 
     /// The launch URL, once the attempt has handed it over. It carries the
-    /// listener's port and its one-time token in the fragment, which the page
-    /// wipes from history the moment it reads it.
+    /// request, the wallet's address and a one-time token in the fragment,
+    /// which the page wipes from history the moment it reads it.
     fn launch(&self) -> String {
         let url = page_of_channel(&self.channel);
-        assert!(
-            url.contains("/b/") && url.contains("/sign.html?ch=url"),
-            "not the checked version: {url}"
-        );
-        // Spec 102: the page is told the app's language, in the query (the
-        // request rides in the fragment, after it).
-        let lang = format!("&lang={}#i=", crate::loc::app_language());
-        assert!(url.contains(&lang), "no `{lang}` in {url}");
+        assert_checked_launch(&url);
         url
+    }
+
+    /// The NEXT launch URL of a flow — a second request is a second visit —
+    /// read while the tab is pumped, since the first answer only reaches the
+    /// wallet when the tab's events are read.
+    fn next_launch(&self, tab: &mut Tab) -> String {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            tab.pump();
+            if let Some(url) = self.channel.take_page() {
+                assert_checked_launch(&url);
+                return url;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the flow never asked for its next page: {}",
+                why(tab)
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
     }
 
     /// Stops the ceremony if the driving side fails, so a failed assertion
@@ -418,18 +473,43 @@ impl Rig {
         Stop(&self.channel)
     }
 
-    /// Wait for the attempt to stop waiting; a stuck one is cancelled so the
-    /// test ends with a failure rather than five minutes later.
-    fn settle(&self) {
+    /// Wait for the attempt to stop waiting, reading the tab meanwhile so its
+    /// answer is delivered; a stuck one is cancelled so the test ends with a
+    /// failure rather than five minutes later.
+    fn settle(&self, tab: &mut Tab) {
         let deadline = Instant::now() + Duration::from_secs(30);
         while self.channel.waiting() && Instant::now() < deadline {
+            tab.pump();
             std::thread::sleep(Duration::from_millis(100));
         }
         if self.channel.waiting() {
             self.channel.cancel();
-            unreachable!("the page never answered the socket");
+            unreachable!("the page never answered: {}", why(tab));
         }
     }
+
+    /// The person gives up in Vela: Cancel on the waiting sheet, and the
+    /// attempt ends.
+    fn cancel(&self) {
+        self.channel.cancel();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while self.channel.waiting() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(!self.channel.waiting(), "Cancel did not end the wait");
+    }
+}
+
+/// A launch the desktop may hand the browser (spec 102): the version its check
+/// admitted (`/b/<sha256>/sign.html`), the request in the fragment, and the
+/// app's language in the query.
+fn assert_checked_launch(url: &str) {
+    assert!(
+        url.contains("/b/") && url.contains("/sign.html?ch=url"),
+        "not the checked version: {url}"
+    );
+    let lang = format!("&lang={}#i=", crate::loc::app_language());
+    assert!(url.contains(&lang), "no `{lang}` in {url}");
 }
 
 struct Stop<'a>(&'a Channel);
@@ -509,7 +589,8 @@ fn the_page_signs_the_operation_the_wallet_assembled() {
             "the page did not offer to sign"
         );
         tab.eval("window.__slider.__confirm()");
-        rig.settle();
+        rig.settle(&mut tab);
+        assert_eq!(tab.delivered, 1, "the page answered the wallet once");
         ceremony
             .join()
             .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
@@ -559,7 +640,8 @@ fn the_page_signs_a_message_as_the_wallet_hashes_it() {
             "the page did not offer to sign"
         );
         tab.eval("window.__slider.__confirm()");
-        rig.settle();
+        rig.settle(&mut tab);
+        assert_eq!(tab.delivered, 1, "the page answered the wallet once");
         ceremony
             .join()
             .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
@@ -571,11 +653,15 @@ fn the_page_signs_a_message_as_the_wallet_hashes_it() {
     );
 }
 
-/// The tab closed without a slide: its beacon is the person declining, and
-/// the request stays open with "closed" to say.
+/// The tab closed without a slide: nothing is signed, and nothing reaches the
+/// wallet either. A closing page can only answer by beacon, and browsers send
+/// beacons over HTTP(S) alone, never to `velawallet://` — so on the desktop the
+/// request waits until the person presses Cancel in Vela, and ends `Closed`.
+/// (The phones see their tab close natively; the desktop's default browser
+/// tells it nothing.)
 #[test]
 #[ignore = "needs a real browser: scripts/trusted-signer-e2e.sh"]
-fn a_tab_closed_unsigned_is_a_decline() {
+fn a_tab_closed_unsigned_signs_nothing() {
     let Some(rig) = Rig::new() else { return };
     let calls = vec![dust("0x031d7D57c99CAF891e1C250554691Fd12D84772b")];
     let op = assembled(&calls);
@@ -588,8 +674,12 @@ fn a_tab_closed_unsigned_is_a_decline() {
         let _stop = rig.guard();
         let mut tab = rig.open_page();
         assert!(tab.wait_for("!!window.__slider"));
+        tab.pump();
+        assert_eq!(tab.delivered, 0);
         rig.browser.close(&tab);
-        rig.settle();
+        std::thread::sleep(Duration::from_secs(2));
+        assert!(rig.channel.waiting(), "a closed tab answered the wallet");
+        rig.cancel();
         ceremony
             .join()
             .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
@@ -599,10 +689,11 @@ fn a_tab_closed_unsigned_is_a_decline() {
 }
 
 /// The operation does not carry what the page was told it carries — a
-/// swapped recipient. The page refuses on its own rules, and on a session
-/// channel it says so AT ONCE (PROTOCOL.md §11) rather than waiting for its
-/// tab to close: the wallet hears "refused", not "closed", and the request is
-/// still there to be signed another way.
+/// swapped recipient. The page refuses on its own rules before any passkey
+/// prompt: no slide, the reason on screen. On the url channel a refusal goes
+/// out only when the tab closes (by beacon, which cannot reach
+/// `velawallet://` — see above), so the wallet hears nothing, and the
+/// request is still there to be signed another way until the person cancels.
 #[test]
 #[ignore = "needs a real browser: scripts/trusted-signer-e2e.sh"]
 fn an_operation_that_is_not_the_request_is_refused_by_the_page() {
@@ -624,37 +715,47 @@ fn an_operation_that_is_not_the_request_is_refused_by_the_page() {
             why(&mut tab)
         );
         assert_eq!(tab.eval("!!window.__slider"), json!(false));
-        rig.settle();
+        assert_eq!(
+            tab.eval("[...document.querySelectorAll('.warning-text')].some(n => /altered during assembly/.test(n.textContent))"),
+            json!(true),
+            "the card did not say why: {}",
+            why(&mut tab)
+        );
+        tab.pump();
+        assert_eq!(tab.delivered, 0);
         rig.browser.close(&tab);
+        std::thread::sleep(Duration::from_secs(1));
+        assert!(rig.channel.waiting(), "the refusal reached the wallet");
+        rig.cancel();
         ceremony
             .join()
             .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
     });
-    assert!(outcome.is_err());
-    assert_eq!(rig.channel.ended(), Some(Refusal::Refused));
+    assert!(outcome.is_err(), "a swapped operation signed");
+    assert_eq!(rig.channel.ended(), Some(Refusal::Closed));
 }
 
-/// **A wallet created through the Trusted Signer, on ONE page visit** (spec 075
-/// US1): the page mints the passkey the create machine asked for, and then —
-/// on the same socket, with the same tab and no second launch URL — answers
-/// the sign-in that finds it again.
+/// **A wallet created through the Trusted Signer, then signed into** (spec 075
+/// US1): the page mints the passkey the create machine asked for, and then
+/// answers the sign-in that finds it again.
 ///
-/// This is the case the URL fragment could not carry, and it is the reason the
-/// desktop moved: two ceremonies, one page visit, one `bye`.
+/// Two requests, two page visits (spec 076: a URL carries one request), each
+/// with its own one-time token; what makes them one flow is the wallet's side.
+/// The second visit is opened in the SAME tab, because a CDP virtual
+/// authenticator belongs to the tab that added it — on a real machine the
+/// key is simply in the platform's vault.
 ///
 /// Both challenges are the PAGE's own. The create's is 32 random bytes it
 /// generated; the sign-in's is the `vela-signin-<ms>-<hex>` it derived from its
 /// own clock, which the core checks the form of before it accepts anything —
 /// so a "sign-in" cannot be a transaction hash in disguise.
 ///
-/// The member proof that finishes a real create is NOT here: the page fetches
-/// its own challenge from a registry, which means standing one up
-/// (`app-web/trusted-signer/samples/mock-registry.mjs`, Node). The verification
-/// of that answer is covered by
+/// The member proof that finishes a real create is NOT here: it needs the
+/// registry's deployment facts. The verification of that answer is covered by
 /// `executor::trusted_signer::tests::a_create_and_its_member_proof_share_one_page_visit`.
 #[test]
 #[ignore = "needs a real browser: scripts/trusted-signer-e2e.sh"]
-fn the_page_creates_a_key_and_then_signs_in_with_it_on_one_visit() {
+fn the_page_creates_a_key_and_then_signs_in_with_it() {
     let Some(rig) = Rig::new() else { return };
     // Spec 102 R3: a create on the person's own page — "Use my own signing
     // page", pointed at this checkout's copy — carries that page on its op.
@@ -696,8 +797,8 @@ fn the_page_creates_a_key_and_then_signs_in_with_it_on_one_visit() {
         let _stop = rig.guard();
 
         // An EMPTY vault: the page has to mint the key itself.
-        let url = rig.launch();
-        let mut tab = rig.browser.open(&url);
+        let first = rig.launch();
+        let mut tab = rig.browser.open(&first);
         tab.add_authenticator();
 
         assert!(
@@ -710,26 +811,26 @@ fn the_page_creates_a_key_and_then_signs_in_with_it_on_one_visit() {
         );
         tab.eval("window.__slider.__confirm()");
 
-        // The SAME tab and the SAME socket carry the next request: the page
-        // answered one and took a second without being reopened. Its own
-        // counters say so, and the wallet never asked for another page.
+        // The create's answer reaches the wallet, which then asks for the
+        // sign-in: a second visit, with a token of its own.
+        let second = rig.next_launch(&mut tab);
+        assert_eq!(tab.delivered, 1, "the create was not answered once");
+        assert_ne!(token_of(&first), token_of(&second), "a token was reused");
+        // A navigation that changes only the fragment would not reload the
+        // page, so go through a blank one.
+        tab.navigate("about:blank");
+        tab.navigate(&second);
         assert!(
             tab.wait_for(
-                "window.__velaState.kind === 'signIn' && window.__velaState.received === 2                  && window.__velaState.answered === 1"
+                "window.__velaState && window.__velaState.phase === 'card' \
+                 && window.__velaState.kind === 'signIn'"
             ),
-            "the sign-in card never came up on the same visit: {}",
+            "the sign-in card never came up: {}",
             why(&mut tab)
         );
-        assert_eq!(
-            rig.channel.take_page(),
-            None,
-            "the wallet asked for a second page visit"
-        );
         tab.eval("window.__slider.__confirm()");
-        rig.settle();
-
-        // The wallet said goodbye, so the page is on its done screen.
-        assert!(tab.wait_for("window.__velaState.phase === 'ended'"));
+        rig.settle(&mut tab);
+        assert_eq!(tab.delivered, 2, "the sign-in was not answered once");
         rig.browser.close(&tab);
         flow.join()
             .unwrap_or_else(|_| unreachable!("the flow panicked"))
@@ -747,7 +848,7 @@ fn the_page_creates_a_key_and_then_signs_in_with_it_on_one_visit() {
     // routes its signatures there and nowhere else.
     assert_eq!(
         registration.signer_origin.as_deref(),
-        Some(rig.page.trim_end_matches('/')),
+        Some(rig.origin.as_str()),
         "the key did not record its page"
     );
     // The core had already parsed the attestation to a P-256 key before it
