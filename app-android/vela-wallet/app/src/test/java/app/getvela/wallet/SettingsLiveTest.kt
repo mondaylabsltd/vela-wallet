@@ -780,34 +780,100 @@ class SettingsLiveTest {
         assertNull(restored.report)
     }
 
+    private fun line(state: uniffi.vela_core_uniffi.SignerIntegrityState, key: String, opens: Boolean) =
+        uniffi.vela_core_uniffi.SignerIntegrityLine(state, "0ba8ee8c", 1_760_000_000_000uL, "componentsUi.signing.integrity.$key", opens)
+
     /**
-     * Spec 071/075, and the founder's 2026-09-26 ruling: Settings keeps the
-     * Trusted Signer page and nothing else about signing — there is no default
-     * "Sign with", because the account signs with the key it signed in with.
+     * Spec 102 (P2-08): Settings keeps a LIST of signing pages — the official
+     * one first, each with whose keys it reaches and its integrity line — and
+     * no free-text "the page every signature opens" field, and still no
+     * default "Sign with" (the founder's 2026-09-26 ruling).
      */
     @Test
-    fun `settings keeps the Trusted Signer page and no default sign-with`() {
-        val view = app.getvela.wallet.feature.settings.core.SignPrefView()
-        val model = SettingsLive.withSignPref(base(), view, strings)
-        val rows = model.sections.flatMap { it.rows }
-
-        assertFalse(
-            "no row says \"${strings.t("settings.signing.title")}\"",
-            rows.any { it.title == strings.t("settings.signing.title") || it.subtitle == strings.t("settings.signing.subtitle") },
+    fun `settings lists the signing pages, official first, each with its domain and line`() {
+        val view = app.getvela.wallet.feature.settings.core.SigningPagesView(
+            pages = listOf(
+                app.getvela.wallet.feature.settings.core.SigningPageRow("https://sign.getvela.app/", "", "getvela.app", official = true),
+                app.getvela.wallet.feature.settings.core.SigningPageRow("https://sign.example.com/", "My page", "example.com"),
+                app.getvela.wallet.feature.settings.core.SigningPageRow("https://signer.example.org/", "", "signer.example.org"),
+            ),
+            loaded = true,
         )
-
-        fun rowValue(id: String) = rows.single { it.id == id }.value
-        assertEquals(strings.t("settings.signing.pageOfficial"), rowValue(SettingsFixtures.SIGNER_PAGE_ROW))
-        assertEquals(strings.t("settings.signing.pageTitle"), rows.single { it.id == SettingsFixtures.SIGNER_PAGE_ROW }.title)
-        val chosen = SettingsLive.withSignPref(
-            base(),
-            view.copy(signer_url = "https://sign.example.test/", signer_url_is_default = false),
+        val lines = mapOf(
+            "https://sign.getvela.app/" to line(uniffi.vela_core_uniffi.SignerIntegrityState.MATCHES, "matches", true),
+            "https://sign.example.com/" to line(uniffi.vela_core_uniffi.SignerIntegrityState.ASK_TO_TRUST, "askTrust", false),
+        )
+        val version = "3f9a1c22" + "0".repeat(56)
+        val model = SettingsLive.withSigningPages(
+            base(), view,
+            { url -> lines[url] ?: app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.CHECKING },
             strings,
+        ) { url -> version.takeIf { url == "https://sign.example.com/" } }
+        val rows = model.signingPages.rows
+        // D6: the official page is a trusted page by its own name; only a page
+        // the person deployed is "self-hosted", and a label they gave wins.
+        assertEquals(listOf("Vela's official signing page", "My page", "Self-hosted · signer.example.org"), rows.map { it.title })
+        assertEquals(listOf("", "My page", ""), rows.map { it.label })
+        // A row named by its domain does not say its address a second time.
+        assertEquals(listOf(true, true, false), rows.map { it.showAddress })
+        // The question's answer carries the check's own version, and only where the line asks.
+        assertEquals(listOf(null, version, null), rows.map { it.trustVersion })
+        assertEquals(listOf("sign.getvela.app", "sign.example.com", "signer.example.org"), rows.map { it.address })
+        assertEquals("Keys on getvela.app", rows[0].domain)
+        assertTrue(rows[0].integrity.text, rows[0].integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        assertTrue(rows[0].integrity.opens)
+        assertTrue(rows[1].integrity.asksToTrust)
+        assertEquals("Checking the page…", rows[2].integrity.text)
+        // The page's own words, not other screens' borrowed ones (core round 10).
+        assertEquals("Trust this version", model.signingPages.trust)
+        assertEquals("Rename", model.signingPages.rename)
+        assertEquals("Remove", model.signingPages.remove)
+        assertEquals("Name", model.signingPages.nameLabel)
+        // The advanced section's row heads the list; nothing says "Sign with".
+        val settingsRows = model.sections.flatMap { it.rows }
+        val row = settingsRows.single { it.id == SettingsFixtures.SIGNING_PAGES_ROW }
+        assertEquals(strings.t("settings.signing.title"), row.title)
+        assertEquals("3", row.value)
+        assertFalse(settingsRows.any { it.title == "Sign with" })
+        // A refused address says why, in the corpus' words; nothing was stored.
+        val refused = SettingsLive.withSigningPages(base(), view.copy(add_error = "insecure"), { app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.CHECKING }, strings)
+        assertEquals(strings.t("settings.signing.pageInsecure"), refused.signingPages.addError)
+        // The pairing service is gone with the channel (owner, 2026-09-23).
+        assertFalse(settingsRows.map { it.id }.any { it.contains("tunnel", ignoreCase = true) })
+    }
+
+    /**
+     * Spec 102 (P2-09): "Where you review and sign" — the core's choices in
+     * its order, a blocked one dimmed with its reason (R1), the active one
+     * marked, and the row's value the venue in force.
+     */
+    @Test
+    fun `where you review and sign - the core's choices, blocked ones with their reason`() {
+        val saved = listOf(app.getvela.wallet.feature.settings.core.SigningPage("https://sign.example.com/", "My page"))
+        val matches = line(uniffi.vela_core_uniffi.SignerIntegrityState.MATCHES, "matches", true)
+        val account = app.getvela.wallet.feature.onboarding.core.SessionAccountRow(
+            index = 0, name = "Savings", address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            signingDomain = "getvela.app", signingVenueJson = """{"type":"in_vela"}""",
         )
-        assertEquals("sign.example.test", chosen.sections.flatMap { it.rows }.single { it.id == SettingsFixtures.SIGNER_PAGE_ROW }.value)
-        // The pairing service is gone with the channel (owner, 2026-09-23):
-        // no row, no sheet, and nothing in the advanced block that names one.
-        val ids = model.sections.flatMap { it.rows }.map { it.id }
-        assertFalse(ids.any { it.contains("tunnel", ignoreCase = true) })
+        val venue = SettingsLive.withVenue(base(), account, saved, { matches }, strings).venue!!
+        assertEquals(strings.t("settings.venue.title"), venue.row.title)
+        assertEquals("Review and sign in Vela", venue.row.value)
+        assertNull(venue.row.subtitle)
+        assertEquals("Keys on getvela.app", venue.domainLine)
+        assertEquals(listOf(null, "Vela's official signing page", "My page"), venue.choices.map { it.page?.title })
+        assertEquals(listOf(true, false, false), venue.choices.map { it.selected })
+        // A page on another domain cannot reach this account's keys: shown, dimmed, with the reason.
+        assertEquals(listOf(null, null, "This page is on sign.example.com; this account's keys are on getvela.app."), venue.choices.map { it.reason })
+
+        // A custom-domain account is locked to its page: Vela's sheet says why it cannot.
+        val own = account.copy(signingDomain = "sign.example.com", signingVenueJson = """{"type":"page","url":"https://sign.example.com/"}""")
+        val locked = SettingsLive.withVenue(base(), own, saved, { matches }, strings).venue!!
+        // The row says where it signs now, and on which host.
+        assertEquals("Review and sign on a trusted signing page", locked.row.value)
+        assertEquals("sign.example.com", locked.row.subtitle)
+        assertEquals("Vela can't reach keys on sign.example.com.", locked.choices.first().reason)
+        assertEquals(listOf(false, false, true), locked.choices.map { it.selected })
+        // No account, no row.
+        assertNull(SettingsLive.withVenue(base(), null, saved, { matches }, strings).venue)
     }
 }

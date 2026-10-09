@@ -27,6 +27,24 @@ enum class SigningScreenState {
      * not drawn on this platform yet; the number stays the canon's.
      */
     CS36,
+
+    /**
+     * Spec 102 D4: the hand-off card — an account that reviews and signs on
+     * the official page, whose check matches the published build list (CS37);
+     * the same request when the page could not be checked, so Open stays shut
+     * (CS38); and the page open, waiting for its answer (CS39).
+     */
+    CS37, CS38, CS39,
+
+    /**
+     * Spec 102 core round, the card on its own — what a send on a page venue
+     * raises: its fee + speed row (`handoffFeeRow`), the key named by its
+     * place (D-17), the page matching (CS40); the same card while a check
+     * older than a day runs again, Open off (CS41); and a dApp request on a
+     * self-hosted page whose build is new to Vela — the line asks, "Trust
+     * this version" answers, Open off until it is trusted (CS42).
+     */
+    CS40, CS41, CS42,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
@@ -246,7 +264,42 @@ sealed interface FeeModel {
 }
 
 /**
- * The Trusted Signer's page is open (spec 071): the sheet says so instead of
+ * Spec 102 D4: the hand-off card — the account reviews and signs on a page,
+ * so the sheet does not repeat the preview. Where (the title), with which key
+ * ("Confirm with {{key}}"), what is trusted about the page (its integrity
+ * line, or why it will not open), and Open — enabled only when the line says
+ * the page opens and the request may be confirmed.
+ */
+@Immutable
+data class HandoffModel(
+    val title: String,
+    /** "Confirm with Savings" / "Confirm with This device"; empty when nothing names the key. */
+    val keyLine: String,
+    /** The page's address, without its scheme. */
+    val page: String,
+    val integrity: app.getvela.wallet.feature.settings.components.IntegrityLineModel,
+    val open: String,
+    /**
+     * The fee this operation was priced at, and its speed — one quiet row
+     * under the key line (core round 5, `handoffFeeRow`), no control: the fee
+     * was chosen before the hand-off. `null`: no row (a message, a fee not
+     * settled for the speed in force, or a surface whose own fee row sits
+     * right above the card).
+     */
+    val fee: HandoffFeeModel? = null,
+    /**
+     * "Trust this version" under a self-hosted page's question
+     * (`settings.signing.pageTrust`), when its line asks; `null` otherwise.
+     */
+    val trust: String? = null,
+)
+
+/** The hand-off card's fee row: "Network fee  ~0.00012 ETH · ≈$0.31", and the speed's name. */
+@Immutable
+data class HandoffFeeModel(val label: String, val value: String, val tier: String?)
+
+/**
+ * The signing page is open (spec 071): the sheet says so instead of
  * offering the confirm, with a way back to the page and a way out.
  */
 @Immutable
@@ -283,8 +336,10 @@ data class SigningScreenModel(
     val dappIconUrls: List<String> = emptyList(),
     /** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
     val networkLogoUrl: String? = null,
-    /** Spec 071: the Trusted Signer is open; the confirm gives way to this. */
+    /** Spec 071: the signing page is open; the confirm gives way to this. */
     val trustedSignerWait: TrustedSignerWaitModel? = null,
+    /** Spec 102 D4: the account signs on a page — the confirm is this card's Open. */
+    val handoff: HandoffModel? = null,
     /** Spec 071: why the last Trusted Signer attempt did not sign. */
     val trustedSignerNotice: String? = null,
     val blocks: List<SigningBlock>,
@@ -317,13 +372,6 @@ data class SigningScreenModel(
     val confirmBlockLine: String? = null,
     /** Spec 079: the ✕'s label — the sheet's one explicit close. */
     val closeLabel: String = "",
-    /**
-     * Spec 079 (owner: one slide): the account signs on the Trusted Signer's
-     * page, whose slide is the consent — the sheet's action is a button that
-     * goes there ([confirmButtonLabel], "去签名页确认"), not a second slide.
-     */
-    val confirmAsButton: Boolean = false,
-    val confirmButtonLabel: String = "",
     /**
      * Spec 079: once the person has approved, the sheet stops being a form and
      * shows this — the send receipt's own model and words, so a dApp

@@ -1189,6 +1189,16 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), confirm.noticeAction)
         assertFalse(confirm.ctaEnabled)
 
+        // Spec 102 (P2b-A10): a venue this device cannot use — the core's
+        // reason in the person's words, and no retry: nothing would change.
+        val blocked = refused.copy(
+            tx_error = SendTxErrorKey.VenueBlocked,
+            tx_venue_block = app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.PageOnOtherDomain("sign.example.com", "getvela.app"),
+        )
+        val venue = SendLive.confirm(drawn, blocked, ctx())
+        assertEquals("This page is on sign.example.com; this account's keys are on getvela.app.", venue.notice)
+        assertNull(venue.noticeAction)
+
         val low = SendView(
             // The core closes the gate while a relay stop is up (issue #424);
             // the shell takes `can_confirm` as it comes.

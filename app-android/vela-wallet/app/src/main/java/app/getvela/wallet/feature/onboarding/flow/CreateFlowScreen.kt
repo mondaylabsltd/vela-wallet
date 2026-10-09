@@ -5,6 +5,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -49,6 +55,38 @@ fun CreateFlowScreen(
     DisposableEffect(Unit) {
         model.startCreate()
         onDispose { }
+    }
+
+    // Spec 102: "Use a trusted signing page" — the picker, over the key list.
+    var pickingPage by remember { mutableStateOf(false) }
+    val pagesView by model.signingPages.collectAsStateWithLifecycle()
+    val checks by model.signerChecks.collectAsStateWithLifecycle()
+    val chosenPage = view?.signingPage?.let { url ->
+        checks.size // read: a new check redraws the line
+        val row = pagesView.pages.firstOrNull { it.url == url }
+        app.getvela.wallet.feature.settings.SettingsLive.pageItem(
+            url = url,
+            name = row?.name.orEmpty(),
+            domain = row?.domain ?: view.signingDomain,
+            official = row?.official ?: false,
+            line = model.signerLine(url),
+            s = strings,
+        )
+    }
+    LaunchedEffect(view?.signingPage) { view?.signingPage?.let { model.checkSigningPages() } }
+    if (pickingPage) {
+        checks.size
+        OwnPageSheet(
+            model = OwnPageModel.of(pagesView, model::signerLine, strings, model::signerToTrust),
+            onPick = { url ->
+                pickingPage = false
+                model.chooseSigningPage(url)
+            },
+            onAdd = model::addSigningPage,
+            onDismiss = { pickingPage = false },
+            cancelLabel = strings.t("common.cancel"),
+            onTrust = model::trustSigningPage,
+        )
     }
 
     val screen = screenFor(view)
@@ -105,7 +143,13 @@ fun CreateFlowScreen(
                 needsSecondKey = view.needsSecondKey,
                 busy = view.busy,
                 addMethods = view.addMethods,
-                addBlocked = view.addBlocked,
+                signingPage = chosenPage,
+                canChoosePage = view.canChoosePage,
+                onChooseOwnPage = {
+                    model.checkSigningPages()
+                    pickingPage = true
+                },
+                onClearOwnPage = { model.chooseSigningPage(null) },
                 onAddKey = model::addKey,
                 onConfirmKey = model::confirmKey,
                 onRemoveKey = model::removeKey,

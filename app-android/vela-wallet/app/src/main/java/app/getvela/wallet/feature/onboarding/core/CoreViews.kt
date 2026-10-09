@@ -62,7 +62,14 @@ enum class SubmitLabel(val wire: String) {
 }
 
 /**
- * `KeyMethod` — how the person chose to mint a founding key.
+ * `KeyMethod` — WHERE a key lives: this device, a phone or tablet reached by
+ * scanning a code, or a USB security key. Three places, and no fourth.
+ *
+ * Spec 102: the Trusted Signer used to be drawn here as a fourth "method". It
+ * never was a place a key lives — the same three places exist on the page too —
+ * it is where a person reviews and signs (the account's signing VENUE, which is
+ * the core's `signing_plan`, not this enum). A `trusted_signer` from the core
+ * is now an unknown value and throws, as any other would.
  *
  * The CHOICE, not the report: `CreateKeyRow` separately carries what the
  * authenticator said about itself, and the two can legitimately disagree. The
@@ -72,13 +79,6 @@ enum class KeyMethod(val wire: String) {
     Platform("platform"),
     Hybrid("hybrid"),
     SecurityKey("security_key"),
-
-    /**
-     * Spec 075: the Trusted Signer — a page the person reads, which runs the
-     * WebAuthn ceremony itself. A passkey route of our own, beside the three
-     * the platform offers, and offered wherever they are.
-     */
-    TrustedSigner("trusted_signer"),
     ;
 
     companion object {
@@ -116,26 +116,11 @@ data class CreateKeyRow(
     val providerName: String,
     val method: KeyMethod,
     /**
-     * WHERE this key lives, as the core settled it (spec 075): the route the
-     * person chose is [method], but a key minted on a Trusted Signer page lives
-     * behind that page whatever the browser's authenticator reported about
-     * itself. Defaults to [method] for a core that predates the field.
+     * WHERE this key lives, from the authenticator's own report — the row's
+     * icon and caption both read it. Defaults to [method] for a core that
+     * predates the field.
      */
     val kind: KeyMethod = method,
-)
-
-/**
- * `AddBlocked` — why a key route is not on offer (spec 075).
- *
- * A wallet's keys all belong to ONE relying party, because the registry files
- * a unit under one `rpId`. Once the first key is minted, the routes that would
- * mint for a different party are off — and the row says so, naming both sides,
- * because the person can fix it: the Trusted Signer page is a setting.
- */
-data class AddBlocked(
-    val relyingParty: String,
-    val page: String?,
-    val pageRelyingParty: String?,
 )
 
 /** `CreateView`. */
@@ -157,10 +142,18 @@ data class CreateView(
     val canGoBack: Boolean,
     val address: String?,
     val syncErrorDetail: String?,
-    /** The routes that may still mint a key for THIS set (spec 075). */
+    /** The places a key may be minted in — always the three (spec 102). */
     val addMethods: List<KeyMethod> = KeyMethod.entries,
-    /** Why the others may not, when some may not. */
-    val addBlocked: AddBlocked? = null,
+    /**
+     * Spec 102: the domain this wallet's keys are minted for — `getvela.app`,
+     * or the domain of the page chosen with "Use a trusted signing page". Shown,
+     * so a person sees which site their keys will belong to.
+     */
+    val signingDomain: String = "getvela.app",
+    /** Spec 102: that page, normalised, when one was chosen; `null` in the app. */
+    val signingPage: String? = null,
+    /** Spec 102: may a page still be chosen? Only before the first key. */
+    val canChoosePage: Boolean = false,
 ) {
     companion object {
         fun from(json: JSONObject): CreateView = CreateView(
@@ -194,18 +187,12 @@ data class CreateView(
             canGoBack = json.optBoolean("can_go_back"),
             address = json.nullableString("address"),
             syncErrorDetail = json.nullableString("sync_error_detail"),
-            // A core that predates the field says nothing, and every route
-            // stays on — the behaviour this client shipped with.
             addMethods = json.optJSONArray("add_methods")
                 ?.let { arr -> (0 until arr.length()).map { KeyMethod.of(arr.getString(it)) } }
                 ?: KeyMethod.entries,
-            addBlocked = json.optJSONObject("add_blocked")?.let { blocked ->
-                AddBlocked(
-                    relyingParty = blocked.optString("relying_party"),
-                    page = blocked.nullableString("page"),
-                    pageRelyingParty = blocked.nullableString("page_relying_party"),
-                )
-            },
+            signingDomain = json.optString("signing_domain").ifEmpty { "getvela.app" },
+            signingPage = json.nullableString("signing_page"),
+            canChoosePage = json.optBoolean("can_choose_page"),
         )
     }
 }
@@ -220,8 +207,22 @@ data class LoginView(val busy: Boolean, val endpointUnreachable: Boolean) {
     }
 }
 
-/** One row of the account switcher. `index` is the position in the ORIGINAL list. */
-data class SessionAccountRow(val index: Int, val name: String, val address: String)
+/**
+ * One row of the account switcher. `index` is the position in the ORIGINAL list.
+ *
+ * Spec 102: [signingDomain] is the RP ID the account's keys live under, and
+ * [signingVenueJson] where its transactions and messages are reviewed and
+ * signed (`{"type":"in_vela"}` / `{"type":"page","url":…}`) — both the core's,
+ * read off the record as the session holds it, and handed back to the core
+ * (`signingVenueChoices`) rather than interpreted here.
+ */
+data class SessionAccountRow(
+    val index: Int,
+    val name: String,
+    val address: String,
+    val signingDomain: String = "getvela.app",
+    val signingVenueJson: String = """{"type":"in_vela"}""",
+)
 
 /** `SessionSignOutView` — present iff the confirmation dialog is open. */
 data class SessionSignOutView(
@@ -252,6 +253,9 @@ data class SessionView(
      */
     val activeName: String get() = accounts.getOrNull(activeIndex)?.name.orEmpty()
 
+    /** The active account's row, `null` when there is none (or a torn view). */
+    val activeRow: SessionAccountRow? get() = accounts.getOrNull(activeIndex)
+
     companion object {
         fun from(json: JSONObject): SessionView = SessionView(
             loading = json.optBoolean("loading"),
@@ -264,6 +268,9 @@ data class SessionView(
                     index = row.optInt("index"),
                     name = account.optString("name"),
                     address = account.optString("address"),
+                    signingDomain = account.optString("signing_domain").ifEmpty { "getvela.app" },
+                    signingVenueJson = account.optJSONObject("signing_venue")?.toString()
+                        ?: """{"type":"in_vela"}""",
                 )
             },
             allowedRoute = SessionRoute.of(json.getString("allowed_route")),

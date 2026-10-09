@@ -89,8 +89,16 @@ fun SigningGalleryScreen(systemDarkTheme: Boolean, initialState: String? = null)
                 )
             }
             Box(modifier = Modifier.weight(1f).padding(top = VelaSpacing.lg)) {
-                val model = remember(state, strings) { SigningFixtures.build(state, strings) }
-                SigningSheetContent(model = model, onConfirm = {}, onClose = {})
+                // CS40/CS41: the hand-off card a send raises on its own.
+                val standalone = remember(state, strings) { SigningFixtures.standaloneHandoff(state, strings) }
+                if (standalone != null) {
+                    app.getvela.wallet.feature.signing.HandoffSheetContent(
+                        standalone, onOpen = {}, onCancel = {}, cancel = strings.t("common.cancel"),
+                    )
+                } else {
+                    val model = remember(state, strings) { SigningFixtures.build(state, strings) }
+                    SigningSheetContent(model = model, onConfirm = {}, onClose = {})
+                }
             }
         }
     }

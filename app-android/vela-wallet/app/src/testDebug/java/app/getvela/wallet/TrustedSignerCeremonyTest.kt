@@ -27,8 +27,10 @@ import java.util.zip.Inflater
 import kotlin.concurrent.thread
 
 /**
- * Spec 075: a whole create flow through the Trusted Signer, over the channel
- * the phones have (spec 076) — the request in the launch URL's fragment, the
+ * Spec 075/102: a whole create flow on a signing page — what a wallet on a
+ * custom domain does (R3: the op names the page; `method` is the place the
+ * page hints the browser to) — over the channel the phones have (spec 076):
+ * the page CHECKED first, the request in the launch URL's fragment, the
  * answer in a `velawallet://sign-result?…`.
  *
  * `register_passkey` mints a key on the page and `sign_member_proof` confirms
@@ -59,7 +61,8 @@ class TrustedSignerCeremonyTest {
             .put("type", "register_passkey")
             .put("name", "Parallel One")
             .put("exclude_credential_ids", org.json.JSONArray())
-            .put("method", "trusted_signer")
+            .put("method", "platform")
+            .put("page", page)
             .toString()
         val memberOp = JSONObject()
             .put("type", "sign_member_proof")
@@ -67,13 +70,17 @@ class TrustedSignerCeremonyTest {
             .put("public_key_hex", account.publicKeyHex)
             .put("attestation_hex", "")
             .put("group_public_key_hex", "04" + "11".repeat(64))
-            .put("method", "trusted_signer")
+            .put("method", "platform")
+            .put("page", page)
             .toString()
 
         val seen = CopyOnWriteArrayList<String>()
         val tokens = CopyOnWriteArrayList<String>()
+        val checks = OfficialDist.checks()
         val wire = TrustedSignerScheme(
             base = page,
+            admit = { checks.ensure(page) },
+            refusal = { checks.line(page) },
             openPage = { url ->
                 val visit = Visit(url)
                 tokens += visit.token
@@ -160,13 +167,17 @@ class TrustedSignerCeremonyTest {
             .put("public_key_hex", account.publicKeyHex)
             .put("attestation_hex", "")
             .put("group_public_key_hex", "04" + "11".repeat(64))
-            .put("method", "trusted_signer")
+            .put("method", "platform")
+            .put("page", page)
             .toString()
         val wallets = ByteArray(32) { (it + 1).toByte() }
         val pages = ByteArray(32) { (it + 9).toByte() }
 
+        val checks = OfficialDist.checks()
         val wire = TrustedSignerScheme(
             base = page,
+            admit = { checks.ensure(page) },
+            refusal = { checks.line(page) },
             openPage = { url ->
                 val visit = Visit(url)
                 thread {

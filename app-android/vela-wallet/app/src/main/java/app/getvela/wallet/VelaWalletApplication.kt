@@ -21,6 +21,12 @@ import app.getvela.wallet.feature.wallet.core.TrackerWorker
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.TrustedSignerLabels
 import app.getvela.wallet.feature.send.core.UserOpSigner
+import app.getvela.wallet.core.crux.Wire
+import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.feature.settings.core.SigningPage
+import kotlinx.serialization.builtins.ListSerializer
+import app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
+import app.getvela.wallet.feature.signing.trustedsigner.SigningPlan
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerTab
 import app.getvela.wallet.feature.send.core.SendHapticKind
@@ -348,12 +354,65 @@ class AppContainer(private val app: Application) {
     var trustedSignerTab: TrustedSignerTab? = null
 
     /**
-     * Spec 071: the Trusted Signer — one channel per process, one ceremony at a
-     * time. The page is `sign_pref`'s; the words are the corpus'.
+     * Spec 102 R6: the phone's integrity checks — every signing page is
+     * fetched, hashed and admitted by the core before it can open. Shared by
+     * the channel (which opens only an admitted page), the hand-off card and
+     * Settings → Signing pages (which draw each page's line).
+     */
+    val signerPages: SignerPageChecks by lazy {
+        val store = VelaStore(app)
+        SignerPageChecks(
+            fetch = SignerPageChecks::httpGet,
+            store = store,
+            // D-15: each page's own trusted versions — the pages core's list
+            // as it stands once read, else the stored list itself.
+            savedPages = {
+                settings.signingPages.value.takeIf { it.loaded }?.saved
+                    ?.let { saved ->
+                        Wire.json.encodeToString(ListSerializer(SigningPage.serializer()), saved)
+                    }
+                    ?: store.read(KeyValueStore.Keys.SIGNING_PAGES)
+            },
+            recordTrust = { url, version -> settings.trustSigningPageVersion(url, version) },
+        )
+    }
+
+    private val signerRefreshScope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
+    /**
+     * Spec 102 D-14: re-check the signing pages in use whose check the core
+     * says is due (`signerPageRefreshDue` — older than half a day, resting
+     * after an attempt that could not complete). In use: every saved page and
+     * each account's page venue (its `signing_plan`). The activity calls this
+     * on every resume — the first one is the start — and hourly while it
+     * runs (`signerPageRefreshSchedule().pollMs`). A page not due costs a
+     * comparison.
+     */
+    fun refreshSignerPages() {
+        signerRefreshScope.launch {
+            runCatching {
+                if (!settings.signingPages.value.loaded) {
+                    settings.refreshSigningPages()
+                    kotlinx.coroutines.withTimeoutOrNull(5_000L) { settings.signingPages.first { it.loaded } }
+                }
+                val saved = settings.signingPages.value.saved.map { it.url }
+                val port = StoreAccountPort(AccountStore(app))
+                val venues = session.view.value.accounts.mapNotNull { row ->
+                    SigningPlan.of(port.accountJson(row.address))?.page
+                }
+                signerPages.refresh(saved + venues)
+            }.onFailure { VelaLog.failure("signer page", "background refresh", it) }
+        }
+    }
+
+    /**
+     * Spec 071/102: the signing page — one channel per process, one ceremony
+     * at a time. Which page is always the caller's (the account's venue, or
+     * a ceremony's op); the words are the corpus'.
      */
     val trustedSigner: TrustedSignerChannel by lazy {
         TrustedSignerChannel(
-            signerUrl = { settings.signPref.value.signer_url },
+            checks = signerPages,
             openPage = { url -> trustedSignerTab?.open(url) ?: false },
             bringBack = { trustedSignerTab?.bringBack() },
             words = {
@@ -362,6 +421,7 @@ class AppContainer(private val app: Application) {
                     refused = i18nRuntime.t("componentsUi.signing.trustedSignerRefused"),
                     mismatch = i18nRuntime.t("componentsUi.signing.trustedSignerMismatch"),
                     timeout = i18nRuntime.t("componentsUi.signing.trustedSignerTimeout"),
+                    unchecked = { line -> SignerPageChecks.words(line, i18nRuntime) },
                 )
             },
             // Read by a person on the signer page, beside "the name and mark
@@ -386,6 +446,8 @@ class AppContainer(private val app: Application) {
                     }.getOrDefault(false)
                 }
             },
+            // Spec 102: the page speaks the app's language, not the browser's.
+            lang = { i18nRuntime.state.value.language },
             labels = { chainId, account ->
                 val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
                 TrustedSignerLabels(
@@ -444,13 +506,13 @@ class AppContainer(private val app: Application) {
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
             trustedSigner = { trustedSigner },
+            words = { key, vars -> i18nRuntime.t(key, vars) },
             // Spec 078: one source for the picker and the asset list.
             holdings = wallet.holdings,
         ).also { controller ->
             // Spec 069: the stored default speed, read now and followed after —
             // Settings changing it reaches a send already open.
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
-                settings.refreshSignPref()
                 settings.refreshFeeTier()
                 settings.feeTier.collect { controller.preferenceChanged() }
             }
@@ -622,30 +684,24 @@ class AppContainer(private val app: Application) {
      */
     suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> {
         val port = StoreAccountPort(AccountStore(app))
-        // Spec 075: a key minted on a Trusted Signer page lives behind it, and
-        // only the record knows that — the registry does not store it.
-        val pages = port.pagesOf(address)
         return port.keysOf(address).mapIndexed { index, key ->
             WalletKeys.DeviceKey(
                 publicKeyHex = key.publicKeyHex,
                 name = if (index == 0) walletName else "",
                 transports = "",
-                signerOrigin = pages[key.publicKeyHex.removePrefix("0x").lowercase()].orEmpty(),
                 credentialId = key.credentialId,
             )
         }
     }
 
     /**
-     * The credential this account signs with — its sign-in route's (the core's
-     * `signInRoute` over the stored record) — or empty for a record from before
-     * the sign-in key. The keys walk marks that key's row (2026-09-26).
+     * The credential this account signs with — its key route's (the core's
+     * `signing_plan` over the stored record, spec 102) — or empty for a record
+     * from before the sign-in key. The keys walk marks that key's row
+     * (2026-09-26).
      */
     suspend fun signInCredentialOf(address: String): String =
-        StoreAccountPort(AccountStore(app)).accountJson(address)
-            ?.let { runCatching { uniffi.vela_core_uniffi.signInRoute(it) }.getOrNull() }
-            ?.let { runCatching { JSONObject(it).optString("credential_id") }.getOrNull() }
-            .orEmpty()
+        SigningPlan.of(StoreAccountPort(AccountStore(app)).accountJson(address))?.credentialId.orEmpty()
 
     /** The active account's FIRST founding key — the one the registry files its groups under. */
     suspend fun foundingKeyOf(address: String): String? =
@@ -687,6 +743,7 @@ class AppContainer(private val app: Application) {
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
                 trustedSigner = { trustedSigner },
+                words = { key, vars -> i18nRuntime.t(key, vars) },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
                 measureCall = { chainId, from, to, valueHex, data ->
@@ -830,8 +887,9 @@ class AppContainer(private val app: Application) {
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             settings.ethereumDataBase().collect { base -> Marks.base = base }
         }
-        // Spec 071: the Trusted Signer page — read before any signature can need it.
-        settings.refreshSignPref()
+        // Spec 102: the saved signing pages — read (and the 071 page imported)
+        // before any account's venue choices are drawn.
+        settings.refreshSigningPages()
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             pool.view.collect { view ->

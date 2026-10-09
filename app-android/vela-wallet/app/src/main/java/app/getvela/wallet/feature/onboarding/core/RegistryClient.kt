@@ -554,10 +554,6 @@ data class PublishMember(
     /** The proof collected AT CREATION. Absent on the login re-publish, whose
      *  executor signs the member live. */
     val proof: JSONObject?,
-    /** Spec 075: the Trusted Signer page this key lives behind, when it does.
-     *  The unit's `rpId` is derived from it — the contract stores one per
-     *  unit and each member proves membership under its own. */
-    val signerOrigin: String = "",
 ) {
     companion object {
         fun from(json: JSONObject): PublishMember = PublishMember(
@@ -566,7 +562,6 @@ data class PublishMember(
             attestationHex = json.optString("attestation_hex"),
             authenticatorAttachment = json.optString("authenticator_attachment"),
             transports = json.optString("transports"),
-            signerOrigin = json.optString("signer_origin"),
             proof = if (json.isNull("proof")) null else json.optJSONObject("proof"),
         )
     }

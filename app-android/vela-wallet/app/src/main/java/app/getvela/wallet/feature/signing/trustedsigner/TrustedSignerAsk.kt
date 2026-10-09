@@ -11,9 +11,9 @@ import uniffi.vela_core_uniffi.WalletKeyRecord
  * Two kinds of request, because the core judges them differently: a SIGNATURE
  * is an assertion over one digest by one of this wallet's keys (spec 071), and
  * a CEREMONY is a passkey operation the create/sign-in machines asked for,
- * judged against the operation's own rules. Both ride the same channels — the
- * loopback socket on this device — and both carry the
- * page they belong to, so a channel never has to know which flow it is in.
+ * judged against the operation's own rules. Both ride the same channel — a
+ * page opened by URL, answering by custom scheme — so a channel never has to
+ * know which flow it is in.
  */
 sealed interface TrustedSignerAsk {
     /** The request JSON the page receives (`{intent, context}`). */
@@ -57,6 +57,13 @@ sealed interface TrustedSignerAnswer {
     data object Cancelled : TrustedSignerAnswer
 
     data object TimedOut : TrustedSignerAnswer
+
+    /**
+     * Spec 102 R6: the page was not opened, because its check did not admit it
+     * — failed, could not run, a version nobody trusts, a blocked one. [line]
+     * is the core's integrity line, which says which.
+     */
+    data class Unchecked(val line: uniffi.vela_core_uniffi.SignerIntegrityLine) : TrustedSignerAnswer
 
     /** The channel itself could not be used. [detail] is for the log. */
     data class Unreachable(

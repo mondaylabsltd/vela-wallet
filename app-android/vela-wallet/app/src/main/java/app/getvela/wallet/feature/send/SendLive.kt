@@ -952,6 +952,29 @@ object SendLive {
     }
 
     /**
+     * Spec 102 D4 (core round 5): the hand-off card's fee + speed row for a
+     * send on a page venue — the core's `handoffFeeRow` over this send's fee
+     * session and speed control as they were last committed, drawn with the
+     * send screen's own fee line (the same formatter, the same coin, the same
+     * price). `null`: no row — the core says the fee is not settled for the
+     * speed in force.
+     */
+    internal fun handoffFee(
+        feeJson: String?,
+        speedJson: String?,
+        fee: FeeView,
+        view: SendView,
+        ctx: Context,
+    ): app.getvela.wallet.feature.signing.HandoffFeeModel? {
+        val row = app.getvela.wallet.feature.signing.core.HandoffFee.of(feeJson, speedJson) ?: return null
+        return app.getvela.wallet.feature.signing.HandoffFeeModel(
+            label = ctx.strings.t("componentsUi.gas.networkFee"),
+            value = feeText(row.fee, view, fee, ctx).first,
+            tier = row.tier_key?.let(ctx.strings::t),
+        )
+    }
+
+    /**
      * One fee line for every surface that prices the same operation — the send
      * screens and the dApp signing sheet. Two formatters would be two answers
      * about what a transaction costs.
@@ -1168,6 +1191,9 @@ object SendLive {
             noticeAction = when {
                 view.relay_unreachable != null -> s.t(I18nKeys.Flows.RELAY_UNREACHABLE_RETRY)
                 view.treasury_bootstrap != null -> s.t(I18nKeys.Flows.TREASURY_RETRY)
+                // Spec 102: a venue that cannot be used here is not a failure
+                // trying again would fix — the notice says why, and no retry.
+                view.tx_error == SendTxErrorKey.VenueBlocked -> null
                 view.tx_error != null -> s.t(I18nKeys.Flows.TX_RETRY)
                 // The stage stays Confirm while the passkey prompt is up; the
                 // one honest button under it is Cancel — the core's checkpoint.
@@ -1209,6 +1235,9 @@ object SendLive {
         return when (view.tx_error) {
             SendTxErrorKey.BundlerFund -> s.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND)
             SendTxErrorKey.Generic -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
+            // Spec 102: why this account cannot sign here — the core's block, translated.
+            SendTxErrorKey.VenueBlocked -> view.tx_venue_block?.words { key, vars -> s.t(key, vars) }
+                ?: s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
             null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
         }
     }

@@ -122,6 +122,8 @@ fun settingsIcon(icon: SettingsIcon): ImageVector = when (icon) {
     SettingsIcon.Monitor -> VelaIcons.Monitor
     SettingsIcon.Upload -> VelaIcons.Upload
     SettingsIcon.LogOut -> VelaIcons.LogOut
+    SettingsIcon.Eye -> VelaIcons.Eye
+    SettingsIcon.FileText -> VelaIcons.FileText
     SettingsIcon.BrandX -> VelaIcons.BrandX
     SettingsIcon.BrandTelegram -> VelaIcons.BrandTelegram
     SettingsIcon.BrandDiscord -> VelaIcons.BrandDiscord

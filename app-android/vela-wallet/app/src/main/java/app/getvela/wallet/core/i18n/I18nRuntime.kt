@@ -58,6 +58,8 @@ class I18nRuntime(
     override fun relativeTime(tsSeconds: Long, nowMs: Long, utcOffsetMinutes: Int, dateFormat: String): String =
         engine.formatRelativeTime(tsSeconds, nowMs, utcOffsetMinutes, dateFormat)
 
+    override val language: String get() = _state.value.language
+
     private fun options(vars: List<TVar>, count: Double? = null): TOptions = TOptions(
         count = count,
         context = null,

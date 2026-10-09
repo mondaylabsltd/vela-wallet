@@ -63,8 +63,10 @@ class SendController(
     /** Spec 069: the stored default speed, and the resolved number preset its gas bids are written in. */
     private val preferredTier: () -> FeeTier = { FeeTier.Standard },
     private val numberPreset: () -> String = { "comma_dot" },
-    /** Spec 071: the Trusted Signer, for an account that signed in through it. */
+    /** Spec 071/102: the signing page, for an account whose venue is one. */
     trustedSigner: () -> TrustedSigner? = { null },
+    /** The corpus, for the sentences a signature that cannot be made is told in (spec 102). */
+    words: (key: String, vars: Map<String, String>) -> String = { key, _ -> key },
     /**
      * Spec 078: the asset list's holdings — the picker is answered from the
      * balance machine's settled round and follows every later one. `null`
@@ -217,6 +219,7 @@ class SendController(
         ports = ports,
         identity = identity,
         trustedSigner = trustedSigner,
+        words = words,
         holdings = holdings,
         // The picker is open: the chains the person holds value on are read
         // ahead — at the speed in force — so the quote a pick starts finds its
@@ -289,6 +292,14 @@ class SendController(
      * either of them knowing (spec 069). `pending` folded into `busy`.
      */
     val fee: StateFlow<FeeView> = speedControl.fee
+
+    /**
+     * Spec 102: the fee session in force and the speed control exactly as the
+     * core wrote them — the hand-off card's fee row (`handoffFeeRow`) reads
+     * them back, so the card restates what this send was priced at.
+     */
+    val feeJson: StateFlow<String?> = speedControl.feeJson
+    val speedJson: StateFlow<String?> = speedControl.speedJson
 
     /** The fee view of the session pricing `tier` — for formatting that option's fee. */
     fun feeViewOf(tier: FeeTier): FeeView? = speedControl.feeViewOf(tier)
@@ -757,24 +768,6 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
         }
     }
 
-    /**
-     * Spec 075: the Trusted Signer page each key lives behind, by public key
-     * (lowercase, `0x`-less). The keys view needs it to say where a key lives;
-     * [keysOf] speaks the core's `WalletKeyRecord`, which has no room for it.
-     */
-    suspend fun pagesOf(address: String): Map<String, String> {
-        val record = record { it.optString("address").equals(address, ignoreCase = true) } ?: return emptyMap()
-        val keys = record.optJSONArray("keys") ?: return emptyMap()
-        val out = mutableMapOf<String, String>()
-        for (index in 0 until keys.length()) {
-            val key = keys.optJSONObject(index) ?: continue
-            val origin = key.optString("signer_origin").ifBlank { continue }
-            val pk = key.optString("public_key_hex").removePrefix("0x").lowercase().ifBlank { continue }
-            out[pk] = origin
-        }
-        return out
-    }
-
     override suspend fun routingOf(address: String): Pair<String, KeyMethod> {
         val record = record { it.optString("address").equals(address, ignoreCase = true) }
         val transports = record?.optJSONArray("keys")?.optJSONObject(0)?.optString("transports").orEmpty()
@@ -790,26 +783,7 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
         return transports to method
     }
 
-    override suspend fun keyRoutesJson(address: String): String {
-        val record = record { it.optString("address").equals(address, ignoreCase = true) } ?: return "[]"
-        val keys = record.optJSONArray("keys") ?: return "[]"
-        val out = org.json.JSONArray()
-        for (index in 0 until keys.length()) {
-            val key = keys.optJSONObject(index) ?: continue
-            out.put(
-                org.json.JSONObject()
-                    .put("credential_id", key.optString("credential_id"))
-                    .put("transports", key.optString("transports"))
-                    // Spec 075: the Trusted Signer page this key lives behind.
-                    // Dropping it would make `signRoute` route a key that only
-                    // one page can reach to the platform sheet instead.
-                    .put("signer_origin", key.optString("signer_origin")),
-            )
-        }
-        return out.toString()
-    }
-
-    /** The record as the core wrote it, `signed_in_with` and all — never rebuilt field by field. */
+    /** The record as the core wrote it — read by the core's `signing_plan`, never rebuilt field by field. */
     override suspend fun accountJson(address: String): String? =
         record { it.optString("address").equals(address, ignoreCase = true) }?.toString()
 

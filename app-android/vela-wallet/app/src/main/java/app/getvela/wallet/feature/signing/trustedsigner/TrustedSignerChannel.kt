@@ -8,6 +8,8 @@ import app.getvela.wallet.feature.send.core.TrustedSigner
 import app.getvela.wallet.feature.send.core.TrustedSignerLabels
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -17,15 +19,21 @@ import uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
 import uniffi.vela_core_uniffi.TrustedSignerOutcome
 import uniffi.vela_core_uniffi.TrustedSignerRefusal
 import uniffi.vela_core_uniffi.WalletKeyRecord
+import uniffi.vela_core_uniffi.trustedSignerCeremonyTitleKey
 import java.security.SecureRandom
 
 /**
- * The Trusted Signer, as the rest of the app sees it (specs 071 and 075).
+ * The signing page, as the rest of the app sees it (specs 071, 075 and 102).
  *
- * It is the fourth passkey route: a page the person reads, which checks the
- * request and runs the WebAuthn ceremony itself. Everything that can ask for
- * one — a send, a dApp request, the key backup, and since 075 creating a
- * wallet, signing in and every proof inside those flows — comes through here.
+ * Spec 102: the page is where a person REVIEWS AND SIGNS — an account's
+ * signing venue — not a fourth place a key lives. Every signature of an
+ * account whose venue is a page comes through here (a send, a dApp request,
+ * the key backup), and so does every key ceremony of a wallet on a custom
+ * domain (R3: only its page can mint or use those keys). Which page is always
+ * the caller's — the plan's venue, or the op's `page` — never a setting.
+ *
+ * Nothing opens unless its integrity check admitted it ([SignerPageChecks],
+ * R6): the version opened is the version checked.
  *
  * The page is a Custom Tab over the app, answering through the custom scheme
  * ([TrustedSignerScheme]). That is the only channel: the owner retired the
@@ -49,8 +57,8 @@ import java.security.SecureRandom
  *    already distinguish.
  */
 class TrustedSignerChannel(
-    /** The page the wallet opens by default (`sign_pref`'s, always usable). */
-    private val signerUrl: () -> String,
+    /** Spec 102 R6: the phone's integrity checks — the only way a page opens. */
+    val checks: SignerPageChecks,
     /** Open [url] in a Custom Tab over the app; `false` when nothing is on screen to open it from. */
     private val openPage: (url: String) -> Boolean,
     /** Put the app back over the tab. */
@@ -69,6 +77,8 @@ class TrustedSignerChannel(
      * counts) — asked only when the person is back with no answer.
      */
     private val reachable: suspend (url: String) -> Boolean = { true },
+    /** The language the app shows, for the page's launch (`lang=`, spec 102). */
+    private val lang: () -> String = { "" },
 ) : TrustedSigner {
 
     /** The sentences a refusal is told in (`componentsUi.signing.trustedSigner*`). */
@@ -77,17 +87,30 @@ class TrustedSignerChannel(
         val refused: String,
         val mismatch: String,
         val timeout: String,
+        /** A page that was not opened: its integrity line, in words. */
+        val unchecked: (uniffi.vela_core_uniffi.SignerIntegrityLine) -> String = { it.key },
     )
 
     sealed interface State {
         data object Idle : State
 
         /**
+         * Spec 102 D4: the hand-off card — review and sign on [page], confirming
+         * with [key] (the key's name, or its place's title). The integrity line
+         * is [checks]'s for [page]; Open goes on only when it opens. Raised for
+         * a signature no signing sheet is showing (a send the person started);
+         * the dApp sheet draws this card itself.
+         */
+        data class Handoff(val page: String, val key: String) : State
+
+        /**
          * The page is open (or being opened) at [url] and the answer is awaited.
          * [unreachable]: the person came back without one and the page's address
          * does not answer (spec 079) — the card says so and offers a retry.
+         * [title]: a key ceremony's own title (the corpus key the core names —
+         * create, sign in, confirm; spec 102), `null` for a signature.
          */
-        data class Waiting(val url: String, val unreachable: Boolean = false) : State
+        data class Waiting(val url: String, val unreachable: Boolean = false, val title: String? = null) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -116,13 +139,33 @@ class TrustedSignerChannel(
     @Volatile
     private var unopenable: String? = null
 
+    /**
+     * The request in flight's own title, when it is a key ceremony: the
+     * core's `trustedSignerCeremonyTitleKey` — "Create your key on your
+     * signing page", "Sign in on…", "Confirm with your key on…" — instead of
+     * a signature's wait. Set per request: one flow can be a create and then
+     * its member proof.
+     */
+    @Volatile
+    private var ceremonyTitle: String? = null
+
     override fun describe(chainId: Int, account: String): TrustedSignerLabels = labels(chainId, account)
 
     // -- what the screens drive -----------------------------------------------
 
-    /** Cancel, on the waiting sheet: the same as closing the page. */
+    /** The hand-off card's answer, while it is up: Open (`true`) or Cancel. */
+    @Volatile
+    private var gate: CompletableDeferred<Boolean>? = null
+
+    /** Cancel, on the hand-off card or the waiting sheet: the same as closing the page. */
     fun cancel() {
+        gate?.complete(false)
         wire?.cancel()
+    }
+
+    /** The hand-off card's Open (spec 102 D4). Ignored when no card is up. */
+    fun open() {
+        gate?.complete(true)
     }
 
     /** "Open the page again" — same port, same token. */
@@ -154,6 +197,7 @@ class TrustedSignerChannel(
         val live = wire
         wire = null
         cancel()
+        gate = null
         live?.end()
         _state.value = State.Idle
         bringBack()
@@ -162,25 +206,31 @@ class TrustedSignerChannel(
     // -- the two things a caller can ask for ----------------------------------
 
     /**
-     * Spec 071: sign [digest] with one of [keys]. [signerOrigin] is the page
-     * the key lives behind, empty for the person's own page.
+     * Sign [digest] with one of [keys], on [page] — the account's venue (spec
+     * 102 R4). [key] is what the hand-off card says the person confirms with;
+     * [askFirst] raises that card ([State.Handoff]) and waits for its Open —
+     * `false` when the caller's own sheet was the card.
      *
      * A standalone signature is a flow of one: the page opens, signs and goes.
-     * Inside a create or a sign-in the conversation is already open, and this
-     * simply puts the next request down it.
      */
     override suspend fun sign(
         requestJson: String,
         digest: ByteArray,
         keys: List<WalletKeyRecord>,
-        signerOrigin: String,
+        page: String,
+        key: String,
+        askFirst: Boolean,
     ): Assertion {
         // A signature asked for on its own opens and closes its own flow; one
         // asked for inside a create or a sign-in belongs to that flow's visit.
         // WHICH it is can only be decided under the lock — two callers reading
         // `wire` from outside it would both think they owned the flow, or
         // neither would.
-        val put = put(TrustedSignerAsk.Signature(requestJson, digest, keys), signerOrigin)
+        val put = put(
+            TrustedSignerAsk.Signature(requestJson, digest, keys),
+            page,
+            handoff = if (askFirst) State.Handoff(page, key) else null,
+        )
         try {
             val answer = put.answer
             val outcome = (answer as? TrustedSignerAnswer.Signed)?.outcome
@@ -218,11 +268,12 @@ class TrustedSignerChannel(
         requestJson: String,
         operationJson: String,
         expectedMemberChallenge: ByteArray? = null,
-        signerOrigin: String = "",
+        page: String,
     ): TrustedSignerCeremonyOutcome {
         val answer = put(
             TrustedSignerAsk.Ceremony(requestJson, operationJson, expectedMemberChallenge),
-            signerOrigin,
+            page,
+            handoff = null,
         ).answer
         val outcome = (answer as? TrustedSignerAnswer.Ceremonial)?.outcome
             ?: refuse(kindOf(answer), sentenceFor(answer))
@@ -244,13 +295,19 @@ class TrustedSignerChannel(
     /** One request's verdict, and whether this caller opened the flow it rode. */
     private class Put(val answer: TrustedSignerAnswer, val ownsFlow: Boolean)
 
-    private suspend fun put(ask: TrustedSignerAsk, signerOrigin: String): Put =
+    private suspend fun put(ask: TrustedSignerAsk, page: String, handoff: State.Handoff?): Put =
         one.withLock {
             notice.value = null
             unopenable = null
+            ceremonyTitle = (ask as? TrustedSignerAsk.Ceremony)
+                ?.let { runCatching { trustedSignerCeremonyTitleKey(it.operationJson) }.getOrNull() }
+            if (handoff != null && !handedOff(handoff)) {
+                _state.value = State.Idle
+                return@withLock Put(TrustedSignerAnswer.Cancelled, wire == null)
+            }
             val existing = wire
             val mine = existing == null
-            val live = existing ?: open(signerOrigin) ?: return@withLock Put(TrustedSignerAnswer.Cancelled, true)
+            val live = existing ?: open(page) ?: return@withLock Put(TrustedSignerAnswer.Cancelled, true)
             val answer = try {
                 live.ask(ask)
             } catch (cancellation: CancellationException) {
@@ -280,18 +337,38 @@ class TrustedSignerChannel(
             Put(answer, mine)
         }
 
+    /**
+     * Spec 102 D4: raise the hand-off card for [card] and wait for the
+     * person's Open (`true`) or Cancel. The page's check starts now, beside
+     * the card, so its line is there by the time they read it.
+     */
+    private suspend fun handedOff(card: State.Handoff): Boolean = coroutineScope {
+        val answer = CompletableDeferred<Boolean>()
+        gate = answer
+        _state.value = card
+        val checking = launch { runCatching { checks.ensure(card.page) } }
+        try {
+            answer.await()
+        } finally {
+            checking.cancel()
+            if (gate === answer) gate = null
+        }
+    }
+
     /** Open the flow's conversation: a Custom Tab, answering by custom scheme. */
-    private fun open(signerOrigin: String): TrustedSignerWire? {
-        val page = signerOrigin.ifEmpty { signerUrl() }
+    private fun open(page: String): TrustedSignerWire? {
         // A channel that cannot even be built is an unopened page, not an
         // exception on its way through the signing paths.
         val built = runCatching {
             TrustedSignerScheme(
                 base = page,
+                admit = { checks.ensure(page) },
+                refusal = { checks.line(page) },
                 openPage = openPage,
                 timeoutMs = timeoutMs,
                 random = random,
-                onOpened = { url -> _state.value = State.Waiting(url) },
+                onOpened = { url -> _state.value = State.Waiting(url, title = ceremonyTitle) },
+                lang = lang,
             )
         }.getOrElse { error ->
             VelaLog.failure("trustedsigner", "the channel could not be opened", error)
@@ -312,6 +389,8 @@ class TrustedSignerChannel(
         val w = words()
         return when (answer) {
             TrustedSignerAnswer.TimedOut -> w.timeout
+            // R6: not opened — the check's own line says why.
+            is TrustedSignerAnswer.Unchecked -> w.unchecked(answer.line)
             is TrustedSignerAnswer.Unreachable -> {
                 VelaLog.event(
                     "trustedsigner",

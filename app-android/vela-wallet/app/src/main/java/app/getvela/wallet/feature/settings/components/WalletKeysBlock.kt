@@ -92,6 +92,17 @@ fun VelaWalletKeysBlock(model: WalletKeysModel, onRow: (String) -> Unit) {
             fontSize = VelaTextSize.base,
             modifier = Modifier.padding(top = VelaSpacing.xs, bottom = VelaSpacing.md),
         )
+        // Spec 102: a wallet whose keys belong to its own domain says which.
+        model.domain?.let {
+            Text(
+                text = it,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(bottom = VelaSpacing.md),
+            )
+        }
 
         if (model.loading) {
             // The shape of one row, so the block does not jump when the answer lands.

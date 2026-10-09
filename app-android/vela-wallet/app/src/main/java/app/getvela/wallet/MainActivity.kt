@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.core.designsystem.tokens.VelaLaunch
 import app.getvela.wallet.core.designsystem.components.VelaLaunchAnimation
@@ -328,6 +329,24 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val prefs = container.preferences.view.first { it.loaded }
             container.applyLanguage(prefs.language)
+        }
+        // Spec 102 D-14: the signing pages in use are re-checked before their
+        // check stops vouching — on every return to the foreground (the first
+        // resume is the start) and hourly while the app is in front. The core
+        // says which are due; one that is not costs a comparison.
+        lifecycle.addObserver(
+            androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) container.refreshSignerPages()
+            },
+        )
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                val poll = uniffi.vela_core_uniffi.signerPageRefreshSchedule().pollMs.toLong()
+                while (true) {
+                    kotlinx.coroutines.delay(poll)
+                    container.refreshSignerPages()
+                }
+            }
         }
         receiptRequested()?.let { container.pendingReceipt.value = it }
         debugOpenUrl(intent)?.let { container.browser.open(it, fromOutside = true) }
