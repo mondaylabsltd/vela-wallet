@@ -590,6 +590,10 @@ enum GalleryTab {
     Dsr1,
     /// Spec 092 — the hero's "can't reach" line and the list it opens.
     Dsr6,
+    /// PR 2 note 11 — a balance read that failed inside Vela: the hero says
+    /// the app's own fault where the "can't reach" line goes, never "Can't
+    /// reach Ethereum".
+    Dsr7,
     Components,
     ContactsComponents,
     Identicons,
@@ -598,7 +602,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 24] = [
+    const ALL: [(GalleryTab, &'static str); 25] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -620,6 +624,7 @@ impl GalleryTab {
         (GalleryTab::Dst8, "DST8"),
         (GalleryTab::Dsr1, "DSR1"),
         (GalleryTab::Dsr6, "DSR6"),
+        (GalleryTab::Dsr7, "DSR7"),
         (GalleryTab::Components, "Components"),
         (GalleryTab::ContactsComponents, "Contacts"),
         (GalleryTab::Identicons, "Identicons"),
@@ -4801,6 +4806,15 @@ impl WalletPage {
                 let money = self.money(cx);
                 return wallet_live::balance(
                     &fixtures::unreachable_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
+            if self.tab == GalleryTab::Dsr7 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::internal_view(),
                     &self.strings,
                     &self.locale,
                     &money,
@@ -21689,6 +21703,7 @@ mod tests {
                 "DST8",
                 "DSR1",
                 "DSR6",
+                "DSR7",
                 "Components",
                 "Contacts",
                 "Identicons",

@@ -54,6 +54,10 @@ pub struct WalletStrings {
     /// Nothing could be read and nothing is known (spec 038): the network
     /// sentence, not a $0.
     pub balance_unreachable: SharedString,
+    /// A read that failed inside Vela itself (PR 2 note 11): the fee's own
+    /// sentence for the same fault (`BalanceView.internal_key`), drawn where
+    /// the "can't reach" line goes — never "Can't reach Ethereum".
+    pub balance_internal: SharedString,
     pub balance_unpriced: SharedString,
     /// The line over the networks the wallet cannot reach (spec 092) — the
     /// hero's status line and the title of the list it opens: templates
@@ -186,6 +190,7 @@ impl WalletStrings {
             updating: s("home.updating"),
             minutes_short: raw("time.minutesShort"),
             balance_unreachable: s("onboarding.common.networkBody"),
+            balance_internal: s(vela_core::app::fee_policy::REASON_INTERNAL_KEY),
             balance_unpriced: s("home.balanceUnpriced"),
             unreachable_one: raw("assets.unreachableOne"),
             unreachable_many: raw("assets.unreachableMany"),

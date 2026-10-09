@@ -1605,11 +1605,13 @@ fn handoff_key(handoff: &vela_core::app::sign_request::SignTrackerHandoff) -> Ha
 }
 
 /// What the core was last told of the op in flight: its hash, the tracker's
-/// status and the tx hash it named (spec 082 RJ4).
+/// status, the tx hash it named (spec 082 RJ4) and why the relay refused it
+/// (PR 2 note 9).
 type Tracked = (
     String,
     vela_core::app::tx_tracker::TrackStatus,
     Option<String>,
+    Option<vela_core::app::tx_tracker::RefusalReason>,
 );
 
 /// The tracker's entry for `op` as the core's `OpTracked`, when it changed
@@ -1624,15 +1626,24 @@ fn tracked_event(
     let entry = entries
         .iter()
         .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))?;
-    let now = (op.to_lowercase(), entry.status, entry.tx_hash.clone());
+    let now = (
+        op.to_lowercase(),
+        entry.status,
+        entry.tx_hash.clone(),
+        entry.refusal,
+    );
     if fed == Some(&now) {
         return None;
     }
+    // The tracker entry's own reason, forwarded as it is (PR 2 note 9): the
+    // sheet's failure line (`SignView::failure_refusal_key`) and the
+    // tracker's `refusal_key` are then one sentence from one source.
     let event = SignEvent::OpTracked {
         user_op_hash: entry.user_op_hash.clone(),
         status: entry.status,
         tx_hash: entry.tx_hash.clone(),
         now_ms,
+        refusal: entry.refusal,
     };
     Some((now, event))
 }

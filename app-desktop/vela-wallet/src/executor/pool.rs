@@ -286,6 +286,9 @@ fn route_within(
 ) -> Result<Value, PoolError> {
     /// How often a waiting caller looks at `stop`.
     const GLANCE: Duration = Duration::from_millis(200);
+    if faulted(chain_id) {
+        return Err(PoolError::Unavailable);
+    }
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
@@ -419,7 +422,46 @@ fn dispatch(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Result
     route(chain_id, kind, method, params).answer
 }
 
+/// `VELA_FAULT_POOL=1,100|all` — a developer seam (PR 2 note 11; the web's
+/// `vela.faultPool(chain)`): every routed call to a named chain answers
+/// [`PoolError::Unavailable`], as if the pool thread were gone, so the
+/// app's own fault can be seen where it is said — the home's line, the fee
+/// row, Continue's alert — without breaking anything real. Read through
+/// `dev_env`, so a release build does not carry it.
+fn faulted(chain_id: u32) -> bool {
+    #[cfg(test)]
+    if let Some(chains) = TEST_FAULT.with(|fault| fault.borrow().clone()) {
+        return chains.contains(&chain_id);
+    }
+    crate::dev_env::var!("VELA_FAULT_POOL").is_some_and(|list| {
+        list.trim().eq_ignore_ascii_case("all")
+            || list
+                .split(',')
+                .any(|id| id.trim().parse::<u32>() == Ok(chain_id))
+    })
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_FAULT: std::cell::RefCell<Option<Vec<u32>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Run `work` with the pool faulted for `chains` on this thread only
+/// ([`faulted`]), so a test proves the classification without touching the
+/// process's environment or the tests beside it.
+#[cfg(test)]
+pub fn with_fault<T>(chains: Option<&[u32]>, work: impl FnOnce() -> T) -> T {
+    TEST_FAULT.with(|fault| *fault.borrow_mut() = chains.map(<[u32]>::to_vec));
+    let out = work();
+    TEST_FAULT.with(|fault| *fault.borrow_mut() = None);
+    out
+}
+
 fn route(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Routed {
+    if faulted(chain_id) {
+        return Routed::unavailable();
+    }
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {

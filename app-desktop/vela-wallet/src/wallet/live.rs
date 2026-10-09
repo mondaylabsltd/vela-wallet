@@ -167,9 +167,9 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             // A first launch with no network says so over the skeleton rather
             // than show a settled-looking zero (spec 038 finding 15) — and a
             // skeleton says nothing else: it is already "still counting".
-            status: view
-                .unreachable
-                .then(|| (StatusKind::Warning, s.balance_unreachable.clone())),
+            status: internal_line(view, s)
+                .or_else(|| view.unreachable.then(|| s.balance_unreachable.clone()))
+                .map(|line| (StatusKind::Warning, line)),
             updated: None,
             refreshing: view.refreshing,
             updating: s.updating.clone(),
@@ -187,7 +187,10 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     // says that itself, turning in place. As a line here it landed ABOVE the
     // control, pushing it a row down under the pointer mid-press — and a
     // figure being re-read on request is not "still updating", it is current.
-    let status = match unreachable_line(view, s) {
+    // A read that failed inside Vela comes first and stands in place of any
+    // "Can't reach …" (PR 2 note 11): the app's own fault is the one that
+    // matters, and the chains it failed on were never asked.
+    let status = match internal_line(view, s).or_else(|| unreachable_line(view, s)) {
         Some(line) => Some((StatusKind::Warning, line)),
         None if on_cache || view.notice == Some(BalanceNotice::StillUpdating) => {
             Some((StatusKind::Refreshing, s.balance_stale.clone()))
@@ -231,6 +234,17 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         refreshing: view.refreshing,
         updating: s.updating.clone(),
     }
+}
+
+/// The hero's line when the last read failed inside Vela (PR 2 note 11,
+/// `BalanceView.internal_key`): the core's sentence for its own fault, never
+/// "Can't reach Ethereum". `None` when nothing failed inside the app.
+#[must_use]
+pub fn internal_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
+    // The core names one key for it today; one this build does not know is
+    // still that fault, said in the words it has.
+    view.internal_key.as_ref()?;
+    Some(s.balance_internal.clone())
 }
 
 /// The line over the networks the wallet cannot reach (spec 092) — the
@@ -613,6 +627,106 @@ mod tests {
     /// two of my guessed field names did not exist.)
     /// The core's list for these networks (spec 092), none read yet — the
     /// order is the core's, so it is the order given.
+    /// PR 2 note 11: a balance read that failed inside Vela — through the
+    /// real core, as the executor reports it (`internal_chain_ids`, or a
+    /// fetch that threw inside the app) — puts the core's sentence for its
+    /// own fault where the "can't reach" line goes, never "Can't reach
+    /// Ethereum"; a real chain-down beside it is still counted, behind it.
+    #[test]
+    fn an_internal_fault_never_reads_cant_reach() {
+        use vela_core::app::balance_dashboard::{
+            BalanceOperation, BalanceShellResult as Res, UNREACHABLE_ONE,
+        };
+        const ADDR: &str = "0x88cca0eedbf2c4426110bbfc998f048689266894";
+        let s = strings();
+        let money = Money::usd();
+        let ethereum = crate::wallet::fill(&s.unreachable_one, "name", "Ethereum");
+        // Boot an account and answer its first fetch with `settle`.
+        let run = |settle: &dyn Fn(bool) -> Res| {
+            let mut host = CoreHost::<BalanceDashboard>::new();
+            let mut pending = host.dispatch(BalanceEvent::AccountChanged {
+                address: ADDR.to_owned(),
+            });
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                        address: address.clone(),
+                        usd: Some(12.0),
+                    },
+                    BalanceOperation::FetchTokens { pull, .. } => settle(*pull),
+                    _ => continue,
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+            host.view()
+        };
+        let settled = |failed: Vec<u32>, internal: Vec<u32>| {
+            move |pull: bool| Res::FetchSettled {
+                address: ADDR.to_owned(),
+                pull,
+                tokens: Vec::new(),
+                failed_chain_ids: failed.clone(),
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 56],
+                internal_chain_ids: internal.clone(),
+                now_ms: 1.0,
+            }
+        };
+
+        // Ethereum's read never left the app: Vela's own words, no "Ethereum".
+        let view = run(&settled(vec![1], vec![1]));
+        assert!(view.internal_key.is_some());
+        assert!(view.unreachable_networks.is_empty());
+        let line = balance(&view, &s, "en", &money)
+            .status
+            .map(|(_, line)| line);
+        assert_eq!(line, Some(s.balance_internal.clone()));
+        assert!(!s.balance_internal.contains("Ethereum"));
+
+        // Ethereum really down: the network's own line, as before.
+        let view = run(&settled(vec![1], Vec::new()));
+        assert_eq!(view.internal_key, None);
+        assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
+        let line = balance(&view, &s, "en", &money)
+            .status
+            .map(|(_, line)| line);
+        assert_eq!(line.as_deref(), Some(ethereum.as_str()));
+
+        // Both at once: the app's fault is the line; the chain that is down
+        // is still listed behind it (the list the line opens).
+        let view = run(&settled(vec![1, 56], vec![1]));
+        assert_eq!(
+            view.unreachable_networks
+                .iter()
+                .map(|n| n.chain_id)
+                .collect::<Vec<_>>(),
+            vec![56]
+        );
+        let line = balance(&view, &s, "en", &money)
+            .status
+            .map(|(_, line)| line);
+        assert_eq!(line, Some(s.balance_internal.clone()));
+
+        // The gallery's DSR7 is the same state through the same core.
+        let gallery = balance(&crate::wallet::fixtures::internal_view(), &s, "en", &money);
+        assert_eq!(
+            gallery.status.map(|(_, line)| line),
+            Some(s.balance_internal.clone())
+        );
+        assert_eq!(gallery.integer.as_ref(), "$4,500", "the total stands");
+
+        // The whole fetch threw inside the app.
+        let view = run(&|pull| Res::FetchErrored {
+            address: ADDR.to_owned(),
+            pull,
+            internal: true,
+        });
+        let line = balance(&view, &s, "en", &money)
+            .status
+            .map(|(_, line)| line);
+        assert_eq!(line, Some(s.balance_internal.clone()));
+    }
+
     fn set_unreachable(view: &mut BalanceView, chain_ids: &[u32]) {
         use vela_core::app::balance_dashboard::{LastKnown, NOT_READ_YET, UnreachableNetwork};
         view.unreachable_networks = chain_ids

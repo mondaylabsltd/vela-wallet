@@ -209,22 +209,45 @@ fn stable_decimals_at(slots: &[Slot], contract: &str) -> Option<usize> {
         .and_then(|slot| slot.decimals_at)
 }
 
-/// One chain's native balance in base units, or `None` if the chain could not
-/// be reached.
+/// Why a chain's balance read came back with nothing (PR 2 note 11).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Miss {
+    /// The chain's nodes gave no usable answer: the network's doing — "Can't
+    /// reach …".
+    Unreachable,
+    /// The read never left the app (issue 483): the request pool is gone, the
+    /// chain's worker could not be started, or it died before it answered.
+    /// Never said as "can't reach" a network that was never asked.
+    Internal,
+}
+
+/// One chain's native balance in base units, or why there is none.
 ///
-/// `None` and zero are different answers and the core treats them differently:
-/// a chain that answered zero is empty, a chain that did not answer is
-/// unreachable, and rendering the second as the first is how a wallet quietly
-/// under-reports somebody's money.
-fn native_raw(chain_id: u32, address: &str) -> Option<String> {
+/// A miss and zero are different answers and the core treats them
+/// differently: a chain that answered zero is empty, a chain that did not
+/// answer is unreachable, and rendering the second as the first is how a
+/// wallet quietly under-reports somebody's money. And a read that never left
+/// the app is neither (PR 2 note 11): the pool thread being gone is Vela's
+/// fault, not the chain's.
+fn native_read(chain_id: u32, address: &str) -> Result<String, Miss> {
     let response = pool::call(chain_id, "eth_getBalance", json!([address, "latest"]));
     let body = match response {
         Ok(body) => body,
-        Err(PoolError::Failed { .. } | PoolError::RangeCap { .. } | PoolError::Unavailable) => {
-            return None;
+        Err(PoolError::Failed { .. } | PoolError::RangeCap { .. }) => {
+            return Err(Miss::Unreachable);
         }
+        Err(PoolError::Unavailable) => return Err(Miss::Internal),
     };
-    abi::dec_hex_quantity(body.get("result").and_then(Value::as_str)?)
+    body.get("result")
+        .and_then(Value::as_str)
+        .and_then(abi::dec_hex_quantity)
+        .ok_or(Miss::Unreachable)
+}
+
+/// [`native_read`]'s balance, for the live tests that read one chain.
+#[cfg(test)]
+fn native_raw(chain_id: u32, address: &str) -> Option<String> {
+    native_read(chain_id, address).ok()
 }
 
 /// Run one `aggregate3` on a chain. An empty vector means the batch did not
@@ -699,7 +722,19 @@ pub type ChainSink = dyn Fn(Vec<BalanceToken>) + Send + Sync;
 #[must_use]
 pub fn fetch_all(address: &str) -> (Vec<BalanceToken>, Vec<u32>) {
     let silent: Arc<ChainSink> = Arc::new(|_| {});
-    fetch_all_streaming(address, &silent)
+    let fetched = fetch_all_streaming(address, &silent);
+    (fetched.tokens, fetched.failed)
+}
+
+/// One round of the fan-out: what was read, and what was not.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Fetched {
+    pub tokens: Vec<BalanceToken>,
+    /// Every chain that did not answer, whatever the reason.
+    pub failed: Vec<u32>,
+    /// The failed chains whose read never left the app ([`Miss::Internal`]) —
+    /// a subset of `failed`, as the core's `internal_chain_ids` is.
+    pub internal: Vec<u32>,
 }
 
 /// The same fan-out, saying what it has found as it finds it.
@@ -719,10 +754,7 @@ pub fn fetch_all(address: &str) -> (Vec<BalanceToken>, Vec<u32>) {
 /// complete picture to decide about the cache write and the failed set, and no
 /// snapshot may arrive after it.
 #[must_use]
-pub fn fetch_all_streaming(
-    address: &str,
-    arrived: &Arc<ChainSink>,
-) -> (Vec<BalanceToken>, Vec<u32>) {
+pub fn fetch_all_streaming(address: &str, arrived: &Arc<ChainSink>) -> Fetched {
     // One batched read on Ethereum mainnet, shared by every chain — but no
     // longer a gate in front of the fan-out: it runs beside the chains, and a
     // chain waits for it only when it gets to pricing, after its own balance
@@ -755,9 +787,12 @@ pub fn fetch_all_streaming(
     // A lock, not a flag: the check and the report happen under it, so a
     // chain cannot pass the check just before the settle and report after.
     let settled = Arc::new(std::sync::Mutex::new(false));
-    let (tx, rx) = std::sync::mpsc::channel::<(u32, Option<Vec<BalanceToken>>)>();
+    let (tx, rx) = std::sync::mpsc::channel::<(u32, Result<Vec<BalanceToken>, Miss>)>();
 
     let mut out: Vec<u32> = Vec::new();
+    // A chain whose worker the OS would not start was never asked: failed,
+    // and inside the app — never a silent absence, and never "can't reach".
+    let mut unstarted: Vec<u32> = Vec::new();
     for (chain_id, symbol) in chains() {
         let address = address.to_owned();
         let mainnet_prices = Arc::clone(&mainnet_prices);
@@ -777,8 +812,8 @@ pub fn fetch_all_streaming(
                         let _ = chain_tokens::fetch(chain_id);
                     })
                     .ok();
-                let result = match native_raw(chain_id, &address) {
-                    Some(raw) => {
+                let result = match native_read(chain_id, &address) {
+                    Ok(raw) => {
                         if let Some(index) = index {
                             let _ = index.join();
                         }
@@ -792,22 +827,31 @@ pub fn fetch_all_streaming(
                         {
                             arrived(found.clone());
                         }
-                        Some(found)
+                        Ok(found)
                     }
-                    None => None,
+                    Err(miss) => Err(miss),
                 };
                 let _ = tx.send((chain_id, result));
             });
         if spawned.is_ok() {
             out.push(chain_id);
+        } else {
+            unstarted.push(chain_id);
         }
     }
     drop(tx);
 
-    let (mut tokens, mut failed) = collect_chain_answers(&rx, out, chain_deadline);
+    let mut fetched = collect_chain_answers(&rx, out, chain_deadline);
     if let Ok(mut settled) = settled.lock() {
         *settled = true;
     }
+    fetched.failed.extend_from_slice(&unstarted);
+    fetched.internal.extend(unstarted);
+    let Fetched {
+        mut tokens,
+        mut failed,
+        mut internal,
+    } = fetched;
     inform_token_trust(address, &tokens);
     // Deterministic order: the core sorts for display, but a stable input makes
     // a test's failure readable.
@@ -818,20 +862,26 @@ pub fn fetch_all_streaming(
             .then_with(|| a.symbol.cmp(&b.symbol))
     });
     failed.sort_unstable();
-    (tokens, failed)
+    internal.sort_unstable();
+    Fetched {
+        tokens,
+        failed,
+        internal,
+    }
 }
 
 /// Each chain's answer, until `budget` runs out (spec 092): a chain that
 /// answered nothing usable, or nothing at all in time, is failed for this
 /// round, and every answer that did arrive still lands. A connection held
-/// open must never keep the round from settling.
+/// open must never keep the round from settling. A chain whose read never
+/// left the app — or whose worker died before it answered — is failed AND
+/// internal (PR 2 note 11).
 fn collect_chain_answers(
-    rx: &std::sync::mpsc::Receiver<(u32, Option<Vec<BalanceToken>>)>,
+    rx: &std::sync::mpsc::Receiver<(u32, Result<Vec<BalanceToken>, Miss>)>,
     mut out: Vec<u32>,
     budget: std::time::Duration,
-) -> (Vec<BalanceToken>, Vec<u32>) {
-    let mut tokens = Vec::new();
-    let mut failed = Vec::new();
+) -> Fetched {
+    let mut fetched = Fetched::default();
     let deadline = std::time::Instant::now() + budget;
     while !out.is_empty() {
         let left = deadline.saturating_duration_since(std::time::Instant::now());
@@ -839,20 +889,30 @@ fn collect_chain_answers(
             Ok((chain_id, found)) => {
                 out.retain(|id| *id != chain_id);
                 match found {
-                    Some(found) => tokens.extend(found),
-                    None => failed.push(chain_id),
+                    Ok(found) => fetched.tokens.extend(found),
+                    Err(miss) => {
+                        fetched.failed.push(chain_id);
+                        if miss == Miss::Internal {
+                            fetched.internal.push(chain_id);
+                        }
+                    }
                 }
             }
             // Out of time: whoever has not answered is unreachable this round.
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                failed.append(&mut out);
+                fetched.failed.append(&mut out);
             }
-            // Every sender gone: a panicked worker is a chain we did not read.
-            // It is not a reason to lose the ones that answered.
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            // Every sender gone with chains still owed: their workers died
+            // (a panic) before answering — chains we did not read, and the
+            // app's own fault, not the network's. It is not a reason to lose
+            // the ones that answered.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                fetched.internal.extend_from_slice(&out);
+                fetched.failed.append(&mut out);
+            }
         }
     }
-    (tokens, failed)
+    fetched
 }
 
 #[cfg(test)]
@@ -864,7 +924,7 @@ mod tests {
     /// lands — the round settles instead of waiting on the silent one.
     #[test]
     fn a_chain_that_never_answers_is_failed_at_the_deadline_and_the_rest_land() {
-        let (tx, rx) = std::sync::mpsc::channel::<(u32, Option<Vec<BalanceToken>>)>();
+        let (tx, rx) = std::sync::mpsc::channel::<(u32, Result<Vec<BalanceToken>, Miss>)>();
         let answered = BalanceToken {
             chain_id: 1,
             symbol: "ETH".to_owned(),
@@ -875,15 +935,60 @@ mod tests {
             price_usd: None,
             spam: false,
         };
-        let _ = tx.send((1, Some(vec![answered.clone()])));
+        let _ = tx.send((1, Ok(vec![answered.clone()])));
         // Chain 56's worker is still holding its sender: it never answers.
         let started = std::time::Instant::now();
-        let (tokens, failed) =
+        let fetched =
             collect_chain_answers(&rx, vec![1, 56], std::time::Duration::from_millis(150));
-        assert_eq!(tokens, vec![answered]);
-        assert_eq!(failed, vec![56]);
+        assert_eq!(fetched.tokens, vec![answered]);
+        assert_eq!(fetched.failed, vec![56]);
+        assert!(
+            fetched.internal.is_empty(),
+            "a silent node is the network's, not Vela's"
+        );
         assert!(started.elapsed() < std::time::Duration::from_secs(2));
         drop(tx);
+    }
+
+    /// PR 2 note 11: a read that never left the app — the pool thread gone —
+    /// and a worker that died before answering are failed AND internal, so
+    /// the home never says "Can't reach" a network nobody asked; a node that
+    /// answered nothing usable is failed and the network's.
+    #[test]
+    fn a_read_that_never_left_the_app_is_internal() {
+        let (tx, rx) = std::sync::mpsc::channel::<(u32, Result<Vec<BalanceToken>, Miss>)>();
+        let _ = tx.send((1, Err(Miss::Internal)));
+        let _ = tx.send((56, Err(Miss::Unreachable)));
+        let _ = tx.send((100, Ok(Vec::new())));
+        // Chain 137's worker died: its sender went with it, and with every
+        // other sender gone the channel says so.
+        drop(tx);
+        let fetched = collect_chain_answers(
+            &rx,
+            vec![1, 56, 100, 137],
+            std::time::Duration::from_secs(5),
+        );
+        assert_eq!(fetched.failed, vec![1, 56, 137]);
+        assert_eq!(fetched.internal, vec![1, 137]);
+        assert!(
+            fetched
+                .internal
+                .iter()
+                .all(|id| fetched.failed.contains(id)),
+            "a subset of the failed chains, as the core reads it"
+        );
+    }
+
+    /// The pool's own verdicts, as the balance read words them: a pool that
+    /// is gone is Vela's fault; endpoints that failed are the chain's.
+    #[test]
+    fn the_pools_verdicts_are_told_apart() {
+        crate::executor::pool::with_fault(Some(&[1]), || {
+            assert_eq!(
+                native_read(1, "0x0000000000000000000000000000000000000001"),
+                Err(Miss::Internal)
+            );
+        });
     }
 
     /// Every built-in chain is read, and a custom network joins them.
