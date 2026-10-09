@@ -80,8 +80,6 @@ struct SigningPagePicker: View {
     var addError: String?
     var onClose: (() -> Void)?
 
-    @State private var draft = ""
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Tokens.Space.s16) {
@@ -97,7 +95,7 @@ struct SigningPagePicker: View {
                     RoundedRectangle(cornerRadius: Tokens.Radius.r12)
                         .stroke(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
                 )
-                if let onAdd { addField(onAdd) }
+                if let onAdd { SigningPageAddField(loc: loc, errorKey: addError, onAdd: onAdd) }
             }
             .padding(.horizontal, Tokens.Layout.screenPaddingX)
             .padding(.vertical, Tokens.Space.s24)
@@ -130,7 +128,20 @@ struct SigningPagePicker: View {
         }
     }
 
-    private func addField(_ onAdd: @escaping (String) -> Void) -> some View {
+}
+
+/// "Add a page": the address, typed, and Save. What may be stored is the
+/// core's call; its refusal is drawn under the field.
+struct SigningPageAddField: View {
+    @Environment(\.theme) private var theme
+    let loc: Loc
+    /// The corpus key of the last refusal.
+    var errorKey: String?
+    let onAdd: (String) -> Void
+
+    @State private var draft = ""
+
+    var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
             Text(loc.t("settings.signing.pageAdd"))
                 .typeRole(Typography.label)
@@ -146,12 +157,8 @@ struct SigningPagePicker: View {
                     .frame(minHeight: Tokens.Layout.hitTarget)
                     .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r8))
                     .accessibilityIdentifier("signingPage.addField")
-                Button {
-                    let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !typed.isEmpty else { return }
-                    onAdd(typed)
-                    draft = ""
-                } label: {
+                    .onSubmit(save)
+                Button(action: save) {
                     Text(loc.t("settings.signing.pageSave"))
                         .typeRole(Typography.actionLabel)
                         .foregroundStyle(theme.accentBase)
@@ -160,13 +167,21 @@ struct SigningPagePicker: View {
                 }
                 .accessibilityIdentifier("signingPage.addSave")
             }
-            if let addError {
-                Text(loc.t(addError))
+            if let errorKey {
+                Text(loc.t(errorKey))
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.errorBase)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("signingPage.addError")
             }
         }
+    }
+
+    private func save() {
+        let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { return }
+        onAdd(typed)
+        draft = ""
     }
 }
 
@@ -232,7 +247,7 @@ struct ChosenSigningPageCard: View {
     var onChange: (() -> Void)?
 
     var body: some View {
-        let content = HStack(alignment: .top, spacing: Tokens.Space.s12) {
+        let content = HStack(alignment: .center, spacing: Tokens.Space.s12) {
             ZStack {
                 Circle().fill(theme.accentSoft)
                 LucideIcon(.globe, size: LucideIconSize.rowGlyph).foregroundStyle(theme.accentBase)
@@ -258,9 +273,8 @@ struct ChosenSigningPageCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .multilineTextAlignment(.leading)
             if onChange != nil {
-                LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
+                LucideIcon(.chevronRight, size: LucideIconSize.rowGlyph)
                     .foregroundStyle(theme.fgSubtle)
-                    .padding(.top, Tokens.Space.s4)
                     .accessibilityHidden(true)
             }
         }

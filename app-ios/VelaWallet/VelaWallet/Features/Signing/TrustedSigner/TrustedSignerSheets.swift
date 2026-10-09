@@ -113,7 +113,6 @@ struct TrustedSignerSheet: View {
     private var handoff: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             HandoffCardView(
-                loc: loc,
                 model: HandoffCardModel.build(page: model.page, keyLabel: model.keyLabel, line: model.line, loc: loc)
             )
             Spacer(minLength: Tokens.Space.s8)

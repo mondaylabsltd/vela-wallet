@@ -63,7 +63,10 @@ struct SettingsFeedbackRowTests {
     /// callback — so the next row with a route and no door, or a door and no
     /// route, fails here.
     @Test func everyHomeRowIsRouted() {
-        let pages: Set<String> = ["networks", "rpc-providers", "add-network", "endpoints", "storage", "about"]
+        let pages: Set<String> = [
+            "networks", "rpc-providers", "add-network", "endpoints", "storage", "about",
+            SigningPagesPageModel.rowId,
+        ]
         for row in liveHome().sections.flatMap(\.rows) {
             let routed = SettingsScreen.overlay(forRow: row.id) != nil
                 || SettingsScreen.externalLink(forRow: row.id) != nil

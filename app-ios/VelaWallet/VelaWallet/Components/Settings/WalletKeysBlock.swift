@@ -51,7 +51,21 @@ struct WalletKeysBlock: View {
                 .foregroundStyle(theme.fgSubtle)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, Tokens.Space.s2)
+                .padding(.bottom, model.domainLine == nil ? Tokens.Space.s8 : Tokens.Space.s4)
+            // Spec 102: an account on its own domain says so once — every key
+            // here lives there, and only a page there can use them.
+            if let domainLine = model.domainLine {
+                HStack(spacing: Tokens.Space.s4) {
+                    LucideIcon(.globe, size: LucideIconSize.smallChevron)
+                        .foregroundStyle(theme.fgMuted)
+                        .accessibilityHidden(true)
+                    Text(domainLine)
+                        .typeRole(Typography.label)
+                        .foregroundStyle(theme.fgMuted)
+                }
                 .padding(.bottom, Tokens.Space.s8)
+                .accessibilityIdentifier("keys.domain")
+            }
 
             if model.loading {
                 // The shape of one row, so the block does not jump when the answer lands.

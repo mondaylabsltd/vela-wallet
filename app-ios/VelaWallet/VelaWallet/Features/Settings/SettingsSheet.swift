@@ -16,6 +16,8 @@ struct SettingsSheet: View {
     @Environment(\.theme) private var theme
     let model: SettingsScreenModel
     let overlay: SettingsOverlay
+    /// The words for what only a sheet draws itself (an integrity line).
+    var loc: Loc?
     let onDismiss: () -> Void
     let onSignOut: () -> Void
     /// A row picked in one of the five select sheets. Absent in the gallery,
@@ -43,6 +45,8 @@ struct SettingsSheet: View {
     var onFixChain: ((Int) -> Void)?
     /// The destructive action waiting on an answer — a storage row's 清除, a
     /// network's bin, "reset to defaults" — and its "yes".
+    /// Spec 102: a venue was chosen for the account. Absent in the gallery.
+    var onChooseVenue: ((SigningVenueWire) -> Void)?
     var pendingConfirm: ConfirmSheetModel?
     var onConfirmPending: (() -> Void)?
     /// The relay's Save and reset (spec 075).
@@ -99,6 +103,10 @@ struct SettingsSheet: View {
                         sheet: model.feeSpeedSheet,
                         onPick: { id in onPick?(.feeSpeed, id) }
                     )
+                case .signingVenue:
+                    if let venue = model.venue, let loc {
+                        VenueSheetBody(loc: loc, model: venue, onChoose: onChooseVenue)
+                    }
                 case .numberFormat:
                     SelectSheetBody(
                         sheet: model.numberSheet,

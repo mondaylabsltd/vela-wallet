@@ -31,16 +31,25 @@ import VelaCore
 /// matches, a warning when it will not open.
 struct IntegrityLineView: View {
     @Environment(\.theme) private var theme
-    let loc: Loc
     let line: SignerIntegrityLine
-    var nowMs: Double = Date().timeIntervalSince1970 * 1000
+    /// The line in words (`SignerIntegrityLine.text`).
+    let text: String
+
+    init(line: SignerIntegrityLine, text: String) {
+        self.line = line
+        self.text = text
+    }
+
+    init(loc: Loc, line: SignerIntegrityLine, nowMs: Double = Date().timeIntervalSince1970 * 1000) {
+        self.init(line: line, text: line.text(loc, nowMs: nowMs))
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
             glyph
                 .frame(width: LucideIconSize.action, alignment: .center)
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + Tokens.Space.s4 }
-            Text(line.text(loc, nowMs: nowMs))
+            Text(text)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(color)
                 .fixedSize(horizontal: false, vertical: true)
@@ -98,6 +107,8 @@ struct HandoffCardModel: Equatable {
     /// "Confirm with {{key}}" — `nil` when the page is told no single key.
     let key: String?
     let line: SignerIntegrityLine
+    /// The line in words.
+    let lineText: String
 
     /// May the page be opened? The core's answer, never the shell's.
     var opens: Bool { line.opens }
@@ -107,7 +118,8 @@ struct HandoffCardModel: Equatable {
             title: loc.t("componentsUi.signing.handoffTitle"),
             page: SigningPageNames.host(page),
             key: keyLabel.map { loc.t("componentsUi.signing.handoffKey", vars: ["key": $0]) },
-            line: line
+            line: line,
+            lineText: line.text(loc)
         )
     }
 }
@@ -117,9 +129,7 @@ struct HandoffCardModel: Equatable {
 /// Trusted Signer's own sheet each have their own row of them.
 struct HandoffCardView: View {
     @Environment(\.theme) private var theme
-    let loc: Loc
     let model: HandoffCardModel
-    var nowMs: Double = Date().timeIntervalSince1970 * 1000
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
@@ -165,7 +175,7 @@ struct HandoffCardView: View {
                     }
                     Divider().overlay(theme.borderBase)
                 }
-                IntegrityLineView(loc: loc, line: model.line, nowMs: nowMs)
+                IntegrityLineView(line: model.line, text: model.lineText)
             }
             .padding(Tokens.Space.s16)
             .frame(maxWidth: .infinity, alignment: .leading)

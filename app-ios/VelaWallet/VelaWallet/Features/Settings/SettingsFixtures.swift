@@ -191,6 +191,10 @@ enum SettingsFixtures {
                     SettingsRowModel(id: feeSpeedRow, title: loc.t("settings.advanced.feeSpeedTitle"),
                                      icon: .clock, subtitle: loc.t("settings.advanced.feeSpeedSubtitle"),
                                      value: loc.t("send.gasTier.fast")),
+                    // Spec 102: the pages this device trusts — beside the
+                    // speed, where the 071 page field was.
+                    SettingsRowModel(id: SigningPagesPageModel.rowId, title: loc.t("settings.signing.title"),
+                                     icon: .link2, subtitle: loc.t("settings.signing.subtitle")),
                     SettingsRowModel(id: "storage", title: loc.t(k.storageTitle),
                                      icon: .hardDrive, subtitle: loc.t(k.storageSubtitle)),
                 ],
@@ -886,8 +890,12 @@ enum SettingsFixtures {
             closeLabel: loc.t(k.close)
         ))
         // SR6 is drawn through the live builder, from a view shaped like the
-        // core's: what the gallery shows is what a session would.
-        return SettingsLive.withUnreachable(unreachableView, display: .usd, on: model, loc: loc)
+        // core's: what the gallery shows is what a session would. So are the
+        // signing surfaces (spec 102), from the core's own answers.
+        return SigningSettingsFixtures.apply(
+            on: SettingsLive.withUnreachable(unreachableView, display: .usd, on: model, loc: loc),
+            loc: loc
+        )
     }
 
     /// Spec 092's three cases in the core's order: last seen holding $4,500,
