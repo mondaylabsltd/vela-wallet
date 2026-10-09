@@ -192,6 +192,102 @@ pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
 pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay-cf.getvela.app";
 pub const DEFAULT_FIAT_RATES_URL: &str = "https://vela-currency.getvela.app/v2/rates?base=USD";
 
+/// The curated public RPCs of the built-in networks — the pool's `public`
+/// tier: below a person's own endpoint, a provider key and the network's
+/// built-in default ([`NetBuiltinChain::rpc_url`]), above whatever the chain
+/// index lists. One list for every shell, where web, iOS and desktop each
+/// held a copy (and Android none), so a dead endpoint had to be found and
+/// dropped three times (`bsc.meowrpc.com`, issue #212).
+///
+/// Measured 2026-10-10, read-only (`eth_chainId` + `eth_blockNumber`, 20
+/// rounds), from a network in China and one in the US:
+/// - every `1rpc.io` endpoint is gone — HTTP 502, or "You've reached the
+///   usage limit for your current plan" — from both (`1rpc.io/matic` timed
+///   out on every call during issue #483); replaced by each chain's Tenderly
+///   gateway (20/20 from both, CORS `*`);
+/// - `bsc.drpc.org` answers 3–7 calls in 20 ("public endpoint rate limit");
+///   replaced by `bsc-dataseed1.bnbchain.org` (20/20);
+/// - Celo's and Ink's built-in defaults (`forno.celo.org`,
+///   `rpc-gel.inkonchain.com`) time out from China, as do Optimism's and
+///   BNB Chain's (which already have a public endpoint here) — so Celo and
+///   Ink get one too.
+///
+/// Every endpoint here must answer a browser (CORS), because the web wallet
+/// reads through it.
+pub const PUBLIC_RPCS: &[(u32, &[&str])] = &[
+    (
+        1,
+        &[
+            "https://ethereum-rpc.publicnode.com",
+            "https://mainnet.gateway.tenderly.co",
+        ],
+    ),
+    (
+        56,
+        &[
+            "https://bsc-rpc.publicnode.com",
+            "https://bsc-dataseed1.bnbchain.org",
+        ],
+    ),
+    (
+        137,
+        &[
+            "https://polygon-bor-rpc.publicnode.com",
+            "https://polygon.gateway.tenderly.co",
+        ],
+    ),
+    (
+        42161,
+        &[
+            "https://arbitrum-one-rpc.publicnode.com",
+            "https://arbitrum.gateway.tenderly.co",
+        ],
+    ),
+    (
+        10,
+        &[
+            "https://optimism-rpc.publicnode.com",
+            "https://optimism.gateway.tenderly.co",
+        ],
+    ),
+    (
+        8453,
+        &[
+            "https://base-rpc.publicnode.com",
+            "https://base.gateway.tenderly.co",
+        ],
+    ),
+    (
+        43114,
+        &[
+            "https://avalanche-c-chain-rpc.publicnode.com",
+            "https://avalanche.gateway.tenderly.co",
+        ],
+    ),
+    (
+        100,
+        &[
+            "https://gnosis-rpc.publicnode.com",
+            "https://gnosis.gateway.tenderly.co",
+        ],
+    ),
+    (196, &["https://rpc.xlayer.tech", "https://xlayer.drpc.org"]),
+    (42220, &["https://celo-rpc.publicnode.com"]),
+    (57073, &["https://rpc-qnd.inkonchain.com"]),
+];
+
+/// [`PUBLIC_RPCS`] for one network, in order; empty for a network with
+/// none (a custom network, or a built-in one whose default and chain index
+/// suffice).
+#[must_use]
+pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
+    PUBLIC_RPCS
+        .iter()
+        .find(|(id, _)| *id == chain_id)
+        .map(|(_, urls)| urls.iter().map(|url| (*url).to_owned()).collect())
+        .unwrap_or_default()
+}
+
 /// Vela's Chain Setup page — which contracts a network lacks, and who can
 /// deploy them. It reads `?chain=<id>` ([`chain_setup_url`]).
 pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";

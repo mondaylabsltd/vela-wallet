@@ -891,6 +891,15 @@ pub fn registry_chain_unit(unit_id: u32, unit_hex: String, members_hex: String) 
     vela_core::registry_chain::unit_json(u64::from(unit_id), &unit_hex, &members_hex)
 }
 
+/// The curated public RPCs of a built-in network, in order — the RPC pool's
+/// `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+/// none. One list for every shell: each used to hold its own copy, and a
+/// dead endpoint had to be found and dropped in each.
+#[uniffi::export]
+pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
+    vela_core::app::network_admin::public_rpc_urls(chain_id)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where

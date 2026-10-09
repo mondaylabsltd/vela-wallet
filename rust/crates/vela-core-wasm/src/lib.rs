@@ -650,6 +650,16 @@ pub fn wallet_keys_step(
     vela_core::wallet_keys::step_json(address, device_keys_json, answers_json, sign_in_credential)
 }
 
+/// The curated public RPCs of a built-in network, in order — the RPC pool's
+/// `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+/// none. One list for every shell: each used to hold its own copy, and a
+/// dead endpoint had to be found and dropped in each.
+#[wasm_bindgen(js_name = publicRpcUrls)]
+#[must_use]
+pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
+    vela_core::app::network_admin::public_rpc_urls(chain_id)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where

@@ -21,14 +21,15 @@ use support::DomainDriver;
 use vela_core::app::network_admin::{
     build_provider_rpc_url, chain_setup_url, clean_endpoint_value, default_endpoint,
     explorer_base_url, is_builtin_chain, is_code_deployed, is_localhost_http, net_blocker,
-    p256_call_indicates_support, parse_chain_data, provider_chain_ids, rank_search, Event,
-    NetBlocker, NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody,
-    NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId,
-    NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints, NetServiceHealth,
-    NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin,
-    BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
-    DEFAULT_PASSKEY_INDEX_URL, MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE,
-    REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
+    p256_call_indicates_support, parse_chain_data, provider_chain_ids, public_rpc_urls,
+    rank_search, Event, NetBlocker, NetChainIndexEntry, NetCustomNetwork, NetEndpointField,
+    NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth,
+    NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints,
+    NetServiceHealth, NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind,
+    NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
+    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_PASSKEY_INDEX_URL,
+    MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS, REQUIRED_CONTRACTS,
+    SEARCH_DEBOUNCE_MS,
 };
 use vela_core::app::remote_mark::chain_logo_url;
 
@@ -2310,4 +2311,33 @@ fn the_eleven_are_built_in_with_verified_provider_slugs() {
         build_provider_rpc_url(NetProviderId::Drpc, 1_440_000, "k"),
         None
     );
+}
+
+/// The curated public endpoints: built-in networks only, https only, no
+/// endpoint twice — and none of the ones measured dead (2026-10-10: every
+/// `1rpc.io`, the rate-limited `bsc.drpc.org`).
+#[test]
+fn the_public_rpcs_are_built_in_https_and_alive_when_measured() {
+    let mut seen = std::collections::BTreeSet::new();
+    for (chain_id, urls) in PUBLIC_RPCS {
+        assert!(
+            BUILTIN_CHAINS.iter().any(|c| c.chain_id == *chain_id),
+            "{chain_id} is not a built-in network"
+        );
+        assert!(!urls.is_empty());
+        for url in *urls {
+            assert!(url.starts_with("https://"), "{url}");
+            assert!(seen.insert(*url), "{url} twice");
+            assert!(!url.contains("1rpc.io"), "{url}: 1rpc.io is gone");
+            assert_ne!(*url, "https://bsc.drpc.org", "rate-limited");
+        }
+    }
+    assert_eq!(
+        public_rpc_urls(137),
+        [
+            "https://polygon-bor-rpc.publicnode.com",
+            "https://polygon.gateway.tenderly.co"
+        ]
+    );
+    assert!(public_rpc_urls(NEW_CHAIN).is_empty());
 }
