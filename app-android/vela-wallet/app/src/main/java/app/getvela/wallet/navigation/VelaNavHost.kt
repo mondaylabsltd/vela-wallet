@@ -1511,7 +1511,9 @@ fun VelaNavHost(
                             // raised from the container's signing state instead.
                             signing = null,
                             onSelectTab = select,
-                            page = engine?.let { e -> { app.getvela.wallet.feature.explore.components.BrowserPage(e) } },
+                            // A live tab put back on screen is covered by its last
+                            // snapshot until the WebView has drawn (no white flash).
+                            page = engine?.let { e -> { app.getvela.wallet.feature.explore.components.BrowserPage(e, cover = snapshots[e.id]) } },
                             landing = when (exploreLanding) {
                                 is app.getvela.wallet.feature.browser.core.ExploreLanding.Tab -> app.getvela.wallet.feature.explore.ExploreView.Browsing
                                 app.getvela.wallet.feature.browser.core.ExploreLanding.Home -> app.getvela.wallet.feature.explore.ExploreView.Start

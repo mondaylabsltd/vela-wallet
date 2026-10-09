@@ -525,6 +525,21 @@ class BrowserEngine(
 
     fun deliver(json: String) = ProviderBridge.deliver(webView, json)
 
+    private var visualRequest = 0L
+
+    /**
+     * [then], on the main thread, once the page's content as it is now is
+     * ready for the WebView's next draw (`postVisualStateCallback`) — how the
+     * page view knows a WebView put back on screen has something to show.
+     * `false` when this WebView cannot say (then is never called).
+     */
+    fun whenDrawn(then: () -> Unit): Boolean {
+        if (!androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.VISUAL_STATE_CALLBACK)) return false
+        visualRequest += 1
+        androidx.webkit.WebViewCompat.postVisualStateCallback(webView, visualRequest) { then() }
+        return true
+    }
+
     /** Settings' debug mode changed (spec 091): this tab's next document gets the script for it. */
     fun debugModeChanged(on: Boolean) {
         provider?.swap(on)
