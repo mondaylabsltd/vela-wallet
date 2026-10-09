@@ -356,7 +356,7 @@ The ladder (each level: what you add → what it newly covers → what it still 
 | 8 | Why the slide stays shut, and says why | One gate, first blocker first; iOS had two copies of it | core/app/sign_confirm.rs 1–19 | ✅ |
 | 9 | Why there's no Reject button next to slide-to-confirm | Closing is the rejection; 88% of the track, "far more than a mis-tap and far less than a fight" | W/signing/ui/SlideToConfirm.svelte | ✅ |
 | 10 | Why a swipe no longer rejects a signature | A stray touch at 08:29:26 rejected a request (2026-09-28) | S/079 ruling 1; W/wallet/ui/BottomSheet.svelte 35–42 | 📜 |
-| 11 | Why sending uses a tap and signing uses a slide | | issue #461 (open) | 🗣 undecided |
+| 11 | Why the signing sheet became a button | Decided 8 October 2026 (#461): every app's signing sheet confirms with a tap; folded into the no-reject-button note | issue #461 | ✅ done |
 | 12 | Why Vela stopped blocking unlimited approvals | Permit2 batches spend the approval in the same transaction; ruling 2026-09-26 | core/app/approval_guard.rs 12–22 | 📜 |
 | 13 | Why "unlimited" starts at 2^200 | Three thresholds used to disagree | approval_guard.rs 118–124 | ✅ |
 | 14 | Why "increase allowance" has no Revoke, and shows the total | "Increase by 100 must never read as cap at 100" | approval_guard.rs 550–567 | ✅ |
