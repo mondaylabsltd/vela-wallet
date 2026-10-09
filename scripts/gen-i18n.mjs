@@ -705,8 +705,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (`onboarding.create.alertNotDiscoverable{Title,Body}`) is 1905's too, so
 //   only its plus is new here: `onboarding.login.alertSignInFailedBodyAndroid`.
 //   1812 + 1 = 1813 leaves, 101 branches.
-if (PATHS.length !== 1914) fail(`expected 1914 paths (1813 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1813) fail(`expected 1813 leaf paths, got ${leafSet.size}`);
+// 1915 (spec 102 integration polish, 2026-10-09): the hand-off card's key is
+//   a row, as the signing page draws it — 「确认方式 | 这台设备」 — not a
+//   sentence a locale must inflect a place title into ("用 这台设备 确认",
+//   "Confirm with This device"). − `componentsUi.signing.handoffKey`
+//   ("Confirm with {{key}}"), + `componentsUi.signing.{confirmWithLabel,
+//   newKeyOnLabel}` (the row's label: "Confirm with", and a create
+//   ceremony's "New key on" — the page's `field.confirmWith` /
+//   `field.keyOn`, word for word in all fifteen). `handoffTitle` loses its
+//   possessive (D6: only a self-hosted page is "your own").
+//   1813 − 1 + 2 = 1814 leaves, 101 branches.
+if (PATHS.length !== 1915) fail(`expected 1915 paths (1814 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1814) fail(`expected 1814 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
