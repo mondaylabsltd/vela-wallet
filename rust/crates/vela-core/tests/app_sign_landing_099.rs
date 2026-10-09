@@ -364,3 +364,36 @@ fn the_ladder_and_the_ring() {
         "a clock behind the send counts from zero"
     );
 }
+
+/// The fee-coin switch: a figure switched to another coin is measured again
+/// with that coin's leg, and the gate holds it as "measuring" — even a view
+/// whose other flags read ready (the gate's own second line), and the hand-off
+/// card draws no fee row for it.
+#[test]
+fn a_figure_switched_to_another_coin_is_still_measuring() {
+    let mut input = ready();
+    input.fee.as_mut().unwrap().provisional = true;
+    assert_eq!(block(&input), Some(ConfirmBlock::FeeMeasuring));
+    assert_eq!(
+        vela_core::app::sign_confirm::handoff_fee(input.fee.as_ref(), None),
+        None
+    );
+    input.fee.as_mut().unwrap().provisional = false;
+    assert_eq!(block(&input), None);
+}
+
+/// The account's previous transaction on this network still going through
+/// holds the confirm, with its own line.
+#[test]
+fn a_previous_transaction_in_flight_holds_the_confirm_with_its_line() {
+    let mut input = ready();
+    input.sign.confirm_gate_open = false;
+    input.sign.confirm_block = Some(ConfirmBlock::PreviousPending);
+    let state = confirm_state(&input);
+    assert!(!state.enabled);
+    assert_eq!(state.block, Some(ConfirmBlock::PreviousPending));
+    assert_eq!(
+        state.key.as_deref(),
+        Some("componentsUi.signing.confirmBlock.previousPending")
+    );
+}

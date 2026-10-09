@@ -1907,6 +1907,29 @@ enum Origin {
     /// The figure on screen is older than a block: priced again before
     /// anything signs it.
     Catchup,
+    /// The coin in force changed after the gas was measured with ANOTHER
+    /// coin's fee leg (a chip tap, or the machine's own re-pick once the
+    /// operation's balance changes are known): the switched figure stays on
+    /// screen, `provisional`, and the operation is measured again at once
+    /// with the new leg — before anything may sign it. A stablecoin leg is
+    /// an ERC-20 `transfer`, one SSTORE heavier than a native one (~9% of a
+    /// mainnet send's gas), and USDC↔USDT is another contract: only the
+    /// identical leg keeps its measurement.
+    Remeasure,
+}
+
+/// The fee leg a gas measurement simulated: the chain's coin, or a token's
+/// `transfer` (lower-cased contract).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum FeeLeg {
+    Native,
+    Token(String),
+}
+
+impl FeeLeg {
+    fn of(fee_token: Option<&str>) -> Self {
+        fee_token.map_or(Self::Native, |token| Self::Token(token.to_lowercase()))
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1932,6 +1955,11 @@ struct Pending {
     /// nothing was asked). Pricing waits for both.
     user_op_gas: Option<FeeGasOutcome>,
     inner_floor: Option<Option<u128>>,
+    /// The fee leg the simulation in flight carries.
+    measured_leg: Option<FeeLeg>,
+    /// This run already simulated again for a coin it re-picked on the real
+    /// gas ([`price_generic`]): it settles now, whatever it picks.
+    relegged: bool,
 }
 
 /// What the pricing step needs once the simulation answers.
@@ -2003,6 +2031,9 @@ pub struct Model {
     /// coin can pay, so the refusal is the one the caller would have had.
     requested_fee_token: Option<String>,
     estimate: Option<FeeEstimate>,
+    /// The fee leg the estimate in force was measured with. `None` on Tempo,
+    /// whose fee is no leg, and before any estimate.
+    measured_leg: Option<FeeLeg>,
     stale: bool,
     attempt: u64,
     /// What the operation itself does to each asset, as the shell's
@@ -2188,6 +2219,13 @@ pub struct FeeView {
     /// `false`.
     #[serde(default)]
     pub nothing_to_pay_from: bool,
+    /// The figure on screen was switched to another coin and is being
+    /// measured again with that coin's fee leg ([`Origin::Remeasure`]): drawn
+    /// as it is, with the measuring sign, and never confirmable until the
+    /// new figure lands (`busy` holds meanwhile too). `#[serde(default)]`: a
+    /// reader that predates it reads `false`.
+    #[serde(default)]
+    pub provisional: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2366,8 +2404,13 @@ impl App for FeePolicy {
         // whose fee leg moves a coin that is not there. Only a PROVABLE
         // shortfall refuses — an amount known and the balance under it — so
         // an unpriceable row (Tempo's native) is not mistaken for an empty one.
-        let confirm_fee_ready =
-            !busy && failed.is_none() && fee.is_some() && !selected_fee_is_short(model);
+        // A figure switched to another coin and not yet measured for it.
+        let provisional = fee.is_some() && failed.is_none() && leg_is_stale(model);
+        let confirm_fee_ready = !busy
+            && !provisional
+            && failed.is_none()
+            && fee.is_some()
+            && !selected_fee_is_short(model);
         let options = option_views(model);
         // Issue #408: said only of a settled figure, and only when every coin
         // on offer is PROVABLY short of it.
@@ -2393,6 +2436,7 @@ impl App for FeePolicy {
             confirm_fee_ready,
             no_coin_pays,
             nothing_to_pay_from,
+            provisional,
         }
     }
 }
@@ -2886,6 +2930,7 @@ fn advance_generic(
         return fail(model, FeeFailure::EstimateFailed);
     };
     est_calls.push(leg);
+    model.pending.measured_leg = Some(FeeLeg::of(model.fee_token.as_deref()));
     let est_calldata_len = multisend_execute_calldata_len(&est_calls);
     // The inner calls' own gas, measured beside the simulation so the quote
     // prices the `callGasLimit` the submit will carry (see
@@ -3647,7 +3692,9 @@ fn price_generic(
     let Some(native) = find_quote(&model.quotes, None).cloned() else {
         return fail(model, FeeFailure::CalculationFailed);
     };
-    if picks_coin(model) {
+    // Once simulated again for a re-picked coin, the run keeps that coin: a
+    // second pick could only bounce between two legs.
+    if picks_coin(model) && !model.pending.relegged {
         // The real gas is in: the coin picked on the static model must still
         // pay. When it does not, pick again on this figure — and when nothing
         // can, the requested coin stands and says so, as it would have.
@@ -3683,6 +3730,15 @@ fn price_generic(
         };
         if let Some(next) = next {
             model.fee_token = next.unwrap_or_else(|| when_no_coin_pays(model));
+        }
+        // The coin picked on the real gas is not the one simulated: its leg
+        // is another call, so the gas is measured again with it — once per
+        // run, and then the run settles on what it has.
+        let leg = FeeLeg::of(model.fee_token.as_deref());
+        if !model.pending.relegged && model.pending.measured_leg.as_ref() != Some(&leg) {
+            model.pending.relegged = true;
+            let coin = model.fee_token.clone();
+            return estimate_in(model, ctx, plan, coin);
         }
     }
     let Some(selected) = find_quote(&model.quotes, model.fee_token.as_deref()).cloned() else {
@@ -3752,6 +3808,7 @@ fn price_generic(
         fee_asset,
         fee_recipient: Some(selected.recipient),
     });
+    model.measured_leg = model.pending.measured_leg.clone();
     model.charge = Some(charge);
     settle_quoted(model)
 }
@@ -3841,6 +3898,8 @@ fn price_tempo(
         fee_recipient: recipient.clone().filter(|r| is_hex_address(r)),
     });
     model.charge = None;
+    // Tempo's fee is no leg of the batch; nothing to measure again.
+    model.measured_leg = None;
     settle_quoted(model)
 }
 
@@ -3849,6 +3908,28 @@ fn settle_quoted(model: &mut Model) -> Command<FeeEffect, Event> {
     model.stale = false;
     model.origin = Origin::Initial;
     resume_ticking(model)
+}
+
+/// The figure on screen is priced in a coin whose fee leg the gas was NOT
+/// measured with ([`Origin::Remeasure`]).
+fn leg_is_stale(model: &Model) -> bool {
+    model.estimate.is_some()
+        && model
+            .measured_leg
+            .as_ref()
+            .is_some_and(|leg| *leg != FeeLeg::of(model.fee_token.as_deref()))
+}
+
+/// The coin in force is no longer the one the gas was measured with: measure
+/// again now, the switched figure staying on screen and unconfirmable until
+/// the new one lands. Nothing to do when the legs match.
+fn remeasure_if_stale(model: &mut Model) -> Option<Command<FeeEffect, Event>> {
+    if !leg_is_stale(model) {
+        return None;
+    }
+    model.attempt += 1;
+    model.origin = Origin::Remeasure;
+    Some(begin_pipeline(model))
 }
 
 /// Wait one [`requote_interval_ms`] before pricing the quote on screen again.
@@ -3938,6 +4019,16 @@ fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
         // shell's retry asks again.
         Origin::Catchup => {
             model.estimate = None;
+            model.charge = None;
+            model.stale = false;
+            model.phase = Phase::Failed(kind);
+        }
+        // The switched figure was never measured for its coin, and now it
+        // cannot be: nothing on screen may be signed. The failure is said,
+        // and the shell's retry asks again in the coin in force.
+        Origin::Remeasure => {
+            model.estimate = None;
+            model.measured_leg = None;
             model.charge = None;
             model.stale = false;
             model.phase = Phase::Failed(kind);
@@ -4085,6 +4176,7 @@ fn estimate_in(
         return fail(model, FeeFailure::EstimateFailed);
     };
     est_calls.push(leg);
+    model.pending.measured_leg = Some(FeeLeg::of(model.fee_token.as_deref()));
     let mut plan = plan.clone();
     if let PricePlan::Generic {
         est_calldata_len, ..
@@ -4151,6 +4243,12 @@ fn balance_changes_measured_now(
     match model.phase.clone() {
         Phase::Quoted => {
             repick_quoted(model, &ctx);
+            // The machine's own re-pick is a coin switch like a tap: the gas
+            // was measured with the coin it left, so it is measured again,
+            // and the confirm waits (the dApp sheet's automatic switch).
+            if let Some(command) = remeasure_if_stale(model) {
+                return command;
+            }
             render()
         }
         Phase::Failed(FeeFailure::WouldFail | FeeFailure::EstimateFailed) => {
@@ -4328,6 +4426,12 @@ fn select_fee_asset_now(model: &mut Model, token: Option<String>) -> Command<Fee
         if !tempo && amount.is_some() && switch_estimate(model, option) {
             model.fee_token = token;
             model.auto_fee_token = false;
+            // The figure switched at once; the gas behind it was measured
+            // with the other coin's leg. Measured again now, and the confirm
+            // waits for it.
+            if let Some(command) = remeasure_if_stale(model) {
+                return command;
+            }
             return render();
         }
     }

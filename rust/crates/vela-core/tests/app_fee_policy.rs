@@ -1588,6 +1588,10 @@ fn a_native_fee_the_account_does_not_hold_is_not_confirmable() {
     sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDC.to_owned()),
     });
+    let leg = remeasured(&mut sut, |sut| {
+        gather(sut, vec![native_row("0"), usdc_row("5000000")])
+    });
+    assert_eq!(leg.as_deref(), Some(USDC), "the USDC leg");
     assert!(sut.view().confirm_fee_ready, "USDC covers it");
 }
 
@@ -1780,6 +1784,25 @@ fn issue_408_a_coin_that_can_pay_keeps_the_sheet_line_about_the_coin_in_force() 
 
     sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDT.to_owned()),
+    });
+    remeasured(&mut sut, |sut| {
+        sut.resolve(Res::GasPrice {
+            eth_gas_price: Some(ISSUE_408_GAS_PRICE.to_owned()),
+            base_fee: Some("0".to_owned()),
+            priority_fee: Some("0".to_owned()),
+        });
+        sut.resolve(Res::BundlerQuote {
+            quote: Some(FeeBundlerQuote {
+                max_fee_per_gas: "1976000000".to_owned(),
+                max_priority_fee_per_gas: None,
+                network_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
+                relayer_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
+                in_band_fee_per_gas: None,
+            }),
+        });
+        sut.resolve(Res::InBandQuotes {
+            quotes: Some(vec![issue_408_eth_row("0"), issue_408_usdt_row("5000000")]),
+        })
     });
     let view = sut.view();
     assert!(view.confirm_fee_ready);
@@ -1992,22 +2015,27 @@ fn coin_amounts_are_written_with_their_unit_rounded_the_safe_way() {
     );
 }
 
-/// `GasFeeCard.handleFeeTokenSelect` fast path: a known option recomputes
-/// locally from the shared gas basis — no RPC round trip.
+/// `GasFeeCard.handleFeeTokenSelect` fast path: a known option switches the
+/// figure on screen at once from the shared gas basis — and because that gas
+/// was measured with the OTHER coin's fee leg (a native transfer is not a
+/// USDC `transfer`), the operation is measured again at once with the new
+/// leg. The switched figure is provisional and never confirmable until the
+/// new one lands.
 #[test]
-fn select_fee_asset_recomputes_locally_without_rpc() {
+fn select_fee_asset_switches_at_once_and_measures_the_new_leg_again() {
     let mut sut = quoted_native(vec![]);
     let ops = sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDC.to_uppercase().replace("0X", "0x")), // case-insensitive
     });
-    assert!(ops.is_empty(), "local recompute issues no operations");
+    assert_eq!(ops, gathering_reads(), "the new leg is measured at once");
     let view = sut.view();
-    assert!(view.confirm_fee_ready);
+    assert!(view.provisional, "measured with another coin's leg");
+    assert!(view.busy && !view.confirm_fee_ready, "the confirm waits");
     assert_eq!(
         view.fee_token.as_deref().map(str::to_lowercase),
         Some(USDC.to_lowercase())
     );
-    let fee = view.fee.expect("quote survives the switch");
+    let fee = view.fee.expect("the switched figure stays on screen");
     assert_eq!(
         fee.total_wei, "0",
         "erc20 fee rides in fee_asset, not totalWei"
@@ -2027,11 +2055,90 @@ fn select_fee_asset_recomputes_locally_without_rpc() {
     // what was quoted.
     assert_eq!(fee.fee_recipient.as_deref(), Some(USDC_RECIPIENT));
 
+    // The re-measure: the simulation carries the USDC `transfer` leg.
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let ops = sut.resolve(quotes_ok());
+    match ops.as_slice() {
+        [Op::EstimateUserOpGas { calls, .. }] => {
+            let leg = calls.last().expect("a fee leg");
+            assert!(leg.to.eq_ignore_ascii_case(USDC), "the USDC leg: {leg:?}");
+            assert_eq!(leg.value, "0");
+        }
+        other => panic!("one simulation with the new leg, got {other:?}"),
+    }
+    assert_eq!(sut.resolve(estimated()), vec![Op::StartTtl { ms: TICK_MS }]);
+    let view = sut.view();
+    assert!(!view.provisional && !view.busy && view.confirm_fee_ready);
+    assert_eq!(
+        view.fee.expect("measured").fee_recipient.as_deref(),
+        Some(USDC_RECIPIENT)
+    );
+
     // Selecting the already-active asset is a no-op.
     let ops = sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDC.to_owned()),
     });
     assert!(ops.is_empty());
+}
+
+/// The money of it: the amount signed in USDC is priced on the gas the USDC
+/// leg measures — an ERC-20 `transfer` is heavier than a native one — never
+/// on the native leg's figure the switch showed for a moment.
+#[test]
+fn the_usdc_fee_is_priced_on_the_usdc_leg_s_own_gas() {
+    let mut sut = quoted_native(vec![]);
+    sut.dispatch(Event::SelectFeeAsset {
+        token: Some(USDC.to_owned()),
+    });
+    let provisional = match sut.view().fee.expect("switched").fee_asset {
+        FeeAssetView::Erc20 { amount, .. } => amount,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(provisional, USDC_FEE_UNITS.to_string());
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    // The USDC leg measures 20k heavier: 470_000 gas.
+    sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::Estimated {
+            verification_gas_limit: "100000".to_owned(),
+            call_gas_limit: "330000".to_owned(),
+            pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
+        },
+    });
+    let view = sut.view();
+    assert!(view.confirm_fee_ready);
+    let signed = match view.fee.expect("measured").fee_asset {
+        FeeAssetView::Erc20 { amount, .. } => amount.parse::<u128>().unwrap(),
+        other => panic!("{other:?}"),
+    };
+    // 470_000 / 450_000 of the native-leg figure, to the unit (rounded up).
+    assert_eq!(signed, (USDC_FEE_UNITS * 470_000).div_ceil(450_000));
+    assert!(signed > USDC_FEE_UNITS);
+}
+
+/// Switching back to the coin the gas was measured with is no new leg: the
+/// local figure is the measured one, and nothing is asked.
+#[test]
+fn switching_back_to_the_measured_coin_asks_nothing() {
+    let mut sut = quoted_native(vec![]);
+    sut.dispatch(Event::SelectFeeAsset {
+        token: Some(USDC.to_owned()),
+    });
+    // Back to the chain's coin while the USDC measure is still out.
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    // Now measured with USDC; going back to native is another leg again.
+    let ops = sut.dispatch(Event::SelectFeeAsset { token: None });
+    assert_eq!(ops, gathering_reads());
+    assert!(sut.view().provisional);
 }
 
 /// Invariant ⑧ — a fee asset whose balance is below the fee it would cost is
@@ -2393,17 +2500,18 @@ fn a_requote_during_a_tick_makes_it_the_visible_refresh() {
 }
 
 /// A chip tap acts on the figure on screen: a background pricing stops for
-/// it, the switch is the local recompute it always was, and ticking resumes.
+/// it, the figure switches at once, and the new leg is measured — the tick's
+/// late answers are dropped, and the confirm waits for the measure.
 #[test]
-fn a_chip_tap_during_a_tick_switches_the_figure_on_screen_and_resumes_ticking() {
+fn a_chip_tap_during_a_tick_switches_the_figure_on_screen_and_measures_it() {
     let mut sut = quoted_native(vec![]);
     sut.resolve(Res::TtlElapsed);
     let ops = sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDC.to_owned()),
     });
-    assert_eq!(ops, vec![Op::StartTtl { ms: TICK_MS }]);
+    assert_eq!(ops, gathering_reads(), "the new leg is measured at once");
     let view = sut.view();
-    assert!(!view.busy && view.confirm_fee_ready);
+    assert!(view.busy && view.provisional && !view.confirm_fee_ready);
     assert_eq!(
         view.fee.expect("quoted").fee_asset,
         FeeAssetView::Erc20 {
@@ -2415,8 +2523,17 @@ fn a_chip_tap_during_a_tick_switches_the_figure_on_screen_and_resumes_ticking() 
     );
     // The stopped tick's answers are dropped.
     assert!(sut.resolve(gas_at(5 * NETWORK_FEE)).is_empty());
+    sut.drop_oldest();
+    sut.drop_oldest();
+    // The measure lands: confirmable again, in USDC.
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    assert_eq!(sut.resolve(estimated()), vec![Op::StartTtl { ms: TICK_MS }]);
+    let view = sut.view();
+    assert!(!view.busy && !view.provisional && view.confirm_fee_ready);
     assert_eq!(
-        sut.view().fee.expect("quoted").fee_asset,
+        view.fee.expect("quoted").fee_asset,
         FeeAssetView::Erc20 {
             token: USDC.to_owned(),
             decimals: 6,
@@ -4441,6 +4558,21 @@ fn a_pick_the_real_gas_outgrows_is_made_again() {
         Some(USDC),
         "picked first"
     );
+    // Moved to ETH on the real gas — and that leg is simulated, in the same
+    // run, before it settles: the gas behind a figure is its own coin's.
+    let again = sut.outstanding();
+    assert_eq!(simulated_leg(&again), None, "the ETH leg: {again:?}");
+    sut.resolve_matching(
+        is_estimate,
+        Res::UserOpGas {
+            outcome: FeeGasOutcome::Estimated {
+                verification_gas_limit: "400000".to_owned(),
+                call_gas_limit: "310000".to_owned(),
+                pre_verification_gas: "40000".to_owned(),
+                settlement_gas: None,
+            },
+        },
+    );
     let view = sut.view();
     assert_eq!(view.fee_token, None, "…and moved to ETH on the real gas");
     assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
@@ -4804,13 +4936,26 @@ fn balance_changes_that_land_after_the_quote_move_the_fee_off_a_drained_coin() {
             change(None, "1000000000000000000"),
         ],
     });
-    assert!(ops.is_empty(), "a local switch, nothing asked: {ops:?}");
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::FetchGasPrice { .. })),
+        "switched at once, and the native leg is measured: {ops:?}"
+    );
     let view = sut.view();
     assert_eq!(view.fee_token, None);
     let fee = view.fee.expect("still quoted");
     assert_eq!(fee.fee_asset, FeeAssetView::Native);
     assert_eq!(fee.total_wei, NATIVE_FEE_WEI.to_string());
     assert_eq!(fee.fee_recipient.as_deref(), Some(NATIVE_RECIPIENT));
+    assert!(
+        !view.confirm_fee_ready,
+        "the dApp sheet's own switch can no longer be confirmed on the old leg's gas"
+    );
+    let leg = remeasured(&mut sut, |sut| {
+        gather(sut, vec![native_row("0"), usdc_row("5000000")])
+    });
+    assert_eq!(leg, None, "the native leg");
+    let view = sut.view();
+    assert_eq!(view.fee_token, None);
     assert!(view.confirm_fee_ready);
 }
 
@@ -5413,6 +5558,27 @@ fn settle(sut: &mut Sut) {
     sut.resolve_matching(is_measure, unmeasured());
 }
 
+/// A coin switch (a tap, or the machine's own re-pick) measures the new leg
+/// again at once: the switched figure is provisional and the confirm waits.
+/// Answer that run with `gather` (the chain's own answers) and the same gas;
+/// returns the leg it simulated (`None` = native).
+fn remeasured(sut: &mut Sut, gather: impl FnOnce(&mut Sut) -> Vec<Op>) -> Option<String> {
+    let view = sut.view();
+    assert!(
+        view.provisional && view.busy && !view.confirm_fee_ready,
+        "switched, and measured again before it is confirmable: {view:?}"
+    );
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    let ops = gather(sut);
+    let leg = simulated_leg(&ops);
+    sut.resolve_matching(is_estimate, estimated());
+    if sut.outstanding().iter().any(is_measure) {
+        sut.resolve_matching(is_measure, unmeasured());
+    }
+    assert!(!sut.view().provisional);
+    leg
+}
+
 fn option<'a>(
     view: &'a vela_core::app::fee_policy::FeeView,
     contract: Option<&str>,
@@ -5494,6 +5660,9 @@ fn with_nothing_else_the_machine_says_so_and_a_usdc_pick_is_warned() {
 
     sut.dispatch(Event::SelectFeeAsset {
         token: Some(BSC_USDC.to_owned()),
+    });
+    remeasured(&mut sut, |sut| {
+        gather(sut, vec![bnb_row("0"), bsc_usdc_row()])
     });
     let view = sut.view();
     assert_eq!(
@@ -5742,7 +5911,12 @@ fn issue_411_a_swap_the_simulation_measured_pays_in_a_coin_that_can() {
     }
 
     let ops = sut.dispatch(issue_411_swap());
-    assert!(ops.is_empty(), "a local switch, nothing asked: {ops:?}");
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::FetchGasPrice { .. })),
+        "switched at once, and the pUSD leg is measured: {ops:?}"
+    );
+    let leg = remeasured(&mut sut, polygon_gather);
+    assert_eq!(leg.as_deref(), Some(PUSD.to_ascii_lowercase().as_str()));
     let view = sut.view();
     assert_eq!(view.fee_token.as_deref(), Some(PUSD), "{view:?}");
     assert!(view.confirm_fee_ready, "{view:?}");
@@ -5807,6 +5981,7 @@ fn issue_411_a_swap_of_all_the_pusd_pays_in_the_usdc() {
             change(Some(&POLYGON_USDC.to_ascii_lowercase()), "256990000"),
         ],
     });
+    remeasured(&mut sut, polygon_gather);
     let view = sut.view();
     assert_eq!(view.fee_token.as_deref(), Some(POLYGON_USDC), "{view:?}");
     assert!(view.confirm_fee_ready);
@@ -5865,6 +6040,7 @@ fn issue_411_a_coin_the_swap_funds_is_quoted_never_refused() {
     settle(&mut sut);
     assert_eq!(sut.view().fee_token, None, "unmeasured: the fallback");
     sut.dispatch(all_the_pusd());
+    remeasured(&mut sut, |sut| polygon_gather_with(sut, rows()));
     in_usdc(&sut.view());
 }
 

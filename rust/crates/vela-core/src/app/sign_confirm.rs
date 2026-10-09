@@ -147,6 +147,16 @@ pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
     super::fee_speed::offered(estimate.tier) != super::fee_speed::offered(tier)
 }
 
+/// The figure on the sheet is another coin's gas (the fee-coin switch): the
+/// coin in force changed after the gas was measured with the other coin's fee
+/// leg, and the machine is measuring it again (`FeeView::provisional`). The
+/// fee machine already holds `confirm_fee_ready` meanwhile; this is the gate's
+/// own second line, as [`fee_of_another_tier`] is for a speed.
+#[must_use]
+pub fn fee_of_another_coin(fee: &FeeView) -> bool {
+    fee.provisional
+}
+
 /// The one gate (module doc).
 #[must_use]
 pub fn confirm_state(input: &ConfirmInput) -> ConfirmState {
@@ -196,7 +206,7 @@ pub fn confirm_state_of(
         let Some(fee) = fee else {
             return shut(ConfirmBlock::FeeMeasuring);
         };
-        if fee.busy || fee_of_another_tier(fee, speed_tier) {
+        if fee.busy || fee_of_another_tier(fee, speed_tier) || fee_of_another_coin(fee) {
             return shut(ConfirmBlock::FeeMeasuring);
         }
         if fee.failed.is_some() {
@@ -298,6 +308,7 @@ pub fn handoff_fee(
         || fee.failed.is_some()
         || !fee.confirm_fee_ready
         || fee_of_another_tier(fee, speed_tier)
+        || fee_of_another_coin(fee)
     {
         return None;
     }
