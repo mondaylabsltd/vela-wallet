@@ -17074,7 +17074,12 @@ impl WalletPage {
                     let measuring = fee.busy
                         || host.fee_measuring()
                         || signing_live::fee_of_another_tier(fee, speed_tier);
-                    signing_live::hold_fee_warning(&mut confirm.fee, held, measuring);
+                    signing_live::hold_fee_warning(
+                        &mut confirm.fee,
+                        held,
+                        measuring,
+                        signing_live::reserve_warning(fee, &self.signing),
+                    );
                     held_note = Some(
                         held.note(
                             confirm
