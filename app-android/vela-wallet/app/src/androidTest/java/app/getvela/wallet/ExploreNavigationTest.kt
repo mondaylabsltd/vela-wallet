@@ -1,5 +1,8 @@
 package app.getvela.wallet
 
+import android.os.Build
+import android.os.SystemClock
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,11 +14,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -29,6 +43,7 @@ import app.getvela.wallet.feature.explore.ExploreScreenState
 import app.getvela.wallet.feature.explore.ExploreView
 import app.getvela.wallet.feature.wallet.components.VelaTab
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -144,6 +159,57 @@ class ExploreNavigationTest {
         compose.onNodeWithContentDescription(strings.t("explore.back")).assertDoesNotExist()
     }
 
+    /**
+     * TalkBack and 探索 while a page is up: Compose hands a screen reader a
+     * SELECTED tab as not clickable and without its click, so a TalkBack user
+     * could not tap 探索 again to reach the home. This one is a Tab with a
+     * click, its selection said in words; on the home, where tapping it again
+     * does nothing, it stays the plain selected tab.
+     */
+    @Test
+    fun theSelectedExploreTabWhileBrowsingIsOneTalkBackCanTapAgain() {
+        show(ExploreScreenState.E4, ExploreView.Browsing)
+        val explore = strings.t("componentsUi.mainNav.explore")
+        compose.onNodeWithContentDescription(explore)
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription))
+        // What TalkBack is handed: clickable, with the click, said to be selected.
+        val node = accessibilityNode(explore)
+        assertTrue("clickable", node.isClickable)
+        assertTrue("with its click", node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
+        if (Build.VERSION.SDK_INT >= 30) assertTrue("said to be selected", !node.stateDescription.isNullOrBlank())
+        // And TalkBack's double-tap does what a tap does: the home, the tab kept.
+        assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        compose.waitForIdle()
+        assertEquals(listOf(VelaTab.Explore), selected)
+        compose.onNodeWithText(openTabs).assertExists()
+        // On the home the selected 探索 does nothing again: the plain selected tab.
+        val home = accessibilityNode(explore)
+        assertTrue("selected", home.isSelected)
+        // The other tabs are unchanged: not selected, clickable.
+        val wallet = accessibilityNode(strings.t("componentsUi.mainNav.wallet"))
+        assertTrue(wallet.isClickable && !wallet.isSelected)
+    }
+
+    /** The node TalkBack would be handed for [description] (via UiAutomation, as a screen reader reads the window). */
+    private fun accessibilityNode(description: String): AccessibilityNodeInfo {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        while (true) {
+            compose.waitForIdle()
+            automation.rootInActiveWindow?.let { root -> find(root, description) }?.let { return it }
+            check(SystemClock.uptimeMillis() < deadline) { "no accessibility node named $description" }
+            Thread.sleep(50)
+        }
+    }
+
+    private fun find(node: AccessibilityNodeInfo, description: String): AccessibilityNodeInfo? {
+        if (node.contentDescription?.toString() == description) return node
+        for (i in 0 until node.childCount) node.getChild(i)?.let { find(it, description) }?.let { return it }
+        return null
+    }
+
     @Test
     fun theHomeHasNoCountBoxAndItsHeaderOpensTheSwitcher() {
         show(ExploreScreenState.E2, ExploreView.Start)
@@ -152,6 +218,105 @@ class ExploreNavigationTest {
         compose.onNodeWithText(strings.t("explore.done")).performClick()
         // Done goes back where the switcher was opened from: the home.
         compose.onNodeWithText(openTabs).assertExists()
+    }
+
+    /**
+     * A resume (a row, a switcher card) whose page the controller has not put
+     * in front yet (`pageComing`): the view it was asked from stays — never
+     * the page left there before, never the home over the switcher — and the
+     * page shows once it is there.
+     */
+    @Test
+    fun aPageStillComingKeepsTheHomeOrTheSwitcherItWasAskedFrom() {
+        val model = ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+        var hasPage by mutableStateOf(false)
+        var coming by mutableStateOf(false)
+        val asking = ExploreCallbacks(
+            onOpenSite = {},
+            // As the controller does: the page there goes out of front, and one is coming.
+            onTabOpen = { id ->
+                opened += id
+                hasPage = false
+                coming = true
+            },
+            onTabClose = {},
+            onTabNew = {},
+            onTabsCloseAll = {},
+            onGroupToggle = { _, _ -> },
+            onSiteMenuPick = {},
+            onBookmark = {},
+            onRecentClear = {},
+        )
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    ExploreScreen(
+                        model = model,
+                        live = asking,
+                        landing = ExploreView.Start,
+                        page = if (hasPage) ({ Box(Modifier.fillMaxSize().background(Color.White)) }) else null,
+                        pageComing = coming,
+                        onPageBack = { false },
+                    )
+                }
+            }
+        }
+        val back = strings.t("explore.back")
+        // A resume row: the home stays while the tab's page is coming.
+        compose.onNodeWithText("polymarket.com").performClick()
+        assertEquals(listOf("polymarket"), opened)
+        compose.onNodeWithText(openTabs).assertExists()
+        compose.onNodeWithContentDescription(back).assertDoesNotExist()
+        hasPage = true
+        coming = false
+        compose.onNodeWithContentDescription(back).assertExists()
+
+        // ‹ to the home, then the switcher: a card's page still coming keeps the switcher.
+        compose.onNodeWithContentDescription(back).performClick()
+        compose.onNodeWithText(strings.t("explore.tabs")).performClick()
+        compose.onNodeWithText("app.aave.com").performClick()
+        assertEquals(listOf("polymarket", "aave"), opened)
+        compose.onNodeWithText(strings.t("explore.done")).assertExists()
+        compose.onNodeWithText(openTabs).assertDoesNotExist()
+        hasPage = true
+        coming = false
+        compose.onNodeWithContentDescription(back).assertExists()
+    }
+
+    /**
+     * A resume row names an open tab by its host, and a host too long for the
+     * row is cut from its START, as the pill cuts it: the registrable domain
+     * at its end stays. Recent dApps rows keep their end cut.
+     */
+    @Test
+    fun aResumeRowCutsALongHostFromItsStart() {
+        val base = ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+        val phishing = "app.uniswap.org.secure-wallet-login-verification.evil.xyz"
+        val resume = base.resume!!
+        val model = base.copy(
+            resume = resume.copy(tabs = listOf(resume.tabs.first().copy(host = phishing, subtitle = phishing)) + resume.tabs.drop(1)),
+        )
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    ExploreScreen(model = model, live = live, landing = ExploreView.Start, onPageBack = { false })
+                }
+            }
+        }
+        val host = layoutOf(compose.onNodeWithText(phishing, useUnmergedTree = true))
+        assertEquals(TextOverflow.StartEllipsis, host.layoutInput.overflow)
+        // Wider than its row, so it is cut — at the start (the platform reports
+        // a head cut on no line, so the width is what says it happened).
+        assertTrue("the phishing host is wider than its row", host.multiParagraph.intrinsics.maxIntrinsicWidth > host.size.width)
+        val recent = compose.onNodeWithText(ExploreFixtures.hyperliquid.host, useUnmergedTree = true)
+        recent.performScrollTo()
+        assertEquals(TextOverflow.Ellipsis, layoutOf(recent).layoutInput.overflow)
+    }
+
+    private fun layoutOf(node: SemanticsNodeInteraction): TextLayoutResult {
+        val results = mutableListOf<TextLayoutResult>()
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        return results.single()
     }
 
     @Test

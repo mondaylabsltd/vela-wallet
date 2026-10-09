@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import androidx.compose.runtime.saveable.SaverScope
 import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.feature.browser.core.BrowserTabs
 import app.getvela.wallet.feature.browser.core.DbrConsentView
@@ -11,6 +12,7 @@ import app.getvela.wallet.feature.browser.core.ExploreOpenKind
 import app.getvela.wallet.feature.browser.core.ExploreOpenTarget
 import app.getvela.wallet.feature.browser.core.ExploreTab
 import app.getvela.wallet.feature.browser.core.ExploreView
+import app.getvela.wallet.navigation.ExploreVisit
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -76,6 +78,44 @@ class BrowserNavigationTest {
         }
         // A waiting tab the strip does not carry is no reason to leave the home.
         assertEquals(ExploreLanding.Home, BrowserTabs.landing(live, ExploreEntry.Section, waiting = "gone"))
+    }
+
+    /** What `rememberSaveable` does to the visit when a route is pushed over the wallet and Back pops it. */
+    private fun ExploreVisit.savedAndRestored(): ExploreVisit {
+        val saved = with(ExploreVisit.Saver) { SaverScope { true }.save(this@savedAndRestored) }
+        return ExploreVisit.Saver.restore(saved!!)!!
+    }
+
+    @Test
+    fun `a waiting tab answered and left does not pull the person back after 设置 and Back`() {
+        // W's consent waits as 探索 is entered: the visit lands on W.
+        val waitingOnW = view("t1", dapp, other, start)
+        val entered = ExploreVisit().entered(ExploreEntry.Section, waiting = "t1")
+        assertEquals(ExploreLanding.Tab("t1"), entered.landing(waitingOnW))
+        val settled = entered.settle(waitingOnW)!!
+        assertEquals(ExploreLanding.Tab("t1"), settled.settled)
+        assertNull("the waiting tab was asked once", settled.waiting)
+        // The person answers, resumes X, opens 设置 and comes Back: the same
+        // visit, restored, with nothing left to act on — W is not selected again.
+        val onX = view("t2", dapp, other, start)
+        val back = settled.savedAndRestored()
+        assertEquals(settled, back)
+        assertNull("a settled visit is not landed again", back.settle(onX))
+        assertEquals(ExploreLanding.Home, BrowserTabs.landing(onX, back.entry, back.waiting))
+        // 探索 entered again is a new visit, asked afresh.
+        val again = back.entered(ExploreEntry.Section, waiting = null)
+        assertEquals(back.number + 1, again.number)
+        assertEquals(ExploreLanding.Home, again.settle(onX)!!.settled)
+    }
+
+    @Test
+    fun `a visit not yet settled keeps its question through a save, and every landing round-trips`() {
+        val pending = ExploreVisit().entered(ExploreEntry.PageOpened, waiting = "t2")
+        assertEquals(pending, pending.savedAndRestored())
+        for (landing in listOf(ExploreLanding.Home, ExploreLanding.Tab("t1"))) {
+            val settled = ExploreVisit(number = 3, entry = ExploreEntry.Reselect, settled = landing)
+            assertEquals(settled, settled.savedAndRestored())
+        }
     }
 
     @Test
@@ -169,6 +209,9 @@ class BrowserNavigationTest {
     }
 
     // -- The wiring ----------------------------------------------------------------
+    // (Which tab gets an engine — none for a restored or landed-away tab until
+    // it is resumed — is a behaviour, proved on a real controller by the
+    // instrumented BrowserControllerWakeTest, not pinned here.)
 
     private val main = File(System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle"), "app-android/vela-wallet/app/src/main/java/app/getvela/wallet")
 
@@ -191,17 +234,9 @@ class BrowserNavigationTest {
         val host = source("navigation/VelaNavHost.kt")
         assertTrue("a re-tap while 探索 is up is Reselect", "if (section == VelaTab.Explore) app.getvela.wallet.feature.browser.core.ExploreEntry.Reselect" in host)
         assertTrue("a page from outside is PageOpened", "enterExplore(app.getvela.wallet.feature.browser.core.ExploreEntry.PageOpened)" in host)
-        assertTrue("the waiting tab is read at entry", "exploreWaiting = application.container.browser.waitingTab()" in host)
-        assertTrue("the landing is the core's", "BrowserTabs.landing(exploreView, exploreEntry, exploreWaiting)" in host)
+        assertTrue("the waiting tab is read at entry", "exploreVisit.entered(entry, waiting = application.container.browser.waitingTab())" in host)
+        assertTrue("the visit, with where it landed, outlives the route pushed over it", "rememberSaveable(stateSaver = ExploreVisit.Saver)" in host)
+        assertTrue("the landing is the visit's, settled once", "exploreVisit.settle(current) ?: return@LaunchedEffect" in host)
         assertTrue("the old engine-decides landing is gone", "initialView" !in host)
-    }
-
-    @Test
-    fun `no engine is made for a tab nobody asked to see`() {
-        val controller = source("feature/browser/core/BrowserController.kt")
-        val reconcile = controller.substringAfter("private fun reconcile(view: ExploreView)").substringBefore("private fun newEngine(")
-        assertTrue("reconcile mints only for the wanted tab", "selected.id in engines || selected.id == wanted" in reconcile)
-        val select = controller.substringAfter("private fun resume(id: String)").substringBefore("fun landedHome()")
-        assertTrue("selecting a tab is asking for it", "wanted = id" in select)
     }
 }
