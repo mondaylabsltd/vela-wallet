@@ -616,13 +616,13 @@ struct SendMachineTests {
         let nets = try networks()
 
         let executor = SendExecutor(
-            store: store, relay: relay, pool: RpcPool(store: store, accounts: accounts),
+            store: store, relay: relay, pool: RpcPool(store: store, accounts: accounts, offline: true),
             spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { CountingSigner() }),
             accounts: accountPort, fees: fees,
             identity: RecipientIdentity(
-                store: store, pool: RpcPool(store: store, accounts: accounts), accounts: accounts
+                store: store, pool: RpcPool(store: store, accounts: accounts, offline: true), accounts: accounts
             ),
-            metadata: TokenMetadata(store: store, pool: RpcPool(store: store, accounts: accounts)),
+            metadata: TokenMetadata(store: store, pool: RpcPool(store: store, accounts: accounts, offline: true)),
             accountStore: accounts,
             balances: { held },
             networks: { nets },
@@ -658,7 +658,7 @@ struct SendMachineTests {
         let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
         let held = try balance()
         let nets = try networks()
-        let pool = RpcPool(store: store, accounts: accounts)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
 
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool,
@@ -706,7 +706,7 @@ struct SendMachineTests {
         let accountPort = ScriptedAccounts()
         let signer = CountingSigner()
         let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
-        let pool = RpcPool(store: store, accounts: accounts)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
 
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool,
@@ -759,7 +759,7 @@ struct SendMachineTests {
         accountPort.recordJson = String(decoding: try JSONSerialization.data(withJSONObject: record), as: UTF8.self)
         let signer = CountingSigner()
         let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil, timers: .stopped)
-        let pool = RpcPool(store: store, accounts: accounts)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool,
             spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { signer }),
@@ -801,7 +801,7 @@ struct SendMachineTests {
         let port = ScriptedRelayPort()
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
-        let pool = RpcPool(store: store, accounts: accounts)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
         var tracked: [String] = []
 
         let executor = SendExecutor(

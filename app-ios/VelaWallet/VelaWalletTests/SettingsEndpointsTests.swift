@@ -51,7 +51,7 @@ struct SettingsEndpointsTests {
         let accounts = AccountStore(defaults: defaults)
         let store = SettingsStore(
             store: shelf, accounts: accounts,
-            pool: RpcPool(store: shelf, accounts: accounts),
+            pool: RpcPool(store: shelf, accounts: accounts, offline: true),
             networkPerform: NetworkAdminStub.perform(
                 executor: NetworkAdminExecutor(store: shelf, accounts: accounts)
             )

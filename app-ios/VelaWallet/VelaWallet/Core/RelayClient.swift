@@ -413,7 +413,20 @@ final class RelayClient {
             "symbol": symbol,
             "usd_balance": decimalText(row["usdBalance"]) ?? "0",
             "usd_price": usdPrice.map { $0 as Any } ?? NSNull(),
+            // PR 2 §5: the relay's own minimum for this coin, VERBATIM (hex
+            // as the relay writes it; the core also reads a decimal). With
+            // it the native fee floors at the relay's minimum; without it (an
+            // older relay) today's rule holds.
+            "minimum_amount": minimumAmount(row["minimumAmount"]).map { $0 as Any } ?? NSNull(),
         ]
+    }
+
+    /// The row's `minimumAmount` as the core takes it: a string verbatim (hex
+    /// or decimal), a JSON number as its decimal text, else none.
+    static func minimumAmount(_ raw: Any?) -> String? {
+        if let text = raw as? String { return text.isEmpty ? nil : text }
+        if raw is NSNumber { return decimalText(raw) }
+        return nil
     }
 
     /// `pimlico_getUserOperationGasPrice`, one tier.
@@ -687,13 +700,35 @@ final class RelayClient {
     /// G13). `nil` for an older relay, a failure or a status the core does not
     /// know — which it reads as `status_unavailable`, never as a verdict.
     func userOpStatus(chainId: Int, userOpHash: String) async -> TrackStatusAnswer? {
+        await userOpStatusWithReason(chainId: chainId, userOpHash: userOpHash)?.answer
+    }
+
+    /// `userOpStatus`, with why the relay refused or failed the op — its
+    /// `rejection_reason`, verbatim (relay PR #23; older relays send none, and
+    /// the core then reads the stage). Read beside the core's parse because
+    /// the UniFFI `TrackStatusAnswer` does not carry it yet (vela-core's own
+    /// `parse_user_op_status` reads the same field the same way: a non-empty
+    /// string on the result object). The core words it (`RefusalReason`).
+    func userOpStatusWithReason(
+        chainId: Int, userOpHash: String
+    ) async -> (answer: TrackStatusAnswer, rejectionReason: String?)? {
         guard !userOpHash.isEmpty,
               let result = await bundlerValue(
                   chainId: chainId, method: userOpStatusMethod(), params: [userOpHash]
               ),
-              let json = Self.jsonText(result)
+              let json = Self.jsonText(result),
+              let answer = parseUserOpStatus(json: json)
         else { return nil }
-        return parseUserOpStatus(json: json)
+        return (answer, Self.rejectionReason(json))
+    }
+
+    /// The status answer's `rejection_reason`, as the core's parser reads it:
+    /// a non-empty string on the result (or on a whole body's `result`).
+    static func rejectionReason(_ json: String) -> String? {
+        guard let object = object(fromJSON: json) else { return nil }
+        let result = object["status"] != nil ? object : (object["result"] as? [String: Any] ?? [:])
+        guard let reason = result["rejection_reason"] as? String, !reason.isEmpty else { return nil }
+        return reason
     }
 
     /// The relay-independent landing check (spec 082 ruling 8): the
@@ -779,9 +814,16 @@ final class RelayClient {
 
     /// The three raw gas signals, each `nil` when unreadable; the core prices
     /// with what it has, and only a failed `eth_gasPrice` triggers its default.
-    func gasSignals(chainId: Int, wantTip: Bool) async -> GasSignals {
+    ///
+    /// `fresh`: a retry after a failure (the fee machine's `fresh`, issue
+    /// #483) — measured again past the held reading, and no read already in
+    /// flight answers it.
+    func gasSignals(chainId: Int, wantTip: Bool, fresh: Bool = false) async -> GasSignals {
         let key = "\(chainId):gas:\(wantTip)"
-        if let held = gasSignalsCache[key], now() - held.at < Self.feeSignalsTTLMs {
+        if fresh {
+            gasSignalsCache[key] = nil
+            feeSignalsEpoch[chainId, default: 0] += 1
+        } else if let held = gasSignalsCache[key], now() - held.at < Self.feeSignalsTTLMs {
             return held.signals
         }
         let epoch = feeSignalsEpoch[chainId, default: 0]
@@ -847,12 +889,26 @@ final class RelayClient {
         return Self.hexQuantity(decimal: decimal)
     }
 
-    /// What the deployment read came to: an answer, or none — and whether
-    /// none was a rate limit (spec 082 RJ13: the fee row then names the
-    /// chain's node, never Vela's relay).
+    /// What the deployment read came to: an answer; none from the chain —
+    /// and whether none was a rate limit (spec 082 RJ13: the fee row then
+    /// names the chain's node, never Vela's relay); or none because the read
+    /// never left the app (issue #483: never told as "can't reach the chain").
+    /// The fee machine's `DeploymentRead`, case for case (`wire`).
     enum DeploymentRead: Equatable {
         case deployed(Bool)
         case unread(rateLimited: Bool)
+        /// Something inside the app failed before the chain could be asked.
+        /// `kind` is diagnostics for the report, never shown.
+        case `internal`(kind: String)
+
+        /// The fee machine's `FeeShellResult::Deployment.read`.
+        var wire: [String: Any] {
+            switch self {
+            case .deployed(let deployed): ["type": "read", "deployed": deployed]
+            case .unread(let rateLimited): ["type": "unreachable", "rate_limited": rateLimited]
+            case .internal(let kind): ["type": "internal", "kind": kind]
+            }
+        }
     }
 
     /// `eth_getCode` != `0x`; `nil` when the chain could not be asked.
@@ -869,10 +925,16 @@ final class RelayClient {
     }
 
     /// `isDeployed`, saying why there is no answer when there is none.
-    func deploymentRead(chainId: Int, address: String) async -> DeploymentRead {
+    ///
+    /// `fresh`: a retry after a failure (the fee machine's `fresh`) — read the
+    /// chain again rather than answer from what is held.
+    func deploymentRead(chainId: Int, address: String, fresh: Bool = false) async -> DeploymentRead {
+        // Not an address: there is nothing to ask a chain, and nothing a chain
+        // did wrong (issue #483).
+        guard Self.isAddress(address) else { return .internal(kind: "deployment: not_an_address") }
         let key = "\(chainId):\(address.lowercased())"
-        if deployedAccounts.contains(key) { return .deployed(true) }
-        return await deploymentFlights.run(key) {
+        if !fresh, deployedAccounts.contains(key) { return .deployed(true) }
+        return await deploymentFlights.run(fresh ? key + ":fresh" : key) {
             let outcome = await self.port.call(
                 chainId: chainId, method: "eth_getCode", params: [address, "latest"], kind: "rpc"
             )
@@ -910,6 +972,11 @@ final class RelayClient {
     func bundlerBaseForTest(chainId: Int) async -> String? {
         await port.bundlerBase(chainId: chainId)
     }
+
+    /// The request pool this client reads through, when it is the app's
+    /// (`PoolRelayPort`) — for the check that the signing path and the app
+    /// share one (issue #483).
+    var boundPool: RpcPool? { (port as? PoolRelayPort)?.pool }
 
     /// What `network_admin`'s `clear_bundler_cache` means on this client.
     func clearCaches() {

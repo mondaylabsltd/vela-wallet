@@ -178,11 +178,17 @@ struct FeedItemWire: Decodable, Equatable {
     /// `usdValue` is a price the core knows (spec 097 N7); `false` draws no
     /// fiat at all — unknown is not "$0.00".
     var priced = false
+    /// The row's own figure is money (PR 2, the core's one masking rule): an
+    /// amount, a batch count, a capped allowance → `true`; an unlimited
+    /// allowance or a figureless signature/call → `false`. While the balance
+    /// is hidden the row masks its figure exactly when this says so. Absent
+    /// on the wire reads `true` — masking too much never shows a figure.
+    var figureMaskable = true
 
     private enum CodingKeys: String, CodingKey {
         case id, direction, counterparty, alias, value, symbol, decimals, usdValue, chainId
         case timestamp, dayStartMs, txHash, batch, kind, status, site, counterpartyRole
-        case dapp, subtitle, priced
+        case dapp, subtitle, priced, figureMaskable
     }
 }
 
@@ -211,7 +217,8 @@ extension FeedItemWire {
             counterpartyRole: try c.decode(FeedCounterpartyRoleWire.self, forKey: .counterpartyRole),
             dapp: try c.decodeIfPresent(FeedDappWire.self, forKey: .dapp),
             subtitle: try c.decodeIfPresent([FeedLineWire].self, forKey: .subtitle) ?? [],
-            priced: try c.decodeIfPresent(Bool.self, forKey: .priced) ?? false
+            priced: try c.decodeIfPresent(Bool.self, forKey: .priced) ?? false,
+            figureMaskable: try c.decodeIfPresent(Bool.self, forKey: .figureMaskable) ?? true
         )
     }
 }
@@ -519,9 +526,13 @@ struct FeedViewWire: Decodable, Equatable {
     /// on every network, newest first, their second line the status, the
     /// network and the day. Empty when no contact is open.
     var contactRows: [FeedItemWire] = []
+    /// The balance is hidden (PR 2) — the feed's OWN flag: History, a
+    /// contact's page, the transfer and dApp details mask on it, never on a
+    /// flag threaded from the balance machine. Absent reads `false`.
+    var hidden = false
 
     private enum CodingKeys: String, CodingKey {
-        case rows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows
+        case rows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden
     }
 }
 
@@ -537,7 +548,8 @@ extension FeedViewWire {
             toast: try c.decodeIfPresent(FeedToastWire.self, forKey: .toast),
             historyEmptyKey: try c.decodeIfPresent(String.self, forKey: .historyEmptyKey) ?? "history.emptyTitle",
             homeEmptyKey: try c.decodeIfPresent(String.self, forKey: .homeEmptyKey) ?? "home.emptyNoActivity",
-            contactRows: try c.decodeIfPresent([FeedItemWire].self, forKey: .contactRows) ?? []
+            contactRows: try c.decodeIfPresent([FeedItemWire].self, forKey: .contactRows) ?? [],
+            hidden: try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
         )
     }
 }

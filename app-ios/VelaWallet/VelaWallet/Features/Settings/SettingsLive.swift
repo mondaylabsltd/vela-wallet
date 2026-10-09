@@ -585,6 +585,7 @@ enum SettingsLive {
     static func withAccounts(
         session: SessionView,
         balances: [BalanceCacheEntryWire],
+        hidden: Bool = false,
         display: WalletLive.Display,
         on model: SettingsScreenModel,
         loc: Loc
@@ -615,7 +616,9 @@ enum SettingsLive {
                 name: row.account.name,
                 addressDisplay: shortenAddress(address),
                 addressFull: address,
-                amount: usd.map(money) ?? "",
+                // Hidden (PR 2, `switcher.hidden`): the mask on every row —
+                // never a figure, never a blank that reads as "unknown".
+                amount: hidden ? WalletFixtures.mask : (usd.map(money) ?? ""),
                 selected: index == session.activeIndex
             )
         }
@@ -627,7 +630,9 @@ enum SettingsLive {
         copy.accountsSheet.summary =
             loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
             + loc.t(k.accountsTotal, vars: [
-                "amount": money(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
+                "amount": hidden
+                    ? WalletFixtures.mask
+                    : money(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
             ])
         return copy
     }

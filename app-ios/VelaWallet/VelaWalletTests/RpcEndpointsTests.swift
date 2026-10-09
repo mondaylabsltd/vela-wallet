@@ -159,25 +159,22 @@ struct RpcEndpointsTests {
         #expect(RpcEndpoints.loadBans(store: store).isEmpty)
     }
 
-    /// A call before `boot()` is REFUSED, not queued.
+    /// A call before `boot()` BOOTS the pool and is answered — never refused
+    /// and never left hanging (issue #483).
     ///
-    /// `CoreStore` drops events sent before a machine's first one — on purpose,
-    /// since every machine reads its stores on boot — so a routed call made
-    /// first would wait on a continuation nothing will ever resume. That is not
-    /// a slow call, it is a hang for the life of the process: a spinner with no
-    /// explanation on screen, and a test suite that never finishes. This suite
-    /// found it that way.
-    @Test func aCallBeforeBootIsRefusedRatherThanHanging() async {
-        let (store, accounts, _) = fresh()
+    /// `CoreStore` drops events sent before a machine's first one, so a call
+    /// queued unbooted would wait on a continuation nothing resumes. It used
+    /// to be refused instead (`before_boot`), and every caller read that as
+    /// "the chain did not answer": the dApp sheet's fee on a pool a re-run
+    /// root had built said "Can't reach Polygon" until the app was killed.
+    /// `boot()` is synchronous and needs only the store, so the pool boots
+    /// itself and routes the call (`Issue483Tests` holds the routing).
+    @Test func aCallBeforeBootBootsThePool() async {
+        let (store, accounts, defaults) = fresh()
+        defaults.set(#"{"ethereumDataURL":"https://127.0.0.1:1"}"#, forKey: VelaStore.Key.serviceEndpoints)
         let pool = RpcPool(store: store, accounts: accounts)
         #expect(!pool.booted)
-
-        let outcome = await pool.call(chainId: 100, method: "eth_blockNumber")
-        guard case .failed(let rateLimited) = outcome else {
-            Issue.record("an unbooted pool answered \(outcome)")
-            return
-        }
-        #expect(!rateLimited, "nothing was asked, so nothing throttled us")
-        #expect(await pool.bestRpcUrl(chainId: 100) == nil)
+        _ = await pool.bestRpcUrl(chainId: 999_483_003)
+        #expect(pool.booted, "the pool did not boot itself on its first question")
     }
 }

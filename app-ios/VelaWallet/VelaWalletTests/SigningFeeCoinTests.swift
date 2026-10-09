@@ -109,7 +109,7 @@ struct SigningFeeCoinTests {
             spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
             store: store,
             // Never booted: a read through it fails closed at once.
-            pool: RpcPool(store: store, accounts: AccountStore()),
+            pool: RpcPool(store: store, accounts: AccountStore(), offline: true),
             ports: SigningController.Ports(
                 nativeSymbol: { _ in "POL" },
                 knownChains: { [137] },

@@ -137,9 +137,17 @@ final class RpcPool {
     private var pending: [String: Pending] = [:]
     private var nextCallId = 0
 
-    init(store: VelaStore, accounts: AccountStore) {
+    /// A pool with no network: every call is answered `.failed` at once and
+    /// nothing leaves the machine — what a phone with no network answers.
+    /// For tests of the callers' fail-closed paths, which used to get this
+    /// shape from a pool nobody booted (issue #483 removed that refusal).
+    /// Chosen at construction; never a state a pool falls into.
+    private let offline: Bool
+
+    init(store: VelaStore, accounts: AccountStore, offline: Bool = false) {
         self.store = store
         self.accounts = accounts
+        self.offline = offline
         self.core = CoreStore(
             bridge: RpcPoolCore(),
             perform: { [weak self] operation in
@@ -158,13 +166,14 @@ final class RpcPool {
     ///
     /// A call before that would be dropped by `CoreStore` (events before boot
     /// are, on purpose) and its continuation would never resume — an `await`
-    /// that hangs for the life of the process. A test suite found exactly that
-    /// by forgetting one `boot()`; a screen would find it as a spinner nobody
-    /// can explain.
+    /// that hangs for the life of the process. So every entry point boots
+    /// first (`bootForCall`).
     private(set) var booted = false
 
     /// Read the persisted ban map and hand it to the core. Once: a second
     /// call would hand the core a stale copy of bans it has since changed.
+    /// Synchronous and needing only the store, so a pool can never be "not
+    /// ready" for longer than this call.
     func boot() {
         guard !booted else { return }
         booted = true
@@ -172,6 +181,25 @@ final class RpcPool {
             "type": "bans_loaded",
             "entries": RpcEndpoints.loadBans(store: store),
         ]))
+    }
+
+    /// A call reached a pool nobody booted: boot it now and answer the call,
+    /// instead of refusing it (issue #483).
+    ///
+    /// It used to refuse — `before_boot`, a `.failed` with nothing sent —
+    /// and that refusal was read by every caller as "the chain did not
+    /// answer". A pool built a second time by a re-run `RootView.init` was
+    /// never booted, so the dApp sheet's fee said "Can't reach Polygon" and
+    /// its retry asked the same dead pool again until the app was killed.
+    /// The app's own pool is booted as the graph is built (`AppGraph`), so
+    /// this is a wiring fault when it happens: logged as `late_boot`, the
+    /// report's ring keeps it, and the call is answered all the same — as
+    /// Android, the web and the desktop always have (their cores route before
+    /// `BansLoaded`).
+    private func bootForCall(_ what: String) {
+        guard !booted else { return }
+        VelaLog.failure(.rpc, kind: "late_boot", what)
+        boot()
     }
 
     // MARK: - The one thing callers want
@@ -199,12 +227,11 @@ final class RpcPool {
         params: [Any] = [],
         kind: String = "rpc"
     ) async -> RpcCallResult {
-        // Fail closed rather than hang. The caller can retry after boot; a
-        // continuation that never resumes cannot. Nothing was sent.
-        guard booted else {
-            VelaLog.failure(.rpc, kind: "before_boot", "method=\(method) chain=\(chainId)")
+        if offline {
             return RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
         }
+        // Never refused for want of a boot (issue #483): boot, then route.
+        bootForCall("method=\(method) chain=\(chainId)")
         let callId = mintCallId()
         let result = await withCheckedContinuation { continuation in
             var entry = Pending(method: method, params: params)
@@ -244,7 +271,7 @@ final class RpcPool {
     /// to the relay as `x-vela-rpc-url` for up to an hour, so a stale one keeps
     /// sending traffic to the endpoint the person just replaced.
     func invalidate(chainId: Int?) {
-        guard booted else { return }
+        bootForCall("invalidate")
         core.dispatch(CoreJSON.string(
             chainId.map { ["type": "refresh_chain", "chain_id": $0] }
                 ?? ["type": "invalidate_all"]
@@ -254,7 +281,8 @@ final class RpcPool {
     /// The best endpoint for a chain, as the core scores it — for the callers
     /// that need a URL rather than an answer (a WebSocket, a link).
     func bestRpcUrl(chainId: Int) async -> String? {
-        guard booted else { return nil }
+        if offline { return nil }
+        bootForCall("best_rpc_url chain=\(chainId)")
         let callId = mintCallId()
         return await withCheckedContinuation { continuation in
             var entry = Pending(method: "", params: [])
@@ -284,7 +312,8 @@ final class RpcPool {
     /// `nil` means every bundler endpoint is banned or the pool is empty — the
     /// caller falls back to the built-in base.
     func bundlerBase(chainId: Int) async -> String? {
-        guard booted else { return nil }
+        if offline { return nil }
+        bootForCall("bundler_base chain=\(chainId)")
         let callId = mintCallId()
         return await withCheckedContinuation { continuation in
             var entry = Pending(method: "", params: [])
@@ -307,10 +336,12 @@ final class RpcPool {
 
     /// Every pool is stale — after a network is added, edited or removed.
     func invalidateAll() {
+        bootForCall("invalidate_all")
         core.dispatch(CoreJSON.string(["type": "invalidate_all"]))
     }
 
     func refresh(chainId: Int) {
+        bootForCall("refresh chain=\(chainId)")
         core.dispatch(CoreJSON.string(["type": "refresh_chain", "chain_id": chainId]))
     }
 

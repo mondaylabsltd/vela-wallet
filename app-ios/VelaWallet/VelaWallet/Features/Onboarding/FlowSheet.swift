@@ -99,7 +99,8 @@ struct FlowSheet: View {
     static func badge(for type: String) -> BadgeVariant {
         switch type {
         case "recover_offer": .info
-        case "not_discoverable": .warning
+        // A lookup that did not happen is a warning, not an offer.
+        case "not_discoverable", "registry_unreachable": .warning
         default: .error
         }
     }

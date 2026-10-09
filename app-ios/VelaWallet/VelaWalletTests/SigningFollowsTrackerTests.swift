@@ -113,7 +113,7 @@ struct SigningFollowsTrackerTests {
         let controller = SigningController(
             wallet: (address: fixture.account, credentialId: fixture.credentialHex),
             relay: relay, accounts: accounts, spine: spine, store: store,
-            pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
+            pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults), offline: true),
             ports: SigningController.Ports(
                 respond: { _, _, payload, _ in seen.answers.append(payload) },
                 trackSubmitted: { submission in

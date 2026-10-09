@@ -75,7 +75,7 @@ struct ContactPickerTests {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
         let accounts = AccountStore(defaults: defaults)
-        let pool = RpcPool(store: store, accounts: accounts)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
         let accountPort = ScriptedAccounts()
         let held = try balance()
         let nets = try networks()

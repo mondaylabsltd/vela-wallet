@@ -253,6 +253,9 @@ final class OnboardingExecutor {
                 "type": "registry_key_status",
                 "registered": status.registered,
                 "unit_ids": status.unitIds.map { NSNumber(value: $0) },
+                // Who vouched — the rebuild is offered only on Gnosis's "no
+                // record"; an answer nobody checked fails closed.
+                "verified_by": status.verifiedBy,
             ]
 
         case "registry_query_unit":

@@ -186,14 +186,14 @@ struct ReceiveTests {
     /// failure would otherwise read as "everything was withdrawn", and the next
     /// successful fetch would read as a deposit of everything. That protection
     /// only works if the shell is honest about failing, which is what this
-    /// pins. The pool is left unbooted, so every read fails without a packet
+    /// pins. The pool is offline, so every read fails without a packet
     /// leaving the machine.
     @Test func aSweepWhereEveryChainFailedSaysSoRatherThanReportingAnEmptyWallet() async {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
         let watcher = ReceiveWatchStore(
             store: store,
-            pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
+            pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults), offline: true),
             held: HeldTokens()
         )
         watcher.watch(address: golden)

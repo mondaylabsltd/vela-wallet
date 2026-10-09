@@ -22,6 +22,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum SendLive {
 
@@ -697,7 +698,9 @@ enum SendLive {
         display: WalletLive.Display, loc: Loc, speed: SpeedInputs? = nil,
         networks: WalletNetworks = .builtin
     ) -> FeeRowModel {
-        let busy = view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
+        // A figure switched to another coin is measured again before it can
+        // be confirmed (PR 2 §4): the row stays measuring until it has.
+        let busy = view.estimatingGas || view.feeBusy || (fee?.busy ?? false) || (fee?.provisional ?? false)
         // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): on
         // the path where a pick re-measures, the estimate in hand still belongs
         // to the speed just left — the send machine keeps it across a tier
@@ -732,7 +735,14 @@ enum SendLive {
             // out and nothing said so. Not while a fresh measurement is out, and
             // not over a row with no figure of its own on it.
             staleNote: (speed != nil && fee?.stale == true && !busy && text != nil)
-                ? loc.t("send.feeStale") : nil
+                ? loc.t("send.feeStale") : nil,
+            // The fee machine's failure, in its own words (issue #483): the
+            // chain's name for a chain read, Vela's own fault for an internal
+            // one — never a blank "—" with nothing said. Asked again on the
+            // core's schedule and by the refresh (a real new read).
+            failNote: busy || text != nil ? nil : fee?.failed
+                .flatMap { feeFailureReasonKey(failure: $0) }
+                .map { loc.t($0, vars: ["chain": view.selectedToken.flatMap { networks.meta($0.chainId)?.displayName } ?? ""]) }
         )
     }
 
@@ -1112,7 +1122,11 @@ enum SendLive {
                 ? loc.t("send.recipientTokenContract")
                 : !view.splitMode && view.recipientRisk?.firstTime == true
                     ? loc.t("componentsUi.signing.firstTimeTag") : nil,
-            cta: live.cta
+            cta: live.cta,
+            // PR 2 §3: "Waiting for your last transaction on this network…" —
+            // the core's key, one line, no timer; it does not move with the
+            // fee's busy state.
+            heldNote: view.previousPending.map { loc.t($0.key) }
         )
     }
 
@@ -1185,6 +1199,9 @@ enum SendLive {
         // Spec 102: not the network's failure — this account cannot sign
         // here, and the core says why.
         case "venue_blocked": return view.txVenueBlock?.text(loc) ?? loc.t("send.txErrorGeneric")
+        // PR 2 §3: the relay holds this account's nonce for an earlier op —
+        // nothing was sent; Try again sends once it has landed.
+        case "previous_pending": return loc.t("componentsUi.signing.confirmBlock.previousPending")
         default: return view.txStatus == "signing" ? loc.t("send.txPreparingBiometric") : nil
         }
     }
@@ -1448,6 +1465,15 @@ enum SendLive {
             // on this client's wire and read by no Swift at all until 058.
             // Only the fee refusal: a fee hold survives into a later failure,
             // and "the fee rose" over a transfer that reverted is untrue.
+            //
+            // PR 2 §3: a refusal is told by its REASON — the core's key (the
+            // fee words only for a fee refusal; "another transaction went
+            // first" for a spent nonce; else "the network refused it, nothing
+            // was sent"). Nothing was sent, so no revert hint follows.
+            if let key = view.receipt?.refusalKey {
+                captions = [loc.t(key)]
+                break
+            }
             if view.receipt?.holdReason == "fee_rejected" {
                 captions = [loc.t("send.txRejectedFees")]
                 break

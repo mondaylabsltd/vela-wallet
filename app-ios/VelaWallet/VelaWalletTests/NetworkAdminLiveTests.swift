@@ -58,7 +58,7 @@ struct NetworkAdminLiveTests {
         let shelf = VelaStore(defaults: defaults)
         let accounts = AccountStore(defaults: defaults)
         let store = SettingsStore(store: shelf, accounts: accounts,
-                                  pool: RpcPool(store: shelf, accounts: accounts))
+                                  pool: RpcPool(store: shelf, accounts: accounts, offline: true))
         store.open()
         await settle(until: { store.isLoaded })
 
@@ -84,7 +84,7 @@ struct NetworkAdminLiveTests {
         let shelf = VelaStore(defaults: defaults)
         let accounts = AccountStore(defaults: defaults)
         let store = SettingsStore(store: shelf, accounts: accounts,
-                                  pool: RpcPool(store: shelf, accounts: accounts))
+                                  pool: RpcPool(store: shelf, accounts: accounts, offline: true))
         store.open()
         await settle(until: { store.isLoaded })
         #expect(store.isLoaded, "the store never loaded")

@@ -216,16 +216,20 @@ enum FlowsLive {
     /// stored USD string. A folded batch row has no single record; it falls
     /// back to the item, which is what the core hands the shell for exactly
     /// that case.
+    ///
+    /// `hidden`: the feed's own privacy flag (`FeedView.hidden`, PR 2) — the
+    /// figure and its worth are the mask; who, where and when stay.
     static func txDetail(
         _ item: FeedItemWire,
         record: FeedTxRecordWire?,
         on model: TxDetailModel,
         loc: Loc,
+        hidden: Bool = false,
         readRequest: @escaping (String) -> String? = { _ in nil },
         networks: WalletNetworks = .builtin
     ) -> TxDetailModel {
         if let dapp = item.dapp {
-            return dappDetail(item, dapp: dapp, record: record, on: model, loc: loc,
+            return dappDetail(item, dapp: dapp, record: record, on: model, loc: loc, hidden: hidden,
                               readRequest: readRequest, networks: networks)
         }
         let incoming = item.direction == .in
@@ -296,14 +300,15 @@ enum FlowsLive {
             closeLabel: model.closeLabel,
             amount: dapp && item.value == nil
                 ? ""
-                : (incoming ? "+" : "\u{2212}")
-                    + WalletLive.compactAmount(item.value, batch: item.batch)
+                : (hidden && item.figureMaskable
+                    ? WalletFixtures.mask
+                    : (incoming ? "+" : "\u{2212}") + WalletLive.compactAmount(item.value, batch: item.batch))
                     + (item.symbol.isEmpty ? "" : " \(item.symbol)"),
             // The STORED figure, not a recomputed one: it is what this wallet
             // recorded the transfer was worth when it happened, and re-pricing
             // it today would quietly restate history. None at all when the
             // core knows no price (spec 097 N7: unknown is not "$0.00").
-            fiat: item.priced ? (record?.usd.map { "≈ \($0)" } ?? "") : "",
+            fiat: Self.maskedFiat(item.priced ? (record?.usd.map { "≈ \($0)" } ?? "") : "", hidden: hidden),
             positive: incoming,
             facts: facts,
             viewOnExplorer: hash.isEmpty ? nil : model.viewOnExplorer,
@@ -328,19 +333,28 @@ enum FlowsLive {
     /// instead. "Technical details" is collapsed, and the request the record
     /// kept is read from the store (`readRequest`, by record id) only when it
     /// is opened.
+    ///
+    /// `hidden` (PR 2): every figure in the detail masks — the header's, what
+    /// came back, the balance changes, a capped allowance — and the unlimited
+    /// allowance stays said: it is a risk to see, not an amount.
     static func dappDetail(
         _ item: FeedItemWire,
         dapp: FeedDappWire,
         record: FeedTxRecordWire?,
         on model: TxDetailModel,
         loc: Loc,
+        hidden: Bool = false,
         readRequest: @escaping (String) -> String?,
         networks: WalletNetworks = .builtin
     ) -> TxDetailModel {
-        let money = WalletLive.dappFigure(item, dapp: dapp)
-        let allowance = money == nil ? dapp.allowance.flatMap { WalletLive.allowanceText($0, loc: loc) } : nil
+        let money = WalletLive.dappFigure(item, dapp: dapp).map { hidden ? WalletFixtures.mask : $0 }
+        let allowance = money == nil
+            ? dapp.allowance.flatMap { WalletLive.allowanceText($0, loc: loc) }.map { text in
+                hidden && !text.unlimited ? (amount: WalletFixtures.mask, unit: text.unit, unlimited: false) : text
+            }
+            : nil
         let backText = dapp.received.map { change in
-            [WalletLive.changeFigure(change, hidden: false), change.symbol]
+            [WalletLive.changeFigure(change, hidden: hidden), change.symbol]
                 .filter { !$0.isEmpty }.joined(separator: " ")
         }
         // Spec 097 N5: nothing left and something came back (a borrow) —
@@ -360,9 +374,13 @@ enum FlowsLive {
             amount: amount.filter { !$0.isEmpty }.joined(separator: " "),
             // The STORED figure, as for any transfer — never re-priced; none
             // when the core knows no price (spec 097 N7).
-            fiat: money == nil || !item.priced ? "" : (record?.usd.map { "≈ \($0)" } ?? ""),
+            fiat: Self.maskedFiat(
+                money == nil || !item.priced ? "" : (record?.usd.map { "≈ \($0)" } ?? ""), hidden: hidden
+            ),
             positive: leadsWithBack && dapp.received?.direction == .in,
-            facts: dapp.facts.compactMap { fact($0, item: item, dapp: dapp, loc: loc, networks: networks) },
+            facts: dapp.facts.compactMap {
+                fact($0, item: item, dapp: dapp, loc: loc, hidden: hidden, networks: networks)
+            },
             viewOnExplorer: hash.isEmpty ? nil : model.viewOnExplorer,
             deleteLabel: loc.t("history.deleteRecord"),
             deleteQuiet: !dapp.offChain && (item.status == .pending || item.status == .unknown),
@@ -394,7 +412,7 @@ enum FlowsLive {
     /// fact this build has never heard of.
     private static func fact(
         _ fact: FeedFactWire, item: FeedItemWire, dapp: FeedDappWire, loc: Loc,
-        networks: WalletNetworks
+        hidden: Bool = false, networks: WalletNetworks
     ) -> FactRowModel? {
         switch fact {
         case .site(let site):
@@ -410,9 +428,10 @@ enum FlowsLive {
             return partyFact(loc.t("componentsUi.signing.labelSpender"), address, name, loc: loc)
         case .spendingCap(let allowance):
             guard let cap = WalletLive.allowanceText(allowance, loc: loc) else { return nil }
+            let amount = hidden && !cap.unlimited ? WalletFixtures.mask : cap.amount
             return FactRowModel(
                 label: loc.t("componentsUi.signingApprove.spendingCap"),
-                value: [cap.amount, cap.unit].filter { !$0.isEmpty }.joined(separator: " "),
+                value: [amount, cap.unit].filter { !$0.isEmpty }.joined(separator: " "),
                 danger: cap.unlimited
             )
         case .expires(let at):
@@ -425,7 +444,7 @@ enum FlowsLive {
             let lines = dapp.changes.map { change in
                 BalanceDeltaRow(
                     symbol: change.verified ? change.symbol : loc.t("componentsUi.signing.balanceUnverifiedToken"),
-                    delta: WalletLive.changeFigure(change, hidden: false),
+                    delta: WalletLive.changeFigure(change, hidden: hidden),
                     tone: !change.verified ? .caution : (change.direction == .in ? .success : .neutral)
                 )
             }
@@ -437,6 +456,12 @@ enum FlowsLive {
             // Technical lines live under their own disclosure.
             return nil
         }
+    }
+
+    /// A stored worth, or the mask while the balance is hidden — and nothing
+    /// where there was nothing to hide.
+    static func maskedFiat(_ fiat: String, hidden: Bool) -> String {
+        hidden && !fiat.isEmpty ? WalletFixtures.mask : fiat
     }
 
     /// One of the core's technical lines, labelled (spec 093).
@@ -564,12 +589,16 @@ enum FlowsLive {
 
     /// One holding, opened from an assets row — with the transfers of that
     /// token, from the same feed the history shows.
+    ///
+    /// `hidden` (PR 2): the balance, its worth and the transfers' figures are
+    /// the mask; the token's own facts (its price, contract, network) stay.
     static func tokenDetail(
         _ token: BalanceTokenWire,
         feed: FeedViewWire?,
         display: WalletLive.Display,
         on model: TokenDetailModel,
         loc: Loc,
+        hidden: Bool = false,
         networks: WalletNetworks = .builtin
     ) -> TokenDetailModel {
         let chain = networks.meta(token.chainId)?.displayName ?? ""
@@ -599,7 +628,7 @@ enum FlowsLive {
         // same ticker on two networks is two different assets.
         let rows = (feed.map(items) ?? [])
             .filter { $0.chainId == token.chainId && $0.symbol == token.symbol }
-            .map { WalletLive.activityRow($0, loc: loc, hidden: false, networks: networks) }
+            .map { WalletLive.activityRow($0, loc: loc, hidden: hidden, networks: networks) }
 
         return TokenDetailModel(
             mark: TokenMarkModel.of(
@@ -611,10 +640,10 @@ enum FlowsLive {
             symbol: token.symbol,
             chain: chain,
             closeLabel: model.closeLabel,
-            balance: "\(WalletLive.compactAmount(token.balance)) \(token.symbol)",
-            fiat: token.priceUsd.map { price in
+            balance: "\(hidden ? WalletFixtures.mask : WalletLive.compactAmount(token.balance)) \(token.symbol)",
+            fiat: maskedFiat(token.priceUsd.map { price in
                 money((Double(token.balance) ?? 0) * price * display.rate, display)
-            } ?? "",
+            } ?? "", hidden: hidden),
             receive: model.receive,
             send: model.send,
             facts: facts,

@@ -49,6 +49,10 @@ struct TrackSubmission: Equatable {
     /// the entry is acknowledged — never "may have been sent" — and a
     /// premature "not sent" reached while the POST was still out yields.
     var admitted = false
+    /// The account that signed it (PR 2): what makes the op one this account
+    /// must wait for on this chain (`in_flight_ops`). `nil` from a caller
+    /// that does not know.
+    var sender: String? = nil
 }
 
 @MainActor
@@ -56,6 +60,13 @@ struct TrackSubmission: Equatable {
 final class TrackerStore {
 
     private(set) var view: TrackViewWire?
+    /// The operations holding their account's nonce (PR 2 §3): the core's
+    /// `in_flight_ops` over its OWN view JSON — never a view re-encoded from
+    /// `TrackViewWire`, whose entries carry neither `sender` nor `stalled`
+    /// (with them gone the list is empty, or the hold never times out). A
+    /// JSON array, set before `onView` and the followers hear the view, and
+    /// forwarded on every render to the send and signing machines.
+    private(set) var inFlightOpsJson = "[]"
     /// Every view, to whoever else watches the same operations — the send
     /// machine's receipt (spec 082: its verdict comes from here, through the
     /// core's `sendReceiptOutcomeOf`).
@@ -99,7 +110,9 @@ final class TrackerStore {
             bridge: TxTrackerCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.commit(view) },
-            onFault: { VelaLog.failure(.tracker, kind: "tx_tracker_fault", VelaLog.error($0)) }
+            onFault: { VelaLog.failure(.tracker, kind: "tx_tracker_fault", VelaLog.error($0)) },
+            // The view as the core wrote it, for `in_flight_ops` (PR 2).
+            keepsJson: true
         )
     }
 
@@ -123,6 +136,8 @@ final class TrackerStore {
             "maybe_sent": submission.maybeSent,
             "submit_block": submission.submitBlock.map { $0 as Any } ?? NSNull(),
             "admitted": submission.admitted,
+            // Optional on the wire: an unknown signer is simply not sent.
+            "sender": submission.sender.map { $0 as Any } ?? NSNull(),
         ])
         if !core.boot(event) { core.dispatch(event) }
     }
@@ -144,6 +159,7 @@ final class TrackerStore {
 
     private func commit(_ view: TrackViewWire) {
         self.view = view
+        inFlightOpsJson = core.json.map { inFlightOps(trackViewJson: $0) } ?? "[]"
         onView?(view)
         followers.removeAll { $0.owner.value == nil }
         for follower in followers { follower.onView(view) }

@@ -114,11 +114,14 @@ enum FlowFixtures {
         func flow(_ code: String, _ view: CreateView) {
             out.append(StateFixture(group: "Create", code: code, fixture: .flow(view)))
         }
-        func sheet(_ code: String, _ type: String, detail: String? = nil, confirmable: Bool = false) {
+        func sheet(
+            _ code: String, _ type: String, detail: String? = nil, confirmable: Bool = false,
+            local: Bool = false
+        ) {
             out.append(StateFixture(
                 group: "Failures",
                 code: code,
-                fixture: .sheet(kind: PromptKind(type: type, detail: detail), confirmable: confirmable)
+                fixture: .sheet(kind: PromptKind(type: type, detail: detail, local: local), confirmable: confirmable)
             ))
         }
 
@@ -203,6 +206,10 @@ enum FlowFixtures {
         sheet("incompatible", "incompatible_create")
         sheet("incompatible · login", "incompatible_login")
         sheet("recover offer", "recover_offer", confirmable: true)
+        // PR 2: the registry could not be asked — a free retry, no new
+        // passkey; and the same when nothing left the device.
+        sheet("registry unreachable", "registry_unreachable", confirmable: true)
+        sheet("registry unreachable · offline", "registry_unreachable", confirmable: true, local: true)
         sheet("recover failed", "recover_failed")
         // The two prompts that carry a detail string are driven THROUGH the
         // refinement rather than around it, so this list is also a check on it:

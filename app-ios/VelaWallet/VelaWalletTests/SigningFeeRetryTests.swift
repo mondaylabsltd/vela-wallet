@@ -17,6 +17,13 @@
 //  "can't reach Vela" — the words are the core's (`feeFailureReasonKey`), and
 //  the schedule is 3 s, 6 s, then every 8 s.
 //
+//  Issue #483: the account read is the fee MACHINE's (`read_deployment`), so
+//  its failure is in the fee view — the row, the footer (the core's gate) and
+//  the retry name the same cause — and a read that never left the app is
+//  `internal`, never "Can't reach <chain>". The shell's own "quote could not
+//  start" state is gone: its footer said "Working out the network fee…" under
+//  a row that said "Tap to retry".
+//
 
 import Foundation
 import os
@@ -121,9 +128,15 @@ struct SigningFeeRetryTests {
             clear: clear(.clearSign),
             fee: fee(failed: FeeFailureText.chainRead(rateLimited: false).text), context: context()
         )
-        #expect(warning(unreachable) == loc.t("explore.chainDown", vars: ["chain": "Gnosis"]))
+        #expect(warning(unreachable) == loc.t("componentsUi.gas.reasonChainDown", vars: ["chain": "Gnosis"]))
         #expect(warning(unreachable)?.contains("Gnosis") == true)
         #expect(warning(unreachable) != loc.t("componentsUi.gas.reasonQuote"))
+        // Issue #483: a read that never left the app is Vela's fault, said
+        // as that — never the chain's name.
+        let internalFault = SigningLive.feeModel(clear: clear(.clearSign), fee: fee(failed: "internal"), context: context())
+        #expect(warning(internalFault) == loc.t("componentsUi.gas.reasonInternal"))
+        #expect(warning(internalFault)?.contains("Gnosis") == false)
+        #expect(tappable(internalFault))
     }
 
     /// The fee view takes `FeeFailure`'s object form (RJ13) — a string
@@ -206,122 +219,103 @@ struct SigningFeeRetryTests {
         #expect(SigningController.requoteDelay(fee(), attempt: 1, allowed: true) == nil, "a quote needs no retry")
     }
 
-    /// The quote could not start: the row says the chain's node is why
-    /// (RJ13) — never Vela — and a tap asks again.
-    @Test func aQuoteThatCouldNotStartSaysWhy() {
-        var ctx = context()
-        ctx.feeStartFailure = FeeFailureText.chainRead(rateLimited: false).text
-        let down = SigningLive.feeModel(clear: clear(.clearSign), fee: nil, context: ctx)
-        #expect(warning(down) == loc.t("explore.chainDown", vars: ["chain": "Gnosis"]))
-        #expect(tappable(down))
-        if case .onchain(_, let value, _, _, _) = down {
-            #expect(value == loc.t("componentsUi.gas.estimateFailed"))
-            #expect(value != loc.t("componentsUi.gas.estimating"))
-        }
-        // No failure: still estimating, no reason, nothing to tap.
-        let waiting = SigningLive.feeModel(clear: clear(.clearSign), fee: nil, context: context())
-        #expect(warning(waiting) == nil)
-        #expect(!tappable(waiting))
-    }
-
-    /// The deployment read fails; the controller names the core's failure,
-    /// and two refresh taps leave exactly one loop asking again.
-    @Test func aRefreshTapLeavesOneLoop() async {
+    private func controller(
+        _ port: RelayPort, chainId: Int = 100, timers: FeeStore.Timers = .wallClock
+    ) -> SigningController {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accounts = ScriptedAccounts()
+        let controller = SigningController(
+            wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
+            relay: relay, accounts: accounts,
+            spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
+            store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults), offline: true),
+            ports: SigningController.Ports(knownChains: { [chainId] }),
+            feeTimers: timers
+        )
+        controller.open(SigningController.Incoming(
+            id: "r1", method: "eth_sendTransaction",
+            paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x1"}]"#,
+            origin: "https://x.test", transportId: "tab-1", chainId: chainId
+        ))
+        return controller
+    }
+
+    /// The account read failed: it is the FEE's failure (issue #483) — the
+    /// row says "Tap to retry" with the chain's reason, and the footer, the
+    /// core's gate over the same fee view, says the fee failed. Before, the
+    /// failure was the shell's and the gate never saw it: "Working out the
+    /// network fee…" under "Tap to retry".
+    @Test func aFailedAccountReadIsTheFeesOwnFailureOnTheRowAndTheFooter() async {
         let port = ScriptedRelayPort()   // eth_getCode unscripted: the chain is silent
-        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let accounts = ScriptedAccounts()
-        let controller = SigningController(
-            wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
-            relay: relay, accounts: accounts,
-            spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
-            store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
-            ports: SigningController.Ports(knownChains: { [100] })
-        )
-        controller.open(SigningController.Incoming(
-            id: "r1", method: "eth_sendTransaction",
-            paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x1"}]"#,
-            origin: "https://x.test", transportId: "tab-1", chainId: 100
-        ))
+        let controller = controller(port)
         let unreachable = FeeFailureText.chainRead(rateLimited: false).text
-        await Wait.until { controller.quoteStartFailure == unreachable }
-        #expect(controller.fee == nil)
+        await Wait.until { controller.fee?.failed == unreachable }
+        #expect(controller.fee?.failed == unreachable)
 
-        controller.refreshFee()
-        controller.refreshFee()
+        let row = SigningLive.feeModel(clear: clear(.clearSign), fee: controller.fee, context: context())
+        if case .onchain(_, let value, _, _, _) = row {
+            #expect(value == loc.t("componentsUi.gas.estimateFailed"))
+        }
+        #expect(warning(row) == loc.t("componentsUi.gas.reasonChainDown", vars: ["chain": "Gnosis"]))
+        #expect(tappable(row))
+        let footer = controller.confirmState
+        #expect(!footer.enabled)
+        #expect(footer.key == "componentsUi.signing.confirmBlock.feeFailed",
+                "the footer names another cause than the row: \(String(describing: footer.key))")
+        #expect(footer.key != "componentsUi.signing.confirmBlock.feeMeasuring")
+        controller.swipeDismissed()
+    }
+
+    /// Every retry is a real read: a refresh after the failure asks the
+    /// chain for the account again (`fresh`), it does not replay the failure.
+    @Test func aRefreshAfterAFailedAccountReadReadsAgain() async {
+        let port = ScriptedRelayPort()
+        let controller = controller(port)
+        let unreachable = FeeFailureText.chainRead(rateLimited: false).text
+        await Wait.until { controller.fee?.failed == unreachable }
         let reads = { port.calls.filter { $0 == "eth_getCode" }.count }
-        // Two taps in a row share one read (the relay's single flight).
-        await Wait.until { reads() >= 2 && controller.startLoopsAlive == 1 }
-        // Each loop now waits the core's 3 s before asking again; a moment
-        // later there is still only the one.
-        try? await Task.sleep(nanoseconds: 200_000_000)
-        #expect(controller.startLoopsAlive == 1, "a refresh tap cancels the loop already waiting")
-        #expect(controller.quoteStartFailure == unreachable)
+        let before = reads()
+
+        // The chain answers now: the refresh reads it and the run goes on
+        // past the account read.
+        port.rpc["eth_getCode"] = .ok("0x6080")
+        controller.refreshFee()
+        await Wait.until { reads() > before }
+        #expect(reads() > before, "the refresh did not read the account again")
+        await Wait.until { controller.fee?.failed != unreachable }
+        #expect(controller.fee?.failed != unreachable, "the refresh replayed the failure")
         controller.swipeDismissed()
     }
 
-    /// 082 iPhone pass (IX6): a chain that never answers the deployment read
-    /// — every node black-holed — is said within the first read's bound, not
-    /// after the pool's every pass (估算中… for 4 min 35 s with no reason).
-    @Test func aDeploymentReadThatNeverAnswersIsSaidInTime() async {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        let store = VelaStore(defaults: defaults)
+    /// 082 iPhone pass (IX6): a chain that never answers the account read —
+    /// every node black-holed — is said within the run's bound (the core's
+    /// `start_deadline`, run out here by the test's clock), not after the
+    /// pool's every pass (估算中… for 4 min 35 s with no reason).
+    @Test func aDeploymentReadThatNeverAnswersIsSaidWithinTheRunsBound() async {
         let port = SilentCodePort()
-        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let accounts = ScriptedAccounts()
-        let controller = SigningController(
-            wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
-            relay: relay, accounts: accounts,
-            spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
-            store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
-            ports: SigningController.Ports(knownChains: { [100] }),
-            firstDeploymentReadMs: 300
-        )
-        controller.open(SigningController.Incoming(
-            id: "r1", method: "eth_sendTransaction",
-            paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x1"}]"#,
-            origin: "https://x.test", transportId: "tab-1", chainId: 100
-        ))
+        let controller = controller(port, timers: .stopped)
+        await Wait.until { port.codeReadsStarted > 0 }
+        #expect(controller.fee?.busy == true, "the row is measuring while the read is out")
+        controller.elapseFeeTimer("start_deadline")
         let unreachable = FeeFailureText.chainRead(rateLimited: false).text
-        await Wait.until { controller.quoteStartFailure == unreachable }
-        #expect(controller.quoteStartFailure == unreachable)
-        // Proved by order, never by a stopwatch (a loaded CI runner took
-        // 34.6 s for a 0.3 s bound, #398): the failure is said while every
-        // deployment read is still held open — none ran its 120 s, so it is
-        // the bound speaking, not the pool giving up.
+        await Wait.until { controller.fee?.failed == unreachable }
+        #expect(controller.fee?.failed == unreachable)
         #expect(port.codeReadsThatRanOut == 0, "said within the bound, not after the pool gave up")
-        #expect(SigningController.firstDeploymentReadMs == 15_000)
         controller.swipeDismissed()
     }
 
-    /// G48: a public node's rate limit on the deployment read is a
-    /// rate-limited chain read — "retrying automatically" — never "can't
-    /// reach Vela" and never a shut confirm for ever.
+    /// G48: a public node's rate limit on the account read is a rate-limited
+    /// chain read — "retrying automatically" — never "can't reach Vela" and
+    /// never a shut confirm for ever.
     @Test func aRateLimitedDeploymentReadIsARateLimitedChainRead() async {
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        let store = VelaStore(defaults: defaults)
         let port = ScriptedRelayPort()
         port.rpc["eth_getCode"] = .failed(rateLimited: true)
-        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let accounts = ScriptedAccounts()
-        let controller = SigningController(
-            wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
-            relay: relay, accounts: accounts,
-            spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
-            store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
-            ports: SigningController.Ports(knownChains: { [1] })
-        )
-        controller.open(SigningController.Incoming(
-            id: "r1", method: "eth_sendTransaction",
-            paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x1"}]"#,
-            origin: "https://x.test", transportId: "tab-1", chainId: 1
-        ))
+        let controller = controller(port, chainId: 1)
         let limited = FeeFailureText.chainRead(rateLimited: true).text
-        await Wait.until { controller.quoteStartFailure == limited }
-        var ctx = context()
-        ctx.feeStartFailure = controller.quoteStartFailure
-        #expect(warning(SigningLive.feeModel(clear: clear(.clearSign), fee: nil, context: ctx))
+        await Wait.until { controller.fee?.failed == limited }
+        #expect(warning(SigningLive.feeModel(clear: clear(.clearSign), fee: controller.fee, context: context()))
                 == loc.t("home.balanceDetailStatusRetrying"))
         controller.swipeDismissed()
     }
@@ -337,8 +331,11 @@ final class SilentCodePort: RelayPort {
     /// not the bound (a bound cancels the read, ending its sleep early).
     private let ranOut = OSAllocatedUnfairLock(initialState: 0)
     var codeReadsThatRanOut: Int { ranOut.withLock { $0 } }
+    /// `eth_getCode` reads asked for.
+    private(set) var codeReadsStarted = 0
     func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
         if method == "eth_getCode" {
+            codeReadsStarted += 1
             if (try? await Task.sleep(nanoseconds: 120_000_000_000)) != nil {
                 ranOut.withLock { $0 += 1 }
             }

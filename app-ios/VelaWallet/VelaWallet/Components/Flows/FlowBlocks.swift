@@ -935,9 +935,10 @@ struct FeeRowView: View {
             if fee.refreshLabel != nil {
                 // Calm and muted: an old figure is not a fault. Always the
                 // line's full height, so nothing jumps when it appears.
-                Text(verbatim: fee.staleNote ?? " ")
+                Text(verbatim: fee.failNote ?? fee.staleNote ?? " ")
                     .typeRole(Typography.flowCaption.scaled(textScale))
-                    .foregroundStyle(theme.fgSubtle)
+                    .foregroundStyle(fee.failNote != nil ? theme.errorBase : theme.fgSubtle)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Tokens.Space.s12)
             }
         }

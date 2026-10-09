@@ -63,7 +63,30 @@ struct UnreachableNetworkWire: Decodable, Equatable {
 struct BalanceSwitcherViewWire: Decodable, Equatable {
     let open: Bool
     let loading: Bool
+    /// Empty while the balance is hidden — the core withholds the figures
+    /// rather than trusting each shell to mask them.
     let balances: [BalanceCacheEntryWire]
+    /// The balance is hidden (PR 2): every row and the total draw the mask.
+    /// Without it an empty `balances` read as "nothing cached" and the total
+    /// summed to $0.00. Absent on the wire reads `false`.
+    var hidden = false
+
+    private enum CodingKeys: String, CodingKey { case open, loading, balances, hidden }
+
+    init(open: Bool, loading: Bool, balances: [BalanceCacheEntryWire], hidden: Bool = false) {
+        self.open = open
+        self.loading = loading
+        self.balances = balances
+        self.hidden = hidden
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        open = try c.decode(Bool.self, forKey: .open)
+        loading = try c.decode(Bool.self, forKey: .loading)
+        balances = try c.decode([BalanceCacheEntryWire].self, forKey: .balances)
+        hidden = try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+    }
 }
 
 struct BalanceViewWire: Decodable, Equatable {

@@ -160,7 +160,7 @@ struct SendHoldingsAndFeesTests {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
         let accounts = AccountStore(defaults: defaults)
-        let pool = RpcPool(store: store, accounts: accounts)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
         let accountPort = ScriptedAccounts()
         let nets = try networks()
         return SendExecutor(
@@ -914,7 +914,7 @@ struct SendHoldingsAndFeesTests {
             "public_key_hex": "04" + String(repeating: "11", count: 64),
             "created_at_iso": "2026-09-26T00:00:00Z",
         ])
-        let pool = RpcPool(store: store, accounts: accounts)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
         let accountPort = ScriptedAccounts()
         let nets = try networks()
         let send = SendStore(executor: SendExecutor(

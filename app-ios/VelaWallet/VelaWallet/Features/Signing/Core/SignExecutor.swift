@@ -381,6 +381,10 @@ final class SignExecutor {
                 return Self.failed(message ?? userOpRefusedDappDetail(), refused: true)
             case .other(let message):
                 return Self.failed(message ?? "Signing failed")
+            // PR 2 §3: an earlier op of this account holds the nonce. The page
+            // keeps its sentence (`PREVIOUS_PENDING_DETAIL`); nothing was sent.
+            case .previousPending:
+                return Self.failed(userOpPreviousPendingDetail())
             }
         } catch {
             return Self.failed("Signing failed")

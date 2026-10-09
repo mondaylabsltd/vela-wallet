@@ -637,7 +637,7 @@ struct SignerKindTests {
                 wallet: (address: golden, credentialId: "cred-1"),
                 relay: relay, accounts: accounts,
                 spine: UserOpSpine(relay: relay, accounts: accounts, signer: { signer }),
-                store: store, pool: RpcPool(store: store, accounts: AccountStore()),
+                store: store, pool: RpcPool(store: store, accounts: AccountStore(), offline: true),
                 ports: SigningController.Ports(knownChains: { [100] })
             )
             controller.open(SigningController.Incoming(

@@ -543,6 +543,10 @@ struct FeeRowModel {
     var refreshing = false
     /// The quote's 30 s TTL ran out — calm, never a fault. Its line is kept.
     var staleNote: String? = nil
+    /// Why there is no fee (issue #483): the fee machine's own failure in its
+    /// words — the chain out of reach, the relay, or Vela's own fault — in the
+    /// same line `staleNote` keeps, so nothing jumps when it appears.
+    var failNote: String? = nil
 }
 
 /// One option of the speed control (spec 068).
@@ -881,6 +885,10 @@ struct SendConfirmModel {
     /// Spec 102: this account reviews and signs on a trusted page — the
     /// page, the key, its integrity line — and the CTA goes there.
     var handoff: HandoffCardModel? = nil
+    /// PR 2 §3: the confirm is held while this account's previous
+    /// transaction on this network is in flight — the core's one line, drawn
+    /// under the held CTA for as long as it holds, whatever the fee says.
+    var heldNote: String? = nil
 }
 
 enum ReceiptStage {

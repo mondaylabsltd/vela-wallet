@@ -87,7 +87,8 @@ final class TrackerExecutor {
             return await pollReceipt(hash: hash, chainId: chainId)
 
         case "poll_status":
-            guard let answer = await relay.userOpStatus(chainId: chainId, userOpHash: hash) else {
+            guard let (answer, reason) = await relay.userOpStatusWithReason(chainId: chainId, userOpHash: hash)
+            else {
                 // An older relay, or one that could not be asked. Not a verdict.
                 VelaLog.notice(.tracker, "op=\(VelaLog.short(hash)) status unavailable")
                 return CoreJSON.string([
@@ -103,6 +104,9 @@ final class TrackerExecutor {
                 // The bundle the relay names while no receipt has — a link
                 // for the explorer, never a verdict (RA7).
                 "tx_hash": answer.txHash.map { $0 as Any } ?? NSNull(),
+                // Why the relay refused it (PR 2 §3): the core words the
+                // refusal by its reason, never the blanket "fees stayed above".
+                "rejection_reason": reason.map { $0 as Any } ?? NSNull(),
             ])
 
         case "find_op_event":
@@ -236,6 +240,9 @@ final class TrackerExecutor {
             "maybe_sent": record["maybeSent"] as? Bool ?? false,
         ]
         if let block = record["submitBlock"] as? NSNumber { wire["submit_block"] = block.uint64Value }
+        // Who signed it (PR 2 §3): after a restart this device still knows
+        // the account has an op in flight on this chain.
+        if let from = record["from"] as? String, !from.isEmpty { wire["sender"] = from }
         return wire
     }
 

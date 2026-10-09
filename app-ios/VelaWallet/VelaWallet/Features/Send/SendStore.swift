@@ -185,6 +185,25 @@ final class SendStore {
         toldFeeToken = nil
         journey += 1
         if !core.boot(event) { core.dispatch(event) }
+        // What is in flight already: a journey opened after the tracker's
+        // last render would otherwise not hear it until the next one.
+        dispatchInFlight()
+    }
+
+    /// The tracker's `in_flight_ops` (PR 2 §3): confirm is held while this
+    /// account's previous op on the chain is still in flight. Forwarded on
+    /// every tracker render (the core dedupes an identical list) and on open.
+    func inFlightChanged(_ opsJson: String) {
+        inFlightOps = opsJson
+        dispatchInFlight()
+    }
+
+    private var inFlightOps = "[]"
+
+    private func dispatchInFlight() {
+        guard entered, let ops = (try? JSONSerialization.jsonObject(with: Data(inFlightOps.utf8))) as? [Any]
+        else { return }
+        dispatch(["type": "in_flight_ops", "ops": ops])
     }
 
     /// The asset list settled a round while this journey is open (spec 078).

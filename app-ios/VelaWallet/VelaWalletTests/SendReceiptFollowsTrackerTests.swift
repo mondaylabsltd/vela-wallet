@@ -111,7 +111,7 @@ struct SendReceiptFollowsTrackerTests {
                      forKey: VelaStore.Key.accounts)
         let store = VelaStore(defaults: defaults)
         let accountStore = AccountStore(defaults: defaults)
-        let pool = RpcPool(store: store, accounts: accountStore)
+        let pool = RpcPool(store: store, accounts: accountStore, offline: true)
         let held = try balance()
         let nets = try networks()
 
