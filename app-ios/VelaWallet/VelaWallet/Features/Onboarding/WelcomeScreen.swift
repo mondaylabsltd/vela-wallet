@@ -153,29 +153,11 @@ struct SignInMethodSheet: View {
                     .padding(.bottom, Tokens.Space.s12)
                 }
 
-                ForEach(KeyMethod.allCases, id: \.self) { method in
-                    let copy = methodCopy(method, chooser: .signIn, loc: loc)
-                    Button { onPick(method) } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                                Text(copy.title)
-                                    .typeRole(Typography.rowTitle)
-                                    .foregroundStyle(theme.fgBase)
-                                Text(copy.body)
-                                    .typeRole(Typography.flowCaption)
-                                    .foregroundStyle(theme.fgMuted)
-                                    .multilineTextAlignment(.leading)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(theme.fgSubtle)
-                        }
-                        .frame(minHeight: Tokens.Layout.hitTarget)
-                        .padding(.vertical, Tokens.Space.s8)
-                    }
-                }
+                // The same three rows the create screen lists (issue #475).
+                KeyMethodRows(loc: loc, chooser: .signIn, onPick: onPick)
 
                 if chosen == nil, onChoosePage != nil, !pageChoices.isEmpty {
-                    Divider().overlay(theme.borderBase).padding(.vertical, Tokens.Space.s8)
+                    SettingsDivider().padding(.top, Tokens.Space.s16)
                     SigningPageEntry(loc: loc) {
                         picking = true
                         detent = .large

@@ -129,6 +129,18 @@ struct CoreWireDriftTests {
         }
     }
 
+    /// `CreateView` carries the keys screen's heading and its pinned flag
+    /// (issue #475) under these names — the mirror defaults both, so a rename
+    /// would decode quietly and the screen would fall back to the old label.
+    @Test func createViewCarriesTheKeysScreenHeading() throws {
+        let json = try CoreJSON.object(CreateWalletCore().view())
+        #expect(json["add_heading_key"] as? String == "onboarding.create.addKeyBtn")
+        #expect(json["methods_pinned"] is Bool)
+        let view = try CoreJSON.decode(CreateView.self, from: json)
+        #expect(view.addHeadingKey == "onboarding.create.addKeyBtn")
+        #expect(view.keys.isEmpty)
+    }
+
     /// `FeedView` decodes, including the tagged `FeedRow` union Swift cannot
     /// synthesise — and the feed machine asks for nothing this build cannot do.
     ///

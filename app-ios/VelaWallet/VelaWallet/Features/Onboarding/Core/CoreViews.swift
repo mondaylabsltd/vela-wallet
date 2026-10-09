@@ -131,6 +131,13 @@ struct CreateView: Equatable {
     /// May a signing page still be chosen? Only before the first key: the
     /// first key commits the set to one domain.
     var canChoosePage: Bool = false
+    /// Issue #475: the corpus key of the heading over the three places —
+    /// "Add a passkey" with no key, "Add another" after, "Limit of 7 reached"
+    /// when full. The core's choice; empty from a core that predates it.
+    var addHeadingKey: String = ""
+    /// The three places are pinned open: no key yet, and one may be added.
+    /// The fold's own open/closed state is the screen's.
+    var methodsPinned: Bool = false
 }
 
 extension CreateView: Decodable {
@@ -139,6 +146,7 @@ extension CreateView: Decodable {
         case showStartOver, busy, status, keys, canAddKey, canFinish, needsSecondKey
         case canGoBack, address, syncErrorDetail, addMethods
         case signingDomain, signingPage, canChoosePage
+        case addHeadingKey, methodsPinned
     }
 
     /// Written out for the three spec-102 fields: a decode failure here is
@@ -169,6 +177,11 @@ extension CreateView: Decodable {
         signingDomain = try values.decodeIfPresent(String.self, forKey: .signingDomain) ?? "getvela.app"
         signingPage = try values.decodeIfPresent(String.self, forKey: .signingPage)
         canChoosePage = try values.decodeIfPresent(Bool.self, forKey: .canChoosePage) ?? false
+        addHeadingKey = try values.decodeIfPresent(String.self, forKey: .addHeadingKey) ?? ""
+        // Absent (a core from before #475): the rule every shell used to
+        // repeat — no key yet, and one may be added.
+        methodsPinned = try values.decodeIfPresent(Bool.self, forKey: .methodsPinned)
+            ?? (keys.isEmpty && canAddKey)
     }
 }
 
