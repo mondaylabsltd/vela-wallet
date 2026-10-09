@@ -294,13 +294,22 @@ function main() {
  * none. Headers are not part of a version's hash, so this reaches every
  * version the host serves, old ones included.
  *
+ * `/*` also says `no-transform`: the host must hand the browser the published
+ * bytes. Cloudflare Web Analytics injected its beacon `<script>` before
+ * `</body>` of every response a browser asked for as HTML, so the bytes a tab
+ * ran hashed to a version nobody published (and the page was no longer
+ * zero-dependency). `no-transform` tells the host not to rewrite the
+ * response; the owner also turns the injection off for this site.
+ *
  * `/b/*` — spec 079: a version never changes, so the browser may keep it for
- * a year and open it with no network.
+ * a year and open it with no network. Pages joins this `Cache-Control` with
+ * the one under `/*`.
  */
 export const HEADERS = [
 	'/*',
 	"  Content-Security-Policy: frame-ancestors 'none'",
 	'  X-Frame-Options: DENY',
+	'  Cache-Control: no-transform',
 	'',
 	'/b/*',
 	'  Cache-Control: public, max-age=31536000, immutable',
