@@ -1030,6 +1030,20 @@ export function summaryOf(blocks: Block[]): string | undefined {
 }
 
 /**
+ * The sentence for the core's refusal key (`SignView.failure_refusal_key`,
+ * PR 2 note 9): a refusal by its reason (`receipt.refusals`), or the held
+ * nonce's own line (`confirmBlock.previousPending`). A key this build does
+ * not carry is the plain refusal — never a dotted path; no key, no sentence.
+ */
+export function refusalWords(
+	key: string | null | undefined,
+	m: SigningMessages
+): string | undefined {
+	if (key === null || key === undefined) return undefined;
+	return m.receipt.refusals[key] ?? m.confirmBlock[key] ?? m.receipt.refused;
+}
+
+/**
  * Spec 079 (F11): once the person has approved, the sheet is a STATUS — never
  * the form with a greyed confirm (the owner: "可信签名器签完后，回到签名提示框，
  * 似乎没有任何提示"). Spec 082 (RA9, G22): its words follow the core's
@@ -1080,10 +1094,16 @@ export function signingStatus(
 			stage: 'failed',
 			title: m.receipt.failed,
 			// Spec 082 RJ3: the relay refused it — say so, with no "try
-			// again": the same op is refused the same way.
+			// again": the same op is refused the same way. PR 2 note 9: and say
+			// WHY, by the core's one sentence for both ways a refusal arrives
+			// (`failure_refusal_key`): at submit (another operation of the
+			// account holds the nonce — that one IS retryable), or by the
+			// tracker's verdict after it (the fee sentence only for a fee
+			// refusal, "went first" for a spent nonce).
 			captions: lines(
 				summary,
-				sign.failure_refused ? m.receipt.refused : (signerReason ?? m.status.failedHint)
+				refusalWords(sign.failure_refusal_key, m) ??
+					(sign.failure_refused ? m.receipt.refused : (signerReason ?? m.status.failedHint))
 			),
 			closable: true,
 			// Spec 096 F8: the page waits for this close to hear the failure;

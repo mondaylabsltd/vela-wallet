@@ -39,6 +39,7 @@ import {
 	calldataBytes,
 	cappedApproval,
 	localizedTerms,
+	refusalWords,
 	signingCloseEvent,
 	signingStatus,
 	summaryOf,
@@ -1916,6 +1917,37 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 		// Not sent for any other reason: the calm "funds are safe" line, as before.
 		const notSent = signingStatus(failedSign(false), undefined, undefined, m);
 		expect(notSent?.captions).toEqual([m.status.failedHint]);
+	});
+
+	it('the sheet says why the relay did not take it, by the core’s key (PR 2 note 9)', () => {
+		const said = (key: string | null, refused = true, retryable = false) =>
+			signingStatus(
+				{ ...failedSign(refused), failure_refusal_key: key, failure_retryable: retryable },
+				undefined,
+				undefined,
+				m
+			);
+		// After the submit, by the tracker's reason: "went first" for a spent
+		// nonce, the fee words only for a fee refusal.
+		expect(said('componentsUi.signing.wentFirst')?.captions).toEqual([
+			m.receipt.refusals['componentsUi.signing.wentFirst']
+		]);
+		expect(said('send.txRejectedFees')?.captions).toEqual([
+			m.receipt.refusals['send.txRejectedFees']
+		]);
+		expect(said('componentsUi.signing.refused')?.captions).toEqual([m.receipt.refused]);
+		// At submit, the account's previous operation held the nonce: its own
+		// line — and "Try again" stays, as on Send.
+		const held = said('componentsUi.signing.confirmBlock.previousPending', false, true);
+		expect(held?.captions).toEqual([
+			m.confirmBlock['componentsUi.signing.confirmBlock.previousPending']
+		]);
+		expect(held?.actions).toEqual({ close: m.receipt.done, retry: m.status.retry });
+		// A key this build has no words for is the plain refusal, never a path.
+		expect(said('componentsUi.signing.somethingNew')?.captions).toEqual([m.receipt.refused]);
+		// No key: as before.
+		expect(said(null)?.captions).toEqual([m.receipt.refused]);
+		expect(refusalWords(null, m)).toBeUndefined();
 	});
 
 	it('the fiat is the wallet’s money line — no exponent, no hard-coded $ (G60)', () => {

@@ -18,6 +18,7 @@ import {
 	landingToRaise,
 	receiptProgress,
 	trackEntryFor,
+	withSheetRefusal,
 	type DappReceiptCopy
 } from './dapp-receipt';
 import { ringProgress } from '$lib/flows/ui/ring';
@@ -137,6 +138,25 @@ describe('the receipt a dApp transaction lands on', () => {
 		// No reason, or one this build has no words for: the plain refusal.
 		expect(said()).toEqual([copy.refused]);
 		expect(said('componentsUi.signing.somethingNew')).toEqual([copy.refused]);
+	});
+
+	it('the landing says why by the sheet’s own field while the request is the sheet’s (PR 2 note 9)', () => {
+		const refused = {
+			kind: 'refused' as const,
+			opHash: OP,
+			refusalKey: 'componentsUi.signing.refused'
+		};
+		// One source: the core's `failure_refusal_key`, worded from the same
+		// tracker `refusal` the entry's key is.
+		expect(withSheetRefusal(refused, 'componentsUi.signing.wentFirst')).toEqual({
+			...refused,
+			refusalKey: 'componentsUi.signing.wentFirst'
+		});
+		// The request has gone (or is another one's): the entry's own key.
+		expect(withSheetRefusal(refused, null)).toBe(refused);
+		// Nothing but a refusal is touched.
+		const submitted = { kind: 'submitted' as const, opHash: OP };
+		expect(withSheetRefusal(submitted, 'componentsUi.signing.wentFirst')).toBe(submitted);
 	});
 
 	it('not sent: failed, "your funds are safe", nothing to look up', () => {

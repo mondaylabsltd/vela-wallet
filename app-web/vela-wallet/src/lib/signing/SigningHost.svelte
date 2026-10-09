@@ -35,6 +35,7 @@
 		endsOnSignedTick,
 		landingCloseAction,
 		landingFor,
+		withSheetRefusal,
 		handoffLands,
 		landingToRaise,
 		autoCloseAfterMs,
@@ -304,6 +305,15 @@
 		watchLanding(op, handoff.chain_id, handoff.maybe_sent);
 	});
 
+	/**
+	 * The landing as drawn: a refusal says why by the sheet's own field while
+	 * its request is still the sheet's (PR 2 note 9, `withSheetRefusal`).
+	 */
+	function landingShown(state: DappReceiptState): DappReceiptState {
+		const mine = landingRequest !== null && signView.request?.id === landingRequest;
+		return withSheetRefusal(state, mine ? signView.failure_refusal_key : null);
+	}
+
 	/** The landing goes: Done, or a landed transaction's own beat. */
 	function closeLanding(): void {
 		const action = landingCloseAction(signRequest.view, landingRequest);
@@ -540,7 +550,7 @@
 {#if landing && receipt}
 	<div class="landing-over">
 		<DappReceipt
-			model={dappReceiptModel(landing, receipt, (txHash) => {
+			model={dappReceiptModel(landingShown(landing), receipt, (txHash) => {
 				const base = explorerBaseURL(landingChain);
 				return base ? `${base}/tx/${txHash}` : null;
 			})}

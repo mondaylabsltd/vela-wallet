@@ -79,6 +79,7 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	tracker_withdraw: null,
 	failure_refused: false,
 	failure_retryable: false,
+	failure_refusal_key: null,
 	notice: null,
 	blocked: null,
 	global_chain_id: 1

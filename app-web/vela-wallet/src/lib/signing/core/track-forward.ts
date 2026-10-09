@@ -13,7 +13,8 @@
  * page (`sign_request::on_op_tracked`: a terminal verdict answers at once,
  * anything else waits). Nothing is judged here: this forwards the entry of the
  * op it is told to watch, once per change of its status or tx hash, and the
- * core drops what does not concern its in-flight op.
+ * core drops what does not concern its in-flight op. A refusal carries its
+ * reason (`refusal`, PR 2 note 9), so the sheet says why in the tracker's words.
  *
  * Also here, beside the rule they carry out: the de-duplication keys of the
  * tracker hand-off and withdrawal (contract §4, "every shell's hand-off
@@ -81,7 +82,7 @@ export function createTrackForward(deps: TrackForwardDeps): TrackForward {
 		if (watched === null) return;
 		const entry = view.entries.find((row) => row.user_op_hash.toLowerCase() === watched);
 		if (!entry) return;
-		const key = `${entry.status}|${entry.tx_hash ?? ''}`;
+		const key = `${entry.status}|${entry.tx_hash ?? ''}|${entry.refusal ?? ''}`;
 		if (key === lastKey) return;
 		lastKey = key;
 		deps.dispatch({
@@ -89,7 +90,11 @@ export function createTrackForward(deps: TrackForwardDeps): TrackForward {
 			user_op_hash: entry.user_op_hash,
 			status: entry.status,
 			tx_hash: entry.tx_hash ?? null,
-			now_ms: now()
+			now_ms: now(),
+			// PR 2 note 9: why the relay refused it, as the tracker read it —
+			// the core says the sheet's failure by it (`failure_refusal_key`),
+			// the same reason the landing's `refusal_key` is worded from.
+			...(entry.refusal != null ? { refusal: entry.refusal } : {})
 		});
 	}
 
