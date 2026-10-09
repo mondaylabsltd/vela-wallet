@@ -1,28 +1,16 @@
-//! What the web wallet still needs of the Trusted Signer (spec 075): nothing of
+//! What the web wallet still needs of the signing page (spec 075): nothing of
 //! the channel, only the REGISTRY's relying party.
 //!
-//! The web wallet does not offer the Trusted Signer at all (owner, 2026-09-23 —
+//! The web wallet does not open a signing page at all (owner, 2026-09-23 —
 //! "web 就不支持可信签名器好了"): no page, no ceremonies, no loopback socket.
-//! But a wallet whose keys were minted on a phone's Trusted Signer page can be
-//! published or read from here, and a member minted behind a page proves under
-//! THAT page's domain. Getting the relying party wrong is how both phones hit
-//! 「可信签名器的回复与这笔请求不符」, so the rule stays where every shell can
-//! reach it.
+//! But a wallet whose keys were minted on a page can be published or read from
+//! here, and a member minted on a page proves under THAT page's domain. Getting
+//! the relying party wrong is how both phones hit 「可信签名器的回复与这笔请求
+//! 不符」, so the rule stays where every shell can reach it. Spec 102: whether
+//! a page can reach an account's keys at all is `signingVenueBlock`.
 
 use vela_core::trusted_signer;
 use wasm_bindgen::prelude::*;
-
-/// Whether a page at `url` can use this wallet's passkeys (they are
-/// `getvela.app` keys).
-///
-/// The web wallet cannot OPEN a Trusted Signer page, but it still has to decide
-/// whether a key that lives behind one is reachable by a platform sheet: a key
-/// minted on `*.getvela.app` is this app's passkey, and a key minted on
-/// anybody else's page is reachable nowhere but there.
-#[wasm_bindgen(js_name = trustedSignerUsesWalletPasskeys)]
-pub fn trusted_signer_uses_wallet_passkeys(url: &str) -> bool {
-    trusted_signer::uses_wallet_passkeys(url)
-}
 
 /// The relying party a key minted behind `signerOrigin` belongs to, or `null`
 /// for a key this wallet's own authenticators made (spec 075).

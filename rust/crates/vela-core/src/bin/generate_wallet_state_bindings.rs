@@ -73,11 +73,11 @@ use vela_core::app::session::{
     Event as SessionEvent, SessionOperation, SessionShellResult, SessionView,
 };
 use vela_core::app::sign_confirm::ConfirmState;
-use vela_core::app::sign_pref::{
-    Event as SignPrefEvent, SignPrefOperation, SignPrefShellResult, SignPrefView,
-};
 use vela_core::app::sign_request::{
     Event as SignEvent, SignEnding, SignEndingState, SignOperation, SignShellResult, SignView,
+};
+use vela_core::app::signing_pages::{
+    Event as SigningPagesEvent, SigningPagesOperation, SigningPagesShellResult, SigningPagesView,
 };
 use vela_core::app::token_trust::{
     Event as TrustEvent, TrustOperation, TrustShellResult, TrustView,
@@ -122,10 +122,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     FeeTierPrefOperation::export_all(&config)?;
     FeeTierPrefShellResult::export_all(&config)?;
     FeeTierPrefView::export_all(&config)?;
-    SignPrefEvent::export_all(&config)?;
-    SignPrefOperation::export_all(&config)?;
-    SignPrefShellResult::export_all(&config)?;
-    SignPrefView::export_all(&config)?;
+    SigningPagesEvent::export_all(&config)?;
+    SigningPagesOperation::export_all(&config)?;
+    SigningPagesShellResult::export_all(&config)?;
+    SigningPagesView::export_all(&config)?;
+    // Spec 102: the JSON the venue doors answer in (`signingPlan`,
+    // `signingVenueChoices`, `signingVenueReachable`) and the integrity line
+    // the hand-off card draws.
+    vela_core::signing_venue::SigningPlan::export_all(&config)?;
+    vela_core::signing_venue::VenueChoice::export_all(&config)?;
+    vela_core::trusted_signer::launch::IntegrityLine::export_all(&config)?;
     GuardEvent::export_all(&config)?;
     GuardOperation::export_all(&config)?;
     GuardShellResult::export_all(&config)?;

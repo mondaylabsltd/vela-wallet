@@ -23,8 +23,12 @@ name: string,
  */
 transports: string, 
 /**
- * Spec 075: the Trusted Signer page this key lives behind (its origin, and
- * so its rpId). A key with one is signed through that page — `auto`
- * routes there — and never through a platform sheet that cannot see it.
+ * The origin of the signing page this key was minted or found on (spec
+ * 075). Spec 102: no longer how this build routes anything — the
+ * account's [`Account::signing_domain`] and [`Account::signing_venue`]
+ * are — but still WRITTEN, because it is what an older build reads to
+ * open the page (its "auto" route follows the first key's page), and a
+ * custom-domain account must stay signable there. Every key of a
+ * custom-domain account carries its page's origin.
  */
 signer_origin?: string | null, };

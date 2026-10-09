@@ -25,7 +25,14 @@ exclude_credential_ids: Array<string>,
  * about itself comes back on the registration and is not constrained
  * by this.
  */
-method: KeyMethod, } | { "type": "sign_proof", credential_id: string, 
+method: KeyMethod, 
+/**
+ * Spec 102 R3: the signing page this ceremony runs on — `Some` only
+ * for a wallet on a custom domain, whose keys only its page can mint.
+ * `None`: in the app. The place (`method`) rides along either way, so
+ * a page can hint the browser to it.
+ */
+page?: string | null, } | { "type": "sign_proof", credential_id: string, 
 /**
  * What the authenticator reported about ITSELF at registration, comma
  * joined (`hybrid,internal`, `usb,nfc`, …), or empty when unknown.
@@ -43,10 +50,10 @@ transports: string,
  */
 method: KeyMethod, purpose: ProofPurpose, 
 /**
- * Spec 075: with `method = trusted_signer`, the page the key lives
- * behind (the sign-in's own). `None` on every other route.
+ * Spec 102 R3: the page this proof is signed on — the custom-domain
+ * wallet's, as the sign-in's. `None`: in the app.
  */
-signer_origin?: string | null, } | { "type": "generate_group_key" } | { "type": "sign_member_proof", credential_id: string, 
+page?: string | null, } | { "type": "generate_group_key" } | { "type": "sign_member_proof", credential_id: string, 
 /**
  * Uncompressed P-256 point, `04‖x‖y` hex.
  */
@@ -85,11 +92,18 @@ transports: string,
  */
 method: KeyMethod, group_public_key_hex: string, 
 /**
- * Spec 075: with `method = trusted_signer`, the page the key was just
- * minted behind — the membership is confirmed there. `None` on every
- * other route.
+ * Spec 102 R3: the page the key was just minted on — the membership
+ * is confirmed there, under that page's domain (the registry is asked
+ * for the challenge under `registry_rp_id(page)`). `None`: in the
+ * app, under the wallet's own relying party.
  */
-signer_origin?: string | null, } | { "type": "lookup_legacy_name", credential_id: string, } | { "type": "authenticate_passkey", method: KeyMethod, } | { "type": "load_accounts" } | { "type": "save_account", account: Account, } | { "type": "save_pending_upload", record: PendingUpload, } | { "type": "remove_pending_upload", credential_id: string, } | { "type": "registry_publish", metadata_hex: string, members: Array<RegistryPublishMember>, group_seed_hex: string, group_public_key_hex: string, 
+page?: string | null, } | { "type": "lookup_legacy_name", credential_id: string, } | { "type": "authenticate_passkey", method: KeyMethod, 
+/**
+ * Spec 102 R3: sign in on this page — the person's own signing page
+ * on a custom domain, the only place its keys answer. `None`: in the
+ * app.
+ */
+page?: string | null, } | { "type": "load_accounts" } | { "type": "save_account", account: Account, } | { "type": "save_pending_upload", record: PendingUpload, } | { "type": "remove_pending_upload", credential_id: string, } | { "type": "registry_publish", metadata_hex: string, members: Array<RegistryPublishMember>, group_seed_hex: string, group_public_key_hex: string, 
 /**
  * Which authenticator route a member with no replayable proof must sign
  * its live possession proof over. It matters only on desktop, and only
@@ -112,4 +126,11 @@ method: KeyMethod,
  * `false` — absent on the wire, which is today's operation byte for
  * byte — and are answered only once the group has landed.
  */
-answer_when_accepted?: boolean, } | { "type": "registry_query_by_public_key", public_key_hex: string, } | { "type": "registry_query_unit", unit_id: number, } | { "type": "probe_index_health" } | { "type": "wait", ms: number, } | { "type": "prompt", kind: PromptKind, confirmable: boolean, } | { "type": "complete_onboarding", mode: CompletionMode, };
+answer_when_accepted?: boolean, 
+/**
+ * Spec 102 R3: the page a member with no replayable proof signs its
+ * live proof on, and whose domain the whole unit is filed under
+ * (`registry_rp_id(page)`) — a custom-domain wallet's. `None`: the
+ * app, and the wallet's own relying party.
+ */
+page?: string | null, } | { "type": "registry_query_by_public_key", public_key_hex: string, } | { "type": "registry_query_unit", unit_id: number, } | { "type": "probe_index_health" } | { "type": "wait", ms: number, } | { "type": "prompt", kind: PromptKind, confirmable: boolean, } | { "type": "complete_onboarding", mode: CompletionMode, };

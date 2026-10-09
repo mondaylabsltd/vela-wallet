@@ -544,8 +544,9 @@ pub fn registry_resolve_unit_step(unit_id: u32, source: String, answers_json: St
     vela_core::registry_resolve::unit_step_json(u64::from(unit_id), &source, &answers_json)
 }
 
-/// "Sign with": which credential a ceremony is pinned to and how it is reached,
-/// for the method the person chose — `None` for `auto`. See
+/// "Sign with": which credential a ceremony is pinned to and where it lives
+/// (a key route: `{credential_id, method, transports, hints}`), for the place
+/// the person chose — `None` for `auto` and anything else. See
 /// `vela_core::wallet_keys::sign_route`.
 #[uniffi::export]
 #[must_use]
@@ -692,7 +693,7 @@ pub struct KeyMethodWords {
 
 /// The words of one key-method row in the create or sign-in chooser, decided
 /// once in the core for every shell. All three are wire names: `method`
-/// (`"platform"`, `"hybrid"`, `"security_key"`, `"trusted_signer"`),
+/// (`"platform"`, `"hybrid"`, `"security_key"` — spec 102: no fourth),
 /// `chooser` (`"create"`, `"sign_in"`) and `unlock` — what unlocks a passkey
 /// on this device as far as the shell can tell (`"face_id"`, `"touch_id"`,
 /// `"windows_hello"`, `"other"`). `None` for a name the core does not know.
@@ -707,21 +708,69 @@ pub fn key_method_words(method: String, chooser: String, unlock: String) -> Opti
     })
 }
 
-/// Where an account's signatures go (founder, 2026-09-26): the key it was
-/// created or signed in with, over the route that reached it — `None` for a
-/// record written before that existed, which signs as it always did.
-/// `account_json` is the stored account record. See
-/// `vela_core::app::Account::sign_in_route`.
+/// A venue row's words (spec 102): `"in_vela"`, `"page"`, or `"own_page"` —
+/// the choosers' "Use my own signing page". `None` for a name the core does
+/// not know. See `vela_core::app::method_words::venue_words`.
 #[uniffi::export]
 #[must_use]
-pub fn sign_in_route(account_json: String) -> Option<String> {
-    vela_core::app::sign_in_route_json(&account_json)
+pub fn venue_words(row: String) -> Option<KeyMethodWords> {
+    let words = vela_core::app::method_words::venue_words(&row)?;
+    Some(KeyMethodWords {
+        title_key: words.title_key.to_owned(),
+        line_key: words.line_key().map(str::to_owned),
+        line_name: words.line_name().map(str::to_owned),
+    })
+}
+
+/// How an account signs on this device (spec 102), as JSON — a `SigningPlan`:
+/// `{domain, venue, blocked?, key?}`. `venue` is where its transactions and
+/// messages are reviewed and signed (`{"type":"in_vela"}` or
+/// `{"type":"page","url":…}`), already able to reach its keys; `blocked` is
+/// set only when nothing on this device can; `key` is the key route
+/// (`{credential_id, method, transports, hints}`), absent for a record
+/// written before the sign-in key was kept. `None` for a record this build
+/// cannot read. See `vela_core::app::Account::signing_plan`.
+#[uniffi::export]
+#[must_use]
+pub fn signing_plan(account_json: String) -> Option<String> {
+    vela_core::app::signing_plan_json(&account_json)
+}
+
+/// Every venue an account on `domain` could pick, as a JSON `VenueChoice[]`
+/// (spec 102 R1, R2): Vela's sheet, the official page, then the saved pages,
+/// each with `blocked` set when it cannot reach the account's keys.
+/// `active_json` is the account's `signing_venue`, `saved_json` the
+/// `SigningPage[]` Settings keeps (`SigningPagesCore`'s `saved`).
+#[uniffi::export]
+#[must_use]
+pub fn signing_venue_choices(
+    domain: String,
+    active_json: String,
+    saved_json: String,
+) -> Option<String> {
+    let active = serde_json::from_str(&active_json).ok()?;
+    let saved: Vec<vela_core::signing_venue::SigningPage> =
+        serde_json::from_str(&saved_json).ok()?;
+    serde_json::to_string(&vela_core::signing_venue::venue_choices(
+        &domain, &active, &saved,
+    ))
+    .ok()
+}
+
+/// The domain whose keys a page at `url` can use (spec 102): its host, or
+/// `getvela.app` for every `*.getvela.app` page. Empty for something that is
+/// not an address.
+#[uniffi::export]
+#[must_use]
+pub fn signing_page_domain(url: String) -> String {
+    vela_core::signing_venue::domain_of_page(&url)
 }
 
 /// Which passkeys control the wallet at `address` — the Settings keys view
-/// (spec 062). `sign_in_credential` is the account's sign-in route credential
-/// (`sign_in_route`), empty for none: its row is marked `signs_here`. See
-/// `vela_core::wallet_keys`.
+/// (spec 062). `sign_in_credential` is the credential of the account's key
+/// route (`signing_plan`'s `key`), empty for none: its row is marked
+/// `signs_here`. Rows are captioned by where each key lives, never the page
+/// it was made on (spec 102). See `vela_core::wallet_keys`.
 #[uniffi::export]
 #[must_use]
 pub fn wallet_keys_step(

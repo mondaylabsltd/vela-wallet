@@ -556,10 +556,9 @@ export class SessionCore {
 }
 
 /**
- * r#" How this device signs by default (spec 071): the "Sign with" every"#
- * r" signing sheet starts at, and which Trusted Signer page it opens.
+ * r" The dApp signing approval lifecycle.
  */
-export class SignPrefCore {
+export class SignRequestCore {
     free(): void;
     [Symbol.dispose](): void;
     dispatch(event_json: string): string;
@@ -569,9 +568,11 @@ export class SignPrefCore {
 }
 
 /**
- * r" The dApp signing approval lifecycle.
+ * r" Settings → Signing pages (spec 102): the pages this device trusts to
+ * r" show and sign requests, the official one always first, and the 071
+ * r#" "Trusted Signer page" imported once."#
  */
-export class SignRequestCore {
+export class SigningPagesCore {
     free(): void;
     [Symbol.dispose](): void;
     dispatch(event_json: string): string;
@@ -1203,15 +1204,6 @@ export function signEndingOf(method: string, payload_json: string, submitted_use
 export function signEndingState(ending_json: string, entry_json?: string | null): string;
 
 /**
- * The route an account's signatures take, as JSON
- * (`{credential_id, transports, method, signer_origin?}`), or `null` for a
- * record written before the account named its sign-in key — that one signs as
- * it always did. `account_json` is the stored account record. See
- * `vela_core::app::Account::sign_in_route`.
- */
-export function signInRoute(account_json: string): string | undefined;
-
-/**
  * What a site's message request asks the account to sign, before the
  * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
  */
@@ -1230,6 +1222,39 @@ export function signNotConfirmedDetail(user_op_hash: string): string;
  * `REQUEST_TTL_MS` to it (RB2).
  */
 export function signRequestTtlMs(): number;
+
+/**
+ * The domain whose keys a page at `url` can use (spec 102): its host, or
+ * `getvela.app` for every `*.getvela.app` page. Empty for something that is
+ * not an address.
+ */
+export function signingPageDomain(url: string): string;
+
+/**
+ * How an account signs on this device (spec 102), as JSON — a
+ * `SigningPlan`: `{domain, venue, blocked?, key?}`. `key` is the key route
+ * (`{credential_id, method, transports, hints}`), absent for a record written
+ * before the account named its sign-in key, which signs as it always did.
+ * `null` for a record this build cannot read. `account_json` is the stored
+ * account record. See `vela_core::app::Account::signing_plan`.
+ */
+export function signingPlan(account_json: string): string | undefined;
+
+/**
+ * R1: why `venue_json` cannot reach the keys of an account on `domain`, as a
+ * JSON `VenueBlock` — or `null` when it can (or does not read as a venue,
+ * which reaches nothing: the string `"invalid"`).
+ */
+export function signingVenueBlock(domain: string, venue_json: string): string | undefined;
+
+/**
+ * Every venue an account on `domain` could pick, as a JSON `VenueChoice[]` —
+ * Vela's sheet, the official page, then the saved pages, each reachable or
+ * blocked with its reason (spec 102 R1, R2). `active_json` is the account's
+ * `signing_venue`; `saved_json` the `SigningPage[]` Settings keeps. `null`
+ * when either does not read.
+ */
+export function signingVenueChoices(domain: string, active_json: string, saved_json: string): string | undefined;
 
 /**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
@@ -1297,17 +1322,6 @@ export function trustedSignerRegistryRpId(signer_origin?: string | null): string
  * `Vec<Option<String>>`, and the phones pass the same shape.
  */
 export function trustedSignerUnitRpId(member_origins_json: string, wallet_rp_id: string): string;
-
-/**
- * Whether a page at `url` can use this wallet's passkeys (they are
- * `getvela.app` keys).
- *
- * The web wallet cannot OPEN a Trusted Signer page, but it still has to decide
- * whether a key that lives behind one is reachable by a platform sheet: a key
- * minted on `*.getvela.app` is this app's passkey, and a key minted on
- * anybody else's page is reachable nowhere but there.
- */
-export function trustedSignerUsesWalletPasskeys(url: string): boolean;
 
 /**
  * The ONE document a typed-data request is read as — what the sheet
@@ -1419,6 +1433,14 @@ export function userOpWriteAheadWaitMs(): number;
 export function validateClientData(kind: string, client_data_json: Uint8Array, authenticator_data: Uint8Array): void;
 
 /**
+ * A venue row's words as JSON (`{title_key, line_key, line_name}`) — `"in_vela"`,
+ * `"page"`, or `"own_page"` (the choosers' "Use my own signing page") — or
+ * `null` for a name the core does not know. See
+ * `vela_core::app::method_words::venue_words`.
+ */
+export function venueWords(row: string): string | undefined;
+
+/**
  * **Does this name actually belong to this address — the next step of the
  * check.**
  *
@@ -1475,7 +1497,7 @@ export interface InitOutput {
     readonly __wbg_rpcpoolcore_free: (a: number, b: number) => void;
     readonly __wbg_sendcore_free: (a: number, b: number) => void;
     readonly __wbg_sessioncore_free: (a: number, b: number) => void;
-    readonly __wbg_signprefcore_free: (a: number, b: number) => void;
+    readonly __wbg_signingpagescore_free: (a: number, b: number) => void;
     readonly __wbg_signrequestcore_free: (a: number, b: number) => void;
     readonly __wbg_tokentrustcore_free: (a: number, b: number) => void;
     readonly __wbg_txtrackercore_free: (a: number, b: number) => void;
@@ -1685,14 +1707,17 @@ export interface InitOutput {
     readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly signEndingOf: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly signEndingState: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly signInRoute: (a: number, b: number) => [number, number];
     readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signNotConfirmedDetail: (a: number, b: number) => [number, number];
     readonly signRequestTtlMs: () => number;
-    readonly signprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
-    readonly signprefcore_new: () => number;
-    readonly signprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
-    readonly signprefcore_view: (a: number) => [number, number, number, number];
+    readonly signingPageDomain: (a: number, b: number) => [number, number];
+    readonly signingPlan: (a: number, b: number) => [number, number];
+    readonly signingVenueBlock: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly signingVenueChoices: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly signingpagescore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly signingpagescore_new: () => number;
+    readonly signingpagescore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly signingpagescore_view: (a: number) => [number, number, number, number];
     readonly signrequestcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1714,7 +1739,6 @@ export interface InitOutput {
     readonly tokentrustcore_view: (a: number) => [number, number, number, number];
     readonly trustedSignerRegistryRpId: (a: number, b: number) => [number, number];
     readonly trustedSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly trustedSignerUsesWalletPasskeys: (a: number, b: number) => number;
     readonly txtrackercore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly txtrackercore_new: () => number;
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1731,6 +1755,7 @@ export interface InitOutput {
     readonly userOpStatusMethod: () => [number, number];
     readonly userOpSubmitStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly venueWords: (a: number, b: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];

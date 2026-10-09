@@ -14,3 +14,4 @@ export * from './SessionShellResult';
 export * from './SessionSignOutView';
 export * from './SessionView';
 export * from './SignInKey';
+export * from './SigningVenue';
