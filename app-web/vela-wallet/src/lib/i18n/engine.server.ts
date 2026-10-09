@@ -350,7 +350,21 @@ export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 		waitingHint: k('componentsUi.signing.trustedSignerWaitingHint'),
 		reopen: k('componentsUi.signing.trustedSignerReopen'),
 		official: k('settings.signing.pageOfficial'),
-		integrity: resolveSettingsMessages(locale).integrity
+		integrity: resolveSettingsMessages(locale).integrity,
+		places: Object.fromEntries(
+			[
+				'onboarding.create.methodPlatformTitle',
+				'onboarding.create.methodHybridTitle',
+				'onboarding.create.methodSecurityKeyTitle'
+			].map((key) => [key, k(key)])
+		),
+		feeLabel: k('componentsUi.gas.networkFee'),
+		tiers: Object.fromEntries(
+			['fast', 'standard', 'slow'].map((tier) => [
+				`send.gasTier.${tier}`,
+				k(`send.gasTier.${tier}`)
+			])
+		)
 	};
 }
 

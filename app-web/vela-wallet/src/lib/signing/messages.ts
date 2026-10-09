@@ -35,9 +35,18 @@ export interface HandoffMessages {
 	waiting: string;
 	waitingHint: string;
 	reopen: string;
-	/** The official page's label. */
+	/** The official page's name. */
 	official: string;
 	integrity: SettingsMessages['integrity'];
+	/**
+	 * The three places a key lives, by the corpus key a `KeyLabel` names
+	 * (`place_key`) — "Confirm with Phone or tablet" for a key that carries
+	 * the wallet's name (D-17).
+	 */
+	places: Record<string, string>;
+	/** The quiet fee + speed row (D-18): its label and the speeds' names, by `tier_key`. */
+	feeLabel: string;
+	tiers: Record<string, string>;
 }
 
 export interface SigningMessages {

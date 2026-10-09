@@ -9,7 +9,9 @@
 	 * which to believe. So the card says four things and nothing else: that the
 	 * request is reviewed on the page, which key will confirm it, the one line
 	 * that backs the word "trusted" (what was checked, and when), and Open —
-	 * which a page that failed its check never gets.
+	 * which a page that failed its check never gets. Under the key, one quiet
+	 * row restates the fee and speed the sheet settled (D-18) — no control:
+	 * the page signs the operation as it was priced.
 	 *
 	 * After Open it is a wait: where to look, and a way back to the page.
 	 */
@@ -39,6 +41,13 @@
 	>
 	<h2 id="handoff-title" class="title">{handoff.waiting?.title ?? handoff.title}</h2>
 	<p class="key">{handoff.waiting?.hint ?? handoff.key}</p>
+	{#if handoff.fee !== undefined && handoff.waiting === undefined}
+		<!-- What the sheet settled, restated; no control (D-18). -->
+		<p class="fee">
+			<span class="fee-label">{handoff.fee.label}</span>
+			<span class="fee-value">{handoff.fee.value}</span>
+		</p>
+	{/if}
 
 	<div class="page">
 		<span class="where">
@@ -111,6 +120,22 @@
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		color: var(--color-fg-muted);
+	}
+
+	.fee {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		column-gap: var(--space-md);
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
+	}
+
+	.fee-value {
+		color: var(--color-fg-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* What is trusted, in one place: the page and what was checked about it. */

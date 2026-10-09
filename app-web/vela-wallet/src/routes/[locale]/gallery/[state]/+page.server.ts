@@ -220,7 +220,8 @@ export const load: PageServerLoad = ({ params }) => {
 			signing: buildHandoffState(
 				params.state as HandoffStateId,
 				base,
-				resolveHandoffMessages(locale)
+				resolveHandoffMessages(locale),
+				locale
 			)
 		};
 	}
