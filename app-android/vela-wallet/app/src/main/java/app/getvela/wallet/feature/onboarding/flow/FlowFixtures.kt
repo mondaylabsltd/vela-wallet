@@ -180,14 +180,14 @@ object FlowFixtures {
             ),
         )
         // Spec 102: three places, and — until the first key commits the set
-        // to one domain — "Use my own signing page". Once a page is chosen the
+        // to one domain — "Use a trusted signing page". Once a page is chosen the
         // entry IS that page: its domain and its integrity line.
         flow(
-            "keys · own page offered",
+            "keys · signing page offered",
             base().copy(stage = CreateStage.AddKeys, canChoosePage = true),
         )
         flow(
-            "keys · own page chosen",
+            "keys · signing page chosen",
             base().copy(
                 stage = CreateStage.AddKeys,
                 canChoosePage = true,

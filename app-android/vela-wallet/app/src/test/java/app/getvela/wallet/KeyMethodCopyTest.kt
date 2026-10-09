@@ -82,17 +82,27 @@ class KeyMethodCopyTest {
     }
 
     /**
-     * Spec 102: "Use my own signing page" has words of its own — the venue's,
-     * not a key place's — and so do the two venues of "Where you review and
-     * sign", in every chooser that draws them.
+     * Spec 102 D6: "Use a trusted signing page" has words of its own — the
+     * venue's, not a key place's; it lists Vela's official page too, so it is
+     * never "my own" — and so do the two venues of "Where you review and
+     * sign", which read alike (D-19), in every chooser that draws them.
      */
     @Test
-    fun `the own page entry and the venues have their own words`() {
+    fun `the signing page entry and the venues have their own words`() {
         val strings = strings("en")
         val (title, line) = app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(strings)
-        assertEquals("Use my own signing page", title)
-        assertEquals("Advanced: keys live on your page's domain and sign only there", line)
-        assertEquals("In Vela", strings.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
-        assertEquals("On a trusted page", strings.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
+        assertEquals("Use a trusted signing page", title)
+        assertEquals("Advanced: Vela's official page, or one you deployed yourself", line)
+        assertEquals("Review and sign in Vela", strings.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
+        assertEquals("Review and sign on a trusted signing page", strings.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
+        val zh = strings("zh")
+        assertEquals("使用可信签名页", app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(zh).first)
+        assertEquals("在 Vela 里预览并签名", zh.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
+        assertEquals("在可信签名页预览并签名", zh.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
+        // "My own signing page" is nowhere (D6).
+        for (s in listOf(strings, zh)) {
+            assertFalse(app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(s).first.contains("own", ignoreCase = true))
+            assertFalse(app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(s).first.contains("自己"))
+        }
     }
 }

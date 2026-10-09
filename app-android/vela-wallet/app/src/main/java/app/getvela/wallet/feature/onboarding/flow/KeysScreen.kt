@@ -72,7 +72,7 @@ fun ColumnScope.KeysScreen(
     busy: Boolean,
     addMethods: List<KeyMethod> = KeyMethod.entries,
     /**
-     * Spec 102: the page chosen with "Use my own signing page" (its address,
+     * Spec 102: the page chosen with "Use a trusted signing page" (its address,
      * whose keys it reaches, its integrity line) — `null` while the keys are
      * made in the app.
      */
@@ -389,7 +389,7 @@ private fun KeyBadge(synced: Boolean) {
 
 /**
  * Where a founding key is minted — the three places a key lives — and, before
- * the first key, "Use my own signing page" (spec 102).
+ * the first key, "Use a trusted signing page" (spec 102).
  *
  * Unlike the browser, this client OWNS the picker — Credential Manager shows the
  * providers it knows about, not a this-device / nearby-device / security-key

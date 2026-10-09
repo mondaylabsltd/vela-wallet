@@ -53,12 +53,14 @@ import uniffi.vela_core_uniffi.SignerIntegrityLine
 import uniffi.vela_core_uniffi.venueWords
 
 /**
- * Spec 102, P2-02: "Use my own signing page" — the one advanced entry beside
- * the three places a key lives. It picks a saved signing page (the official
- * one first, then the person's own, each with whose keys it reaches and its
- * integrity line), or adds one by address. A page on a custom domain then
- * mints every key and runs every ceremony (R3), and the wallet is locked to
- * it; a `getvela.app` page runs them in the app and becomes the venue (D-8).
+ * Spec 102, P2-02: "Use a trusted signing page" — the one advanced entry
+ * beside the three places a key lives (D6: Vela's official page is a trusted
+ * page too, so the entry is not "my own"). It picks a saved signing page —
+ * "Vela's official signing page" first, then the self-hosted ones, each with
+ * whose keys it reaches and its integrity line — or adds one by address. A
+ * page on a custom domain then mints every key and runs every ceremony (R3),
+ * and the wallet is locked to it; a `getvela.app` page runs them in the app
+ * and becomes the venue (D-8).
  */
 data class OwnPageModel(
     val title: String,
@@ -69,16 +71,24 @@ data class OwnPageModel(
     val save: String,
     /** The list has been read: adding is offered only then. */
     val loaded: Boolean,
+    /** A self-hosted page's "Trust this version" (`settings.signing.pageTrust`). */
+    val trust: String = "",
 ) {
     companion object {
-        fun of(view: SigningPagesView, line: (String) -> SignerIntegrityLine, strings: VelaStrings): OwnPageModel {
-            val words = venueWords("own_page")
+        fun of(
+            view: SigningPagesView,
+            line: (String) -> SignerIntegrityLine,
+            strings: VelaStrings,
+            toTrust: (String) -> String? = { null },
+        ): OwnPageModel {
+            val words = venueWords("signing_page")
             return OwnPageModel(
                 title = words?.titleKey?.let(strings::t).orEmpty(),
                 body = words?.lineName ?: words?.lineKey?.let(strings::t).orEmpty(),
                 pages = view.pages.map { row ->
-                    SettingsLive.pageItem(row.url, row.name, row.domain, row.official, line(row.url), strings)
+                    SettingsLive.pageItem(row.url, row.name, row.domain, row.official, line(row.url), strings, toTrust(row.url))
                 },
+                trust = strings.t("settings.signing.pageTrust"),
                 add = strings.t("settings.signing.pageAdd"),
                 addError = when (view.add_error) {
                     "invalid" -> strings.t("settings.signing.pageInvalid")
@@ -91,9 +101,9 @@ data class OwnPageModel(
             )
         }
 
-        /** The entry's own two lines (`venueWords("own_page")`). */
+        /** The entry's own two lines (`venueWords("signing_page")`). */
         fun entry(strings: VelaStrings): Pair<String, String> {
-            val words = venueWords("own_page")
+            val words = venueWords("signing_page")
             return words?.titleKey?.let(strings::t).orEmpty() to
                 (words?.lineName ?: words?.lineKey?.let(strings::t).orEmpty())
         }
@@ -155,12 +165,17 @@ fun OwnPageEntry(
     }
 }
 
-/** The picker's body: the pages, then a page added by address. Hosted by a sheet or inline. */
+/**
+ * The picker's body: the pages, then a page added by address. Hosted by a
+ * sheet or inline. A self-hosted page whose check asks to be trusted carries
+ * its answer under its words ([onTrust]); it opens once trusted.
+ */
 @Composable
 fun OwnPageList(
     model: OwnPageModel,
     onPick: (String) -> Unit,
     onAdd: (String) -> Unit,
+    onTrust: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var address by remember { mutableStateOf("") }
@@ -180,6 +195,9 @@ fun OwnPageList(
         model.pages.forEachIndexed { index, page ->
             if (index > 0) HorizontalDivider(color = colors.borderBase, thickness = VelaBorder.hairline)
             SigningPageItem(model = page, onClick = { onPick(page.url) })
+            if (page.trustVersion != null) {
+                app.getvela.wallet.feature.settings.components.TrustAnswer(model.trust) { onTrust(page.url) }
+            }
         }
         HorizontalDivider(color = colors.borderBase, thickness = VelaBorder.hairline)
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
@@ -217,6 +235,7 @@ fun OwnPageSheet(
     onAdd: (String) -> Unit,
     onDismiss: () -> Unit,
     cancelLabel: String,
+    onTrust: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     VelaModalSheet(
@@ -240,7 +259,7 @@ fun OwnPageSheet(
                 fontSize = VelaTextSize.xl2,
                 modifier = Modifier.padding(bottom = VelaSpacing.sm),
             )
-            OwnPageList(model, onPick = onPick, onAdd = onAdd)
+            OwnPageList(model, onPick = onPick, onAdd = onAdd, onTrust = onTrust)
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             VelaSecondaryButton(cancelLabel, onClick = onDismiss, modifier = Modifier.fillMaxWidth())
         }

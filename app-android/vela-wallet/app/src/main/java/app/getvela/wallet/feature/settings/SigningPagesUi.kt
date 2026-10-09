@@ -40,6 +40,7 @@ import app.getvela.wallet.feature.settings.components.RowGlyph
 import app.getvela.wallet.feature.settings.components.SettingsDivider
 import app.getvela.wallet.feature.settings.components.SigningPageItem
 import app.getvela.wallet.feature.settings.components.SigningPageTextAction
+import app.getvela.wallet.feature.settings.components.TrustAnswer
 import app.getvela.wallet.feature.settings.components.VelaUrlField
 
 /**
@@ -102,23 +103,6 @@ internal fun SigningPagesPageBody(
     )
 }
 
-/** A custom page's own build asks to be trusted on this device: the line is the question, this the answer. */
-@Composable
-private fun TrustAnswer(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        color = VelaTheme.colors.accentBase,
-        fontFamily = VelaFontFamily,
-        fontWeight = VelaFontWeight.semibold,
-        fontSize = VelaTextSize.base,
-        modifier = Modifier
-            // Under the row's words: past the glyph and its gap.
-            .padding(start = VelaIconSize.lg + VelaSpacing.lg, bottom = VelaSpacing.md)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = VelaSpacing.sm),
-    )
-}
-
 /** A saved page's new name; empty names it by its host again. */
 @Composable
 internal fun RenameSigningPageSheetBody(
@@ -132,7 +116,7 @@ internal fun RenameSigningPageSheetBody(
         return
     }
     val host = row.address.substringBefore('/')
-    var name by remember(url) { mutableStateOf(row.title.takeIf { it != host }.orEmpty()) }
+    var name by remember(url) { mutableStateOf(row.label) }
     SheetTitle(model.rename, row.address)
     VelaUrlField(
         label = model.nameLabel,

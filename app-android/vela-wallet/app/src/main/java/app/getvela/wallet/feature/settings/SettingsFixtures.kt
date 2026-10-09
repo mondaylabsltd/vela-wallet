@@ -1028,8 +1028,22 @@ object SettingsFixtures {
     const val OFFICIAL_PAGE = "https://sign.getvela.app/"
     const val OWN_PAGE = "https://sign.example.com/"
 
-    /** What Settings → Signing pages keeps on the drawn device (the official page is never stored). */
-    val SAVED_PAGES = listOf(app.getvela.wallet.feature.settings.core.SigningPage(OWN_PAGE, "My page"))
+    /** A second self-hosted page, named by the person, whose build is new to Vela: its check asks. */
+    const val ASK_PAGE = "https://signer.example.org/"
+
+    /** The full version [ASK_PAGE]'s check asks the person to trust. */
+    const val ASK_VERSION = "3f9a1c22b7e4d05a6c8f1e2d3b4a59687766554433221100ffeeddccbbaa9988"
+
+    /**
+     * What Settings → Signing pages keeps on the drawn device (the official
+     * page is never stored): a self-hosted page the person did not name — so
+     * it reads "Self-hosted · sign.example.com" (D6) — whose build they
+     * trusted, and one they named whose build is new to Vela.
+     */
+    val SAVED_PAGES = listOf(
+        app.getvela.wallet.feature.settings.core.SigningPage(OWN_PAGE, "", listOf("6ffe9ef2" + "0".repeat(56))),
+        app.getvela.wallet.feature.settings.core.SigningPage(ASK_PAGE, "Home"),
+    )
 
     /** 14:32 today — the boards' "checked" time (the web's). */
     private val CHECKED_AT: Long = java.util.Calendar.getInstance().apply {
@@ -1043,14 +1057,21 @@ object SettingsFixtures {
 
     /**
      * The integrity lines the boards draw: the official page matches the
-     * published build list; the person's own page is a build they trusted on
+     * published build list; the self-hosted page is a build they trusted on
      * this device — or, on ST18b, one that will NOT open.
      */
     fun pageLine(url: String, refused: Boolean = false): uniffi.vela_core_uniffi.SignerIntegrityLine = when {
         url == OFFICIAL_PAGE -> line(uniffi.vela_core_uniffi.SignerIntegrityState.MATCHES, "matches", "0ba8ee8c", true)
+        url == ASK_PAGE -> uniffi.vela_core_uniffi.SignerIntegrityLine(
+            uniffi.vela_core_uniffi.SignerIntegrityState.ASK_TO_TRUST, ASK_VERSION.take(8), null,
+            "componentsUi.signing.integrity.askTrust", false,
+        )
         refused -> line(uniffi.vela_core_uniffi.SignerIntegrityState.MISMATCH, "mismatch", "7d41e0b9", false)
-        else -> line(uniffi.vela_core_uniffi.SignerIntegrityState.TRUSTED_HERE, "trusted", "3f9a1c22", true)
+        else -> line(uniffi.vela_core_uniffi.SignerIntegrityState.TRUSTED_HERE, "trusted", "6ffe9ef2", true)
     }
+
+    /** The version a board's page asks to be trusted, when it does. */
+    fun pageToTrust(url: String): String? = ASK_VERSION.takeIf { url == ASK_PAGE }
 
     /**
      * The account the boards draw — on `getvela.app`, reviewing on the
@@ -1066,10 +1087,12 @@ object SettingsFixtures {
         signingVenueJson = """{"type":"page","url":"${if (own) OWN_PAGE else OFFICIAL_PAGE}"}""",
     )
 
-    private val SIGNING_PAGES_VIEW = app.getvela.wallet.feature.settings.core.SigningPagesView(
+    /** The signing pages the boards' device keeps — Settings → Signing pages, and the create / sign-in picker's list. */
+    val SIGNING_PAGES_VIEW = app.getvela.wallet.feature.settings.core.SigningPagesView(
         pages = listOf(
             app.getvela.wallet.feature.settings.core.SigningPageRow(OFFICIAL_PAGE, "", "getvela.app", official = true),
-            app.getvela.wallet.feature.settings.core.SigningPageRow(OWN_PAGE, "My page", "sign.example.com"),
+            app.getvela.wallet.feature.settings.core.SigningPageRow(OWN_PAGE, "", "sign.example.com", trusted = SAVED_PAGES[0].trusted),
+            app.getvela.wallet.feature.settings.core.SigningPageRow(ASK_PAGE, "Home", "signer.example.org"),
         ),
         saved = SAVED_PAGES,
         loaded = true,
@@ -1080,7 +1103,7 @@ object SettingsFixtures {
         val refused = state == SettingsScreenState.ST18B
         val view = if (refused) SIGNING_PAGES_VIEW.copy(add_error = "duplicate") else SIGNING_PAGES_VIEW
         val lines = { url: String -> pageLine(url, refused) }
-        val pages = SettingsLive.withSigningPages(model, view, emptyMap(), lines, s)
+        val pages = SettingsLive.withSigningPages(model, view, lines, s, ::pageToTrust)
         val drafted = if (refused) pages.copy(signingPages = pages.signingPages.copy(draft = OWN_PAGE)) else pages
         return SettingsLive.withVenue(drafted, venueAccount(own = state == SettingsScreenState.ST17B), SAVED_PAGES, lines, s)
     }

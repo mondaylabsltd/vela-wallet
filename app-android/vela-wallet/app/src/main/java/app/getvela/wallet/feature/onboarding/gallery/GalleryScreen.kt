@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -171,20 +172,40 @@ fun GalleryScreen(initialDarkTheme: Boolean) {
                             onOpenPrivacy = {},
                             onOpenTerms = {},
                         )
-                        Screen.Keys -> KeysScreen(
-                            keys = view.keys,
-                            canAddKey = view.canAddKey,
-                            canFinish = view.canFinish,
-                            needsSecondKey = view.needsSecondKey,
-                            busy = view.busy,
-                            addMethods = view.addMethods,
-                            signingPage = FlowFixtures.ownPageItem(view, strings),
-                            canChoosePage = view.canChoosePage,
-                            onAddKey = {},
-                            onConfirmKey = {},
-                            onRemoveKey = {},
-                            onFinish = {},
-                        )
+                        Screen.Keys -> {
+                            // Spec 102: "Use a trusted signing page" opens its list
+                            // over the board — the boards' pages and their lines
+                            // (official, self-hosted, one asking to be trusted).
+                            // Picking, adding and trusting stay no-ops.
+                            var pagesOpen by remember(selectedCode) { mutableStateOf(false) }
+                            KeysScreen(
+                                keys = view.keys,
+                                canAddKey = view.canAddKey,
+                                canFinish = view.canFinish,
+                                needsSecondKey = view.needsSecondKey,
+                                busy = view.busy,
+                                addMethods = view.addMethods,
+                                signingPage = FlowFixtures.ownPageItem(view, strings),
+                                canChoosePage = view.canChoosePage,
+                                onChooseOwnPage = { pagesOpen = true },
+                                onAddKey = {},
+                                onConfirmKey = {},
+                                onRemoveKey = {},
+                                onFinish = {},
+                            )
+                            if (pagesOpen) {
+                                val settings = app.getvela.wallet.feature.settings.SettingsFixtures
+                                app.getvela.wallet.feature.onboarding.flow.OwnPageSheet(
+                                    model = app.getvela.wallet.feature.onboarding.flow.OwnPageModel.of(
+                                        settings.SIGNING_PAGES_VIEW, { url -> settings.pageLine(url) }, strings, settings::pageToTrust,
+                                    ),
+                                    onPick = { pagesOpen = false },
+                                    onAdd = {},
+                                    onDismiss = { pagesOpen = false },
+                                    cancelLabel = strings.t("common.cancel"),
+                                )
+                            }
+                        }
                         Screen.Progress -> ProgressScreen(
                             position = progressFor(view.status)!!,
                             keyCount = view.keys.size,

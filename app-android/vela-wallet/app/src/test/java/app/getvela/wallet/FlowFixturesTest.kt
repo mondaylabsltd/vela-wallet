@@ -44,8 +44,8 @@ class FlowFixturesTest {
             "name · draft waiting" to Screen.Name,
             "keys · one, needs a second" to Screen.Keys,
             "keys · two, ready" to Screen.Keys,
-            "keys · own page offered" to Screen.Keys,
-            "keys · own page chosen" to Screen.Keys,
+            "keys · signing page offered" to Screen.Keys,
+            "keys · signing page chosen" to Screen.Keys,
             "keys · a page's own set" to Screen.Keys,
             "keys · unconfirmed row" to Screen.Keys,
             "keys · at the cap" to Screen.Keys,
@@ -178,16 +178,16 @@ class FlowFixturesTest {
     }
 
     /**
-     * Spec 102: "Use my own signing page" is offered beside the three until
+     * Spec 102: "Use a trusted signing page" is offered beside the three until
      * the first key, and a chosen page is drawn as that page — its domain and
      * integrity line — with the CreateView's own fields, nothing invented.
      */
     @Test
     fun theOwnPageBoardsCarryTheCoresFields() {
-        val (_, offered) = flows().first { it.first == "keys · own page offered" }
+        val (_, offered) = flows().first { it.first == "keys · signing page offered" }
         assertTrue(offered.canChoosePage)
         assertEquals(null, offered.signingPage)
-        val (_, chosen) = flows().first { it.first == "keys · own page chosen" }
+        val (_, chosen) = flows().first { it.first == "keys · signing page chosen" }
         assertEquals(FlowFixtures.OWN_PAGE, chosen.signingPage)
         assertEquals(FlowFixtures.OWN_DOMAIN, chosen.signingDomain)
         val (_, set) = flows().first { it.first == "keys · a page's own set" }

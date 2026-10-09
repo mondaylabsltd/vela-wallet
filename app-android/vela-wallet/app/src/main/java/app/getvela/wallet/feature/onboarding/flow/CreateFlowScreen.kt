@@ -57,7 +57,7 @@ fun CreateFlowScreen(
         onDispose { }
     }
 
-    // Spec 102: "Use my own signing page" — the picker, over the key list.
+    // Spec 102: "Use a trusted signing page" — the picker, over the key list.
     var pickingPage by remember { mutableStateOf(false) }
     val pagesView by model.signingPages.collectAsStateWithLifecycle()
     val checks by model.signerChecks.collectAsStateWithLifecycle()
@@ -77,7 +77,7 @@ fun CreateFlowScreen(
     if (pickingPage) {
         checks.size
         OwnPageSheet(
-            model = OwnPageModel.of(pagesView, model::signerLine, strings),
+            model = OwnPageModel.of(pagesView, model::signerLine, strings, model::signerToTrust),
             onPick = { url ->
                 pickingPage = false
                 model.chooseSigningPage(url)
@@ -85,6 +85,7 @@ fun CreateFlowScreen(
             onAdd = model::addSigningPage,
             onDismiss = { pickingPage = false },
             cancelLabel = strings.t("common.cancel"),
+            onTrust = model::trustSigningPage,
         )
     }
 

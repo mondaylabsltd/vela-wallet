@@ -146,7 +146,7 @@ data class CreateView(
     val addMethods: List<KeyMethod> = KeyMethod.entries,
     /**
      * Spec 102: the domain this wallet's keys are minted for — `getvela.app`,
-     * or the domain of the page chosen with "Use my own signing page". Shown,
+     * or the domain of the page chosen with "Use a trusted signing page". Shown,
      * so a person sees which site their keys will belong to.
      */
     val signingDomain: String = "getvela.app",

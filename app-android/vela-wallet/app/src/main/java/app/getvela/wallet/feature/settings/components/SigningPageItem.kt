@@ -127,7 +127,7 @@ fun IntegrityLine(model: IntegrityLineModel, modifier: Modifier = Modifier) {
 @Immutable
 data class SigningPageItemModel(
     val url: String,
-    /** "Official", the person's label, or the host. */
+    /** "Vela's official signing page", the person's label, or "Self-hosted · <domain>". */
     val title: String,
     /** The address, without its scheme: `sign.getvela.app`. */
     val address: String,
@@ -137,11 +137,13 @@ data class SigningPageItemModel(
     val official: Boolean,
     /** The version the line asks to trust, when it does. */
     val trustVersion: String? = null,
+    /** The person's own label for the page; empty when they gave none (the rename field's start). */
+    val label: String = "",
 )
 
 /**
  * A signing page row — Settings → Signing pages, "Where you review and sign"
- * and the "Use my own signing page" pickers all draw this one: the shield,
+ * and the "Use a trusted signing page" pickers all draw this one: the shield,
  * the page's name, where it lives and whose keys it reaches (the address in
  * the mono face), and its integrity line.
  *
@@ -276,5 +278,27 @@ fun SigningPageTextAction(label: String, danger: Boolean = false, onClick: () ->
             .clip(CircleShape)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = VelaSpacing.sm, vertical = VelaSpacing.xs),
+    )
+}
+
+/**
+ * A self-hosted page's own build asks to be trusted on this device: its line
+ * is the question ("Version 3f9a1c22 is new to Vela. Trust it on this
+ * device?"), this the answer (`settings.signing.pageTrust`) — under the row's
+ * words, past the glyph and its gap. One quiet accent word, never a button
+ * that outshouts the line it answers.
+ */
+@Composable
+fun TrustAnswer(label: String, modifier: Modifier = Modifier, indent: Boolean = true, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = VelaTheme.colors.accentBase,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.semibold,
+        fontSize = VelaTextSize.base,
+        modifier = modifier
+            .padding(start = if (indent) VelaIconSize.lg + VelaSpacing.lg else VelaSpacing.none, bottom = VelaSpacing.md)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = VelaSpacing.sm),
     )
 }

@@ -94,9 +94,12 @@ object SettingsLive {
     }
 
     /**
-     * One signing page as every list draws it (spec 102): "Official", the
-     * person's label or the host; the address; whose keys it reaches; and the
-     * integrity line the phone's check gives it now.
+     * One signing page as every list draws it (spec 102): its name — Vela's
+     * official signing page, the person's label, or "Self-hosted · <domain>"
+     * (D6: only a page the person deployed is "their own"); the address;
+     * whose keys it reaches; and the integrity line the phone's check gives
+     * it now. [trustVersion]: the version its check asks the person to trust
+     * (`SignerPageAdmission.versionToTrust`), when it does.
      */
     fun pageItem(
         url: String,
@@ -105,22 +108,24 @@ object SettingsLive {
         official: Boolean,
         line: SignerIntegrityLine,
         s: VelaStrings,
-        version: String = "",
+        trustVersion: String? = null,
     ): SigningPageItemModel {
         val address = url.substringAfter("://").trimEnd('/')
         val integrity = integrityModel(line, s)
+        val label = if (official) "" else name.trim()
         return SigningPageItemModel(
             url = url,
             title = when {
                 official -> s.t("settings.signing.pageOfficial")
-                name.isNotBlank() -> name.trim()
-                else -> address.substringBefore('/')
+                label.isNotEmpty() -> label
+                else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { address.substringBefore('/') }))
             },
             address = address,
             domain = if (domain.isBlank()) "" else s.t("settings.signing.keysOn", mapOf("domain" to domain)),
             integrity = integrity,
             official = official,
-            trustVersion = version.takeIf { integrity.asksToTrust && it.isNotBlank() },
+            trustVersion = trustVersion?.takeIf { integrity.asksToTrust && it.isNotBlank() },
+            label = label,
         )
     }
 
@@ -128,19 +133,20 @@ object SettingsLive {
      * Settings → Signing pages (spec 102): the row in the advanced section and
      * the page behind it, from the `signing_pages` core and the integrity
      * checks. Nothing here decides what may be saved — a refused address comes
-     * back as the core's `add_error`.
+     * back as the core's `add_error`. [toTrust] is the version a page's check
+     * asks the person to trust, when it does.
      */
     fun withSigningPages(
         model: SettingsScreenModel,
         view: SigningPagesView,
-        checks: Map<String, SignerPageChecks.Check>,
         line: (String) -> SignerIntegrityLine,
         s: VelaStrings,
+        toTrust: (String) -> String? = { null },
     ): SettingsScreenModel {
         val rows = view.pages.map { row ->
             pageItem(
                 url = row.url, name = row.name, domain = row.domain, official = row.official,
-                line = line(row.url), s = s, version = checks[SignerPageChecks.key(row.url)]?.version.orEmpty(),
+                line = line(row.url), s = s, trustVersion = toTrust(row.url),
             )
         }
         val pages = SigningPagesModel(
@@ -148,8 +154,8 @@ object SettingsLive {
             subtitle = s.t("settings.signing.subtitle"),
             rows = rows,
             add = s.t("settings.signing.pageAdd"),
-            nameLabel = s.t("contacts.nameLabel"),
-            rename = s.t("explore.rename"),
+            nameLabel = s.t("settings.signing.pageName"),
+            rename = s.t("settings.signing.pageRename"),
             addError = when (view.add_error) {
                 "invalid" -> s.t("settings.signing.pageInvalid")
                 "insecure" -> s.t("settings.signing.pageInsecure")
@@ -157,8 +163,8 @@ object SettingsLive {
                 else -> null
             },
             save = s.t("settings.signing.pageSave"),
-            remove = s.t("settingsModals.network.removeConfirm"),
-            trust = s.t("onboarding.create.confirmKeyBtn"),
+            remove = s.t("settings.signing.pageRemove"),
+            trust = s.t("settings.signing.pageTrust"),
             loaded = view.loaded,
         )
         return model.copy(

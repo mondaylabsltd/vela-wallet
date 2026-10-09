@@ -42,7 +42,7 @@ import app.getvela.wallet.feature.onboarding.core.KeyMethod
 /**
  * The ways to sign in — this device, a nearby device by scan, a hardware
  * security key — the SAME three places creating a wallet offers per key, and
- * (spec 102) "Use my own signing page" for a wallet whose keys live on the
+ * (spec 102) "Use a trusted signing page" for a wallet whose keys live on the
  * person's own domain. A wallet that lives on a security key is reachable even
  * when a platform passkey is also present, which the plain system route would
  * use silently.
@@ -67,6 +67,8 @@ fun SignInMethodSheet(
     /** The picker came up: read and check every page. */
     onOpenPages: () -> Unit = {},
     onAddPage: (String) -> Unit = {},
+    /** "Trust this version" on a self-hosted page whose check asks. */
+    onTrustPage: (String) -> Unit = {},
 ) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
@@ -102,6 +104,7 @@ fun SignInMethodSheet(
                         picking = false
                     },
                     onAdd = onAddPage,
+                    onTrust = onTrustPage,
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.lg))
                 VelaSecondaryButton(strings.t("common.cancel"), onClick = { picking = false }, modifier = Modifier.fillMaxWidth())

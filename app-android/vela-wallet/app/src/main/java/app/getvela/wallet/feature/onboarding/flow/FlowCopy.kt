@@ -83,8 +83,8 @@ const val ANDROID_UNLOCK = "other"
  * A method's title and line in the person's words, as the core decides them for
  * [chooser] (`keyMethodWords`, 087 F01/F02) — the create picker, the sign-in
  * sheet and the QR card cannot disagree. The sign-in sheet's phone row scans;
- * it never says "create". Three places; "Use my own signing page" is not one
- * of them (spec 102 — its words are `venueWords("own_page")`).
+ * it never says "create". Three places; "Use a trusted signing page" is not one
+ * of them (spec 102 — its words are `venueWords("signing_page")`).
  */
 fun methodCopy(
     method: KeyMethod,

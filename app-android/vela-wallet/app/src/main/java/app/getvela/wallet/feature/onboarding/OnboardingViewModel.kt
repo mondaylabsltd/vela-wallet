@@ -367,7 +367,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Spec 102: "Use my own signing page" — create this wallet on [url] (a
+     * Spec 102: "Use a trusted signing page" — create this wallet on [url] (a
      * saved signing page), and so on that page's domain; `null` goes back to
      * the app. Only before the first key: the core refuses it after, because
      * the first key commits the set to one domain.
@@ -380,9 +380,9 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    // -- spec 102: "Use my own signing page" ----------------------------------
+    // -- spec 102: "Use a trusted signing page" -------------------------------
 
-    /** The saved signing pages (official first) — what "Use my own signing page" picks from. */
+    /** The saved signing pages (official first) — what "Use a trusted signing page" picks from. */
     val signingPages get() = container.settings.signingPages
 
     /** Every page's integrity check, by base address. */
@@ -390,6 +390,14 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
 
     /** The integrity line for [url] now. */
     fun signerLine(url: String) = container.signerPages.line(url)
+
+    /** The version [url]'s check asks the person to trust, when it does. */
+    fun signerToTrust(url: String) = container.signerPages.versionToTrust(url)
+
+    /** "Trust this version" on a self-hosted page in the picker: stored on that page, then checked again. */
+    fun trustSigningPage(url: String) {
+        viewModelScope.launch { runCatching { container.signerPages.trust(url) } }
+    }
 
     /** The picker came up: read the list, and check every page on it. */
     fun checkSigningPages() {
@@ -483,8 +491,8 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Sign in with a key on [method]'s place — on [page] (spec 102, "Use my
-     * own signing page") when one was chosen, which the core runs on that page
+     * Sign in with a key on [method]'s place — on [page] (spec 102, "Use a
+     * trusted signing page") when one was chosen, which the core runs on that page
      * only for a custom domain (R3).
      */
     fun signIn(method: KeyMethod = KeyMethod.Platform, page: String? = null) =
