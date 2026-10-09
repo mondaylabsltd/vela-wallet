@@ -423,17 +423,18 @@ struct TrustedSignerChannelTests {
 
 final class ScriptedTrustedSigner: TrustedSignerPort {
     var answer: (_ digest: Data) -> TrustedSignerChannel.Ending
-    private(set) var asked: [(request: [String: Any], digest: Data, page: String, place: KeyMethod?)] = []
+    private(set) var asked: [(request: [String: Any], digest: Data, page: String, place: KeyMethod?, keyName: String)] = []
 
     init(answer: @escaping (_ digest: Data) -> TrustedSignerChannel.Ending) {
         self.answer = answer
     }
 
     func sign(
-        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String, place: KeyMethod?
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
+        keyName: String, place: KeyMethod?
     ) async -> TrustedSignerChannel.Ending {
         let request = (try? JSONSerialization.jsonObject(with: Data(requestJson.utf8))) as? [String: Any] ?? [:]
-        asked.append((request, digest, page, place))
+        asked.append((request, digest, page, place, keyName))
         return answer(digest)
     }
 }
@@ -504,6 +505,7 @@ struct TrustedSignerSpineTests {
         #expect(route["hints"] as? [String] == ["client-device"])
         #expect(asked.page == "https://sign.getvela.app/")
         #expect(asked.place == .platform, "the card says which key the person confirms with")
+        #expect(asked.keyName == "Mine", "…by its own name first")
     }
 
     /// The same account, its venue In Vela: the page is never asked, and the
@@ -768,7 +770,7 @@ struct TrustedSignerPageTests {
         let signing = Task {
             await host.sign(
                 requestJson: request, digest: Data(repeating: 7, count: 32), keys: fixture.keys,
-                page: page, place: .platform
+                page: page, keyName: "", place: .platform
             )
         }
         print("[trusted-signer-e2e] page opening: \(page)")

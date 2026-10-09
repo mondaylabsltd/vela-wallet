@@ -165,14 +165,21 @@ struct SigningPlanWire: Decodable, Equatable {
     /// The key this device signs with. `nil` for a record from before the
     /// sign-in key was kept, which signs as it always did.
     let key: KeyRouteWire?
+    /// The record's own label for that key ("Confirm with {{key}}" names it,
+    /// else its place). Not on the wire: read from the same record.
+    var keyName = ""
 
     private enum CodingKeys: String, CodingKey { case domain, venue, blocked, key }
 
-    init(domain: String, venue: SigningVenueWire, blocked: VenueBlockWire? = nil, key: KeyRouteWire? = nil) {
+    init(
+        domain: String, venue: SigningVenueWire, blocked: VenueBlockWire? = nil,
+        key: KeyRouteWire? = nil, keyName: String = ""
+    ) {
         self.domain = domain
         self.venue = venue
         self.blocked = blocked
         self.key = key
+        self.keyName = keyName
     }
 
     init(from decoder: Decoder) throws {
@@ -192,9 +199,16 @@ struct SigningPlanWire: Decodable, Equatable {
     /// The core's plan for a stored account record — `nil` for a record this
     /// build cannot read.
     static func of(accountJson: String) -> SigningPlanWire? {
-        signingPlan(accountJson: accountJson).flatMap {
+        guard var plan = signingPlan(accountJson: accountJson).flatMap({
             try? CoreJSON.decoder.decode(SigningPlanWire.self, from: Data($0.utf8))
+        }) else { return nil }
+        if let id = plan.key?.credentialId,
+           let record = try? CoreJSON.object(accountJson),
+           let keys = record["keys"] as? [[String: Any]],
+           let key = keys.first(where: { ($0["credential_id"] as? String)?.caseInsensitiveCompare(id) == .orderedSame }) {
+            plan.keyName = (key["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        return plan
     }
 }
 

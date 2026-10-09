@@ -139,34 +139,17 @@ struct TrustedSignerSheet: View {
     }
 
     private var waiting: some View {
-        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
-            VStack(alignment: .leading, spacing: Tokens.Space.s12) {
-                HStack(spacing: Tokens.Space.s12) {
-                    if copy.busy {
-                        ProgressView()
-                    } else {
-                        LucideIcon(.triangleAlert, size: LucideIconSize.rowGlyph)
-                            .foregroundStyle(theme.warningBase)
-                            .accessibilityHidden(true)
-                    }
-                    Text(copy.title)
-                        .typeRole(Typography.title)
-                        .foregroundStyle(theme.fgBase)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier(model.unreachable ? "trustedSigner.signerDown" : "trustedSigner.waiting")
-                }
-                if let hint = copy.hint {
-                    Text(hint)
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(theme.fgSubtle)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                // Which page holds the request, and the check that let it
-                // open — the same line the card drew.
-                if !model.page.isEmpty {
-                    IntegrityLineView(loc: loc, line: model.line)
-                        .padding(.top, Tokens.Space.s4)
-                }
+        VStack(spacing: Tokens.Space.s16) {
+            HandoffCardView(
+                model: HandoffCardModel
+                    .build(page: model.page, keyLabel: model.keyLabel, line: model.line, loc: loc)
+                    .waiting(title: copy.title, hint: copy.hint, down: model.unreachable)
+            )
+            .accessibilityIdentifier(model.unreachable ? "trustedSigner.signerDown" : "trustedSigner.waiting")
+            if copy.busy {
+                ProgressView()
+                    .padding(.top, Tokens.Space.s8)
+                    .accessibilityHidden(true)
             }
             Spacer(minLength: Tokens.Space.s8)
             if let reopen = model.reopen {

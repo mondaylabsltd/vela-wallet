@@ -60,6 +60,7 @@ enum SigningLive {
         /// card. `nil` page: the account signs in Vela.
         var handoffPage: String?
         var handoffPlace: KeyMethod?
+        var handoffKeyName = ""
         var handoffLine: SignerIntegrityLine?
         /// Spec 082 RF5: the quote could not even start (the account's
         /// deployment could not be read) — the core's failure name for it,
@@ -281,7 +282,7 @@ enum SigningLive {
         let handoff: HandoffCardModel? = refused ? nil : context.handoffPage.map { page in
             HandoffCardModel.build(
                 page: page,
-                keyLabel: context.handoffPlace.map { TrustedSigner.keyLabel($0, loc: loc) },
+                keyLabel: TrustedSigner.keyLabel(name: context.handoffKeyName, place: context.handoffPlace, loc: loc),
                 line: context.handoffLine ?? SignerPageChecks.checking,
                 loc: loc
             )

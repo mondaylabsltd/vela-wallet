@@ -609,7 +609,8 @@ final class OfferedKeysPage: TrustedSignerPort {
     }
 
     func sign(
-        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String, place: KeyMethod?
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
+        keyName: String, place: KeyMethod?
     ) async -> TrustedSignerChannel.Ending {
         let request = (try? JSONSerialization.jsonObject(with: Data(requestJson.utf8))) as? [String: Any] ?? [:]
         offered.append((request["context"] as? [String: Any])?["allowCredentials"] as? [String] ?? [])

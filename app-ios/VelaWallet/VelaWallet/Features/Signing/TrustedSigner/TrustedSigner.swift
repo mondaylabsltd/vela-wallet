@@ -55,11 +55,13 @@ protocol TrustedSignerPort: AnyObject {
     /// over `digest` by one of `keys` — the keys the page was offered, which
     /// for an account with a sign-in key is that key alone.
     ///
-    /// `place` is where the account's key lives — what the hand-off card
-    /// says the person will confirm with. `nil` for a record from before the
+    /// `keyName` (the record's label for the key) and `place` (where it
+    /// lives) are what the hand-off card says the person will confirm with —
+    /// the name, else the place. `place` is `nil` for a record from before the
     /// sign-in key was kept.
     func sign(
-        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String, place: KeyMethod?
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
+        keyName: String, place: KeyMethod?
     ) async -> TrustedSignerChannel.Ending
 }
 
@@ -204,10 +206,11 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     // MARK: - The spine's door (071, 102 R4)
 
     func sign(
-        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String, place: KeyMethod?
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
+        keyName: String, place: KeyMethod?
     ) async -> TrustedSignerChannel.Ending {
         let ask = TrustedSignerAsk.signature(request: requestJson, digest: digest, keys: keys)
-        let keyLabel = place.map { Self.keyLabel($0, loc: loc) }
+        let keyLabel = Self.keyLabel(name: keyName, place: place, loc: loc)
         // The signing sheet was the hand-off card, and its Open is what asked
         // for this: a page that is admitted opens at once. One that is not
         // keeps the card up, with the line that says why.
@@ -226,10 +229,10 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         deployment: SignerRegistryDeployment? = nil
     ) async -> TrustedSignerCeremonyStep {
         let id = UUID().uuidString.lowercased()
-        let place = (try? CoreJSON.object(operationJson))
-            .flatMap { $0["method"] as? String }
-            .flatMap(KeyMethod.init(rawValue:))
-        let keyLabel = place.map { Self.keyLabel($0, loc: loc) }
+        let operation = try? CoreJSON.object(operationJson)
+        let place = (operation?["method"] as? String).flatMap(KeyMethod.init(rawValue:))
+        // A key being made carries its name; a sign-in names none.
+        let keyLabel = Self.keyLabel(name: operation?["name"] as? String ?? "", place: place, loc: loc)
         guard let request = trustedSignerCeremonyRequest(
             operationJson: operationJson, id: id, walletName: walletName, registry: registry,
             deployment: deployment
@@ -264,6 +267,14 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     /// it (`keyMethodWords`).
     static func keyLabel(_ place: KeyMethod, loc: Loc) -> String {
         methodCopy(place, chooser: .signIn, loc: loc).title
+    }
+
+    /// "Confirm with {{key}}": the key's own name, else its place's title;
+    /// `nil` when neither is known.
+    static func keyLabel(name: String, place: KeyMethod?, loc: Loc) -> String? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        return place.map { keyLabel($0, loc: loc) }
     }
 
     func endFlow() {

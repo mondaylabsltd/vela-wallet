@@ -69,6 +69,9 @@ struct SigningPageRowModel: Identifiable, Equatable {
     let official: Bool
     /// The person's own label, for the rename field.
     let label: String
+    /// A custom page's own build this device has not decided about: the
+    /// full version "Confirm" trusts here (D-7). `nil` otherwise.
+    var trustVersion: String? = nil
 }
 
 /// Settings → Signing pages.
@@ -85,6 +88,9 @@ struct SigningPagesPageModel {
     var loaded: Bool
     let rename: String
     let remove: String
+    /// Trust a custom page's own build on this device.
+    let trust: String
+    let nameLabel: String
     let save: String
     let cancel: String
 }
@@ -95,6 +101,8 @@ struct SigningSettingsActions {
     var onAddPage: (String) -> Void = { _ in }
     var onRenamePage: (_ url: String, _ name: String) -> Void = { _, _ in }
     var onRemovePage: (String) -> Void = { _ in }
+    /// Trust `version` of the page at `url` on this device.
+    var onTrustPage: (_ url: String, _ version: String) -> Void = { _, _ in }
     /// A list of pages is on screen: check them.
     var onPagesShown: () -> Void = {}
 }
@@ -111,12 +119,13 @@ extension SettingsLive {
         plan: SigningPlanWire?,
         pages: SigningPagesViewWire?,
         line: (String) -> SignerIntegrityLine,
+        asksTrust: (String) -> String? = { _ in nil },
         on model: SettingsScreenModel,
         loc: Loc
     ) -> SettingsScreenModel {
         var copy = model
         let saved = pages?.saved ?? []
-        copy.signingPages = signingPagesPage(pages, line: line, loc: loc)
+        copy.signingPages = signingPagesPage(pages, line: line, asksTrust: asksTrust, loc: loc)
         copy.venue = plan.map { venueSetting($0, saved: saved, rows: pages?.pages ?? [], line: line, loc: loc) }
         if let plan, !plan.onAppDomain {
             copy.keys?.domainLine = loc.t("settings.signing.keysOn", vars: ["domain": plan.domain])
@@ -125,7 +134,8 @@ extension SettingsLive {
     }
 
     static func signingPagesPage(
-        _ view: SigningPagesViewWire?, line: (String) -> SignerIntegrityLine, loc: Loc
+        _ view: SigningPagesViewWire?, line: (String) -> SignerIntegrityLine,
+        asksTrust: (String) -> String? = { _ in nil }, loc: Loc
     ) -> SigningPagesPageModel {
         let rows = (view?.pages ?? SigningPagesViewWire.initial?.pages ?? []).map { page in
             SigningPageRowModel(
@@ -135,7 +145,8 @@ extension SettingsLive {
                 domainLine: loc.t("settings.signing.keysOn", vars: ["domain": page.domain]),
                 line: line(page.url),
                 official: page.official,
-                label: page.name
+                label: page.name,
+                trustVersion: page.official ? nil : asksTrust(page.url)
             )
         }
         return SigningPagesPageModel(
@@ -145,9 +156,12 @@ extension SettingsLive {
             addLabel: loc.t("settings.signing.pageAdd"),
             addErrorKey: SigningPagesViewWire.addErrorKey(view?.addError),
             loaded: view?.loaded ?? false,
-            // Borrowed until the corpus has settings-own words for them.
+            // Borrowed until the corpus has settings-own words for them —
+            // the same borrowings Android makes.
             rename: loc.t("explore.rename"),
-            remove: loc.t("settingsModals.network.removeConfirm"),
+            remove: loc.t("onboarding.create.removeKeyBtn"),
+            trust: loc.t("onboarding.create.confirmKeyBtn"),
+            nameLabel: loc.t("contacts.nameLabel"),
             save: loc.t("settings.signing.pageSave"),
             cancel: loc.t("common.cancel")
         )
@@ -228,6 +242,9 @@ struct SigningPagesBody: View {
                     if index > 0 { Divider().overlay(theme.borderBase) }
                     SigningPageSettingsRow(
                         loc: loc, row: row, panel: panel,
+                        onTrust: actions.map { actions in
+                            { version in actions.onTrustPage(row.url, version) }
+                        },
                         onRename: actions != nil && panel.loaded && !row.official ? {
                             renameDraft = row.label
                             renaming = row
@@ -248,7 +265,7 @@ struct SigningPagesBody: View {
         }
         .padding(.top, Tokens.Space.s8)
         .alert(panel.rename, isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-            TextField(renaming?.host ?? "", text: $renameDraft)
+            TextField(panel.nameLabel, text: $renameDraft)
             Button(panel.save) {
                 if let row = renaming { actions?.onRenamePage(row.url, renameDraft) }
                 renaming = nil
@@ -275,6 +292,7 @@ private struct SigningPageSettingsRow: View {
     let loc: Loc
     let row: SigningPageRowModel
     let panel: SigningPagesPageModel
+    var onTrust: ((String) -> Void)?
     var onRename: (() -> Void)?
     var onRemove: (() -> Void)?
 
@@ -300,6 +318,18 @@ private struct SigningPageSettingsRow: View {
                     .foregroundStyle(theme.fgSubtle)
                 IntegrityLineView(loc: loc, line: row.line)
                     .padding(.top, Tokens.Space.s2)
+                // "Version … is new to Vela. Trust it on this device?" — the
+                // answer, beside the question.
+                if let version = row.trustVersion, let onTrust {
+                    Button { onTrust(version) } label: {
+                        Text(panel.trust)
+                            .typeRole(Typography.actionLabel)
+                            .foregroundStyle(theme.accentBase)
+                            .frame(minHeight: Tokens.Layout.hitTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("signingPage.trust.\(row.host)")
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if onRename != nil || onRemove != nil {

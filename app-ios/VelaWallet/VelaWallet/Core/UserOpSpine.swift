@@ -558,7 +558,7 @@ final class UserOpSpine {
         }
         let ending = await trustedSigner.sign(
             requestJson: request, digest: challenge, keys: offered, page: page,
-            place: plan.key?.place
+            keyName: plan.keyName, place: plan.key?.place
         )
         switch ending {
         case .outcome(.accepted(let credentialIdHex, let assertion)):

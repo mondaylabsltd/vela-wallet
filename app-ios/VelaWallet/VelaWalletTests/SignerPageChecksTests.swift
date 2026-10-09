@@ -152,6 +152,36 @@ struct SignerPageChecksTests {
         #expect(checks.openable(custom) == nil)
     }
 
+    /// D-7: a custom page's index proposes its own build, which nobody here
+    /// knows — the line asks, nothing opens, and "Confirm" trusts exactly that
+    /// version on this device; the page is checked again and opens. The
+    /// official page never asks.
+    @Test func aCustomPagesOwnBuildIsTrustedOnlyWhenThePersonSaysSo() async throws {
+        let server = Server()
+        server.index = Data(#"{"versions":["\#(hash)"]}"#.utf8)
+        server.page = bytes
+        final class Box { var trusted: [String] = [] }
+        let box = Box()
+        let checks = SignerPageChecks(
+            fetchIndex: { [server] _ in server.index },
+            fetchPage: { [server] _ in server.page },
+            lists: { (box.trusted, []) },
+            addTrusted: { box.trusted.append($0) },
+            clock: { Self.start }
+        )
+        await checks.ensure(custom)
+        #expect(checks.line(for: custom).state == .askToTrust)
+        #expect(!checks.line(for: custom).opens)
+        let asked = try #require(checks.versionAskingTrust(custom))
+        #expect(asked == hash)
+
+        await checks.trust(custom, version: asked)
+        #expect(box.trusted == [hash])
+        #expect(checks.line(for: custom).state == .trustedHere)
+        #expect(checks.openable(custom) != nil)
+        #expect(checks.versionAskingTrust(custom) == nil)
+    }
+
     /// The index is read as the desktop reads it: `{"versions": […]}` or a
     /// bare list, hashes only; anything else is an empty list.
     @Test func theIndexIsReadLeniently() {
@@ -232,7 +262,7 @@ struct HandoffCardTests {
                 state: state, version: "12345678", checkedAtMs: 1, key: "componentsUi.signing.integrity.\(leaf)",
                 opens: state == .matches || state == .trustedHere
             )
-            let text = line.text(loc, nowMs: 2)
+            let text = line.text(loc)
             #expect(text != line.key, "\(state) has no sentence")
             #expect(!text.contains("{{"))
             #expect(!text.localizedCaseInsensitiveContains("untampered"))

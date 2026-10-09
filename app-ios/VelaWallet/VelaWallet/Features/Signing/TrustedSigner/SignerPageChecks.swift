@@ -61,6 +61,7 @@ final class SignerPageChecks {
     private let fetchIndex: Fetch
     private let fetchPage: Fetch
     private let lists: () -> (trusted: [String], blocked: [String])
+    private let addTrusted: (String) -> Void
     private let clock: () -> UInt64
 
     /// The last ruling per page, admitted or refused, by its normalised base.
@@ -75,11 +76,13 @@ final class SignerPageChecks {
         fetchIndex: Fetch? = nil,
         fetchPage: Fetch? = nil,
         lists: (() -> (trusted: [String], blocked: [String]))? = nil,
+        addTrusted: ((String) -> Void)? = nil,
         clock: @escaping () -> UInt64 = { UInt64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.fetchIndex = fetchIndex ?? { await Self.get($0, limit: 256 * 1024) }
         self.fetchPage = fetchPage ?? { await Self.get($0, limit: Self.maxBytes) }
         self.lists = lists ?? { Self.storedLists(VelaStore()) }
+        self.addTrusted = addTrusted ?? { Self.storeTrusted($0, in: VelaStore()) }
         self.clock = clock
     }
 
@@ -108,6 +111,22 @@ final class SignerPageChecks {
     func line(for base: String) -> SignerIntegrityLine {
         guard let admission = admission(for: base) else { return Self.checking }
         return admission.line(nowMs: nowMs)
+    }
+
+    /// The full version a custom page's own index proposed and this device
+    /// has not decided about (`AskToTrust`) — what "Confirm" trusts. `nil`
+    /// otherwise; the official page never asks (D-7).
+    func versionAskingTrust(_ base: String) -> String? {
+        guard case .askToTrust(let actual)? = admission(for: base)?.verdict() else { return nil }
+        return Self.normalizedHash(actual)
+    }
+
+    /// The person trusts `version` on this device (FR-009) — added to
+    /// `vela.signerPage.trusted` — and the page is checked again under it.
+    func trust(_ base: String, version: String) async {
+        guard let hash = Self.normalizedHash(version) else { return }
+        addTrusted(hash)
+        await check(base)
     }
 
     /// Is a check of `base` running right now?
@@ -242,6 +261,15 @@ final class SignerPageChecks {
         return (list(trustedKey), list(blockedKey))
     }
 
+    /// One hash added to the device's trusted list, once.
+    static func storeTrusted(_ hash: String, in store: VelaStore) {
+        var trusted = storedLists(store).trusted
+        guard !trusted.contains(hash) else { return }
+        trusted.append(hash)
+        let json = (try? JSONSerialization.data(withJSONObject: trusted)).map { String(decoding: $0, as: UTF8.self) }
+        store.writeString(trustedKey, json)
+    }
+
     /// Bases are compared as the core normalises them.
     static func key(_ base: String) -> String {
         base.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -279,12 +307,13 @@ private extension Optional {
 
 extension SignerIntegrityLine {
     /// The line in words: the core names the corpus key, the shell fills the
-    /// version and "checked …" (the core's compact relative time).
-    func text(_ loc: Loc, nowMs: Double = Date().timeIntervalSince1970 * 1000) -> String {
+    /// version and "checked {{time}}" — the check's moment as the person reads
+    /// times (their own format; a check vouches for a day at most).
+    func text(_ loc: Loc) -> String {
         var vars: [String: String] = [:]
         if !version.isEmpty { vars["version"] = version }
         if let checkedAtMs {
-            vars["time"] = loc.relativeTime(atMs: Double(checkedAtMs), now: Date(timeIntervalSince1970: nowMs / 1000))
+            vars["time"] = Formats.time(Date(timeIntervalSince1970: Double(checkedAtMs) / 1000))
         }
         return vars.isEmpty ? loc.t(key) : loc.t(key, vars: vars)
     }

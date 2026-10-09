@@ -179,6 +179,8 @@ final class SigningController {
     var venuePage: String? { venuePlan?.venue.pageUrl }
     /// Where the account's key lives — "Confirm with …".
     var venuePlace: KeyMethod? { venuePlan?.key?.place }
+    /// The record's name for that key, which "Confirm with …" says first.
+    var venueKeyName: String { venuePlan?.keyName ?? "" }
     private var ports: Ports
 
     /// Record ids already on disk, and the handoff waiting for them. The

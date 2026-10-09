@@ -3047,6 +3047,7 @@ struct RootView: View {
             trustedSignerRoute: live?.trustedSignerRoute ?? false,
             handoffPage: live?.venuePage,
             handoffPlace: live?.venuePlace,
+            handoffKeyName: live?.venueKeyName ?? "",
             handoffLine: live?.venuePage.map { SignerPageChecks.shared.line(for: $0) },
             feeStartFailure: live?.quoteStartFailure,
             networks: walletNetworks
@@ -3601,6 +3602,9 @@ struct RootView: View {
                 onAddPage: { settings.addSigningPage(url: $0) },
                 onRenamePage: { settings.renameSigningPage(url: $0, name: $1) },
                 onRemovePage: { settings.removeSigningPage(url: $0) },
+                onTrustPage: { url, version in
+                    Task { await SignerPageChecks.shared.trust(url, version: version) }
+                },
                 onPagesShown: { primeSigningPages() }
             ),
             onOpenLink: { openExternal($0) },
@@ -3743,6 +3747,7 @@ struct RootView: View {
             plan: session.view.address.isEmpty ? nil : plan,
             pages: settings.signingPages,
             line: { SignerPageChecks.shared.line(for: $0) },
+            asksTrust: { SignerPageChecks.shared.versionAskingTrust($0) },
             on: model, loc: loc
         )
         // The preferences last: they have no machine to wait for, and every
@@ -3812,7 +3817,7 @@ struct RootView: View {
         else { return nil }
         return HandoffCardModel.build(
             page: page,
-            keyLabel: plan.key?.place.map { TrustedSigner.keyLabel($0, loc: loc) },
+            keyLabel: TrustedSigner.keyLabel(name: plan.keyName, place: plan.key?.place, loc: loc),
             line: SignerPageChecks.shared.line(for: page),
             loc: loc
         )
