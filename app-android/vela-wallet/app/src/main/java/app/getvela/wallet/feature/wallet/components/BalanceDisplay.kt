@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -57,14 +58,14 @@ fun BalanceDisplay(
         )
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         when (model.state) {
-            BalanceStateKind.Normal -> AmountRow(model, onToggleVisibility)
+            BalanceStateKind.Normal -> HeroLine { AmountRow(model, onToggleVisibility) }
             BalanceStateKind.ZeroLive -> {
-                AmountRow(model, onToggleVisibility)
+                HeroLine { AmountRow(model, onToggleVisibility) }
                 Spacer(modifier = Modifier.height(VelaSpacing.md))
                 LiveIndicatorRow(model.liveText.orEmpty())
             }
-            BalanceStateKind.Loading -> SkeletonBalanceBlock()
-            BalanceStateKind.Hidden -> HiddenRow(model, onToggleVisibility)
+            BalanceStateKind.Loading -> HeroLine { SkeletonBalanceBlock() }
+            BalanceStateKind.Hidden -> HeroLine { HiddenRow(model, onToggleVisibility) }
         }
         model.status?.let { status ->
             Spacer(modifier = Modifier.height(VelaSpacing.md))
@@ -74,6 +75,27 @@ fun BalanceDisplay(
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
             BalanceRefreshControl(model = refresh, spinning = refreshSpinning, onRefresh = onRefresh)
         }
+    }
+}
+
+/**
+ * The figure's own line, held in every state (PR 2 polish): the mask and the
+ * skeleton stand in the height the figure takes, so hiding or showing the
+ * balance moves nothing under it. The mask's row (its eye's 48 dp target over
+ * a smaller mask) was 6 px off the figure's on the Xiaomi, and Receive, Send
+ * and the activity moved by that much at every toggle.
+ */
+@Composable
+private fun HeroLine(content: @Composable () -> Unit) {
+    Box(contentAlignment = Alignment.CenterStart) {
+        Text(
+            text = "0",
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.bold,
+            fontSize = VelaTextSize.xl5,
+            modifier = Modifier.alpha(0f).clearAndSetSemantics {},
+        )
+        content()
     }
 }
 
