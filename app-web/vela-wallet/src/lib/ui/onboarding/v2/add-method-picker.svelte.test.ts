@@ -1,15 +1,17 @@
 /**
- * The key-method chooser, in a real browser (spec 075).
+ * The key-place chooser, in a real browser (spec 075, spec 102).
  *
  * One list serves three places — the FIRST founding key, "add another key",
  * and the sign-in sheet on Welcome — so what it offers is what every one of
  * them offers.
  *
- * On the WEB that is three routes. 075 made the Trusted Signer a fourth, and on
- * 2026-09-23 the owner took it off this shell entirely ("web 就不支持可信签名器
- * 好了"): a browser cannot open the page, so a key minted there would be one
- * this wallet could never sign with again. The core still offers it — the
- * native shells have it — so the filter here is the thing under test.
+ * Spec 102: THREE places and no fourth. The Trusted Signer sat here as a
+ * fourth "place", and a person who tapped it was asked "this device / scan a
+ * code / USB key" all over again — a signing page is where a person reviews
+ * and signs, not where a key lives. Beside the three, a shell that can OPEN a
+ * page may offer the advanced "Use my own signing page"; the web cannot (owner,
+ * 2026-09-23), so its live flows never pass it — the gallery does, as the
+ * design the phones build to.
  *
  * A `.svelte.test.ts` because it is about what a person sees, and the strings
  * are the REAL corpus: a chooser that reads well with invented copy proves
@@ -20,7 +22,6 @@ import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import en from '../../../../../../../assets/i18n/en.json';
 import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-import type { AddBlocked } from '$lib/onboarding/generated/AddBlocked';
 import AddMethodPicker from './AddMethodPicker.svelte';
 
 const strings = (key: string, params?: Record<string, string | number>): string => {
@@ -34,75 +35,59 @@ const strings = (key: string, params?: Record<string, string | number>): string 
 	);
 };
 
-function drawn(narrow?: { allowed: KeyMethod[]; blocked: AddBlocked }) {
+function drawn(options: { ownPage?: () => void; allowed?: KeyMethod[] } = {}) {
 	const picked: KeyMethod[] = [];
 	const screen = render(AddMethodPicker, {
 		props: {
 			open: true,
 			strings,
 			onPick: (method: KeyMethod) => picked.push(method),
-			...(narrow ? { allowed: narrow.allowed, blocked: narrow.blocked } : {})
+			...(options.allowed ? { allowed: options.allowed } : {}),
+			...(options.ownPage ? { ownPage: { onPick: options.ownPage } } : {})
 		}
 	});
 	const buttons = [...screen.container.querySelectorAll<HTMLButtonElement>('button.method')];
 	return {
 		picked,
 		buttons,
-		reason: [...screen.container.querySelectorAll('.reason')].map(
-			(line) => line.textContent?.trim() ?? ''
-		),
 		names: buttons.map((button) => button.querySelector('.name')?.textContent?.trim()),
 		captions: buttons.map((button) => button.querySelector('.caption')?.textContent?.trim())
 	};
 }
 
-describe('the key-method chooser', () => {
-	it('offers the three routes a browser can actually take', () => {
+describe('the key-place chooser', () => {
+	it('offers the three places a key can live — and no fourth', () => {
 		const view = drawn();
 		expect(view.names).toEqual([
 			strings('onboarding.create.methodPlatformTitle'),
 			strings('onboarding.create.methodHybridTitle'),
 			strings('onboarding.create.methodSecurityKeyTitle')
 		]);
-	});
-
-	it('never draws the Trusted Signer, even when the core offers it', () => {
-		const view = drawn({
-			allowed: ['platform', 'hybrid', 'security_key', 'trusted_signer'],
-			blocked: null as unknown as AddBlocked
-		});
-		expect(view.names).not.toContain(strings('componentsUi.signing.trustedSignerTitle'));
 		expect(view.buttons).toHaveLength(3);
+		// The words the fourth row wore are gone from the corpus altogether.
+		const signing = (en as { componentsUi: { signing: Record<string, unknown> } }).componentsUi
+			.signing;
+		expect(signing.trustedSignerTitle).toBeUndefined();
 	});
 
-	it('a route that would mint for another site is off, and says why', () => {
-		// Spec 075, the owner's report of 2026-09-23: a set of `getvela.app`
-		// keys plus a signer page on `localhost`. The page cannot add to this
-		// set — it would mint a key no unit accepts — and a person who reads
-		// this row needs to know the page is a setting they can change.
-		const view = drawn({
-			allowed: ['platform', 'hybrid', 'security_key'],
-			blocked: {
-				relying_party: 'getvela.app',
-				page: 'http://localhost:8140/sign.html',
-				page_relying_party: 'localhost'
-			}
-		});
-		expect(view.buttons.map((button) => button.disabled)).toEqual([false, false, false]);
-		// Two paragraphs: what this wallet's keys belong to, then the page to
-		// change — never joined, which would put a space after a full stop
-		// that already ends the line in Chinese.
-		expect(view.reason).toHaveLength(2);
-		expect(view.reason[0]).toContain('getvela.app');
-		expect(view.reason[1]).toContain('http://localhost:8140/sign.html');
-		expect(view.reason[1]).toContain('localhost');
+	it('the web’s live flows draw no "own signing page" (it opens no page)', () => {
+		expect(drawn().names).not.toContain(strings('onboarding.create.ownPageTitle'));
 	});
 
-	it('says nothing extra while every route still fits', () => {
-		expect(drawn().reason).toEqual([]);
+	it('a shell that opens pages draws it below the three, and it is not a place', () => {
+		let chosen = 0;
+		const view = drawn({ ownPage: () => (chosen += 1) });
+		expect(view.buttons).toHaveLength(4);
+		expect(view.names.slice(0, 3)).toEqual(drawn().names);
+		expect(view.names[3]).toBe(strings('onboarding.create.ownPageTitle'));
+		expect(view.captions[3]).toBe(strings('onboarding.create.ownPageBody'));
+		view.buttons[3]?.click();
+		expect(chosen).toBe(1);
+		// Choosing it picks no place.
+		expect(view.picked).toEqual([]);
 	});
 
-	it('hands the core the route the person tapped', () => {
+	it('hands the core the place the person tapped', () => {
 		const view = drawn();
 		view.buttons.at(-1)?.click();
 		view.buttons[0]?.click();

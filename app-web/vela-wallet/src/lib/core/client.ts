@@ -74,7 +74,6 @@ import init, {
 	RpcPoolCore,
 	SendCore,
 	SessionCore,
-	SignPrefCore,
 	SignRequestCore,
 	storageIsCacheKey,
 	storageIsErasableKey,
@@ -113,7 +112,6 @@ export {
 	RpcPoolCore,
 	SendCore,
 	SessionCore,
-	SignPrefCore,
 	SignRequestCore,
 	TokenTrustCore,
 	TxTrackerCore

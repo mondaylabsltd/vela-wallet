@@ -12,6 +12,8 @@
  * SHELL rule — a namespace sweep over three key-value stores, which no core has
  * a port to perform.
  */
+import type { SigningVenue } from '$lib/core/generated/SigningVenue';
+
 export type SettingsPrefEvent =
 	/** A segment id from the drawn control: `light` / `dark` / `auto`. */
 	| { kind: 'theme'; id: string }
@@ -29,14 +31,12 @@ export type SettingsPrefEvent =
 	 * rewrites the stored default.
 	 */
 	| { kind: 'fee-speed'; id: string }
-	/** The Trusted Signer's page, as typed and saved — the `sign_pref` core validates it. */
-	| { kind: 'signer-page'; text: string }
-	/** Back to the official page. */
-	| { kind: 'signer-page-reset' }
-	/** Spec 075: the tunnel a cross-device pairing goes through, as typed and saved. */
-	| { kind: 'tunnel-page'; text: string }
-	/** Back to the official tunnel. */
-	| { kind: 'tunnel-page-reset' }
+	/**
+	 * Spec 102: where the active account reviews and signs — the session core
+	 * refuses a venue that cannot reach its keys (R1). Never raised on the
+	 * web, whose one venue is a statement (it opens no page).
+	 */
+	| { kind: 'signing-venue'; venue: SigningVenue }
 	| { kind: 'number-format'; id: string }
 	| { kind: 'date-format'; id: string }
 	| { kind: 'time-format'; id: string }

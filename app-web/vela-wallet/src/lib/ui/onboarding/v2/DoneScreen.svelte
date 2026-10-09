@@ -102,11 +102,8 @@
 
 	<ul class="keys">
 		{#each keys as key, index (index)}
-			<!-- A Trusted Signer key names its page, not the vault beyond it (075). -->
-			{@const holder =
-				key.kind === 'trusted_signer'
-					? undefined
-					: providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
+			<!-- Captioned by where the key lives (spec 102: three places, no fourth). -->
+			{@const holder = providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
 			{@const where = holder ?? strings(providerLineFor(key.kind))}
 			{@const badge = keyBadge(key, strings)}
 			<li class="key">

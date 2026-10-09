@@ -120,21 +120,24 @@ test('sign-in stays on Welcome — it has no steps to show', async ({ page }) =>
  * so a security key or a phone is reachable without the browser's own sheet
  * deciding.
  *
- * Spec 075 made it FOUR: the Trusted Signer is a passkey route of its own, and
- * the owner's ruling is that it stands wherever the three stand.
+ * Spec 102: THREE — the places a key can live. Spec 075's fourth row (the
+ * Trusted Signer) was not a place but where a person reviews and signs, and
+ * the web opens no signing page at all (owner, 2026-09-23); nor does it offer
+ * "sign in on my own signing page", which only an app that opens pages can.
  */
 for (const [width, height] of [
 	[390, 844],
 	[1440, 900]
 ] as const) {
-	test(`sign-in offers the four ways in, with icons, at ${width}px`, async ({ page }) => {
+	test(`sign-in offers the three ways in, with icons, at ${width}px`, async ({ page }) => {
 		await page.setViewportSize({ width, height });
 		await page.goto('/en');
 		await page.getByRole('button', { name: 'I already have a wallet' }).click();
 		await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
 		const rows = page.locator('.methods .method');
-		await expect(rows).toHaveCount(4);
-		for (let i = 0; i < 4; i += 1) {
+		await expect(rows).toHaveCount(3);
+		await expect(page.locator('.method.own')).toHaveCount(0);
+		for (let i = 0; i < 3; i += 1) {
 			await expect(rows.nth(i).locator('svg')).toBeVisible();
 		}
 		await expect(page).toHaveURL('/en');

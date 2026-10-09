@@ -40,6 +40,12 @@ type RegistryApiMember = {
 
 export type PublishArgs = {
 	rpId: string;
+	/**
+	 * Spec 102 R3: the page a member with no replayable proof would sign its
+	 * live proof on — a custom-domain wallet's. The web opens no page, so such
+	 * a member is refused here, named. `null`: the app.
+	 */
+	page?: string | null;
 	/** The group's opaque metadata blob, already hex-encoded by the core. */
 	metadataHex: string;
 	/** The founding passkeys, in canonical founding order. */
@@ -122,16 +128,13 @@ export async function publish(args: PublishArgs): Promise<string | null> {
 			if (!derived) {
 				throw new Error(`registry challenge is missing member ${member.public_key_hex}`);
 			}
-			// Spec 075: a member that lives behind a Trusted Signer page signs
-			// THERE, and the web wallet has no Trusted Signer (owner, 2026-09-23).
-			// No platform sheet can see that key — asking the OS would find
-			// nothing, and signing with the wallet's own rpId would produce an
-			// assertion the registry can never verify. So it stops here, named.
-			const behindPage = member.signer_origin ?? '';
-			if (behindPage !== '') {
-				throw new Error(
-					`this key lives behind ${behindPage}, which only the Vela app can open`
-				);
+			// Spec 102 R3: a custom-domain wallet's member proves itself on its
+			// page, and the web opens none (owner, 2026-09-23). No platform sheet
+			// can see that key — asking the OS would find nothing, and signing
+			// with the wallet's own rpId would produce an assertion the registry
+			// can never verify. So it stops here, named.
+			if (args.page) {
+				throw new Error(`this key proves itself on ${args.page}, which only the Vela app can open`);
 			}
 			const assertion = await Passkey.sign(stripHex(derived.challenge), member.credential_id);
 			proof = buildMemberProof(

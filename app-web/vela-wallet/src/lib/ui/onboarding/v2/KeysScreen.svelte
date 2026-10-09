@@ -16,7 +16,8 @@
 	import { isDarkTheme } from '$lib/theme.svelte';
 	import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import type { AddBlocked } from '$lib/onboarding/generated/AddBlocked';
+	import type { IntegrityLineModel } from '$lib/settings/model';
+	import IntegrityLine from '$lib/settings/ui/IntegrityLine.svelte';
 
 	interface Props {
 		keys: CreateKeyRow[];
@@ -25,10 +26,23 @@
 		needsSecondKey: boolean;
 		busy: boolean;
 		maxKeys: number;
-		/** Spec 075: the routes that may still mint a key for THIS set. */
+		/** The places a key may be minted in — always the three (spec 102). */
 		addMethods?: KeyMethod[];
-		/** Why the others may not, when some may not. */
-		addBlocked?: AddBlocked | null;
+		/**
+		 * Spec 102: the page chosen with "Use my own signing page", and the
+		 * domain this wallet's keys are minted for. Drawn only when a page was
+		 * chosen — then every key belongs to THAT site, and the person must see
+		 * which before it is too late to choose otherwise. Absent on the web,
+		 * which offers no own page.
+		 */
+		signingDomain?: string;
+		signingPage?: string | null;
+		/** That page's integrity line, in words — from a shell that checks it (the web checks none). */
+		pageLine?: IntegrityLineModel;
+		/** May a signing page still be chosen (the core's `can_choose_page`: before the first key)? */
+		canChoosePage?: boolean;
+		/** "Use my own signing page" — only from a shell that opens pages. */
+		ownPage?: { onPick: () => void };
 		strings: (key: string, params?: Record<string, string | number>) => string;
 		onAddKey: (method: KeyMethod) => void;
 		onConfirmKey: (index: number) => void;
@@ -44,7 +58,11 @@
 		busy,
 		maxKeys,
 		addMethods,
-		addBlocked = null,
+		signingDomain = '',
+		signingPage = null,
+		pageLine,
+		canChoosePage = false,
+		ownPage,
 		strings,
 		onAddKey,
 		onConfirmKey,
@@ -92,6 +110,20 @@
 		</p>
 	{/if}
 
+	{#if signingPage}
+		<!--
+			Spec 102: "Use my own signing page" was chosen. Every key below is
+			minted for that page's domain and signs only there — said before the
+			first key, because that is when the choice is still free.
+		-->
+		<div class="page">
+			<span class="pagedomain">{strings('settings.signing.keysOn', { domain: signingDomain })}</span
+			>
+			<span class="pageurl">{signingPage}</span>
+			{#if pageLine}<IntegrityLine line={pageLine} />{/if}
+		</div>
+	{/if}
+
 	<div class="list">
 		<div class="listhead">
 			<span class="label">{strings('onboarding.create.keysLabel')}</span>
@@ -103,16 +135,8 @@
 		<ul class="rows">
 			{#each keys as key, index (index)}
 				{@const badge = keyBadge(key, strings)}
-				<!--
-					Spec 075: a key behind a Trusted Signer page is not named by the
-					catalog. The AAGUID a page reports belongs to the authenticator on
-					ITS side — the one thing this wallet cannot reach — so the row says
-					the page, which is where the key lives.
-				-->
-				{@const holder =
-					key.kind === 'trusted_signer'
-						? undefined
-						: providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
+				<!-- Captioned by where the key lives (spec 102: three places, no fourth). -->
+				{@const holder = providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
 				{@const where = holder ?? strings(providerLineFor(key.kind))}
 				<li class="row">
 					<!--
@@ -181,9 +205,9 @@
 		<AddMethodPicker
 			open={pickerShown}
 			allowed={addMethods}
-			blocked={addBlocked}
 			{strings}
 			onPick={pick}
+			ownPage={canChoosePage ? ownPage : undefined}
 		/>
 	</div>
 
@@ -254,6 +278,30 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-lg);
+	}
+
+	/* The chosen page: which site every key will belong to, said once, calmly. */
+	.page {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		padding: var(--space-md) var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-sunken);
+	}
+
+	.pagedomain {
+		color: var(--color-fg-base);
+		font-size: var(--text-sm);
+		font-weight: var(--weight-semibold);
+	}
+
+	.pageurl {
+		color: var(--color-fg-muted);
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		overflow-wrap: anywhere;
 	}
 
 	.listhead {

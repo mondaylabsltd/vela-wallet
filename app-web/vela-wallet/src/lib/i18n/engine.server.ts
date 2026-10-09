@@ -425,18 +425,39 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			slowHint: k('send.gasTierHintSlow')
 		},
 		signing: {
-			methods: {
-				trusted_signer: k('componentsUi.signing.trustedSignerTitle')
-			},
-			trustedSignerBody: k('componentsUi.signing.trustedSignerBody'),
-			pageTitle: k('settings.signing.pageTitle'),
-			pageSubtitle: k('settings.signing.pageSubtitle'),
+			title: k('settings.signing.title'),
+			subtitle: k('settings.signing.subtitle'),
 			pageOfficial: k('settings.signing.pageOfficial'),
 			pageInvalid: k('settings.signing.pageInvalid'),
 			pageInsecure: k('settings.signing.pageInsecure'),
-			pageForeign: k('settings.signing.pageForeign'),
-			pageReset: k('settings.signing.pageReset'),
-			pageSave: k('settings.signing.pageSave')
+			pageDuplicate: k('settings.signing.pageDuplicate'),
+			pageAdd: k('settings.signing.pageAdd'),
+			pageSave: k('settings.signing.pageSave'),
+			keysOn: k('settings.signing.keysOn'),
+			rename: k('explore.rename'),
+			remove: k('settingsModals.network.removeConfirm')
+		},
+		venue: {
+			title: k('settings.venue.title'),
+			subtitle: k('settings.venue.subtitle'),
+			inVela: k('settings.venue.inVela'),
+			inVelaBody: k('settings.venue.inVelaBody'),
+			page: k('settings.venue.page'),
+			pageBody: k('settings.venue.pageBody'),
+			blockedApp: k('settings.venue.blockedApp'),
+			blockedPage: k('settings.venue.blockedPage')
+		},
+		integrity: {
+			checking: k('componentsUi.signing.integrity.checking'),
+			matches: k('componentsUi.signing.integrity.matches'),
+			trusted: k('componentsUi.signing.integrity.trusted'),
+			unchecked: k('componentsUi.signing.integrity.unchecked'),
+			mismatch: k('componentsUi.signing.integrity.mismatch'),
+			blocked: k('componentsUi.signing.integrity.blocked'),
+			askTrust: k('componentsUi.signing.integrity.askTrust'),
+			couldNotCheck: k('componentsUi.signing.integrity.couldNotCheck'),
+			noVersion: k('componentsUi.signing.integrity.noVersion'),
+			allBlocked: k('componentsUi.signing.integrity.allBlocked')
 		},
 		networks: {
 			count: k('settings.networks.count'),

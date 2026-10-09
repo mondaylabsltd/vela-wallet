@@ -126,15 +126,20 @@ export function methodCopy(
 				title: 'onboarding.create.methodSecurityKeyTitle',
 				body: 'onboarding.create.methodSecurityKeyBody'
 			};
-		case 'trusted_signer':
-			return {
-				title: 'componentsUi.signing.trustedSignerTitle',
-				body: 'componentsUi.signing.trustedSignerBody'
-			};
 		default:
 			return unreachable(method);
 	}
 }
+
+/**
+ * "Use my own signing page" (spec 102) — the chooser's advanced entry, which is
+ * not a place a key lives. The core's `venue_words("own_page")` names these
+ * keys; `copy.test.ts` holds the two to each other.
+ */
+export const OWN_PAGE_COPY = {
+	title: 'onboarding.create.ownPageTitle',
+	body: 'onboarding.create.ownPageBody'
+} as const;
 
 /**
  * The provider line under a key's name, when the AAGUID catalog cannot name the
@@ -163,8 +168,6 @@ export function providerLineFor(kind: KeyMethod): string {
 			return 'onboarding.create.methodHybridTitle';
 		case 'security_key':
 			return 'onboarding.create.providerSecurityKey';
-		case 'trusted_signer':
-			return 'componentsUi.signing.trustedSignerTitle';
 		default:
 			return unreachable(kind);
 	}

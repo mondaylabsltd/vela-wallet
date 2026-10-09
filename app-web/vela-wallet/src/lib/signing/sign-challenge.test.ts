@@ -1,7 +1,8 @@
 /**
  * Where a signature goes (founder, 2026-09-26): the key the account signed in
  * with, over the route it signed in over — never a choice made per signature.
- * The account record says which, the real core reads it (`signInRoute`), and
+ * The account record says which, the real core reads it (`signingPlan`, spec
+ * 102 — migrating a record from before), and
  * this asserts what the browser is then actually asked: that one credential,
  * over the transports the core names, with the chosen method's hint only when
  * the sign-in found the key where it was chosen — a key found somewhere else is
@@ -10,13 +11,17 @@
  * A record written before it named its sign-in key must sign exactly as it
  * always did: every founding key allowed with its own transports, no hint, the
  * browser left to pick.
+ *
+ * And spec 102's P2-11: the web opens no signing page. A `getvela.app` account
+ * whose venue is a page signs here natively; an account on a custom signing
+ * domain is refused with the core's own reason, before any ceremony.
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bytesToHex } from '$lib/onboarding/core/passkey';
 import { saveAccount } from '$lib/onboarding/core/storage';
 import type { Account } from '$lib/onboarding/generated/Account';
-import { signChallenge, type ChallengeSigner } from './sign-challenge';
+import { signChallenge, VenueBlockedError, type ChallengeSigner } from './sign-challenge';
 
 type Asked = {
 	hints?: string[];
@@ -70,8 +75,16 @@ afterEach(() => {
 
 const ADDRESS = '0x2222222222222222222222222222222222222222';
 
-/** Two founding keys: a built-in passkey, then a YubiKey. */
-function wallet(signedInWith?: Account['signed_in_with']): Account {
+/** The sign-in key as an older build wrote it (`signed_in_with`), which the core migrates. */
+type LegacySignIn = {
+	credential_id: string;
+	method: 'platform' | 'hybrid' | 'security_key' | 'trusted_signer';
+	transports?: string;
+	signer_origin?: string;
+};
+
+/** Two founding keys: a built-in passkey, then a YubiKey — as an older build stored them. */
+function wallet(signedInWith?: LegacySignIn): Account {
 	return {
 		id: 'aa01',
 		name: 'Ann',
@@ -93,7 +106,7 @@ function wallet(signedInWith?: Account['signed_in_with']): Account {
 			}
 		],
 		...(signedInWith === undefined ? {} : { signed_in_with: signedInWith })
-	};
+	} as unknown as Account;
 }
 
 /** What each path hands over, as it built it before: every key, each with what it registered. */
@@ -162,17 +175,80 @@ describe('an account that names its sign-in key', () => {
 		]);
 	});
 
-	it('refuses a key behind a Trusted Signer page — the web has none — without a ceremony', async () => {
+	it('a record this build wrote (sign_in_key, domain, venue) signs the same way', async () => {
+		saveAccount({
+			...wallet(),
+			sign_in_key: { credential_id: 'bb02', method: 'security_key', transports: 'usb,nfc,ble' },
+			signing_domain: 'getvela.app',
+			signing_venue: { type: 'in_vela' }
+		});
+		const { asked: request } = await attempt();
+		expect(request?.hints).toEqual(['security-key']);
+		expect(pinned(request)).toEqual([{ id: 'bb02', transports: ['usb', 'nfc', 'ble'] }]);
+	});
+});
+
+/**
+ * P2-11: the web opens no page (owner, 2026-09-23). Whether an account can be
+ * signed for here is the core's R1 asked of the web's one venue — in Vela.
+ */
+describe('the web opens no signing page', () => {
+	it('a getvela.app account whose venue is the trusted page signs HERE, natively', async () => {
+		saveAccount({
+			...wallet(),
+			sign_in_key: { credential_id: 'aa01', method: 'platform', transports: 'internal' },
+			signing_domain: 'getvela.app',
+			signing_venue: { type: 'page', url: 'https://sign.getvela.app/' }
+		});
+		const { asked: request, error } = await attempt();
+		// The browser was asked (and refused, in this test) — the venue was not.
+		expect(error).not.toBeInstanceOf(VenueBlockedError);
+		expect(asked).toHaveLength(1);
+		expect(pinned(request)).toEqual([{ id: 'aa01', transports: ['internal'] }]);
+	});
+
+	it('an older record signed in on the official page migrates to its PLACE and signs here', async () => {
+		// ≤ 0.9.7 wrote the page as the method; the key reported `internal`.
 		saveAccount(
 			wallet({
-				credential_id: 'bb02',
+				credential_id: 'aa01',
 				method: 'trusted_signer',
-				signer_origin: 'https://sign.example'
+				signer_origin: 'https://sign.getvela.app'
 			})
 		);
+		const { asked: request } = await attempt();
+		expect(asked).toHaveLength(1);
+		expect(pinned(request).map((c) => c.id)).toEqual(['aa01']);
+		expect(request?.hints).toEqual(['client-device']);
+	});
+
+	it('refuses a custom-domain account with the core’s reason — and no ceremony', async () => {
+		const own = wallet({
+			credential_id: 'bb02',
+			method: 'trusted_signer',
+			signer_origin: 'https://sign.example.com'
+		});
+		saveAccount(own);
 		const { error } = await attempt();
 		expect(asked).toHaveLength(0);
-		expect(String(error)).toContain('https://sign.example');
+		expect(error).toBeInstanceOf(VenueBlockedError);
+		expect((error as VenueBlockedError).block).toEqual({
+			type: 'app_cannot_reach',
+			domain: 'sign.example.com'
+		});
+		expect(String(error)).toContain('sign.example.com');
+	});
+
+	it('refuses a custom-domain account even when its own venue is the page', async () => {
+		saveAccount({
+			...wallet(),
+			sign_in_key: { credential_id: 'aa01', method: 'platform' },
+			signing_domain: 'sign.example.com',
+			signing_venue: { type: 'page', url: 'https://sign.example.com/' }
+		});
+		const { error } = await attempt();
+		expect(asked).toHaveLength(0);
+		expect(error).toBeInstanceOf(VenueBlockedError);
 	});
 });
 
@@ -200,12 +276,22 @@ describe('a record from before the sign-in key', () => {
 		expect(pinned(request).map((c) => c.id)).toEqual(['aa01', 'bb02']);
 	});
 
-	it('still refuses when its first key lives behind a Trusted Signer page', async () => {
-		const behind = wallet();
+	it('still refuses when its first key was minted on a custom-domain page', async () => {
+		const behind = wallet() as unknown as { keys: Record<string, unknown>[] };
 		behind.keys[0] = { ...behind.keys[0], signer_origin: 'https://me.example' };
-		saveAccount(behind);
+		saveAccount(behind as unknown as Account);
 		const { error } = await attempt();
 		expect(asked).toHaveLength(0);
-		expect(String(error)).toContain('https://me.example');
+		expect(error).toBeInstanceOf(VenueBlockedError);
+		expect(String(error)).toContain('me.example');
+	});
+
+	it('signs as before when its first key was minted on the official page', async () => {
+		const behind = wallet() as unknown as { keys: Record<string, unknown>[] };
+		behind.keys[0] = { ...behind.keys[0], signer_origin: 'https://sign.getvela.app' };
+		saveAccount(behind as unknown as Account);
+		const { asked: request } = await attempt();
+		expect(asked).toHaveLength(1);
+		expect(pinned(request).map((c) => c.id)).toEqual(['aa01', 'bb02']);
 	});
 });

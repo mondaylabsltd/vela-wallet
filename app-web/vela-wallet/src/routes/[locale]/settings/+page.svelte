@@ -47,7 +47,8 @@
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-	import { signPreference } from '$lib/settings/core/sign-pref.svelte';
+	import { signingVenueBlock, signingVenueChoices } from '$lib/core/kernels';
+	import { venueModel } from '$lib/settings/venue';
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
 	import {
@@ -170,7 +171,6 @@
 		void networkAdmin.boot();
 		void currency.boot();
 		void feeTierPreference.boot();
-		void signPreference.boot();
 		void balance.boot();
 		preferences.boot();
 		analyticsConsent.boot();
@@ -396,13 +396,10 @@
 					track('setting_fee_speed_changed', { speed: event.id });
 				}
 				return;
-			// Spec 071: the Trusted Signer's page. The core refuses an address it
-			// would not open (saying why in its view); nothing is judged here.
-			case 'signer-page':
-				signPreference.submitSignerUrl(event.text);
-				return;
-			case 'signer-page-reset':
-				signPreference.resetSignerUrl();
+			// Spec 102: never raised here — the web's venue is a statement (it
+			// opens no page) — but the core is the one to rule if it ever is.
+			case 'signing-venue':
+				if (view.address !== '') session.chooseVenue(view.address, event.venue);
 				return;
 			case 'analytics':
 				analyticsConsent.set(event.on);
@@ -534,6 +531,33 @@
 		on: analyticsConsent.enabled
 	});
 
+	/**
+	 * Spec 102: where the active account reviews and signs, from the SESSION's
+	 * record (the core's reader migrated it), never the raw store. On the web
+	 * that is always Vela's own sheet — it opens no signing page (owner,
+	 * 2026-09-23; P2-11), so a page venue signs here natively — or nowhere, for
+	 * an account on its own signing domain, with the core's reason.
+	 */
+	const activeAccount = $derived(view.accounts[view.active_index]?.account);
+	const liveVenue = $derived.by(() => {
+		if (!activeAccount) return undefined;
+		const domain = activeAccount.signing_domain;
+		return venueModel(
+			{
+				domain,
+				choices: signingVenueChoices(domain, activeAccount.signing_venue, []),
+				webOnly: true
+			},
+			m
+		);
+	});
+	/** P2-10: the signing domain, for an account whose keys Vela's sheet cannot reach (R1). */
+	const customDomain = $derived.by(() => {
+		if (!activeAccount) return undefined;
+		const domain = activeAccount.signing_domain;
+		return signingVenueBlock(domain, { type: 'in_vela' }) === null ? undefined : domain;
+	});
+
 	/** Fixture base → identity overlay → live network sections (research D7). */
 	const liveHome = $derived.by(() => {
 		if (identity === null) return data.home;
@@ -547,7 +571,14 @@
 		model = withLivePreferences(model, m, languageValue, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
 		model = withFeedback(model, m, deviceFacts);
-		model = { ...model, keys: walletKeysModel(walletKeys, backupState, m) };
+		model = {
+			...model,
+			keys: walletKeysModel(walletKeys, backupState, m, customDomain),
+			venue: liveVenue,
+			// Spec 102: no Signing pages on the web — it opens none, so a list of
+			// pages it trusts would be a list of nothing it does.
+			signingPages: undefined
+		};
 		// The phone's first block (founder, 2026-09-05): 通讯录 is a tab on the
 		// bar under this very screen, so the block it made up goes with it. The
 		// report (spec 081 FR-016) is in the LAST block, after 关于 — "what is
@@ -559,7 +590,7 @@
 			sections: model.sections
 				.map((section) => ({
 					...section,
-					rows: section.rows.filter((row) => row.id !== 'contacts')
+					rows: section.rows.filter((row) => row.id !== 'contacts' && row.id !== 'signing-pages')
 				}))
 				.filter((section) => section.rows.length > 0 || section.appearanceControls === true)
 		};
@@ -582,7 +613,14 @@
 		model = withLiveFeeSpeedDesktop(model, feeTierPreference.view, liveHome.feeSpeedSheet);
 		model = {
 			...model,
-			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }
+			account: {
+				...model.account,
+				keys: walletKeysModel(walletKeys, backupState, m, customDomain),
+				venue: liveVenue
+			},
+			// Spec 102: the web opens no signing page — see the phone model above.
+			signingPages: undefined,
+			nav: model.nav.filter((item) => item.id !== 'signing-pages')
 		};
 		model = withEraseFailure(model, m, eraseFailed);
 		// Spec 081: the wide layout's own two dead controls — the danger card

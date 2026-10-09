@@ -74,15 +74,27 @@ function view(over: Partial<CreateView> = {}): CreateView {
 		can_add_key: false,
 		can_finish: false,
 		needs_second_key: false,
-		// An empty set has committed to no relying party, so every route is
-		// still open and there is nothing to explain (spec 075).
-		add_methods: ['platform', 'hybrid', 'security_key', 'trusted_signer'],
-		add_blocked: null,
+		// Spec 102: always the three places — a signing page is not one.
+		add_methods: ['platform', 'hybrid', 'security_key'],
+		signing_domain: 'getvela.app',
+		signing_page: null,
+		can_choose_page: true,
 		...over
 	};
 }
 
-export type CreateFixture = { code: string; label: string; view: CreateView };
+export type CreateFixture = {
+	code: string;
+	label: string;
+	view: CreateView;
+	/**
+	 * Spec 102: draw the chooser's "Use my own signing page" entry and, once a
+	 * page is chosen, its integrity line — what a shell that OPENS pages shows.
+	 * The web is not one (it never offers the entry); the phones are, and this
+	 * board is the design they build to.
+	 */
+	ownPage?: { line?: { key: string; version: string; time: string } };
+};
 
 export const CREATE_FIXTURES: CreateFixture[] = [
 	{ code: 'F1', label: 'Name · empty', view: view() },
@@ -176,48 +188,48 @@ export const CREATE_FIXTURES: CreateFixture[] = [
 			can_finish: true
 		})
 	},
-	// Spec 075: a wallet's keys all belong to one relying party, so both ways
-	// the picker narrows. The sentence under the list is the only thing that
-	// tells a person what to do about it.
+	// Spec 102: the chooser of a shell that opens pages — three places, then
+	// "Use my own signing page" set apart below them, before the first key.
 	{
 		code: 'K6',
-		label: 'Keys · the signer page is somewhere else',
-		view: view({
-			stage: 'add_keys',
-			name: 'Everyday wallet',
-			keys: [key({ synced: false })],
-			can_add_key: true,
-			needs_second_key: true,
-			add_methods: ['platform', 'hybrid', 'security_key'],
-			add_blocked: {
-				relying_party: 'getvela.app',
-				page: 'http://localhost:8140/sign.html',
-				page_relying_party: 'localhost'
-			}
-		})
+		label: 'Keys · empty, with "use my own signing page" (apps)',
+		view: view({ stage: 'add_keys', name: 'Everyday wallet', keys: [], can_add_key: true }),
+		ownPage: {}
 	},
+	// …and once a page on the person's own domain is chosen: every key is
+	// minted for THAT domain, said before the first one exists, with the
+	// page's integrity line beside it (a fixture line: the web checks none).
 	{
 		code: 'K7',
-		label: "Keys · a page's own set",
+		label: 'Keys · own signing page chosen (apps)',
 		view: view({
 			stage: 'add_keys',
 			name: 'Everyday wallet',
-			// A page's key reports `platform` too, but the vault holding it is
-			// not this device's and the row must not claim one.
-			keys: [
-				key({
-					method: 'trusted_signer',
-					kind: 'trusted_signer',
-					synced: false,
-					aaguid: '',
-					provider_name: ''
-				})
-			],
+			keys: [],
+			can_add_key: true,
+			signing_domain: 'sign.example.com',
+			signing_page: 'https://sign.example.com/'
+		}),
+		ownPage: {
+			line: { key: 'componentsUi.signing.integrity.trusted', version: '3f9a1c22', time: '14:32' }
+		}
+	},
+	{
+		code: 'K8',
+		label: 'Keys · a set on its own domain (apps)',
+		view: view({
+			stage: 'add_keys',
+			name: 'Everyday wallet',
+			keys: [key({ synced: false, aaguid: '', provider_name: '' })],
 			can_add_key: true,
 			needs_second_key: true,
-			add_methods: ['trusted_signer'],
-			add_blocked: { relying_party: 'sign.example.com', page: null, page_relying_party: null }
-		})
+			signing_domain: 'sign.example.com',
+			signing_page: 'https://sign.example.com/',
+			can_choose_page: false
+		}),
+		ownPage: {
+			line: { key: 'componentsUi.signing.integrity.trusted', version: '3f9a1c22', time: '14:32' }
+		}
 	},
 	{
 		code: 'K4',

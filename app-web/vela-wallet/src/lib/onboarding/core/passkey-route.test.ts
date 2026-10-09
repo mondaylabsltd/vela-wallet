@@ -55,9 +55,10 @@ describe('the one mapping', () => {
 		}
 	});
 
-	it('the Trusted Signer, or no method, adds nothing', () => {
-		expect(methodRouting('trusted_signer')).toEqual({});
+	it('no method adds nothing — and an older build’s fourth word is no method', () => {
 		expect(methodRouting(undefined)).toEqual({});
+		// Spec 102 retired `trusted_signer` as a place; a stray one routes nowhere.
+		expect(methodRouting('trusted_signer' as unknown as KeyMethod)).toEqual({});
 	});
 });
 
