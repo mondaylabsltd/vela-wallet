@@ -141,6 +141,8 @@ client says and logs it the same way.
   for a new tab, so an open tab takes the address rather than the open doing
   nothing — a start-page tab, else the tab used longest ago, never the dApp
   just left while another tab will do; the shell selects the tab it is given.
+  Closing a tab hands the selection to a neighbour without moving that
+  neighbour up the resume rows: nobody opened it.
 - **Every read settles** by `READ_DEADLINE_MS` (30 s), whatever the endpoints
   are doing.
 - **The landing** counts the chain's usual time from when the relay put the

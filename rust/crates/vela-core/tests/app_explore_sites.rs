@@ -739,8 +739,8 @@ fn a_stale_selection_falls_back_to_the_first_tab() {
 // Recency (spec 099 R2) — the order browser_tabs keeps engines alive in
 // ---------------------------------------------------------------------------
 
-/// Opening and selecting a tab put it first; closing one forgets it, and the
-/// tab that takes over from a closed selected one is the one in use now.
+/// Opening and selecting a tab put it first; closing one forgets it. The
+/// tab a close hands the selection to keeps its place: nobody opened it.
 #[test]
 fn recency_follows_the_person() {
     let mut sut = ready(None);
@@ -765,11 +765,11 @@ fn recency_follows_the_person() {
         vec![ids[0].clone(), ids[2].clone(), ids[1].clone()]
     );
 
-    // Closing the selected tab selects its right-hand neighbour, which is
-    // the tab in use now.
+    // Closing the selected tab selects its right-hand neighbour — and the
+    // tab used before the closed one is still the most recent.
     written(sut.dispatch(Event::TabClosed { id: ids[0].clone() }));
     assert_eq!(sut.view().selected_tab.as_deref(), Some(ids[1].as_str()));
-    assert_eq!(sut.view().recent_tabs, vec![ids[1].clone(), ids[2].clone()]);
+    assert_eq!(sut.view().recent_tabs, vec![ids[2].clone(), ids[1].clone()]);
 }
 
 /// At launch only the selected tab has had a page this session.
@@ -987,6 +987,48 @@ fn restored_tabs_resume_from_the_selected_one_then_in_strip_order() {
     assert_eq!(
         ids_of(&sut.view().resumable),
         vec!["t-3".to_owned(), "t-1".to_owned(), "t-4".to_owned()]
+    );
+}
+
+/// Closing the page in front (⋯ → close page, the switcher's ✕) returns the
+/// person to the home with a neighbour selected. That neighbour was not
+/// opened — the rows still lead with the tab used before the closed one, in
+/// the order the person used them, one close or several.
+#[test]
+fn a_close_never_moves_the_neighbour_it_selects_up_the_rows() {
+    let (mut sut, ids) = five_tabs();
+    // Used: c, then a, then e (the rows read e, a, c).
+    for at in [2, 0, 4] {
+        written(sut.dispatch(Event::TabSelected {
+            id: ids[at].clone(),
+        }));
+    }
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[4].clone(), ids[0].clone(), ids[2].clone()]
+    );
+
+    // Close e: d, its left-hand neighbour, is selected but was never used.
+    written(sut.dispatch(Event::TabClosed { id: ids[4].clone() }));
+    let view = sut.view();
+    assert_eq!(view.selected_tab.as_deref(), Some(ids[3].as_str()));
+    assert_eq!(
+        ids_of(&view.resumable),
+        vec![ids[0].clone(), ids[2].clone(), ids[3].clone()],
+        "a, then c, as used; d, only selected by the close, where it was"
+    );
+
+    // A batch close that takes the selection: the same.
+    written(sut.dispatch(Event::TabSelected { id: ids[2].clone() }));
+    written(sut.dispatch(Event::TabsClosed {
+        ids: vec![ids[2].clone(), ids[3].clone()],
+    }));
+    let view = sut.view();
+    assert_eq!(view.selected_tab.as_deref(), Some(ids[1].as_str()));
+    assert_eq!(
+        ids_of(&view.resumable),
+        vec![ids[0].clone(), ids[1].clone()],
+        "a was used; b only selected by the close"
     );
 }
 

@@ -18,7 +18,9 @@ favorites_full: boolean,
 tabs_full: boolean, 
 /**
  * Every tab id, most recently used first (spec 099 R2): the order
- * [`super::browser_tabs::plan_engines`] keeps engines alive in.
+ * [`super::browser_tabs::plan_engines`] keeps engines alive in. A tab
+ * is used when it is opened or selected — not when a close hands it
+ * the selection.
  */
 recent_tabs: Array<string>, 
 /**

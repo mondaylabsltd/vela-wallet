@@ -339,7 +339,9 @@ pub struct ExploreView {
     /// The strip is full, for the same reason.
     pub tabs_full: bool,
     /// Every tab id, most recently used first (spec 099 R2): the order
-    /// [`super::browser_tabs::plan_engines`] keeps engines alive in.
+    /// [`super::browser_tabs::plan_engines`] keeps engines alive in. A tab
+    /// is used when it is opened or selected — not when a close hands it
+    /// the selection.
     #[serde(default)]
     pub recent_tabs: Vec<String>,
     /// The home's resume rows (spec 099 navigation): the tabs that have a
@@ -613,6 +615,12 @@ fn untitled(site: &ExploreSite) -> bool {
 /// and the one a person's hand already expects. Closing the final tab leaves
 /// the strip empty and nothing selected: the shell draws its start page then,
 /// which is what a browser with no tabs is.
+///
+/// The neighbour keeps its place in the recency order: selected by a rule,
+/// not opened by anybody, so it does not jump to the top of the home's
+/// resume rows ([`ExploreView::resumable`]) — the tab the person used before
+/// the closed one stays first. The selected tab's engine is kept whatever
+/// its recency ([`super::browser_tabs::plan_engines`], rule 1).
 fn close_tab(model: &mut Model, id: &str) -> Command<ExploreEffect, Event> {
     let Some(index) = model.doc.tabs.iter().position(|t| t.id == id) else {
         return Command::done();
@@ -631,10 +639,6 @@ fn close_tab(model: &mut Model, id: &str) -> Command<ExploreEffect, Event> {
                     .and_then(|left| model.doc.tabs.get(left))
             })
             .map(|tab| tab.id.clone());
-        // The tab that takes over is the one in use now.
-        if let Some(next) = model.doc.selected_tab.clone() {
-            used(model, next);
-        }
     }
     persist(model)
 }
@@ -676,7 +680,8 @@ fn used(model: &mut Model, id: String) {
 /// surviving tab to its RIGHT in the old strip, else to its left — the single
 /// close's rule, so "close tabs to the right" of a tab left of the selected
 /// one lands on that tab, and "close other tabs" lands on the one kept.
-/// Nothing left: nothing selected, the start page.
+/// Nothing left: nothing selected, the start page. As for one close, the tab
+/// that takes the selection keeps its place in the recency order.
 fn close_tabs(model: &mut Model, ids: &[String]) -> Command<ExploreEffect, Event> {
     if !ids
         .iter()
@@ -700,10 +705,7 @@ fn close_tabs(model: &mut Model, ids: &[String]) -> Command<ExploreEffect, Event
             .find(|id| survives(id))
             .or_else(|| before[..at].iter().rev().find(|id| survives(id)))
             .cloned();
-        model.doc.selected_tab = next.clone();
-        if let Some(next) = next {
-            used(model, next);
-        }
+        model.doc.selected_tab = next;
     }
     persist(model)
 }
