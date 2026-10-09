@@ -123,22 +123,32 @@ class BrowserNavigationTest {
     }
 
     @Test
-    fun `a full strip has no room for a new tab, so the core answers the selected one`() {
+    fun `a full strip has no room for a new tab, so the core names one it can spare`() {
         // The machine drops a `tab_opened` past its 24 tabs: "new tab" there
-        // would be an open that does nothing. The core says where it goes;
-        // the shell has no rule of its own for it.
-        fun strip(count: Int) = ExploreView(
-            tabs = (1..count).map { ExploreTab("t$it", url = "https://site$it.example/", title = "", host = "site$it.example") },
+        // would be an open that does nothing. The core says where it goes —
+        // never t3, the dApp just left: the tab used longest ago (recency
+        // knows only t3, the rest follow in strip order, t24 last), or a
+        // start-page tab. The shell has no rule of its own for it.
+        fun strip(count: Int, startPage: String? = null) = ExploreView(
+            tabs = (1..count).map {
+                val id = "t$it"
+                if (id == startPage) ExploreTab(id, url = null, title = "", host = "")
+                else ExploreTab(id, url = "https://site$it.example/", title = "", host = "site$it.example")
+            },
             selected_tab = "t3",
             recent_tabs = listOf("t3"),
             ready = true,
         )
         for (kind in listOf(ExploreOpenKind.Address, ExploreOpenKind.Site)) {
             assertEquals(
-                ExploreOpenTarget.Load("t3"),
+                ExploreOpenTarget.Load("t24"),
                 BrowserTabs.openTarget(strip(24), shown = "t3", onPage = false, url = "https://late.example/", kind = kind),
             )
         }
+        assertEquals(
+            ExploreOpenTarget.Load("t9"),
+            BrowserTabs.openTarget(strip(24, startPage = "t9"), shown = "t3", onPage = false, url = "https://late.example/", kind = ExploreOpenKind.Address),
+        )
         // A picked site already open still comes back as it was left; one short of the cap, a new tab.
         assertEquals(
             ExploreOpenTarget.Resume("t7"),
