@@ -8,7 +8,7 @@ import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
 import { keyMethodWords, venueWords } from '../../../../../../rust/pkg-web/vela_core.js';
 import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-import { methodCopy, OWN_PAGE_COPY, type KeyChooser } from './copy';
+import { methodCopy, type KeyChooser } from './copy';
 
 /** Spec 102: three places, and no fourth. */
 const METHODS: KeyMethod[] = ['platform', 'hybrid', 'security_key'];
@@ -38,16 +38,22 @@ describe('methodCopy', () => {
 
 	/**
 	 * Spec 102: the Trusted Signer is not a place a key lives — the core has
-	 * no words for it as one, in either chooser — and the choosers' advanced
-	 * "Use my own signing page" is the core's `venue_words("own_page")`.
+	 * no words for it as one, in either chooser. The apps' entry "Use a trusted
+	 * signing page" is the core's `venue_words("signing_page")` (D6, renamed
+	 * from "own page"); the web's choosers do not offer it (P2b-W3), so no
+	 * copy of it lives here.
 	 */
-	it('knows no fourth method, and the own-page entry is the core’s words', () => {
+	it('knows no fourth method; the apps’ trusted-page entry is the core’s D6 words', () => {
 		for (const chooser of CHOOSERS) {
 			expect(keyMethodWords('trusted_signer', chooser, 'other') ?? null, chooser).toBeNull();
 		}
-		const own = JSON.parse(venueWords('own_page') ?? 'null') as Words | null;
-		expect(own).not.toBeNull();
-		expect(OWN_PAGE_COPY).toEqual({ title: own?.title_key, body: own?.line_key });
+		const entry = JSON.parse(venueWords('signing_page') ?? 'null') as Words | null;
+		expect(entry).toMatchObject({
+			title_key: 'onboarding.create.signingPageTitle',
+			line_key: 'onboarding.create.signingPageBody'
+		});
+		// The old name still reads (an older shell), as the same words.
+		expect(JSON.parse(venueWords('own_page') ?? 'null')).toEqual(entry);
 	});
 
 	it('the sign-in sheet’s phone row scans; only the create picker creates (F02)', () => {

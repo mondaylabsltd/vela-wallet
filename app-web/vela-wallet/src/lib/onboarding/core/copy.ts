@@ -132,16 +132,6 @@ export function methodCopy(
 }
 
 /**
- * "Use my own signing page" (spec 102) — the chooser's advanced entry, which is
- * not a place a key lives. The core's `venue_words("own_page")` names these
- * keys; `copy.test.ts` holds the two to each other.
- */
-export const OWN_PAGE_COPY = {
-	title: 'onboarding.create.ownPageTitle',
-	body: 'onboarding.create.ownPageBody'
-} as const;
-
-/**
  * The provider line under a key's name, when the AAGUID catalog cannot name the
  * vault: WHERE THIS KEY LIVES, in the same three words the method picker used.
  *

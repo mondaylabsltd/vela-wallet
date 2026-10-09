@@ -16,8 +16,6 @@
 	import { isDarkTheme } from '$lib/theme.svelte';
 	import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import type { IntegrityLineModel } from '$lib/settings/model';
-	import IntegrityLine from '$lib/settings/ui/IntegrityLine.svelte';
 
 	interface Props {
 		keys: CreateKeyRow[];
@@ -29,20 +27,14 @@
 		/** The places a key may be minted in — always the three (spec 102). */
 		addMethods?: KeyMethod[];
 		/**
-		 * Spec 102: the page chosen with "Use my own signing page", and the
-		 * domain this wallet's keys are minted for. Drawn only when a page was
-		 * chosen — then every key belongs to THAT site, and the person must see
-		 * which before it is too late to choose otherwise. Absent on the web,
-		 * which offers no own page.
+		 * Spec 102: a signing page the core's view says was chosen, and the
+		 * domain this wallet's keys are minted for — then every key belongs to
+		 * THAT site, said before it is too late to choose otherwise. The web
+		 * offers no "Use a trusted signing page" entry (P2b-W3), so its view
+		 * never holds one; drawn only if the core ever says so.
 		 */
 		signingDomain?: string;
 		signingPage?: string | null;
-		/** That page's integrity line, in words — from a shell that checks it (the web checks none). */
-		pageLine?: IntegrityLineModel;
-		/** May a signing page still be chosen (the core's `can_choose_page`: before the first key)? */
-		canChoosePage?: boolean;
-		/** "Use my own signing page" — only from a shell that opens pages. */
-		ownPage?: { onPick: () => void };
 		strings: (key: string, params?: Record<string, string | number>) => string;
 		onAddKey: (method: KeyMethod) => void;
 		onConfirmKey: (index: number) => void;
@@ -60,9 +52,6 @@
 		addMethods,
 		signingDomain = '',
 		signingPage = null,
-		pageLine,
-		canChoosePage = false,
-		ownPage,
 		strings,
 		onAddKey,
 		onConfirmKey,
@@ -112,15 +101,14 @@
 
 	{#if signingPage}
 		<!--
-			Spec 102: "Use my own signing page" was chosen. Every key below is
-			minted for that page's domain and signs only there — said before the
-			first key, because that is when the choice is still free.
+			Spec 102: a signing page was chosen. Every key below is minted for
+			that page's domain and signs only there — said before the first key,
+			because that is when the choice is still free.
 		-->
 		<div class="page">
 			<span class="pagedomain">{strings('settings.signing.keysOn', { domain: signingDomain })}</span
 			>
 			<span class="pageurl">{signingPage}</span>
-			{#if pageLine}<IntegrityLine line={pageLine} />{/if}
 		</div>
 	{/if}
 
@@ -202,13 +190,7 @@
 					: strings('onboarding.create.addKeyBtn')}
 			</span>
 		</button>
-		<AddMethodPicker
-			open={pickerShown}
-			allowed={addMethods}
-			{strings}
-			onPick={pick}
-			ownPage={canChoosePage ? ownPage : undefined}
-		/>
+		<AddMethodPicker open={pickerShown} allowed={addMethods} {strings} onPick={pick} />
 	</div>
 
 	<div class="spacer"></div>

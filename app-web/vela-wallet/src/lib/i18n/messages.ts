@@ -148,12 +148,10 @@ const FLOW_KEYS_SCREEN_KEYS = [
 	'onboarding.create.methodSecurityKeyTitle',
 	'onboarding.create.methodSecurityKeyBody',
 	// Spec 102: what the keys screen draws when the core says a signing page
-	// was chosen ("Keys on {{domain}}"), and the chooser's advanced entry. The
-	// web never sends that choice (it opens no page), but the screens draw
-	// whatever the core's view holds — and they are the gallery's boards.
-	'settings.signing.keysOn',
-	'onboarding.create.ownPageTitle',
-	'onboarding.create.ownPageBody'
+	// was chosen ("Keys on {{domain}}"). The web never sends that choice — it
+	// opens no page, and its choosers offer no "Use a trusted signing page"
+	// (P2b-W3) — but the screen draws whatever the core's view holds.
+	'settings.signing.keysOn'
 ] as const;
 
 /** The progress, retry and done screens (spec 019). */

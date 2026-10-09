@@ -207,17 +207,6 @@
 					addMethods={view.add_methods}
 					signingDomain={view.signing_domain}
 					signingPage={view.signing_page ?? null}
-					canChoosePage={view.can_choose_page}
-					ownPage={fixture.ownPage ? { onPick: () => log('signing_page_chosen') } : undefined}
-					pageLine={fixture.ownPage?.line
-						? {
-								text: strings(fixture.ownPage.line.key, {
-									version: fixture.ownPage.line.version,
-									time: fixture.ownPage.line.time
-								}),
-								tone: 'ok'
-							}
-						: undefined}
 					{strings}
 					onAddKey={(m) => log(`add_key ${m}`)}
 					onConfirmKey={(i) => log(`confirm_key ${i}`)}

@@ -19,15 +19,15 @@
 	 * it is where a person REVIEWS AND SIGNS. That is the account's venue now,
 	 * chosen in Settings, and the same three places exist on the page too.
 	 *
-	 * `ownPage` is the one thing that is not a place: "Use my own signing page"
-	 * (advanced), which mints a wallet whose keys live on the person's own
-	 * domain and sign only on that page (R2, R3). Only a shell that can OPEN a
-	 * page offers it. The web cannot (owner, 2026-09-23; plan P2-11), so the
-	 * live flows never pass it — the gallery draws it, as the design the phones
-	 * build to.
+	 * The apps add one entry below the three that is not a place: "Use a
+	 * trusted signing page" (D6), for a wallet whose keys live on a page's own
+	 * domain and sign only on that page (R2, R3). The web has no such entry
+	 * (P2b-W3): it opens no signing page, so a self-hosted page's ceremonies
+	 * could never run here, and the official page's run in the app and sign in
+	 * Vela on the web anyway (P2-11).
 	 */
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import { methodCopy, OWN_PAGE_COPY, type KeyChooser } from '$lib/onboarding/core/copy';
+	import { methodCopy, type KeyChooser } from '$lib/onboarding/core/copy';
 	import { methodGlyph } from '$lib/onboarding/passkey-icons';
 	import PasskeyMethodIcon from '$lib/ui/onboarding/PasskeyMethodIcon.svelte';
 
@@ -42,11 +42,9 @@
 		 * row scans — it creates nothing.
 		 */
 		chooser?: KeyChooser;
-		/** "Use my own signing page" — only from a shell that can open one. */
-		ownPage?: { onPick: () => void };
 	}
 
-	let { open, allowed, strings, onPick, chooser = 'create', ownPage }: Props = $props();
+	let { open, allowed, strings, onPick, chooser = 'create' }: Props = $props();
 
 	const METHODS: KeyMethod[] = ['platform', 'hybrid', 'security_key'];
 
@@ -75,16 +73,6 @@
 			</li>
 		{/each}
 	</ul>
-	{#if ownPage}
-		<!-- Set apart from the three: it is not a place, and it is not for most people. -->
-		<button class="method own" type="button" onclick={() => ownPage?.onPick()}>
-			<PasskeyMethodIcon glyph={{ kind: 'lucide', name: 'eye' }} />
-			<span class="text">
-				<span class="name">{strings(OWN_PAGE_COPY.title)}</span>
-				<span class="caption">{strings(OWN_PAGE_COPY.body)}</span>
-			</span>
-		</button>
-	{/if}
 {/if}
 
 <style>
@@ -117,17 +105,6 @@
 	.off {
 		opacity: var(--opacity-disabled);
 		cursor: not-allowed;
-	}
-
-	/* The advanced entry: below the three, quieter, its own block. */
-	.own {
-		margin-top: var(--space-md);
-		border-bottom: 0;
-	}
-
-	.own .name {
-		color: var(--color-fg-muted);
-		font-weight: var(--weight-medium);
 	}
 
 	.text {

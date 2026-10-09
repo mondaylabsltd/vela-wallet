@@ -11,6 +11,7 @@
  */
 import { expect, test } from '@playwright/test';
 import { STORAGE_KEY as INTRO_SEEN_KEY } from '../src/lib/intro/gate';
+import { en } from './live-helpers';
 
 // Every test here needs the LANDING page. A fresh Playwright context is a
 // first run, and a first run opens on the intro carousel (spec 020) — so the
@@ -123,7 +124,7 @@ test('sign-in stays on Welcome — it has no steps to show', async ({ page }) =>
  * Spec 102: THREE — the places a key can live. Spec 075's fourth row (the
  * Trusted Signer) was not a place but where a person reviews and signs, and
  * the web opens no signing page at all (owner, 2026-09-23); nor does it offer
- * "sign in on my own signing page", which only an app that opens pages can.
+ * the apps' "Use a trusted signing page" (D6, P2b-W3).
  */
 for (const [width, height] of [
 	[390, 844],
@@ -136,7 +137,7 @@ for (const [width, height] of [
 		await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
 		const rows = page.locator('.methods .method');
 		await expect(rows).toHaveCount(3);
-		await expect(page.locator('.method.own')).toHaveCount(0);
+		await expect(page.getByText(en('onboarding.create.signingPageTitle'))).toHaveCount(0);
 		for (let i = 0; i < 3; i += 1) {
 			await expect(rows.nth(i).locator('svg')).toBeVisible();
 		}
