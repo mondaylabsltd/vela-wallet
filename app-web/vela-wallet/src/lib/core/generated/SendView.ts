@@ -220,8 +220,11 @@ can_confirm: boolean,
 /**
  * The account's previous transaction on this network is still going
  * through, so the confirm is held (part of `can_confirm`): this one
- * would take the same nonce. Drawn as its `key` under the confirm; the
- * confirm opens by itself once the first is final. `None` otherwise.
+ * would take the same nonce. Drawn as its `key` under the confirm — the
+ * one line for as long as it holds, unchanged while the fee re-measures,
+ * no countdown; the confirm opens by itself once the first is final or
+ * has made no progress for ten minutes
+ * ([`super::tx_tracker::IN_FLIGHT_STALL_MS`]). `None` otherwise.
  */
 previous_pending: SendPreviousPending | null, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, 
 /**

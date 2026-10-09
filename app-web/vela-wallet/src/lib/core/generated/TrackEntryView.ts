@@ -41,4 +41,10 @@ refusal?: RefusalReason | null,
  * the reason is unknown. Every surface that tells a refusal (the send
  * receipt, the signing sheet's ending, a row's detail) draws THIS.
  */
-refusal_key?: string | null, };
+refusal_key?: string | null, 
+/**
+ * Not final, and the relay has said nothing new of it for
+ * [`IN_FLIGHT_STALL_MS`]: it no longer holds its account's nonce
+ * ([`in_flight_ops`]). Off the wire while false.
+ */
+stalled?: boolean, };

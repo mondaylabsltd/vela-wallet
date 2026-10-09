@@ -7,7 +7,8 @@
  * from the chain, where the first has not landed) — the relay refuses it, or
  * one of the two is dropped after the other lands. So the second waits:
  * every confirm that would sign one is held while this exists
- * (`ConfirmBlock::PreviousPending`), and opens once the first is final.
+ * (`ConfirmBlock::PreviousPending`), and opens once the first is final — or
+ * once the relay has said nothing new of it for [`IN_FLIGHT_STALL_MS`].
  *
  * Read from the tracker, which persists every pending record — a restart
  * still knows (`TrackPendingRecord::sender`).

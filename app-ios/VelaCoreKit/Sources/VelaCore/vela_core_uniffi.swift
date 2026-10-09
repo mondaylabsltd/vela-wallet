@@ -15349,6 +15349,26 @@ public func identiconSvgCircular(seed: String)throws  -> String  {
 })
 }
 /**
+ * Every operation in flight on this device — the tracker's view (JSON) in,
+ * an `InFlightOp` JSON array out (`[]` when the view does not read). Forward
+ * it on every tracker render to the send machine and the signing machine
+ * (`Event::InFlightOps`): a second transaction of an account on a chain
+ * where it already has one in flight waits for it (the confirm is held with
+ * `componentsUi.signing.confirmBlock.previousPending`) until it is final or
+ * has made no progress for ten minutes. Pass the core's view JSON as it
+ * came: the stall is a field of it (`stalled`), and a copy re-encoded from
+ * a shell type that lacks the field holds until final. See
+ * `vela_core::app::tx_tracker::in_flight_ops`.
+ */
+public func inFlightOps(trackViewJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_in_flight_ops(
+        FfiConverterString.lower(trackViewJson),uniffiCallStatus
+    )
+})
+}
+/**
  * `parseBundlerUnderfunded`: the relay saying the per-Safe gas account is short.
  */
 public func isBundlerUnderfunded(message: String) -> Bool  {
@@ -17533,6 +17553,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_identicon_svg_circular() != 30334) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_in_flight_ops() != 22851) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_is_bundler_underfunded() != 12173) {

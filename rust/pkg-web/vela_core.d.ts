@@ -971,7 +971,9 @@ export function identiconSvgCircular(seed: string): string;
 /**
  * Every operation in flight on this device: the tracker's view (JSON) in, an
  * `InFlightOp` JSON array out. Forward it on every tracker render to the send
- * and signing machines (`InFlightOps`). See `vela_core::app::tx_tracker`.
+ * and signing machines (`InFlightOps`). An op is held until it is final or
+ * has made no progress for ten minutes (the view's `stalled`). See
+ * `vela_core::app::tx_tracker`.
  */
 export function inFlightOps(track_view_json: string): string;
 
