@@ -239,6 +239,16 @@ pub fn signing_plan_json(account_json: &str) -> Option<String> {
     serde_json::to_string(&account.signing_plan()).ok()
 }
 
+/// [`signing_plan_json`] as the web wallet carries it out
+/// ([`crate::signing_venue::SigningPlan::on_web`]): the web opens no page, so
+/// a `getvela.app` account signs in Vela there and a custom-domain account is
+/// `blocked` with the web's reason.
+#[must_use]
+pub fn signing_plan_on_web_json(account_json: &str) -> Option<String> {
+    let account: Account = serde_json::from_str(account_json).ok()?;
+    serde_json::to_string(&account.signing_plan().on_web()).ok()
+}
+
 /// Which of the wallet's keys this device signs with, and where that key
 /// lives: the one the person created the wallet with, or last signed in with,
 /// HERE.
@@ -304,7 +314,41 @@ impl Account {
                 .err(),
             venue: self.signing_venue.clone(),
             key: self.key_route(),
+            key_label: self.key_label(),
         }
+    }
+
+    /// "Confirm with {key}" — the key this device signs with, as the person
+    /// reads it ([`crate::signing_venue::KeyLabel`]): its own label when that
+    /// is not the wallet's name, else the place it lives (the place the
+    /// sign-in reached it on). A record with no sign-in key names its first
+    /// key the same way, its place read from what that key reported.
+    #[must_use]
+    pub fn key_label(&self) -> crate::signing_venue::KeyLabel {
+        let (key, method) = match self
+            .sign_in_key
+            .as_ref()
+            .filter(|key| self.matches_credential(&key.credential_id))
+        {
+            Some(sign_in) => (
+                self.keys
+                    .iter()
+                    .find(|key| key.credential_id == sign_in.credential_id),
+                sign_in.method,
+            ),
+            None => {
+                let first = self.keys.first();
+                let method = first
+                    .and_then(|key| crate::passkey::reported_method("", &key.transports))
+                    .unwrap_or_default();
+                (first, method)
+            }
+        };
+        crate::signing_venue::KeyLabel::of(
+            key.map(|key| key.name.as_str()),
+            &self.name,
+            method.name(),
+        )
     }
 
     /// Choose where this account reviews and signs (D1) — refused, and nothing

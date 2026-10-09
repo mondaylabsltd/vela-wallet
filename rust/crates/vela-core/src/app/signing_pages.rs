@@ -8,6 +8,9 @@
 //! page_added ─┬─ a usable page not yet saved ─► persist + commit
 //!             └─ invalid / insecure / already saved ─► refused, nothing stored
 //! page_renamed / page_removed ─► persist + commit
+//! version_trusted ─┬─ a self-hosted page, a sha256 ─► persist + commit
+//!                  │   (the page saved first when it was not)
+//!                  └─ the official page, not a hash ─► refused, nothing stored
 //! ```
 //!
 //! **A list, not a field.** The 071 Settings field held one free-text address
@@ -23,6 +26,17 @@
 //! `vela.` prefix that survives sign-out) and the words; the core decides what
 //! may be stored. Integrity is not this machine's: a row's integrity line comes
 //! from the check (`trusted_signer::launch`), which the shell runs.
+//!
+//! **Trusting a version (spec 076 FR-009, spec 102 core round).** A
+//! self-hosted page serving a build Vela did not publish can only end in
+//! "Version 3f9a1c22 is new to Vela. Trust it on this device?"
+//! ([`crate::trusted_signer::launch::IntegrityState::AskToTrust`]). The
+//! answer is stored HERE, on that page ([`SigningPage::trusted`]) — so a yes
+//! vouches for that deployment and nothing else — and the shell passes the
+//! page's list as `trusted` the next time it checks it, which then reads
+//! "trusted on this device" and opens. Never for the official page: nobody can
+//! vouch for bytes `sign.getvela.app` was not supposed to serve, and an "allow
+//! it anyway" there is a social-engineering door.
 
 use crux_core::capability::Operation;
 use crux_core::macros::effect;
@@ -101,6 +115,11 @@ pub enum Event {
     PageRenamed { url: String, name: String },
     /// Forget a saved page. The official page cannot be removed.
     PageRemoved { url: String },
+    /// "Trust this version": the person trusts `version` (the full sha256 the
+    /// check served — `SignerPageAdmission::version_to_trust`) for the page at
+    /// `url`, on this device. A page that is not saved yet is saved with it.
+    /// Refused for the official page and for anything that is not a sha256.
+    VersionTrusted { url: String, version: String },
     #[serde(skip)]
     ShellCompleted {
         attempt: u64,
@@ -151,6 +170,11 @@ pub struct SigningPageRow {
     pub domain: String,
     /// The official page: always first, never removed or renamed.
     pub official: bool,
+    /// Versions of this page the person trusted on this device — what the
+    /// shell passes as `trusted` when it checks this page. Always empty for
+    /// the official page.
+    #[serde(default)]
+    pub trusted: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -204,10 +228,7 @@ impl App for SigningPages {
                     return render();
                 }
                 model.add_error = None;
-                model.pages.push(SigningPage {
-                    url,
-                    name: name.trim().to_owned(),
-                });
+                model.pages.push(SigningPage::new(url, name.trim()));
                 write(model, false)
             }
             Event::PageRenamed { url, name } => {
@@ -238,6 +259,33 @@ impl App for SigningPages {
                 model.add_error = None;
                 write(model, false)
             }
+            Event::VersionTrusted { url, version } => {
+                if model.phase != Phase::Idle {
+                    return Command::done();
+                }
+                let Ok(url) = trusted_signer::signer_url(&url) else {
+                    return Command::done();
+                };
+                let Some(version) = trusted_signer::integrity::normalize_hash(&version) else {
+                    return Command::done();
+                };
+                if is_official(&url) || trusted_signer::integrity::is_official(&url) {
+                    return Command::done();
+                }
+                let index = match model.pages.iter().position(|page| page.url == url) {
+                    Some(index) => index,
+                    None => {
+                        model.pages.push(SigningPage::new(url, ""));
+                        model.pages.len() - 1
+                    }
+                };
+                let page = &mut model.pages[index];
+                if page.trusted.contains(&version) {
+                    return Command::done();
+                }
+                page.trusted.push(version);
+                write(model, false)
+            }
             Event::ShellCompleted { attempt, result } => {
                 if attempt != model.attempt {
                     return Command::done();
@@ -261,10 +309,7 @@ impl App for SigningPages {
                         };
                         if let Ok(url) = trusted_signer::signer_url(&legacy) {
                             if !is_official(&url) && !model.pages.iter().any(|p| p.url == url) {
-                                model.pages.push(SigningPage {
-                                    url,
-                                    name: String::new(),
-                                });
+                                model.pages.push(SigningPage::new(url, ""));
                             }
                         }
                         write(model, true)
@@ -282,12 +327,14 @@ impl App for SigningPages {
             name: String::new(),
             domain: domain_of_page(official),
             official: true,
+            trusted: Vec::new(),
         }];
         pages.extend(model.pages.iter().map(|page| SigningPageRow {
             url: page.url.clone(),
             name: page.name.clone(),
             domain: domain_of_page(&page.url),
             official: false,
+            trusted: page.trusted.clone(),
         }));
         SigningPagesView {
             pages,
@@ -331,9 +378,20 @@ fn read_pages(raw: Option<&str>) -> Vec<SigningPage> {
         if is_official(&url) || pages.iter().any(|kept| kept.url == url) {
             continue;
         }
+        let mut trusted: Vec<String> = Vec::new();
+        for version in page
+            .trusted
+            .iter()
+            .filter_map(|v| trusted_signer::integrity::normalize_hash(v))
+        {
+            if !trusted.contains(&version) {
+                trusted.push(version);
+            }
+        }
         pages.push(SigningPage {
             url,
             name: page.name.trim().to_owned(),
+            trusted,
         });
     }
     pages

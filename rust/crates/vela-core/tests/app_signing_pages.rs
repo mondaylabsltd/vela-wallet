@@ -17,10 +17,7 @@ use vela_core::trusted_signer::DEFAULT_SIGNER_URL;
 type Sut = DomainDriver<SigningPages>;
 
 fn page(url: &str, name: &str) -> SigningPage {
-    SigningPage {
-        url: url.to_owned(),
-        name: name.to_owned(),
-    }
+    SigningPage::new(url.to_owned(), name.to_owned())
 }
 
 fn stored(pages: Option<&str>, legacy: Option<&str>) -> Res {

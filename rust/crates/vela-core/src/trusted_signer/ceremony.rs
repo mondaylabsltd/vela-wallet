@@ -135,6 +135,31 @@ impl Ceremony {
         serde_json::from_str(operation_json).ok()
     }
 
+    /// The corpus key of the title a shell draws while this ceremony waits on
+    /// the page (spec 102 core round) — not the hand-off card's "Review and
+    /// sign on your trusted signing page": a ceremony has nothing to review,
+    /// and the person is making a key, signing in, or confirming with one.
+    ///
+    /// - create a key (the first, or another) → `ceremonyCreate`;
+    /// - sign in, and the two recovery proofs of a sign-in → `ceremonySignIn`;
+    /// - the proof that a new key signs, and a member proof → `ceremonyConfirm`.
+    #[must_use]
+    pub const fn title_key(&self) -> &'static str {
+        match self {
+            Self::RegisterPasskey { .. } => "componentsUi.signing.ceremonyCreate",
+            Self::AuthenticatePasskey { .. }
+            | Self::SignProof {
+                purpose: ProofPurpose::RecoverFirst | ProofPurpose::RecoverSecond,
+                ..
+            } => "componentsUi.signing.ceremonySignIn",
+            Self::SignProof {
+                purpose: ProofPurpose::Verify,
+                ..
+            }
+            | Self::SignMemberProof { .. } => "componentsUi.signing.ceremonyConfirm",
+        }
+    }
+
     /// Where the key this ceremony makes or uses lives.
     #[must_use]
     pub fn place(&self) -> Option<KeyMethod> {
