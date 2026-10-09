@@ -13410,10 +13410,12 @@ public func browserLoadVisit(url: String, title: String, icon: String?, mainFram
  * the address, and how it was asked for (`"address"` typed or handed in,
  * `"site"` a favourite, recent or featured tile picked) in; an
  * `ExploreOpenTarget` JSON out — `{"type":"load","id":…}` (send
- * `tab_navigated` and load it there), `{"type":"resume","id":…}` (a tab
- * already on that site: `tab_selected`, shown as it was left) or
- * `{"type":"new_tab"}` (`tab_opened`; never for a full strip, whose open
- * loads in the selected tab). `None` for input that does not read.
+ * `tab_selected` when it is not the selected tab, then `tab_navigated`, and
+ * load it there), `{"type":"resume","id":…}` (a tab already on that site:
+ * `tab_selected`, shown as it was left) or `{"type":"new_tab"}`
+ * (`tab_opened`; never for a full strip, whose open loads in a start-page
+ * tab, else the tab used longest ago — never the dApp just left while
+ * another tab will do). `None` for input that does not read.
  * See `vela_core::app::browser_tabs::open_target`.
  */
 public func browserOpenTarget(viewJson: String, shown: String?, onPage: Bool, url: String, kind: String) -> String?  {
@@ -15959,7 +15961,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_visit() != 23241) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_browser_open_target() != 7423) {
+    if (uniffi_vela_core_uniffi_checksum_func_browser_open_target() != 28982) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_browser_pinned_title() != 57380) {
