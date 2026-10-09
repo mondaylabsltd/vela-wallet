@@ -220,6 +220,19 @@ pub fn remove_account(index: usize, cx: &mut App) {
     dispatch(vela_core::app::session::Event::RemoveAccount { index }, cx);
 }
 
+/// Spec 102 (D1): where the account at `address` reviews and signs on this
+/// device. The core refuses — and writes nothing — when the venue cannot
+/// reach the account's keys (R1); the screen never offers one that cannot.
+pub fn choose_venue(address: &str, venue: vela_core::signing_venue::SigningVenue, cx: &mut App) {
+    dispatch(
+        vela_core::app::session::Event::SigningVenueChosen {
+            address: address.to_owned(),
+            venue,
+        },
+        cx,
+    );
+}
+
 pub fn sign_out(cx: &mut App) {
     dispatch(vela_core::app::session::Event::SignOut, cx);
 }
@@ -264,7 +277,9 @@ mod tests {
                 transports: "usb".to_owned(),
                 signer_origin: None,
             }],
-            signed_in_with: None,
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
         }
     }
 

@@ -8,7 +8,9 @@
 
 pub mod components;
 pub mod fixtures;
+pub mod integrity;
 pub mod live;
+pub mod pages;
 pub mod status;
 pub mod trusted_signer;
 
@@ -248,6 +250,9 @@ pub struct SigningStrings {
     pub summary_deploy: SharedString,
     pub summary_safe: SharedString,
     pub fee_label: SharedString,
+    /// Spec 102: why this account cannot sign here
+    /// (`SignErrorNotice::venue_block`), the core's reason with its domains.
+    pub venue_blocks: crate::signing::trusted_signer::VenueBlockWords,
     /// The fee row while a speed just picked is measured (spec 069).
     pub fee_estimating: SharedString,
     pub fee_token_title: SharedString,
@@ -497,6 +502,7 @@ impl SigningStrings {
             summary_deploy: s("summaryDeploy"),
             summary_safe: s("safeSummary"),
             fee_label: loc.t("componentsUi.gas.networkFee"),
+            venue_blocks: crate::signing::trusted_signer::VenueBlockWords::resolve(loc),
             fee_estimating: loc.t("componentsUi.gas.estimating"),
             fee_token_title: s("feeTokenTitle"),
             fee_balance: loc.t("componentsUi.gas.rowBalance"),

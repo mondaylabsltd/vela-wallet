@@ -1442,6 +1442,12 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
             SignErrorKind::UserRejected | SignErrorKind::WalletSwitchedChains => {
                 SharedString::default()
             }
+            // Spec 102: this account cannot sign here — the core's reason,
+            // in the person's language, not the page's English.
+            SignErrorKind::VenueBlocked => error.venue_block.as_ref().map_or_else(
+                || s.error_generic.clone(),
+                |block| s.venue_blocks.say(block),
+            ),
             _ => s.error_generic.clone(),
         };
         if !text.is_empty() {
@@ -3864,6 +3870,7 @@ mod tests {
             error: Some(vela_core::app::sign_request::SignErrorNotice {
                 kind: SignErrorKind::UnlimitedApproval,
                 detail: None,
+                venue_block: None,
             }),
             ..pristine_sign()
         };
@@ -3885,6 +3892,7 @@ mod tests {
             error: Some(vela_core::app::sign_request::SignErrorNotice {
                 kind: SignErrorKind::SubmitFailed,
                 detail: Some("relayer said: nonce too low".to_owned()),
+                venue_block: None,
             }),
             ..pristine_sign()
         };
@@ -3909,6 +3917,7 @@ mod tests {
             error: Some(vela_core::app::sign_request::SignErrorNotice {
                 kind: SignErrorKind::UserRejected,
                 detail: None,
+                venue_block: None,
             }),
             ..pristine_sign()
         };

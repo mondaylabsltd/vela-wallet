@@ -492,6 +492,9 @@ pub struct FlowStrings {
     pub tx_maybe_sent: SharedString,
     pub tx_error_generic: SharedString,
     pub tx_error_bundler_fund: SharedString,
+    /// Spec 102: why this account cannot sign here (`SendTxErrorKey::
+    /// VenueBlocked`), the core's reason filled with its domains.
+    pub venue_blocks: crate::signing::trusted_signer::VenueBlockWords,
     pub first_time_tag: SharedString,
     /// Spec 096 F12: the recipient is a token's own contract.
     pub recipient_token_contract: SharedString,
@@ -858,6 +861,7 @@ impl FlowStrings {
             tx_maybe_sent: s("componentsUi.signing.maybeSent"),
             tx_error_generic: s("send.txErrorGeneric"),
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
+            venue_blocks: crate::signing::trusted_signer::VenueBlockWords::resolve(loc),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
             recipient_token_contract: s("send.recipientTokenContract"),
             fee_pending: SharedString::from("…"),

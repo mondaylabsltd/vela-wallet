@@ -56,7 +56,7 @@ use crate::theme::{
 };
 use crate::ui::{
     ButtonState, ButtonVariant, LaunchAnimation, NameFieldStrings, RailSlot, onboarding_rail,
-    text_field, vela_button, welcome_cta, welcome_cta_state,
+    text_field, vela_button, vela_button_opts, welcome_cta, welcome_cta_state,
 };
 use crate::wallet::components::balanced_wrap_width;
 use crate::window_frame::{
@@ -98,6 +98,21 @@ struct EndpointSurface {
     automatic: bool,
 }
 
+/// Which chooser opened "Use a trusted signing page" (spec 102) — and so where a
+/// picked page goes: the create machine's `SigningPageChosen`, or the sign-in
+/// this page is about to start.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OwnPageFor {
+    Create,
+    SignIn,
+}
+
+/// The own-page picker's "Add a page" field.
+struct PageDraft {
+    text: String,
+    focus: FocusHandle,
+}
+
 /// The PIN dialog's state. `request` is what the authenticator told us about
 /// itself; `value` is what the person has typed so far.
 struct PinDialog {
@@ -115,6 +130,8 @@ pub struct OnboardingPage {
     identicons: RefCell<IdenticonCache>,
     /// The method rows' marks (spec 038).
     passkey_icons: RefCell<PasskeyIconCache>,
+    /// The app's own glyphs, for the signing-page rows (spec 102).
+    icons: RefCell<crate::icons::IconCache>,
     /// Names and marks for models the compiled catalog cannot name — asked
     /// once per AAGUID, from the render pass that first needs one.
     directory: RefCell<PasskeyDirectory>,
@@ -132,6 +149,13 @@ pub struct OnboardingPage {
     /// The sign-in method picker is open — the person tapped "I already have a
     /// wallet" and is choosing this device, a phone by scan, or a security key.
     signin_methods_open: bool,
+    /// Spec 102: "Use a trusted signing page" is open, for which chooser.
+    own_page_for: Option<OwnPageFor>,
+    /// Spec 102: the page the next sign-in runs on (R3) — chosen from the
+    /// sign-in chooser's advanced entry; `None` signs in in the app.
+    signin_page: Option<String>,
+    /// The picker's "Add a page" field.
+    page_draft: PageDraft,
 
     login: CoreHost<Login>,
     login_view: LoginView,
@@ -244,6 +268,7 @@ impl OnboardingPage {
             focus_handle,
             identicons: RefCell::default(),
             passkey_icons: RefCell::default(),
+            icons: RefCell::default(),
             directory: RefCell::default(),
             intro: if crate::dev_env::flag!("VELA_INTRO")
                 || storage::read_epoch_ms(theme::INTRO_SEEN_KEY).is_none()
@@ -259,6 +284,12 @@ impl OnboardingPage {
             picker_open: false,
             copied: false,
             signin_methods_open: false,
+            own_page_for: None,
+            signin_page: None,
+            page_draft: PageDraft {
+                text: String::new(),
+                focus: cx.focus_handle(),
+            },
             login,
             login_view,
             endpoint_dismissed: false,
@@ -313,16 +344,9 @@ impl OnboardingPage {
             .create
             .dispatch(vela_core::app::create_wallet::Event::Start);
         self.pump_create(pending, cx);
-        // Spec 075: which Trusted Signer page Settings names decides whether that
-        // route can mint a key THIS set accepts — a key made on a page belongs
-        // to that page's domain, and a wallet's keys all belong to one relying
-        // party. The core cannot read the store.
-        let pending =
-            self.create
-                .dispatch(vela_core::app::create_wallet::Event::SignerPageChanged {
-                    url: crate::executor::trusted_signer::signer_url(),
-                });
-        self.pump_create(pending, cx);
+        // Spec 102: no page is chosen for the person. A wallet's signing
+        // domain is `getvela.app` unless they pick their own page from the
+        // chooser's advanced entry, before the first key.
         cx.notify();
     }
 
@@ -334,9 +358,12 @@ impl OnboardingPage {
         // The method routes: `SecurityKey` runs the app-owned USB ceremony,
         // `Hybrid` shows a QR and signs in through a phone over caBLE. (Platform
         // has no route on the desktop and the picker presents it as unavailable.)
-        let pending = self
-            .login
-            .dispatch(vela_core::app::login::Event::SignIn { method });
+        // Spec 102 R3: with the person's own page chosen, the place is asked
+        // ON that page — the core carries it on the ceremony.
+        let pending = self.login.dispatch(vela_core::app::login::Event::SignIn {
+            method,
+            page: self.signin_page.clone(),
+        });
         self.pump_login(pending, cx);
         cx.notify();
     }
@@ -601,6 +628,11 @@ impl OnboardingPage {
                 // not an error to report, just nothing to do.
                 return;
             }
+            FlowEvent::ChooseOwnPage => {
+                self.open_own_page(OwnPageFor::Create, window, cx);
+                return;
+            }
+            FlowEvent::ClearOwnPage => CreateEvent::SigningPageChosen { url: None },
         };
 
         // The name field keeps focus across a keystroke-driven re-render.
@@ -849,9 +881,9 @@ impl OnboardingPage {
         )
     }
 
-    /// Spec 075: the Trusted Signer's own dialogs during a create or a sign-in —
-    /// where the signer is, the cross-device pairing and its code, the wait,
-    /// and how the last attempt ended.
+    /// The trusted page's own dialogs during a create or a sign-in on the
+    /// person's own signing page (spec 102 R3) — the wait, and how the last
+    /// attempt ended (or why the page never opened).
     ///
     /// The same cards the signing sheet draws (`signing::trusted_signer`), and
     /// for the same reason the cable's dialogs are shared: a person creating a
@@ -871,17 +903,24 @@ impl OnboardingPage {
             trusted_signer_cards::waiting_card(
                 theme,
                 &self.loc,
+                self.loc.t(channel.title_key()),
                 channel.unreachable(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| reopen.reopen(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| cancel.cancel(),
             )
         } else {
             let refusal = channel.ended()?;
+            let said = trusted_signer_cards::ended_words(
+                &self.loc,
+                refusal,
+                channel.not_opened().as_ref(),
+            );
             let forget = Arc::clone(&channel);
             trusted_signer_cards::ended_card(
                 theme,
                 &self.loc,
-                refusal,
+                self.loc.t(channel.title_key()),
+                said,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| forget.forget(),
             )
         };
@@ -912,9 +951,198 @@ impl OnboardingPage {
         )))
     }
 
-    /// The sign-in method picker — the same three methods creating a wallet
+    // -- spec 102: "Use a trusted signing page" --------------------------------
+
+    /// Open the page picker for `purpose`: the pages this device keeps, read
+    /// again, each checked in the background as its row is drawn.
+    fn open_own_page(&mut self, purpose: OwnPageFor, window: &mut Window, cx: &mut Context<Self>) {
+        use vela_core::app::signing_pages::Event as PagesEvent;
+        crate::resident::resident::<vela_core::app::signing_pages::SigningPages>(cx)
+            .update(cx, |pages, cx| pages.dispatch(PagesEvent::Refresh, cx));
+        self.own_page_for = Some(purpose);
+        self.page_draft.text.clear();
+        self.page_draft.focus.focus(window, cx);
+        cx.notify();
+    }
+
+    /// A page was picked: the create machine's domain (before its first key),
+    /// or the page the next sign-in runs on.
+    fn pick_own_page(&mut self, url: String, cx: &mut Context<Self>) {
+        match self.own_page_for.take() {
+            Some(OwnPageFor::Create) => {
+                let pending =
+                    self.create
+                        .dispatch(vela_core::app::create_wallet::Event::SigningPageChosen {
+                            url: Some(url),
+                        });
+                self.pump_create(pending, cx);
+            }
+            Some(OwnPageFor::SignIn) => {
+                self.signin_page = Some(url);
+                self.signin_methods_open = true;
+            }
+            None => {}
+        }
+        cx.notify();
+    }
+
+    /// "Add a page" in the picker: the core validates it and says why not.
+    fn add_own_page(&mut self, cx: &mut Context<Self>) {
+        use vela_core::app::signing_pages::Event as PagesEvent;
+        let url = self.page_draft.text.trim().to_owned();
+        if url.is_empty() {
+            return;
+        }
+        let added = crate::resident::resident::<vela_core::app::signing_pages::SigningPages>(cx)
+            .update(cx, |pages, cx| {
+                pages.dispatch(
+                    PagesEvent::PageAdded {
+                        url,
+                        name: String::new(),
+                    },
+                    cx,
+                );
+                pages.view().add_error.is_none()
+            });
+        if added {
+            self.page_draft.text.clear();
+        }
+        cx.notify();
+    }
+
+    /// One page as the choosers draw it: its label (if the person gave one),
+    /// whose keys it reaches, and its integrity line now.
+    fn own_page_row(&self, url: &str, cx: &mut Context<Self>) -> crate::signing::pages::PageRow {
+        let view = crate::resident::resident::<vela_core::app::signing_pages::SigningPages>(cx)
+            .read(cx)
+            .view();
+        let saved = view.pages.iter().find(|row| row.url == url);
+        let line = crate::signing::integrity::line(url, cx);
+        crate::signing::pages::page_row(
+            &self.loc,
+            url,
+            saved.map_or("", |row| row.name.as_str()),
+            &vela_core::signing_venue::domain_of_page(url),
+            saved.is_some_and(|row| row.official),
+            &line,
+        )
+    }
+
+    /// The page picker, over whichever chooser opened it.
+    fn own_page_prompt(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Stateful<Div>> {
+        self.own_page_for?;
+        let view = crate::resident::resident::<vela_core::app::signing_pages::SigningPages>(cx)
+            .read(cx)
+            .view();
+        let rows: Vec<crate::signing::pages::PageRow> = view
+            .pages
+            .iter()
+            .map(|row| self.own_page_row(&row.url, cx))
+            .collect();
+        let s_add = self.loc.t("settings.signing.pageAdd");
+        let refused = view.add_error.as_deref().map(|error| {
+            self.loc.t(match error {
+                "insecure" => "settings.signing.pageInsecure",
+                "duplicate" => "settings.signing.pageDuplicate",
+                _ => "settings.signing.pageInvalid",
+            })
+        });
+        let page = cx.entity();
+        let field = crate::settings::components::editable_url_field(
+            "own-page-add",
+            theme,
+            Some(s_add.clone()),
+            &self.page_draft.text,
+            SharedString::from("https://sign.example.com"),
+            None,
+            None,
+            refused
+                .is_some()
+                .then_some(crate::settings::fixtures::Tone::Error),
+            &self.page_draft.focus,
+            window,
+            {
+                let page = page.clone();
+                move |text: String, _window: &mut Window, cx: &mut App| {
+                    page.update(cx, |page, cx| {
+                        page.page_draft.text = text;
+                        cx.notify();
+                    });
+                }
+            },
+            {
+                let page = page.clone();
+                move |_window: &mut Window, cx: &mut App| {
+                    page.update(cx, |page, cx| page.add_own_page(cx));
+                }
+            },
+        );
+        let mut add = div().w_full().flex().flex_col().gap(px(8.)).child(
+            div()
+                .w_full()
+                .flex()
+                .items_end()
+                .gap(px(8.))
+                .child(div().flex_1().min_w(px(0.)).child(field))
+                .child(
+                    vela_button_opts(
+                        "own-page-add-button",
+                        ButtonVariant::Secondary,
+                        s_add,
+                        !self.page_draft.text.trim().is_empty(),
+                        theme,
+                        cx.listener(|this, _, _, cx| this.add_own_page(cx)),
+                    )
+                    .w(px(120.))
+                    .flex_none(),
+                ),
+        );
+        if let Some(refused) = refused {
+            add = add.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.error_base)
+                    .child(refused),
+            );
+        }
+        let on_pick: crate::signing::pages::PickPage = {
+            let page = page.clone();
+            Rc::new(move |url, _window, cx| {
+                page.update(cx, |page, cx| page.pick_own_page(url, cx));
+            })
+        };
+        // "Trust this version" on a self-hosted page's question: stored on
+        // that page, then checked again (spec 102 D-15).
+        let on_trust: crate::signing::pages::PickPage =
+            Rc::new(|url, _window, cx| crate::signing::integrity::trust(&url, cx));
+        let sheet = crate::signing::pages::own_page_sheet(
+            theme,
+            &mut self.icons.borrow_mut(),
+            &self.loc,
+            &rows,
+            on_pick,
+            on_trust,
+            add,
+            cx.listener(|this, _, _, cx| {
+                // Back to the chooser it was opened from.
+                if this.own_page_for.take() == Some(OwnPageFor::SignIn) {
+                    this.signin_methods_open = true;
+                }
+                cx.notify();
+            }),
+        );
+        Some(scrim(theme, "own-page-scrim").child(sheet))
+    }
+
+    /// The sign-in method picker — the same three places creating a wallet
     /// offers, so a wallet living on a phone or a security key is reachable, not
-    /// just whatever a platform passkey would default to.
+    /// just whatever a platform passkey would default to — and (spec 102) the
+    /// advanced entry for a wallet on the person's own signing page.
     fn signin_method_prompt(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         if !self.signin_methods_open {
             return None;
@@ -925,10 +1153,42 @@ impl OnboardingPage {
                 page.update(cx, |page, cx| page.sign_in(method, cx));
             })
         };
+        let chosen = self
+            .signin_page
+            .clone()
+            .map(|url| self.own_page_row(&url, cx));
+        let on_page = self
+            .signin_page
+            .as_deref()
+            .is_some_and(|url| vela_core::signing_venue::ceremony_page(Some(url)).is_some());
+        let own_page = hardware::OwnPage {
+            on_page,
+            chosen: chosen.as_ref(),
+            icons: &self.icons,
+            on_open: {
+                let page = cx.entity();
+                Rc::new(move |window: &mut Window, cx: &mut App| {
+                    page.update(cx, |page, cx| {
+                        page.signin_methods_open = false;
+                        page.open_own_page(OwnPageFor::SignIn, window, cx);
+                    });
+                })
+            },
+            on_clear: {
+                let page = cx.entity();
+                Rc::new(move |_window: &mut Window, cx: &mut App| {
+                    page.update(cx, |page, cx| {
+                        page.signin_page = None;
+                        cx.notify();
+                    });
+                })
+            },
+        };
         let card = hardware::signin_method_card(
             theme,
             &self.loc,
             &self.passkey_icons,
+            Some(own_page),
             on_pick,
             cx.listener(|this, _, _, cx| {
                 this.signin_methods_open = false;
@@ -1262,6 +1522,14 @@ impl Render for OnboardingPage {
             let sink: FlowSink = Rc::new(move |event, window, cx| {
                 entity.update(cx, |page, cx| page.on_flow_event(event, window, cx));
             });
+            // Spec 102: the page this wallet is being made on, when the person
+            // chose their own — its domain and integrity line, drawn above
+            // the three places.
+            let own_page = self
+                .create_view
+                .signing_page
+                .clone()
+                .map(|url| self.own_page_row(&url, cx));
             let host = FlowHost {
                 theme: &theme,
                 passkey_icons: &self.passkey_icons,
@@ -1271,6 +1539,8 @@ impl Render for OnboardingPage {
                 identicons: &self.identicons,
                 directory: &self.directory,
                 picker_open: self.picker_open,
+                own_page: own_page.as_ref(),
+                icons: &self.icons,
                 copied: self.copied,
                 sink,
             };
@@ -1371,6 +1641,9 @@ impl Render for OnboardingPage {
             ));
         }
         if let Some(picker) = self.signin_method_prompt(&theme, cx) {
+            root = root.child(picker);
+        }
+        if let Some(picker) = self.own_page_prompt(&theme, window, cx) {
             root = root.child(picker);
         }
         if let Some(qr) = self.qr_prompt(&theme, cx) {

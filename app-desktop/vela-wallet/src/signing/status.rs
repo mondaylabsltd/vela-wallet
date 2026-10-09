@@ -987,6 +987,7 @@ mod tests {
                 v.error = Some(SignErrorNotice {
                     kind: SignErrorKind::SubmitFailed,
                     detail: Some("relay unreachable".to_owned()),
+                    venue_block: None,
                 });
             }),
             true,
@@ -1010,6 +1011,7 @@ mod tests {
                 v.error = Some(SignErrorNotice {
                     kind: SignErrorKind::SubmitFailed,
                     detail: Some(vela_core::user_op::REFUSED_DAPP_DETAIL.to_owned()),
+                    venue_block: None,
                 });
                 v.failure_refused = true;
             }),
@@ -1034,6 +1036,7 @@ mod tests {
                 v.error = Some(SignErrorNotice {
                     kind: SignErrorKind::SubmitFailed,
                     detail: Some("Could not estimate gas".to_owned()),
+                    venue_block: None,
                 });
                 v.failure_retryable = true;
             }),
@@ -1054,7 +1057,7 @@ mod tests {
         ] {
             let form = approved(
                 &view(|v| {
-                    v.error = Some(SignErrorNotice { kind, detail: None });
+                    v.error = Some(SignErrorNotice::new(kind, None));
                 }),
                 true,
                 None,
@@ -1083,6 +1086,7 @@ mod tests {
                     "{} ({TX})",
                     vela_core::app::sign_request::REVERTED_MESSAGE
                 )),
+                venue_block: None,
             });
         });
         let at = |track: Option<&TrackEntryView>| {
@@ -1141,6 +1145,7 @@ mod tests {
             v.error = Some(SignErrorNotice {
                 kind: SignErrorKind::SubmitFailed,
                 detail: Some("relay said no".to_owned()),
+                venue_block: None,
             });
         });
         let generic = approved(&refused, true, Some(&summary()), None, &clock(0.), &s)
@@ -1196,6 +1201,7 @@ mod tests {
                 v.error = Some(SignErrorNotice {
                     kind: SignErrorKind::SubmitFailed,
                     detail: Some("personal_sign carried nothing this wallet could sign".to_owned()),
+                    venue_block: None,
                 });
             }),
             false,

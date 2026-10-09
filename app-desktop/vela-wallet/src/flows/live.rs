@@ -3587,11 +3587,18 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
     }
 }
 
-/// The two error wordings the core chooses between.
+/// The error wordings the core chooses between — and, for a venue this
+/// device cannot use (spec 102), the core's reason with its domains.
 fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
     send.tx_error.map(|key| match key {
         vela_core::app::send::SendTxErrorKey::Generic => s.tx_error_generic.clone(),
         vela_core::app::send::SendTxErrorKey::BundlerFund => s.tx_error_bundler_fund.clone(),
+        vela_core::app::send::SendTxErrorKey::VenueBlocked => {
+            send.tx_venue_block.as_ref().map_or_else(
+                || s.tx_error_generic.clone(),
+                |block| s.venue_blocks.say(block),
+            )
+        }
     })
 }
 
@@ -3804,7 +3811,24 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         } else {
             CtaState::Disabled
         },
+        handoff: None,
     }
+}
+
+/// Spec 102 D4: the confirm when the account reviews and signs on a trusted
+/// page — the hand-off above the CTA, and the CTA saying where it goes. It
+/// opens only when the page's check says it may; a wait (signing,
+/// submitting) stays a wait.
+pub fn with_handoff(
+    mut confirm: SendConfirm,
+    handoff: crate::signing::trusted_signer::HandoffModel,
+) -> SendConfirm {
+    confirm.cta = handoff.open_label.clone();
+    if confirm.cta_state == CtaState::Enabled && !handoff.opens {
+        confirm.cta_state = CtaState::Disabled;
+    }
+    confirm.handoff = Some(Box::new(handoff));
+    confirm
 }
 
 /// One amount of money, in the hero's own formatting (no `≈`).
@@ -7649,6 +7673,48 @@ mod speed_tests {
             .unwrap_or_else(|| unreachable!("the confirm names the speed"));
         assert_eq!(row.value, s.gas_tier_fast);
         assert_eq!(row.note.as_ref(), Some(&s.fee_speed_free));
+    }
+
+    /// Spec 102 D4: on a trusted page the confirm hands off — the CTA says
+    /// where it goes, and is armed only when the page's check says it may
+    /// open; a wait stays a wait.
+    #[test]
+    fn the_confirm_hands_off_and_opens_only_a_checked_page() {
+        use crate::signing::trusted_signer::handoff_model;
+        use vela_core::trusted_signer::integrity::{LAUNCH, Verdict};
+        use vela_core::trusted_signer::launch::IntegrityLine;
+        let (s, wallet) = strings();
+        let send = CoreHost::<SendMachine>::new().view();
+        let fee = CoreHost::<FeePolicy>::new().view();
+        let loc = crate::loc::Loc::for_tag("en");
+        let handoff = crate::executor::send::Handoff {
+            page: Some(vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned()),
+            block: None,
+            key_label: vela_core::signing_venue::KeyLabel::of(None, "", "hybrid"),
+        };
+        let armed = |mut confirm: SendConfirm| {
+            confirm.cta_state = CtaState::Enabled;
+            confirm
+        };
+        let admitted = IntegrityLine::of(&Verdict::Open, LAUNCH, Some(1));
+        let confirm = with_handoff(
+            armed(send_confirm(&inputs(&send, &fee, &s, &wallet, None))),
+            handoff_model(&loc, &handoff, Some(&admitted)),
+        );
+        assert_eq!(confirm.cta, loc.t("componentsUi.signing.openSigner"));
+        assert_eq!(confirm.cta_state, CtaState::Enabled);
+        assert!(confirm.handoff.is_some());
+
+        let checking = with_handoff(
+            armed(send_confirm(&inputs(&send, &fee, &s, &wallet, None))),
+            handoff_model(&loc, &handoff, Some(&IntegrityLine::checking())),
+        );
+        assert_eq!(checking.cta_state, CtaState::Disabled, "opened unchecked");
+
+        let mut busy = send_confirm(&inputs(&send, &fee, &s, &wallet, None));
+        busy.cta_state = CtaState::Busy;
+        let busy = with_handoff(busy, handoff_model(&loc, &handoff, Some(&admitted)));
+        assert_eq!(busy.cta_state, CtaState::Busy);
     }
 
     /// A pick is restated without a reason; a send at the default adds no row.

@@ -47,6 +47,7 @@ use vela_core::app::send::SendSubmitFailure;
 use vela_core::app::tx_tracker::WAIT_WINDOW_MS;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
+use vela_core::signing_venue::{KeyRoute, VenueBlock};
 use vela_core::user_op::{
     CALL_GAS_LIMIT, EstimateFailure, MultiSendCall, NOT_SENT_DAPP_DETAIL, PRE_VERIFICATION_GAS,
     RelayRejection, SubmitVerdict, UserOperation, VERIFICATION_GAS_DEPLOYED,
@@ -100,6 +101,12 @@ pub enum SubmitFailure {
         kind: FailureKind,
         message: String,
     },
+    /// Spec 102: the account's venue cannot be used here — nothing on this
+    /// device can reach its keys (`SigningPlan::blocked`). No prompt was
+    /// raised and no page opened; the core says why, in the person's
+    /// language (`SendSubmitFailure::VenueBlocked`,
+    /// `SignSubmitOutcome::VenueBlocked`).
+    VenueBlocked(VenueBlock),
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -118,6 +125,7 @@ impl From<SubmitFailure> for SendSubmitFailure {
             SubmitFailure::AskerGone => SendSubmitFailure::Other {
                 message: Some("the request was withdrawn; nothing was sent".to_owned()),
             },
+            SubmitFailure::VenueBlocked(block) => SendSubmitFailure::VenueBlocked { block },
             SubmitFailure::Other(message)
             | SubmitFailure::Refused(message)
             | SubmitFailure::Signer { message, .. } => SendSubmitFailure::Other {
@@ -290,20 +298,26 @@ pub struct QuotedFee {
 /// same shape.
 pub type SignFn<'a> = &'a mut dyn FnMut(&[u8]) -> Result<Assertion, PasskeyFailure>;
 
-/// Who signs this request (spec 071).
+/// Who signs this request (spec 071; spec 102: by the account's venue).
 pub enum Signer<'a> {
-    /// A passkey, over the digest alone.
+    /// A passkey, over the digest alone — the account reviews and signs in
+    /// Vela.
     Passkey(SignFn<'a>),
-    /// The Trusted Signer: the request as the page is told it, the page, the
-    /// screen's channel to its waiting sheet, and the one key the page may
-    /// sign with — the account's sign-in key (founder, 2026-09-26). `None`
-    /// for a record from before it, whose every founding key may answer.
+    /// The account's trusted page: the request as the page is told it, the
+    /// page, the screen's channel to its waiting sheet, and the key route
+    /// (R5) — the one key the page may sign with, the account's sign-in key
+    /// (founder, 2026-09-26). `None` for a record from before it, whose every
+    /// founding key may answer.
     TrustedSigner {
         ask: &'a Ask,
-        page: &'a str,
+        page: String,
         channel: &'a Channel,
-        only: Option<&'a str>,
+        key_route: Option<&'a KeyRoute>,
     },
+    /// Spec 102 R1: nothing on this device can reach the account's keys. No
+    /// prompt and no page: the submit ends `VenueBlocked`, and the core words
+    /// why.
+    Unreachable { block: &'a VenueBlock },
 }
 
 impl Signer<'_> {
@@ -349,28 +363,32 @@ impl Signer<'_> {
         keys: &[WalletKey],
         operation: Option<(&UserOperation, &[MultiSendCall])>,
     ) -> Result<Assertion, SubmitFailure> {
+        if let Self::Unreachable { block } = self {
+            return Err(SubmitFailure::VenueBlocked((*block).clone()));
+        }
         match self {
             Self::Passkey(sign) => sign(digest),
             Self::TrustedSigner {
                 ask,
                 page,
                 channel,
-                only,
+                key_route,
             } => {
                 // The page is offered that key alone, and no other key's
                 // answer is taken — the same rule a passkey ceremony pinned
                 // to it keeps.
-                let allowed: Vec<WalletKey> = match only {
-                    Some(credential) => keys
+                let allowed: Vec<WalletKey> = match key_route {
+                    Some(route) => keys
                         .iter()
-                        .filter(|key| key.credential_id.eq_ignore_ascii_case(credential))
+                        .filter(|key| key.credential_id.eq_ignore_ascii_case(&route.credential_id))
                         .cloned()
                         .collect(),
                     None => keys.to_vec(),
                 };
-                let request = ask.request(chain_id, safe, &allowed, operation);
+                let request = ask.request(chain_id, safe, &allowed, *key_route, operation);
                 trusted_signer::sign(&request, page, digest, &allowed, channel)
             }
+            Self::Unreachable { .. } => unreachable!("answered above"),
         }
         .map_err(|failure| match failure.kind {
             FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
@@ -1402,7 +1420,9 @@ mod tests {
                     signer_origin: None,
                 })
                 .collect(),
-            signed_in_with: None,
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
         }
     }
 
@@ -2061,8 +2081,9 @@ mod tests {
     #[test]
     fn the_trusted_signers_answer_becomes_the_same_envelope() {
         use crate::executor::trusted_signer::tests::{
-            answers_once, page_result, refuses_once, signing_key, wallet_key,
+            admitted, answers_once, page_result, refuses_once, signing_key, wallet_key,
         };
+        admitted();
         let credential = [0x11_u8, 0x22, 0x33];
         let keys = vec![
             wallet_key(&signing_key(9), &[0x99]),
@@ -2100,9 +2121,9 @@ mod tests {
         let signed = {
             let mut signer = Signer::TrustedSigner {
                 ask: &ask,
-                page: "https://sign.getvela.app/",
+                page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
-                only: None,
+                key_route: None,
             };
             signer.sign(
                 &digest,
@@ -2138,9 +2159,9 @@ mod tests {
         let declined = {
             let mut signer = Signer::TrustedSigner {
                 ask: &ask,
-                page: "https://sign.getvela.app/",
+                page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
-                only: None,
+                key_route: None,
             };
             signer.sign(
                 &digest,
@@ -2170,14 +2191,16 @@ mod tests {
     #[test]
     fn the_trusted_signer_takes_only_the_sign_in_key() {
         use crate::executor::trusted_signer::tests::{
-            answers_once, page_result, signing_key, wallet_key,
+            admitted, answers_once, page_result, signing_key, wallet_key,
         };
+        admitted();
         const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let (first, second) = ([0x99_u8], [0x11_u8, 0x22, 0x33]);
         let keys = vec![
             wallet_key(&signing_key(9), &first),
             wallet_key(&signing_key(7), &second),
         ];
+        let route = KeyRoute::new(&keys[1].credential_id, "platform", "internal");
         let original = [0x42_u8; 32];
         let challenge =
             compute_safe_message_hash(&original, 100, SAFE).unwrap_or_else(|e| unreachable!("{e}"));
@@ -2197,9 +2220,9 @@ mod tests {
                 &keys,
                 Signer::TrustedSigner {
                     ask: &ask,
-                    page: "https://sign.getvela.app/",
+                    page: "https://sign.getvela.app/".to_owned(),
                     channel: &channel,
-                    only: Some(&keys[1].credential_id),
+                    key_route: Some(&route),
                 },
                 &quiet,
                 &always_asked,
@@ -2223,6 +2246,41 @@ mod tests {
         assert_eq!(ended, None);
     }
 
+    /// Spec 102 R1: keys nothing on this device can reach are signed by
+    /// nothing — no prompt, no page — and the submit ends `VenueBlocked`
+    /// with the reason, which the core words in the person's language
+    /// (`SendSubmitFailure::VenueBlocked`).
+    #[test]
+    fn keys_out_of_reach_raise_no_prompt_and_say_why() {
+        let block = VenueBlock::AppCannotReach {
+            domain: "sign.example.com".to_owned(),
+        };
+        let keys = vec![WalletKey {
+            credential_id: "aa".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+        }];
+        let heard = std::cell::RefCell::new(Vec::new());
+        let edges = |edge: CeremonyEdge| heard.borrow_mut().push(edge);
+        let mut signer = Signer::Unreachable { block: &block };
+        let refused = signer.sign(
+            &[0xab; 32],
+            100,
+            "0xabc",
+            &keys,
+            None,
+            &edges,
+            &always_asked,
+        );
+        assert_eq!(
+            refused.err(),
+            Some(SubmitFailure::VenueBlocked(block.clone()))
+        );
+        assert_eq!(
+            SendSubmitFailure::from(SubmitFailure::VenueBlocked(block.clone())),
+            SendSubmitFailure::VenueBlocked { block }
+        );
+    }
+
     /// A message through the Trusted Signer (spec 071): the page is told the
     /// site's own request and no operation, the answer is accepted only over
     /// the Safe's `SafeMessage` hash of the original computed here, and it
@@ -2230,8 +2288,9 @@ mod tests {
     #[test]
     fn a_message_through_the_trusted_signer_is_the_same_1271_signature() {
         use crate::executor::trusted_signer::tests::{
-            answers_once, page_result, signing_key, wallet_key,
+            admitted, answers_once, page_result, signing_key, wallet_key,
         };
+        admitted();
         const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let credential = [0x11_u8, 0x22, 0x33];
         let keys = vec![wallet_key(&signing_key(7), &credential)];
@@ -2246,7 +2305,7 @@ mod tests {
             account_name: None,
         };
         // The request the page would get: the site's, and no operation.
-        let request = ask.request(100, SAFE, &keys, None);
+        let request = ask.request(100, SAFE, &keys, None, None);
         assert_eq!(request["intent"]["method"], "personal_sign");
         assert!(request["context"].get("operation").is_none());
 
@@ -2260,9 +2319,9 @@ mod tests {
             &keys,
             Signer::TrustedSigner {
                 ask: &ask,
-                page: "https://sign.getvela.app/",
+                page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
-                only: None,
+                key_route: None,
             },
             &quiet,
             &always_asked,

@@ -59,7 +59,6 @@ use vela_core::app::send::{
     SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation, SendReceiptOutcome,
     SendRecipientDraft, SendShellResult, SendStage, SendView,
 };
-use vela_core::app::sign_pref::SignPref;
 use vela_core::app::tx_tracker::TxTracker;
 
 use crate::ceremony::CeremonyChannel;
@@ -288,12 +287,11 @@ impl SendHost {
         let channel = CeremonyChannel::new();
         let mut ctx = SendContext::new(&account, channel.ceremony(window_handle));
         // The send signs with the key the account signed in with (founder,
-        // 2026-09-26); the Trusted Signer's page, when that is where it
-        // signs, as Settings names it as the send opens.
+        // 2026-09-26), where the account reviews and signs (spec 102): its
+        // trusted page, when that is its venue.
         let (trusted_signer, changed) = trusted_signer::Channel::new();
         ctx.trusted_signer = trusted_signer;
-        let preference = resident::resident::<SignPref>(cx).read(cx).view();
-        ctx.follow_sign_in(&preference.signer_url);
+        ctx.follow_venue();
         let send = CoreHost::<Send>::new();
         let view = send.view();
         let display_code = display.code.clone();
@@ -1211,6 +1209,12 @@ impl SendHost {
         Arc::clone(&self.ctx.trusted_signer)
     }
 
+    /// Spec 102 D4: the hand-off card's facts, when this account reviews and
+    /// signs on a trusted page (or nothing here can reach its keys).
+    pub fn handoff(&self) -> Option<send_executor::Handoff> {
+        self.ctx.handoff()
+    }
+
     /// Something on the Trusted Signer's channel changed: hand the browser the
     /// page if a ceremony asked for it, and redraw.
     fn trusted_signer_changed(&mut self, cx: &mut Context<Self>) {
@@ -1802,7 +1806,9 @@ mod tests {
                     signer_origin: None,
                 })
                 .collect(),
-            signed_in_with: None,
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
         };
         storage::save_account(&account).unwrap_or_else(|e| unreachable!("{e}"));
         storage::save_active_index(0).unwrap_or_else(|e| unreachable!("{e}"));
@@ -2542,7 +2548,9 @@ mod tests {
                 public_key_hex: "04aa".to_owned(),
                 created_at_iso: String::new(),
                 keys: Vec::new(),
-                signed_in_with: None,
+                sign_in_key: None,
+                signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+                signing_venue: vela_core::signing_venue::SigningVenue::InVela,
             };
             let _ = storage::save_account(&account);
             account.id = "cred1".to_owned();
