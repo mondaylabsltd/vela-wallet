@@ -74,6 +74,8 @@ object SigningLive {
         val trustedSignerWaiting: Boolean = false,
         /** Spec 079: back from the page with no answer, and its address does not answer. */
         val trustedSignerUnreachable: Boolean = false,
+        /** Spec 102: a key ceremony's own title (a corpus key), `null` for a signature. */
+        val trustedSignerTitle: String? = null,
         /** Spec 071: why the last Trusted Signer attempt did not sign. */
         val trustedSignerNotice: String? = null,
         /** Spec 079: the chain's explorer base, for the landed receipt's link. */
@@ -97,14 +99,24 @@ object SigningLive {
     /** Spec 102 D4: the page an account signs on, the key it confirms with, and that page's line now. */
     data class Handoff(val page: String, val key: String, val line: uniffi.vela_core_uniffi.SignerIntegrityLine)
 
-    /** The hand-off card's words (D4) — shared by the dApp sheet and a send's own card. */
-    fun handoffModel(handoff: Handoff, strings: VelaStrings): HandoffModel = HandoffModel(
-        title = strings.s("handoffTitle"),
-        keyLine = if (handoff.key.isBlank()) "" else strings.s("handoffKey", mapOf("key" to handoff.key)),
-        page = handoff.page.substringAfter("://").trimEnd('/'),
-        integrity = app.getvela.wallet.feature.settings.components.integrityModel(handoff.line, strings),
-        open = strings.s("openSigner"),
-    )
+    /**
+     * The hand-off card's words (D4) — shared by the dApp sheet and a send's
+     * own card. [fee] is the card's fee + speed row (`handoffFeeRow`), `null`
+     * where there is none to draw. A self-hosted page whose check asks to be
+     * trusted carries the answer (`settings.signing.pageTrust`) under its line.
+     */
+    fun handoffModel(handoff: Handoff, strings: VelaStrings, fee: HandoffFeeModel? = null): HandoffModel {
+        val integrity = app.getvela.wallet.feature.settings.components.integrityModel(handoff.line, strings)
+        return HandoffModel(
+            title = strings.s("handoffTitle"),
+            keyLine = if (handoff.key.isBlank()) "" else strings.s("handoffKey", mapOf("key" to handoff.key)),
+            page = handoff.page.substringAfter("://").trimEnd('/'),
+            integrity = integrity,
+            open = strings.s("openSigner"),
+            fee = fee,
+            trust = strings.t("settings.signing.pageTrust").takeIf { integrity.asksToTrust },
+        )
+    }
 
     /** The transport of a request the WALLET made of itself (`VelaWalletApplication`). */
     const val WALLET_TRANSPORT = "wallet"
@@ -134,7 +146,9 @@ object SigningLive {
             )
         }
         return TrustedSignerWaitModel(
-            title = s.s("trustedSignerWaiting"),
+            // Spec 102: a ceremony says what it is doing there — create, sign
+            // in, confirm (`trustedSignerCeremonyTitleKey`); a signature waits.
+            title = ctx.trustedSignerTitle?.let(s::t) ?: s.s("trustedSignerWaiting"),
             hint = s.s("trustedSignerWaitingHint"),
             reopen = s.s("trustedSignerReopen"),
             cancel = s.t("common.cancel"),
@@ -629,6 +643,9 @@ object SigningLive {
         SignErrorKind.SignerUnavailable,
         SignErrorKind.SignerNotDiscoverable,
         SignErrorKind.SignerFailed,
+        // Spec 102: the venue cannot be used here — nothing was signed, and
+        // the core says why (`venue_block`); not retryable.
+        SignErrorKind.VenueBlocked,
     )
 
     /** The landing's clock for one operation: [waiting] — the relay has not sent it; [eta] — the count, when there is one. */
@@ -898,6 +915,9 @@ object SigningLive {
         sign.error?.kind == SignErrorKind.SignerUnavailable -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_UNAVAILABLE)
         sign.error?.kind == SignErrorKind.SignerNotDiscoverable -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_NOT_DISCOVERABLE)
         sign.error?.kind == SignErrorKind.SignerFailed -> s.t(I18nKeys.BrowserStatus.REASON_SIGNER_FAILED)
+        // Spec 102: why this account cannot sign here, in the person's language.
+        sign.error?.kind == SignErrorKind.VenueBlocked ->
+            sign.error.venue_block?.words { key, vars -> s.t(key, vars) } ?: s.t("send.txErrorGeneric")
         else -> s.t("send.txErrorGeneric")
     }
 

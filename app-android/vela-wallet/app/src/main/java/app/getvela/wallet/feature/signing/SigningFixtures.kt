@@ -9,6 +9,13 @@ import app.getvela.wallet.feature.flows.FeeSpeedOptionModel
 import app.getvela.wallet.feature.flows.FactLead
 import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.feature.wallet.WalletFixtures
+import app.getvela.wallet.feature.send.core.FeeAssetView
+import app.getvela.wallet.feature.send.core.FeeEstimateView
+import app.getvela.wallet.feature.send.core.FeeOptionView
+import app.getvela.wallet.feature.send.core.FeeSpeedView
+import app.getvela.wallet.feature.send.core.FeeTier
+import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.send.core.SendView
 
 /**
  * Canonical signing fixtures (spec 022, data-model.md §3 — the single canon all
@@ -214,23 +221,51 @@ object SigningFixtures {
     }
 
     /**
-     * CS37–CS39 (spec 102 D4): a swap on Uniswap for an account whose venue is
-     * the official page. The sheet does not repeat the preview — the page is
-     * the authority — so under the requester there is only the fee (the one
-     * thing Vela decides before it hands off) and the card: where, with which
-     * key, and what is trusted about the page.
+     * The key the boards' account confirms with — the core's `key_label` over
+     * a record whose sign-in key carries the wallet's own name, on a phone:
+     * D-17 names it by its place ("Phone or tablet"), since the card's
+     * "Signing account" row already says the wallet's name.
+     */
+    private fun VelaStrings.boardKey(): String {
+        val record = org.json.JSONObject()
+            .put("id", "a1b2c3d4")
+            .put("name", WalletFixtures.NAME)
+            .put("address", WalletFixtures.ADDRESS_FULL)
+            .put("public_key_hex", "04" + "ab".repeat(64))
+            .put("created_at_iso", "2026-09-30T10:00:00.000Z")
+            .put(
+                "keys",
+                org.json.JSONArray().put(
+                    org.json.JSONObject().put("credential_id", "a1b2c3d4").put("public_key_hex", "04" + "ab".repeat(64))
+                        .put("name", WalletFixtures.NAME).put("transports", "hybrid"),
+                ),
+            )
+            .put("sign_in_key", org.json.JSONObject().put("credential_id", "a1b2c3d4").put("method", "hybrid").put("transports", "hybrid"))
+            .put("signing_domain", "getvela.app")
+            .put("signing_venue", org.json.JSONObject().put("type", "page").put("url", app.getvela.wallet.feature.settings.SettingsFixtures.OFFICIAL_PAGE))
+            .toString()
+        return app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.of(record)?.keyLabel?.text(::t).orEmpty()
+    }
+
+    /**
+     * CS37–CS39, CS42 (spec 102 D4): a swap on Uniswap for an account that
+     * reviews and signs on a page. The sheet does not repeat the preview — the
+     * page is the authority — so under the requester there is only the fee
+     * (chosen here, before the hand-off: the sheet's own fee row, which the
+     * card does not repeat) and the card: where, with which key, and what is
+     * trusted about the page.
      */
     private fun VelaStrings.handoff(state: SigningScreenState): SigningScreenModel {
-        val official = app.getvela.wallet.feature.settings.SettingsFixtures.OFFICIAL_PAGE
-        val line = if (state == SigningScreenState.CS38) {
-            uniffi.vela_core_uniffi.SignerIntegrityLine(
+        val settings = app.getvela.wallet.feature.settings.SettingsFixtures
+        val page = if (state == SigningScreenState.CS42) settings.ASK_PAGE else settings.OFFICIAL_PAGE
+        val line = when (state) {
+            SigningScreenState.CS38 -> uniffi.vela_core_uniffi.SignerIntegrityLine(
                 uniffi.vela_core_uniffi.SignerIntegrityState.COULD_NOT_CHECK, "0ba8ee8c", null,
                 "componentsUi.signing.integrity.couldNotCheck", false,
             )
-        } else {
-            app.getvela.wallet.feature.settings.SettingsFixtures.pageLine(official)
+            else -> settings.pageLine(page)
         }
-        val card = SigningLive.handoffModel(SigningLive.Handoff(official, WalletFixtures.NAME, line), this)
+        val card = SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line), this)
         return model(
             state, Dapp.uniswap, Dapp.uniswapTint,
             blocks = emptyList(),
@@ -252,6 +287,73 @@ object SigningFixtures {
             } else {
                 null
             },
+        )
+    }
+
+    /**
+     * CS40/CS41: the card on its own, as a send on a page venue raises it —
+     * the fee + speed row is the core's `handoffFeeRow` over a settled fee
+     * session and the speed control (Standard), drawn with the send screen's
+     * own fee line. CS41: the page's check is a day old and runs again —
+     * the core's line while it does is "checking", and Open waits for it.
+     * `null` for every other board.
+     */
+    fun standaloneHandoff(state: SigningScreenState, strings: VelaStrings): HandoffModel? {
+        if (state != SigningScreenState.CS40 && state != SigningScreenState.CS41) return null
+        val settings = app.getvela.wallet.feature.settings.SettingsFixtures
+        val page = settings.OFFICIAL_PAGE
+        val line = if (state == SigningScreenState.CS41) {
+            uniffi.vela_core_uniffi.signerIntegrityLineWhileChecking(null, System.currentTimeMillis().toULong())
+        } else {
+            settings.pageLine(page)
+        }
+        return SigningLive.handoffModel(
+            SigningLive.Handoff(page, strings.boardKey(), line),
+            strings,
+            fee = boardFee(strings),
+        )
+    }
+
+    /** A settled 0.00012 ETH fee on Ethereum at Standard, priced at $2,600 — through the core's `handoffFeeRow`. */
+    private fun boardFee(strings: VelaStrings): HandoffFeeModel? {
+        val estimate = FeeEstimateView(
+            chain_id = 1,
+            total_wei = "120000000000000",
+            max_fee_per_gas = "1000000000",
+            network_fee_per_gas = "800000000",
+            relayer_fee_per_gas = "200000000",
+            bundler_gas_price = "1000000000",
+            in_band_gas_basis = "120000",
+            total_gas = "120000",
+            deployed = true,
+            tier = FeeTier.Standard,
+            quoted = true,
+            fee_asset = FeeAssetView.Native,
+        )
+        val fee = FeeView(
+            fee = estimate,
+            options = listOf(
+                FeeOptionView(
+                    symbol = "ETH", decimals = 18, balance = "50000000000000000", recipient = "",
+                    usd_balance = "130", usd_price = "2600", amount = "120000000000000", selected = true,
+                ),
+            ),
+            confirm_fee_ready = true,
+        )
+        val json = app.getvela.wallet.core.crux.Wire.json
+        return app.getvela.wallet.feature.send.SendLive.handoffFee(
+            feeJson = json.encodeToString(FeeView.serializer(), fee),
+            speedJson = json.encodeToString(FeeSpeedView.serializer(), FeeSpeedView(tier = FeeTier.Standard)),
+            fee = fee,
+            view = SendView(),
+            ctx = app.getvela.wallet.feature.send.SendLive.Context(
+                strings = strings,
+                chainNames = mapOf(1 to "Ethereum"),
+                explorers = emptyMap(),
+                money = app.getvela.wallet.feature.wallet.WalletLive.Money.dollars(),
+                fromName = WalletFixtures.NAME,
+                fromAddress = WalletFixtures.ADDRESS_FULL,
+            ),
         )
     }
 
@@ -1003,7 +1105,8 @@ object SigningFixtures {
 
             SigningScreenState.CS36 -> ownBackup()
 
-            SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39 -> handoff(state)
+            SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
+            SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42 -> handoff(state)
 
             SigningScreenState.CS32 -> model(
                 state, unknownDapp, Dapp.unknownTint,

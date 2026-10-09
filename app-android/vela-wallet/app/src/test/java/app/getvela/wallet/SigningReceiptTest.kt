@@ -71,7 +71,7 @@ class SigningReceiptTest {
         val handoff = SigningLive.Handoff("https://sign.getvela.app/", "Savings", opens)
         val card = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(handoff = handoff))
         val model = card.handoff!!
-        assertEquals("Review and sign on your trusted page", model.title)
+        assertEquals("Review and sign on your trusted signing page", model.title)
         assertEquals("Confirm with Savings", model.keyLine)
         assertEquals("sign.getvela.app", model.page)
         assertTrue(model.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
@@ -86,6 +86,54 @@ class SigningReceiptTest {
         val shut = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(handoff = handoff.copy(line = refused)))
         assertEquals("Couldn't check the page, so it won't open.", shut.handoff!!.integrity.text)
         assertTrue(!shut.confirmEnabled)
+    }
+
+    /**
+     * P2b-A10: a venue this device cannot use is told to the core as
+     * `venue_blocked`; the sheet's failure says why in the person's language
+     * (`SignErrorNotice.venue_block`), never the shell's English, and offers
+     * no retry.
+     */
+    @Test
+    fun `a venue that cannot be used here is said in the person's words`() {
+        val drawn = app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS1, strings)
+        val request = app.getvela.wallet.feature.signing.core.IncomingRequest("r1", "personal_sign", "[\"0x48\",\"0x88cCA0EeDbF2C4426110bbFc998F048689266894\"]", "http://127.0.0.1:8137", "tab-1", 100)
+        val block = app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.AppCannotReach("sign.example.com")
+        val sign = SignView(
+            surface = SignSurface.Sheet,
+            error = app.getvela.wallet.feature.signing.core.SignErrorNotice(
+                app.getvela.wallet.feature.signing.core.SignErrorKind.VenueBlocked, venue_block = block,
+            ),
+        )
+        val sheet = SigningLive.model(
+            drawn, request, sign,
+            app.getvela.wallet.feature.signing.core.ClearSigningView(), app.getvela.wallet.feature.signing.core.GuardView(),
+            app.getvela.wallet.feature.send.core.FeeView(confirm_fee_ready = true), ctx,
+        )
+        val said = "Vela can't reach keys on sign.example.com."
+        val receipt = sheet.receipt
+        assertTrue("the reason is said: ${sheet.blocks} / $receipt", receipt?.captions?.contains(said) == true || sheet.blocks.any { it is SigningBlock.Warning && it.text == said })
+        assertNull("no retry: nothing would change", receipt?.retry)
+        // The wire reads the core's shape.
+        val decoded = app.getvela.wallet.core.crux.Wire.json.decodeFromString(
+            app.getvela.wallet.feature.signing.core.SignErrorNotice.serializer(),
+            """{"kind":"venue_blocked","detail":null,"venue_block":{"type":"page_on_other_domain","page_domain":"sign.example.com","domain":"getvela.app"}}""",
+        )
+        assertEquals(app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.PageOnOtherDomain("sign.example.com", "getvela.app"), decoded.venue_block)
+        val outcome = app.getvela.wallet.core.crux.Wire.json.encodeToString(
+            app.getvela.wallet.feature.signing.core.SignSubmitOutcome.serializer(),
+            app.getvela.wallet.feature.signing.core.SignSubmitOutcome.VenueBlocked(block),
+        )
+        assertEquals("""{"type":"venue_blocked","block":{"type":"app_cannot_reach","domain":"sign.example.com"}}""", outcome)
+    }
+
+    /** P2b-A8: a key ceremony on a page waits under its own title, not a signature's. */
+    @Test
+    fun `a ceremony waits under its own title`() {
+        val create = SigningLive.trustedSignerWait(ctx.copy(trustedSignerWaiting = true, trustedSignerTitle = "componentsUi.signing.ceremonyCreate"))
+        assertEquals("Create your key on your signing page", create?.title)
+        val signature = SigningLive.trustedSignerWait(ctx.copy(trustedSignerWaiting = true))
+        assertEquals("Waiting for the signing page…", signature?.title)
     }
 
     @Test

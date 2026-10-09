@@ -525,6 +525,8 @@ class SendExecutor(
                 is UserOpSpine.Failure.Other -> SendSubmitFailure.Other(failure.message)
                 // The send's words for a passkey that failed are unchanged (the desktop's rule).
                 is UserOpSpine.Failure.Signer -> SendSubmitFailure.Other(failure.message)
+                // Spec 102: this account cannot sign here — the confirm screen says why, translated.
+                is UserOpSpine.Failure.VenueBlocked -> SendSubmitFailure.VenueBlocked(failure.block)
             },
         )
     }

@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.signing.SigningTone
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -100,9 +101,9 @@ class SigningFixturesTest {
 
     @Test
     fun everyScenarioBuilds() {
-        // The 33 of the canon, CS36 — the wallet's own backup — and CS37–CS39,
-        // spec 102's hand-off card.
-        assertEquals(37, SigningScreenState.entries.size)
+        // The 33 of the canon, CS36 — the wallet's own backup — and CS37–CS42,
+        // spec 102's hand-off card (CS40/CS41: the card a send raises on its own).
+        assertEquals(40, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
@@ -133,15 +134,40 @@ class SigningFixturesTest {
         val en = enStrings()
         val open = SigningFixtures.build(SigningScreenState.CS37, en)
         val card = open.handoff!!
-        assertEquals("Review and sign on your trusted page", card.title)
-        assertTrue(card.keyLine, card.keyLine.startsWith("Confirm with "))
+        assertEquals("Review and sign on your trusted signing page", card.title)
+        // D-17: the founding key carries the wallet's name, so it is named by its place.
+        assertEquals("Confirm with Phone or tablet", card.keyLine)
         assertEquals("sign.getvela.app", card.page)
+        // D-13: a moment, in the person's format — the boards' check ran at 14:32 today.
         assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        assertFalse(card.integrity.text, card.integrity.text.endsWith("checked "))
+        // The dApp sheet's own fee row sits right above the card: the card does not repeat it.
+        assertNull(card.fee)
+        assertNull(card.trust)
         assertTrue(open.confirmEnabled)
         val shut = SigningFixtures.build(SigningScreenState.CS38, en)
         assertEquals("Couldn't check the page, so it won't open.", shut.handoff!!.integrity.text)
         assertFalse(shut.confirmEnabled)
         assertEquals("Waiting for the signing page…", SigningFixtures.build(SigningScreenState.CS39, en).trustedSignerWait!!.title)
+
+        // CS40: the card a send raises on its own — its fee + speed row is the core's.
+        val alone = SigningFixtures.standaloneHandoff(SigningScreenState.CS40, en)!!
+        val fee = alone.fee!!
+        assertEquals("Network fee", fee.label)
+        assertTrue(fee.value, fee.value.startsWith("0.00012 ETH"))
+        assertEquals("Standard", fee.tier)
+        assertTrue(alone.integrity.opens)
+        // CS41: a check a day old runs again — "checking", and Open waits.
+        val checking = SigningFixtures.standaloneHandoff(SigningScreenState.CS41, en)!!
+        assertEquals("Checking the page…", checking.integrity.text)
+        assertFalse(checking.integrity.opens)
+        assertNull(SigningFixtures.standaloneHandoff(SigningScreenState.CS37, en))
+        // CS42: a self-hosted build new to Vela — the line asks, the card answers, Open is off.
+        val asks = SigningFixtures.build(SigningScreenState.CS42, en)
+        assertEquals("Version 3f9a1c22 is new to Vela. Trust it on this device?", asks.handoff!!.integrity.text)
+        assertEquals("Trust this version", asks.handoff!!.trust)
+        assertEquals("signer.example.org", asks.handoff!!.page)
+        assertFalse(asks.confirmEnabled)
     }
 
     /**

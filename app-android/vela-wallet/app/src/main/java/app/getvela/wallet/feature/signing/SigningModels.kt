@@ -35,6 +35,16 @@ enum class SigningScreenState {
      * (CS38); and the page open, waiting for its answer (CS39).
      */
     CS37, CS38, CS39,
+
+    /**
+     * Spec 102 core round, the card on its own — what a send on a page venue
+     * raises: its fee + speed row (`handoffFeeRow`), the key named by its
+     * place (D-17), the page matching (CS40); the same card while a check
+     * older than a day runs again, Open off (CS41); and a dApp request on a
+     * self-hosted page whose build is new to Vela — the line asks, "Trust
+     * this version" answers, Open off until it is trusted (CS42).
+     */
+    CS40, CS41, CS42,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
@@ -269,7 +279,24 @@ data class HandoffModel(
     val page: String,
     val integrity: app.getvela.wallet.feature.settings.components.IntegrityLineModel,
     val open: String,
+    /**
+     * The fee this operation was priced at, and its speed — one quiet row
+     * under the key line (core round 5, `handoffFeeRow`), no control: the fee
+     * was chosen before the hand-off. `null`: no row (a message, a fee not
+     * settled for the speed in force, or a surface whose own fee row sits
+     * right above the card).
+     */
+    val fee: HandoffFeeModel? = null,
+    /**
+     * "Trust this version" under a self-hosted page's question
+     * (`settings.signing.pageTrust`), when its line asks; `null` otherwise.
+     */
+    val trust: String? = null,
 )
+
+/** The hand-off card's fee row: "Network fee  ~0.00012 ETH · ≈$0.31", and the speed's name. */
+@Immutable
+data class HandoffFeeModel(val label: String, val value: String, val tier: String?)
 
 /**
  * The signing page is open (spec 071): the sheet says so instead of

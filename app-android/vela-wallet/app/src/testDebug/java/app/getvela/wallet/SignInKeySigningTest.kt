@@ -238,11 +238,12 @@ class SignInKeySigningTest {
         assertEquals("https://sign.getvela.app/", ask.page)
         assertEquals(listOf(first), ask.keys)
         assertFalse(ask.askFirst)
-        // The card's key: the key's own name in the record, else its place.
-        assertEquals(
-            app.getvela.wallet.feature.signing.trustedsigner.VenueWords.keyLabel(keyset[0].name, KeyMethod.Platform) { it },
-            ask.key,
-        )
+        // The card's key is the plan's `key_label` (D-17): the key's own name
+        // when it is not the wallet's, else its place's title — never read
+        // off the record by the shell.
+        val expected = keyset[0].name.trim().takeIf { it.isNotEmpty() && !it.equals("Parallel space", ignoreCase = true) }
+            ?: "onboarding.create.methodPlatformTitle"
+        assertEquals(expected, ask.key)
     }
 
     /** R1: a custom-domain account whose page this device does not know signs nothing, and says why. */
@@ -253,8 +254,11 @@ class SignInKeySigningTest {
             .put("signing_venue", JSONObject().put("type", "in_vela"))
         val refused = runCatching { spine(storeWith(record), pageRecording(CopyOnWriteArrayList())).signMessage(100, safe, digest) }
             .exceptionOrNull() as UserOpSpine.Refused
-        val failure = refused.failure as UserOpSpine.Failure.Signer
-        assertEquals("settings.venue.blockedApp", failure.message)
+        // Told to the core as `venue_blocked` with the block itself — the
+        // sheet and the send say why in the person's language (P2b-A10).
+        val failure = refused.failure as UserOpSpine.Failure.VenueBlocked
+        assertEquals(app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.AppCannotReach("example.com"), failure.block)
+        assertEquals("settings.venue.blockedApp", failure.block.key())
         assertTrue("nothing was signed: $ceremonies", ceremonies.isEmpty())
     }
 

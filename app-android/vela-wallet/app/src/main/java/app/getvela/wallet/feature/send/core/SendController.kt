@@ -293,6 +293,14 @@ class SendController(
      */
     val fee: StateFlow<FeeView> = speedControl.fee
 
+    /**
+     * Spec 102: the fee session in force and the speed control exactly as the
+     * core wrote them — the hand-off card's fee row (`handoffFeeRow`) reads
+     * them back, so the card restates what this send was priced at.
+     */
+    val feeJson: StateFlow<String?> = speedControl.feeJson
+    val speedJson: StateFlow<String?> = speedControl.speedJson
+
     /** The fee view of the session pricing `tier` — for formatting that option's fee. */
     fun feeViewOf(tier: FeeTier): FeeView? = speedControl.feeViewOf(tier)
 

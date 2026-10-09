@@ -17,6 +17,7 @@ import uniffi.vela_core_uniffi.WebAuthnAssertion
 import uniffi.vela_core_uniffi.TrustedSignerInput
 import uniffi.vela_core_uniffi.trustedSignerRequest
 import app.getvela.wallet.feature.signing.trustedsigner.SigningPlan
+import app.getvela.wallet.feature.signing.trustedsigner.VenueBlock
 import app.getvela.wallet.feature.signing.trustedsigner.VenueWords
 import uniffi.vela_core_uniffi.eip1271Signature
 import uniffi.vela_core_uniffi.safeMessageHash
@@ -92,8 +93,8 @@ class UserOpSpine(
         val page: String? = null,
         val signInKey: Boolean = false,
         val keyRouteJson: String? = null,
-        /** The key's name in the record, for "Confirm with {{key}}"; empty when it has none. */
-        val keyName: String = "",
+        /** What "Confirm with {{key}}" names: the plan's `key_label` (D-17); `null` for a record without one. */
+        val keyLabel: SigningPlan.KeyLabel? = null,
         val blocked: JSONObject? = null,
     )
 
@@ -122,7 +123,7 @@ class UserOpSpine(
         return route.copy(
             page = plan?.page,
             blocked = plan?.blocked,
-            keyName = VenueWords.keyName(record, route.credentialId),
+            keyLabel = plan?.keyLabel,
         )
     }
 
@@ -142,7 +143,7 @@ class UserOpSpine(
     data class Handoff(val page: String, val key: String)
 
     private fun keyLabel(route: Route): String =
-        VenueWords.keyLabel(route.keyName, route.method.takeIf { route.signInKey }) { key -> words(key, emptyMap()) }
+        route.keyLabel?.text { key -> words(key, emptyMap()) }.orEmpty()
 
     /**
      * The one signature of an attempt: the person's passkey over the account's
@@ -161,7 +162,10 @@ class UserOpSpine(
         // R1: a custom-domain account whose page this device does not know —
         // nothing here can reach its keys, and the core says why.
         picked.blocked?.let { block ->
-            throw Refused(Failure.Signer(FailureKind.Other, VenueWords.block(block, words)))
+            throw Refused(
+                VenueBlock.of(block)?.let(Failure::VenueBlocked)
+                    ?: Failure.Signer(FailureKind.Other, VenueWords.block(block, words)),
+            )
         }
         val page = picked.page
         if (page != null) {
@@ -223,6 +227,14 @@ class UserOpSpine(
          * POSTed. Nothing left the device.
          */
         data object NotCleared : Failure()
+
+        /**
+         * Spec 102: the account's venue cannot be used on this device (the
+         * plan's `blocked`) — nothing was signed or sent. Told to the core as
+         * `venue_blocked`, which says why in the person's language; never
+         * retried.
+         */
+        data class VenueBlocked(val block: VenueBlock) : Failure()
 
         /**
          * Spec 082 RA1: the relay was never reached and nothing left the device

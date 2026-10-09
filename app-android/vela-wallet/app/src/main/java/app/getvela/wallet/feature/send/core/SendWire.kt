@@ -243,6 +243,14 @@ sealed class SendSubmitFailure {
     @Serializable
     @SerialName("other")
     data class Other(val message: String? = null) : SendSubmitFailure()
+
+    /**
+     * Spec 102: the account's venue cannot be used here — nothing was signed
+     * or sent; the confirm screen says why ([SendView.tx_venue_block]).
+     */
+    @Serializable
+    @SerialName("venue_blocked")
+    data class VenueBlocked(val block: app.getvela.wallet.feature.signing.trustedsigner.VenueBlock) : SendSubmitFailure()
 }
 
 /** Present ⇔ in-band: the fee leg to sign EXACTLY as quoted (invariant ①). */
@@ -300,6 +308,9 @@ enum class SendTxErrorKey {
     @SerialName("generic") Generic,
 
     @SerialName("bundler_fund") BundlerFund,
+
+    /** Spec 102: this account cannot sign here; [SendView.tx_venue_block] says why. */
+    @SerialName("venue_blocked") VenueBlocked,
 }
 
 @Serializable
@@ -695,6 +706,8 @@ data class SendView(
     val sending: Boolean = false,
     val tx_status: SendTxStatus = SendTxStatus.Idle,
     val tx_error: SendTxErrorKey? = null,
+    /** Spec 102: with `tx_error` = [SendTxErrorKey.VenueBlocked], why this account cannot sign here. */
+    val tx_venue_block: app.getvela.wallet.feature.signing.trustedsigner.VenueBlock? = null,
     val tx_hash: String? = null,
     val user_op_hash: String? = null,
     val receipt: SendReceiptView? = null,

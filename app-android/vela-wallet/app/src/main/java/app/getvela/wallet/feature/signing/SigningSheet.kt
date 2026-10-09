@@ -93,6 +93,8 @@ fun SigningSheet(
     /** Spec 071: the Trusted Signer's waiting card. */
     onTrustedSignerReopen: () -> Unit = {},
     onTrustedSignerCancel: () -> Unit = {},
+    /** Spec 102: "Trust this version" on the hand-off card's question. */
+    onHandoffTrust: () -> Unit = {},
     /** Spec 079: the receipt's "view on explorer". */
     onExplorer: () -> Unit = {},
     /** Spec 079: the fee row's refresh. */
@@ -123,6 +125,7 @@ fun SigningSheet(
             onPickSpeed = onPickSpeed,
             onTrustedSignerReopen = onTrustedSignerReopen,
             onTrustedSignerCancel = onTrustedSignerCancel,
+            onHandoffTrust = onHandoffTrust,
             onRetry = onRetry,
         )
     }
@@ -149,6 +152,8 @@ fun SigningSheetContent(
     onPickSpeed: (String) -> Unit = {},
     onTrustedSignerReopen: () -> Unit = {},
     onTrustedSignerCancel: () -> Unit = {},
+    /** Spec 102: "Trust this version" on the hand-off card's question. */
+    onHandoffTrust: () -> Unit = {},
     /** Spec 096 F8: the failed receipt's Try again. */
     onRetry: (() -> Unit)? = null,
 ) {
@@ -272,6 +277,7 @@ fun SigningSheetContent(
                 enabled = model.confirmEnabled,
                 onOpen = onConfirm,
                 modifier = Modifier.testTag(OPEN_SIGNER_TAG),
+                onTrust = onHandoffTrust,
             )
         } else if (action != null) {
             // Issue #461: a tap, like the Send screen's Confirm — the same
@@ -320,19 +326,25 @@ fun SigningSheetContent(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HandoffSheet(model: HandoffModel, onOpen: () -> Unit, onCancel: () -> Unit, cancel: String) {
+fun HandoffSheet(model: HandoffModel, onOpen: () -> Unit, onCancel: () -> Unit, cancel: String, onTrust: () -> Unit = {}) {
     VelaModalSheet(
         onDismissRequest = onCancel,
         containerColor = VelaTheme.colors.bgRaised,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = VelaSizing.screenPaddingX).padding(bottom = VelaSpacing.xl3),
-            verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
-        ) {
-            HandoffCard(model, enabled = model.integrity.opens, onOpen = onOpen)
-            app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(cancel, onCancel, Modifier.fillMaxWidth())
-        }
+        HandoffSheetContent(model, onOpen = onOpen, onCancel = onCancel, cancel = cancel, onTrust = onTrust)
+    }
+}
+
+/** The card on its own and its Cancel — the modal's body, and the gallery's CS40/CS41. */
+@Composable
+fun HandoffSheetContent(model: HandoffModel, onOpen: () -> Unit, onCancel: () -> Unit, cancel: String, onTrust: () -> Unit = {}) {
+    Column(
+        modifier = Modifier.padding(horizontal = VelaSizing.screenPaddingX).padding(bottom = VelaSpacing.xl3),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        HandoffCard(model, enabled = model.integrity.opens, onOpen = onOpen, onTrust = onTrust)
+        app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(cancel, onCancel, Modifier.fillMaxWidth())
     }
 }
 
