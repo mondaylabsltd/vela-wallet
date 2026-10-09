@@ -8615,3 +8615,28 @@ fn the_tracker_s_reason_rides_the_receipt_outcome() {
         })
     );
 }
+
+// ---------------------------------------------------------------------------
+// PR 2 integration: note 6
+// ---------------------------------------------------------------------------
+
+/// What the tracker last said is in flight is the device's, not the form's:
+/// a form opened between two tracker renders is held from its first frame
+/// (note 6). Open used to rebuild the model and forget it.
+#[test]
+fn open_keeps_what_is_in_flight() {
+    let mut sut = boot(vec![eth("2")]);
+    sut.dispatch(Event::InFlightOps {
+        ops: vec![in_flight(ACCOUNT, 1, "0xfirst")],
+    });
+    // The form is opened again (another send), and nothing is re-told.
+    sut.dispatch(open_event(SendOpenParams::default()));
+    let ops = sut.resolve(loaded(vec![eth("2")]));
+    for _ in &ops {
+        sut.resolve(Res::FeesPrewarmed);
+    }
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    let view = sut.view();
+    assert!(view.previous_pending.is_some(), "held from the first frame");
+    assert!(!view.can_confirm);
+}

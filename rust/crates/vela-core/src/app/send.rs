@@ -1514,7 +1514,9 @@ pub enum Event {
     /// confirm is held ([`SendView::previous_pending`]): a second send signed
     /// now would take the same nonce. It opens once the first is final, or
     /// has made no progress for ten minutes (`tx_tracker::IN_FLIGHT_STALL_MS`
-    /// — the tracker then leaves it out of the list).
+    /// — the tracker then leaves it out of the list). An [`Event::Open`]
+    /// keeps the last list: a form opened between two renders is held from
+    /// its first frame.
     InFlightOps {
         ops: Vec<super::tx_tracker::InFlightOp>,
     },
@@ -1918,7 +1920,8 @@ pub struct Model {
     refused: bool,
     /// Why the relay refused the submitted op, when it did and said.
     refusal: Option<super::tx_tracker::RefusalReason>,
-    /// [`Event::InFlightOps`]: every operation in flight on this device.
+    /// [`Event::InFlightOps`]: every operation in flight on this device. Kept
+    /// across [`Event::Open`]: it is the device's, not the form's.
     in_flight: Vec<super::tx_tracker::InFlightOp>,
     recipient_identity: Option<SendRecipientIdentity>,
     recipient_risk: Option<SendRecipientRisk>,
@@ -2986,11 +2989,17 @@ fn open(
     // A remount: everything resets except the request-id source (so stale
     // results can never collide with fresh flights) and the recipient-row
     // counter (a module global in TS).
+    // And what the tracker last said is in flight: it is the device's, not
+    // the form's — told on every tracker render, and a form opened between
+    // two renders must be held from its first frame (PR 2 note 6), as the
+    // attempt counter survives for the same kind of reason.
     let attempt = model.attempt;
     let recipient_seq = model.recipient_seq;
+    let in_flight = std::mem::take(&mut model.in_flight);
     *model = Model {
         attempt,
         recipient_seq,
+        in_flight,
         ..Model::default()
     };
     model.account = account;
