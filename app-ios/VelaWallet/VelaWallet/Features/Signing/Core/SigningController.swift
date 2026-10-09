@@ -110,6 +110,10 @@ final class SigningController {
     var fee: FeeViewWire? { fees.view }
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     var speed: FeeSpeedViewWire? { fees.speed }
+    /// The same two views as the core wrote them — the hand-off card's fee
+    /// row reads them whole (`handoffFeeRow`, spec 102).
+    var feeJson: String? { fees.viewJson }
+    var speedJson: String? { fees.speedJson }
 
     /// The fee view of the session pricing `tier`, for that option's line.
     func feeView(of tier: String) -> FeeViewWire? { fees.view(of: tier) }
@@ -177,10 +181,8 @@ final class SigningController {
     var trustedSignerRoute: Bool { venuePage != nil }
     /// The page, when the venue is one.
     var venuePage: String? { venuePlan?.venue.pageUrl }
-    /// Where the account's key lives — "Confirm with …".
-    var venuePlace: KeyMethod? { venuePlan?.key?.place }
-    /// The record's name for that key, which "Confirm with …" says first.
-    var venueKeyName: String { venuePlan?.keyName ?? "" }
+    /// "Confirm with …" — the plan's own name for the key (D-17).
+    var venueKeyLabel: KeyLabelWire? { venuePlan?.keyLabel }
     private var ports: Ports
 
     /// Record ids already on disk, and the handoff waiting for them. The

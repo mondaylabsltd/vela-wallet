@@ -346,7 +346,7 @@ struct SignInRouteTests {
         #expect(page.pages.count == 1 && page.pages[0].hasPrefix("https://sign.example"))
     }
 
-    /// "Use my own signing page" with the OFFICIAL page, through the real
+    /// "Use a trusted signing page" with the OFFICIAL page, through the real
     /// login machine (spec 102 R3, D-8): the ceremony runs in the app — the
     /// operation names no page — and the account's venue becomes that page,
     /// so the next signature goes there with the sign-in key alone and its
@@ -610,7 +610,7 @@ final class OfferedKeysPage: TrustedSignerPort {
 
     func sign(
         requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
-        keyName: String, place: KeyMethod?
+        keyLabel: KeyLabelWire?
     ) async -> TrustedSignerChannel.Ending {
         let request = (try? JSONSerialization.jsonObject(with: Data(requestJson.utf8))) as? [String: Any] ?? [:]
         offered.append((request["context"] as? [String: Any])?["allowCredentials"] as? [String] ?? [])

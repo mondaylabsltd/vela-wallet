@@ -55,13 +55,11 @@ protocol TrustedSignerPort: AnyObject {
     /// over `digest` by one of `keys` — the keys the page was offered, which
     /// for an account with a sign-in key is that key alone.
     ///
-    /// `keyName` (the record's label for the key) and `place` (where it
-    /// lives) are what the hand-off card says the person will confirm with —
-    /// the name, else the place. `place` is `nil` for a record from before the
-    /// sign-in key was kept.
+    /// `keyLabel` is what the hand-off card says the person will confirm with
+    /// — the signing plan's `key_label` (D-17); `nil` says no key.
     func sign(
         requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
-        keyName: String, place: KeyMethod?
+        keyLabel: KeyLabelWire?
     ) async -> TrustedSignerChannel.Ending
 }
 
@@ -207,14 +205,13 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
 
     func sign(
         requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
-        keyName: String, place: KeyMethod?
+        keyLabel: KeyLabelWire?
     ) async -> TrustedSignerChannel.Ending {
         let ask = TrustedSignerAsk.signature(request: requestJson, digest: digest, keys: keys)
-        let keyLabel = Self.keyLabel(name: keyName, place: place, loc: loc)
         // The signing sheet was the hand-off card, and its Open is what asked
         // for this: a page that is admitted opens at once. One that is not
         // keeps the card up, with the line that says why.
-        let ending = await run(ask, page: page, keyLabel: keyLabel, waitForOpen: false)
+        let ending = await run(ask, page: page, title: nil, keyLabel: keyLabel?.text(loc), waitForOpen: false)
         // A signature is a flow of one: the page is told so rather than left
         // on its waiting screen.
         endFlow()
@@ -230,9 +227,14 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     ) async -> TrustedSignerCeremonyStep {
         let id = UUID().uuidString.lowercased()
         let operation = try? CoreJSON.object(operationJson)
+        // The key's place (`method`): a ceremony makes or proves a key there,
+        // and a key being made is no name to confirm with yet (D-17's rule
+        // never says "Confirm with <the wallet's name>").
         let place = (operation?["method"] as? String).flatMap(KeyMethod.init(rawValue:))
-        // A key being made carries its name; a sign-in names none.
-        let keyLabel = Self.keyLabel(name: operation?["name"] as? String ?? "", place: place, loc: loc)
+        let keyLabel = place.map { Self.keyLabel($0, loc: loc) }
+        // Its own title (core round 12): create / sign in / confirm — a
+        // ceremony has nothing to review.
+        let title = trustedSignerCeremonyTitleKey(operationJson: operationJson).map { loc.t($0) }
         guard let request = trustedSignerCeremonyRequest(
             operationJson: operationJson, id: id, walletName: walletName, registry: registry,
             deployment: deployment
@@ -246,7 +248,7 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         )
         // Nothing in the app said "a page will open" before a ceremony: the
         // card does, and waits for the person's Open.
-        switch await run(ask, page: page, keyLabel: keyLabel, waitForOpen: true) {
+        switch await run(ask, page: page, title: title, keyLabel: keyLabel, waitForOpen: true) {
         case .ceremony(.registered(let json)):
             VelaHaptic.success.play()
             return .registered(json)
@@ -269,14 +271,6 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         methodCopy(place, chooser: .signIn, loc: loc).title
     }
 
-    /// "Confirm with {{key}}": the key's own name, else its place's title;
-    /// `nil` when neither is known.
-    static func keyLabel(name: String, place: KeyMethod?, loc: Loc) -> String? {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !name.isEmpty { return name }
-        return place.map { keyLabel($0, loc: loc) }
-    }
-
     func endFlow() {
         conversation?.end()
         conversation = nil
@@ -291,7 +285,7 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     /// Puts `ask` to the flow's session, opening one — through the hand-off
     /// card and the integrity check — when there is none.
     private func run(
-        _ ask: TrustedSignerAsk, page: String, keyLabel: String?, waitForOpen: Bool
+        _ ask: TrustedSignerAsk, page: String, title: String?, keyLabel: String?, waitForOpen: Bool
     ) async -> TrustedSignerChannel.Ending {
         if let conversation {
             model?.stage = .waiting
@@ -307,6 +301,7 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         openPage = page
         let model = TrustedSignerSheetModel()
         model.page = page
+        model.title = title
         model.keyLabel = keyLabel
         model.line = checks.line(for: page)
         self.model = model
@@ -341,6 +336,17 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
             Task { @MainActor in
                 let ruling = await self.checks.check(page)
                 model.line = ruling.line(nowMs: self.checks.nowMs)
+            }
+        }
+        // "Version … is new to Vela. Trust it on this device?" — answered
+        // here, on the card that asks: stored on this page (D-15), then the
+        // page is checked again and Open follows the new ruling.
+        model.trust = { [weak self, weak model] in
+            guard let self, let model, self.checks.versionAskingTrust(page) != nil else { return }
+            model.line = SignerPageChecks.checking
+            Task { @MainActor in
+                await self.checks.trustAsked(page)
+                model.line = self.checks.line(for: page)
             }
         }
         let ruling = await checks.ensure(page)

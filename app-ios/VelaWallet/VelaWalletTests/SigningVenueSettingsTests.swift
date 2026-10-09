@@ -169,7 +169,9 @@ struct SigningVenueSettingsTests {
 
     // MARK: - D4: the signing sheet hands off
 
-    private func signingModel(line: SignerIntegrityLine?, page: String?, gateOpen: Bool = true) -> SigningModel {
+    private func signingModel(
+        line: SignerIntegrityLine?, page: String?, gateOpen: Bool = true, fee: HandoffFeeModel? = nil
+    ) -> SigningModel {
         let request = SigningController.Incoming(
             id: "r1", method: "personal_sign",
             paramsJson: #"["0x48","0x88cCA0EeDbF2C4426110bbFc998F048689266894"]"#,
@@ -187,8 +189,9 @@ struct SigningVenueSettingsTests {
         )
         context.trustedSignerRoute = page != nil
         context.handoffPage = page
-        context.handoffPlace = .platform
+        context.handoffKeyLabel = KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle")
         context.handoffLine = line
+        context.handoffFee = fee
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc), request: request, sign: sign,
             clear: .empty, guard: .empty, fee: nil, context: context,
@@ -199,9 +202,10 @@ struct SigningVenueSettingsTests {
     @Test func aPageVenueGetsTheHandoffCardNotASecondPreview() throws {
         let model = signingModel(line: line(official), page: official)
         let card = try #require(model.handoff)
-        #expect(card.title == "Review and sign on your trusted page")
+        #expect(card.title == "Review and sign on your trusted signing page")
         #expect(card.page == "sign.getvela.app")
-        #expect(card.key?.hasPrefix("Confirm with ") == true)
+        #expect(card.pageName == "Vela's official signing page")
+        #expect(card.key == "Confirm with \(loc.t("onboarding.create.methodPlatformTitle"))")
         #expect(card.opens)
         #expect(model.confirm?.enabled == true)
         #expect(model.confirmAsButton)

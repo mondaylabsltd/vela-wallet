@@ -37,6 +37,9 @@ final class TrustedSignerSheetModel {
     var stage: Stage = .handoff
     /// The page's base address.
     var page: String = ""
+    /// A ceremony's own title (create / sign in / confirm); `nil` is the
+    /// hand-off's "Review and sign on your trusted signing page".
+    var title: String?
     /// The key's name or its place's title — "Confirm with {{key}}".
     var keyLabel: String?
     /// The page's integrity line, as the core ruled on it.
@@ -45,6 +48,8 @@ final class TrustedSignerSheetModel {
     var open: (() -> Void)?
     /// Check the page again — offered when the check itself could not run.
     var recheck: (() -> Void)?
+    /// "Trust this version" — offered while the line asks it.
+    var trust: (() -> Void)?
     /// Only while a page is open on this device.
     var reopen: (() -> Void)?
     var cancel: () -> Void = {}
@@ -113,7 +118,10 @@ struct TrustedSignerSheet: View {
     private var handoff: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             HandoffCardView(
-                model: HandoffCardModel.build(page: model.page, keyLabel: model.keyLabel, line: model.line, loc: loc)
+                model: HandoffCardModel.build(
+                    page: model.page, keyLabel: model.keyLabel, line: model.line, loc: loc, title: model.title
+                ),
+                onTrust: model.trust
             )
             Spacer(minLength: Tokens.Space.s8)
             VelaButton(

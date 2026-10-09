@@ -3064,9 +3064,17 @@ struct RootView: View {
             typicalS: SigningController.typicalInclusionS(chainId: chain),
             trustedSignerRoute: live?.trustedSignerRoute ?? false,
             handoffPage: live?.venuePage,
-            handoffPlace: live?.venuePlace,
-            handoffKeyName: live?.venueKeyName ?? "",
+            handoffKeyLabel: live?.venueKeyLabel,
             handoffLine: live?.venuePage.map { SignerPageChecks.shared.line(for: $0) },
+            // The card's fee row: the fee the sheet settled, for the speed in
+            // force — the core's ruling on the two views as last rendered.
+            handoffFee: live.flatMap { live in
+                live.venuePage == nil ? nil : HandoffFeeModel.of(
+                    feeJson: live.feeJson, speedJson: live.speedJson, fee: live.fee,
+                    display: WalletLive.Display.from(settings.currency), networks: walletNetworks, loc: loc
+                )
+            },
+            handoffPageName: live?.venuePage.flatMap(savedPageName),
             feeStartFailure: live?.quoteStartFailure,
             networks: walletNetworks
         )
@@ -3835,12 +3843,23 @@ struct RootView: View {
               entry.address.caseInsensitiveCompare(session.view.address) == .orderedSame,
               let plan = entry.plan, let page = plan.venue.pageUrl
         else { return nil }
+        // No fee row here: the confirm's own figures, right above the card,
+        // are the same fee session and speed control (`fees`), with the speed
+        // still changeable — a second row would say the fee twice.
         return HandoffCardModel.build(
             page: page,
-            keyLabel: TrustedSigner.keyLabel(name: plan.keyName, place: plan.key?.place, loc: loc),
+            keyLabel: plan.keyText(loc),
             line: SignerPageChecks.shared.line(for: page),
-            loc: loc
+            loc: loc,
+            name: savedPageName(page)
         )
+    }
+
+    /// The person's own label for a saved page, when they gave it one.
+    private func savedPageName(_ url: String) -> String? {
+        settings.signingPages?.pages
+            .first { SignerPageChecks.key($0.url) == SignerPageChecks.key(url) }
+            .flatMap { $0.name.isEmpty ? nil : $0.name }
     }
 
     /// "Where you review and sign" chose `venue` for the active account. The

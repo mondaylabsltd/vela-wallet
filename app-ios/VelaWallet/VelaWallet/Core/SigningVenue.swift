@@ -68,19 +68,24 @@ extension SigningVenueWire: Decodable {
     }
 }
 
-/// `signing_venue::VenueBlock` — why a venue cannot reach an account's keys
-/// (R1). The sentence is the corpus's (`key`), with both sides named.
+/// `signing_venue::VenueBlock` — why a venue cannot be used for an account
+/// (R1, and the web's). The sentence is the corpus's (`key`), with both sides
+/// named.
 enum VenueBlockWire: Equatable, Hashable {
     /// Vela's own sheet signs only with `getvela.app` keys.
     case appCannotReach(domain: String)
     /// A browser lets a page use only its own site's passkeys.
     case pageOnOtherDomain(pageDomain: String, domain: String)
+    /// Signing pages open from the Vela apps, not the web (D-16). Never an R1
+    /// answer on a phone; read so a record or a view carrying it still draws.
+    case notOnWeb
 
     /// `VenueBlock::key`.
     var key: String {
         switch self {
         case .appCannotReach: "settings.venue.blockedApp"
         case .pageOnOtherDomain: "settings.venue.blockedPage"
+        case .notOnWeb: "settings.venue.blockedWeb"
         }
     }
 
@@ -88,10 +93,22 @@ enum VenueBlockWire: Equatable, Hashable {
         switch self {
         case .appCannotReach(let domain): ["domain": domain]
         case .pageOnOtherDomain(let pageDomain, let domain): ["pageDomain": pageDomain, "domain": domain]
+        case .notOnWeb: [:]
         }
     }
 
-    func text(_ loc: Loc) -> String { loc.t(key, vars: vars) }
+    func text(_ loc: Loc) -> String { vars.isEmpty ? loc.t(key) : loc.t(key, vars: vars) }
+
+    /// The block as the core reads it back — `SignSubmitOutcome::venue_blocked`
+    /// and `SendSubmitFailure::venue_blocked` carry it whole.
+    var wire: [String: Any] {
+        switch self {
+        case .appCannotReach(let domain): ["type": "app_cannot_reach", "domain": domain]
+        case .pageOnOtherDomain(let pageDomain, let domain):
+            ["type": "page_on_other_domain", "page_domain": pageDomain, "domain": domain]
+        case .notOnWeb: ["type": "not_on_web"]
+        }
+    }
 }
 
 extension VenueBlockWire: Decodable {
@@ -106,8 +123,29 @@ extension VenueBlockWire: Decodable {
                 pageDomain: try values.decodeIfPresent(String.self, forKey: .pageDomain) ?? "",
                 domain: domain
             )
+        case "not_on_web": self = .notOnWeb
         default: self = .appCannotReach(domain: domain)
         }
+    }
+}
+
+/// `signing_venue::KeyLabel` — "Confirm with {{key}}": the key's own label
+/// when the core kept one (never the wallet's name), else its place's title.
+struct KeyLabelWire: Decodable, Equatable, Hashable {
+    /// The key's own label, drawn as it is.
+    let name: String?
+    /// The corpus key of the key's place — always set.
+    let placeKey: String
+
+    init(name: String? = nil, placeKey: String) {
+        self.name = name
+        self.placeKey = placeKey
+    }
+
+    /// The words: `name`, else the place's title.
+    func text(_ loc: Loc) -> String {
+        if let name, !name.isEmpty { return name }
+        return loc.t(placeKey)
     }
 }
 
@@ -165,21 +203,21 @@ struct SigningPlanWire: Decodable, Equatable {
     /// The key this device signs with. `nil` for a record from before the
     /// sign-in key was kept, which signs as it always did.
     let key: KeyRouteWire?
-    /// The record's own label for that key ("Confirm with {{key}}" names it,
-    /// else its place). Not on the wire: read from the same record.
-    var keyName = ""
+    /// "Confirm with {{key}}" — the core's name for that key (D-17). `nil`
+    /// only from a core too old to say.
+    let keyLabel: KeyLabelWire?
 
-    private enum CodingKeys: String, CodingKey { case domain, venue, blocked, key }
+    private enum CodingKeys: String, CodingKey { case domain, venue, blocked, key, keyLabel }
 
     init(
         domain: String, venue: SigningVenueWire, blocked: VenueBlockWire? = nil,
-        key: KeyRouteWire? = nil, keyName: String = ""
+        key: KeyRouteWire? = nil, keyLabel: KeyLabelWire? = nil
     ) {
         self.domain = domain
         self.venue = venue
         self.blocked = blocked
         self.key = key
-        self.keyName = keyName
+        self.keyLabel = keyLabel
     }
 
     init(from decoder: Decoder) throws {
@@ -188,6 +226,7 @@ struct SigningPlanWire: Decodable, Equatable {
         venue = try values.decodeIfPresent(SigningVenueWire.self, forKey: .venue) ?? .inVela
         blocked = try? values.decodeIfPresent(VenueBlockWire.self, forKey: .blocked)
         key = try? values.decodeIfPresent(KeyRouteWire.self, forKey: .key)
+        keyLabel = try? values.decodeIfPresent(KeyLabelWire.self, forKey: .keyLabel)
     }
 
     /// `signing_venue::APP_DOMAIN`.
@@ -196,19 +235,16 @@ struct SigningPlanWire: Decodable, Equatable {
     /// The account is on Vela's own domain — its keys answer in the app.
     var onAppDomain: Bool { domain.caseInsensitiveCompare(Self.appDomain) == .orderedSame }
 
+    /// "Confirm with …"'s key, in words — the core's label, never the record
+    /// read here.
+    func keyText(_ loc: Loc) -> String? { keyLabel?.text(loc) }
+
     /// The core's plan for a stored account record — `nil` for a record this
     /// build cannot read.
     static func of(accountJson: String) -> SigningPlanWire? {
-        guard var plan = signingPlan(accountJson: accountJson).flatMap({
+        signingPlan(accountJson: accountJson).flatMap {
             try? CoreJSON.decoder.decode(SigningPlanWire.self, from: Data($0.utf8))
-        }) else { return nil }
-        if let id = plan.key?.credentialId,
-           let record = try? CoreJSON.object(accountJson),
-           let keys = record["keys"] as? [[String: Any]],
-           let key = keys.first(where: { ($0["credential_id"] as? String)?.caseInsensitiveCompare(id) == .orderedSame }) {
-            plan.keyName = (key["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return plan
     }
 }
 

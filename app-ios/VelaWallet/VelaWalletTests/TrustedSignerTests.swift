@@ -425,7 +425,7 @@ struct TrustedSignerChannelTests {
 
 final class ScriptedTrustedSigner: TrustedSignerPort {
     var answer: (_ digest: Data) -> TrustedSignerChannel.Ending
-    private(set) var asked: [(request: [String: Any], digest: Data, page: String, place: KeyMethod?, keyName: String)] = []
+    private(set) var asked: [(request: [String: Any], digest: Data, page: String, keyLabel: KeyLabelWire?)] = []
 
     init(answer: @escaping (_ digest: Data) -> TrustedSignerChannel.Ending) {
         self.answer = answer
@@ -433,10 +433,10 @@ final class ScriptedTrustedSigner: TrustedSignerPort {
 
     func sign(
         requestJson: String, digest: Data, keys: [WalletKeyRecord], page: String,
-        keyName: String, place: KeyMethod?
+        keyLabel: KeyLabelWire?
     ) async -> TrustedSignerChannel.Ending {
         let request = (try? JSONSerialization.jsonObject(with: Data(requestJson.utf8))) as? [String: Any] ?? [:]
-        asked.append((request, digest, page, place, keyName))
+        asked.append((request, digest, page, keyLabel))
         return answer(digest)
     }
 }
@@ -506,8 +506,11 @@ struct TrustedSignerSpineTests {
         #expect(route["place"] as? String == "platform")
         #expect(route["hints"] as? [String] == ["client-device"])
         #expect(asked.page == "https://sign.getvela.app/")
-        #expect(asked.place == .platform, "the card says which key the person confirms with")
-        #expect(asked.keyName == "Mine", "…by its own name first")
+        // D-17: the card says which key the person confirms with — the core's
+        // label. This key carries the wallet's own name ("Mine"), which the
+        // card's "Signing account" row already says, so it is named by its
+        // place instead.
+        #expect(asked.keyLabel == KeyLabelWire(name: nil, placeKey: "onboarding.create.methodPlatformTitle"))
     }
 
     /// The same account, its venue In Vela: the page is never asked, and the
@@ -772,7 +775,7 @@ struct TrustedSignerPageTests {
         let signing = Task {
             await host.sign(
                 requestJson: request, digest: Data(repeating: 7, count: 32), keys: fixture.keys,
-                page: page, keyName: "", place: .platform
+                page: page, keyLabel: KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle")
             )
         }
         print("[trusted-signer-e2e] page opening: \(page)")

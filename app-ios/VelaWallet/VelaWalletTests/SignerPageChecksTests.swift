@@ -356,13 +356,17 @@ struct HandoffCardTests {
             key: "componentsUi.signing.integrity.matches", opens: true
         )
         let card = HandoffCardModel.build(
-            page: "https://sign.getvela.app/", keyLabel: TrustedSigner.keyLabel(.platform, loc: loc),
+            page: "https://sign.getvela.app/",
+            keyLabel: KeyLabelWire(placeKey: "onboarding.create.methodHybridTitle").text(loc),
             line: line, loc: loc
         )
-        #expect(card.title == "Review and sign on your trusted page")
+        #expect(card.title == "Review and sign on your trusted signing page")
+        // D6/D-19: the official page is named, not tagged.
+        #expect(card.pageName == "Vela's official signing page")
         #expect(card.page == "sign.getvela.app")
-        #expect(card.key == "Confirm with \(methodCopy(.platform, chooser: .signIn, loc: loc).title)")
+        #expect(card.key == "Confirm with \(loc.t("onboarding.create.methodHybridTitle"))")
         #expect(card.opens)
+        #expect(card.trust == nil, "the official page never asks to be trusted")
         let text = line.text(loc)
         #expect(text.hasPrefix("Version 0ba8ee8c · matches Vela's published build list · checked "))
         #expect(!text.contains("{{"), "a placeholder was left unfilled: \(text)")
@@ -376,6 +380,76 @@ struct HandoffCardTests {
         #expect(!refused.opens)
         #expect(refused.key == nil)
         #expect(refused.line.text(loc) == "Couldn't check the page, so it won't open.")
+    }
+
+    /// D-17: a key the person named is named; a key that carries the
+    /// wallet's name is named by its place — the core's label, drawn.
+    @Test func theKeyIsNamedAsThePlanNamesIt() {
+        #expect(KeyLabelWire(name: "YubiKey 5C", placeKey: "onboarding.create.methodSecurityKeyTitle").text(loc) == "YubiKey 5C")
+        #expect(KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle").text(loc)
+                == loc.t("onboarding.create.methodPlatformTitle"))
+        let plan = SigningPlanWire.of(accountJson: TrustedSignerFixture().pageRecordJson)
+        #expect(plan?.keyLabel?.placeKey == "onboarding.create.methodPlatformTitle")
+        #expect(plan?.keyLabel?.name == nil, "a key named after the wallet repeated the account row")
+    }
+
+    /// D6: a self-hosted page is "Self-hosted · {{domain}}" unless the person
+    /// named it; its own build asks to be trusted, with the answer beside it.
+    @Test func aSelfHostedPageIsNamedAndAsksToBeTrusted() {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let ask = SignerIntegrityLine(state: .askToTrust, version: "3f9a1c22", checkedAtMs: 1,
+                                      key: "componentsUi.signing.integrity.askTrust", opens: false)
+        let card = HandoffCardModel.build(page: "https://sign.example.com/", keyLabel: nil, line: ask, loc: zh)
+        #expect(card.pageName == "自己部署的签名页 · \(signingPageDomain(url: "https://sign.example.com/"))")
+        #expect(card.trust == "信任这个版本")
+        #expect(!card.opens)
+        let named = HandoffCardModel.build(page: "https://sign.example.com/", keyLabel: nil, line: ask, loc: zh, name: "Work")
+        #expect(named.pageName == "Work")
+        for text in [card.pageName, card.title, card.lineText] {
+            #expect(!text.contains("我自己的签名页"))
+        }
+    }
+
+    /// Core round 12: a ceremony on a page has its own title, never "Review
+    /// and sign".
+    @Test func aCeremonyHasItsOwnTitle() throws {
+        let page = "https://sign.example.com/"
+        let create = try #require(trustedSignerCeremonyTitleKey(
+            operationJson: #"{"type":"register_passkey","name":"Mine","page":"\#(page)"}"#
+        ))
+        #expect(loc.t(create) == "Create your key on your signing page")
+        let card = HandoffCardModel.build(page: page, keyLabel: nil, line: SignerPageChecks.checking,
+                                          loc: loc, title: loc.t(create))
+        #expect(card.title == "Create your key on your signing page")
+        #expect(trustedSignerCeremonyTitleKey(operationJson: #"{"type":"nothing"}"#) == nil)
+    }
+
+    /// Core round 5: the card's fee row is the fee settled for the speed in
+    /// force, with that speed — no row while it is measured, not ready, or
+    /// another speed's; no speed restated where there is one.
+    @Test func theFeeRowIsTheSettledFeeForTheSpeedInForce() throws {
+        let row = try #require(HandoffFeeModel.of(
+            feeJson: HandoffFeeFixtures.feeJson(tier: "fast"), speedJson: HandoffFeeFixtures.speedJson(tier: "fast"),
+            fee: nil, display: .usd, networks: .builtin, loc: loc
+        ))
+        #expect(row.label == "Network fee")
+        #expect(row.value.hasPrefix("~") && row.value.contains("USDC"), "\(row.value)")
+        #expect(row.tier == loc.t("send.gasTier.fast"))
+        let single = HandoffFeeModel.of(
+            feeJson: HandoffFeeFixtures.feeJson(), speedJson: HandoffFeeFixtures.speedJson(single: true),
+            fee: nil, display: .usd, networks: .builtin, loc: loc
+        )
+        #expect(single != nil && single?.tier == nil)
+        for (fee, speed) in [
+            (HandoffFeeFixtures.feeJson(busy: true), HandoffFeeFixtures.speedJson()),
+            (HandoffFeeFixtures.feeJson(ready: false), HandoffFeeFixtures.speedJson()),
+            (HandoffFeeFixtures.feeJson(tier: "standard"), HandoffFeeFixtures.speedJson(tier: "fast")),
+        ] {
+            #expect(HandoffFeeModel.of(feeJson: fee, speedJson: speed, fee: nil, display: .usd,
+                                       networks: .builtin, loc: loc) == nil)
+        }
+        #expect(HandoffFeeModel.of(feeJson: nil, speedJson: nil, fee: nil, display: .usd,
+                                   networks: .builtin, loc: loc) == nil, "a message has no fee row")
     }
 
     /// The waiting and ending lines no longer name a "Trusted Signer".

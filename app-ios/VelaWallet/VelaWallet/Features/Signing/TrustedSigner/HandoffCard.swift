@@ -9,19 +9,23 @@
 //  transaction a second time — the page is the authority. What the app says
 //  is short and checkable:
 //
-//      Review and sign on your trusted page
-//      sign.getvela.app
+//      Review and sign on your trusted signing page
+//      Confirm with Phone or tablet
 //      ┌──────────────────────────────────────────────┐
-//      │ 🔒 Confirm with This device                   │
-//      │ ✓  Version 0ba8ee8c · matches Vela's          │
-//      │    published build list · checked now         │
+//      │ Vela's official signing page  sign.getvela.app│
+//      │ Network fee            ~$0.01 · Standard      │
+//      │ ✓ Version 0ba8ee8c · matches Vela's published │
+//      │   build list · checked 14:32                  │
 //      └──────────────────────────────────────────────┘
 //      [ Continue to signing page ]
 //
 //  The integrity line is what backs the word "trusted": it is the core's
 //  ruling on the bytes this phone fetched (`SignerPageChecks`), never a claim
 //  of "verified" or "untampered". A refusal takes the line's place, in the
-//  warning colour, and the button stays disabled.
+//  warning colour, and the button stays disabled. The fee row (core round 5)
+//  is the fee the sheet settled, for the speed in force — the page signs the
+//  operation the app assembled, fee leg included — and no control: a
+//  different fee is a different operation.
 //
 
 import SwiftUI
@@ -101,11 +105,47 @@ struct IntegrityLineView: View {
     }
 }
 
+/// The card's fee row: the fee in force, drawn as the sheet's folded fee row
+/// draws it, and the speed it was priced at.
+struct HandoffFeeModel: Equatable {
+    /// "Network fee".
+    let label: String
+    /// "~$0.01" — or the coin's own amount, as the fee row says it.
+    let value: String
+    /// "Standard" — `nil` where there is nothing to restate (one speed).
+    let tier: String?
+
+    /// `HandoffFee` as the core wrote it (`handoffFeeRow`).
+    private struct Wire: Decodable {
+        let fee: FeeEstimateWire
+        let tier: String?
+        let tierKey: String?
+    }
+
+    /// The row, from the fee session in force and the speed control as last
+    /// rendered — `nil` (no row) when the core says there is none: a message,
+    /// or a fee not settled for the speed in force.
+    static func of(
+        feeJson: String?, speedJson: String?, fee: FeeViewWire?,
+        display: WalletLive.Display, networks: WalletNetworks, loc: Loc
+    ) -> HandoffFeeModel? {
+        guard let json = handoffFeeRow(feeJson: feeJson, speedJson: speedJson),
+              let wire = try? CoreJSON.decoder.decode(Wire.self, from: Data(json.utf8))
+        else { return nil }
+        return HandoffFeeModel(
+            label: loc.t("componentsUi.gas.networkFee"),
+            value: "~" + SendLive.feeLine(wire.fee, view: nil, fee: fee, display: display, networks: networks),
+            tier: wire.tierKey.map { loc.t($0) }
+        )
+    }
+}
+
 /// What the card says, already in words.
 struct HandoffCardModel: Equatable {
-    /// `componentsUi.signing.handoffTitle`.
+    /// `componentsUi.signing.handoffTitle` — or a ceremony's own title.
     let title: String
-    /// The page by name — "Official", the person's label, or its host…
+    /// The page by name — "Vela's official signing page", the person's
+    /// label, or "Self-hosted · {{domain}}"…
     let pageName: String
     /// …and by host, drawn beside the name when they differ.
     let page: String
@@ -114,6 +154,13 @@ struct HandoffCardModel: Equatable {
     let line: SignerIntegrityLine
     /// The line in words.
     let lineText: String
+    /// The fee and speed the page will sign — `nil`: no row.
+    var fee: HandoffFeeModel? = nil
+    /// The page's address, for "Trust this version".
+    var pageUrl: String = ""
+    /// "Trust this version" — set while the line asks (`AskToTrust`, a
+    /// self-hosted page's own build); `nil` otherwise.
+    var trust: String? = nil
     /// The page could not be opened at all (spec 079): the mark warns,
     /// whatever the check said about the bytes.
     var down = false
@@ -126,24 +173,26 @@ struct HandoffCardModel: Equatable {
     func waiting(title: String, hint: String?, down: Bool) -> HandoffCardModel {
         HandoffCardModel(
             title: title, pageName: pageName, page: page, key: hint,
-            line: line, lineText: lineText, down: down
+            line: line, lineText: lineText, fee: fee, pageUrl: pageUrl, trust: nil, down: down
         )
     }
 
     static func build(
         page: String, keyLabel: String?, line: SignerIntegrityLine, loc: Loc,
-        name: String? = nil
+        name: String? = nil, title: String? = nil, fee: HandoffFeeModel? = nil
     ) -> HandoffCardModel {
-        let host = SigningPageNames.host(page)
-        let official = signingPageDomain(url: page) == SigningPlanWire.appDomain
-            && SignerPageChecks.key(page) == SignerPageChecks.key(trustedSignerDefaultUrl())
-        return HandoffCardModel(
-            title: loc.t("componentsUi.signing.handoffTitle"),
-            pageName: name ?? (official ? loc.t("settings.signing.pageOfficial") : host),
-            page: host,
+        HandoffCardModel(
+            title: title ?? loc.t("componentsUi.signing.handoffTitle"),
+            pageName: SigningPageNames.name(
+                url: page, label: name ?? "", official: SigningPageNames.isOfficial(page), loc: loc
+            ),
+            page: SigningPageNames.host(page),
             key: keyLabel.map { loc.t("componentsUi.signing.handoffKey", vars: ["key": $0]) },
             line: line,
-            lineText: line.text(loc)
+            lineText: line.text(loc),
+            fee: fee,
+            pageUrl: page,
+            trust: line.state == .askToTrust ? loc.t("settings.signing.pageTrust") : nil
         )
     }
 }
@@ -155,6 +204,9 @@ struct HandoffCardModel: Equatable {
 struct HandoffCardView: View {
     @Environment(\.theme) private var theme
     let model: HandoffCardModel
+    /// "Trust this version". `nil`: the app's one checker stores it on the
+    /// page and checks again (`SignerPageChecks.trustAsked`).
+    var onTrust: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: Tokens.Space.s12) {
@@ -189,7 +241,40 @@ struct HandoffCardView: View {
                             .truncationMode(.middle)
                     }
                 }
+                if let fee = model.fee {
+                    HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                        Text(fee.label)
+                            .typeRole(Typography.flowCaption)
+                            .foregroundStyle(theme.fgMuted)
+                        Spacer(minLength: Tokens.Space.s8)
+                        Text(verbatim: fee.tier.map { "\(fee.value) · \($0)" } ?? fee.value)
+                            .typeRole(Typography.flowCaption)
+                            .foregroundStyle(theme.fgBase)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("handoff.fee")
+                }
                 IntegrityLineView(line: model.line, text: model.lineText)
+                // The answer to "Trust it on this device?", beside the question.
+                if let trust = model.trust {
+                    Button {
+                        if let onTrust {
+                            onTrust()
+                        } else {
+                            let page = model.pageUrl
+                            Task { @MainActor in await SignerPageChecks.shared.trustAsked(page) }
+                        }
+                    } label: {
+                        Text(trust)
+                            .typeRole(Typography.actionLabel)
+                            .foregroundStyle(theme.accentBase)
+                            .frame(minHeight: Tokens.Layout.hitTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, LucideIconSize.rowGlyph + Tokens.Space.s8)
+                    .accessibilityIdentifier("handoff.trust")
+                }
             }
             .padding(.horizontal, Tokens.Space.s20)
             .padding(.vertical, Tokens.Space.s16)

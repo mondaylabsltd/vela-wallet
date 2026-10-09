@@ -484,7 +484,9 @@ struct SigningPlanTests {
         )
         #expect(signer.calls == 0, "a key on its own domain must never reach the platform sheet")
         #expect(page.asked.first?.page.hasPrefix("https://sign.example.com") == true)
-        #expect(page.asked.first?.place == nil, "a record with no sign-in key names no place")
+        // Core round 17: a record with no sign-in key still names a key — its
+        // first key's place — so the card always says what to confirm with.
+        #expect(page.asked.first?.keyLabel?.placeKey.hasPrefix("onboarding.create.method") == true)
     }
 }
 
