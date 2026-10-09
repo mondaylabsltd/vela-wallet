@@ -170,6 +170,7 @@ fn bundler_ok() -> Res {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("1000000000".to_owned()),
             relayer_fee_per_gas: Some("1000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     }
 }
@@ -181,13 +182,15 @@ fn quotes_ok() -> Res {
 }
 
 fn estimated() -> Res {
-    // Padded (`safe-transaction.ts:697-702`): vgl 100k×1.5 → floor 300k,
-    // cgl 50k×1.5 → floor 100k, pvg 40k+10k → 50k. Total = 450_000.
+    // A relay that publishes no `settlementGas`: its limits are priced as
+    // returned (`user_op::in_band_gas_limits`, no ×1.5, no 300k floor on a
+    // deployed Safe): 100k + 310k + 40k = 450_000.
     Res::UserOpGas {
         outcome: FeeGasOutcome::Estimated {
             verification_gas_limit: "100000".to_owned(),
-            call_gas_limit: "50000".to_owned(),
+            call_gas_limit: "310000".to_owned(),
             pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
         },
     }
 }
@@ -1636,6 +1639,7 @@ fn issue_408_quote(request: Event, rows: Vec<FeeAssetQuote>) -> Sut {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
             relayer_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(Res::InBandQuotes { quotes: Some(rows) });
@@ -2346,6 +2350,7 @@ fn zero_bundler_quote_falls_back_locally() {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("0".to_owned()),
             relayer_fee_per_gas: Some("0".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -2438,6 +2443,7 @@ fn rejects_a_bundler_quote_far_above_the_chain_rate() {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("4000000000".to_owned()),
             relayer_fee_per_gas: Some("4000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -2462,6 +2468,7 @@ fn accepts_a_bundler_quote_at_the_three_times_boundary() {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("3000000000".to_owned()), // exactly 3×
             relayer_fee_per_gas: Some("3000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -2486,6 +2493,7 @@ fn a_bundler_under_report_is_floored_at_the_chain_measurement() {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("500000000".to_owned()),
             relayer_fee_per_gas: Some("500000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -2951,6 +2959,7 @@ fn tempo_contract_call_refines_off_the_real_estimate() {
             verification_gas_limit: "2000000".to_owned(),
             call_gas_limit: "1500000".to_owned(),
             pre_verification_gas: "100000".to_owned(),
+            settlement_gas: None,
         },
     });
     let fee = sut.view().fee.expect("refined quote");
@@ -3238,6 +3247,7 @@ fn a_quote_that_reports_its_tip_publishes_the_gas_price_that_speed_buys() {
             max_priority_fee_per_gas: Some("52000200406".to_owned()),
             network_fee_per_gas: Some("445661310562".to_owned()),
             relayer_fee_per_gas: Some("297107540375".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -3294,6 +3304,7 @@ fn a_measured_zero_gas_price_is_published_as_zero() {
             max_priority_fee_per_gas: Some("0".to_owned()),
             network_fee_per_gas: Some("1000000000".to_owned()),
             relayer_fee_per_gas: Some("1000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -3326,6 +3337,7 @@ fn an_unreported_base_fee_publishes_no_gas_price_rather_than_the_fallback() {
             max_priority_fee_per_gas: Some("500000000".to_owned()),
             network_fee_per_gas: Some("1000000000".to_owned()),
             relayer_fee_per_gas: Some("1000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -3488,6 +3500,7 @@ fn a_quote_that_reports_its_tip_publishes_both_ends_of_the_range() {
             max_priority_fee_per_gas: Some("52000200406".to_owned()),
             network_fee_per_gas: Some("445661310562".to_owned()),
             relayer_fee_per_gas: Some("297107540375".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(quotes_ok());
@@ -3560,6 +3573,7 @@ fn relay_trivial_estimate() -> Res {
             verification_gas_limit: "100000".to_owned(),
             call_gas_limit: "118000".to_owned(),
             pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
         },
     }
 }
@@ -3617,24 +3631,26 @@ fn undeployed_contract_call_is_priced_on_the_measured_floor() {
     let floor =
         vela_core::user_op::inner_calls_gas_floor(&[MEASURED_REGISTRY_CALL], 1).expect("a floor");
     assert_eq!(floor, 5_495_156);
-    // Displayed = signed: the submit's padded relay figure is under the floor,
-    // so the op carries exactly `floor` — the quote must price exactly that.
-    let submit_cgl = vela_core::user_op::pad_gas_estimate(
+    // Displayed = signed: the submit's limits (`in_band_gas_limits`, the one
+    // rule) put the relay's figure under the floor, so the op carries exactly
+    // `floor` — the quote must price exactly that.
+    let submit = vela_core::user_op::in_band_gas_limits(
         vela_core::user_op::GasEstimate {
             verification_gas_limit: 100_000,
             call_gas_limit: 118_000,
             pre_verification_gas: 40_000,
+            settlement_gas: None,
         },
-        2_000_000,
-        200_000,
-    )
-    .call_gas_limit
-    .max(floor);
-    assert_eq!(submit_cgl, floor);
+        false,
+        Some(floor),
+    );
+    assert_eq!(submit.call_gas_limit, floor);
 
     let fee = sut.view().fee.expect("quoted");
-    // 2,000,000 (undeployed vgl floor) + 5,495,156 + (40,000 + 10,000).
-    let total = 2_000_000 + submit_cgl + 50_000;
+    // 2,000,000 (undeployed vgl floor, a relay without `settlementGas`) +
+    // 5,495,156 + 40,000 (the relay's own preVerificationGas, as returned).
+    let total = 2_000_000 + floor + 40_000;
+    assert_eq!(submit.total(), total);
     assert_eq!(fee.total_gas, total.to_string());
     assert_eq!(fee.total_wei, (total * NETWORK_FEE * 3).to_string());
 }
@@ -3652,7 +3668,7 @@ fn the_measurement_may_answer_before_the_simulation() {
     sut.resolve(relay_trivial_estimate());
     assert_eq!(
         sut.view().fee.expect("quoted").total_gas,
-        (2_000_000 + 5_495_156 + 50_000u128).to_string()
+        (2_000_000 + 5_495_156 + 40_000u128).to_string()
     );
 }
 
@@ -3660,8 +3676,8 @@ fn the_measurement_may_answer_before_the_simulation() {
 /// behaviour, which drops its floor the same way.
 #[test]
 fn an_unmeasurable_call_keeps_the_relay_figure() {
-    // Relay: 118k × 1.5 = 177k.
-    let relay_total = (2_000_000 + 177_000 + 50_000u128).to_string();
+    // The relay's 118k as returned (above the undeployed 100k call floor).
+    let relay_total = (2_000_000 + 118_000 + 40_000u128).to_string();
 
     let mut sut = Sut::new();
     to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
@@ -3689,7 +3705,7 @@ fn an_unmeasurable_call_keeps_the_relay_figure() {
 
 /// The web submit measures every contract call, deployed or not, so the
 /// quote does too: a small call on a DEPLOYED Safe whose floor (×1.25 + 60k +
-/// 50k/call) out-grows the relay's padded figure is priced on the floor.
+/// 50k/call) out-grows the relay's figure is priced on the floor.
 #[test]
 fn a_deployed_safe_contract_call_is_measured_too() {
     let mut sut = Sut::new();
@@ -3701,14 +3717,15 @@ fn a_deployed_safe_contract_call_is_measured_too() {
             verification_gas_limit: "100000".to_owned(),
             call_gas_limit: "80000".to_owned(),
             pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
         },
     });
     sut.resolve(measured(&[Some("46000")]));
-    // Floor 46,000 × 1.25 + 60,000 + 50,000 = 167,500 > 80,000 × 1.5.
-    // 300,000 (deployed vgl floor) + 167,500 + 50,000.
-    assert_eq!(sut.view().fee.expect("quoted").total_gas, "517500");
+    // Floor 46,000 × 1.25 + 60,000 + 50,000 = 167,500 > the relay's 80,000.
+    // 100,000 (the relay's verification, as returned) + 167,500 + 40,000.
+    assert_eq!(sut.view().fee.expect("quoted").total_gas, "307500");
 
-    // A floor BELOW the relay's padded figure changes nothing.
+    // A floor BELOW the relay's figure changes nothing.
     let mut sut = Sut::new();
     to_estimating(&mut sut, request(CHAIN, vec![contract_call()]));
     sut.resolve(Res::UserOpGas {
@@ -3716,12 +3733,13 @@ fn a_deployed_safe_contract_call_is_measured_too() {
             verification_gas_limit: "100000".to_owned(),
             call_gas_limit: "400000".to_owned(),
             pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
         },
     });
     sut.resolve(measured(&[Some("46000")]));
     assert_eq!(
         sut.view().fee.expect("quoted").total_gas,
-        (300_000 + 600_000 + 50_000u128).to_string()
+        (100_000 + 400_000 + 40_000u128).to_string()
     );
 }
 
@@ -3762,7 +3780,7 @@ fn only_contract_calls_are_measured() {
     // 5,385,156 + 60,000 + 50,000 × 2 inner calls = 5,545,156.
     assert_eq!(
         sut.view().fee.expect("quoted").total_gas,
-        (2_000_000 + 5_545_156 + 50_000u128).to_string()
+        (2_000_000 + 5_545_156 + 40_000u128).to_string()
     );
 }
 
@@ -4119,9 +4137,11 @@ fn a_pick_the_real_gas_outgrows_is_made_again() {
         vec![native_row("1000000000000000000"), usdc_row("3500000")],
         Res::UserOpGas {
             outcome: FeeGasOutcome::Estimated {
-                verification_gas_limit: "400000".to_owned(), // ×1.5 = 600k
-                call_gas_limit: "50000".to_owned(),          // → 100k floor
-                pre_verification_gas: "40000".to_owned(),    // +10k = 50k
+                // The relay's limits, as returned: 400k + 310k + 40k = 750k.
+                verification_gas_limit: "400000".to_owned(),
+                call_gas_limit: "310000".to_owned(),
+                pre_verification_gas: "40000".to_owned(),
+                settlement_gas: None,
             },
         },
     );
@@ -5390,6 +5410,7 @@ fn polygon_gather_with(sut: &mut Sut, rows: Vec<FeeAssetQuote>) -> Vec<Op> {
             max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("2185000000000".to_owned()),
             relayer_fee_per_gas: Some("2185000000000".to_owned()),
+            in_band_fee_per_gas: None,
         }),
     });
     sut.resolve(Res::InBandQuotes { quotes: Some(rows) })

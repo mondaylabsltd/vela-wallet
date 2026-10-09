@@ -56,11 +56,13 @@ use crate::safe::{
 // Constants (`safe-transaction.ts:69-82`)
 // ---------------------------------------------------------------------------
 
-/// Verification gas requested from the estimator for a deployed Safe, and the
-/// floor its padded answer is held to.
+/// Verification gas requested from the estimator for a deployed Safe. Only
+/// Tempo still holds its answer to it ([`tempo_gas_limits`]); an in-band
+/// operation signs the relay's own figure ([`in_band_gas_limits`]).
 pub const VERIFICATION_GAS_DEPLOYED: u128 = 300_000;
-/// The same for an undeployed Safe: `sendUserOp` floors at 2M, so the estimate
-/// must match.
+/// The same for an undeployed Safe, and the floor its signed verification
+/// limit keeps while the relay does not publish `settlementGas`
+/// ([`in_band_gas_limits`]).
 pub const VERIFICATION_GAS_UNDEPLOYED: u128 = 2_000_000;
 /// Simple transfers; the estimator may raise it.
 pub const CALL_GAS_LIMIT: u128 = 200_000;
@@ -118,12 +120,42 @@ pub struct WalletKey {
     pub public_key_hex: String,
 }
 
-/// The estimator's three answers, raw.
+/// The estimator's answer, raw: the three limits, and — from a relay that
+/// publishes it — the gas it settles the operation against.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GasEstimate {
     pub verification_gas_limit: u128,
     pub call_gas_limit: u128,
     pub pre_verification_gas: u128,
+    /// `settlementGas` (vela-relay `docs/fees.md`): the gas the relay bills
+    /// this operation against — the simulated gas it USES plus the relay's
+    /// documented buffer, never the padded limits, and never more than their
+    /// sum. `None` from a relay older than the field.
+    ///
+    /// Its presence is also what says the relay reads `verificationGasLimit`
+    /// from the simulation correctly: until it shipped, every relay answered
+    /// the constant 100,000 (it decoded an ABI offset as `preOpGas`), which is
+    /// below what an undeployed Safe's first operation needs to validate
+    /// (412,195 measured on Ethereum). See [`in_band_gas_limits`].
+    pub settlement_gas: Option<u128>,
+}
+
+/// The three gas limits a submitted operation carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GasLimits {
+    pub verification_gas_limit: u128,
+    pub call_gas_limit: u128,
+    pub pre_verification_gas: u128,
+}
+
+impl GasLimits {
+    /// Their sum — the most gas the operation can spend.
+    #[must_use]
+    pub fn total(&self) -> u128 {
+        self.verification_gas_limit
+            .saturating_add(self.call_gas_limit)
+            .saturating_add(self.pre_verification_gas)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -553,23 +585,99 @@ pub fn build_dummy_signature() -> Result<Vec<u8>, CoreError> {
 }
 
 // ---------------------------------------------------------------------------
-// Gas padding (`sendUserOpInBand`, `safe-transaction.ts:1760-1768`)
+// The gas limits an operation is signed with — one rule for every shell
 // ---------------------------------------------------------------------------
 
-/// The limits a submitted operation carries, from the estimator's raw
-/// answer: ×1.5 on the two limits, each held to its floor, and +10,000 on
-/// preVerificationGas. The floors are the caller's because they differ by
-/// path (deployed / undeployed / Tempo).
-pub fn pad_gas_estimate(
+/// The call floor of a Safe that is not deployed yet.
+///
+/// The relay estimates `callGasLimit` against the sender, and an undeployed
+/// Safe has no code there, so the figure is a codeless account's (the relay's
+/// own 50,000 minimum on Ethereum, 2026-10-08) whatever the calls do. The
+/// inner-call floor ([`inner_calls_gas_floor`]) covers a contract call; this
+/// covers the transfers, whose own measurement is skipped.
+pub const UNDEPLOYED_CALL_GAS_FLOOR: u128 = 100_000;
+
+/// The gas limits an in-band operation is SIGNED with, from the relay's
+/// estimate — the one rule every shell's submit and the fee quote share.
+///
+/// The relay's limits are taken as returned. They are already sized for
+/// execution: `verificationGasLimit` is 1.5× the simulated validation,
+/// `callGasLimit` 1.5× the call's own `eth_estimateGas` (vela-relay
+/// `estimate.rs`). The wallet used to multiply both by 1.5 again and hold
+/// verification to 300,000 — for an operation that validates in 61,906 gas on
+/// Ethereum — and then priced the fee on those limits: about four times the
+/// gas the operation used (the 2026-10-02 mainnet operation 0x7132ee31…:
+/// 583,954 priced against 146,824 used). Three raises remain, each for a
+/// figure the relay cannot know:
+///
+/// - the call limit is raised to the inner calls' own measured floor
+///   (`inner_floor`, [`inner_calls_gas_floor`]) — the relay estimates the
+///   call against the sender, which for an undeployed Safe has no code;
+/// - an undeployed Safe's call limit is held to
+///   [`UNDEPLOYED_CALL_GAS_FLOOR`], for the same reason;
+/// - an undeployed Safe's verification limit is held to
+///   [`VERIFICATION_GAS_UNDEPLOYED`] when the relay does not publish
+///   `settlementGas`: every such relay answers verification as the constant
+///   100,000 (it read an ABI offset as `preOpGas`), and a first operation —
+///   the Safe's deployment plus its validation — needs 412,195 on Ethereum.
+///   A relay that publishes `settlementGas` reads the simulation correctly,
+///   and its figure stands.
+///
+/// `preVerificationGas` is the relay's figure as returned; it carries the
+/// relay's own 10% (≥ 5,000) buffer over the calldata it was estimated on,
+/// which a real fee amount in place of the placeholder's `1` stays inside.
+#[must_use]
+pub fn in_band_gas_limits(
+    estimate: GasEstimate,
+    deployed: bool,
+    inner_floor: Option<u128>,
+) -> GasLimits {
+    let verification_gas_limit = if !deployed && estimate.settlement_gas.is_none() {
+        estimate
+            .verification_gas_limit
+            .max(VERIFICATION_GAS_UNDEPLOYED)
+    } else {
+        estimate.verification_gas_limit
+    };
+    let call_floor = if deployed {
+        0
+    } else {
+        UNDEPLOYED_CALL_GAS_FLOOR
+    };
+    GasLimits {
+        verification_gas_limit,
+        call_gas_limit: estimate
+            .call_gas_limit
+            .max(call_floor)
+            .max(inner_floor.unwrap_or(0)),
+        pre_verification_gas: estimate.pre_verification_gas,
+    }
+}
+
+/// The limits a TEMPO operation carries: ×1.5 on the two limits, each held to
+/// its floor, and +10,000 on preVerificationGas. Tempo prices its fee on its
+/// own model (`fee_policy::tempo_expected_gas`, the unpadded simulation),
+/// never on these limits, so they are untouched by the in-band fee fix.
+#[must_use]
+pub fn tempo_gas_limits(
     estimate: GasEstimate,
     verification_floor: u128,
     call_floor: u128,
-) -> GasEstimate {
-    GasEstimate {
-        verification_gas_limit: (estimate.verification_gas_limit * 15 / 10).max(verification_floor),
-        call_gas_limit: (estimate.call_gas_limit * 15 / 10).max(call_floor),
-        pre_verification_gas: estimate.pre_verification_gas + 10_000,
+) -> GasLimits {
+    GasLimits {
+        verification_gas_limit: half_again(estimate.verification_gas_limit).max(verification_floor),
+        call_gas_limit: half_again(estimate.call_gas_limit).max(call_floor),
+        pre_verification_gas: estimate.pre_verification_gas.saturating_add(10_000),
     }
+}
+
+/// `limit × 1.5`, exact. A relay figure too large to multiply is a limit no
+/// chain can carry; it stays unrepresentably large (and is refused where it
+/// is sent) rather than wrapping into a small one.
+fn half_again(limit: u128) -> u128 {
+    limit
+        .checked_mul(15)
+        .map_or(u128::MAX, |scaled| scaled / 10)
 }
 
 /// A floor for `call_gas_limit` measured from the inner calls THEMSELVES.
@@ -1398,25 +1506,113 @@ mod tests {
         assert!(json.get("feeToken").is_none());
     }
 
+    /// The relay's answers measured on Ethereum at block 26,149,237
+    /// (2026-10-08), every one from a relay that does not publish
+    /// `settlementGas` and so answers verification as the constant 100,000.
+    fn mainnet(vgl: u128, cgl: u128, pvg: u128, settlement: Option<u128>) -> GasEstimate {
+        GasEstimate {
+            verification_gas_limit: vgl,
+            call_gas_limit: cgl,
+            pre_verification_gas: pvg,
+            settlement_gas: settlement,
+        }
+    }
+
+    /// A deployed Safe signs the relay's limits as returned: no ×1.5 on top
+    /// of the relay's own ×1.5, no 300,000 verification floor (the ETH send
+    /// validates in 61,906), no +10,000.
     #[test]
-    fn gas_padding_applies_the_factor_the_floors_and_the_adder() {
-        let raw = GasEstimate {
-            verification_gas_limit: 100_000,
-            call_gas_limit: 50_000,
-            pre_verification_gas: 40_000,
-        };
-        let padded = pad_gas_estimate(raw, VERIFICATION_GAS_DEPLOYED, CALL_GAS_LIMIT);
+    fn a_deployed_safe_signs_the_relays_limits_as_returned() {
+        let eth_send = mainnet(100_000, 114_894, 101_613, None);
+        let limits = in_band_gas_limits(eth_send, true, None);
+        assert_eq!(
+            limits,
+            GasLimits {
+                verification_gas_limit: 100_000,
+                call_gas_limit: 114_894,
+                pre_verification_gas: 101_613,
+            }
+        );
+        // The old rule signed 583,954 for the same answer.
+        assert_eq!(limits.total(), 316_507);
+        // A relay that publishes `settlementGas` is believed the same way.
+        let fixed = mainnet(100_000, 114_894, 101_613, Some(198_764));
+        assert_eq!(in_band_gas_limits(fixed, true, None), limits);
+    }
+
+    /// The inner calls' measured floor raises the call limit — the swap's
+    /// 282,863 does not (the relay's 329,093 is above it), a registry write's
+    /// 5,495,156 does.
+    #[test]
+    fn the_inner_calls_floor_raises_the_call_limit_and_only_upward() {
+        let swap = mainnet(100_000, 329_093, 110_083, None);
+        assert_eq!(
+            in_band_gas_limits(swap, true, Some(282_863)).call_gas_limit,
+            329_093
+        );
+        assert_eq!(
+            in_band_gas_limits(swap, true, Some(282_863)).total(),
+            539_176
+        );
+        let registry = mainnet(100_000, 118_000, 150_000, None);
+        let floor = inner_calls_gas_floor(&[4_308_125], 1);
+        assert_eq!(
+            in_band_gas_limits(registry, true, floor).call_gas_limit,
+            5_495_156
+        );
+    }
+
+    /// An undeployed Safe: a relay that does not publish `settlementGas`
+    /// answers verification as 100,000 against a real 412,195, so the 2M
+    /// floor stays; one that publishes it read the simulation (1.5 × 412,195)
+    /// and is believed. The call limit is a codeless sender's either way, so
+    /// it is held to 100,000.
+    #[test]
+    fn an_undeployed_safe_keeps_the_2m_floor_only_for_a_relay_without_settlement_gas() {
+        let old = mainnet(100_000, 50_000, 109_986, None);
+        assert_eq!(
+            in_band_gas_limits(old, false, None),
+            GasLimits {
+                verification_gas_limit: VERIFICATION_GAS_UNDEPLOYED,
+                call_gas_limit: UNDEPLOYED_CALL_GAS_FLOOR,
+                pre_verification_gas: 109_986,
+            }
+        );
+        let new = mainnet(618_292, 50_000, 109_986, Some(610_300));
+        assert_eq!(
+            in_band_gas_limits(new, false, None),
+            GasLimits {
+                verification_gas_limit: 618_292,
+                call_gas_limit: UNDEPLOYED_CALL_GAS_FLOOR,
+                pre_verification_gas: 109_986,
+            }
+        );
+        // A real call from the undeployed Safe still rides its own floor.
+        assert_eq!(
+            in_band_gas_limits(new, false, Some(5_495_156)).call_gas_limit,
+            5_495_156
+        );
+    }
+
+    /// Tempo keeps its own padding: its fee is priced on its own model, never
+    /// on these limits.
+    #[test]
+    fn tempo_keeps_the_factor_the_floors_and_the_adder() {
+        let raw = mainnet(100_000, 50_000, 40_000, None);
+        let padded = tempo_gas_limits(raw, VERIFICATION_GAS_DEPLOYED, 760_000);
         assert_eq!(padded.verification_gas_limit, 300_000, "floored");
-        assert_eq!(padded.call_gas_limit, 200_000, "floored");
+        assert_eq!(padded.call_gas_limit, 760_000, "floored");
         assert_eq!(padded.pre_verification_gas, 50_000);
-        let big = GasEstimate {
-            verification_gas_limit: 400_000,
-            call_gas_limit: 400_000,
-            pre_verification_gas: 0,
-        };
-        let padded = pad_gas_estimate(big, VERIFICATION_GAS_UNDEPLOYED, CALL_GAS_LIMIT);
-        assert_eq!(padded.verification_gas_limit, 2_000_000);
-        assert_eq!(padded.call_gas_limit, 600_000);
+        let big = mainnet(4_400_000, 800_000, 0, None);
+        let padded = tempo_gas_limits(big, TEMPO_VERIFICATION_GAS_UNDEPLOYED, 760_000);
+        assert_eq!(padded.verification_gas_limit, 6_600_000);
+        assert_eq!(padded.call_gas_limit, 1_200_000);
+        // A figure too large to multiply stays too large, never wraps small.
+        let absurd = mainnet(u128::MAX, 1, 1, None);
+        assert_eq!(
+            tempo_gas_limits(absurd, 0, 0).verification_gas_limit,
+            u128::MAX
+        );
     }
 }
 
@@ -1474,17 +1670,34 @@ pub fn batch_has_contract_call(calls: &[MultiSendCall]) -> bool {
     calls.iter().any(|call| !is_plain_transfer_call(&call.data))
 }
 
-/// The gas floors a draft starts from and its padded estimate is held to.
-/// They differ by path — deployed / undeployed / Tempo — so the caller names
-/// them once and every step reads the same pair.
+/// The gas a draft asks the estimator about, and how the estimator's answer
+/// becomes the limits the operation is signed with. They differ by path —
+/// deployed / undeployed / Tempo — so the caller names them once and every
+/// step reads the same value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GasFloors {
+    /// The verification limit the draft carries INTO the estimate.
     pub verification: u128,
+    /// The call limit the draft carries into the estimate. On Tempo it is
+    /// also the floor the padded answer is held to.
     pub call: u128,
+    /// Which rule turns the estimate into signed limits.
+    pub rule: LimitsRule,
+}
+
+/// Which rule turns the relay's estimate into the limits an operation is
+/// signed with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LimitsRule {
+    /// [`in_band_gas_limits`] — every in-band network.
+    InBand { deployed: bool },
+    /// [`tempo_gas_limits`], held to the [`GasFloors`]' own figures.
+    Tempo,
 }
 
 impl GasFloors {
-    /// The in-band floors (`sendUserOpInBand`).
+    /// The in-band draft (`sendUserOpInBand`): the figures the estimator is
+    /// asked about, and [`LimitsRule::InBand`].
     #[must_use]
     pub fn in_band(deployed: bool) -> Self {
         GasFloors {
@@ -1494,6 +1707,7 @@ impl GasFloors {
                 VERIFICATION_GAS_UNDEPLOYED
             },
             call: CALL_GAS_LIMIT,
+            rule: LimitsRule::InBand { deployed },
         }
     }
 
@@ -1508,6 +1722,18 @@ impl GasFloors {
                 TEMPO_VERIFICATION_GAS_UNDEPLOYED
             },
             call: call_floor,
+            rule: LimitsRule::Tempo,
+        }
+    }
+
+    /// The limits `estimate` signs, by this path's rule. The inner calls'
+    /// measured floor is raised separately ([`inner_calls_gas_floor`]); the
+    /// raise is a `max`, so the order does not matter.
+    #[must_use]
+    pub fn limits(&self, estimate: GasEstimate) -> GasLimits {
+        match self.rule {
+            LimitsRule::InBand { deployed } => in_band_gas_limits(estimate, deployed, None),
+            LimitsRule::Tempo => tempo_gas_limits(estimate, self.verification, self.call),
         }
     }
 }
@@ -1571,12 +1797,13 @@ pub fn draft_operation(
     })
 }
 
-/// The relay's raw estimate onto the draft, padded and floored.
+/// The relay's raw estimate onto the draft, as the limits this path signs
+/// ([`GasFloors::limits`]).
 pub fn apply_estimate(op: &mut UserOperation, estimate: GasEstimate, floors: GasFloors) {
-    let padded = pad_gas_estimate(estimate, floors.verification, floors.call);
-    op.verification_gas_limit = padded.verification_gas_limit;
-    op.call_gas_limit = padded.call_gas_limit;
-    op.pre_verification_gas = padded.pre_verification_gas;
+    let limits = floors.limits(estimate);
+    op.verification_gas_limit = limits.verification_gas_limit;
+    op.call_gas_limit = limits.call_gas_limit;
+    op.pre_verification_gas = limits.pre_verification_gas;
 }
 
 /// The batch with the SETTLED fee leg, onto a draft whose gas the estimate
@@ -2074,9 +2301,9 @@ mod submit_spine_tests {
 
     /// A draft is estimable-shaped: floors as limits, zero fee fields, the
     /// dummy signature, and a MultiSend even for one call. The estimate then
-    /// pads and floors, and the settled fee leg replaces only the calldata.
+    /// sets the limits, and the settled fee leg replaces only the calldata.
     #[test]
-    fn a_draft_is_padded_by_the_estimate_and_keeps_its_gas_when_the_fee_settles() {
+    fn a_draft_takes_the_estimate_and_keeps_its_gas_when_the_fee_settles() {
         let safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let inner = vec![to_multi_send_call(
             "0x031d7D57c99CAF891e1C250554691Fd12D84772b",
@@ -2101,13 +2328,14 @@ mod submit_spine_tests {
                 verification_gas_limit: 100_000,
                 call_gas_limit: 300_000,
                 pre_verification_gas: 50_000,
+                settlement_gas: None,
             },
             floors,
         );
-        // ×1.5 then floored: 150k < 300k floor → 300k; 450k > 200k floor → 450k; +10k.
-        assert_eq!(op.verification_gas_limit, 300_000);
-        assert_eq!(op.call_gas_limit, 450_000);
-        assert_eq!(op.pre_verification_gas, 60_000);
+        // The relay's limits as returned (`in_band_gas_limits`).
+        assert_eq!(op.verification_gas_limit, 100_000);
+        assert_eq!(op.call_gas_limit, 300_000);
+        assert_eq!(op.pre_verification_gas, 50_000);
 
         let settled = in_band_batch(
             &inner,
@@ -2119,7 +2347,7 @@ mod submit_spine_tests {
         let before = op.call_data.clone();
         replace_calls(&mut op, &settled).unwrap_or_else(|e| unreachable!("{e}"));
         assert_ne!(op.call_data, before);
-        assert_eq!(op.call_gas_limit, 450_000);
+        assert_eq!(op.call_gas_limit, 300_000);
         assert_eq!(op.signature, dummy);
         assert!(calculate_safe_op_hash(&op, 100).is_ok());
     }

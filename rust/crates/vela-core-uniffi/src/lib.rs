@@ -1400,11 +1400,19 @@ pub enum UserOpFeeMode {
     },
 }
 
-/// The gas floors a path starts from (decimal strings).
+/// The gas a path's draft asks the estimator about (decimal strings), and
+/// which rule turns the answer into the signed limits — what
+/// [`user_op_floors`] hands out and every other call takes back as it is.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct GasFloorsRecord {
     pub verification: String,
     pub call: String,
+    /// Tempo's rule (×1.5 held to these floors) rather than the in-band one
+    /// (`vela_core::user_op::in_band_gas_limits`).
+    pub tempo: bool,
+    /// Whether the Safe is deployed — the in-band rule holds an undeployed
+    /// one's limits to their floors.
+    pub deployed: bool,
 }
 
 fn u128_of(text: &str, what: &str) -> Result<u128, CoreError> {
@@ -1417,6 +1425,13 @@ fn floors_of(record: &GasFloorsRecord) -> Result<vela_core::user_op::GasFloors, 
     Ok(vela_core::user_op::GasFloors {
         verification: u128_of(&record.verification, "verification floor")?,
         call: u128_of(&record.call, "call floor")?,
+        rule: if record.tempo {
+            vela_core::user_op::LimitsRule::Tempo
+        } else {
+            vela_core::user_op::LimitsRule::InBand {
+                deployed: record.deployed,
+            }
+        },
     })
 }
 
@@ -1494,17 +1509,12 @@ fn batch_for(
 /// calls plus the reimbursement leg).
 #[uniffi::export]
 pub fn user_op_floors(chain_id: u32, deployed: bool, sub_calls: u32) -> GasFloorsRecord {
-    let floors = if vela_core::app::fee_policy::is_tempo_chain(chain_id) {
-        vela_core::user_op::GasFloors::tempo(
-            deployed,
-            vela_core::app::fee_policy::tempo_call_gas_limit(sub_calls),
-        )
-    } else {
-        vela_core::user_op::GasFloors::in_band(deployed)
-    };
+    let floors = vela_core::app::fee_policy::user_op_gas_floors(chain_id, deployed, sub_calls);
     GasFloorsRecord {
         verification: floors.verification.to_string(),
         call: floors.call.to_string(),
+        tempo: floors.rule == vela_core::user_op::LimitsRule::Tempo,
+        deployed,
     }
 }
 
@@ -1538,14 +1548,20 @@ pub fn user_op_draft(
     Ok(draft_of(&op))
 }
 
-/// The relay's raw estimate onto the draft: ×1.5 on the two limits, each held
-/// to its floor, +10,000 on preVerificationGas.
+/// The relay's raw estimate onto the draft, as the limits the operation is
+/// signed with — the one rule every shell shares
+/// (`vela_core::user_op::in_band_gas_limits`; Tempo keeps its own padding).
+/// `settlement_gas` is the relay's `settlementGas` as it answered it, `None`
+/// from a relay that does not publish it: it decides whether an undeployed
+/// Safe's verification limit keeps its 2M floor. The inner calls' measured
+/// floor is raised after this, by [`user_op_raise_call_gas`].
 #[uniffi::export]
 pub fn user_op_apply_estimate(
     draft: UserOpDraft,
     verification_gas_limit: String,
     call_gas_limit: String,
     pre_verification_gas: String,
+    settlement_gas: Option<String>,
     floors: GasFloorsRecord,
 ) -> Result<UserOpDraft, CoreError> {
     let mut op = op_of(&draft)?;
@@ -1555,6 +1571,12 @@ pub fn user_op_apply_estimate(
             verification_gas_limit: u128_of(&verification_gas_limit, "verificationGasLimit")?,
             call_gas_limit: u128_of(&call_gas_limit, "callGasLimit")?,
             pre_verification_gas: u128_of(&pre_verification_gas, "preVerificationGas")?,
+            // A figure that does not read is no figure — the undeployed
+            // floor then stays, the safe side.
+            settlement_gas: settlement_gas
+                .as_deref()
+                .and_then(|gas| gas.trim().parse::<u128>().ok())
+                .filter(|gas| *gas > 0),
         },
         floors_of(&floors)?,
     );
