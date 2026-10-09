@@ -61,6 +61,19 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // The page as the authority (spec 102 Phase 3): what is signed first, the
+    // key it will use, then one tap — the WebAuthn call inside the tap, for
+    // Safari. It reads the wallet's key route (`context.keyRoute`, a
+    // ceremony's `place`/`hints`/`transports`) and asks the browser for that
+    // one key with its transports and hints, so no generic chooser; names
+    // networks and tokens from this crate's own tables (a Base USDC send was
+    // "0 ?"); speaks the apps' fifteen languages; and says what it is in one
+    // line (its version from its own address · zero dependencies · open
+    // source · self-hostable). Answers only to `velawallet://sign-result`
+    // and refuses frames, as 364b8737 does.
+    // LAUNCH (spec 102 Phase 3) — valid only once `dist/` is deployed and
+    // `/b/2d19fa49…/sign` answers 200 + immutable with these bytes.
+    "2d19fa497c4131a9341f69248fb68a79c3bbf750aed0559747b0d34ac9fa009d",
     // The answer goes to the Vela wallet and nowhere else (spec 102 R7, Phase
     // 0). Every earlier page signs for whoever opens it: a signature's answer
     // went to any `cb=` the link named and to any postMessage opener, so a
@@ -69,8 +82,8 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // `velawallet://sign-result` (signatures and every ceremony on the URL
     // channel), sends nothing anywhere else, and does nothing inside a frame
     // (the host adds `frame-ancestors 'none'` and `X-Frame-Options: DENY`).
-    // LAUNCH (spec 102 Phase 0) — valid only once `dist/` is deployed and
-    // `/b/364b8737…/sign` answers 200 + immutable with these bytes.
+    // LAUNCH from spec 102 Phase 0 until 2d19fa49 (Phase 3). Kept: a build
+    // that knows only this hash keeps working, and it is as safe to open.
     "364b8737d0646aa87be17162bf8af6621e1aeb31f8f96d19a7613edf562c2b23",
     // Both of the next two, in one page: 085's typed-data reader and 082's
     // site and plain-send fixes (the merge of the two branches, 2026-10-01).
@@ -165,7 +178,7 @@ pub const ENFORCE: bool = true;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "364b8737d0646aa87be17162bf8af6621e1aeb31f8f96d19a7613edf562c2b23";
+pub const LAUNCH: &str = "2d19fa497c4131a9341f69248fb68a79c3bbf750aed0559747b0d34ac9fa009d";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).
