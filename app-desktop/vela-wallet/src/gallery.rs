@@ -70,10 +70,12 @@ enum Fixture {
         crate::executor::trusted_signer::Refusal,
         Option<crate::executor::trusted_signer::NotOpened>,
     ),
-    /// Spec 102 D4: the hand-off card, with its page's integrity line.
+    /// Spec 102 D4: the hand-off card, with its page's integrity line and —
+    /// for a transaction — the fee row the sheet settled (label, value).
     Handoff(
         crate::executor::send::Handoff,
         vela_core::trusted_signer::launch::IntegrityLine,
+        Option<(&'static str, &'static str)>,
     ),
     /// Spec 102: the sign-in chooser — three places and "Use my own signing
     /// page", or (with a page) that page heading the places.
@@ -110,6 +112,18 @@ fn official_checked() -> vela_core::trusted_signer::launch::IntegrityLine {
 /// A self-hosted page's line: its own build, trusted on this device.
 fn own_checked() -> vela_core::trusted_signer::launch::IntegrityLine {
     checked("7e57c0de5e1f0000000000000000000000000000000000000000000000000000")
+}
+
+/// A self-hosted page serving a build nobody decided about yet: "Version
+/// 3f9a1c22 is new to Vela. Trust it on this device?"
+fn asks_to_trust() -> vela_core::trusted_signer::launch::IntegrityLine {
+    vela_core::trusted_signer::launch::IntegrityLine::of(
+        &vela_core::trusted_signer::integrity::Verdict::AskToTrust {
+            actual: "3f9a1c22b7e04d5a9c8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c".to_owned(),
+        },
+        "",
+        None,
+    )
 }
 
 /// A check that did not complete.
@@ -470,37 +484,66 @@ fn entries() -> Vec<Entry> {
             fixture,
         });
     };
+    // The key labels the plan carries (D-17): a key named after the wallet
+    // is named by its place; one the person named, by its name.
+    let by_place = |method: &str| vela_core::signing_venue::KeyLabel::of(None, "", method);
     let official_handoff = crate::executor::send::Handoff {
         page: Some(vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned()),
         block: None,
-        key_name: None,
-        key_place: KeyMethod::SecurityKey,
+        key_label: by_place("hybrid"),
     };
+    // What the sheet settled before the hand-off: the fee in its coin, its
+    // fiat, and the speed it is priced at.
+    const FEE: Option<(&str, &str)> = Some((
+        "componentsUi.gas.networkFee",
+        "0.0012 USDC · ≈$0.01 · send.gasTier.standard",
+    ));
     signer(
         "hand-off · matches",
-        Fixture::Handoff(official_handoff.clone(), official_checked()),
+        Fixture::Handoff(official_handoff.clone(), official_checked(), FEE),
     );
     signer(
         "hand-off · checking",
         Fixture::Handoff(
             official_handoff.clone(),
             vela_core::trusted_signer::launch::IntegrityLine::checking(),
+            FEE,
         ),
     );
     signer(
         "hand-off · could not check",
-        Fixture::Handoff(official_handoff.clone(), could_not_check()),
+        Fixture::Handoff(official_handoff.clone(), could_not_check(), FEE),
     );
     signer(
-        "hand-off · own page, named key",
+        "hand-off · a message, no fee",
+        Fixture::Handoff(official_handoff.clone(), official_checked(), None),
+    );
+    signer(
+        "hand-off · self-hosted, named key",
         Fixture::Handoff(
             crate::executor::send::Handoff {
                 page: Some(OWN_PAGE.to_owned()),
                 block: None,
-                key_name: Some("YubiKey 5C".to_owned()),
-                key_place: KeyMethod::SecurityKey,
+                key_label: vela_core::signing_venue::KeyLabel::of(
+                    Some("YubiKey 5C"),
+                    "Savings",
+                    "security_key",
+                ),
             },
             own_checked(),
+            FEE,
+        ),
+    );
+    signer(
+        "hand-off · self-hosted, new version",
+        Fixture::Handoff(
+            crate::executor::send::Handoff {
+                page: Some(OWN_PAGE.to_owned()),
+                block: None,
+                key_label: by_place("security_key"),
+            },
+            asks_to_trust(),
+            FEE,
         ),
     );
     signer(
@@ -511,10 +554,10 @@ fn entries() -> Vec<Entry> {
                 block: Some(vela_core::signing_venue::VenueBlock::AppCannotReach {
                     domain: "sign.example.com".to_owned(),
                 }),
-                key_name: None,
-                key_place: KeyMethod::Platform,
+                key_label: by_place("platform"),
             },
             vela_core::trusted_signer::launch::IntegrityLine::checking(),
+            None,
         ),
     );
     signer("sign in · methods", Fixture::SignIn(None));
@@ -538,6 +581,13 @@ fn entries() -> Vec<Entry> {
                 "sign.example.com".to_owned(),
                 false,
                 own_checked(),
+            ),
+            (
+                "https://signer.example.org/".to_owned(),
+                String::new(),
+                "signer.example.org".to_owned(),
+                false,
+                asks_to_trust(),
             ),
             (
                 "http://localhost:8140/clearsigning/".to_owned(),
@@ -889,6 +939,7 @@ impl GalleryView {
                 crate::signing::trusted_signer::ended_card(
                     theme,
                     &self.loc,
+                    self.loc.t("componentsUi.signing.handoffTitle"),
                     crate::signing::trusted_signer::ended_words(
                         &self.loc,
                         *refusal,
@@ -899,11 +950,21 @@ impl GalleryView {
             }
             // On the signing column's own surface and width, as the wallet
             // draws it beside a request.
-            Fixture::Handoff(handoff, line) => {
-                let model =
+            Fixture::Handoff(handoff, line, fee) => {
+                let mut model =
                     crate::signing::trusted_signer::handoff_model(&self.loc, handoff, Some(line));
+                // The fee row in the corpus's words: the label, and the
+                // speed's name in place of its key.
+                model.fee = fee.map(|(label, value)| {
+                    let speed = "send.gasTier.standard";
+                    (
+                        self.loc.t(label),
+                        SharedString::from(value.replace(speed, &self.loc.t(speed))),
+                    )
+                });
                 let on_open: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
                 let on_recheck: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
+                let on_trust: crate::signing::trusted_signer::Click = Box::new(|_, _, _| {});
                 div()
                     .w(px(theme::THIRD_PANEL_W))
                     .p(px(24.))
@@ -917,6 +978,7 @@ impl GalleryView {
                         &model,
                         Some(on_open),
                         Some(on_recheck),
+                        Some(on_trust),
                     ))
             }
             Fixture::SignIn(page) => {
@@ -974,6 +1036,7 @@ impl GalleryView {
                     &mut self.icons.borrow_mut(),
                     &self.loc,
                     &rows,
+                    Rc::new(|_, _, _| {}),
                     Rc::new(|_, _, _| {}),
                     add,
                     |_, _, _| {},

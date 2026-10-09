@@ -1185,6 +1185,9 @@ pub struct Identity {
 /// and the per-row facts each listener carries.
 struct SendBindings {
     host: gpui::Entity<SendHost>,
+    /// Spec 102: the trusted page this send hands off to, for the hand-off's
+    /// "Try again" and "Trust this version".
+    handoff_page: Option<String>,
     token_ids: Vec<String>,
     fee_contracts: Vec<Option<String>>,
     amount: String,
@@ -6366,8 +6369,10 @@ impl WalletPage {
         } else {
             Vec::new()
         };
+        let handoff_page = host.read(cx).handoff().and_then(|handoff| handoff.page);
         Some(SendBindings {
             host,
+            handoff_page,
             token_ids: flows_live::send_token_ids(&view),
             fee_contracts: flows_live::fee_token_contracts(&fee),
             // Shown in the person's decimal mark (078 M-04); edits are read
@@ -6455,10 +6460,12 @@ impl WalletPage {
             .find(|channel| channel.waiting() || channel.ended().is_some())?;
         let card = if channel.waiting() {
             let unreachable = channel.unreachable();
+            let heading = self.loc.t(channel.title_key());
             let (reopen, cancel) = (Arc::clone(&channel), channel);
             signing_trusted_signer::waiting_card(
                 theme,
                 &self.loc,
+                heading,
                 unreachable,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| reopen.reopen(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel(),
@@ -6473,6 +6480,7 @@ impl WalletPage {
             signing_trusted_signer::ended_card(
                 theme,
                 &self.loc,
+                self.loc.t(channel.title_key()),
                 said,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| channel.forget(),
             )
@@ -7078,6 +7086,8 @@ impl WalletPage {
             notice_action: None,
             notice_dismiss: None,
             notice_report: None,
+            handoff_recheck: None,
+            handoff_trust: None,
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
             split_address_fields: Vec::new(),
@@ -7699,7 +7709,23 @@ impl WalletPage {
                     });
                     actions.advance = Some(to_batch(BatchEvent::Apply));
                 }
-                FlowPanel::Dsd3 => actions.advance = Some(to_host(SendEvent::SlideConfirm)),
+                FlowPanel::Dsd3 => {
+                    actions.advance = Some(to_host(SendEvent::SlideConfirm));
+                    // Spec 102: the hand-off's own two actions, on its page.
+                    if let Some(page) = send.handoff_page.clone() {
+                        let again = page.clone();
+                        actions.handoff_recheck = Some(Box::new(
+                            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                crate::signing::integrity::recheck(&again, cx);
+                            },
+                        ));
+                        actions.handoff_trust = Some(Box::new(
+                            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                crate::signing::integrity::trust(&page, cx);
+                            },
+                        ));
+                    }
+                }
                 FlowPanel::Dsd4 => actions.advance = Some(to_host(SendEvent::Done)),
                 _ => {}
             }
@@ -11724,33 +11750,23 @@ impl WalletPage {
                         &mut self.icons,
                         &row,
                     ));
-            if row.refused {
-                let again = url.clone();
-                body = body.child(
-                    div()
-                        .id(ElementId::from(("settings-signing-recheck", index)))
-                        .pl(px(44.))
-                        .pt(px(6.))
-                        .flex()
-                        .items_center()
-                        .gap(px(6.))
-                        .cursor_pointer()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.accent)
-                        .child(icon_img(
-                            &mut self.icons,
-                            Icon::RefreshCw,
-                            false,
-                            theme.accent,
-                            12.,
-                        ))
-                        .child(self.loc.t("common.tryAgain"))
-                        .on_click(cx.listener(move |_, _, _, cx| {
-                            crate::signing::integrity::recheck(&again, cx);
-                            cx.notify();
-                        })),
-                );
-            }
+            // The line's own actions: "Trust this version" under a
+            // self-hosted page's question (stored on THAT page, D-15), "Try
+            // again" under a refusal.
+            let (trust_url, again) = (url.clone(), url.clone());
+            body = body.children(crate::signing::pages::line_actions(
+                theme,
+                &mut self.icons,
+                SharedString::from(format!("settings-signing-line-{index}")),
+                &row,
+                self.loc.t("common.tryAgain"),
+                Some(Box::new(move |_, _, cx| {
+                    crate::signing::integrity::trust(&trust_url, cx);
+                })),
+                Some(Box::new(move |_, _, cx| {
+                    crate::signing::integrity::recheck(&again, cx);
+                })),
+            ));
             if let Some(typed) = renaming {
                 let focus = self
                     .signer_rename_focus
@@ -11761,7 +11777,7 @@ impl WalletPage {
                 body = body.child(div().pl(px(44.)).pt(px(10.)).child(editable_url_field(
                     ElementId::from(("settings-signing-rename", index)),
                     theme,
-                    None,
+                    Some(self.settings.signer_page_name.clone()),
                     &typed,
                     row.host.clone().unwrap_or_else(|| row.name.clone()),
                     None,
@@ -11788,6 +11804,8 @@ impl WalletPage {
                     },
                 )));
             }
+            // Rename and Remove, in words (core round 10) — quiet text
+            // buttons; the official page is neither renamed nor removed.
             let mut tools = div().flex().flex_none().items_center().gap(px(4.));
             if !page.official && view.loaded {
                 let rename_url = url.clone();
@@ -11796,26 +11814,35 @@ impl WalletPage {
                     .signer_page_rename
                     .as_ref()
                     .is_some_and(|(u, _)| *u == url);
+                let tool = |id: ElementId, label: SharedString| {
+                    div()
+                        .id(id)
+                        .px(px(10.))
+                        .py(px(6.))
+                        .rounded(px(8.))
+                        .cursor_pointer()
+                        .text_size(theme::text_row_sub())
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .child(label)
+                };
                 tools = tools
                     .child(
-                        div()
-                            .id(ElementId::from(("settings-signing-rename-button", index)))
-                            .p(px(6.))
-                            .rounded(px(8.))
-                            .cursor_pointer()
-                            .hover(|el| el.bg(theme.bg_sunken))
-                            .child(icon_img(
-                                &mut self.icons,
-                                if editing { Icon::Check } else { Icon::Pencil },
-                                false,
-                                if editing {
-                                    theme.accent
-                                } else {
-                                    theme.fg_muted
-                                },
-                                14.,
-                            ))
-                            .on_click(cx.listener(move |page, _, window, cx| {
+                        tool(
+                            ElementId::from(("settings-signing-rename-button", index)),
+                            if editing {
+                                self.settings.signer_page_save.clone()
+                            } else {
+                                self.settings.signer_page_rename.clone()
+                            },
+                        )
+                        .text_color(if editing {
+                            theme.accent
+                        } else {
+                            theme.fg_muted
+                        })
+                        .hover(|el| el.bg(theme.bg_sunken))
+                        .on_click(cx.listener(
+                            move |page, _, window, cx| {
                                 if page
                                     .signer_page_rename
                                     .as_ref()
@@ -11832,35 +11859,29 @@ impl WalletPage {
                                     focus.focus(window, cx);
                                 }
                                 cx.notify();
-                            })),
+                            },
+                        )),
                     )
                     .child({
                         let remove_url = url.clone();
-                        div()
-                            .id(ElementId::from(("settings-signing-remove", index)))
-                            .p(px(6.))
-                            .rounded(px(8.))
-                            .cursor_pointer()
-                            .hover(|el| el.bg(theme.error_soft))
-                            .child(icon_img(
-                                &mut self.icons,
-                                Icon::Trash2,
-                                false,
-                                theme.fg_muted,
-                                14.,
-                            ))
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                resident::resident::<SigningPages>(cx).update(cx, |pages, cx| {
-                                    pages.dispatch(
-                                        PagesEvent::PageRemoved {
-                                            url: remove_url.clone(),
-                                        },
-                                        cx,
-                                    );
-                                });
-                                page.signer_page_rename = None;
-                                cx.notify();
-                            }))
+                        tool(
+                            ElementId::from(("settings-signing-remove", index)),
+                            self.settings.signer_page_remove.clone(),
+                        )
+                        .text_color(theme.fg_muted)
+                        .hover(|el| el.bg(theme.error_soft).text_color(theme.error_base))
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            resident::resident::<SigningPages>(cx).update(cx, |pages, cx| {
+                                pages.dispatch(
+                                    PagesEvent::PageRemoved {
+                                        url: remove_url.clone(),
+                                    },
+                                    cx,
+                                );
+                            });
+                            page.signer_page_rename = None;
+                            cx.notify();
+                        }))
                     });
             }
             let entry = div()
@@ -17754,12 +17775,51 @@ impl WalletPage {
                 .page
                 .as_deref()
                 .map(|page| crate::signing::integrity::line(page, cx));
-            let card = signing_trusted_signer::handoff_model(&self.loc, handoff, line.as_ref());
+            let mut card = signing_trusted_signer::handoff_model(&self.loc, handoff, line.as_ref());
+            // Core round 5: the fee the sheet settled, and its speed — one
+            // quiet row, read from the SAME fee session and speed control the
+            // sheet drives (`sign_confirm::handoff_fee`), drawn by the sheet's
+            // own fee formatter. None for a message, or a fee not settled for
+            // the speed in force (the confirm gate keeps Open shut then).
+            #[cfg(not(target_os = "linux"))]
+            if let Some(host) = self.signing_host.as_ref() {
+                let currency = self.money(cx);
+                let host = host.read(cx);
+                let fee = (!signing_live::off_chain(&host.clear_view))
+                    .then(|| {
+                        vela_core::app::sign_confirm::handoff_fee(
+                            Some(host.fee_view()),
+                            Some(host.speed_view()),
+                        )
+                    })
+                    .flatten();
+                if let Some(fee) = fee {
+                    let figure = flows_live::fee_line(
+                        Some(&fee.fee),
+                        None,
+                        host.fee_view(),
+                        &self.locale,
+                        &currency,
+                    );
+                    card.fee = Some((
+                        self.signing.fee_label.clone(),
+                        signing_trusted_signer::handoff_fee_value(&self.loc, &fee, &figure),
+                    ));
+                }
+            }
             let on_recheck: Option<signing_trusted_signer::Click> =
                 handoff.page.clone().map(|page| {
                     Box::new(
                         move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
                             crate::signing::integrity::recheck(&page, cx);
+                        },
+                    ) as signing_trusted_signer::Click
+                });
+            let on_trust: Option<signing_trusted_signer::Click> =
+                handoff.page.clone().map(|page| {
+                    Box::new(
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            crate::signing::integrity::trust(&page, cx);
                         },
                     ) as signing_trusted_signer::Click
                 });
@@ -17783,6 +17843,7 @@ impl WalletPage {
                     &card,
                     confirm_action,
                     on_recheck,
+                    on_trust,
                 ))
                 .children(note.map(|(note, said)| {
                     div()

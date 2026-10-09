@@ -277,7 +277,7 @@ pub fn own_page_row(
     on_open: RowAction,
 ) -> Div {
     let words = vela_core::app::method_words::venue_row_words(
-        vela_core::app::method_words::VenueRow::OwnPage,
+        vela_core::app::method_words::VenueRow::SigningPage,
     );
     let mark = icons
         .borrow_mut()
@@ -779,7 +779,7 @@ mod tests {
     fn the_own_page_entry_is_worded_and_is_not_a_place() {
         let loc = crate::loc::Loc::from_env();
         let words = vela_core::app::method_words::venue_row_words(
-            vela_core::app::method_words::VenueRow::OwnPage,
+            vela_core::app::method_words::VenueRow::SigningPage,
         );
         let title = loc.t(words.title_key);
         assert_ne!(title.as_ref(), words.title_key);

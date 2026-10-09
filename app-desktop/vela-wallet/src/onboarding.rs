@@ -903,6 +903,7 @@ impl OnboardingPage {
             trusted_signer_cards::waiting_card(
                 theme,
                 &self.loc,
+                self.loc.t(channel.title_key()),
                 channel.unreachable(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| reopen.reopen(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| cancel.cancel(),
@@ -918,6 +919,7 @@ impl OnboardingPage {
             trusted_signer_cards::ended_card(
                 theme,
                 &self.loc,
+                self.loc.t(channel.title_key()),
                 said,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| forget.forget(),
             )
@@ -1114,12 +1116,17 @@ impl OnboardingPage {
                 page.update(cx, |page, cx| page.pick_own_page(url, cx));
             })
         };
+        // "Trust this version" on a self-hosted page's question: stored on
+        // that page, then checked again (spec 102 D-15).
+        let on_trust: crate::signing::pages::PickPage =
+            Rc::new(|url, _window, cx| crate::signing::integrity::trust(&url, cx));
         let sheet = crate::signing::pages::own_page_sheet(
             theme,
             &mut self.icons.borrow_mut(),
             &self.loc,
             &rows,
             on_pick,
+            on_trust,
             add,
             cx.listener(|this, _, _, cx| {
                 // Back to the chooser it was opened from.

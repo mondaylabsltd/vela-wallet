@@ -49,6 +49,13 @@ pub struct SettingsStrings {
     pub signer_page_insecure: SharedString,
     pub signer_page_duplicate: SharedString,
     pub signer_page_add: SharedString,
+    /// Spec 102 core round 10: Settings → Signing pages' own words — rename a
+    /// page, remove it, its name field and its save (a row's "Trust this
+    /// version" is the row's own, `signing::pages::PageRow::trust`).
+    pub signer_page_rename: SharedString,
+    pub signer_page_remove: SharedString,
+    pub signer_page_name: SharedString,
+    pub signer_page_save: SharedString,
     /// The account's "Where you review and sign" (spec 102 D1): its title,
     /// the sentence under it, and the two venue rows' words.
     pub venue_title: SharedString,
@@ -368,6 +375,10 @@ impl SettingsStrings {
             signer_page_insecure: s("settings.signing.pageInsecure"),
             signer_page_duplicate: s("settings.signing.pageDuplicate"),
             signer_page_add: s("settings.signing.pageAdd"),
+            signer_page_rename: s("settings.signing.pageRename"),
+            signer_page_remove: s("settings.signing.pageRemove"),
+            signer_page_name: s("settings.signing.pageName"),
+            signer_page_save: s("settings.signing.pageSave"),
             venue_title: s("settings.venue.title"),
             venue_subtitle: s("settings.venue.subtitle"),
             venue_in_vela: s("settings.venue.inVela"),
@@ -746,6 +757,10 @@ mod tests {
                 (&s.signer_page_insecure, "settings.signing.pageInsecure"),
                 (&s.signer_page_duplicate, "settings.signing.pageDuplicate"),
                 (&s.signer_page_add, "settings.signing.pageAdd"),
+                (&s.signer_page_rename, "settings.signing.pageRename"),
+                (&s.signer_page_remove, "settings.signing.pageRemove"),
+                (&s.signer_page_name, "settings.signing.pageName"),
+                (&s.signer_page_save, "settings.signing.pageSave"),
                 (&s.venue_title, "settings.venue.title"),
                 (&s.venue_subtitle, "settings.venue.subtitle"),
                 (&s.venue_in_vela, "settings.venue.inVela"),
