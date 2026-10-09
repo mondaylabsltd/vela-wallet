@@ -416,6 +416,7 @@
   "recipientCount_other": "{{count}} 位收款人",
   "removeRecipient": "移除",
   "alertInsufficientBalanceBody": "總額超過你的餘額。",
+  "alertEstimateChainDownBody": "暫時連不上 {{chain}}，無法計算這筆交易的費用。請稍後再試。",
   "recipientPickAria": "從通訊錄選擇",
   "scanAria": "掃描 QR code",
   "multiSendNoFundsAfterGas": "扣除 gas 儲備後餘額不足。",
@@ -1384,6 +1385,8 @@
    "maybeSent": "可能已經送出。Vela 會繼續查看，請不要重複送出。",
    "refused": "網路拒絕了這筆交易，什麼都沒有送出。",
    "wentFirst": "這個帳戶的另一筆交易先完成了，這筆什麼都沒有送出。",
+   "notSentTitle": "尚未送出",
+   "notSentBody": "你在這個網路上的上一筆交易還在處理中。等它完成後再試一次。",
    "unknownOutcome": "超過 24 小時仍未確認。",
    "openSigner": "前往簽名頁確認",
    "signerDown": "簽名頁沒能開啟，請檢查網路。",
@@ -1408,6 +1411,8 @@
     "batchUnsettled": "正在逐一檢查這批呼叫…",
     "feeMeasuring": "正在計算網路費用…",
     "feeFailed": "沒能算出費用——點費用重試",
+    "feeRetrying": "暫時沒能算出費用，正在自動重試…",
+    "feeWouldFail": "照現在的方式送出會失敗。",
     "previousPending": "正在等待這個網路上的上一筆交易完成…"
    }
   },
@@ -1441,6 +1446,7 @@
    "estFee": "預估手續費",
    "estimating": "估算中…",
    "estimateFailed": "點擊重試",
+   "payWithAnotherCoin": "改用別的幣付費",
    "gasPrice": "Gas 價格",
    "gasPriceUserOp": "Gas 價格（UserOp）",
    "networkFee": "網路費",
@@ -1460,7 +1466,7 @@
    "reasonSimulation": "中繼暫時沒能試跑這筆交易，正在自動重試。",
    "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網路本身，正在自動重試。",
    "reasonChainDown": "暫時連不上 {{chain}}，無法計算費用，正在自動重試。",
-   "reasonInternal": "Vela 內部出了問題，正在重試。如果一直失敗，請重新開啟 App。",
+   "reasonInternal": "Vela 內部出了問題。如果一直這樣，請重新開啟 App。",
    "rowShort": "需要 ~{{need}}，現有 {{have}}",
    "noCoinPays": "所有代幣都不夠付這筆網路費"
   },

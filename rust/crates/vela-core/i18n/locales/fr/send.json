@@ -81,6 +81,7 @@
     "recipientCount_other": "{{count}} destinataires",
     "removeRecipient": "Retirer",
     "alertInsufficientBalanceBody": "Le total dépasse votre solde.",
+    "alertEstimateChainDownBody": "Impossible de joindre {{chain}} pour calculer les frais de cette transaction. Réessayez dans un instant.",
     "recipientPickAria": "Choisir un contact",
     "multiSendNoFundsAfterGas": "Solde insuffisant après la réserve de gas.",
     "gasReserved": "gas réservé",

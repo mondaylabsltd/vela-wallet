@@ -359,6 +359,7 @@
   "recipientCount_other": "{{count}} alıcı",
   "removeRecipient": "Kaldır",
   "alertInsufficientBalanceBody": "Toplam bakiyenizi aşıyor.",
+  "alertEstimateChainDownBody": "Bu işlemin ücretini hesaplamak için {{chain}} ağına ulaşılamıyor. Birazdan tekrar deneyin.",
   "recipientPickAria": "Kişilerden seç",
   "multiSendNoFundsAfterGas": "Gas rezervinden sonra bakiye yetersiz.",
   "gasReserved": "Gas ayrıldı",
@@ -1384,6 +1385,8 @@
    "maybeSent": "Gönderilmiş olabilir. Vela kontrol ediyor — tekrar göndermeyin.",
    "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
    "wentFirst": "Bu hesabın başka bir işlemi önce gitti — hiçbir şey gönderilmedi.",
+   "notSentTitle": "Henüz gönderilmedi",
+   "notSentBody": "Bu ağdaki önceki işleminiz hâlâ işleniyor. Tamamlandığında yeniden deneyin.",
    "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
    "openSigner": "İmza sayfasında onayla",
    "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin.",
@@ -1408,6 +1411,8 @@
     "batchUnsettled": "Toplu işlemdeki her çağrı kontrol ediliyor…",
     "feeMeasuring": "Ağ ücreti hesaplanıyor…",
     "feeFailed": "Ücret hesaplanamadı — tekrar denemek için dokunun",
+    "feeRetrying": "Ücret henüz hesaplanamadı. Otomatik olarak yeniden deneniyor…",
+    "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
     "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…"
    }
   },
@@ -1489,6 +1494,7 @@
    "deployedNo": "Hayır (ilk işlem)",
    "estimating": "Tahmin ediliyor...",
    "estimateFailed": "Yeniden denemek için dokun",
+   "payWithAnotherCoin": "Başka bir coin ile öde",
    "feeToken": "Ücret token'ı",
    "paidWith": "{{symbol}} ile ödendi",
    "rowBalance": "Bakiye",
@@ -1499,7 +1505,7 @@
    "reasonSimulation": "Relay bu işlemi henüz deneme olarak çalıştıramadı. Otomatik olarak yeniden deneniyor.",
    "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor.",
    "reasonChainDown": "Ücreti hesaplamak için {{chain}} ağına ulaşılamıyor. Otomatik olarak yeniden deneniyor.",
-   "reasonInternal": "Vela'nın içinde bir sorun oluştu. Yeniden deneniyor — sürerse uygulamayı yeniden açın.",
+   "reasonInternal": "Vela'nın içinde bir sorun oluştu. Sürerse uygulamayı yeniden açın.",
    "rowShort": "Gereken ~{{need}}, mevcut {{have}}",
    "noCoinPays": "Bu ücreti karşılayan token yok"
   },

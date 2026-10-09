@@ -158,15 +158,16 @@ struct SameNonceAndFeeCoinTests {
     // MARK: - §3 refusals
 
     /// The relay's nonce refusal (its `nonce_in_flight`, or an older relay's
-    /// `[existingHash:…]` read as held) is its own failure: Send says the
-    /// previous transaction is pending, with Try again.
+    /// `[existingHash:…]` read as held) is its own failure: Send says it was
+    /// not sent yet — the previous transaction is still being processed —
+    /// calmly, with Try again (PR 2 polish).
     @Test func theRelaysNonceRefusalIsPreviousPendingOnSend() throws {
         var object = try CoreJSON.object(SendCore().view())
         object["stage"] = "confirm"
         object["tx_error"] = "previous_pending"
         let view = try CoreJSON.decode(SendViewWire.self, from: object)
-        #expect(SendLive.confirmNotice(view, loc: loc)
-                == loc.t("componentsUi.signing.confirmBlock.previousPending"))
+        #expect(SendLive.confirmNotice(view, loc: loc) == loc.t("componentsUi.signing.notSentBody"))
+        #expect(SendLive.confirmNoticeTitle(view, loc: loc) == loc.t("componentsUi.signing.notSentTitle"))
         object["tx_error"] = NSNull()
         object["previous_pending"] = [
             "chain_id": 100, "user_op_hash": op, "key": "componentsUi.signing.confirmBlock.previousPending",
@@ -194,8 +195,10 @@ struct SameNonceAndFeeCoinTests {
             "type": "poll_status", "user_op_hash": op, "chain_id": 100,
         ]))
         #expect(old["rejection_reason"] is NSNull)
-        #expect(RelayClient.rejectionReason(#"{"result":{"status":"failed","rejection_reason":"fee_below_market"}}"#)
-                == "fee_below_market")
+        // Through the core's ONE parser (PR 2 note 5) — no side reader.
+        port.rpc[userOpStatusMethod()] = .ok(["status": "failed", "rejection_reason": "fee_below_market"] as [String: Any])
+        let answer = try #require(await relay.userOpStatus(chainId: 100, userOpHash: op))
+        #expect(answer.rejectionReason == "fee_below_market")
     }
 
     /// The sheet's ending names the reason the tracker's entry carries.
@@ -291,27 +294,39 @@ struct SameNonceAndFeeCoinTests {
             "decimals": 18, "token_address": NSNull(), "price_usd": 1.0, "logo_urls": [], "spam": false,
         ]
         let view = try CoreJSON.decode(SendViewWire.self, from: object)
-        func fee(_ failed: Any) throws -> FeeViewWire {
-            try CoreJSON.decode(FeeViewWire.self, from: [
-                "busy": false, "failed": failed, "fee": NSNull(), "stale": false, "fee_token": NSNull(),
-                "options": [], "confirm_fee_ready": false,
-            ])
+        // The fee views the real fee machine writes (PR 2 note 1).
+        func fee(_ scene: FeeCoreScene?) throws -> FeeViewWire {
+            guard let scene else {
+                return try CoreJSON.decode(FeeViewWire.self, from: [
+                    "busy": false, "failed": NSNull(), "fee": NSNull(), "stale": false, "fee_token": NSNull(),
+                    "options": [], "confirm_fee_ready": false,
+                ])
+            }
+            let json = try #require(scene.views(chainId: 100)?.failed)
+            return try CoreJSON.decoder.decode(FeeViewWire.self, from: Data(json.utf8))
         }
         let speed = try CoreJSON.decoder.decode(FeeSpeedViewWire.self, from: Data(
             #"{"tier":"standard","preferred":"standard","previews":[],"open":false,"picked":false,"free":false,"free_note":false,"single":false,"gas_price_line":false,"options":[]}"#.utf8
         ))
-        func note(_ failed: Any) throws -> String? {
-            let feeView = try fee(failed)
+        func row(_ scene: FeeCoreScene?) throws -> FeeRowModel {
+            let feeView = try fee(scene)
             return SendLive.form(
                 view, fee: feeView, display: .usd, on: drawn, loc: loc,
                 speed: SendLive.SpeedInputs(view: speed, feeView: { _ in feeView })
-            ).fee.failNote
+            ).fee
         }
-        #expect(try note(["chain_read": ["rate_limited": false]])
+        func note(_ scene: FeeCoreScene?) throws -> String? { try row(scene).failNote }
+        #expect(try note(.chainDown)
                 == loc.t("componentsUi.gas.reasonChainDown", vars: ["chain": "Gnosis"]))
-        #expect(try note("internal") == loc.t("componentsUi.gas.reasonInternal"))
-        #expect(try note("internal")?.contains("Gnosis") == false)
-        #expect(try note(NSNull()) == nil)
+        #expect(try note(.internalFault) == loc.t("componentsUi.gas.reasonInternal"))
+        #expect(try note(.internalFault)?.contains("Gnosis") == false)
+        #expect(try note(nil) == nil)
+        // PR 2 note 1: the core retries those by itself — the dash, and a tap
+        // still asks at once; only a tap-only failure asks for the tap.
+        #expect(try row(.chainDown).value == "—")
+        #expect(try row(.chainDown).tapRetries)
+        #expect(try row(.missingKey).value == loc.t("componentsUi.gas.estimateFailed"))
+        #expect(try !row(nil).tapRetries)
     }
 
     /// The relay's published minimum reaches the core verbatim (§5).

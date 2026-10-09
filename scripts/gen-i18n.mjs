@@ -726,7 +726,26 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (the relay's `nonce_used`), + `componentsUi.gas.reason{ChainDown,
 //   Internal}` (issue #483: the fee row's own sentences).
 //   1814 − 54 + 6 = 1766 leaves, 101 branches.
-// 1867 (UI batch, 2026-10-10): − `send.scanToFill` (issue #471: the scan
+// 1869 (correctness batch integration, 2026-10-10): the fee's failure says
+//   one truth on its row and under the held confirm — the core retries it
+//   by itself, so + `componentsUi.signing.confirmBlock.feeRetrying` (the
+//   footer while it does; `feeFailed`'s "tap it" is left for a failure only
+//   a tap retries) — and Continue's failed estimate says the chain out of
+//   reach by its name: + `send.alertEstimateChainDownBody`.
+//   `componentsUi.gas.reasonInternal` is reworded in place (it now also
+//   stands on the home and in that alert, where nothing is retrying).
+//   1766 + 2 = 1768 leaves, 101 branches.
+// 1873 (correctness batch polish, 2026-10-10): the relay turning a submit
+//   back because the account's previous transaction still holds the nonce
+//   is "not sent yet", said calmly — not "Failed" over the held confirm's
+//   "waiting…" line: + `componentsUi.signing.notSent{Title,Body}` (the
+//   sheet's and Send's). A fee the relay answered would fail says what a
+//   tap on its row does: + `componentsUi.gas.payWithAnotherCoin` (the
+//   row's figure; the tap opens the coins), + `componentsUi.signing
+//   .confirmBlock.feeWouldFail` (the line under the held confirm, a fact
+//   asking for no tap — `feeFailed`'s "tap it to retry" was untrue there).
+//   1768 + 4 = 1772 leaves, 101 branches.
+// UI batch (2026-10-10), on top of the correctness batch's 1873: − `send.scanToFill` (issue #471: the scan
 //   moved from the contact picker to each recipient row, which says
 //   `send.scanAria`), − `contacts.actionQr` (issue #479: a contact's page
 //   offers Send only), − `contacts.{pickerTitle,pickerEmptyHint,scanToAdd}`
@@ -737,9 +756,9 @@ for (let i = 1; i < PATHS.length; i++) {
 //   + `settingsModals.addNetwork.noP256Hint` (no P-256 verifier: nothing to
 //   deploy, money would be stuck), + `onboarding.common.insertKeyAppleSheet
 //   {,Hint}` (iOS: a key that does not answer over USB goes through Apple's
-//   sheet). 1766 − 5 + 5 = 1766 leaves, 101 branches.
-if (PATHS.length !== 1867) fail(`expected 1867 paths (1766 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1766) fail(`expected 1766 leaf paths, got ${leafSet.size}`);
+//   sheet). 1772 − 5 + 5 = 1772 leaves, 101 branches; 1873 paths.
+if (PATHS.length !== 1873) fail(`expected 1873 paths (1772 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1772) fail(`expected 1772 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

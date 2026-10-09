@@ -18,6 +18,10 @@ import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.send.core.SendView
 import app.getvela.wallet.feature.signing.core.ClearSigningView
 import app.getvela.wallet.feature.signing.core.SignEndingState
+import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.SignErrorNotice
+import app.getvela.wallet.feature.signing.core.SignSurface
+import app.getvela.wallet.feature.signing.core.SignView
 
 /**
  * Canonical signing fixtures (spec 022, data-model.md §3 — the single canon all
@@ -260,18 +264,37 @@ object SigningFixtures {
             SigningScreenState.CS47 -> app.getvela.wallet.feature.send.core.FeeView(
                 fee = inUsdc, fee_token = usdc, options = options, confirm_fee_ready = true,
             )
-            SigningScreenState.CS48 -> app.getvela.wallet.feature.send.core.FeeView(
-                failed = app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false),
-            )
-            else -> app.getvela.wallet.feature.send.core.FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.Internal)
+            // PR 2 note 1: the real fee machine's view of each failure.
+            SigningScreenState.CS48 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.ChainDown)
+            SigningScreenState.CS49 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.Internal)
+            SigningScreenState.CS51 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.Retrying)
+            SigningScreenState.CS52 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.TapOnly)
+            // PR 2 polish: the relay answered that it would fail in USDC.
+            SigningScreenState.CS54, SigningScreenState.CS56 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailChooseCoin)
+            SigningScreenState.CS55 -> feeBoard(app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailNothing)
+            else -> app.getvela.wallet.feature.send.core.FeeView()
         }
         val block = when (state) {
             SigningScreenState.CS45 -> I18nKeys.Flows.PREVIOUS_PENDING
             SigningScreenState.CS46 -> "componentsUi.signing.confirmBlock.feeMeasuring"
-            SigningScreenState.CS47, SigningScreenState.CS50 -> null
-            else -> "componentsUi.signing.confirmBlock.feeFailed"
+            SigningScreenState.CS47, SigningScreenState.CS50, SigningScreenState.CS53 -> null
+            // The core's one line for the failure (`sign_confirm_state`'s key is the fee view's `footer_key`).
+            else -> fee.failure?.footer_key
         }
         val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
+        if (state == SigningScreenState.CS53) {
+            // The relay turned it back: another of this account's operations
+            // holds the nonce. Nothing was sent — "Not sent yet", calmly, its
+            // sentence, and Try again (the core's view of it).
+            val sign = SignView(
+                surface = SignSurface.Sheet,
+                error = SignErrorNotice(SignErrorKind.SubmitFailed, "previous transaction pending"),
+                failure_retryable = true,
+                failure_refusal_key = I18nKeys.Flows.NOT_SENT_BODY,
+                failure_not_sent = true,
+            )
+            return base.copy(receipt = SigningLive.receipt(sign, base.blocks, ctx))
+        }
         if (state == SigningScreenState.CS50) {
             // The relay refused it: another of this account's transactions used the nonce first.
             val entry = app.getvela.wallet.feature.send.core.TrackEntryView(
@@ -283,11 +306,16 @@ object SigningFixtures {
             return base.copy(receipt = SigningLive.aftercareReceipt(SignEndingState.Refused, summary, ctx.copy(track = entry)))
         }
         return base.copy(
-            fee = SigningLive.feeModel(ClearSigningView(), fee, ctx),
+            // CS56: the row's tap opened the coins.
+            fee = SigningLive.feeModel(ClearSigningView(), fee, ctx.copy(feeOpen = state == SigningScreenState.CS56)),
             confirmEnabled = block == null,
             confirmBlockLine = block?.let { t(it) },
         )
     }
+
+    /** A fee view the real fee machine wrote for a board's failure (`FeeBoards`), on the boards' chain and account. */
+    private fun feeBoard(case: app.getvela.wallet.feature.send.core.FeeBoards.Case) =
+        app.getvela.wallet.feature.send.core.FeeBoards.view(case, chainId = 1, account = WalletFixtures.ADDRESS_FULL)
 
     /** The relay's fee recipient on the boards. */
     private const val RELAY = "0x2222222222222222222222222222222222222222"
@@ -1200,7 +1228,9 @@ object SigningFixtures {
             SigningScreenState.CS36 -> ownBackup()
 
             SigningScreenState.CS45, SigningScreenState.CS46, SigningScreenState.CS47,
-            SigningScreenState.CS48, SigningScreenState.CS49, SigningScreenState.CS50 -> correctness(state)
+            SigningScreenState.CS48, SigningScreenState.CS49, SigningScreenState.CS50,
+            SigningScreenState.CS51, SigningScreenState.CS52, SigningScreenState.CS53,
+            SigningScreenState.CS54, SigningScreenState.CS55, SigningScreenState.CS56 -> correctness(state)
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,

@@ -67,6 +67,36 @@ describe('the answer follows the tracker (RJ4)', () => {
 		]);
 	});
 
+	it('a refusal carries the tracker’s reason, so the sheet says why (PR 2 note 9)', () => {
+		const t = tracker();
+		t.forward.watch(OP);
+		t.push(entry({}));
+		t.push(
+			entry({
+				status: 'rejected',
+				outcome: 'final',
+				refusal: 'nonce_used',
+				refusal_key: 'componentsUi.signing.wentFirst'
+			})
+		);
+		expect(t.sent).toEqual([
+			{ type: 'op_tracked', user_op_hash: OP, status: 'pending', tx_hash: null, now_ms: 42 },
+			{
+				type: 'op_tracked',
+				user_op_hash: OP,
+				status: 'rejected',
+				tx_hash: null,
+				now_ms: 42,
+				refusal: 'nonce_used'
+			}
+		]);
+		// A refusal with no reason named stays off the event: the plain sentence.
+		const plain = tracker();
+		plain.forward.watch(OP);
+		plain.push(entry({ status: 'rejected', outcome: 'final', refusal: null }));
+		expect(plain.sent[0]).not.toHaveProperty('refusal');
+	});
+
 	it('a landing carries its tx hash (DX-W1: the page gets it as soon as the tracker has it)', () => {
 		const t = tracker();
 		t.forward.watch(OP);

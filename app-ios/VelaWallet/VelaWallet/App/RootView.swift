@@ -845,6 +845,21 @@ struct RootView: View {
                 .onChange(of: fees.view?.busy) { _, busy in
                     if let busy { send.feeBusyChanged(busy) }
                 }
+                // …and whether the fee failed (`FeeView.failure`, a re-ask after
+                // one included): the send machine holds the confirm on it and
+                // drops the figure it kept, so the confirm never opens between
+                // the core's re-asks on a figure the fee machine discarded.
+                // Said again to every new journey.
+                // Only a failure of the form's own question counts (PR 2
+                // polish): right after a token switch the old chain's failure
+                // is no reason to hold this chain's confirm.
+                .modifier(FeeFailedBridge(
+                    said: FeeFailedBridge.Said(
+                        failed: SendLive.formFailure(fees.view, view: send.view) != nil,
+                        journey: send.journey
+                    ),
+                    tell: { failed in send.feeFailedChanged(failed) }
+                ))
                 // …and the card's coin in force, which names the fee row's coin
                 // while no estimate is in hand (`SendView.fee_coin`).
                 .modifier(FeeTokenBridge(
@@ -2204,6 +2219,12 @@ struct RootView: View {
     /// visibly so.
     private func flowModel(_ state: FlowStateId) -> FlowScreenModel {
         var model = WalletFlowFixtures.build(state, loc: loc)
+        // The fee coins opened from the confirm — a fee that would fail,
+        // "Pay with another coin" (PR 2 polish) — sit over the confirm the
+        // person is on, never over the form they already left.
+        if state == .sd2f, let view = send.view, view.stage == .confirm {
+            model.base = WalletFlowFixtures.build(SendLive.flowState(view, feeSheetOpen: false), loc: loc).base
+        }
         let address = session.view.address
         // The receive screens first, because they are the ones where a fixture
         // is not embarrassing but dangerous: money sent to the drawn address is
@@ -3119,7 +3140,11 @@ struct RootView: View {
     /// The refusal the core raised, in the core's words.
     private var sendRefusal: FlowAlertModel? {
         guard let kind = send.alert else { return nil }
-        let text = SendLive.alertText(kind, loc: loc)
+        // The network the estimate was for, by the wallet's own name for it —
+        // the body may say it could not be reached (PR 2 note 13).
+        let chain = (send.view?.selectedToken?.chainId ?? send.view?.multiChainId)
+            .flatMap { walletNetworks.meta($0)?.displayName } ?? ""
+        let text = SendLive.alertText(kind, loc: loc, chain: chain)
         return FlowAlertModel(title: text.title, message: text.body, dismiss: loc.t("common.gotIt"))
     }
 
@@ -4070,6 +4095,22 @@ private struct FeeTokenBridge: ViewModifier {
 
     func body(content: Content) -> some View {
         content.onChange(of: said, initial: true) { _, said in tell(said.token, said.pricing) }
+    }
+}
+
+/// Whether the fee session's fee failed, into the send machine
+/// (`fee_failed_changed`) — on every change, and to every new journey.
+private struct FeeFailedBridge: ViewModifier {
+    struct Said: Equatable {
+        let failed: Bool
+        let journey: Int
+    }
+
+    let said: Said
+    let tell: (Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: said, initial: true) { _, said in tell(said.failed) }
     }
 }
 

@@ -322,6 +322,23 @@ export function landingFor(
 	return state;
 }
 
+/**
+ * PR 2 note 9: the landing's refusal and the sheet's failure say WHY from one
+ * field. The core words the sheet's (`SignView.failure_refusal_key`) from the
+ * tracker entry's own `refusal`, forwarded with `op_tracked` — so while the
+ * landing's request is still the sheet's (a refusal after "Submitted" is held
+ * until its Done, spec 097 N4), that field is the landing's sentence too;
+ * once the request has gone, the entry's `refusal_key` — the same reason in
+ * the same words — is all there is. `sheetKey` is `null` for another request.
+ */
+export function withSheetRefusal(
+	state: DappReceiptState,
+	sheetKey: string | null | undefined
+): DappReceiptState {
+	if (state.kind !== 'refused' || sheetKey === null || sheetKey === undefined) return state;
+	return { ...state, refusalKey: sheetKey };
+}
+
 /** The tracker's entry for `opHash`, matched as the tracker keys it (lowercase). */
 export function trackEntryFor(
 	entries: readonly TrackEntryView[],

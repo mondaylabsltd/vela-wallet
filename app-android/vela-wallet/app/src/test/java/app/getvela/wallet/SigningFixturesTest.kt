@@ -103,9 +103,9 @@ class SigningFixturesTest {
     fun everyScenarioBuilds() {
         // The 33 of the canon, CS36 — the wallet's own backup — CS37–CS42,
         // spec 102's hand-off card (CS40/CS41: the card a send raises on its
-        // own), CS43/CS44, a key ceremony waiting on its page, and CS45–CS50,
+        // own), CS43/CS44, a key ceremony waiting on its page, and CS45–CS56,
         // the correctness batch's boards (drawn through the live builders).
-        assertEquals(48, SigningScreenState.entries.size)
+        assertEquals(54, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
@@ -226,7 +226,7 @@ class SigningFixturesTest {
     }
 
     /**
-     * CS45–CS50, the correctness batch's boards, say what the live builders
+     * CS45–CS53, the correctness batch's boards, say what the live builders
      * say: the held confirm's one line; a switched coin's figure kept with the
      * measuring sign while the confirm waits, then settled; the fee row and
      * the footer naming one cause — the chain out of reach, or a fault inside
@@ -256,10 +256,46 @@ class SigningFixturesTest {
         val internal = row(SigningScreenState.CS49)
         assertEquals(en.t("componentsUi.gas.reasonInternal"), internal.warning)
         assertFalse("never the chain's words for a fault of the app's", internal.warning!!.contains("Ethereum"))
-        for (state in listOf(SigningScreenState.CS48, SigningScreenState.CS49)) {
-            assertEquals("the footer names the fee failure", en.t("componentsUi.signing.confirmBlock.feeFailed"), board(state).confirmBlockLine)
-            assertTrue("and the row is the retry", row(state).tappable)
+        // PR 2 note 1: the core retries both by itself — "Retrying…" under the
+        // confirm, the dash on the row, nothing asking for a tap.
+        for (state in listOf(SigningScreenState.CS48, SigningScreenState.CS49, SigningScreenState.CS51)) {
+            assertEquals("the footer says the core is retrying", en.t("componentsUi.signing.confirmBlock.feeRetrying"), board(state).confirmBlockLine)
+            assertFalse(board(state).confirmEnabled)
+            assertEquals("—", row(state).value)
+            assertTrue("and the row is a retry at once", row(state).tappable)
         }
+        // CS51: the re-ask out — the reason kept, the sign turning.
+        val retrying = row(SigningScreenState.CS51)
+        assertEquals(chainDown.warning, retrying.warning)
+        assertTrue(retrying.refreshing && retrying.measuring)
+        // CS52: only a tap fixes it — and both places say so.
+        assertEquals(en.t("componentsUi.gas.estimateFailed"), row(SigningScreenState.CS52).value)
+        assertEquals(en.t("componentsUi.signing.confirmBlock.feeFailed"), board(SigningScreenState.CS52).confirmBlockLine)
+        // CS53: the relay turned it back — another operation holds the nonce:
+        // "Not sent yet", calmly (no failure mark), its sentence, Try again.
+        val nonceHeld = board(SigningScreenState.CS53).receipt!!
+        assertTrue(nonceHeld.captions.toString(), nonceHeld.captions.contains(en.t("componentsUi.signing.notSentBody")))
+        assertEquals(en.t("componentsUi.signing.notSentTitle"), nonceHeld.title)
+        assertEquals(app.getvela.wallet.feature.flows.ReceiptStage.NotSent, nonceHeld.stage)
+        assertTrue(nonceHeld.retry != null)
+
+        // CS54–CS56 (PR 2 polish): the relay answered that it would fail in
+        // the coin chosen. The row says what a tap does — the coins — and the
+        // line under the confirm is the fact, asking for no tap.
+        val wouldFail = row(SigningScreenState.CS54)
+        assertEquals(en.t("componentsUi.gas.payWithAnotherCoin"), wouldFail.value)
+        assertTrue("its tap opens the coins", wouldFail.tappable && wouldFail.chevron)
+        assertEquals(en.t("componentsUi.signing.confirmBlock.feeWouldFail"), board(SigningScreenState.CS54).confirmBlockLine)
+        assertFalse(board(SigningScreenState.CS54).confirmEnabled)
+        // CS56: the coins its tap opened — every coin the relay offers.
+        val opened = row(SigningScreenState.CS56)
+        assertEquals(listOf("ETH", "USDC"), opened.options.map { it.name })
+        // CS55: no other coin left — the dash, and no control at all.
+        val nothing = row(SigningScreenState.CS55)
+        assertEquals("—", nothing.value)
+        assertFalse("no tap target", nothing.tappable)
+        assertFalse("no chevron promising one", nothing.chevron)
+        assertEquals(en.t("componentsUi.signing.confirmBlock.feeWouldFail"), board(SigningScreenState.CS55).confirmBlockLine)
 
         val refused = board(SigningScreenState.CS50).receipt!!
         assertTrue(refused.captions.toString(), refused.captions.contains(en.t("componentsUi.signing.wentFirst")))

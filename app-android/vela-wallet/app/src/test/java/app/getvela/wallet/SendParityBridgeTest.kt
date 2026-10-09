@@ -83,7 +83,7 @@ class SendParityBridgeTest {
 
     private val gnosis = NetNetworkRow(id = "gnosis", chain_id = 100, display_name = "Gnosis", native_symbol = "XDAI")
 
-    private fun controller(tokens: List<BalanceToken>, networks: List<NetNetworkRow> = listOf(gnosis)): SendController {
+    private fun controller(tokens: List<BalanceToken>, networks: List<NetNetworkRow> = listOf(gnosis), accounts: FakeStore = FakeStore()): SendController {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scopes += scope
         val pool = RpcPool(store = FakeStore(), endpoints = Endpoints(), scope = scope, transport = FakeRpcTransport { _, _ -> FakeRpcTransport.body("0x") })
@@ -93,7 +93,7 @@ class SendParityBridgeTest {
             relay = RelayClient(FakeRelayPort(), builtinBase = { "https://builtin.test" }, retryDelayMs = 0),
             pool = pool,
             feed = FeedExecutor(store = FakeStore(), ownAccounts = { emptyList() }),
-            accountStore = AccountStore(FakeStore()),
+            accountStore = AccountStore(accounts),
             balances = { BalanceView(address = safe, tokens = tokens.filter { it.price_usd != null }, unpriced_tokens = tokens.filter { it.price_usd == null }) },
             networks = { NetView(loaded = true, networks = networks) },
             signer = { error("no signing in this test") },
@@ -211,6 +211,45 @@ class SendParityBridgeTest {
     }
 
     private fun sd2() = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
+
+    /**
+     * PR 2 notes 10 and 13 on the real machines. Nothing answers, so the
+     * account read fails as the chain's: the form's fee row says why (the
+     * dash, the reason naming Gnosis), the core retries it by itself — and
+     * Continue's estimate passes the fee machine's own failure through, so
+     * the alert says the chain is out of reach, never "could not build a
+     * valid transaction estimate".
+     */
+    @Test
+    fun `a failed fee says why on the form, and continue's alert names its cause`() {
+        // The account on this device: Continue reaches the fee, not "account unavailable".
+        val record = org.json.JSONObject().put("id", "cred").put("name", "Me").put("address", safe).put("public_key_hex", "04" + "ab".repeat(64))
+        val send = controller(listOf(xdai(1.0)), accounts = FakeStore(mapOf("vela.accounts" to "[$record]", "vela.activeAccountIndex" to "0")))
+        send.pickOnly(SendDisplayContext(code = "USD", rate = 1.0, fiat_decimals = 2))
+        send.setRecipient("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141")
+        send.setAmount("0.5")
+        send.settle { it.can_continue }
+        send.continueTapped()
+        val alert = runBlocking { withTimeout(30_000) { send.alert.first { it != null } } }!!
+        assertEquals(
+            app.getvela.wallet.feature.send.core.SendAlertKind.EstimateFailed(
+                app.getvela.wallet.feature.send.core.SendEstimateFailure.Fee(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false)),
+            ),
+            alert,
+        )
+        val (title, body) = SendLive.alertText(alert, strings, "Gnosis")
+        assertEquals(strings.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE), title)
+        assertEquals(strings.t(I18nKeys.Flows.ALERT_ESTIMATE_CHAIN_DOWN_BODY, mapOf("chain" to "Gnosis")), body)
+
+        val failed = runBlocking { withTimeout(15_000) { send.fee.first { it.failure != null } } }
+        val row = SendLive.form(sd2(), send.send.value, failed, ctx(), SendLive.SpeedInputs(send.speed.value) { null }).fee
+        assertEquals("—", row.value)
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_CHAIN_DOWN, mapOf("chain" to "Gnosis")), row.reason)
+        assertTrue("the core retries it by itself", failed.failure!!.auto_retry)
+        // A tap on the failed row is the retry, not the coin list.
+        assertEquals(app.getvela.wallet.feature.send.core.FeeFailureRow.Tap.Retry, send.feeTapped())
+        send.left()
+    }
 
     @Test
     fun `an account holding nothing says so, not that nothing matched`() {

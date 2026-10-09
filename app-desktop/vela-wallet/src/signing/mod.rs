@@ -261,23 +261,29 @@ pub struct SigningStrings {
     /// Spec 079: the send form's own refresh control and its stale line.
     pub fee_refresh: SharedString,
     pub fee_stale: SharedString,
-    /// Why a fee failed, per corpus key the core can name
-    /// (`fee_policy::failure_reason_key`, spec 082 RJ13) — resolved here so
-    /// the row never picks the words itself: the relay, a rate-limited chain
-    /// node, a chain node out of reach (`{{chain}}` left for the row).
-    pub fee_reasons: Vec<(&'static str, String)>,
     /// Spec 082 RJ3: the relay refused the operation — nothing was sent, and
     /// sending it again meets the same refusal, so no "try again".
     pub refused: SharedString,
     /// The refusal told by its reason (`TrackEntryView.refusal_key`): every
     /// sentence the core may choose, by key.
     pub refusals: Vec<(&'static str, SharedString)>,
+    /// "Not sent yet" (PR 2 polish): the column's title, in place of
+    /// "Failed", when the relay turned the operation back because the
+    /// account's previous one still holds the nonce
+    /// (`SignView.failure_not_sent`); its sentence is one of `refusals`.
+    pub not_sent_title: SharedString,
     /// The confirm's held lines the gallery draws (`ConfirmBlock::key`): the
-    /// account's previous transaction still going through, the fee being
-    /// worked out, and the fee that could not be.
+    /// account's previous transaction still going through, and the fee being
+    /// worked out. The fee that could not be is the fee view's own line
+    /// (`fee_failure`).
     pub note_previous_pending: SharedString,
     pub note_fee_measuring: SharedString,
-    pub note_fee_failed: SharedString,
+    /// The fee's failure in the core's words (PR 2 note 1) — why it failed,
+    /// under the row (spec 082 RJ13: the relay, a rate-limited chain node, a
+    /// chain node out of reach, a fault inside Vela), the row's figure and
+    /// the line under the held confirm — the same words Send's row and
+    /// confirm draw.
+    pub fee_failure: crate::flows::FeeFailureWords,
     /// Spec 079 US7: the Trusted Signer route's confirm ("去签名页确认").
     pub open_signer: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
@@ -518,23 +524,12 @@ impl SigningStrings {
             fee_balance: loc.t("componentsUi.gas.rowBalance"),
             fee_refresh: loc.t("send.feeRefresh"),
             fee_stale: loc.t("send.feeStale"),
-            fee_reasons: FEE_FAILURES
-                .iter()
-                .filter_map(|failure| {
-                    vela_core::app::fee_policy::failure_reason_key(*failure)
-                        .map(|key| (key, loc.t(key).to_string()))
-                })
-                .fold(Vec::new(), |mut keys, (key, text)| {
-                    if !keys.iter().any(|(known, _)| *known == key) {
-                        keys.push((key, text));
-                    }
-                    keys
-                }),
             refused: s("refused"),
             refusals: crate::flows::refusal_sentences(loc),
+            not_sent_title: loc.t(vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY),
             note_previous_pending: block_note(loc, ConfirmBlock::PreviousPending),
             note_fee_measuring: block_note(loc, ConfirmBlock::FeeMeasuring),
-            note_fee_failed: block_note(loc, ConfirmBlock::FeeFailed),
+            fee_failure: crate::flows::FeeFailureWords::resolve(loc),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             warn_fee_coin_spent: loc.t("componentsUi.gas.feeCoinSpent"),
@@ -581,27 +576,10 @@ fn block_note(loc: &Loc, block: ConfirmBlock) -> SharedString {
     block.key(false).map(|key| loc.t(key)).unwrap_or_default()
 }
 
-/// Every way a fee can fail, so the sheet resolves the words for whichever
-/// the core names — the core picks the key, this only reads it once.
-const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 10] = {
-    use vela_core::app::fee_policy::FeeFailure as F;
-    [
-        F::MissingPublicKey,
-        F::FeeTokenUnavailable,
-        F::QuoteUnavailable,
-        F::CalculationFailed,
-        F::EstimateFailed,
-        F::GasQuoteTooHigh,
-        F::WouldFail,
-        F::ChainRead { rate_limited: true },
-        F::ChainRead {
-            rate_limited: false,
-        },
-        // Issue #483: a fault inside the app — never "can't reach the chain".
-        F::Internal,
-    ]
-};
+#[cfg(test)]
+use crate::flows::FEE_FAILURES;
 
+#[cfg(test)]
 impl SigningStrings {
     /// The line under a failed fee, in the core's words for it (spec 082
     /// RJ13): `None` when the core names none (the row keeps its dash).
@@ -613,8 +591,7 @@ impl SigningStrings {
         chain: &str,
     ) -> Option<SharedString> {
         let key = vela_core::app::fee_policy::failure_reason_key(failure)?;
-        let (_, text) = self.fee_reasons.iter().find(|(known, _)| *known == key)?;
-        Some(SharedString::from(fill(text, &[("chain", chain)])))
+        self.fee_failure.text(key, chain)
     }
 }
 
@@ -668,6 +645,10 @@ mod tests {
             (
                 s.value_unlimited.as_ref(),
                 "componentsUi.signingApprove.unlimitedValue",
+            ),
+            (
+                s.not_sent_title.as_ref(),
+                vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY,
             ),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");

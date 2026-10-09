@@ -2217,6 +2217,75 @@ mod tests {
         });
     }
 
+    /// PR 2 note 9: the relay did not take it because another operation of
+    /// the account holds the nonce. The desktop answers it with the core's
+    /// own detail (`PREVIOUS_PENDING`), so the sheet says why — "Not sent
+    /// yet" (PR 2 polish), calmly, over what to do — and offers "Try again",
+    /// as Send does; a plain refusal says the refusal, as a failure, with no
+    /// retry.
+    #[test]
+    fn a_held_nonce_at_submit_is_told_and_tried_again() {
+        use crate::flows::fixtures::ReceiptStage;
+        use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
+        use vela_core::app::tx_tracker::REFUSED_KEY;
+        storage::tests::with_temp_state("sign-held-nonce", || {
+            let s = crate::signing::SigningStrings::resolve(&crate::loc::Loc::from_env());
+            let clock = crate::signing::status::Clock {
+                now_ms: 6_000.0,
+                typical_s: Some(5),
+                chain_name: "Gnosis".to_owned(),
+                seen_submitted_ms: None,
+            };
+            let ctx = context(Some("http://127.0.0.1:8137"));
+            for (failure, key, retry) in [
+                (
+                    user_op::SubmitFailure::PreviousPending,
+                    NOT_SENT_BODY_KEY,
+                    true,
+                ),
+                (
+                    user_op::SubmitFailure::Refused("fee too low".to_owned()),
+                    REFUSED_KEY,
+                    false,
+                ),
+            ] {
+                let (mut host, submit, ops) = signed("rid-held");
+                let persist = only(&ops, "the record");
+                let _ = host.resolve(persist.id, run(&persist.operation, &ctx));
+                let _ = host.resolve(
+                    submit,
+                    SignShellResult::Submit {
+                        outcome: submit_failure(100, ME, failure.clone()),
+                        now_ms: 6_000.0,
+                    },
+                );
+                let view = host.view();
+                assert_eq!(
+                    view.failure_refusal_key.as_deref(),
+                    Some(key),
+                    "{failure:?}"
+                );
+                assert_eq!(view.failure_retryable, retry, "{failure:?}");
+                let receipt = crate::signing::status::approved(&view, true, None, None, &clock, &s)
+                    .unwrap_or_else(|| unreachable!("the failure is drawn"));
+                assert_eq!(
+                    receipt.captions,
+                    vec![crate::flows::refusal_of(&s.refusals, Some(key))],
+                    "{failure:?}"
+                );
+                assert_eq!(receipt.retry.is_some(), retry, "{failure:?}");
+                // Not sent yet is no failure: its own title and the calm disc.
+                assert_eq!(view.failure_not_sent, retry, "{failure:?}");
+                if retry {
+                    assert_eq!(receipt.stage, ReceiptStage::NotSent);
+                    assert_eq!(receipt.title, s.not_sent_title);
+                } else {
+                    assert_eq!(receipt.stage, ReceiptStage::Failed);
+                }
+            }
+        });
+    }
+
     /// Spec 082 RJ1: the relay took the written-ahead op — its row stays
     /// pending (only the tracker closes it) and no longer "may have been
     /// sent"; a proven-not-sent one is deleted, and only that one.

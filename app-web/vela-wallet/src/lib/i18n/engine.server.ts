@@ -16,10 +16,10 @@ import { I18n as WasmI18n, i18nPluralSuffixes } from '../../../../../rust/pkg-we
 import './wasm-init.server';
 import { FALLBACK_LOCALE, type Locale } from './locales';
 import { FLOW_KEYS, FLOW_PLURAL_KEYS, type FlowMessages, type WelcomeMessages } from './messages';
-import type { WalletMessages } from '$lib/wallet/messages';
+import { BALANCE_INTERNAL_KEYS, type WalletMessages } from '$lib/wallet/messages';
 import type { ContactsMessages } from '$lib/contacts/messages';
 import { INTRO_KEYS } from '$lib/intro/slides';
-import { WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
+import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
@@ -199,7 +199,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyTitle: k('assets.emptyTitle'),
 			emptyCaption: k('assets.emptySubtext'),
 			unreachableOne: k('assets.unreachableOne'),
-			unreachableMany: k('assets.unreachableMany')
+			unreachableMany: k('assets.unreachableMany'),
+			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)]))
 		},
 		networkFilter: {
 			pillAll: k('componentsUi.networkFilter.pillAll'),
@@ -704,6 +705,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			unreachableMany: k('assets.unreachableMany'),
 			unreachableBody: k('assets.unreachableBody'),
 			unreachableNone: k('assets.unreachableNone'),
+			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)])),
 			lines: Object.fromEntries(UNREACHABLE_LINE_KEYS.map((key) => [key, k(key)])),
 			rpcFix: k('assets.rpcFix'),
 			rpcFixTitle: k('assets.rpcFixTitle'),
@@ -962,21 +964,10 @@ export function resolveExploreMessages(locale: Locale): ExploreMessages {
 /** The serializable strings the signing sheet renders (spec 022 §5). */
 /**
  * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082
- * RJ13) — resolved at build time so the sheet can look up whichever the core
- * names. A key the core adds later and this list lacks draws no line.
+ * RJ13) — one list for the sheet and the send screens, kept beside the send
+ * screens' keys (`$lib/flows/messages`, client-safe).
  */
-export const FEE_REASON_KEYS = [
-	'componentsUi.gas.reasonQuote',
-	'componentsUi.gas.reasonFeeToken',
-	'componentsUi.gas.reasonSimulation',
-	'componentsUi.gas.reasonQuoteHigh',
-	'home.balanceDetailStatusRetrying',
-	// Issue 483: the fee's own sentences — a chain out of reach ("Can't reach
-	// {{chain}} to price this"), and a fault inside Vela. The browser's
-	// `explore.chainDown` ("page data may be incomplete") is no longer the fee's.
-	'componentsUi.gas.reasonChainDown',
-	'componentsUi.gas.reasonInternal'
-] as const;
+export { FEE_REASON_KEYS };
 
 /**
  * Every sentence a refusal is told by (`tx_tracker::RefusalReason::key`,
@@ -987,7 +978,11 @@ export const FEE_REASON_KEYS = [
 export const REFUSAL_KEYS = [
 	'send.txRejectedFees',
 	'componentsUi.signing.wentFirst',
-	'componentsUi.signing.refused'
+	'componentsUi.signing.refused',
+	// PR 2 polish: at submit, the relay turned it back because the account's
+	// previous operation on this network still holds the nonce
+	// (`SignView.failure_refusal_key` under `failure_not_sent`).
+	'componentsUi.signing.notSentBody'
 ] as const;
 
 /** Spec 099 R7: every line `sign_confirm::ConfirmBlock::key` can name. */
@@ -1002,7 +997,14 @@ export const CONFIRM_BLOCK_KEYS = [
 	'componentsUi.signing.confirmBlock.approvalChoice',
 	'componentsUi.signing.confirmBlock.batchUnsettled',
 	'componentsUi.signing.confirmBlock.feeMeasuring',
-	'componentsUi.signing.confirmBlock.feeFailed'
+	'componentsUi.signing.confirmBlock.feeFailed',
+	// PR 2 note 1: the core asks a failed fee again by itself — the footer
+	// says so (`FeeFailureView.footer_key`), never "tap it" under a row that
+	// asks for no tap.
+	'componentsUi.signing.confirmBlock.feeRetrying',
+	// PR 2 polish: the relay answered that the operation would fail — a fact,
+	// asking for no tap; the row says what a tap does.
+	'componentsUi.signing.confirmBlock.feeWouldFail'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
 	// coin, and the confirm's note said it again.
 ] as const;
@@ -1141,6 +1143,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeLabel: k('componentsUi.gas.networkFee'),
 		feeEstimating: k('componentsUi.gas.estimating'),
 		feeRetry: k('componentsUi.gas.estimateFailed'),
+		feePayWithAnotherCoin: k('componentsUi.gas.payWithAnotherCoin'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
 		feeCoinSpent: k('componentsUi.gas.feeCoinSpent'),
@@ -1219,7 +1222,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			backgroundHint: k('send.txBackgroundHint'),
 			messageSigning: k('componentsUi.signing.signing'),
 			failedHint: k('send.txErrorGeneric'),
-			retry: k('send.txRetryBtn')
+			retry: k('send.txRetryBtn'),
+			notSentTitle: k('componentsUi.signing.notSentTitle')
 		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),

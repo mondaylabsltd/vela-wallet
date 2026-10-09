@@ -127,6 +127,13 @@ final class CoreStore<View: Decodable> {
         driver.dispatch(eventJson)
     }
 
+    /// Stop for good (`CoreDriver.dispose`): every effect in flight is
+    /// cancelled and its answer dropped, and no view is committed again —
+    /// for a machine whose surface has gone while its core would otherwise
+    /// keep asking (a fee session's timers, PR 2 note 1). `view` and `json`
+    /// keep what they last held.
+    func dispose() { driver.dispose() }
+
     /// Written for the compiler, not for the runtime: it is empty on purpose.
     ///
     /// The target builds with `-default-isolation MainActor`, which makes every

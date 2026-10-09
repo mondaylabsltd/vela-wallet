@@ -90,7 +90,7 @@ class FeeTokenWordTest {
                     )
                     "load_account_credential" -> SendShellResult.AccountCredential(public_key_hex = "04aa")
                     "prewarm_fees" -> SendShellResult.FeesPrewarmed
-                    "estimate_fee" -> SendShellResult.FeeEstimated(SendFeeOutcome.Failed(SendEstimateFailure.QuoteUnavailable))
+                    "estimate_fee" -> SendShellResult.FeeEstimated(SendFeeOutcome.Failed(SendEstimateFailure.Fee(app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable)))
                     else -> continue
                 }
                 drain(core.resolveEffect(effect.getLong("id").toULong(), Wire.json.encodeToString(SendShellResult.serializer(), answer)))

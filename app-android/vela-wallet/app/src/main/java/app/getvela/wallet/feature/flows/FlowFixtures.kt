@@ -944,7 +944,7 @@ object FlowFixtures {
                 cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
                 ctaAccent = false,
             )
-            ReceiptStage.Submitted, ReceiptStage.Failed -> SendReceiptModel(
+            ReceiptStage.Submitted, ReceiptStage.Failed, ReceiptStage.NotSent -> SendReceiptModel(
                 header = header,
                 stage = ReceiptStage.Submitted,
                 title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
@@ -1059,8 +1059,150 @@ object FlowFixtures {
             FlowState.SD4C -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Confirmed)))
             FlowState.SD3D -> screen(FlowBase.SendConfirm(heldConfirm(s)))
             FlowState.SD4D -> screen(FlowBase.SendReceipt(refusedReceipt(s)))
+            FlowState.SD2G, FlowState.SD2H -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.ChainDown)))
+            FlowState.SD2I -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.Internal)))
+            FlowState.SD2J -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.Retrying)))
+            FlowState.SD3E -> screen(FlowBase.SendConfirm(feeHeldConfirm(s)))
+            // A live state (the confirm's fee line opened the coins): the
+            // drawn models only — the live builders fill both, so no board
+            // machine runs on the live path.
+            FlowState.SD3F -> screen(
+                FlowBase.SendConfirm(sendConfirm(s, SendFormMode.Single)),
+                FlowSheet.FeeToken(feeTokenPick(s)),
+            )
+            FlowState.SD3G -> screen(FlowBase.SendConfirm(notSentConfirm(s)))
+            FlowState.SD3H -> screen(FlowBase.SendConfirm(failedFeeConfirm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.TapOnly)))
+            FlowState.SD3I -> screen(FlowBase.SendConfirm(failedFeeConfirm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailChooseCoin)))
+            FlowState.SD2K -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailChooseCoin)))
+            FlowState.SD2L -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailNothing)))
+            FlowState.SD2M -> screen(
+                FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailChooseCoin)),
+                FlowSheet.FeeToken(boardFeeSheet(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailChooseCoin)),
+            )
         }
     }
+
+    /**
+     * The alert a board draws over its screen — Continue's estimate failed,
+     * worded by its cause (PR 2 note 13): the failure is the real fee
+     * machine's, passed through as `SendEstimateFailure` as the send
+     * controller passes it. `null` for every other state.
+     */
+    fun alert(state: FlowState): app.getvela.wallet.feature.send.core.SendAlertKind? {
+        val case = when (state) {
+            FlowState.SD2H -> app.getvela.wallet.feature.send.core.FeeBoards.Case.ChainDown
+            FlowState.SD2I -> app.getvela.wallet.feature.send.core.FeeBoards.Case.Internal
+            else -> return null
+        }
+        val failed = boardFee(case).failed ?: return null
+        return app.getvela.wallet.feature.send.core.SendAlertKind.EstimateFailed(
+            app.getvela.wallet.feature.send.core.SendEstimateFailure.Fee(failed),
+        )
+    }
+
+    /** The chain the boards' send is on, by name — what `{{chain}}` says. */
+    val BOARD_CHAIN: String get() = NETWORKS[0].name
+
+    /** A fee view the real fee machine wrote for a board's failure, on the boards' chain and account. */
+    private fun boardFee(case: app.getvela.wallet.feature.send.core.FeeBoards.Case) =
+        app.getvela.wallet.feature.send.core.FeeBoards.view(case, chainId = 1, account = WalletFixtures.ADDRESS_FULL)
+
+    /**
+     * SD2G–SD2J: the send form over a fee the core failed to price — through
+     * the live [app.getvela.wallet.feature.send.SendLive.form], the speed
+     * control folded as it ships, so the row has its refresh and its kept
+     * line.
+     */
+    private fun failedFeeForm(s: VelaStrings, case: app.getvela.wallet.feature.send.core.FeeBoards.Case): SendFormModel {
+        val fee = boardFee(case)
+        return app.getvela.wallet.feature.send.SendLive.form(
+            sendForm(s, SendFormMode.Single),
+            boardSend().copy(
+                stage = app.getvela.wallet.feature.send.core.SendStage.EnterDetails,
+                amount = "120",
+                fee_busy = fee.busy,
+                // The coin in force is the fee card's (`SendView.fee_coin`): USDC when the run priced in it.
+                fee_coin = if (fee.fee_token != null) {
+                    app.getvela.wallet.feature.send.core.SendFeeCoin(symbol = "USDC", contract = fee.fee_token, chain_id = 1)
+                } else {
+                    app.getvela.wallet.feature.send.core.SendFeeCoin(symbol = "ETH", contract = null, chain_id = 1)
+                },
+                can_continue = true,
+            ),
+            fee,
+            boardContext(s),
+            app.getvela.wallet.feature.send.SendLive.SpeedInputs(app.getvela.wallet.feature.send.core.FeeSpeedView(), feeViewOf = { null }),
+        )
+    }
+
+    /**
+     * SD3E: on the confirm, the fee could not be priced again — the core is
+     * asking again by itself, so the confirm is held with the one line the
+     * signing sheet draws for it ("Retrying…"), and the fee says why.
+     */
+    private fun feeHeldConfirm(s: VelaStrings): SendConfirmModel {
+        val fee = boardFee(app.getvela.wallet.feature.send.core.FeeBoards.Case.Retrying)
+        return app.getvela.wallet.feature.send.SendLive.confirm(
+            sendConfirm(s, SendFormMode.Single),
+            boardSend().copy(
+                stage = app.getvela.wallet.feature.send.core.SendStage.Confirm,
+                fee_busy = fee.busy,
+                can_confirm = false,
+            ),
+            boardContext(s),
+            fee,
+        )
+    }
+
+    /**
+     * SD3H / SD3I: the confirm over a failed fee the core does NOT retry by
+     * itself — only a tap fixes it ("Tap to retry", and "Tap it to retry"
+     * under the held confirm), or the relay answered that it would fail ("Pay
+     * with another coin", and "This would fail if sent as it is."). The fee
+     * line is the row's control either way.
+     */
+    private fun failedFeeConfirm(s: VelaStrings, case: app.getvela.wallet.feature.send.core.FeeBoards.Case): SendConfirmModel {
+        val fee = boardFee(case)
+        return app.getvela.wallet.feature.send.SendLive.confirm(
+            sendConfirm(s, SendFormMode.Single),
+            boardSend().copy(
+                stage = app.getvela.wallet.feature.send.core.SendStage.Confirm,
+                fee_busy = fee.busy,
+                can_confirm = false,
+            ),
+            boardContext(s),
+            fee,
+        )
+    }
+
+    /** The fee coins a board's row opens, as the live sheet lists them from the fee machine's view. */
+    private fun boardFeeSheet(s: VelaStrings, case: app.getvela.wallet.feature.send.core.FeeBoards.Case): FeeTokenPickModel =
+        app.getvela.wallet.feature.send.SendLive.feeSheet(feeTokenPick(s), boardFee(case), boardSend(), boardContext(s))
+
+    /**
+     * SD3G: the relay turned the submit back — the account's previous
+     * transaction on this network still holds the nonce. Nothing was sent:
+     * "Not sent yet", calmly, the sentence under it, and Try again.
+     */
+    private fun notSentConfirm(s: VelaStrings): SendConfirmModel = app.getvela.wallet.feature.send.SendLive.confirm(
+        sendConfirm(s, SendFormMode.Single),
+        boardSend().copy(
+            stage = app.getvela.wallet.feature.send.core.SendStage.Confirm,
+            fee = app.getvela.wallet.feature.send.core.FeeEstimateView(
+                chain_id = 1, total_wei = "123000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+                relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+                deployed = true, tier = app.getvela.wallet.feature.send.core.FeeTier.Standard, quoted = true,
+                fee_asset = app.getvela.wallet.feature.send.core.FeeAssetView.Native,
+            ),
+            can_confirm = false,
+            tx_status = app.getvela.wallet.feature.send.core.SendTxStatus.Error,
+            tx_error = app.getvela.wallet.feature.send.core.SendTxErrorKey.PreviousPending,
+            previous_pending = app.getvela.wallet.feature.send.core.SendPreviousPending(
+                chain_id = 1, user_op_hash = "0x" + "f1".repeat(32), key = I18nKeys.Flows.PREVIOUS_PENDING,
+            ),
+        ),
+        boardContext(s),
+    )
 
     /** The send the boards drive through the live builders: 120 USDT on Ethereum to Alice. */
     private fun boardSend(): app.getvela.wallet.feature.send.core.SendView = app.getvela.wallet.feature.send.core.SendView(

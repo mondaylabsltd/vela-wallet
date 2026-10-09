@@ -201,11 +201,10 @@ struct FeeViewWire: Decodable, Equatable {
     let busy: Bool
     /// `missing_public_key` / `fee_token_unavailable` / `quote_unavailable` /
     /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high` /
-    /// `would_fail` (spec 083 fee; not said to this shell yet) — or, since
-    /// spec 082 (RJ13), the object form `{"chain_read":{"rate_limited":…}}`
-    /// kept as its JSON text. Either way it is what the core's
-    /// `feeRequoteDelayMs` and `feeFailureReasonKey` take back, so this shell
-    /// never reads it apart (`FeeFailureText`).
+    /// `would_fail` / `internal` — or, since spec 082 (RJ13), the object form
+    /// `{"chain_read":{"rate_limited":…}}` kept as its JSON text, as the
+    /// core's own functions take it back (`FeeFailureText`). What the row and
+    /// the footer SAY of it is `failure`'s, never worked out from this.
     let failed: String?
     /// Present only when valid for the form's CURRENT chain. A quote for the
     /// chain somebody just left is withheld rather than shown.
@@ -232,12 +231,114 @@ struct FeeViewWire: Decodable, Equatable {
     /// `fee_measuring` / `fee_of_another_coin`) and the row draws the
     /// switched figure with the measuring sign. Absent reads `false`.
     var provisional = false
+    /// The failure, said ONCE for the fee row and the line under the held
+    /// confirm (PR 2 note 1): the row's reason, whether the core is asking
+    /// again by itself, whether that re-ask is out now, the row's figure and
+    /// the footer's line. Present while `failed` is, AND through the re-ask
+    /// that follows it (`failed` is `nil` then and `busy` true) — so the row
+    /// keeps saying why instead of flipping to "Estimating…" and back. Every
+    /// surface draws the failure from this, never from `failed` apart.
+    var failure: FeeFailureViewWire? = nil
+}
+
+/// The core's `FeeFailureView`: the fee's failure as the row and the footer
+/// draw it. The core owns the retry (`start_ttl` after a failure that can
+/// pass — 3 s, 6 s, then every 8 s), so these words are the machine's: while
+/// it retries nothing asks for a tap, and "Tap to retry" stands only where a
+/// tap is the one way.
+struct FeeFailureViewWire: Decodable, Equatable {
+    /// What failed, as the text the core's own functions take back
+    /// (`FeeFailureText`): the run on screen's, or — while `retrying` — the
+    /// run before the one out now.
+    let failure: String
+    /// The line under the row; `{{chain}}` is the chain's name. `nil`: no
+    /// line (not the network's doing).
+    let reasonKey: String?
+    /// The core asks again by itself: nothing may ask for a tap.
+    let autoRetry: Bool
+    /// A re-ask after this failure is out now: keep the reason on screen and
+    /// draw the row's measuring sign beside it.
+    let retrying: Bool
+    /// The row's figure: "Tap to retry" only when a tap is the one way;
+    /// `nil` — the dash.
+    let figureKey: String?
+    /// The line under the held confirm — the signing sheet's and Send's:
+    /// "Retrying…" while the core retries, "Tap it to retry" when only a tap
+    /// asks again, "This would fail if sent as it is." for `would_fail` (a
+    /// fact, asking for no tap).
+    let footerKey: String
+    /// What a tap on the failed row does (`FeeFailureTap`, PR 2 polish) —
+    /// and so what its figure may promise. Every fee row does exactly this.
+    /// Absent on the wire (an older core) reads `retry`.
+    var tap: FeeFailureTapWire = .retry
+    /// The question the failed run answered: its chain (`nil` only from a
+    /// view built without a run) and the coin it priced the fee in (`nil` =
+    /// the chain's own). A surface asking about another chain draws none of
+    /// it (`isFor(chain:)`).
+    var chainId: Int? = nil
+    var feeToken: String? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case failure, reasonKey, autoRetry, retrying, figureKey, footerKey, tap, chainId, feeToken
+    }
+
+    init(
+        failure: String, reasonKey: String?, autoRetry: Bool, retrying: Bool,
+        figureKey: String?, footerKey: String, tap: FeeFailureTapWire = .retry,
+        chainId: Int? = nil, feeToken: String? = nil
+    ) {
+        self.failure = failure
+        self.reasonKey = reasonKey
+        self.autoRetry = autoRetry
+        self.retrying = retrying
+        self.figureKey = figureKey
+        self.footerKey = footerKey
+        self.tap = tap
+        self.chainId = chainId
+        self.feeToken = feeToken
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // A `FeeFailure`: a string for every variant but `chain_read`.
+        failure = try c.decode(FeeFailureText.self, forKey: .failure).text
+        reasonKey = try c.decodeIfPresent(String.self, forKey: .reasonKey)
+        autoRetry = try c.decode(Bool.self, forKey: .autoRetry)
+        retrying = try c.decode(Bool.self, forKey: .retrying)
+        figureKey = try c.decodeIfPresent(String.self, forKey: .figureKey)
+        footerKey = try c.decode(String.self, forKey: .footerKey)
+        // A tap this build does not know asks nothing rather than lying.
+        tap = try c.decodeIfPresent(String.self, forKey: .tap)
+            .map { FeeFailureTapWire(rawValue: $0) ?? .nothing } ?? .retry
+        chainId = try c.decodeIfPresent(Int.self, forKey: .chainId)
+        feeToken = try c.decodeIfPresent(String.self, forKey: .feeToken)
+    }
+
+    /// Whether this failure is the answer to `chain`'s question — the core's
+    /// `FeeFailureView::is_for_chain`. Right after a token switch the form
+    /// names another chain before the fee machine is asked about it; the old
+    /// chain's failure must not flash there. A failure built without a run
+    /// (`chainId` `nil`) is taken as it is.
+    func isFor(chain: Int?) -> Bool { chainId == nil || chainId == chain }
+}
+
+/// The core's `FeeFailureTap`: what a tap on a failed fee row does.
+enum FeeFailureTapWire: String, Equatable {
+    /// Ask again at once (the fee machine's `requote`) — every failure but
+    /// `would_fail`. While a re-ask is out a second tap asks nothing.
+    case retry
+    /// Open the fee coins — the list the coin opener opens: the relay
+    /// answered that it fails with the coin in force, and another is on offer.
+    case chooseCoin = "choose_coin"
+    /// Nothing: it would fail and no other coin is left. The row is no
+    /// control — no tap target, no chevron — and its figure is the dash.
+    case nothing
 }
 
 extension FeeViewWire {
     private enum CodingKeys: String, CodingKey {
         case busy, failed, fee, stale, feeToken, options, confirmFeeReady, noCoinPays, nothingToPayFrom
-        case provisional
+        case provisional, failure
     }
 
     /// Written out for `failed` alone: a `FeeFailure` is a string for every
@@ -255,6 +356,7 @@ extension FeeViewWire {
         noCoinPays = try c.decodeIfPresent(Bool.self, forKey: .noCoinPays) ?? false
         nothingToPayFrom = try c.decodeIfPresent(Bool.self, forKey: .nothingToPayFrom) ?? false
         provisional = try c.decodeIfPresent(Bool.self, forKey: .provisional) ?? false
+        failure = try c.decodeIfPresent(FeeFailureViewWire.self, forKey: .failure)
     }
 }
 

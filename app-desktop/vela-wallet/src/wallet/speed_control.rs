@@ -26,8 +26,8 @@ use futures::StreamExt as _;
 use gpui::Context;
 
 use vela_core::app::fee_policy::{
-    DeploymentRead, Event as FeeEvent, FeeBalanceChange, FeeCall, FeeOperation, FeePolicy,
-    FeeShellResult, FeeTier, FeeView,
+    DeploymentRead, Event as FeeEvent, FeeBalanceChange, FeeCall, FeeFailure, FeeOperation,
+    FeePolicy, FeeShellResult, FeeTier, FeeView,
 };
 use vela_core::app::fee_speed::{
     Event as SpeedEvent, FeeSpeed, FeeSpeedView, TierPreviewQuote, TierQuote,
@@ -54,6 +54,15 @@ pub trait SpeedHost: Sized + 'static {
 
     /// Any session moved — for an owner that polls while fees are busy.
     fn fees_moved(&mut self, _cx: &mut Context<Self>) {}
+
+    /// The surface still prices anything. `false` once it is over (a request
+    /// answered or closed): its sessions' timers — the block-time re-price
+    /// and the core's own re-ask after a failure (PR 2 note 1) — are not
+    /// answered, so a session nobody can see stops asking. A surface whose
+    /// entity goes stops anyway: its timers find nobody.
+    fn fee_wanted(&self) -> bool {
+        true
+    }
 }
 
 /// What a fee session was asked to price. Replayed at another tier for the
@@ -158,6 +167,9 @@ pub struct SpeedControl {
     /// only to a session pricing those very calls. The fee machine forgets it
     /// on every new question, so each session is told again after each one.
     balance_changes: Option<(Vec<FeeCall>, Vec<FeeBalanceChange>)>,
+    /// The failure of the fee in force last written to the log (FR-018): one
+    /// line when it fails, one when it is back — not one per re-ask.
+    logged_failure: Option<FeeFailure>,
 }
 
 impl Default for SpeedControl {
@@ -183,6 +195,7 @@ impl SpeedControl {
             last_on_form: None,
             syncing: false,
             balance_changes: None,
+            logged_failure: None,
         }
     }
 
@@ -349,6 +362,9 @@ fn resolve<H: SpeedHost>(
     result: FeeShellResult,
     cx: &mut Context<H>,
 ) {
+    if !answered(&result, host.fee_wanted()) {
+        return;
+    }
     let Some(session) = host.speed_control().session_mut(key) else {
         return;
     };
@@ -362,6 +378,14 @@ fn resolve<H: SpeedHost>(
     }
     let pending = session.host.resolve(id, result);
     pump(host, key, pending, cx);
+}
+
+/// Whether a session's answer reaches its core: every answer while the
+/// surface still prices anything, and — once it is over — none of its timers
+/// (the block-time re-price, the core's own re-ask after a failure: PR 2
+/// note 1), so a session nobody can see stops asking.
+fn answered(result: &FeeShellResult, wanted: bool) -> bool {
+    wanted || !matches!(result, FeeShellResult::TtlElapsed)
 }
 
 fn pump<H: SpeedHost>(
@@ -431,6 +455,7 @@ fn pump<H: SpeedHost>(
 fn in_force_changed<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     let control = host.speed_control();
     control.fee_view = control.fee.view.clone();
+    log_failure(control);
     if !control.fee_view.busy
         && control.fee_view.failed.is_some()
         && let Some(ask) = &control.fee.ask
@@ -438,6 +463,32 @@ fn in_force_changed<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
         fee_signals::invalidate(ask.chain_id);
     }
     host.in_force_changed(cx);
+}
+
+/// FR-018: the fee in force failed, or is back — the chain, the cause, and
+/// who asks again (never an address). The core asks again by itself for a
+/// failure that can pass (PR 2 note 1, its own `StartTtl`); the shell only
+/// says so, once per failure rather than once per re-ask, and a re-ask out
+/// (`busy`, no failure yet) is neither.
+fn log_failure(control: &mut SpeedControl) {
+    let now = control.fee_view.failed;
+    if now == control.logged_failure || (now.is_none() && control.fee_view.busy) {
+        return;
+    }
+    let chain = control.fee.priced.unwrap_or_default();
+    match (now, control.fee_view.failure.as_ref()) {
+        (Some(failure), view) => crate::diag::vlog!(
+            "fee",
+            "quote failed chain={chain} cause={failure:?} {}",
+            if view.is_some_and(|view| view.auto_retry) {
+                "— the core asks again by itself"
+            } else {
+                "— a tap asks again"
+            }
+        ),
+        (None, _) => crate::diag::vlog!("fee", "quote back chain={chain}"),
+    }
+    control.logged_failure = now;
 }
 
 /// Price the operation at the tier in force — the fee machine reads the
@@ -571,18 +622,6 @@ pub fn refresh<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     control.generation += 1;
     control.fee.generation = control.generation;
     fee_dispatch(host, FeeEvent::Requote, cx);
-}
-
-/// Ask the question in force again from the start — the account read, then
-/// the quote — over a measurement still out (spec 082 RJ12): an
-/// automatic re-quote that ran past its bound is superseded, never waited
-/// out, because the relay it hangs on may be back already.
-pub fn reask<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
-    let Some(ask) = host.speed_control().fee.ask.clone() else {
-        return;
-    };
-    fee_signals::invalidate(ask.chain_id);
-    ask_in_force(host, ask, cx);
 }
 
 // -- the reconcile step (`fee_speed.rs`) ----------------------------------------
@@ -725,6 +764,23 @@ fn sync_previews<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// PR 2 note 1: the core's own re-ask is a timer the session answers
+    /// like every other wait — while the surface still prices anything. Once
+    /// it is over, no timer of its sessions is answered (they stop asking);
+    /// the answers to reads already out still land.
+    #[test]
+    fn a_surface_that_is_over_answers_no_timer() {
+        assert!(answered(&FeeShellResult::TtlElapsed, true));
+        assert!(!answered(&FeeShellResult::TtlElapsed, false));
+        assert!(answered(&FeeShellResult::DeadlineElapsed, false));
+        assert!(answered(
+            &FeeShellResult::Deployment {
+                read: DeploymentRead::Read { deployed: true },
+            },
+            false
+        ));
+    }
 
     fn ask(tier: FeeTier, amount: &str) -> QuoteAsk {
         QuoteAsk {

@@ -58,7 +58,7 @@ final class WalletStore {
     init(store: VelaStore, pool: RpcPool, held: HeldTokens, registry: ChainTokens? = nil) {
         self.executor = BalanceExecutor(store: store, pool: pool, held: held)
         if let registry {
-            executor.chainFacts = { [registry] chainId in await registry.facts(chainId: chainId) }
+            executor.chainDocument = { [registry] chainId in await registry.document(chainId: chainId) }
         }
         self.core = CoreStore(
             bridge: BalanceDashboardCore(),

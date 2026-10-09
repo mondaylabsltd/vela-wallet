@@ -665,11 +665,19 @@ class SendLiveTest {
         // Released: the confirm opens and the line goes.
         assertNull(SendLive.confirm(drawn, held.copy(previous_pending = null, can_confirm = true), ctx()).ctaHold)
 
-        // The relay refused it at submit: the previous one still holds the nonce.
+        // The relay turned it back at submit: the previous one still holds the
+        // nonce. "Not sent yet", calmly (PR 2 polish) — its title over the
+        // signing sheet's sentence, no warning tone — with Try again.
         val refused = SendLive.confirm(drawn, held.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.PreviousPending), ctx())
-        assertEquals(strings.t(I18nKeys.Flows.PREVIOUS_PENDING), refused.notice)
+        assertEquals(strings.t(I18nKeys.Flows.NOT_SENT_TITLE), refused.noticeTitle)
+        assertEquals(strings.t(I18nKeys.Flows.NOT_SENT_BODY), refused.notice)
+        assertTrue("calm, never the warning tone", refused.noticeCalm)
         assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), refused.noticeAction)
         assertNull("said once", refused.ctaHold)
+        // Any other refusal keeps its own words and tone, untitled.
+        val generic = SendLive.confirm(drawn, held.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.Generic), ctx())
+        assertNull(generic.noticeTitle)
+        assertFalse(generic.noticeCalm)
 
         // The core's view decodes it.
         val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(

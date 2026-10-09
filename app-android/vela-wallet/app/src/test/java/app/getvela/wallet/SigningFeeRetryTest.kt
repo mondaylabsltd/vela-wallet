@@ -43,9 +43,10 @@ import org.junit.Test
  * - A deployment read the chain's nodes did not answer is the chain node's
  *   failure (`ChainRead`), rate-limited or out of reach — never Vela's relay,
  *   never a quote priced as if the Safe did not exist.
- * - A failure a recovering network clears is asked again on the core's
- *   schedule (3 s, 6 s, then every 8 s), each ask bounded by
- *   `feeRequoteTimeoutMs()`, and the fee is back as soon as the relay is.
+ * - A failure a recovering network clears is asked again by the core itself
+ *   (3 s, 6 s, then every 8 s — PR 2 note 1: its own `StartTtl`, answered by
+ *   the fee executor; the shell schedules nothing), and the fee is back as
+ *   soon as the relay is.
  */
 class SigningFeeRetryTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -200,6 +201,73 @@ class SigningFeeRetryTest {
         val reads = port.calls.count { it.endsWith("eth_getCode") }
         c.feeTapped()
         withTimeout(10_000) { while (port.calls.count { it.endsWith("eth_getCode") } <= reads) kotlinx.coroutines.delay(20) }
+    }
+
+    /**
+     * PR 2 note 1: ONE truth for the row and the footer. The core retries the
+     * failure by itself, so the row says why with no "Tap to retry" and the
+     * footer — the core's gate over the very view the row draws — says
+     * "Retrying…", never "Tap it to retry"; through the re-ask too, the reason
+     * kept on the row beside the turning sign and the footer unchanged. And a
+     * closed sheet's sessions stop: no read after it.
+     */
+    @Test
+    fun `the row and the footer say one truth while the core retries, and a closed sheet stops it`() = runBlocking<Unit> {
+        scriptRelay()
+        port.always("eth_getCode") { RpcResult.Failed(rateLimited = false) }
+        val c = controller()
+        c.open(transfer())
+        val failed = withTimeout(20_000) { c.fee.first { it.failed != null } }
+        assertTrue(failed.failure!!.auto_retry)
+        suspend fun gate() = SigningLive.confirmState(
+            withTimeout(5_000) { c.signJson.first { it != null } },
+            withTimeout(5_000) { c.guardJson.first { it != null } },
+            withTimeout(5_000) { c.clearJson.first { it != null } },
+            c.feeJson.value,
+            null,
+        )
+        val reason = strings.t(I18nKeys.Flows.FEE_REASON_CHAIN_DOWN, mapOf("chain" to "Gnosis"))
+        val row = SigningLive.feeModel(ClearSigningView(), failed, ctx) as FeeModel.OnChain
+        assertEquals("—", row.value)
+        assertEquals(reason, row.warning)
+        val footer = withTimeout(5_000) {
+            var state = gate()
+            while (state.key != I18nKeys.Flows.FEE_RETRYING) { kotlinx.coroutines.delay(20); state = gate() }
+            state
+        }
+        assertTrue(!footer.enabled)
+        assertEquals(app.getvela.wallet.feature.signing.core.ConfirmBlock.FeeFailed, footer.block)
+
+        // The core's own re-ask (3 s): the reason stays, the sign turns, the footer holds its line.
+        val retrying = withTimeout(10_000) { c.fee.first { it.failure?.retrying == true } }
+        val turning = SigningLive.feeModel(ClearSigningView(), retrying, ctx) as FeeModel.OnChain
+        assertEquals("—", turning.value)
+        assertEquals(reason, turning.warning)
+        assertTrue(turning.refreshing)
+        // The gate over the decoded views, re-encoded: the failure rides along, so the line holds.
+        val during = SigningLive.confirmState(c.sign.value, c.guard.value, c.clear.value, retrying, null)
+        assertEquals("through the re-ask, never \"working out the fee\"", I18nKeys.Flows.FEE_RETRYING, during.key)
+
+        c.cancel()
+        withTimeout(5_000) { c.closed.first { it } }
+        kotlinx.coroutines.delay(500)
+        val after = port.calls.count { it.endsWith("eth_getCode") }
+        kotlinx.coroutines.delay(7_000)
+        assertEquals("a closed sheet asks nothing more", after, port.calls.count { it.endsWith("eth_getCode") })
+    }
+
+    /** PR 2 note 9: the tracker entry's reason rides `OpTracked`, from the one field `refusal_key` is worded from. */
+    @Test
+    fun `the tracker's refusal reaches the sheet with its reason`() {
+        val entry = app.getvela.wallet.feature.send.core.TrackEntryView(
+            user_op_hash = "0x" + "5c".repeat(32), chain_id = 100, status = app.getvela.wallet.feature.send.core.TrackStatus.Rejected,
+            outcome = app.getvela.wallet.feature.send.core.TrackOutcome.Final,
+            refusal = app.getvela.wallet.feature.send.core.RefusalReason.NonceUsed, refusal_key = I18nKeys.Flows.SIGN_WENT_FIRST,
+        )
+        val event = SigningController.opTracked(entry, 1.0)
+        assertEquals(app.getvela.wallet.feature.send.core.RefusalReason.NonceUsed, event.refusal)
+        assertEquals(app.getvela.wallet.feature.send.core.TrackStatus.Rejected, event.status)
+        assertEquals(null, SigningController.opTracked(entry.copy(refusal = null), 1.0).refusal)
     }
 
     /**

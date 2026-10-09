@@ -13,6 +13,25 @@
 
 import { VENUE_BLOCK_KEYS } from '$lib/settings/messages';
 
+/**
+ * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082
+ * RJ13) — resolved at build time so the fee row (the sheet's and Send's) can
+ * look up whichever the core names. A key the core adds later and this list
+ * lacks draws no line.
+ */
+export const FEE_REASON_KEYS = [
+	'componentsUi.gas.reasonQuote',
+	'componentsUi.gas.reasonFeeToken',
+	'componentsUi.gas.reasonSimulation',
+	'componentsUi.gas.reasonQuoteHigh',
+	'home.balanceDetailStatusRetrying',
+	// Issue 483: the fee's own sentences — a chain out of reach ("Can't reach
+	// {{chain}} to price this"), and a fault inside Vela. The browser's
+	// `explore.chainDown` ("page data may be incomplete") is no longer the fee's.
+	'componentsUi.gas.reasonChainDown',
+	'componentsUi.gas.reasonInternal'
+] as const;
+
 /** Every corpus key the wallet-flow screens consume. Tests iterate this. */
 export const WALLET_FLOW_KEYS = [
 	// ---------------------------------------------------------------- chrome
@@ -213,8 +232,12 @@ export const WALLET_FLOW_KEYS = [
 	'send.txRetryBtn',
 	// Correctness batch item 3: the account's previous transaction on this
 	// network still holds the nonce — the held confirm's one line
-	// (`SendView.previous_pending.key`), and the submit refused for it.
+	// (`SendView.previous_pending.key`)…
 	'componentsUi.signing.confirmBlock.previousPending',
+	// …and, PR 2 polish, the submit the relay turned back for it
+	// (`tx_error` `previous_pending`): "Not sent yet", calmly, as on the sheet.
+	'componentsUi.signing.notSentTitle',
+	'componentsUi.signing.notSentBody',
 	// …and a refusal told by its reason (`SendReceiptView.refusal_key`): the
 	// fee sentence only for a fee refusal, "another transaction went first"
 	// for a spent nonce, else the plain refusal (listed with the dApp rows).
@@ -226,6 +249,19 @@ export const WALLET_FLOW_KEYS = [
 	'send.splitTotalLabel',
 	'send.continueBtn',
 	'componentsUi.gas.networkFee',
+
+	// send · a failed fee, in the core's words (PR 2 note 1): the reason
+	// under the row (`FeeView.failure.reason_key`), the row's figure when a
+	// tap is the one way (`figure_key`), and the line under the held confirm
+	// (`footer_key`) — "Retrying…" while the core asks again by itself.
+	...FEE_REASON_KEYS,
+	'componentsUi.gas.estimateFailed',
+	'componentsUi.signing.confirmBlock.feeRetrying',
+	'componentsUi.signing.confirmBlock.feeFailed',
+	// …and, PR 2 polish, after the relay answered that it would fail: the
+	// figure when a tap opens the fee coins, and the line under the confirm.
+	'componentsUi.gas.payWithAnotherCoin',
+	'componentsUi.signing.confirmBlock.feeWouldFail',
 
 	// send · fee token
 	'send.feeTokenLabel',
@@ -321,6 +357,10 @@ export const WALLET_FLOW_KEYS = [
 	// send · the core's alerts, worded (spec 038 #D4)
 	'send.alertEstimateFailedTitle',
 	'send.alertEstimateFailedBody',
+	// PR 2 note 13: the estimate alert by its cause
+	// (`sendEstimateFailureBodyKey`) — the chain out of reach by name; a fault
+	// inside Vela is `componentsUi.gas.reasonInternal` (above).
+	'send.alertEstimateChainDownBody',
 	'send.alertAccountUnavailableBody',
 	'send.alertInvalidAddressTitle',
 	'send.alertInvalidAddressBody',

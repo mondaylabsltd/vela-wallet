@@ -67,8 +67,23 @@ enum class SigningScreenState {
      * fault inside the app (CS49), the row and the footer naming the same
      * cause; and a relay refusal told by its reason, another transaction of
      * the account having gone first (CS50).
+     *
+     * The integration round (PR 2 notes 1, 9), each fee view written by the
+     * real fee machine (`FeeBoards`): CS48/CS49 retried by the core itself —
+     * the reason on the row, "Retrying…" under the confirm, nothing asking
+     * for a tap; its re-ask out, the reason kept beside the turning sign
+     * (CS51); a failure only a tap fixes — "Tap to retry" on the row, "Tap it
+     * to retry" under the confirm (CS52); and the sheet's own failure told by
+     * the relay's reason (`failure_refusal_key`): another of the account's
+     * operations holds the nonce — since the polish round "Not sent yet",
+     * calmly, with Try again (CS53, `failure_not_sent`).
+     *
+     * The polish round: a fee the relay answered would fail in the coin
+     * chosen — "Pay with another coin" on the row and "This would fail if
+     * sent as it is." under the confirm (CS54), the coins its tap opens
+     * (CS56), and the dash, no control, when no other coin is left (CS55).
      */
-    CS45, CS46, CS47, CS48, CS49, CS50,
+    CS45, CS46, CS47, CS48, CS49, CS50, CS51, CS52, CS53, CS54, CS55, CS56,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
@@ -286,6 +301,12 @@ sealed interface FeeModel {
         val reserve: String? = null,
         /** The chevron: only where a tap opens the coin list. */
         val chevron: Boolean = true,
+        /**
+         * PR 2 polish: the row has coins to open, but a tap does not open them
+         * now (a failure it retries, or one it cannot help): the chevron's room
+         * is kept, unmarked, so the figure does not move when it comes back.
+         */
+        val chevronRoom: Boolean = false,
     ) : FeeModel
 
     /** Off-chain signature: the ✓ line, in place of a fee row. */

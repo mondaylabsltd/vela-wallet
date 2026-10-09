@@ -598,18 +598,10 @@ class RelayClient(
         val status = runCatching {
             app.getvela.wallet.core.crux.Wire.json.decodeFromString(TrackLifecycle.serializer(), "\"${parsed.status}\"")
         }.getOrNull() ?: return null
-        return StatusAnswer(status, parsed.stage, parsed.txHash, rejectionReason(body))
-    }
-
-    /**
-     * The relay's `rejection_reason`, verbatim — read where the core's own
-     * parser reads it (the status object, or the body's `result`), because the
-     * UniFFI record `parseUserOpStatus` returns does not carry it yet. What the
-     * reason MEANS (and an unknown one) is the core's (`RefusalReason::of`).
-     */
-    private fun rejectionReason(body: JSONObject): String? {
-        val result = if (body.has("status")) body else body.optJSONObject("result") ?: return null
-        return (result.opt("rejection_reason") as? String)?.takeIf { it.isNotEmpty() }
+        // The relay's `rejection_reason` from the one parser (PR 2 note 5),
+        // verbatim: what it MEANS (and an unknown one) is the core's
+        // (`RefusalReason::of`).
+        return StatusAnswer(status, parsed.stage, parsed.txHash, parsed.rejectionReason)
     }
 
     /** The pool's answer to the tracker's find-event, as it came (spec 082 ruling 8). */

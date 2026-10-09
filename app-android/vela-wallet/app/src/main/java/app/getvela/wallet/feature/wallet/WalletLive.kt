@@ -120,7 +120,11 @@ object WalletLive {
                     // out, and not while the balance cannot be read at all —
                     // the web's `assetsMode`, the desktop's and the iPhone's
                     // (087 F03).
-                    view.holdings_loading || view.balance_unknown -> SectionMode.Loading
+                    // Nor while nothing could be read at all — every chain
+                    // failed, or the fetch threw, with nothing cached
+                    // (`unreachable`): "Deposit your first asset" under the
+                    // reason would be a claim nobody made (PR 2 integration).
+                    view.holdings_loading || view.balance_unknown || view.unreachable -> SectionMode.Loading
                     else -> SectionMode.Empty
                 },
             ),
@@ -416,11 +420,11 @@ object WalletLive {
         val total = view.display_total_usd ?: view.cached_total_usd
 
         // **Unreachable is not zero.** A first launch that could read nothing,
-        // with nothing cached: the core's figure here is 0.0 — `total` is not
-        // null — and rendering it was spec 038 finding 15, a settled-looking
-        // "$0.00" over an unreadable chain. The flag exists to keep that number
-        // off the hero. A skeleton and a reason, the same reason the web and
-        // desktop heroes give.
+        // with nothing cached: rendering a figure here was spec 038 finding 15,
+        // a settled-looking "$0.00" over an unreadable chain. The core's figure
+        // is null in this state now (PR 2 polish; it was 0.0), and the flag
+        // still decides first: a skeleton and a reason, the same reason the
+        // web and desktop heroes give.
         if (view.unreachable) {
             return fallback.copy(
                 state = BalanceStateKind.Loading,
@@ -428,7 +432,9 @@ object WalletLive {
                 decimals = null,
                 status = BalanceStatusModel(
                     kind = BalanceStatusKind.Warning,
-                    text = strings.t(I18nKeys.Wallet.BALANCE_UNREACHABLE),
+                    // A read that failed inside Vela (PR 2 note 11) is said as
+                    // that — never "the request never arrived".
+                    text = strings.t(view.internal_key ?: I18nKeys.Wallet.BALANCE_UNREACHABLE),
                 ),
             )
         }
@@ -514,6 +520,10 @@ object WalletLive {
         val onCache = view.display_total_usd == null && view.cached_total_usd != null
         val unreachable = unreachableLine(view, strings, chainNames)
         return when {
+            // PR 2 note 11 (issue 483): a read that never left the app is
+            // Vela's own fault — the core's sentence for it, where the
+            // unreachable line goes and in place of any "Can't reach …".
+            view.internal_key != null -> BalanceStatusModel(BalanceStatusKind.Warning, strings.t(view.internal_key))
             unreachable != null -> BalanceStatusModel(BalanceStatusKind.Warning, unreachable)
             onCache || view.notice == BalanceNotice.StillUpdating ->
                 BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))

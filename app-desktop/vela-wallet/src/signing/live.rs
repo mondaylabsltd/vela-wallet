@@ -223,6 +223,17 @@ impl HeldLines {
     }
 }
 
+/// Whether the fee row's lines are held — the last settled words kept
+/// invisibly — because a figure is being measured (`measuring`: one is out on
+/// the speed control). Never while the core's re-ask after a failure is out
+/// (PR 2 note 1): its reason is the row's line, and it is said, so nothing
+/// flips while the core retries.
+#[must_use]
+pub fn holds_lines(fee: &FeeView, measuring: bool, speed_tier: Option<FeeTier>) -> bool {
+    let retrying = fee.failure.as_ref().is_some_and(|failure| failure.retrying);
+    !retrying && (fee.busy || measuring || fee_of_another_tier(fee, speed_tier))
+}
+
 /// [`HeldLines::warning`] on the fee row, where it has one.
 pub fn hold_fee_warning(
     model: &mut FeeModel,
@@ -1890,15 +1901,18 @@ pub fn fee_model(
     // the fee in hand is the previous speed's: "estimating", never its money.
     // Only the figure gives way — the coin list and its warning stay.
     let another_tier = fee_of_another_tier(fee, speed_tier);
-    // Spec 079 / 082 RJ13: a quote that failed for a reason that can pass is
-    // asked again by itself, and the row says why in the core's words
-    // (`fee_policy::failure_reason_key`) instead of a bare "—". One the core
-    // names no reason for (no public key, a calculation that cannot be done)
-    // keeps the dash.
-    let reason = fee
-        .failed
-        .and_then(|failure| s.fee_reason(failure, &crate::flows::live::chain_name(chain_id)));
-    let unreachable = reason.is_some();
+    // PR 2 note 1: the failure as the core says it once for the row and the
+    // footer (`FeeView.failure`) — through the re-ask that follows it too, so
+    // the row keeps its reason (and turns its measuring sign) instead of
+    // flipping to "Estimating…" and back every few seconds. The figure is
+    // "Tap to retry" only when a tap is the one way; while the core asks
+    // again by itself it is the dash.
+    let failure_view = crate::flows::fee_failure_of(fee, Some(chain_id));
+    let failure = failure_view.as_ref().map(|failure| {
+        s.fee_failure
+            .row(failure, &crate::flows::live::chain_name(chain_id))
+    });
+    let reason = failure.as_ref().and_then(|lines| lines.reason.clone());
     // Spec 083 fee: the relay ANSWERED that the operation fails with the coin
     // in force. Said in words too, and never as the network's doing.
     let refused = refused_fee_warning(fee, s);
@@ -1909,14 +1923,17 @@ pub fn fee_model(
     // is shut for the same reason.
     FeeModel::OnChain {
         label: s.fee_label.clone(),
-        // What the handler already knows (`signing_host::fee_tapped`): a
-        // failed quote can be asked again, more than one coin can be chosen
-        // between — and one coin with a quote in hand is neither.
-        tappable: fee.failed.is_some() || fee.options.len() > 1,
-        value: if another_tier || (fee.busy && fee.fee.is_none()) {
+        // What the handler does (`signing_host::fee_tapped`): a failed
+        // quote does what its failure says a tap does — asks again, or
+        // opens the coins — and one that a tap cannot help is no control
+        // (PR 2 polish); a settled one opens the coins when there is more
+        // than one. Through the re-ask too: a chevron that came and went
+        // every few seconds would be a row that flickers.
+        tappable: fee_tap(fee, failure_view.as_ref()) != FeeTap::Nothing,
+        value: if let Some(lines) = failure.as_ref() {
+            lines.figure.clone()
+        } else if another_tier || (fee.busy && fee.fee.is_none()) {
             s.fee_estimating.clone()
-        } else if unreachable || refused.is_some() {
-            SharedString::default()
         } else {
             SharedString::from(crate::flows::live::fee_line(
                 fee.fee.as_ref(),
@@ -2102,34 +2119,39 @@ pub fn refused_fee_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedSt
     )
 }
 
-/// What a tap on the fee row does ([`crate::wallet::signing_host::SigningHost::fee_tapped`]).
+/// What a tap on the fee row does ([`crate::wallet::signing_host::SigningHost::fee_tapped`],
+/// and the Send form's row and its confirm's fee line).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FeeTap {
-    /// Open (or close) the coin list in the sheet.
+    /// Open (or close) the coin list.
     Coins,
     /// Ask the relay again.
     Requote,
-    /// One coin and a quote: nothing to do.
+    /// Nothing: one coin and a quote, or a failure no tap can help.
     Nothing,
 }
 
-/// The coin list opens whenever there is another coin to choose — even over
-/// a failed quote (spec 083 fee: after the relay refused the operation with
-/// USDC paying, the ">" did nothing the person could use, and ETH could have
-/// paid). A failure with no other coin to choose — the relay out of reach,
-/// where the core marks every coin as unpriced — is asked again, as before.
+/// What a tap on a fee row does, given the failure the row draws (`failure`
+/// — the core's `FeeView.failure`, already dropped when it is another
+/// chain's). A failed row does EXACTLY what its failure says
+/// (`FeeFailureView.tap`, PR 2 polish), so its words never promise one
+/// thing and do another: "Tap to retry" asks again (every failure but
+/// `would_fail`), "Pay with another coin" opens the coins (spec 083 fee:
+/// after the relay refused the operation with USDC paying, ETH could pay),
+/// and a failure with no other coin left does nothing. A settled row opens
+/// the coins when there is more than one to choose between.
 #[must_use]
-pub fn fee_tap(fee: &FeeView) -> FeeTap {
-    let another_coin = fee
-        .options
-        .iter()
-        .any(|option| !option.selected && !option.insufficient);
-    if fee.options.len() > 1 && (fee.failed.is_none() || another_coin) {
-        FeeTap::Coins
-    } else if fee.failed.is_some() {
-        FeeTap::Requote
-    } else {
-        FeeTap::Nothing
+pub fn fee_tap(
+    fee: &FeeView,
+    failure: Option<&vela_core::app::fee_policy::FeeFailureView>,
+) -> FeeTap {
+    use vela_core::app::fee_policy::FeeFailureTap;
+    match failure.map(|failure| failure.tap) {
+        Some(FeeFailureTap::Retry) => FeeTap::Requote,
+        Some(FeeFailureTap::ChooseCoin) => FeeTap::Coins,
+        Some(FeeFailureTap::Nothing) => FeeTap::Nothing,
+        None if fee.options.len() > 1 => FeeTap::Coins,
+        None => FeeTap::Nothing,
     }
 }
 
@@ -4428,6 +4450,10 @@ mod fee_tests {
 
         let mut failed = quoted(vec![option("ETH", None, false, true)], false);
         failed.failed = Some(vela_core::app::fee_policy::FeeFailure::QuoteUnavailable);
+        failed.failure = Some(vela_core::app::fee_policy::FeeFailureView::of(
+            vela_core::app::fee_policy::FeeFailure::QuoteUnavailable,
+            false,
+        ));
         assert!(tappable(&failed), "a failed quote can be asked again");
     }
 
@@ -4437,7 +4463,7 @@ mod fee_tests {
     /// dash; and "from a while ago" is said only beside a figure.
     #[test]
     fn the_fee_row_refreshes_and_says_why_it_has_no_figure() {
-        use vela_core::app::fee_policy::FeeFailure;
+        use vela_core::app::fee_policy::{FeeFailure, FeeFailureView};
         let s = strings();
         let clear =
             crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
@@ -4473,6 +4499,7 @@ mod fee_tests {
 
         let mut unreachable = crate::core_host::CoreHost::<FeePolicy>::new().view();
         unreachable.failed = Some(FeeFailure::QuoteUnavailable);
+        unreachable.failure = Some(FeeFailureView::of(FeeFailure::QuoteUnavailable, false));
         let (value, warning, ..) = parts(row(&unreachable));
         assert_eq!(
             warning,
@@ -4480,13 +4507,20 @@ mod fee_tests {
             "the core's words for a relay failure"
         );
         assert!(warning.is_some());
-        assert!(value.is_empty(), "the sentence, not a dash: {value}");
+        // PR 2 note 1: the core asks again by itself — the row's figure is
+        // the dash, never "Tap to retry", with the sentence under it.
+        assert_eq!(value.as_ref(), "—");
 
         let mut unfixable = unreachable.clone();
         unfixable.failed = Some(FeeFailure::MissingPublicKey);
+        unfixable.failure = Some(FeeFailureView::of(FeeFailure::MissingPublicKey, false));
         let (value, warning, ..) = parts(row(&unfixable));
         assert!(warning.is_none(), "no promise to retry what cannot heal");
-        assert_eq!(value.as_ref(), "—");
+        assert_eq!(
+            value,
+            crate::loc::Loc::from_env().t(vela_core::app::fee_policy::ESTIMATE_FAILED_KEY),
+            "only a tap asks again: the row says so"
+        );
 
         let mut stale_fee = quoted(vec![option("ETH", None, false, true)], true);
         stale_fee.stale = true;
@@ -4504,6 +4538,60 @@ mod fee_tests {
         assert!(refreshing);
     }
 
+    /// PR 2 note 1: through the core's re-ask the row keeps saying why — its
+    /// reason is said, not held invisibly as a measured figure's lines are —
+    /// and the sign turns beside it.
+    #[test]
+    fn the_reason_is_said_through_the_re_ask() {
+        let s = strings();
+        let failures = crate::signing::fixtures::fee_failures();
+        assert!(!holds_lines(&failures.retrying, true, None));
+        assert!(!holds_lines(&failures.down, false, None));
+        let mut measured = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        measured.busy = true;
+        assert!(
+            holds_lines(&measured, false, None),
+            "a figure being measured"
+        );
+
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let mut held = HeldLines::default();
+        for fee in [&failures.down, &failures.retrying] {
+            let mut model = fee_model(
+                &clear,
+                fee,
+                1,
+                false,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            );
+            fee_row_state(&mut model, fee.busy);
+            hold_fee_warning(
+                &mut model,
+                &mut held,
+                holds_lines(fee, fee.busy, None),
+                None,
+            );
+            let FeeModel::OnChain {
+                warning,
+                warning_held,
+                refreshing,
+                value,
+                ..
+            } = model
+            else {
+                unreachable!("a transaction has a fee row")
+            };
+            assert!(warning.is_some_and(|line| line.contains("Ethereum")));
+            assert!(!warning_held, "said, not held");
+            assert_eq!(value.as_ref(), "—");
+            assert_eq!(refreshing, fee.busy, "the sign turns while it retries");
+        }
+    }
+
     /// Spec 082 RJ13 (G48, DX-G14): with no fault set, Ethereum's public
     /// node rate-limited the deployment read and the row said "can't reach
     /// Vela — check your network" over a shut confirm. It is the chain's node,
@@ -4519,6 +4607,9 @@ mod fee_tests {
         let warning_of = |failure: FeeFailure, s: &SigningStrings| {
             let fee = FeeView {
                 failed: Some(failure),
+                failure: Some(vela_core::app::fee_policy::FeeFailureView::of(
+                    failure, false,
+                )),
                 ..crate::core_host::CoreHost::<FeePolicy>::new().view()
             };
             let model = fee_model(
@@ -4538,7 +4629,7 @@ mod fee_tests {
                     tappable,
                     ..
                 } => {
-                    assert!(value.is_empty());
+                    assert_eq!(value.as_ref(), "—", "the core retries: the dash");
                     assert!(tappable, "a failed fee can be asked again");
                     warning
                 }
@@ -4597,6 +4688,9 @@ mod fee_tests {
         ] {
             let fee = FeeView {
                 failed: Some(failure),
+                failure: Some(vela_core::app::fee_policy::FeeFailureView::of(
+                    failure, false,
+                )),
                 ..crate::core_host::CoreHost::<FeePolicy>::new().view()
             };
             let FeeModel::OnChain { warning, .. } = fee_model(
@@ -5075,8 +5169,29 @@ mod fee_tests {
     /// A fee row whose quote the relay refused: the operation fails with the
     /// coin in force (spec 083 fee).
     fn refused(options: Vec<FeeOptionView>) -> FeeView {
+        failed_with(vela_core::app::fee_policy::FeeFailure::WouldFail, options)
+    }
+
+    /// A Base fee row that failed with `kind`, over `options`, its failure
+    /// as the core says it (`FeeView.failure`): a coin other than the one in
+    /// force, with something to pay from, is "another coin" — what a tap
+    /// after `would_fail` opens (none of these were tried by the run).
+    fn failed_with(
+        kind: vela_core::app::fee_policy::FeeFailure,
+        options: Vec<FeeOptionView>,
+    ) -> FeeView {
         let mut fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
-        fee.failed = Some(vela_core::app::fee_policy::FeeFailure::WouldFail);
+        let another_coin = options
+            .iter()
+            .any(|option| !option.selected && !option.insufficient);
+        fee.failed = Some(kind);
+        fee.failure = Some(vela_core::app::fee_policy::FeeFailureView::of_run(
+            kind,
+            false,
+            another_coin,
+            Some(8453),
+            None,
+        ));
         fee.options = options;
         fee
     }
@@ -5128,7 +5243,12 @@ mod fee_tests {
             Some(warning.clone()),
             s.fee_reason(vela_core::app::fee_policy::FeeFailure::EstimateFailed, "")
         );
-        assert!(value.is_empty(), "the sentence, not a dash: {value}");
+        // PR 2 polish: the figure says what a tap does — asking again gets
+        // the same answer, so it opens the coins (`FeeFailureView.tap`),
+        // the sentence under it.
+        let tap =
+            crate::loc::Loc::from_env().t(vela_core::app::fee_policy::PAY_WITH_ANOTHER_COIN_KEY);
+        assert_eq!(value, tap);
         assert!(tappable, "another coin can be chosen");
         assert_eq!(
             refused_fee_warning(&drained, &s),
@@ -5148,11 +5268,18 @@ mod fee_tests {
             Some(s.warn_will_fail.clone()),
             "nothing is charged for an operation the relay refused"
         );
-        assert!(value.is_empty());
+        assert_eq!(value, tap);
+
+        // No coin left to pay with: the dash, and no control.
+        let (value, _, tappable) = row(&refused(vec![option("ETH", None, false, true)]));
+        assert_eq!(value.as_ref(), "—");
+        assert!(!tappable, "nothing a tap could do");
 
         // The network sentence is still the network's.
-        let mut unreachable = refused(Vec::new());
-        unreachable.failed = Some(vela_core::app::fee_policy::FeeFailure::EstimateFailed);
+        let unreachable = failed_with(
+            vela_core::app::fee_policy::FeeFailure::EstimateFailed,
+            Vec::new(),
+        );
         // The core's words for it (spec 082 RJ13).
         assert_eq!(
             row(&unreachable).1,
@@ -5161,11 +5288,15 @@ mod fee_tests {
         assert!(refused_fee_warning(&unreachable, &s).is_none());
     }
 
-    /// Spec 083 fee: the ">" opens the coin list whenever another coin can be
-    /// chosen — over a refused quote too — and a failure with nothing else to
-    /// choose is asked again, as before.
+    /// PR 2 polish: a tap on the fee row does EXACTLY what the row says
+    /// (`FeeFailureView.tap`). Settled, it opens the coins when there is
+    /// more than one; after the relay answered that it fails (spec 083 fee)
+    /// it opens them while another coin is left — asking again would get the
+    /// same answer — and does nothing once none is; every other failure is
+    /// asked again, whatever coins there are.
     #[test]
-    fn the_fee_row_opens_the_coins_whenever_another_can_be_chosen() {
+    fn the_fee_row_does_what_its_failure_says() {
+        use vela_core::app::fee_policy::FeeFailure;
         let usdc = Some("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
         let one = vec![option("ETH", None, false, true)];
         let two = || {
@@ -5174,21 +5305,30 @@ mod fee_tests {
                 option("USDC", usdc, true, true),
             ]
         };
-        assert_eq!(fee_tap(&quoted(one.clone(), true)), FeeTap::Nothing);
-        assert_eq!(fee_tap(&quoted(two(), true)), FeeTap::Coins);
-        assert_eq!(fee_tap(&refused(two())), FeeTap::Coins, "ETH can pay");
+        let tap = |fee: &FeeView| fee_tap(fee, fee.failure.as_ref());
+        assert_eq!(tap(&quoted(one.clone(), true)), FeeTap::Nothing);
+        assert_eq!(tap(&quoted(two(), true)), FeeTap::Coins);
+        assert_eq!(tap(&refused(two())), FeeTap::Coins, "ETH can pay");
         assert_eq!(
-            fee_tap(&refused(one)),
-            FeeTap::Requote,
-            "no other coin: ask again"
+            tap(&refused(one.clone())),
+            FeeTap::Nothing,
+            "no other coin: asking again gets the same answer"
         );
-        // The relay out of reach: every coin unpriced, so none to choose.
-        let mut unreachable = refused(vec![
-            option("ETH", None, true, false),
-            option("USDC", usdc, true, true),
-        ]);
-        unreachable.failed = Some(vela_core::app::fee_policy::FeeFailure::EstimateFailed);
-        assert_eq!(fee_tap(&unreachable), FeeTap::Requote);
+        // The chain out of reach: asked again — even with another coin on
+        // offer, which would meet the same chain.
+        for kind in [
+            FeeFailure::EstimateFailed,
+            FeeFailure::ChainRead {
+                rate_limited: false,
+            },
+            FeeFailure::Internal,
+        ] {
+            assert_eq!(tap(&failed_with(kind, two())), FeeTap::Requote, "{kind:?}");
+            assert_eq!(tap(&failed_with(kind, one.clone())), FeeTap::Requote);
+        }
+        // Another chain's failure is not this row's: the row is as settled.
+        let other = refused(two());
+        assert_eq!(fee_tap(&other, None), FeeTap::Coins);
     }
 
     /// Issue #262: quoted in a coin the wallet cannot pay with, the confirm

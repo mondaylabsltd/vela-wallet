@@ -1187,6 +1187,15 @@ export function rpcReadTimeoutMs(): number;
 
 export function safeProxyRuntimeCode(): string;
 
+/**
+ * The corpus key of the body of the alert a failed Continue estimate shows
+ * (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+ * its name (`{{chain}}`), a fault inside the app as that, else the general
+ * sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+ * JSON; anything unreadable reads as the general sentence.
+ */
+export function sendEstimateFailureBodyKey(failure: string): string;
+
 export function sha256(data: Uint8Array): Uint8Array;
 
 /**
@@ -1792,6 +1801,7 @@ export interface InitOutput {
     readonly rpcpoolcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly rpcpoolcore_view: (a: number) => [number, number, number, number];
     readonly safeProxyRuntimeCode: () => [number, number, number, number];
+    readonly sendEstimateFailureBodyKey: (a: number, b: number) => [number, number];
     readonly sendcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly sendcore_new: () => number;
     readonly sendcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

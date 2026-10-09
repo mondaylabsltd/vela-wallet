@@ -819,7 +819,7 @@ enum WalletFlowFixtures {
                 ],
                 cta: loc.t("send.txCloseBackground"), ctaAccent: false
             )
-        case .submitted, .failed:
+        case .submitted, .failed, .notSent:
             return SendReceiptModel(
                 header: header, stage: .submitted,
                 title: loc.t("send.txSubmittedTitle"),

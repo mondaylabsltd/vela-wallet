@@ -141,6 +141,7 @@
     "recipientCount_other": "{{count}} destinatarios",
     "removeRecipient": "Quitar",
     "alertInsufficientBalanceBody": "El total supera tu saldo.",
+    "alertEstimateChainDownBody": "No se puede conectar con {{chain}} para calcular la comisión de esta transacción. Inténtalo de nuevo en un momento.",
     "recipientPickAria": "Elegir un contacto",
     "multiSendNoFundsAfterGas": "No alcanza para el gas tras la reserva.",
     "gasReserved": "gas reservado",

@@ -218,6 +218,23 @@ pub fn fee_failure_reason_key(failure: &str) -> Option<String> {
     vela_core::app::fee_policy::failure_reason_key(fee_failure_of(failure)?).map(str::to_owned)
 }
 
+/// The corpus key of the body of the alert a failed Continue estimate shows
+/// (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+/// its name (`{{chain}}`), a fault inside the app as that, else the general
+/// sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+/// JSON; anything unreadable reads as the general sentence.
+#[wasm_bindgen(js_name = sendEstimateFailureBodyKey)]
+#[must_use]
+pub fn send_estimate_failure_body_key(failure: &str) -> String {
+    use vela_core::app::send::SendEstimateFailure;
+    serde_json::from_value::<SendEstimateFailure>(serde_json::Value::String(failure.to_owned()))
+        .ok()
+        .or_else(|| serde_json::from_str(failure).ok())
+        .unwrap_or(SendEstimateFailure::Other)
+        .body_key()
+        .to_owned()
+}
+
 /// The words of a venue refusal (spec 102), as JSON `{key, vars}`: the corpus
 /// key `VenueBlock::key()` names and the values its line takes by name
 /// (`domain`, `pageDomain`) — translate `key` with `vars` and the sentence is

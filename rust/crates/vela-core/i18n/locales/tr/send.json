@@ -80,6 +80,7 @@
     "recipientCount_other": "{{count}} alıcı",
     "removeRecipient": "Kaldır",
     "alertInsufficientBalanceBody": "Toplam bakiyenizi aşıyor.",
+    "alertEstimateChainDownBody": "Bu işlemin ücretini hesaplamak için {{chain}} ağına ulaşılamıyor. Birazdan tekrar deneyin.",
     "recipientPickAria": "Kişilerden seç",
     "multiSendNoFundsAfterGas": "Gas rezervinden sonra bakiye yetersiz.",
     "gasReserved": "Gas ayrıldı",

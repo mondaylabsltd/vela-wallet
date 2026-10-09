@@ -1077,6 +1077,19 @@ enum SettingsLive {
                 action: loc.t(k.balanceDetailRetry)
             ))
         }
+        // PR 2 note 11: a chain whose read never left the app is listed with
+        // the core's own sentence for that fault — never "RPC unavailable",
+        // which would send somebody to fix an endpoint nobody asked.
+        if let key = balance.internalKey {
+            for id in balance.internalChainIds ?? []
+            where !pending.contains(where: { $0.id == String(id) }) {
+                pending.append(BalanceDetailRowModel(
+                    id: String(id), mark: row(id), name: chainName(id),
+                    status: loc.t(key), tone: .error,
+                    action: loc.t(k.balanceDetailRetry)
+                ))
+            }
+        }
 
         var perChain: [Int: Double] = [:]
         for token in balance.tokens {

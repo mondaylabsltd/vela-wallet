@@ -595,6 +595,8 @@ describe('the unreachable-networks list (spec 092)', () => {
 		rate_limited_chain_ids: [],
 		unreachable_networks: networks,
 		unreachable_key: key,
+		internal_chain_ids: [],
+		internal_key: null,
 		holdings_loading: false,
 		cached_total_usd: null,
 		switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -615,6 +617,22 @@ describe('the unreachable-networks list (spec 092)', () => {
 			['Polygon', 'Not read yet', m.rescue.rpcFix]
 		]);
 		expect(panel.rows.map((r) => r.chainId)).toEqual([1, 56, 137]);
+	});
+
+	it('a read that failed inside Vela titles the list as that, never "can’t reach" (PR 2 note 11)', () => {
+		const panel = liveUnreachable(
+			{
+				...view([], null),
+				failed_chain_ids: [1],
+				internal_chain_ids: [1],
+				internal_key: 'componentsUi.gas.reasonInternal'
+			},
+			USD,
+			m
+		);
+		expect(panel.title).toBe(m.rescue.internal['componentsUi.gas.reasonInternal']);
+		expect(panel.title).not.toContain('Ethereum');
+		expect(panel.rows).toEqual([]);
 	});
 
 	it('names the one network, and writes the worth in the display currency', () => {

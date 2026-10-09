@@ -812,6 +812,37 @@ object I18nKeys {
         /** The fee's own reasons (issue #483): the chain's nodes out of reach (`{{chain}}`), or a fault inside the app. */
         const val FEE_REASON_CHAIN_DOWN = "componentsUi.gas.reasonChainDown"
         const val FEE_REASON_INTERNAL = "componentsUi.gas.reasonInternal"
+        /**
+         * PR 2 note 1: the line under a confirm held by a failed fee while
+         * the core asks again by itself ("Couldn't work out the fee yet.
+         * Retrying…") — the core's `FeeFailureView.footer_key`, beside
+         * `confirmBlock.feeFailed` when only a tap retries. Listed so the
+         * smoke test holds both in the corpus.
+         */
+        const val FEE_RETRYING = "componentsUi.signing.confirmBlock.feeRetrying"
+        const val FEE_FAILED = "componentsUi.signing.confirmBlock.feeFailed"
+        /** The fee row's figure when only a tap asks again ("Tap to retry"): `FeeFailureView.figure_key`. */
+        const val FEE_TAP_TO_RETRY = "componentsUi.gas.estimateFailed"
+        /**
+         * PR 2 polish: the fee row's figure when the relay answered that the
+         * operation fails with the coin in force and a tap opens the coins
+         * ("Pay with another coin") — `FeeFailureView.figure_key` with
+         * `tap = choose_coin`.
+         */
+        const val FEE_PAY_WITH_ANOTHER_COIN = "componentsUi.gas.payWithAnotherCoin"
+        /**
+         * The line under the held confirm for that answer ("This would fail
+         * if sent as it is.") — a fact, asking for no tap: `footer_key`.
+         */
+        const val FEE_WOULD_FAIL = "componentsUi.signing.confirmBlock.feeWouldFail"
+        /**
+         * PR 2 polish: a submit the relay turned back because the account's
+         * previous transaction on this network still holds the nonce — "Not
+         * sent yet", calmly, over its sentence, with Try again: the signing
+         * sheet's `failure_not_sent`, Send's `tx_error = previous_pending`.
+         */
+        const val NOT_SENT_TITLE = "componentsUi.signing.notSentTitle"
+        const val NOT_SENT_BODY = "componentsUi.signing.notSentBody"
         const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"
@@ -825,6 +856,13 @@ object I18nKeys {
         const val TX_REJECTED_FEES = "send.txRejectedFees"
         const val ALERT_ESTIMATE_TITLE = "send.alertEstimateFailedTitle"
         const val ALERT_ESTIMATE_BODY = "send.alertEstimateFailedBody"
+        /**
+         * PR 2 note 13: Continue's estimate failed because the chain's nodes
+         * did not answer ("Can't reach {{chain}} to price this transaction…")
+         * — the core's `sendEstimateFailureBodyKey` names it; listed for the
+         * smoke test.
+         */
+        const val ALERT_ESTIMATE_CHAIN_DOWN_BODY = "send.alertEstimateChainDownBody"
         const val ALERT_LOAD_TOKENS = "send.alertLoadTokensError"
         const val TX_ERROR_GENERIC = "send.txErrorGeneric"
         const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"

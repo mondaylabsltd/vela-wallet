@@ -10372,6 +10372,11 @@ public struct TrackStatusAnswer: Equatable, Hashable {
      * The bundle transaction the relay names, when it has one.
      */
     public var txHash: String?
+    /**
+     * Why the relay refused it (`rejection_reason`, relay contract §2) —
+     * the tracker's `Status.rejection_reason`, passed through as it is.
+     */
+    public var rejectionReason: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -10385,10 +10390,15 @@ public struct TrackStatusAnswer: Equatable, Hashable {
          */stage: String?, 
         /**
          * The bundle transaction the relay names, when it has one.
-         */txHash: String?) {
+         */txHash: String?, 
+        /**
+         * Why the relay refused it (`rejection_reason`, relay contract §2) —
+         * the tracker's `Status.rejection_reason`, passed through as it is.
+         */rejectionReason: String?) {
         self.status = status
         self.stage = stage
         self.txHash = txHash
+        self.rejectionReason = rejectionReason
     }
 
     
@@ -10409,7 +10419,8 @@ public struct FfiConverterTypeTrackStatusAnswer: FfiConverterRustBuffer {
             try TrackStatusAnswer(
                 status: FfiConverterString.read(from: &buf), 
                 stage: FfiConverterOptionString.read(from: &buf), 
-                txHash: FfiConverterOptionString.read(from: &buf)
+                txHash: FfiConverterOptionString.read(from: &buf), 
+                rejectionReason: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -10417,6 +10428,7 @@ public struct FfiConverterTypeTrackStatusAnswer: FfiConverterRustBuffer {
         FfiConverterString.write(value.status, into: &buf)
         FfiConverterOptionString.write(value.stage, into: &buf)
         FfiConverterOptionString.write(value.txHash, into: &buf)
+        FfiConverterOptionString.write(value.rejectionReason, into: &buf)
     }
 }
 
@@ -15891,6 +15903,22 @@ public func safeProxyRuntimeCode()throws  -> String  {
 })
 }
 /**
+ * The corpus key of the body of the alert a failed Continue estimate shows
+ * (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+ * its name (`{{chain}}`), a fault inside the app as that, else the general
+ * sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+ * JSON for one that carries data (`{"chain_read":{"rate_limited":false}}`);
+ * anything unreadable reads as the general sentence.
+ */
+public func sendEstimateFailureBodyKey(failure: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_send_estimate_failure_body_key(
+        FfiConverterString.lower(failure),uniffiCallStatus
+    )
+})
+}
+/**
  * The receipt verdict a tracker entry stands for, for the send machine's
  * `ReceiptUpdate` — a `SendReceiptOutcome` as JSON (`confirmed{tx_hash}`,
  * `failed{rejected, not_sent}`, `fee_held`, `acknowledged`) — or `None` while
@@ -17681,6 +17709,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_safe_proxy_runtime_code() != 4363) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_send_estimate_failure_body_key() != 25888) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_send_receipt_outcome_of() != 57773) {

@@ -137,6 +137,7 @@
     "recipientCount_other": "{{count}} 位收款人",
     "removeRecipient": "移除",
     "alertInsufficientBalanceBody": "總額超過你的餘額。",
+    "alertEstimateChainDownBody": "暫時連不上 {{chain}}，無法計算這筆交易的費用。請稍後再試。",
     "recipientPickAria": "從通訊錄選擇",
     "scanAria": "掃描 QR code",
     "multiSendNoFundsAfterGas": "扣除 gas 儲備後餘額不足。",

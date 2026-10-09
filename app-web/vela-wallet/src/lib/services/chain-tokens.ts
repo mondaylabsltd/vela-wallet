@@ -39,7 +39,21 @@ export interface ChainTokenData {
 // Cache
 // ---------------------------------------------------------------------------
 
-const cache = new Map<number, { data: ChainTokenData; at: number }>();
+/**
+ * What reading a chain's registry document came to (PR 2 polish) — three
+ * outcomes, not two. `doc`: the server answered with the document. `absent`:
+ * the server answered that there is none (HTTP 404) — a definitive "no such
+ * document". `unread`: nothing definitive came back — the request failed or
+ * timed out, the server answered 5xx, 429 or any other non-2xx, or the body
+ * could not be read. Folding `unread` into "no document" made a chain with no
+ * native coin (Tempo) read as "answered, holds nothing" — $0.00 — whenever the
+ * document's server could not be reached.
+ */
+export type ChainTokensRead =
+	{ kind: 'doc'; data: ChainTokenData } | { kind: 'absent' } | { kind: 'unread'; cause: unknown };
+
+/** The definitive answers, kept {@link CACHE_TTL}. An `unread` is never kept: the next ask reads again. */
+const cache = new Map<number, { read: Exclude<ChainTokensRead, { kind: 'unread' }>; at: number }>();
 
 // ---------------------------------------------------------------------------
 // Built-in DEX overrides — guaranteed correct, never depend on remote API.
@@ -152,48 +166,84 @@ const BUILTIN_DEX: Record<number, DexInfo> = {
 // Public API
 // ---------------------------------------------------------------------------
 
-/** Fetch chain token data with caching. Returns null if chain is unknown. */
-export async function fetchChainTokens(chainId: number): Promise<ChainTokenData | null> {
+/**
+ * The chain's registry document, as one of three outcomes
+ * ({@link ChainTokensRead}). `doc` and `absent` are cached for 30 min;
+ * `unread` never is.
+ */
+export async function readChainTokens(chainId: number): Promise<ChainTokensRead> {
 	const cached = cache.get(chainId);
-	if (cached && Date.now() - cached.at < CACHE_TTL) return cached.data;
+	if (cached && Date.now() - cached.at < CACHE_TTL) return cached.read;
 
+	let res: Response;
 	try {
-		const res = await fetchWithTimeout(
+		res = await fetchWithTimeout(
 			`${getEthereumDataURL()}/chains/eip155-${chainId}.json`,
 			{},
 			{ timeoutMs: NET_TIMEOUTS.ethereumData }
 		);
-		if (!res.ok) return null;
-
-		// The registry document, trusted only field by field (the Expo module had
-		// `any` here; strict mode wants the shape spelled out).
-		const raw = (await res.json()) as {
-			nativeCurrency?: { name?: string; symbol?: string; decimals?: unknown };
-			stables?: unknown;
-			wrappedNativeToken?: string | null;
-			dex?: ChainTokenData['dex'];
-		};
-		const rawDec = raw.nativeCurrency?.decimals;
-		const decimals = typeof rawDec === 'number' && rawDec >= 0 && rawDec <= 255 ? rawDec : 18;
-
-		const data: ChainTokenData = {
-			chainId,
-			nativeCurrency: {
-				name: raw.nativeCurrency?.name ?? 'Ether',
-				symbol: raw.nativeCurrency?.symbol ?? 'ETH',
-				decimals
-			},
-			stables: Array.isArray(raw.stables) ? (raw.stables as ChainTokenData['stables']) : [],
-			wrappedNativeToken: raw.wrappedNativeToken ?? null,
-			// Built-in DEX overrides take priority over API data
-			dex: BUILTIN_DEX[chainId] ?? raw.dex ?? null
-		};
-
-		cache.set(chainId, { data, at: Date.now() });
-		return data;
-	} catch {
-		return null;
+	} catch (cause) {
+		// No answer at all: offline, refused, timed out.
+		return { kind: 'unread', cause };
 	}
+	if (res.status === 404) {
+		// The server answered: there is no document for this chain.
+		const read = { kind: 'absent' } as const;
+		cache.set(chainId, { read, at: Date.now() });
+		return read;
+	}
+	if (!res.ok) {
+		// 5xx, 429, any other refusal: the server said nothing about the chain.
+		return { kind: 'unread', cause: new Error(`registry document: HTTP ${res.status}`) };
+	}
+
+	// The registry document, trusted only field by field (the Expo module had
+	// `any` here; strict mode wants the shape spelled out).
+	let raw: {
+		nativeCurrency?: { name?: string; symbol?: string; decimals?: unknown };
+		stables?: unknown;
+		wrappedNativeToken?: string | null;
+		dex?: ChainTokenData['dex'];
+	};
+	try {
+		const body: unknown = await res.json();
+		if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+			return { kind: 'unread', cause: new Error('registry document: not an object') };
+		}
+		raw = body as typeof raw;
+	} catch (cause) {
+		// A body cut off or not JSON is no answer either.
+		return { kind: 'unread', cause };
+	}
+	const rawDec = raw.nativeCurrency?.decimals;
+	const decimals = typeof rawDec === 'number' && rawDec >= 0 && rawDec <= 255 ? rawDec : 18;
+
+	const data: ChainTokenData = {
+		chainId,
+		nativeCurrency: {
+			name: raw.nativeCurrency?.name ?? 'Ether',
+			symbol: raw.nativeCurrency?.symbol ?? 'ETH',
+			decimals
+		},
+		stables: Array.isArray(raw.stables) ? (raw.stables as ChainTokenData['stables']) : [],
+		wrappedNativeToken: raw.wrappedNativeToken ?? null,
+		// Built-in DEX overrides take priority over API data
+		dex: BUILTIN_DEX[chainId] ?? raw.dex ?? null
+	};
+
+	const read = { kind: 'doc', data } as const;
+	cache.set(chainId, { read, at: Date.now() });
+	return read;
+}
+
+/**
+ * The chain's registry facts, or `null` when there are none to be had —
+ * `absent` and `unread` alike. For callers that only want facts (token
+ * trust); the balance read tells the two apart ({@link readChainTokens}).
+ */
+export async function fetchChainTokens(chainId: number): Promise<ChainTokenData | null> {
+	const read = await readChainTokens(chainId);
+	return read.kind === 'doc' ? read.data : null;
 }
 
 /**

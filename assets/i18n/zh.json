@@ -299,6 +299,7 @@
   "continueBtn": "继续",
   "alertEstimateFailedTitle": "无法准备交易",
   "alertEstimateFailedBody": "无法生成有效的交易预估，请重试。",
+  "alertEstimateChainDownBody": "暂时连不上 {{chain}}，无法计算这笔交易的费用。请稍后再试。",
   "alertAccountUnavailableBody": "无法加载准备这笔交易所需的账户密钥，请重试。",
   "alertInvalidAddressTitle": "地址无效",
   "alertInvalidAddressBody": "请输入有效的以太坊地址（0x...）。",
@@ -1394,6 +1395,8 @@
    "maybeSent": "可能已经发出。Vela 会继续查看，请不要重复发送。",
    "refused": "网络拒绝了这笔交易，什么都没有发出。",
    "wentFirst": "这个账户的另一笔交易先完成了，这笔什么都没有发出。",
+   "notSentTitle": "暂未发送",
+   "notSentBody": "这个网络上你的上一笔交易还在处理中。等它完成后再试一次。",
    "unknownOutcome": "超过 24 小时仍未确认。",
    "openSigner": "去签名页确认",
    "signerDown": "签名页没能打开，请检查网络。",
@@ -1418,6 +1421,8 @@
     "batchUnsettled": "正在逐一检查这批调用…",
     "feeMeasuring": "正在计算网络费用…",
     "feeFailed": "没能算出费用——点费用重试",
+    "feeRetrying": "暂时没能算出费用，正在自动重试…",
+    "feeWouldFail": "按现在的方式发送会失败。",
     "previousPending": "正在等待这个网络上的上一笔交易完成…"
    }
   },
@@ -1451,6 +1456,7 @@
    "estFee": "网络费",
    "estimating": "估算中...",
    "estimateFailed": "点击重试",
+   "payWithAnotherCoin": "换一种币付费",
    "gasPrice": "Gas 价格",
    "gasPriceUserOp": "Gas 价格 (UserOp)",
    "networkFee": "网络费",
@@ -1470,7 +1476,7 @@
    "reasonSimulation": "中继暂时没能试运行这笔交易，正在自动重试。",
    "reasonQuoteHigh": "中继的 gas 价格眼下远高于网络本身，正在自动重试。",
    "reasonChainDown": "暂时连不上 {{chain}}，无法计算费用，正在自动重试。",
-   "reasonInternal": "Vela 内部出了问题，正在重试。如果一直失败，请重新打开应用。",
+   "reasonInternal": "Vela 内部出了问题。如果一直这样，请重新打开应用。",
    "rowShort": "需要 ~{{need}}，现有 {{have}}",
    "noCoinPays": "所有代币都不够付这笔网络费"
   },

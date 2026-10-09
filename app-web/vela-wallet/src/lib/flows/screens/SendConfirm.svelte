@@ -12,7 +12,7 @@
 	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
-	import type { SendConfirmModel } from '../model';
+	import type { FactRowModel, SendConfirmModel } from '../model';
 
 	interface Props {
 		model: SendConfirmModel;
@@ -28,9 +28,30 @@
 		ctaBusy?: boolean;
 		/** The failed submit's "Try again" (`retry_after_error`). */
 		onretry?: () => void;
+		/**
+		 * PR 2 polish: the failed fee line's two actions, as its words promise
+		 * (`FactRowModel.tap`) — ask the fee again at once (`requote`), or open
+		 * the fee coins. Absent ⇒ the line stays a fact.
+		 */
+		onfeeretry?: () => void;
+		onfeecoins?: () => void;
 	}
 
-	let { model, onconfirm, ctaDisabled = false, ctaBusy = false, onretry }: Props = $props();
+	let {
+		model,
+		onconfirm,
+		ctaDisabled = false,
+		ctaBusy = false,
+		onretry,
+		onfeeretry,
+		onfeecoins
+	}: Props = $props();
+
+	/** The action a pressable fact's tap names, if this screen was given it. */
+	function tapOf(fact: FactRowModel): (() => void) | undefined {
+		if (fact.tap === undefined) return undefined;
+		return fact.tap.does === 'retry' ? onfeeretry : onfeecoins;
+	}
 </script>
 
 <div class="confirm">
@@ -61,7 +82,7 @@
 	<ul class="facts">
 		{#each model.facts as fact (fact.label)}
 			<li>
-				<FactRow {fact} />
+				<FactRow {fact} ontap={tapOf(fact)} />
 				{#if fact.note !== undefined}
 					<p class="note">{fact.note}</p>
 				{/if}
@@ -84,8 +105,18 @@
 	<div class="cta">
 		{#if model.error !== undefined}
 			<!-- The last submit did not go: why, and the retry that clears it.
-			     Above the confirm it unblocks, so the eye meets the cause first. -->
-			<div class="error" role="alert">
+			     Above the confirm it unblocks, so the eye meets the cause first.
+			     "Not sent yet" (`calm`, PR 2 polish) is no failure: its title over
+			     the sentence, in the quiet ink, announced politely. -->
+			<div
+				class="error"
+				class:calm={model.error.calm === true}
+				role={model.error.calm === true ? 'status' : 'alert'}
+				data-testid="send-confirm-error"
+			>
+				{#if model.error.title !== undefined}
+					<p class="title">{model.error.title}</p>
+				{/if}
 				<p>{model.error.text}</p>
 				{#if model.error.retry !== undefined && onretry !== undefined}
 					<Button variant="secondary" shape="rounded" onclick={onretry}>{model.error.retry}</Button>
@@ -209,6 +240,22 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		color: var(--color-error-base);
+	}
+	/* Held back, not failed: the held line's quiet ink, its title in the
+	   body's own colour — nothing here is in the error colour. */
+	.error.calm {
+		gap: var(--space-xs);
+	}
+	.error.calm p {
+		color: var(--color-fg-muted);
+	}
+	.error.calm .title {
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+	.error.calm :global(button) {
+		margin-top: var(--space-sm);
 	}
 	/* Why a fact reads as it does (issue 686: a speed taken because it was
 	   free). Quiet, under its row and inside the same card, so the reason is

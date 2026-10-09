@@ -226,7 +226,7 @@ pub const DESKTOP_STATES: [&str; 10] = [
     dead_code,
     reason = "cross-platform scenario inventory (data-model.md §3)"
 )]
-pub const ALL_STATES: [&str; 41] = [
+pub const ALL_STATES: [&str; 46] = [
     "cs1", "cs2", "cs3", "cs4", "cs5", "cs6", "cs7", "cs8", "cs9", "cs10", "cs11", "cs12", "cs13",
     "cs14", "cs15", "cs16", "cs17", "cs18", "cs19", "cs20", "cs21", "cs22", "cs23", "cs24", "cs25",
     "cs26", "cs27", "cs28", "cs29", "cs30", "cs31", "cs32", "cs33",
@@ -243,6 +243,14 @@ pub const ALL_STATES: [&str; 41] = [
     // holding the confirm, and a fee coin switched (provisional, then
     // measured).
     "cs37", "cs38", "cs39", "cs40", "cs41",
+    // PR 2 note 1: the fee's failure in one truth on the row and the footer —
+    // the core's re-ask out after the chain-down (the reason kept, the
+    // measuring sign turning), and a failure only a tap retries.
+    "cs42", "cs43",
+    // PR 2 polish: the relay answered that the transfer fails — a tap opens
+    // the coins while another is left ("Pay with another coin"), closed and
+    // then open; with none left the row is no control.
+    "cs44", "cs45", "cs46",
 ];
 
 /// The scenario `VELA_SIGNING_STATE=cs36` names, if it names one — with
@@ -1770,6 +1778,11 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
         "cs39" => correctness_state("cs39", s),
         "cs40" => correctness_state("cs40", s),
         "cs41" => correctness_state("cs41", s),
+        "cs42" => correctness_state("cs42", s),
+        "cs43" => correctness_state("cs43", s),
+        "cs44" => correctness_state("cs44", s),
+        "cs45" => correctness_state("cs45", s),
+        "cs46" => correctness_state("cs46", s),
 
         other => panic!("unknown signing state `{other}`"),
     };
@@ -1782,36 +1795,168 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
     model
 }
 
+/// `VELA_SIGNING_REFUSAL=held|refused|went-first|fees` — with `VELA_PAGE=
+/// gallery` and a signing state: the sheet after the relay did not take the
+/// operation, through the real `sign_request` core, so its failure line is
+/// the core's one sentence for it (`SignView.failure_refusal_key`, PR 2 note
+/// 9). At submit: another operation of the account holds the nonce (`held`
+/// — "Try again" stays) or a plain refusal; after it, the tracker's verdict
+/// with its reason (`went-first`: the nonce another operation used; `fees`:
+/// fees stayed above). Same env-pin family as `VELA_SIGNING_STATE`.
+#[must_use]
+pub fn refusal_pin() -> Option<vela_core::app::sign_request::SignView> {
+    let want = crate::dev_env::var!("VELA_SIGNING_REFUSAL")?;
+    refusal_view(want.trim())
+}
+
+/// [`refusal_pin`]'s sheet for `want`, or `None` for a name it does not know.
+#[must_use]
+pub fn refusal_view(want: &str) -> Option<vela_core::app::sign_request::SignView> {
+    use crate::core_host::CoreHost;
+    use vela_core::app::sign_request::{
+        Event, SignAccountRef, SignApproveOpts, SignOperation, SignRequest, SignShellResult,
+        SignSubmitOutcome,
+    };
+    use vela_core::app::tx_tracker::{RefusalReason, TrackStatus};
+    const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    const OP: &str = "0xa974c5dd0a00000000000000000000000000000000000000000000000000beef";
+    const ID: &str = "rid-gallery";
+    enum Ends {
+        AtSubmit { message: String, refused: bool },
+        Tracked(RefusalReason),
+    }
+    let ends = match want {
+        "held" => Ends::AtSubmit {
+            message: vela_core::user_op::PREVIOUS_PENDING_DETAIL.to_owned(),
+            refused: false,
+        },
+        "refused" => Ends::AtSubmit {
+            message: "UserOperation refused".to_owned(),
+            refused: true,
+        },
+        "went-first" => Ends::Tracked(RefusalReason::NonceUsed),
+        "fees" => Ends::Tracked(RefusalReason::FeeBelowMarket),
+        _ => return None,
+    };
+    let mut host = CoreHost::<SignRequest>::new();
+    host.dispatch(Event::NetworksChanged {
+        chain_ids: vec![100],
+    });
+    host.dispatch(Event::AccountsChanged {
+        accounts: vec![SignAccountRef {
+            address: ME.to_owned(),
+            credential_id: "cred0".to_owned(),
+        }],
+        active_index: 0,
+    });
+    host.dispatch(Event::RequestArrived {
+        id: ID.to_owned(),
+        method: "eth_sendTransaction".to_owned(),
+        params_json:
+            r#"[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x38d7ea4c68000"}]"#
+                .to_owned(),
+        origin: "https://app.uniswap.org".to_owned(),
+        transport_id: "tab-gallery".to_owned(),
+        dedicated_transport: true,
+        per_request_chain: Some(100),
+        dapp: None,
+        granted_address: Some(ME.to_owned()),
+        requested_address: None,
+        request_ts_ms: None,
+        now_ms: 1_000.0,
+        first_party: false,
+    });
+    let ops = host.dispatch(Event::ApproveTapped {
+        opts: SignApproveOpts::default(),
+    });
+    let precheck = ops.first()?.id;
+    let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
+    let submit = ops
+        .iter()
+        .find(|op| matches!(op.operation, SignOperation::SignAndSubmit { .. }))?
+        .id;
+    let persist = |host: &mut CoreHost<SignRequest>,
+                   ops: Vec<crate::core_host::Pending<SignOperation>>| {
+        for op in ops {
+            if matches!(op.operation, SignOperation::PersistRecord { .. }) {
+                let _ = host.resolve(op.id, SignShellResult::RecordPersisted);
+            }
+        }
+    };
+    match ends {
+        Ends::AtSubmit { message, refused } => {
+            host.dispatch(Event::CeremonyStarted { id: ID.to_owned() });
+            host.dispatch(Event::CeremonyDone { id: ID.to_owned() });
+            let ops = host.dispatch(Event::OpSigned {
+                id: ID.to_owned(),
+                user_op_hash: OP.to_owned(),
+                submit_block: Some(48_487_620),
+                now_ms: 5_000.0,
+            });
+            persist(&mut host, ops);
+            let _ = host.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: SignSubmitOutcome::Failed {
+                        message,
+                        refused,
+                        signer: None,
+                    },
+                    now_ms: 6_000.0,
+                },
+            );
+        }
+        Ends::Tracked(reason) => {
+            let ops = host.dispatch(Event::OpSubmitted {
+                id: ID.to_owned(),
+                user_op_hash: OP.to_owned(),
+                now_ms: 5_000.0,
+                maybe_sent: false,
+                submit_block: None,
+            });
+            persist(&mut host, ops);
+            let _ = host.dispatch(Event::OpTracked {
+                user_op_hash: OP.to_owned(),
+                status: TrackStatus::Rejected,
+                tx_hash: None,
+                now_ms: 20_000.0,
+                refusal: Some(reason),
+            });
+        }
+    }
+    Some(host.view())
+}
+
 /// The correctness batch's sheet states, on cs1's transfer: its fee row
-/// drawn by the live `fee_model` from a fee view the core produced or would
-/// produce, and its confirm held with the core's line for the block the gate
-/// gives (`sign_confirm`).
+/// drawn by the live `fee_model` from a fee view the core produced, and its
+/// confirm held with the core's line for it — a failed fee's footer is the
+/// fee view's own (`FeeFailureView.footer_key`, the key `sign_confirm` hands
+/// the sheet), so the row and the footer say one thing.
 fn correctness_state(state: &'static str, s: &SigningStrings) -> SigningModel {
-    use vela_core::app::fee_policy::{FeeFailure, FeeView};
     let mut model = build("cs1", s);
     model.id = state;
-    let pristine =
-        || crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
-    let failed = |failure| FeeView {
-        failed: Some(failure),
-        ..pristine()
-    };
+    let failures = fee_failures();
     let [_, provisional, settled] = fee_coin_switch();
+    let [choose_coin, nothing] = fee_would_fail();
     let (fee, note) = match state {
-        "cs37" => (
-            Some(failed(FeeFailure::ChainRead {
-                rate_limited: false,
-            })),
-            Some(s.note_fee_failed.clone()),
-        ),
-        "cs38" => (
-            Some(failed(FeeFailure::Internal)),
-            Some(s.note_fee_failed.clone()),
-        ),
+        // The chain out of reach, and a fault inside Vela: the core asks
+        // again by itself — "Retrying…", never a tap.
+        "cs37" => (Some(failures.down), None),
+        "cs38" => (Some(failures.internal), None),
         // The fee is settled; the account's previous transaction on this
         // network holds the confirm — one line, nothing else in its place.
         "cs39" => (None, Some(s.note_previous_pending.clone())),
         "cs40" => (Some(provisional), Some(s.note_fee_measuring.clone())),
+        // The re-ask out after the chain-down: the reason kept, the
+        // measuring sign turning beside it.
+        "cs42" => (Some(failures.retrying), None),
+        // Only a tap retries it: "Tap to retry", "Tap it to retry".
+        "cs43" => (Some(failures.tap), None),
+        // The relay answered that it fails: "Pay with another coin" over
+        // "This would fail if sent as it is." — and the list that tap
+        // opens; with no coin left, the dash and no chevron.
+        "cs44" | "cs46" => (Some(choose_coin), None),
+        "cs45" => (Some(nothing), None),
         _ => (Some(settled), None),
     };
     if let Some(fee) = fee {
@@ -1821,7 +1966,7 @@ fn correctness_state(state: &'static str, s: &SigningStrings) -> SigningModel {
             &clear,
             &fee,
             1,
-            false,
+            state == "cs46",
             s,
             "en",
             None,
@@ -1829,32 +1974,106 @@ fn correctness_state(state: &'static str, s: &SigningStrings) -> SigningModel {
         );
         crate::signing::live::fee_row_state(&mut row, fee.busy || fee.provisional);
         model.fee = row;
+        // The footer of a failed fee: the fee view's own line.
+        if let Some(failure) = fee.failure.as_ref() {
+            model.confirm_enabled = false;
+            model.confirm_note = Some(s.fee_failure.row(failure, "Ethereum").footer);
+            return model;
+        }
     }
     model.confirm_enabled = note.is_none();
     model.confirm_note = note;
     model
 }
 
-/// A fee coin switched, through the real `fee_policy` core with canned
-/// answers: quoted in ETH, then USDC picked (`provisional` — the switched
-/// figure, measured again with the USDC leg before it can be confirmed),
-/// then measured. On Ethereum, for cs1's transfer.
+/// PR 2 note 1's fee failures, each through the real `fee_policy` core on
+/// cs1's transfer (Ethereum), the account read answered as the executor
+/// would answer it.
+pub struct FeeFailures {
+    /// The chain's nodes did not answer: the core asks again by itself.
+    pub down: vela_core::app::fee_policy::FeeView,
+    /// The read never left the app (issue 483): asked again by itself too.
+    pub internal: vela_core::app::fee_policy::FeeView,
+    /// The core's own re-ask after `down`, out now (`retrying`).
+    pub retrying: vela_core::app::fee_policy::FeeView,
+    /// An account not yet deployed with no public key: only a tap retries.
+    pub tap: vela_core::app::fee_policy::FeeView,
+}
+
 #[must_use]
-pub fn fee_coin_switch() -> [vela_core::app::fee_policy::FeeView; 3] {
-    use crate::core_host::{CoreHost, Pending};
+pub fn fee_failures() -> FeeFailures {
+    use crate::core_host::CoreHost;
     use vela_core::app::fee_policy::{
-        DeploymentRead, Event as FeeEvent, FeeAssetKind, FeeAssetQuote, FeeBundlerQuote, FeeCall,
-        FeeGasOutcome, FeeOperation, FeePolicy, FeeShellResult as Res, FeeTier,
+        DeploymentRead, Event as FeeEvent, FeeCall, FeeOperation, FeePolicy, FeeShellResult,
+        FeeTier,
     };
-    const USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
-    let row = |native: bool| FeeAssetQuote {
+    let run = |read: DeploymentRead, public_key: bool, retry: bool| {
+        let mut host = CoreHost::<FeePolicy>::new();
+        let pending = host.dispatch(FeeEvent::QuoteRequested {
+            chain_id: 1,
+            account: "0x88cca0eedbf2c4426110bbfc998f048689266894".to_owned(),
+            deployed: false,
+            public_key_available: public_key,
+            tier: FeeTier::Standard,
+            calls: vec![FeeCall {
+                to: "0x2222222222222222222222222222222222222222".to_owned(),
+                value: "1000".to_owned(),
+                data: "0x".to_owned(),
+            }],
+            fee_token: None,
+            auto_fee_token: false,
+            number: Default::default(),
+            read_deployment: Some(true),
+        });
+        let Some(asked) = pending
+            .iter()
+            .find(|effect| matches!(effect.operation, FeeOperation::ReadDeployment { .. }))
+        else {
+            return host.view();
+        };
+        let after = host.resolve(asked.id, FeeShellResult::Deployment { read });
+        if retry
+            && let Some(timer) = after
+                .iter()
+                .find(|effect| matches!(effect.operation, FeeOperation::StartTtl { .. }))
+        {
+            // The core's own timer came due: its re-ask is out.
+            let _ = host.resolve(timer.id, FeeShellResult::TtlElapsed);
+        }
+        host.view()
+    };
+    let down = || DeploymentRead::Unreachable {
+        rate_limited: false,
+    };
+    FeeFailures {
+        down: run(down(), true, false),
+        internal: run(
+            DeploymentRead::Internal {
+                kind: "rpc: pool_unavailable".to_owned(),
+            },
+            true,
+            false,
+        ),
+        retrying: run(down(), true, true),
+        tap: run(DeploymentRead::Read { deployed: false }, false, false),
+    }
+}
+
+/// The mainnet USDC the canned fee answers offer beside ETH.
+const FEE_USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+
+/// The relay's in-band row for ETH (`native`) or USDC, as the canned fee
+/// answers give it: 1 ETH at $2,500, 50 USDC.
+fn fee_quote_row(native: bool) -> vela_core::app::fee_policy::FeeAssetQuote {
+    use vela_core::app::fee_policy::{FeeAssetKind, FeeAssetQuote};
+    FeeAssetQuote {
         recipient: "0x1111111111111111111111111111111111111111".to_owned(),
         asset: if native {
             FeeAssetKind::Native
         } else {
             FeeAssetKind::Erc20
         },
-        fee_token: (!native).then(|| USDC.to_owned()),
+        fee_token: (!native).then(|| FEE_USDC.to_owned()),
         balance: if native {
             "1000000000000000000"
         } else {
@@ -1867,55 +2086,82 @@ pub fn fee_coin_switch() -> [vela_core::app::fee_policy::FeeView; 3] {
         usd_price: Some(if native { "2500" } else { "1" }.to_owned()),
         native_usd_floor_price: None,
         minimum_amount: None,
+    }
+}
+
+/// Answer every effect the fee core asks, as the executor would on a
+/// healthy Ethereum — the relay's simulation `refused` when asked to (spec
+/// 083 fee: it ANSWERED that the operation fails with the coin in force).
+fn answer_fee(
+    host: &mut crate::core_host::CoreHost<vela_core::app::fee_policy::FeePolicy>,
+    mut pending: Vec<crate::core_host::Pending<vela_core::app::fee_policy::FeeOperation>>,
+    refused: bool,
+) {
+    use vela_core::app::fee_policy::{
+        DeploymentRead, FeeBundlerQuote, FeeGasOutcome, FeeOperation, FeeShellResult as Res,
     };
-    let answer = |host: &mut CoreHost<FeePolicy>, mut pending: Vec<Pending<FeeOperation>>| {
-        while let Some(effect) = pending.pop() {
-            let result = match effect.operation {
-                FeeOperation::ReadDeployment { .. } => Res::Deployment {
-                    read: DeploymentRead::Read { deployed: true },
+    while let Some(effect) = pending.pop() {
+        let result = match effect.operation {
+            FeeOperation::ReadDeployment { .. } => Res::Deployment {
+                read: DeploymentRead::Read { deployed: true },
+            },
+            FeeOperation::FetchGasPrice { .. } => Res::GasPrice {
+                eth_gas_price: Some("1000000000".to_owned()),
+                base_fee: Some("1000000000".to_owned()),
+                priority_fee: Some("1000000".to_owned()),
+            },
+            FeeOperation::FetchBundlerQuote { .. } => Res::BundlerQuote {
+                quote: Some(FeeBundlerQuote {
+                    max_fee_per_gas: "2000000000".to_owned(),
+                    max_priority_fee_per_gas: None,
+                    network_fee_per_gas: Some("1000000000".to_owned()),
+                    relayer_fee_per_gas: Some("1000000000".to_owned()),
+                    in_band_fee_per_gas: None,
+                }),
+            },
+            FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {
+                quotes: Some(vec![fee_quote_row(true), fee_quote_row(false)]),
+            },
+            FeeOperation::EstimateUserOpGas { .. } if refused => Res::UserOpGas {
+                outcome: FeeGasOutcome::Refused,
+            },
+            // The fee leg is the last call: a USDC `transfer` is one
+            // SSTORE heavier than a native leg — the reason a switched
+            // coin is measured again (its figure moves when it lands).
+            FeeOperation::EstimateUserOpGas { calls, .. } => Res::UserOpGas {
+                outcome: FeeGasOutcome::Estimated {
+                    verification_gas_limit: "100000".to_owned(),
+                    call_gas_limit: if calls.last().is_some_and(|leg| leg.data != "0x") {
+                        "330000"
+                    } else {
+                        "300000"
+                    }
+                    .to_owned(),
+                    pre_verification_gas: "50000".to_owned(),
+                    settlement_gas: None,
                 },
-                FeeOperation::FetchGasPrice { .. } => Res::GasPrice {
-                    eth_gas_price: Some("1000000000".to_owned()),
-                    base_fee: Some("1000000000".to_owned()),
-                    priority_fee: Some("1000000".to_owned()),
-                },
-                FeeOperation::FetchBundlerQuote { .. } => Res::BundlerQuote {
-                    quote: Some(FeeBundlerQuote {
-                        max_fee_per_gas: "2000000000".to_owned(),
-                        max_priority_fee_per_gas: None,
-                        network_fee_per_gas: Some("1000000000".to_owned()),
-                        relayer_fee_per_gas: Some("1000000000".to_owned()),
-                        in_band_fee_per_gas: None,
-                    }),
-                },
-                FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {
-                    quotes: Some(vec![row(true), row(false)]),
-                },
-                // The fee leg is the last call: a USDC `transfer` is one
-                // SSTORE heavier than a native leg — the reason a switched
-                // coin is measured again (its figure moves when it lands).
-                FeeOperation::EstimateUserOpGas { calls, .. } => Res::UserOpGas {
-                    outcome: FeeGasOutcome::Estimated {
-                        verification_gas_limit: "100000".to_owned(),
-                        call_gas_limit: if calls.last().is_some_and(|leg| leg.data != "0x") {
-                            "330000"
-                        } else {
-                            "300000"
-                        }
-                        .to_owned(),
-                        pre_verification_gas: "50000".to_owned(),
-                        settlement_gas: None,
-                    },
-                },
-                FeeOperation::MeasureInnerCalls { calls, .. } => Res::InnerCallsMeasured {
-                    gas: calls.iter().map(|_| None).collect(),
-                },
-                // Timers stay out: nothing here waits on a clock.
-                _ => continue,
-            };
-            pending.extend(host.resolve(effect.id, result));
-        }
-    };
+            },
+            FeeOperation::MeasureInnerCalls { calls, .. } => Res::InnerCallsMeasured {
+                gas: calls.iter().map(|_| None).collect(),
+            },
+            // Timers stay out: nothing here waits on a clock.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+}
+
+/// cs1's transfer priced on Ethereum by a fresh fee core — the coin chosen
+/// by the person (`auto` false) or left to the machine; `data` the call's.
+fn fee_quote(
+    auto: bool,
+    data: &str,
+) -> (
+    crate::core_host::CoreHost<vela_core::app::fee_policy::FeePolicy>,
+    Vec<crate::core_host::Pending<vela_core::app::fee_policy::FeeOperation>>,
+) {
+    use crate::core_host::CoreHost;
+    use vela_core::app::fee_policy::{Event as FeeEvent, FeeCall, FeePolicy, FeeTier};
     let mut host = CoreHost::<FeePolicy>::new();
     let pending = host.dispatch(FeeEvent::QuoteRequested {
         chain_id: 1,
@@ -1926,21 +2172,51 @@ pub fn fee_coin_switch() -> [vela_core::app::fee_policy::FeeView; 3] {
         calls: vec![FeeCall {
             to: "0x2222222222222222222222222222222222222222".to_owned(),
             value: "1000".to_owned(),
-            data: "0x".to_owned(),
+            data: data.to_owned(),
         }],
         fee_token: None,
-        auto_fee_token: false,
+        auto_fee_token: auto,
         number: Default::default(),
         read_deployment: Some(true),
     });
-    answer(&mut host, pending);
+    (host, pending)
+}
+
+/// A fee coin switched, through the real `fee_policy` core with canned
+/// answers: quoted in ETH, then USDC picked (`provisional` — the switched
+/// figure, measured again with the USDC leg before it can be confirmed),
+/// then measured. On Ethereum, for cs1's transfer.
+#[must_use]
+pub fn fee_coin_switch() -> [vela_core::app::fee_policy::FeeView; 3] {
+    use vela_core::app::fee_policy::Event as FeeEvent;
+    let (mut host, pending) = fee_quote(false, "0x");
+    answer_fee(&mut host, pending, false);
     let quoted = host.view();
     let pending = host.dispatch(FeeEvent::SelectFeeAsset {
-        token: Some(USDC.to_owned()),
+        token: Some(FEE_USDC.to_owned()),
     });
     let provisional = host.view();
-    answer(&mut host, pending);
+    answer_fee(&mut host, pending, false);
     [quoted, provisional, host.view()]
+}
+
+/// The relay answered that a contract call fails (spec 083 fee,
+/// `FeeFailure::WouldFail`), through the real `fee_policy` core (PR 2
+/// polish): `[choose_coin, nothing]`. The call is a swap-sized one — a
+/// small one keeps the static fallback whatever the simulation says. First
+/// with ETH, the coin the person chose — USDC is still untried and has
+/// something to pay from, so a tap opens the coins ("Pay with another
+/// coin"); then with the coin left to the machine, which tried ETH and USDC
+/// both — no coin is left, and the row is no control.
+#[must_use]
+pub fn fee_would_fail() -> [vela_core::app::fee_policy::FeeView; 2] {
+    let call = format!("0x{}", "ab".repeat(1_200));
+    let run = |auto: bool| {
+        let (mut host, pending) = fee_quote(auto, &call);
+        answer_fee(&mut host, pending, true);
+        host.view()
+    };
+    [run(false), run(true)]
 }
 
 #[cfg(test)]
@@ -1951,10 +2227,16 @@ mod tests {
     /// The correctness batch's states draw what they are named for: the
     /// fee row says why it failed (the chain by name, or Vela's own fault),
     /// the confirm is held with the core's line, and a switched coin's
-    /// figure turns until it is measured.
+    /// figure turns until it is measured. PR 2 note 1: the row and the
+    /// footer say one thing — "Retrying…" with the dash while the core asks
+    /// again by itself (the reason kept and the sign turning through the
+    /// re-ask), "Tap to retry" and "Tap it to retry" only when a tap is the
+    /// one way.
     #[test]
     fn the_correctness_states_draw_their_cause() {
-        let s = SigningStrings::resolve(&Loc::from_env());
+        use vela_core::app::fee_policy::{ESTIMATE_FAILED_KEY, FEE_FAILED_KEY, FEE_RETRYING_KEY};
+        let loc = Loc::from_env();
+        let s = SigningStrings::resolve(&loc);
         let row = |state| match build(state, &s).fee {
             FeeModel::OnChain {
                 value,
@@ -1964,16 +2246,28 @@ mod tests {
             } => (value, warning, refreshing),
             _ => unreachable!("a transfer has a fee row"),
         };
-        let (_, down, _) = row("cs37");
+        let (down_figure, down, down_turning) = row("cs37");
         let (_, internal, _) = row("cs38");
         assert!(down.as_ref().is_some_and(|line| line.contains("Ethereum")));
         assert!(internal.is_some() && internal != down);
+        assert_eq!(down_figure.as_ref(), "—", "never \"Tap to retry\" here");
+        assert!(!down_turning);
+        let (figure, kept, turning) = row("cs42");
+        assert_eq!(kept, down, "the reason is kept through the re-ask");
+        assert_eq!(figure.as_ref(), "—");
+        assert!(turning, "the measuring sign turns while it retries");
+        let (tap_figure, _, _) = row("cs43");
+        assert_eq!(tap_figure, loc.t(ESTIMATE_FAILED_KEY));
+        let retrying = loc.t(FEE_RETRYING_KEY);
+        let tap = loc.t(FEE_FAILED_KEY);
         for (state, note) in [
-            ("cs37", Some(&s.note_fee_failed)),
-            ("cs38", Some(&s.note_fee_failed)),
+            ("cs37", Some(&retrying)),
+            ("cs38", Some(&retrying)),
             ("cs39", Some(&s.note_previous_pending)),
             ("cs40", Some(&s.note_fee_measuring)),
             ("cs41", None),
+            ("cs42", Some(&retrying)),
+            ("cs43", Some(&tap)),
         ] {
             let model = build(state, &s);
             assert_eq!(model.confirm_note.as_ref(), note, "{state}");
@@ -1983,6 +2277,81 @@ mod tests {
         assert!(value.contains("USDC") && refreshing, "{value}");
         let (value, _, refreshing) = row("cs41");
         assert!(value.contains("USDC") && !refreshing, "{value}");
+    }
+
+    /// PR 2 polish: the would_fail boards are what they are named for,
+    /// through the real fee core — a tap that opens the coins while USDC is
+    /// untried, and nothing once every coin was tried; neither asks again.
+    #[test]
+    fn the_would_fail_views_say_what_a_tap_does() {
+        use vela_core::app::fee_policy::{
+            FEE_WOULD_FAIL_KEY, FeeFailure, FeeFailureTap, PAY_WITH_ANOTHER_COIN_KEY,
+        };
+        let [choose, nothing] = fee_would_fail();
+        let choose = choose
+            .failure
+            .unwrap_or_else(|| unreachable!("the relay answered that it fails"));
+        assert_eq!(choose.failure, FeeFailure::WouldFail);
+        assert_eq!(choose.tap, FeeFailureTap::ChooseCoin);
+        assert_eq!(
+            choose.figure_key.as_deref(),
+            Some(PAY_WITH_ANOTHER_COIN_KEY)
+        );
+        assert_eq!(choose.footer_key, FEE_WOULD_FAIL_KEY);
+        assert_eq!(choose.chain_id, Some(1));
+        let nothing = nothing
+            .failure
+            .unwrap_or_else(|| unreachable!("the relay answered that it fails"));
+        assert_eq!(nothing.failure, FeeFailure::WouldFail);
+        assert_eq!(nothing.tap, FeeFailureTap::Nothing);
+        assert_eq!(nothing.figure_key, None, "the dash");
+        assert_eq!(nothing.footer_key, FEE_WOULD_FAIL_KEY);
+    }
+
+    /// PR 2 note 9: each refusal the gallery pins reaches the sheet through
+    /// the real core with its reason — the held nonce (tried again), the
+    /// plain refusal, the nonce another operation used, the fee — and the
+    /// sheet's failure says it.
+    #[test]
+    fn the_refusal_pins_say_why() {
+        use crate::flows::fixtures::ReceiptStage;
+        use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
+        use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
+        let s = SigningStrings::resolve(&Loc::from_env());
+        let clock = crate::signing::status::Clock {
+            now_ms: 20_000.0,
+            typical_s: Some(5),
+            chain_name: "Gnosis".to_owned(),
+            seen_submitted_ms: None,
+        };
+        for (want, key, retry) in [
+            ("held", NOT_SENT_BODY_KEY, true),
+            ("refused", REFUSED_KEY, false),
+            ("went-first", REFUSED_NONCE_KEY, false),
+            ("fees", REFUSED_FEES_KEY, false),
+        ] {
+            let view = refusal_view(want).unwrap_or_else(|| unreachable!("{want}"));
+            assert_eq!(view.failure_refusal_key.as_deref(), Some(key), "{want}");
+            let receipt = crate::signing::status::approved(&view, true, None, None, &clock, &s)
+                .unwrap_or_else(|| unreachable!("{want}: the failure is drawn"));
+            assert_eq!(
+                receipt.captions,
+                vec![crate::flows::refusal_of(&s.refusals, Some(key))],
+                "{want}"
+            );
+            assert_eq!(receipt.retry.is_some(), retry, "{want}");
+            // PR 2 polish: the held nonce is "Not sent yet" — the calm disc
+            // and its own title, never "Failed" in red.
+            if want == "held" {
+                assert!(view.failure_not_sent);
+                assert_eq!(receipt.stage, ReceiptStage::NotSent);
+                assert_eq!(receipt.title, s.not_sent_title);
+                assert_ne!(receipt.title, s.receipt_failed);
+            } else {
+                assert_eq!(receipt.stage, ReceiptStage::Failed, "{want}");
+            }
+        }
+        assert!(refusal_view("nonsense").is_none());
     }
 
     /// Every scenario builds, and none of them ships an empty confirm label —

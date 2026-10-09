@@ -67,6 +67,99 @@ struct SendReceiptFollowsTrackerTests {
         return try CoreJSON.decode(NetViewWire.self, from: CoreJSON.object(json))
     }
 
+
+    /// PR 2 integration: the fee machine failed (or is re-asking after a
+    /// failure) while the confirm is up. The bridge tells the send machine
+    /// (`fee_failed_changed`) — once per change, and again to a new journey —
+    /// and the machine holds the confirm and drops the figure it kept, so the
+    /// row draws the failure instead of a figure the fee machine discarded,
+    /// and the confirm no longer opens between the core's re-asks. A settled
+    /// quote (`fee_updated`) clears it.
+    @Test func aFailedFeeHoldsTheConfirmAndDropsItsFigure() async throws {
+        let scripted = ScriptedRelayPort()
+        scripted.rpc["eth_getCode"] = .ok("0x")
+        scripted.rpc["eth_blockNumber"] = .ok("0x2e3b9d9")
+        scripted.rpc["eth_gasPrice"] = .ok("0x3b9aca00")
+        scripted.rpc["eth_getBlockByNumber"] = .ok(["baseFeePerGas": "0x3b9aca00"] as [String: Any])
+        scripted.rpc["eth_maxPriorityFeePerGas"] = .ok("0x1")
+        let tier: [String: Any] = [
+            "maxFeePerGas": "0x77359400", "maxPriorityFeePerGas": "0x1",
+            "networkFeePerGas": "0x3b9aca00", "relayerFeePerGas": "0x3b9aca00",
+        ]
+        scripted.rpc["pimlico_getUserOperationGasPrice"] = .ok(
+            ["slow": tier, "standard": tier, "fast": tier] as [String: Any]
+        )
+        scripted.rpc["vela_getInBandGasQuote"] = .ok([[
+            "recipient": feeRecipient, "asset": "native", "feeToken": NSNull(), "decimals": 18,
+            "symbol": "XDAI", "balance": "0xde0b6b3a7640000", "usdPrice": "1", "usdBalance": "1",
+        ] as [String: Any]])
+        scripted.rpc["eth_estimateUserOperationGas"] = .ok([
+            "verificationGasLimit": "0x30d40", "callGasLimit": "0x30d40", "preVerificationGas": "0xc350",
+        ] as [String: Any])
+
+        let port = WriteAheadProbePort(scripted)
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accounts = ScriptedAccounts()
+        accounts.keyList = fixture.keys
+        accounts.recordJson = fixture.pageRecordJson
+        let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
+        let fixture = self.fixture
+        spine.trustedSigner = ScriptedTrustedSigner { digest in
+            let data = try! JSONSerialization.data(withJSONObject: fixture.result(for: digest))
+            return .outcome(trustedSignerVerify(
+                resultJson: String(decoding: data, as: UTF8.self), digest: digest, keys: fixture.keys
+            ))
+        }
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        defaults.set("[\(fixture.pageRecordJson)]",
+                     forKey: VelaStore.Key.accounts)
+        let store = VelaStore(defaults: defaults)
+        let accountStore = AccountStore(defaults: defaults)
+        let pool = RpcPool(store: store, accounts: accountStore, offline: true)
+        let held = try balance()
+        let nets = try networks()
+
+        var tracked: [TrackSubmission] = []
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool, spine: spine, accounts: accounts,
+            fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil, timers: .stopped),
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accountStore),
+            metadata: TokenMetadata(store: store, pool: pool), accountStore: accountStore,
+            balances: { held }, networks: { nets },
+            ports: SendExecutor.Ports(trackSubmitted: { tracked.append($0) }),
+            clearanceWaitMs: 600_000
+        )
+        let send = SendStore(executor: executor)
+        send.open(
+            accountId: fixture.credentialHex, address: fixture.account, name: "Mine",
+            displayCode: "USD", displayRate: 1, fiatDecimals: 2
+        )
+        await Wait.until { !(send.view?.tokens.isEmpty ?? true) }
+        let token = try #require(send.view?.tokens.first?.id)
+        send.selectToken(id: token)
+        await Wait.until { send.view?.stage == .enterDetails }
+        send.setRecipient(payee)
+        send.setAmount("0.001")
+        await Wait.until { send.view?.canContinue == true }
+        send.advance()
+        await Wait.until { send.view?.stage == .confirm && send.view?.canConfirm == true }
+        let kept = try #require(send.view?.fee)
+        _ = tracked
+
+        send.feeFailedChanged(true)
+        #expect(send.view?.canConfirm == false, "the confirm opened over a fee the fee machine discarded")
+        #expect(send.view?.fee == nil, "the confirm kept a figure the fee machine discarded")
+        // Said once: the same word again changes nothing.
+        send.feeFailedChanged(true)
+        #expect(send.view?.canConfirm == false)
+        // A settled quote stands again: the confirm opens on it.
+        send.feeUpdated(kept)
+        send.feeFailedChanged(false)
+        await Wait.until { send.view?.canConfirm == true }
+        #expect(send.view?.canConfirm == true)
+        #expect(send.view?.fee != nil)
+    }
+
     /// The Send's receipt reads "may have been sent" only while nobody knows
     /// better. Here the tracker found the landed op while the relay's reply
     /// was being lost: once the lost reply names the op to the receipt, the

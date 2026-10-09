@@ -62,6 +62,9 @@ import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.send.core.FeeFailureRow
+import app.getvela.wallet.feature.send.core.FeeFailureTap
+import app.getvela.wallet.feature.send.core.formChain
 import app.getvela.wallet.feature.send.core.SendFeeCoin
 import app.getvela.wallet.feature.send.core.SendNameSource
 import app.getvela.wallet.feature.send.core.SendPayee
@@ -124,7 +127,9 @@ object SendLive {
             feeSheetOpen -> FlowState.SD2F
             else -> FlowState.SD2
         }
-        SendStage.Confirm -> if (feeSheetOpen) FlowState.SD2F else FlowState.SD3
+        // The confirm keeps its page under the fee coins its fee line opened
+        // (PR 2 polish): the form drawn under them read as a step back.
+        SendStage.Confirm -> if (feeSheetOpen) FlowState.SD3F else FlowState.SD3
         SendStage.Receipt -> when (view.receipt?.status) {
             SendReceiptStatus.Confirmed -> FlowState.SD4C
             SendReceiptStatus.Failed, SendReceiptStatus.NotSent -> FlowState.SD4B
@@ -777,15 +782,23 @@ object SendLive {
         is SendAmountWarning.CannotConvert -> s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to warning.code, "symbol" to warning.symbol))
     }
 
-    /** Title and body for every `SendAlertKind` — the core's refusal, in the core's words. */
-    fun alertText(kind: SendAlertKind, s: VelaStrings): Pair<String, String> = when (kind) {
+    /**
+     * Title and body for every `SendAlertKind` — the core's refusal, in the
+     * core's words. [chainName]: the selected token's chain, for a sentence
+     * that names it (`{{chain}}`).
+     */
+    fun alertText(kind: SendAlertKind, s: VelaStrings, chainName: String = ""): Pair<String, String> = when (kind) {
         SendAlertKind.InvalidAddress -> s.t(I18nKeys.Flows.ALERT_INVALID_ADDRESS_TITLE) to s.t(I18nKeys.Flows.ALERT_INVALID_ADDRESS_BODY)
         SendAlertKind.InvalidAmount -> s.t(I18nKeys.Flows.ALERT_INVALID_AMOUNT_TITLE) to s.t(I18nKeys.Flows.ALERT_INVALID_AMOUNT_BODY)
         is SendAlertKind.InsufficientBalance ->
             s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_TITLE) to (kind.warning?.let { warningText(it, s) } ?: s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY))
         SendAlertKind.SplitOverBalance -> s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_TITLE) to s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY)
         SendAlertKind.LoadTokensFailed -> s.t(I18nKeys.Flows.ALERT_LOAD_TOKENS) to ""
-        is SendAlertKind.EstimateFailed -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to s.t(I18nKeys.Flows.ALERT_ESTIMATE_BODY)
+        // PR 2 note 13: worded by its cause — the core's key for this failure
+        // (the chain out of reach by its name, a fault inside the app, else
+        // the general sentence).
+        is SendAlertKind.EstimateFailed -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to
+            s.t(uniffi.vela_core_uniffi.sendEstimateFailureBodyKey(kind.kind.wire), mapOf("chain" to chainName))
         SendAlertKind.AccountUnavailable -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to s.t(I18nKeys.Flows.ALERT_ACCOUNT_UNAVAILABLE_BODY)
     }
 
@@ -806,6 +819,33 @@ object SendLive {
         val estimate = inHand.takeIf { !ofAnotherTier }
         val text = feeText(estimate, view, fee, ctx).first
         val s = ctx.strings
+        // PR 2 note 1: a failed fee, said once for the row and the line under
+        // a held confirm — kept through the core's own re-ask (busy then),
+        // with the measuring sign turning beside it, so nothing flips to
+        // "Estimating…" and back while it retries.
+        //
+        // PR 2 polish: only a failure for the form's own chain — right after a
+        // token switch the old chain's failure is not drawn here at all.
+        val failure = FeeFailureRow.forChain(fee, formChain(view))
+        if (failure != null) {
+            return fallback.copy(
+                mark = feeRowMark(view.fee_coin, fallback.mark),
+                // What a tap does, in words: "Tap to retry", "Pay with another
+                // coin" — else the dash.
+                value = FeeFailureRow.figure(failure, s),
+                refreshLabel = speed?.let { s.t(I18nKeys.Flows.FEE_REFRESH) },
+                refreshing = busy,
+                // Why, in the line the row already keeps — the chain by its name.
+                // A failure no re-ask fixes ("would fail") has no reason of its
+                // own: the form, which holds no confirm, says the fact the
+                // confirm's footer says, so "Pay with another coin" — or the
+                // dash — is never a figure with no why (PR 2 polish).
+                reason = failure.reason_key?.let { s.t(it, mapOf("chain" to feeChainName(view, ctx))) }
+                    ?: failure.takeIf { it.tap != FeeFailureTap.Retry }?.let { FeeFailureRow.footer(it, s) },
+                // A row whose tap does nothing is no control: no tap target, no chevron.
+                opens = FeeFailureRow.isControl(failure),
+            )
+        }
         return fallback.copy(
             // The coin is the core's, in every state (SendView.fee_coin): the
             // estimate in hand — the speed just left's while a newly picked
@@ -831,6 +871,12 @@ object SendLive {
             // not over a row with no figure of its own on it.
             staleNote = if (speed != null && fee?.stale == true && !busy && estimate != null) s.t(I18nKeys.Flows.FEE_STALE) else null,
         )
+    }
+
+    /** The chain the fee is priced on, by name — the form's own (a sweep's, else the picked coin's). */
+    private fun feeChainName(view: SendView, ctx: Context): String {
+        val chainId = (if (view.multi_select_mode) view.multi_chain_id else null) ?: view.selected_token?.chain_id
+        return chainId?.let { ctx.chainNames[it] } ?: view.selected_token?.network.orEmpty()
     }
 
     /**
@@ -1092,6 +1138,9 @@ object SendLive {
             "≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(amount.toDouble() * price))}"
         } ?: ""
         val (feeLine, _) = feeText(view.fee, view, fee, ctx)
+        // The fee card's failure, only when it is for this send's chain (PR 2
+        // polish): another chain's is not drawn — no figure, no reason, no line.
+        val failure = FeeFailureRow.forChain(fee, formChain(view))
         val split = view.split_mode && view.recipients.isNotEmpty()
         // SD3c — a sweep has no one figure (`confirm_amount` is empty): its
         // coins are the rows below, each the amount the signature moves.
@@ -1147,7 +1196,20 @@ object SendLive {
                 ),
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.EST_FEE),
-                    value = if (view.fee != null) "~$feeLine" else s.t(I18nKeys.Flows.FEE_ESTIMATING),
+                    // PR 2 note 1: a fee the session failed to price again is
+                    // said as the row says it (its figure, its reason), never
+                    // the figure the session dropped.
+                    value = when {
+                        failure != null -> FeeFailureRow.figure(failure, s)
+                        view.fee != null -> "~$feeLine"
+                        else -> s.t(I18nKeys.Flows.FEE_ESTIMATING)
+                    },
+                    note = failure?.reason_key?.let { s.t(it, mapOf("chain" to chain)) },
+                    // PR 2 polish: the line that shows the failure is its
+                    // control, as the form's row is — "Tap to retry" asks
+                    // again, "Pay with another coin" opens the coins — so the
+                    // "Tap it to retry" under the confirm is true here too.
+                    tap = failure != null && FeeFailureRow.isControl(failure),
                 ),
             ) + listOfNotNull(
                 // The speed, but only when it was CHOSEN for this send, or taken
@@ -1187,10 +1249,20 @@ object SendLive {
             // this one line under it — whatever `fee_busy` says, no timer, no
             // countdown — until the tracker says it is final or has stalled.
             // The relay's own refusal of the same kind is the notice instead.
-            ctaHold = view.previous_pending?.key
-                ?.takeIf { view.tx_error != SendTxErrorKey.PreviousPending }
-                ?.let { s.t(it) },
+            //
+            // ONE line under the held confirm: the previous transaction's,
+            // else a failed fee's — the core's `footer_key`, the very line
+            // the signing sheet draws ("Retrying…" while the core asks again
+            // by itself, "Tap it to retry" only when a tap is the one way).
+            ctaHold = view.previous_pending?.key?.takeIf { view.tx_error != SendTxErrorKey.PreviousPending }?.let { s.t(it) }
+                ?: failure?.let { FeeFailureRow.footer(it, s) },
             notice = confirmNotice(view, ctx),
+            // PR 2 polish: a submit the relay turned back because the previous
+            // transaction still holds the nonce is "Not sent yet" — its title
+            // over its sentence, calm, with Try again (no error buzz either:
+            // the core fires none for it).
+            noticeTitle = if (notSent(view)) s.t(I18nKeys.Flows.NOT_SENT_TITLE) else null,
+            noticeCalm = notSent(view),
             noticeFund = fundAddress(view, ctx),
             noticeReport = reportLabel(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
@@ -1241,6 +1313,14 @@ object SendLive {
         return SweepBreakdown(rows, totalUsd)
     }
 
+    /**
+     * The confirm's notice is "Not sent yet" (PR 2 polish): the submit was
+     * turned back because the previous transaction holds the nonce, and no
+     * relay stop is up over it (a stop is said instead, in its own words).
+     */
+    internal fun notSent(view: SendView): Boolean =
+        view.tx_error == SendTxErrorKey.PreviousPending && view.relay_unreachable == null && view.treasury_bootstrap == null
+
     /** What stopped the confirm page: the relay's treasury, or a submit the relay refused. */
     internal fun confirmNotice(view: SendView, ctx: Context): String? {
         val s = ctx.strings
@@ -1252,9 +1332,11 @@ object SendLive {
             // for the block (`venueBlockLine`), translated.
             SendTxErrorKey.VenueBlocked -> view.tx_venue_block?.words { key, vars -> s.t(key, vars) }?.ifBlank { null }
                 ?: s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
-            // The relay refused it: the account's previous transaction on this
-            // network still holds the nonce. Its words, with Try again.
-            SendTxErrorKey.PreviousPending -> s.t(I18nKeys.Flows.PREVIOUS_PENDING)
+            // The relay turned it back: the account's previous transaction on
+            // this network still holds the nonce. Nothing was sent and nothing
+            // went wrong — the sentence under "Not sent yet" ([notSent]), the
+            // signing sheet's own, with Try again.
+            SendTxErrorKey.PreviousPending -> s.t(I18nKeys.Flows.NOT_SENT_BODY)
             null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
         }
     }

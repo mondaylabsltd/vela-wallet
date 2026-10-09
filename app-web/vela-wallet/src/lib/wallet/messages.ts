@@ -91,6 +91,12 @@ export interface WalletMessages {
 		unreachableOne: string;
 		/** … `{{n}}` for several. */
 		unreachableMany: string;
+		/**
+		 * PR 2 note 11 (issue 483): the line when the last read failed inside
+		 * Vela itself, by the key the core names (`BalanceView.internal_key`) —
+		 * drawn where the unreachable line goes, never "Can't reach Ethereum".
+		 */
+		internal: Readonly<Record<string, string>>;
 	};
 	networkFilter: { pillAll: string; sheetTitle: string; allNetworks: string };
 	sidebar: { networks: string };
@@ -155,6 +161,13 @@ export interface WalletMessages {
 	close: string;
 }
 
+/**
+ * Every line the core can name for a balance read that failed inside Vela
+ * (`BalanceView.internal_key`, PR 2 note 11): the fee's own sentence for the
+ * same fault (`fee_policy::REASON_INTERNAL_KEY`).
+ */
+export const BALANCE_INTERNAL_KEYS = ['componentsUi.gas.reasonInternal'] as const;
+
 /** Every corpus key the wallet screens consume (tests iterate this). */
 export const WALLET_KEYS = [
 	'componentsUi.mainNav.wallet',
@@ -205,6 +218,8 @@ export const WALLET_KEYS = [
 	'assets.emptySubtext',
 	'assets.unreachableOne',
 	'assets.unreachableMany',
+	// PR 2 note 11: a read that failed inside Vela, said as that.
+	...BALANCE_INTERNAL_KEYS,
 	// Spec 038: the home's sentence for a first launch with no network.
 	'onboarding.common.networkBody',
 	'componentsUi.networkFilter.pillAll',

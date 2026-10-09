@@ -115,7 +115,7 @@ use vela_core::app::network_admin::{Event as NetEvent, NetOverrideField, Network
 use vela_core::app::payment_request::PaymentRequest;
 use vela_core::app::receive_watch::ReceiveWatch;
 use vela_core::app::send::{
-    Event as SendEvent, SendAlertKind, SendDisplayContext, SendOpenParams, SendRecipientDraft,
+    Event as SendEvent, SendDisplayContext, SendOpenParams, SendRecipientDraft,
 };
 use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
@@ -590,6 +590,10 @@ enum GalleryTab {
     Dsr1,
     /// Spec 092 — the hero's "can't reach" line and the list it opens.
     Dsr6,
+    /// PR 2 note 11 — a balance read that failed inside Vela: the hero says
+    /// the app's own fault where the "can't reach" line goes, never "Can't
+    /// reach Ethereum".
+    Dsr7,
     Components,
     ContactsComponents,
     Identicons,
@@ -598,7 +602,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 24] = [
+    const ALL: [(GalleryTab, &'static str); 25] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -620,6 +624,7 @@ impl GalleryTab {
         (GalleryTab::Dst8, "DST8"),
         (GalleryTab::Dsr1, "DSR1"),
         (GalleryTab::Dsr6, "DSR6"),
+        (GalleryTab::Dsr7, "DSR7"),
         (GalleryTab::Components, "Components"),
         (GalleryTab::ContactsComponents, "Contacts"),
         (GalleryTab::Identicons, "Identicons"),
@@ -4806,6 +4811,15 @@ impl WalletPage {
                     &money,
                 );
             }
+            if self.tab == GalleryTab::Dsr7 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::internal_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
             return fixtures::balance_default(&self.strings);
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
@@ -6540,8 +6554,31 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
+        // `VELA_SEND_STATE=alert-down|alert-internal`: Continue's alert over
+        // the gallery's send mock, worded by its cause (PR 2 note 13) — there
+        // is no send machine on that route to raise it.
+        if self.gallery
+            && self.send_host.is_none()
+            && let Some(kind) = crate::gallery::send_alert_pin()
+        {
+            let (title, body) =
+                flows_live::send_alert_words(&self.loc, &kind, &flows_live::chain_name(1));
+            let card = self.send_alert_card(theme, title, body, |_, _, _| {});
+            return Some(
+                div()
+                    .id("send-alert-scrim")
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(theme.backdrop)
+                    .child(card)
+                    .into_any_element(),
+            );
+        }
         let host = self.send_host.clone()?;
-        let (touch, qr, pin, pick, alert) = {
+        let (touch, qr, pin, pick, alert, chain_id) = {
             let read = host.read(cx);
             (
                 read.touch_waiting(),
@@ -6551,6 +6588,10 @@ impl WalletPage {
                     .map(|pin| (pin.request.clone(), pin.value.clone(), pin.focus.clone())),
                 read.pick.clone(),
                 read.alert.clone(),
+                read.view
+                    .selected_token
+                    .as_ref()
+                    .map_or(1, |token| token.chain_id),
             )
         };
         let scrim = |id: &'static str| {
@@ -6640,82 +6681,71 @@ impl WalletPage {
             return Some(scrim("send-touch-scrim").child(card).into_any_element());
         }
         if let Some(kind) = alert {
-            let (title, body) = self.send_alert_words(&kind);
-            let mut card = div()
-                .w(px(400.))
-                .flex()
-                .flex_col()
-                .gap(px(12.))
-                .p(px(24.))
-                .rounded(px(20.))
-                .bg(theme.bg_raised)
-                .border_1()
-                .border_color(theme.border_card)
-                .child(
-                    div()
-                        .text_size(theme::text_panel_title())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .child(title),
-                );
-            if let Some(body) = body {
-                card = card.child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(body),
-                );
-            }
+            // Worded by its cause (PR 2 note 13), the selected token's chain
+            // named where the chain is the cause.
+            let (title, body) =
+                flows_live::send_alert_words(&self.loc, &kind, &flows_live::chain_name(chain_id));
             let dismiss = {
                 let host = host.clone();
                 move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
                     host.update(cx, |host, cx| host.acknowledge_alert(cx));
                 }
             };
-            card = card.child(
-                div()
-                    .id("send-alert-ok")
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(theme.accent)
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_inverse)
-                    .child(self.flow_strings.got_it.clone())
-                    .on_click(dismiss),
-            );
+            let card = self.send_alert_card(theme, title, body, dismiss);
             return Some(scrim("send-alert-scrim").child(card).into_any_element());
         }
         None
     }
 
-    /// The core's alert kind, in the corpus's words. Semantic keys only —
-    /// the core never hands over a sentence.
-    fn send_alert_words(&self, kind: &SendAlertKind) -> (SharedString, Option<SharedString>) {
-        let t = |key: &str| self.loc.t(key);
-        match kind {
-            SendAlertKind::InvalidAddress => (
-                t("send.alertInvalidAddressTitle"),
-                Some(t("send.alertInvalidAddressBody")),
-            ),
-            SendAlertKind::InvalidAmount => (
-                t("send.alertInvalidAmountTitle"),
-                Some(t("send.alertInvalidAmountBody")),
-            ),
-            SendAlertKind::InsufficientBalance { .. } | SendAlertKind::SplitOverBalance => (
-                t("send.alertInsufficientBalanceTitle"),
-                Some(t("send.alertInsufficientBalanceBody")),
-            ),
-            SendAlertKind::LoadTokensFailed => (t("send.alertLoadTokensError"), None),
-            SendAlertKind::EstimateFailed { .. } => (
-                t("send.alertEstimateFailedTitle"),
-                Some(t("send.alertEstimateFailedBody")),
-            ),
-            SendAlertKind::AccountUnavailable => (t("send.alertAccountUnavailableBody"), None),
+    /// The core's alert over the send flow: its title, its body and one
+    /// "Got it".
+    fn send_alert_card(
+        &self,
+        theme: &Theme,
+        title: SharedString,
+        body: Option<SharedString>,
+        dismiss: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+    ) -> Div {
+        let mut card = div()
+            .w(px(400.))
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .p(px(24.))
+            .rounded(px(20.))
+            .bg(theme.bg_raised)
+            .border_1()
+            .border_color(theme.border_card)
+            .child(
+                div()
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .child(title),
+            );
+        if let Some(body) = body {
+            card = card.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(body),
+            );
         }
+        card.child(
+            div()
+                .id("send-alert-ok")
+                .h(px(CONTACTS_BUTTON_H))
+                .rounded(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .bg(theme.accent)
+                .text_size(theme::text_row_title())
+                .text_color(theme.fg_inverse)
+                .child(self.flow_strings.got_it.clone())
+                .on_click(dismiss),
+        )
     }
 
     /// DSD2cL's total line, which reads what the importer's own view does not
@@ -7602,12 +7632,7 @@ impl WalletPage {
                         actions.add_recipient = Some(to_host(SendEvent::EnterSplitMode));
                     }
                     actions.open_batch_import = Some(to_host(SendEvent::OpenBatchImport));
-                    actions.open_fee_token = Some(Box::new(cx.listener(
-                        |this, _: &gpui::ClickEvent, _, cx| {
-                            this.send_fee_picker = true;
-                            cx.notify();
-                        },
-                    )));
+                    actions.open_fee_token = Some(send_fee_tap(host.clone(), cx));
                     // Spec 069: measure again, and the speed control — every
                     // decision behind it is the `fee_speed` core's.
                     let on_host =
@@ -7761,6 +7786,9 @@ impl WalletPage {
                 }
                 FlowPanel::Dsd3 => {
                     actions.advance = Some(to_host(SendEvent::SlideConfirm));
+                    // The confirm's fee line, when its failure answers a tap
+                    // (PR 2 polish): the form row's own tap.
+                    actions.open_fee_token = Some(send_fee_tap(host.clone(), cx));
                     // Spec 102: the hand-off's own two actions, on its page.
                     if let Some(page) = send.handoff_page.clone() {
                         let again = page.clone();
@@ -17511,6 +17539,35 @@ impl WalletPage {
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
         let mut model = signing_fixtures::build(self.signing_state, &self.signing);
+        // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the
+        // operation (PR 2 note 9), drawn from the real core's view by the
+        // live receipt builder — there is no request on this route.
+        if self.gallery
+            && self.signing_host.is_none()
+            && let Some(view) = signing_fixtures::refusal_pin()
+        {
+            let summary = crate::signing::status::summary_of(&model.blocks);
+            let header = signing_components::HeaderModel::of(&model);
+            let clock = signing_clock(100, None);
+            if let Some(receipt) = crate::signing::status::approved(
+                &view,
+                true,
+                summary.as_ref(),
+                None,
+                &clock,
+                &self.signing,
+            ) {
+                return self.signing_receipt_view(
+                    theme,
+                    window,
+                    Some(&header),
+                    &receipt,
+                    100,
+                    Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {}),
+                    cx,
+                );
+            }
+        }
         // Which of the three things this column is: the request, the core's
         // refusal of it (spec 081), or the gas account it cannot pay from.
         let mut kind = signing_live::ColumnKind::Request;
@@ -17708,9 +17765,8 @@ impl WalletPage {
                     self.signing_held = Some((id, signing_live::HeldLines::default()));
                 }
                 if let Some((_, held)) = self.signing_held.as_mut() {
-                    let measuring = fee.busy
-                        || host.fee_measuring()
-                        || signing_live::fee_of_another_tier(fee, speed_tier);
+                    let measuring =
+                        signing_live::holds_lines(fee, host.fee_measuring(), speed_tier);
                     signing_live::hold_fee_warning(
                         &mut confirm.fee,
                         held,
@@ -20889,6 +20945,30 @@ fn backup_request(
     }
 }
 
+/// A tap on Send's fee row — the form's, and the confirm's fee line when it
+/// is a control (PR 2 polish): EXACTLY what the row says it does. A failed
+/// fee does what its failure says (`FeeFailureView.tap`, only for the form's
+/// own chain): asks again at once — a real new read, as the signing sheet's
+/// row does; while the re-ask is out the tap waits for it — or opens the fee
+/// coins ("Pay with another coin"); one no tap can help does nothing. A
+/// settled fee opens the coins.
+fn send_fee_tap(host: gpui::Entity<SendHost>, cx: &mut Context<WalletPage>) -> panels::Click {
+    Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+        use crate::signing::live::{FeeTap, fee_tap};
+        let read = host.read(cx);
+        let fee = read.fee_view();
+        let failure = flows_live::form_fee_failure(fee, &read.view);
+        match fee_tap(fee, failure.as_ref()) {
+            FeeTap::Requote => host.update(cx, SendHost::refresh_fee),
+            FeeTap::Nothing if failure.is_some() => {}
+            FeeTap::Coins | FeeTap::Nothing => {
+                this.send_fee_picker = true;
+                cx.notify();
+            }
+        }
+    }))
+}
+
 /// The host of a signer page address, for its badge — the address itself is
 /// already in the field under it.
 /// The chain's clock for a signing receipt (spec 079): now, its usual
@@ -21689,6 +21769,7 @@ mod tests {
                 "DST8",
                 "DSR1",
                 "DSR6",
+                "DSR7",
                 "Components",
                 "Contacts",
                 "Identicons",

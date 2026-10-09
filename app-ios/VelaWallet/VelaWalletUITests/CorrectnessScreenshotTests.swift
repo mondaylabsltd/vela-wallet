@@ -16,6 +16,26 @@
 //    its reason (sheet and Send); and the onboarding gallery's "can't look up
 //    your wallet" prompt, both forms.
 //
+//  The integration's core round (PR 2 notes 1/10, 9, 11, 13):
+//
+//  - `testCoreRoundBoards`: the fee row and the line under the held confirm
+//    saying one thing (retrying by itself / its re-ask out / tap only) on the
+//    sheet, the Send form and the confirm; Continue's alert and the form's
+//    reason by cause (chain down vs internal); a refusal's reason on the
+//    sheet; the home with an internal fault vs a chain really down.
+//  - `testInternalFaultLive`: the LIVE app with Ethereum's pool faulted
+//    (`-vela.faultPool 1`, DEBUG): the home must say Vela's own fault, never
+//    "Can't reach Ethereum". Needs the network for the other chains.
+//
+//  The polish round (PR 2 polish):
+//
+//  - `testPolishBoards`: "Not sent yet" on the sheet and on Send's confirm
+//    (calm: no red); a fee that would fail — "Pay with another coin" and its
+//    footer, and the tap opening the coins, on the sheet, the Send form and
+//    the confirm, and with no coin left the dash and no control; the
+//    tap-only "Tap to retry" row and its "Tap it to retry" footer on the
+//    confirm and the sheet.
+//
 //  Simulator only (a seeded read-only account); skipped in the scheme.
 //
 
@@ -63,6 +83,83 @@ final class CorrectnessScreenshotTests: XCTestCase {
                     attach(app.screenshot(), named: "\(name)-\(lang)-\(theme)")
                     app.terminate()
                 }
+            }
+        }
+    }
+
+    // MARK: - The integration's core round
+
+    func testCoreRoundBoards() {
+        let boards = [
+            "fee-chain-down", "fee-retrying", "fee-tap", "fee-internal",
+            "send-fee-chain-down", "send-fee-internal", "send-fee-retrying",
+            "send-confirm-retrying", "send-confirm-tap",
+            "alert-chain-down", "alert-internal",
+            "refused-held", "refused-fee",
+            "home-internal", "home-chain-down", "home-internal-all",
+        ]
+        for lang in Self.langs {
+            for theme in Self.themes {
+                for board in boards {
+                    let app = XCUIApplication()
+                    app.launchEnvironment["VELA_PAGE"] = "pr2"
+                    app.launchEnvironment["VELA_STATE"] = board
+                    pin(app, lang: lang, theme: theme)
+                    app.launch()
+                    settle(2.5)
+                    attach(app.screenshot(), named: "\(board)-\(lang)-\(theme)")
+                    app.terminate()
+                }
+            }
+        }
+    }
+
+    // MARK: - The polish round
+
+    func testPolishBoards() {
+        let boards = [
+            "notsent-sheet", "notsent-send",
+            "wouldfail-coin-sheet", "wouldfail-coin-sheet-open", "wouldfail-none-sheet",
+            "wouldfail-coin-send", "wouldfail-coin-confirm", "wouldfail-coin-confirm-open",
+            "wouldfail-none-confirm",
+            "send-confirm-tap", "fee-tap",
+        ]
+        for lang in Self.langs {
+            for theme in Self.themes {
+                for board in boards {
+                    let app = XCUIApplication()
+                    app.launchEnvironment["VELA_PAGE"] = "pr2"
+                    app.launchEnvironment["VELA_STATE"] = board
+                    pin(app, lang: lang, theme: theme)
+                    app.launch()
+                    settle(2.5)
+                    attach(app.screenshot(), named: "\(board)-\(lang)-\(theme)")
+                    app.terminate()
+                }
+            }
+        }
+    }
+
+    /// The live home with Ethereum's reads failing inside Vela.
+    func testInternalFaultLive() {
+        for lang in Self.langs {
+            for theme in Self.themes {
+                let app = XCUIApplication()
+                app.launchArguments += ["-vela.faultPool", "1"]
+                app.launchArguments += ["-vela.parallelSpace", "0"]
+                app.launchEnvironment["VELA_ACCOUNT"] = Self.me
+                pin(app, lang: lang, theme: theme)
+                app.launch()
+                let assets = app.staticTexts[lang == "zh" ? "资产" : "Assets"].firstMatch
+                XCTAssertTrue(assets.waitForExistence(timeout: 40), "the home never appeared (\(lang)-\(theme))")
+                settle(15)
+                // Never "Can't reach Ethereum" for a fault that asked Ethereum nothing.
+                let wrong = app.staticTexts.containing(NSPredicate(
+                    format: "label CONTAINS %@", lang == "zh" ? "暂时连不上 Ethereum" : "Can't reach Ethereum"
+                ))
+                XCTAssertEqual(wrong.count, 0, "the home blamed Ethereum (\(lang)-\(theme))")
+                attach(app.screenshot(), named: "live-internal-home-\(lang)-\(theme)")
+                app.terminate()
             }
         }
     }

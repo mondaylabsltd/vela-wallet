@@ -154,6 +154,15 @@ export interface FactRowModel {
 	 * `success` for what an operation brought in. Absent: plain ink.
 	 */
 	tone?: 'success' | 'danger';
+	/**
+	 * The row is a control (PR 2 polish): the send confirm's fee line when the
+	 * fee failed and a tap does something — asks again at once (`retry`,
+	 * "Tap to retry" over the footer's "Tap it to retry"), or opens the fee
+	 * coins (`choose_coin`, "Pay with another coin"). `label` is its
+	 * accessible name; `busy`, a re-ask already out — the tap asks nothing.
+	 * Absent: a fact, never pressable.
+	 */
+	tap?: { does: 'retry' | 'choose_coin'; label: string; busy?: boolean };
 }
 
 export type StatusTone = 'success' | 'warning' | 'error' | 'info';
@@ -562,6 +571,23 @@ export interface FeeRowModel {
 	 * people to fear a fee row that is doing its job.
 	 */
 	staleNote?: string;
+	/**
+	 * Why there is no fee (PR 2 note 1): the core's reason for the failure
+	 * (`FeeView.failure.reason_key`), drawn in the line the stale note keeps —
+	 * so its arrival moves nothing below — and kept through the re-ask the
+	 * core makes by itself, beside the turning measuring sign.
+	 */
+	reason?: string;
+	/**
+	 * What a tap on the row does — exactly what its figure says (PR 2 polish,
+	 * the core's `FeeFailureView.tap`). Absent or `open`: it opens the fee
+	 * coins, behind the chevron that promises them — "Pay with another coin"
+	 * on a fee the relay answered would fail is this too. `retry`: the fee
+	 * failed and a tap asks again at once (`requote`) — no chevron, no list;
+	 * while a re-ask is out a second tap asks nothing. `none`: the row is no
+	 * control at all — the dash, stated, with no chevron and no press.
+	 */
+	tap?: 'open' | 'retry' | 'none';
 }
 
 /** One row of the folded speed control (spec 068). */
@@ -958,8 +984,13 @@ export interface SendConfirmModel {
 	 * The last submit did not go (`SendView.tx_error`): why, in the core's
 	 * chosen words, and "Try again" (`retry_after_error`) — absent where trying
 	 * again would meet the same refusal (spec 102's venue block).
+	 *
+	 * `calm` (PR 2 polish): no failure at all — the relay turned it back
+	 * because the account's previous transaction on this network still holds
+	 * the nonce (`previous_pending`). Its own title ("Not sent yet") over the
+	 * sentence, in the quiet ink, never the error colour.
 	 */
-	error?: { text: string; retry?: string };
+	error?: { title?: string; text: string; retry?: string; calm?: boolean };
 	cta: string;
 }
 
@@ -997,7 +1028,13 @@ export interface BreakdownRowModel {
 	note?: string;
 }
 
-export type ReceiptStage = 'submitting' | 'submitted' | 'confirmed' | 'failed';
+/**
+ * Where a transaction stands. `not_sent` (PR 2 polish): the relay turned it
+ * back because the account's previous operation on this network still holds
+ * the nonce — nothing was sent and nothing went wrong, so it is drawn calmly
+ * (the clock, in the waiting colours), never as a failure.
+ */
+export type ReceiptStage = 'submitting' | 'submitted' | 'confirmed' | 'failed' | 'not_sent';
 
 /** SD4 — the receipt, in whichever of its states the transaction is in. */
 export interface SendReceiptModel {

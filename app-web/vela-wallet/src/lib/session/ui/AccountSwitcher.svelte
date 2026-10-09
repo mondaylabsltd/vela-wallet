@@ -16,11 +16,10 @@
 	 * dialog on the desktop, the desktop rule for every phone 弹框.
 	 */
 	import { onMount } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
 	import AccountsSheetBody from '$lib/settings/ui/AccountsSheetBody.svelte';
 	import Dialog from '$lib/settings/ui/Dialog.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import { liveAccountsSheet } from '$lib/settings/live';
+	import { liveAccountsSheet, switcherBalances } from '$lib/settings/live';
 	import type { SettingsMessages } from '$lib/settings/messages';
 	import { session } from '$lib/session/core/session.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
@@ -46,17 +45,10 @@
 	 * the active account's.
 	 */
 	const sheet = $derived.by(() => {
-		const balances = new SvelteMap<string, number>();
-		for (const entry of balance.view.switcher.balances) {
-			balances.set(entry.address.toLowerCase(), entry.usd);
-		}
-		// The live total stands in for the active row only while it is shown:
-		// hidden, the core withholds every switcher figure (`app::privacy`) and
-		// the rows and the total draw the mask.
+		// The live total stands in for the active row only while it is a
+		// figure — not hidden, not a home that read nothing (`switcherBalances`).
+		const balances = switcherBalances(balance.view, view.address);
 		const hidden = balance.view.switcher.hidden;
-		if (!hidden && balance.view.display_total_usd !== null && view.address !== '') {
-			balances.set(view.address.toLowerCase(), balance.view.display_total_usd);
-		}
 		return liveAccountsSheet(
 			{
 				rows: view.accounts,

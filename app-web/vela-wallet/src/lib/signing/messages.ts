@@ -199,6 +199,12 @@ export interface SigningMessages {
 	feeEstimating: string;
 	/** The fee row after the quote failed; tapping it asks again. */
 	feeRetry: string;
+	/**
+	 * PR 2 polish: the fee row after the relay answered that the operation
+	 * would fail with the coin in force — a tap opens the fee coins
+	 * (`componentsUi.gas.payWithAnotherCoin`, `FeeFailureView.figure_key`).
+	 */
+	feePayWithAnotherCoin: string;
 	feeTokenTitle: string;
 	/** Issue 262: the selected coin cannot pay — the send form's issue-211 sentence ({{sym}}). */
 	feeShort: string;
@@ -349,6 +355,14 @@ export interface SigningMessages {
 		failedHint: string;
 		/** Spec 096 F8: `send.txRetryBtn` — a failure that sent nothing, tried again. */
 		retry: string;
+		/**
+		 * PR 2 polish: `componentsUi.signing.notSentTitle` — "Not sent yet", in
+		 * place of "Failed" when the relay turned the operation back because
+		 * the account's previous one still holds the nonce
+		 * (`SignView.failure_not_sent`). Its sentence is the refusal key's
+		 * (`componentsUi.signing.notSentBody`, in `receipt.refusals`).
+		 */
+		notSentTitle: string;
 	};
 	viewOnExplorer: string;
 	byteSize: string;

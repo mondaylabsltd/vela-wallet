@@ -131,14 +131,7 @@ describe('literal audit — product UI references tokens, never raw values', () 
 		join(APP_ROOT, 'src/app.css')
 	].filter(
 		(path) =>
-			!path.includes('/tokens/') &&
-			!path.endsWith('.test.ts') &&
-			!path.endsWith('/fixtures.ts') &&
-			// The wire types ts-rs writes from the core (`gen-core-types --check`
-			// pins them byte for byte): Rust's doc comments, not product UI. An
-			// issue number written with its hash there is no colour, and this file
-			// cannot be edited to say otherwise.
-			!path.includes('/generated/')
+			!path.includes('/tokens/') && !path.endsWith('.test.ts') && !path.endsWith('/fixtures.ts')
 	);
 
 	it('audits a non-trivial file set', () => {

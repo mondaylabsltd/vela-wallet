@@ -97,6 +97,10 @@ fun FlowGalleryScreen(systemDarkTheme: Boolean, initialState: String? = null) {
                 // through its chips, and a screen that pushed one would take
                 // the chip row's selection out of sync with what is drawn.
                 FlowHost(model = model)
+                // A board's alert, through the dialog the live send draws (PR 2 note 13).
+                FlowFixtures.alert(state)?.let { kind ->
+                    app.getvela.wallet.navigation.SendAlertDialog(kind = kind, strings = strings, chainName = FlowFixtures.BOARD_CHAIN, onDismiss = {})
+                }
             }
         }
     }

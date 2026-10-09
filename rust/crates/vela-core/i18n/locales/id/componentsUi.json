@@ -222,6 +222,8 @@
       "maybeSent": "Mungkin sudah terkirim. Vela terus memeriksa — jangan kirim ulang.",
       "refused": "Jaringan menolaknya — tidak ada yang terkirim.",
       "wentFirst": "Transaksi lain dari akun ini lebih dulu diproses — tidak ada yang terkirim.",
+      "notSentTitle": "Belum terkirim",
+      "notSentBody": "Transaksi Anda sebelumnya di jaringan ini masih diproses. Coba lagi setelah selesai.",
       "unknownOutcome": "Masih belum terkonfirmasi setelah 24 jam.",
       "openSigner": "Konfirmasi di halaman tanda tangan",
       "signerDown": "Halaman tanda tangan tidak terbuka. Periksa koneksi Anda.",
@@ -246,6 +248,8 @@
         "batchUnsettled": "Memeriksa setiap panggilan dalam batch…",
         "feeMeasuring": "Menghitung biaya jaringan…",
         "feeFailed": "Biaya tidak bisa dihitung — ketuk untuk mencoba lagi",
+        "feeRetrying": "Biaya belum bisa dihitung. Mencoba lagi otomatis…",
+        "feeWouldFail": "Transaksi ini akan gagal jika dikirim seperti ini.",
         "previousPending": "Menunggu transaksi sebelumnya di jaringan ini selesai…"
       }
     },
@@ -327,6 +331,7 @@
       "deployedNo": "Belum (tx pertama)",
       "estimating": "Memperkirakan...",
       "estimateFailed": "Ketuk untuk coba lagi",
+      "payWithAnotherCoin": "Bayar dengan koin lain",
       "feeToken": "Token biaya",
       "paidWith": "Dibayar dengan {{symbol}}",
       "rowBalance": "Saldo",
@@ -337,7 +342,7 @@
       "reasonSimulation": "Relay belum bisa menjalankan uji transaksi ini. Mencoba lagi otomatis.",
       "reasonQuoteHigh": "Harga gas relay sedang jauh di atas harga jaringan. Mencoba lagi otomatis.",
       "reasonChainDown": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya. Mencoba lagi otomatis.",
-      "reasonInternal": "Terjadi kesalahan di dalam Vela. Mencoba lagi — jika terus gagal, buka ulang aplikasinya.",
+      "reasonInternal": "Terjadi kesalahan di dalam Vela. Jika terus terjadi, buka ulang aplikasinya.",
       "rowShort": "Perlu ~{{need}}, ada {{have}}",
       "noCoinPays": "Tidak ada token yang cukup untuk biaya ini"
     },

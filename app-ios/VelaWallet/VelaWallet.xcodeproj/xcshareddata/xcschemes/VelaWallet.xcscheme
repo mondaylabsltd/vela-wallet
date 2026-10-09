@@ -173,6 +173,9 @@
                <Test
                   Identifier = "CorrectnessScreenshotTests">
                </Test>
+               <Test
+                  Identifier = "PR2PolishDeviceTests">
+               </Test>
             </SkippedTests>
          </TestableReference>
       </Testables>

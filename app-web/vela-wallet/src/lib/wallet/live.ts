@@ -326,11 +326,24 @@ export function exactAmount(amount: string): string {
  * status line and the title of the list it opens. The core chooses the
  * sentence (`unreachable_key`: one network named, several counted); this only
  * fills it. `undefined` when every network answered.
+ *
+ * PR 2 note 11 (issue 483): a read that failed inside Vela itself is said in
+ * that line instead, by the core's key (`internal_key`) — an internal fault
+ * never reads "Can't reach Ethereum", and the core already leaves such chains
+ * out of `unreachable_networks`. A key this build has no words for falls
+ * through to the network line (or none), never a dotted path.
  */
 export function unreachableLine(
-	view: Pick<BalanceView, 'unreachable_networks' | 'unreachable_key'>,
-	words: { unreachableOne: string; unreachableMany: string }
+	view: Pick<BalanceView, 'unreachable_networks' | 'unreachable_key'> &
+		Partial<Pick<BalanceView, 'internal_key'>>,
+	words: {
+		unreachableOne: string;
+		unreachableMany: string;
+		internal?: Readonly<Record<string, string>>;
+	}
 ): string | undefined {
+	const internal = view.internal_key ? words.internal?.[view.internal_key] : undefined;
+	if (internal !== undefined) return internal;
 	const first = view.unreachable_networks[0];
 	if (view.unreachable_key === 'assets.unreachableOne' && first !== undefined) {
 		return fill(words.unreachableOne, { name: chainName(first.chain_id) });
@@ -429,15 +442,28 @@ export function liveBalance(
 	// last-known cached total paints first, live replaces it (max(live,cached)
 	// is the core's rule — this only chooses what to show meanwhile).
 	const total = view.display_total_usd ?? view.cached_total_usd;
-	if (total === null) {
+	// Nothing known (`unreachable`): the first read failed — or settled with
+	// every chain it asked failed (PR 2 integration) — and nothing is cached.
+	// The core gives no figure for it (`display_total_usd` is null, PR 2
+	// polish); the skeleton and the reason, never a zero.
+	if (total === null || view.unreachable) {
 		return {
 			...base,
 			currency: currency.rate !== null ? currency.code : 'USD',
 			state: 'loading',
 			// Spec 038 finding 15: a first launch with no network is
-			// "unreachable" over the skeleton, never a settled-looking $0.
-			...(view.unreachable
-				? { status: { kind: 'warning' as const, text: m.balance.unreachable } }
+			// "unreachable" over the skeleton, never a settled-looking $0 —
+			// unless what failed was Vela itself (PR 2 note 11): that is said
+			// as Vela's own fault, never as the network.
+			...(view.unreachable || view.internal_key
+				? {
+						status: {
+							kind: 'warning' as const,
+							text:
+								(view.internal_key ? m.assets.internal[view.internal_key] : undefined) ??
+								m.balance.unreachable
+						}
+					}
 				: {})
 		};
 	}
@@ -451,7 +477,8 @@ export function liveBalance(
 
 	// One status line, most actionable first: the networks the wallet cannot
 	// reach (spec 092 — every one, held or not; a rate limit heals on its own
-	// and is never listed), then the core's notice.
+	// and is never listed) — or, in their place, a read that failed inside
+	// Vela (PR 2 note 11) — then the core's notice.
 	//
 	// NOT a read the person asked for (issue 462, `view.refreshing`): the
 	// control they pressed says that itself, turning in place. As a line here
@@ -514,8 +541,10 @@ export function liveAssetRow(
 function assetsMode(view: BalanceView): SectionModel['mode'] {
 	if (view.tokens.length > 0) return 'rows';
 	// Nothing held yet — a skeleton while the first fetch is out, an empty
-	// state once the core has actually looked.
-	return view.holdings_loading || view.balance_unknown ? 'loading' : 'empty';
+	// state once the core has actually looked. A look that reached nothing
+	// (`unreachable`) is no look: never "Deposit your first asset" under a
+	// line saying nothing could be read.
+	return view.holdings_loading || view.balance_unknown || view.unreachable ? 'loading' : 'empty';
 }
 
 // ---------------------------------------------------------------------------

@@ -420,6 +420,7 @@
   "recipientCount_other": "{{count}} destinatarios",
   "removeRecipient": "Quitar",
   "alertInsufficientBalanceBody": "El total supera tu saldo.",
+  "alertEstimateChainDownBody": "No se puede conectar con {{chain}} para calcular la comisión de esta transacción. Inténtalo de nuevo en un momento.",
   "recipientPickAria": "Elegir un contacto",
   "multiSendNoFundsAfterGas": "No alcanza para el gas tras la reserva.",
   "gasReserved": "gas reservado",
@@ -1388,6 +1389,8 @@
    "maybeSent": "Es posible que ya se haya enviado. Vela sigue revisando; no la envíes otra vez.",
    "refused": "La red la rechazó; no se envió nada.",
    "wentFirst": "Otra transacción de esta cuenta pasó primero; no se envió nada.",
+   "notSentTitle": "Aún no se envió",
+   "notSentBody": "Tu transacción anterior en esta red todavía se está procesando. Vuelve a intentarlo cuando termine.",
    "unknownOutcome": "Sigue sin confirmarse tras 24 horas.",
    "openSigner": "Confirmar en la página de firma",
    "signerDown": "No se abrió la página de firma. Revisa tu conexión.",
@@ -1412,6 +1415,8 @@
     "batchUnsettled": "Revisando cada llamada del lote…",
     "feeMeasuring": "Calculando la comisión de red…",
     "feeFailed": "No se pudo calcular la comisión: tócala para reintentar",
+    "feeRetrying": "Aún no se pudo calcular la comisión. Reintentando automáticamente…",
+    "feeWouldFail": "Fallaría si se envía así.",
     "previousPending": "Esperando a que termine tu transacción anterior en esta red…"
    }
   },
@@ -1493,6 +1498,7 @@
    "deployedNo": "No (primera tx)",
    "estimating": "Estimando...",
    "estimateFailed": "Toca para reintentar",
+   "payWithAnotherCoin": "Pagar con otra moneda",
    "feeToken": "Token de comisión",
    "paidWith": "Pagado con {{symbol}}",
    "rowBalance": "Saldo",
@@ -1503,7 +1509,7 @@
    "reasonSimulation": "El relay todavía no pudo simular esta transacción. Reintentando automáticamente.",
    "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente.",
    "reasonChainDown": "No se puede conectar con {{chain}} para calcular la comisión. Reintentando automáticamente.",
-   "reasonInternal": "Algo falló dentro de Vela. Reintentando; si sigue fallando, vuelve a abrir la app.",
+   "reasonInternal": "Algo falló dentro de Vela. Si sigue pasando, vuelve a abrir la app.",
    "rowShort": "Necesitas ~{{need}}, tienes {{have}}",
    "noCoinPays": "Ningún token alcanza para esta comisión"
   },

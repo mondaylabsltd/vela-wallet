@@ -369,6 +369,7 @@ fn a_batch_is_never_answered_with_the_tx_it_landed_in() {
         status: TrackStatus::Confirmed,
         tx_hash: Some(tx),
         now_ms: NOW + 10_000.0,
+        refusal: None,
     });
     assert_eq!(answers(&ops), vec![ok_id(&op)]);
 }

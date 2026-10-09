@@ -51,6 +51,8 @@ final class SendStore {
     /// and the chain it is a coin on. `nil` = nothing yet — a fresh journey
     /// has been told nothing.
     private var toldFeeToken: (chainId: Int, token: String?)?
+    /// What `fee_failed_changed` last told this journey; `nil` = nothing yet.
+    private var toldFeeFailed: Bool?
     /// Counts journeys entered, so the fee-coin bridge speaks to each new one
     /// even when nothing else it watches has moved.
     private(set) var journey = 0
@@ -103,6 +105,7 @@ final class SendStore {
             self?.account = nil
             self?.heardRound = nil
             self?.toldFeeToken = nil
+            self?.toldFeeFailed = nil
             self?.trustedSignerNotice = nil
             self?.closes += 1
         }
@@ -122,6 +125,8 @@ final class SendStore {
     /// meantime must not draw the journey just left. Dropped before the
     /// machine's first boot, when there is nothing to forget.
     func leave() {
+        // The fee priced for the journey left stops asking (PR 2 note 1).
+        executor.journeyEnded()
         core.dispatch(CoreJSON.string([
             "type": "open",
             "account": NSNull(),
@@ -132,6 +137,7 @@ final class SendStore {
         account = nil
         heardRound = nil
         toldFeeToken = nil
+        toldFeeFailed = nil
         trustedSignerNotice = nil
         alert = nil
     }
@@ -183,6 +189,7 @@ final class SendStore {
         account = address.lowercased()
         heardRound = nil
         toldFeeToken = nil
+        toldFeeFailed = nil
         journey += 1
         if !core.boot(event) { core.dispatch(event) }
         // What is in flight already: a journey opened after the tracker's
@@ -322,6 +329,20 @@ final class SendStore {
     }
     func feeBusyChanged(_ busy: Bool) {
         dispatch(["type": "fee_busy_changed", "busy": busy])
+    }
+
+    /// The fee card's `FeeView.failure` is set — a failure, or the core's own
+    /// re-ask after one — or no longer is (PR 2 integration): the bridge's
+    /// half beside `feeBusyChanged`. While it is, the send machine holds the
+    /// confirm and, on the confirm page, drops the figure it kept from
+    /// Continue, so the row draws the failure instead of a figure the fee
+    /// machine discarded — the confirm no longer opens between two re-asks
+    /// and shuts again with the next. Told when it differs from what this
+    /// journey was last told; a fresh journey's first word always goes.
+    func feeFailedChanged(_ failed: Bool) {
+        guard entered, toldFeeFailed != failed else { return }
+        toldFeeFailed = failed
+        dispatch(["type": "fee_failed_changed", "failed": failed])
     }
 
     /// The fee card's coin in force (`FeeView.fee_token`, `nil` = the chain's

@@ -19,15 +19,43 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const NATIVE_DECIMALS = 18;
 
+/** The pool's own error, as `rpc-pool.ts` defines it (hoisted for the mock). */
+const pool = vi.hoisted(() => ({
+	PoolFailedError: class PoolFailedError extends Error {
+		readonly maybeDelivered: boolean;
+		readonly rateLimited: boolean;
+		readonly internal: boolean;
+		constructor(
+			message: string,
+			facts: { maybeDelivered: boolean; rateLimited: boolean; internal?: boolean }
+		) {
+			super(message);
+			this.maybeDelivered = facts.maybeDelivered;
+			this.rateLimited = facts.rateLimited;
+			this.internal = facts.internal ?? false;
+		}
+	}
+}));
+
 /** Chains whose multicall rejects, standing in for an RPC outage. */
 const down = new Set<number>();
+/** Chains whose request pool fails inside the app (issue 483): nothing leaves. */
+const faulted = new Set<number>();
 /** Chains whose wire never answers at all — a connection held open (spec 092). */
 const stalled = new Set<number>();
 /** Raw native balance each healthy chain reports. */
 const balances = new Map<number, bigint>();
 
 vi.mock('./rpc-pool', () => ({
+	PoolFailedError: pool.PoolFailedError,
 	poolRpcCall: async (_method: string, _params: unknown[], chainId: number) => {
+		if (faulted.has(chainId)) {
+			throw new pool.PoolFailedError(`pool fault for chain ${chainId}`, {
+				maybeDelivered: false,
+				rateLimited: false,
+				internal: true
+			});
+		}
 		if (stalled.has(chainId)) return new Promise(() => {});
 		if (down.has(chainId)) return { error: { message: 'every endpoint failed' } };
 		const raw = balances.get(chainId) ?? 0n;
@@ -52,12 +80,17 @@ vi.mock('./chain-tokens', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./chain-tokens')>();
 	return {
 		...actual,
-		fetchChainTokens: async (chainId: number) => ({
-			chainId,
-			nativeCurrency: { name: 'Coin', symbol: 'COIN', decimals: NATIVE_DECIMALS },
-			stables: [],
-			wrappedNativeToken: null,
-			dex: null
+		// The balance read asks for the document's outcome (PR 2 polish):
+		// here it is always there.
+		readChainTokens: async (chainId: number) => ({
+			kind: 'doc' as const,
+			data: {
+				chainId,
+				nativeCurrency: { name: 'Coin', symbol: 'COIN', decimals: NATIVE_DECIMALS },
+				stables: [],
+				wrappedNativeToken: null,
+				dex: null
+			}
 		})
 	};
 });
@@ -77,7 +110,12 @@ vi.mock('./native-price', () => ({
 	peggedNativeUsd: () => null
 }));
 
-import { carryOverUnansweredChains, clearTokenCache, fetchTokens } from './wallet-api';
+import {
+	carryOverUnansweredChains,
+	clearTokenCache,
+	fetchTokens,
+	readFailedInsideApp
+} from './wallet-api';
 import { balanceChainReadDeadlineMs } from '$lib/core/kernels';
 import { tokenChainId, type APIToken } from './tokens-model';
 import { networkId } from './networks';
@@ -98,6 +136,7 @@ function chainIdsOf(tokens: APIToken[]): number[] {
 beforeEach(() => {
 	clearTokenCache();
 	down.clear();
+	faulted.clear();
 	stalled.clear();
 	balances.clear();
 	vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -218,6 +257,50 @@ describe('holdings on a chain that did not answer', () => {
 		});
 
 		expect(snapshots.every((ids) => ids.includes(GNOSIS))).toBe(true);
+	});
+});
+
+/**
+ * PR 2 note 11 (issue 483): home with an internal fault read "Can't reach
+ * Ethereum". A read that never left the app — the pool faulted or never
+ * booted, or this code threw before it sent anything — is said apart from a
+ * chain that did not answer, so the balance machine can word it as Vela's own.
+ */
+describe('a read that never left the app', () => {
+	it('is reported apart from a chain that did not answer — a subset of the failed', async () => {
+		faulted.add(GNOSIS);
+		down.add(BASE);
+		balances.set(ARBITRUM, ONE);
+		let failed: number[] = [];
+		let internal: number[] = [];
+		await fetchTokens(ADDRESS, {
+			forceRefresh: true,
+			onFailedChains: (ids, inside) => {
+				failed = ids;
+				internal = inside;
+			}
+		});
+		expect(failed).toEqual(expect.arrayContaining([GNOSIS, BASE]));
+		expect(internal).toEqual([GNOSIS]);
+	});
+
+	it('a caller that joins the round hears which failed inside the app too', async () => {
+		faulted.add(GNOSIS);
+		let joined: number[] = [];
+		await Promise.all([
+			fetchTokens(ADDRESS),
+			fetchTokens(ADDRESS, { onFailedChains: (_ids, inside) => (joined = inside) })
+		]);
+		expect(joined).toEqual([GNOSIS]);
+	});
+
+	it('classifies by where it broke, never by the words', () => {
+		const fault = (internal: boolean) =>
+			new pool.PoolFailedError('x', { maybeDelivered: false, rateLimited: false, internal });
+		expect(readFailedInsideApp(fault(true))).toBe(true);
+		expect(readFailedInsideApp(fault(false))).toBe(false);
+		// Thrown by this code, not by any read: inside the app.
+		expect(readFailedInsideApp(new TypeError('cannot read properties of undefined'))).toBe(true);
 	});
 });
 

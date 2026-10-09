@@ -222,6 +222,8 @@
       "maybeSent": "Có thể đã được gửi. Vela vẫn đang theo dõi — đừng gửi lại.",
       "refused": "Mạng đã từ chối — chưa có gì được gửi đi.",
       "wentFirst": "Một giao dịch khác của tài khoản này đã đi trước — chưa có gì được gửi đi.",
+      "notSentTitle": "Chưa gửi",
+      "notSentBody": "Giao dịch trước của bạn trên mạng này vẫn đang được xử lý. Hãy thử lại khi nó hoàn tất.",
       "unknownOutcome": "Sau 24 giờ vẫn chưa xác nhận.",
       "openSigner": "Xác nhận ở trang ký",
       "signerDown": "Không mở được trang ký. Hãy kiểm tra kết nối.",
@@ -246,6 +248,8 @@
         "batchUnsettled": "Đang kiểm tra từng lệnh gọi trong lô…",
         "feeMeasuring": "Đang tính phí mạng…",
         "feeFailed": "Không tính được phí — chạm vào phí để thử lại",
+        "feeRetrying": "Chưa tính được phí. Đang tự động thử lại…",
+        "feeWouldFail": "Nếu gửi như hiện tại, giao dịch sẽ thất bại.",
         "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…"
       }
     },
@@ -327,6 +331,7 @@
       "deployedNo": "Chưa (giao dịch đầu tiên)",
       "estimating": "Đang ước tính...",
       "estimateFailed": "Chạm để thử lại",
+      "payWithAnotherCoin": "Trả bằng coin khác",
       "feeToken": "Token trả phí",
       "paidWith": "Trả bằng {{symbol}}",
       "rowBalance": "Số dư",
@@ -337,7 +342,7 @@
       "reasonSimulation": "Relay chưa chạy thử được giao dịch này. Đang tự động thử lại.",
       "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại.",
       "reasonChainDown": "Không kết nối được {{chain}} để tính phí. Đang tự động thử lại.",
-      "reasonInternal": "Vela gặp lỗi bên trong. Đang thử lại — nếu vẫn lỗi, hãy mở lại ứng dụng.",
+      "reasonInternal": "Vela gặp lỗi bên trong. Nếu vẫn tiếp diễn, hãy mở lại ứng dụng.",
       "rowShort": "Cần ~{{need}}, có {{have}}",
       "noCoinPays": "Không token nào đủ trả phí này"
     },

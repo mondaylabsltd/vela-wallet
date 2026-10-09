@@ -124,6 +124,15 @@ struct BalanceViewWire: Decodable, Equatable {
     /// The corpus key of the home line over them (`assets.unreachableOne` /
     /// `assets.unreachableMany`); `nil` when every network answered.
     var unreachableKey: String? = nil
+    /// The failed chains whose read never left the app (PR 2 note 11) — not
+    /// in `unreachableNetworks`: nothing there is the network's doing. The
+    /// core always sends it; absent (a hand-written view) reads as none.
+    var internalChainIds: [Int]? = nil
+    /// The home's line when a read failed INSIDE Vela
+    /// (`componentsUi.gas.reasonInternal`, the fee's own sentence for the same
+    /// fault): drawn where the unreachable line goes, in place of any "Can't
+    /// reach …" — an internal fault never reads "Can't reach Ethereum".
+    var internalKey: String? = nil
     let holdingsLoading: Bool
     let cachedTotalUsd: Double?
     let switcher: BalanceSwitcherViewWire

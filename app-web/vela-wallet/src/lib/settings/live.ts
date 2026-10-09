@@ -1003,6 +1003,30 @@ export interface LiveAccountsInput {
 	identicon: (address: string) => string;
 }
 
+/**
+ * The switcher's totals, by lowercased address: the balance core's cached
+ * figure per account, with the live total standing in for the active
+ * account's — only while it is a figure. Hidden, the core withholds every
+ * switcher figure (`app::privacy`) and the rows and the total draw the mask;
+ * and a home that read nothing (`unreachable`) has no figure either
+ * (`display_total_usd` is null, PR 2 polish) — the active row keeps what was
+ * cached for it, never a $0.00 nobody read.
+ */
+export function switcherBalances(
+	view: Pick<BalanceView, 'switcher' | 'display_total_usd'>,
+	activeAddress: string
+): Map<string, number> {
+	const balances = new Map<string, number>();
+	for (const entry of view.switcher.balances) {
+		balances.set(entry.address.toLowerCase(), entry.usd);
+	}
+	const live = view.display_total_usd;
+	if (!view.switcher.hidden && live !== null && activeAddress !== '') {
+		balances.set(activeAddress.toLowerCase(), live);
+	}
+	return balances;
+}
+
 function liveAccountRows(input: LiveAccountsInput) {
 	return input.rows.map((row, position) => {
 		const usd = input.balances.get(row.account.address.toLowerCase());

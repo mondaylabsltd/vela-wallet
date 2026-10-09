@@ -9,12 +9,14 @@ export type BalanceView = { address: string | null,
  * The ONE number the hero may render, in USD (the display-currency
  * machine owns conversion). `None` while the skeleton shows — never a
  * fake $0 (invariant ②) — AND while privacy hides: the fiat value is
- * withheld by construction, not masked downstream (invariant ⑧).
+ * withheld by construction, not masked downstream (invariant ⑧) — AND
+ * while [`Self::unreachable`]: nothing was read, so there is no figure.
  */
 display_total_usd: number | null, balance_unknown: boolean, balance_partial: boolean, 
 /**
- * Nothing could be read and nothing is known: the first fetch failed
- * with no cache to fall back on. A skeleton and a reason, never a zero.
+ * Nothing could be read and nothing is known: the first fetch failed —
+ * or settled with every chain it asked failed — with no cache to fall
+ * back on. A skeleton and a reason, never a zero.
  */
 unreachable: boolean, 
 /**
@@ -71,6 +73,19 @@ unreachable_networks: Array<UnreachableNetwork>,
  * `None` when every network answered.
  */
 unreachable_key: string | null, 
+/**
+ * The failed chains whose read never left the app (PR 2 note 11) — not
+ * in `unreachable_networks`: nothing there is the network's doing.
+ */
+internal_chain_ids: Array<number>, 
+/**
+ * The home line when the last read failed inside Vela itself
+ * (`fee_policy::REASON_INTERNAL_KEY`, the fee's own sentence for the same
+ * fault): drawn where the unreachable line goes, and in place of any
+ * "can't reach" a chain-down would say — an internal fault never reads
+ * "Can't reach Ethereum" (issue 483). `None` otherwise.
+ */
+internal_key: string | null, 
 /**
  * `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
  */

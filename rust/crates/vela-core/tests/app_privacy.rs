@@ -115,6 +115,7 @@ fn balance(hidden: bool) -> BalanceView {
         failed_chain_ids: vec![],
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![1, 100, 56],
+        internal_chain_ids: vec![],
         now_ms: NOW,
     });
     sut.resolve(Res::BalanceCacheWritten);
@@ -129,6 +130,7 @@ fn balance(hidden: bool) -> BalanceView {
         failed_chain_ids: vec![56],
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![1, 100, 56],
+        internal_chain_ids: vec![],
         now_ms: NOW + 1_000.0,
     });
     sut.dispatch(Event::SwitcherOpened {

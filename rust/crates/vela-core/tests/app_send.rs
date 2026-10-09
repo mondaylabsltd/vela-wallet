@@ -8676,15 +8676,20 @@ fn only_the_same_account_on_the_same_chain_waits() {
 
 /// The relay refused the submit because another transaction of the account
 /// holds the nonce (another device, one this device could not follow):
-/// nothing was sent, and it says so — not the generic failure.
+/// nothing was sent, and it says so — not the generic failure, and calmly:
+/// no error buzz for something that did not go wrong.
 #[test]
 fn a_held_nonce_refusal_says_the_previous_transaction_is_pending() {
     let mut sut = boot(vec![eth("2")]);
     to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
     slide_to_submit(&mut sut);
-    sut.resolve(Res::SubmitFailed {
+    let ops = sut.resolve(Res::SubmitFailed {
         failure: SendSubmitFailure::PreviousPending,
     });
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::Haptic { .. })),
+        "not sent yet is no failure: {ops:?}"
+    );
     let view = sut.view();
     assert_eq!(view.tx_status, SendTxStatus::Error);
     assert_eq!(view.tx_error, Some(SendTxErrorKey::PreviousPending));
@@ -8753,4 +8758,114 @@ fn the_tracker_s_reason_rides_the_receipt_outcome() {
             refusal: Some(RefusalReason::NonceUsed),
         })
     );
+}
+
+// ---------------------------------------------------------------------------
+// PR 2 integration: notes 6 and 13
+// ---------------------------------------------------------------------------
+
+/// What the tracker last said is in flight is the device's, not the form's:
+/// a form opened between two tracker renders is held from its first frame
+/// (note 6). Open used to rebuild the model and forget it.
+#[test]
+fn open_keeps_what_is_in_flight() {
+    let mut sut = boot(vec![eth("2")]);
+    sut.dispatch(Event::InFlightOps {
+        ops: vec![in_flight(ACCOUNT, 1, "0xfirst")],
+    });
+    // The form is opened again (another send), and nothing is re-told.
+    sut.dispatch(open_event(SendOpenParams::default()));
+    let ops = sut.resolve(loaded(vec![eth("2")]));
+    for _ in &ops {
+        sut.resolve(Res::FeesPrewarmed);
+    }
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    let view = sut.view();
+    assert!(view.previous_pending.is_some(), "held from the first frame");
+    assert!(!view.can_confirm);
+}
+
+/// The send vocabulary is the fee vocabulary (note 13): every fee failure
+/// passes through as it is, in the same wire shape, and the alert says the
+/// chain out of reach by its name and a fault inside the app as that — never
+/// "can't reach the chain" for the second.
+#[test]
+fn every_fee_failure_passes_through_and_is_worded_by_its_cause() {
+    use vela_core::app::fee_policy::{FeeFailure, REASON_INTERNAL_KEY};
+    use vela_core::app::send::{
+        ESTIMATE_CHAIN_DOWN_BODY_KEY, ESTIMATE_FAILED_BODY_KEY, ESTIMATE_FAILED_TITLE_KEY,
+    };
+    for failure in [
+        FeeFailure::MissingPublicKey,
+        FeeFailure::FeeTokenUnavailable,
+        FeeFailure::QuoteUnavailable,
+        FeeFailure::CalculationFailed,
+        FeeFailure::EstimateFailed,
+        FeeFailure::GasQuoteTooHigh,
+        FeeFailure::ChainRead { rate_limited: true },
+        FeeFailure::ChainRead {
+            rate_limited: false,
+        },
+        FeeFailure::WouldFail,
+        FeeFailure::Internal,
+    ] {
+        let fee_json = serde_json::to_value(failure).unwrap();
+        let send: SendEstimateFailure = serde_json::from_value(fee_json.clone())
+            .unwrap_or_else(|e| panic!("{failure:?} does not pass through: {e}"));
+        assert_eq!(send, SendEstimateFailure::from(failure));
+        assert_eq!(serde_json::to_value(send).unwrap(), fee_json, "same shape");
+    }
+    assert_eq!(
+        SendEstimateFailure::ChainRead {
+            rate_limited: false
+        }
+        .body_key(),
+        ESTIMATE_CHAIN_DOWN_BODY_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::Internal.body_key(),
+        REASON_INTERNAL_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::WouldFail.body_key(),
+        ESTIMATE_FAILED_BODY_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::Timeout.body_key(),
+        ESTIMATE_FAILED_BODY_KEY
+    );
+    assert_eq!(ESTIMATE_FAILED_TITLE_KEY, "send.alertEstimateFailedTitle");
+}
+
+/// The fee card failed on the confirm page (a catch-up that could not price
+/// again, or the core's re-ask after a failure): the confirm is held, and
+/// the figure kept from Continue is dropped — it never opens on a figure the
+/// fee machine discarded, between two re-asks. A settled quote opens it.
+#[test]
+fn a_failed_fee_card_holds_the_confirm_and_drops_its_figure() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.view().can_confirm);
+
+    sut.dispatch(Event::FeeFailedChanged { failed: true });
+    let view = sut.view();
+    assert!(!view.can_confirm, "held while the fee card has failed");
+    assert_eq!(view.fee, None, "the discarded figure is not drawn");
+    // Between two re-asks the busy flag drops: still held.
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    sut.dispatch(Event::FeeBusyChanged { busy: false });
+    assert!(!sut.view().can_confirm);
+    assert!(sut
+        .dispatch(Event::SlideConfirm)
+        .iter()
+        .all(|op| !matches!(op, Op::SubmitUserOp { .. })));
+
+    // The re-ask lands.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 1_200),
+    });
+    sut.dispatch(Event::FeeFailedChanged { failed: false });
+    let view = sut.view();
+    assert!(view.can_confirm);
+    assert_eq!(view.fee.map(|fee| fee.total_wei), Some("1200".to_owned()));
 }

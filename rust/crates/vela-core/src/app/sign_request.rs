@@ -955,6 +955,12 @@ pub enum Event {
         #[serde(default)]
         tx_hash: Option<String>,
         now_ms: f64,
+        /// Why the relay refused it — the tracker entry's `refusal`
+        /// (`TrackEntryView::refusal`), for [`SignView::failure_refusal_key`].
+        /// Absent: the plain refusal sentence.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        refusal: Option<super::tx_tracker::RefusalReason>,
     },
     /// The passkey (or Trusted Signer) prompt for request `id` opened
     /// (spec 082 RA9). Accepted only while that request's pipeline is in its
@@ -1525,6 +1531,9 @@ pub struct Model {
     /// The error above is a refusal by the relay (spec 082 RJ3). Set and
     /// cleared with `sign_error`.
     sign_error_refused: bool,
+    /// Why the relay did not take it, as a sentence ([`SignView::failure_refusal_key`]).
+    /// Set and cleared with `sign_error_refused`.
+    sign_error_refusal_key: Option<&'static str>,
     pending_op_hash: Option<String>,
     /// The sheet's op was submitted "may have been sent" (spec 082 RA3).
     pending_op_maybe_sent: bool,
@@ -1649,6 +1658,7 @@ impl Model {
         self.funding_pinned_rid = None;
         self.sign_error = None;
         self.sign_error_refused = false;
+        self.sign_error_refusal_key = None;
         self.pending_op_hash = None;
         self.pending_op_maybe_sent = false;
     }
@@ -1824,6 +1834,32 @@ pub struct SignView {
     /// the close.
     #[serde(default)]
     pub failure_retryable: bool,
+    /// The sentence that says why the relay did not take the operation on
+    /// the sheet (PR 2 note 9), drawn under the failure — the one field for
+    /// both ways a refusal arrives:
+    /// - at submit, the relay's answer: another operation of the account
+    ///   holds the nonce → `componentsUi.signing.notSentBody`
+    ///   ([`super::sign_confirm::NOT_SENT_BODY_KEY`], under
+    ///   [`Self::failure_not_sent`]'s calm title; retryable, as on Send); any
+    ///   other refusal → `componentsUi.signing.refused`;
+    /// - after it, the tracker's verdict ([`Event::OpTracked`]'s `refusal`):
+    ///   its reason's sentence (`tx_tracker::refusal_key` — the fee sentence
+    ///   only for `fee_below_market`, "went first" for `nonce_used`).
+    ///
+    /// `None` for a failure that was no refusal. `#[serde(default)]`.
+    #[serde(default)]
+    pub failure_refusal_key: Option<String>,
+    /// The failure on the sheet is no failure: the relay turned the operation
+    /// back at submit because the account's previous one on this network
+    /// still holds the nonce. Nothing was sent and nothing went wrong, so the
+    /// sheet says it calmly — the title
+    /// [`super::sign_confirm::NOT_SENT_TITLE_KEY`] ("Not sent yet") in place
+    /// of "Failed", over [`Self::failure_refusal_key`]'s sentence, with no
+    /// failure styling (no red mark, no error haptic) — and offers Try again
+    /// ([`Self::failure_retryable`]). `#[serde(default)]`: a reader that
+    /// predates it reads `false`.
+    #[serde(default)]
+    pub failure_not_sent: bool,
     pub notice: Option<SignNotice>,
     pub global_chain_id: u32,
     /// Present when the request was refused because it would have changed who
@@ -1935,7 +1971,8 @@ impl App for SignRequest {
                 status,
                 tx_hash,
                 now_ms: _,
-            } => on_op_tracked(model, &user_op_hash, status, tx_hash),
+                refusal,
+            } => on_op_tracked(model, &user_op_hash, status, tx_hash, refusal),
             Event::CeremonyStarted { id } => on_ceremony(model, &id, Ceremony::Up),
             Event::CeremonyDone { id } => on_ceremony(model, &id, Ceremony::Done),
             Event::TransportDropped { transport_id } => {
@@ -2102,6 +2139,13 @@ impl App for SignRequest {
             tracker_withdraw: model.tracker_withdraw.clone(),
             failure_refused: model.sign_error.is_some() && model.sign_error_refused,
             failure_retryable: model.failure_retryable(),
+            failure_refusal_key: model
+                .sign_error
+                .as_ref()
+                .and(model.sign_error_refusal_key)
+                .map(str::to_owned),
+            failure_not_sent: model.sign_error.is_some()
+                && model.sign_error_refusal_key == Some(super::sign_confirm::NOT_SENT_BODY_KEY),
             notice: model.notice,
             global_chain_id: model.global_chain_id(),
             blocked: model.blocked.clone(),
@@ -2394,6 +2438,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
     if let Some(op) = model.answer_held() {
         model.sign_error = None;
         model.sign_error_refused = false;
+        model.sign_error_refusal_key = None;
         commands.push(request_op(model, op, false));
     }
     model.reconciled = true;
@@ -2438,6 +2483,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         // exactly like every other request that waits for a decision.
         model.blocked = Some(blocked_view(&block));
         model.sign_error_refused = false;
+        model.sign_error_refusal_key = None;
         model.sign_error = Some(SignErrorNotice::new(
             SignErrorKind::SelfCallBlocked,
             Some(block.function.as_str().to_owned()),
@@ -2651,6 +2697,7 @@ fn approve_with(
     // Immediate feedback + fresh error state (`dapp-connection.tsx:656-658`).
     model.sign_error = None;
     model.sign_error_refused = false;
+    model.sign_error_refusal_key = None;
     model.pending_op_hash = None;
     model.pending_op_maybe_sent = false;
 
@@ -2726,6 +2773,7 @@ fn approve_with(
             };
             if stale {
                 model.sign_error_refused = false;
+                model.sign_error_refusal_key = None;
                 model.sign_error = Some(SignErrorNotice::new(SignErrorKind::StaleFeeQuote, None));
                 return render();
             }
@@ -2945,6 +2993,7 @@ fn fail_pending(
     );
     model.sign_error = Some(SignErrorNotice::new(kind, detail));
     model.sign_error_refused = false;
+    model.sign_error_refusal_key = None;
     ops_and_render(model, vec![op])
 }
 
@@ -2978,6 +3027,7 @@ fn fail_inflight(
             p.held = Some(payload);
             model.sign_error = Some(SignErrorNotice::new(kind, detail));
             model.sign_error_refused = false;
+            model.sign_error_refusal_key = None;
         }
         // Nobody is looking (dismissed while it ran, or superseded): the
         // page is answered at once.
@@ -3059,6 +3109,7 @@ fn retry(model: &mut Model) -> Command<SignEffect, Event> {
     }
     model.sign_error = None;
     model.sign_error_refused = false;
+    model.sign_error_refusal_key = None;
     render()
 }
 
@@ -3070,6 +3121,7 @@ fn funding_cancel(model: &mut Model) -> Command<SignEffect, Event> {
     };
     model.sign_error = None;
     model.sign_error_refused = false;
+    model.sign_error_refusal_key = None;
     model.pending_op_hash = None;
     // ⑧: funding cancellation is NOT a user reject — recoverable -32603, so
     // the extension writes no durable 'rejected' (`dapp-connection.tsx:940-946`).
@@ -3393,6 +3445,7 @@ fn on_op_tracked(
     user_op_hash: &str,
     status: TrackStatus,
     tx_hash: Option<String>,
+    reason: Option<super::tx_tracker::RefusalReason>,
 ) -> Command<SignEffect, Event> {
     let Some(fl) = model.inflight.clone() else {
         return Command::done();
@@ -3470,6 +3523,7 @@ fn on_op_tracked(
                 model.sign_error = Some(SignErrorNotice::new(*kind, message.clone()));
             }
             model.sign_error_refused = refused;
+            model.sign_error_refusal_key = refused.then(|| super::tx_tracker::refusal_key(reason));
             model.pending_op_hash = None;
             model.pending_op_maybe_sent = false;
             if let Some(p) = model.pending.as_mut() {
@@ -3963,6 +4017,9 @@ fn on_submit_outcome(
             // RJ3: the relay refused it — the page is told so in the fixed
             // sentence (the relay's words are diagnostics), and the sheet's
             // failure is a refusal, never "try again".
+            // Another operation of the account holds the nonce: every shell
+            // answers it with the core's own detail for that (PR 2 note 9).
+            let previous_pending = message == crate::user_op::PREVIOUS_PENDING_DETAIL;
             let detail = if refused {
                 crate::user_op::REFUSED_DAPP_DETAIL.to_owned()
             } else {
@@ -3978,6 +4035,13 @@ fn on_submit_outcome(
             };
             let command = fail_inflight(model, CODE_INTERNAL, kind, Some(detail));
             model.sign_error_refused = refused && model.sign_error.is_some();
+            model.sign_error_refusal_key = if previous_pending {
+                Some(super::sign_confirm::NOT_SENT_BODY_KEY)
+            } else if model.sign_error_refused {
+                Some(super::tx_tracker::REFUSED_KEY)
+            } else {
+                None
+            };
             command
         }
         // Spec 102: the venue cannot be used here. The page hears a calm

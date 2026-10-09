@@ -167,6 +167,51 @@ fn settle_with_carry_over(
     tokens
 }
 
+/// One round's answer for the core: what was read, the chains that did not
+/// answer — and of those, the ones the pool saw only rate limits on, and the
+/// ones whose read never left the app (PR 2 note 11).
+fn settled_result(
+    address: &str,
+    pull: bool,
+    read_chain_ids: Vec<u32>,
+    fetched: balances::Fetched,
+) -> BalanceShellResult {
+    let balances::Fetched {
+        tokens,
+        failed,
+        internal,
+    } = fetched;
+    // A chain that did not answer keeps what the last round knew it held;
+    // it is still reported as failed below.
+    let tokens = settle_with_carry_over(address, tokens, &failed);
+    let limited = if failed.iter().all(|chain| internal.contains(chain)) {
+        // Nothing left the app: the pool has no verdict to give, and asking
+        // it would be one more call into what just failed.
+        Vec::new()
+    } else {
+        pool::rate_limited_chains()
+    };
+    BalanceShellResult::FetchSettled {
+        address: address.to_owned(),
+        pull,
+        tokens,
+        // Of the chains that failed, the ones the pool saw only rate limits
+        // on: "still loading", not "broken" — nobody is sent to swap RPCs
+        // over a busy provider (the web's `getRateLimitedChains`, 078 W-08).
+        rate_limited_chain_ids: failed
+            .iter()
+            .copied()
+            .filter(|chain| limited.contains(chain) && !internal.contains(chain))
+            .collect(),
+        failed_chain_ids: failed,
+        read_chain_ids,
+        // Of the chains that failed, the ones whose read never left the app:
+        // never "Can't reach …" (`BalanceView::internal_key`).
+        internal_chain_ids: internal,
+        now_ms: crate::executor::now_ms(),
+    }
+}
+
 impl Machine for BalanceDashboard {
     const LABEL: &'static str = "balance_dashboard";
 
@@ -228,30 +273,21 @@ impl Machine for BalanceDashboard {
                     // Counted while it reads: a "network came back" joins it
                     // rather than starting a second round beside it (G53).
                     let _reading = RoundGuard::enter();
-                    let read_chain_ids = balances::chain_ids();
-                    let (tokens, failed) = balances::fetch_all_streaming(&address, &arrived);
-                    // A chain that did not answer keeps what the last round
-                    // knew it held; it is still reported as failed below.
-                    let tokens = settle_with_carry_over(&address, tokens, &failed);
-                    let limited = pool::rate_limited_chains();
-                    let rate_limited_chain_ids = failed
-                        .iter()
-                        .copied()
-                        .filter(|chain| limited.contains(chain))
-                        .collect();
-                    BalanceShellResult::FetchSettled {
+                    // A fault inside the round itself — a panic between the
+                    // fan-out and the settle — is the app's, said as that
+                    // (PR 2 note 11), never left as a fetch that never ends.
+                    // The panic hook has the report for the failure sheet
+                    // all the same (spec 038).
+                    let settled = crate::panic_report::guarded(|| {
+                        let read_chain_ids = balances::chain_ids();
+                        let fetched = balances::fetch_all_streaming(&address, &arrived);
+                        settled_result(&address, pull, read_chain_ids, fetched)
+                    });
+                    settled.unwrap_or(BalanceShellResult::FetchErrored {
                         address,
                         pull,
-                        tokens,
-                        failed_chain_ids: failed,
-                        // Of the chains that failed, the ones the pool saw
-                        // only rate limits on: "still loading", not "broken"
-                        // — nobody is sent to swap RPCs over a busy provider
-                        // (the web's `getRateLimitedChains`, 078 W-08).
-                        rate_limited_chain_ids,
-                        read_chain_ids,
-                        now_ms: crate::executor::now_ms(),
-                    }
+                        internal: true,
+                    })
                 }))
             }
 

@@ -82,6 +82,7 @@
     "recipientCount_other": "{{count}} получателей",
     "removeRecipient": "Удалить",
     "alertInsufficientBalanceBody": "Сумма превышает ваш баланс.",
+    "alertEstimateChainDownBody": "Нет связи с {{chain}}, комиссию за эту транзакцию не рассчитать. Попробуйте ещё раз чуть позже.",
     "recipientPickAria": "Выбрать контакт",
     "multiSendNoFundsAfterGas": "Недостаточно средств на газ после резерва.",
     "gasReserved": "газ зарезервирован",

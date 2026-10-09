@@ -398,6 +398,11 @@ export interface SettingsMessages {
 		/** The title once every network in the list has come back. */
 		unreachableNone: string;
 		/**
+		 * PR 2 note 11: the home's line when the read failed inside Vela
+		 * (`BalanceView.internal_key`) — the list's title then too.
+		 */
+		internal: Readonly<Record<string, string>>;
+		/**
 		 * Each row's line, by the corpus key the core names in `line_key`
 		 * ({@link UNREACHABLE_LINE_KEYS}); `assets.lastSeen` fills `{{amount}}`.
 		 */
@@ -827,6 +832,8 @@ export const SETTINGS_KEYS = [
 	'assets.unreachableMany',
 	'assets.unreachableBody',
 	'assets.unreachableNone',
+	// PR 2 note 11: the list's title when the read failed inside Vela.
+	'componentsUi.gas.reasonInternal',
 	'assets.lastSeen',
 	'assets.lastSeenUnpriced',
 	'assets.lastSeenEmpty',

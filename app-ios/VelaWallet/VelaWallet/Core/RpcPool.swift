@@ -202,6 +202,44 @@ final class RpcPool {
         boot()
     }
 
+    // MARK: - A pool that cannot send (PR 2 note 11)
+
+    /// Chains whose calls cannot leave the app: a fault inside Vela, never
+    /// the chain's. Only a DEBUG build ever holds any — injected with the
+    /// launch argument `-vela.faultPool 1,137` (the web's
+    /// `vela.faultPool(chain)`) or `faultChain(_:)` — so a screenshot and a
+    /// test can show what the wallet says when the fault is its own (home
+    /// with an internal fault must never read "Can't reach Ethereum"). A
+    /// release pool sends every call.
+    private var faulted: Set<Int> = RpcPool.injectedFaults()
+
+    /// Why a call on `chainId` cannot leave the app now — diagnostics for the
+    /// report, never shown — or `nil` when it can. A read that fails while
+    /// this says so failed inside Vela: it is told as that, never as the
+    /// network out of reach (the balance's `internal_chain_ids`, the fee's
+    /// `internal`).
+    func unsendable(chainId: Int) -> String? {
+        faulted.contains(chainId) ? "pool_fault" : nil
+    }
+
+    #if DEBUG
+    /// Fault (or heal) one chain's calls — a test's and a board's hook.
+    func faultChain(_ chainId: Int, _ faulty: Bool = true) {
+        if faulty { faulted.insert(chainId) } else { faulted.remove(chainId) }
+    }
+    #endif
+
+    private static func injectedFaults() -> Set<Int> {
+        #if DEBUG
+        let raw = UserDefaults.standard.string(forKey: "vela.faultPool") ?? ""
+        return Set(raw.split(separator: ",").compactMap {
+            Int($0.trimmingCharacters(in: .whitespaces))
+        })
+        #else
+        return []
+        #endif
+    }
+
     // MARK: - The one thing callers want
 
     /// Route one JSON-RPC call and wait for the core's verdict.
@@ -228,6 +266,13 @@ final class RpcPool {
         kind: String = "rpc"
     ) async -> RpcCallResult {
         if offline {
+            return RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
+        }
+        // A pool that cannot send this chain's calls answers at once, and
+        // nothing left: no network was asked, so the network's health hears
+        // nothing of it either (`onOutcome`).
+        if let kind = unsendable(chainId: chainId) {
+            VelaLog.failure(.rpc, kind: kind, "chain=\(chainId) method=\(method)")
             return RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
         }
         // Never refused for want of a boot (issue #483): boot, then route.

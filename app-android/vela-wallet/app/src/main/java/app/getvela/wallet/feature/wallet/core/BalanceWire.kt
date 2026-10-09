@@ -93,10 +93,10 @@ data class BalanceView(
     val balance_partial: Boolean = false,
     /**
      * Nothing could be read and nothing is known: the first fetch failed with
-     * no cache to fall back on (#188, spec 038 finding 15). The core's
-     * `display_total_usd` is `0.0` in this state — which is exactly the number
-     * this flag exists to keep off the hero. A skeleton and a reason, never a
-     * zero.
+     * no cache to fall back on (#188, spec 038 finding 15). A skeleton and a
+     * reason, never a zero — and since the PR 2 polish the core says so in
+     * the figure too: `display_total_usd` is `null` in this state (it was
+     * `0.0`, which every screen had to know to keep off the hero).
      */
     val unreachable: Boolean = false,
     val notice: BalanceNotice? = null,
@@ -116,6 +116,17 @@ data class BalanceView(
     val unreachable_networks: List<UnreachableNetwork> = emptyList(),
     /** The corpus key of the home line over them; `null` when every network answered. */
     val unreachable_key: String? = null,
+    /**
+     * PR 2 note 11: the failed chains whose read never left the app — a fault
+     * inside Vela, not the network's. Never in [unreachable_networks].
+     */
+    val internal_chain_ids: List<Int> = emptyList(),
+    /**
+     * The home line when the last read failed inside Vela itself (the fee's
+     * own sentence for the same fault): drawn where the unreachable line
+     * goes, in place of any "Can't reach …". `null` otherwise.
+     */
+    val internal_key: String? = null,
     val holdings_loading: Boolean = false,
     val cached_total_usd: Double? = null,
     val switcher: BalanceSwitcherView = BalanceSwitcherView(),
@@ -238,6 +249,12 @@ sealed class BalanceShellResult {
         val rate_limited_chain_ids: List<Int> = emptyList(),
         /** Spec 092: every chain this round asked — one that answered empty is not "not read yet". */
         val read_chain_ids: List<Int> = emptyList(),
+        /**
+         * PR 2 note 11: the failed chains whose read never left the app (an
+         * exception inside this shell before anything was sent) — a subset of
+         * [failed_chain_ids], never said as "can't reach".
+         */
+        val internal_chain_ids: List<Int> = emptyList(),
         val now_ms: Double,
     ) : BalanceShellResult()
 
@@ -249,7 +266,12 @@ sealed class BalanceShellResult {
      */
     @Serializable
     @SerialName("fetch_errored")
-    data class FetchErrored(val address: String, val pull: Boolean) : BalanceShellResult()
+    data class FetchErrored(
+        val address: String,
+        val pull: Boolean,
+        /** PR 2 note 11: it threw inside the app before anything left it — Vela's own fault, never "can't reach". */
+        val internal: Boolean = false,
+    ) : BalanceShellResult()
 
     @Serializable
     @SerialName("account_assets_fetched")

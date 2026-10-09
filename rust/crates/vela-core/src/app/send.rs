@@ -67,7 +67,7 @@ use serde::{Deserialize, Serialize};
 use super::fee_policy::{
     encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable, reserve_fee_token,
     reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset, FeeAssetView, FeeCall,
-    FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
+    FeeEstimate, FeeEstimateView, FeeFailure, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
     TEMPO_FEE_TOKEN_DECIMALS,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
@@ -832,8 +832,9 @@ pub struct SendTxRecord {
     pub submit_block: Option<u64>,
 }
 
-/// Estimate failure vocabulary — `fee_policy::FeeFailure` plus the send-side
-/// timeout; the shell maps service errors into these.
+/// Estimate failure vocabulary — every `fee_policy::FeeFailure`, in the same
+/// wire shape (a shell passes the fee machine's failure through as it is:
+/// [`From<FeeFailure>`]), plus the send-side timeout and `other`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -850,6 +851,67 @@ pub enum SendEstimateFailure {
     /// The 15s race lost (`useSendController.ts:768-770`).
     Timeout,
     Other,
+    /// A chain read the quote needs got no answer from the chain's nodes
+    /// (`FeeFailure::ChainRead`): the chain is out of reach, not Vela.
+    ChainRead {
+        rate_limited: bool,
+    },
+    /// The relay simulated it and it fails (`FeeFailure::WouldFail`).
+    WouldFail,
+    /// The read never left the app (`FeeFailure::Internal`, issue 483):
+    /// never "can't reach the chain".
+    Internal,
+}
+
+impl From<FeeFailure> for SendEstimateFailure {
+    fn from(failure: FeeFailure) -> Self {
+        match failure {
+            FeeFailure::MissingPublicKey => Self::MissingPublicKey,
+            FeeFailure::FeeTokenUnavailable => Self::FeeTokenUnavailable,
+            FeeFailure::QuoteUnavailable => Self::QuoteUnavailable,
+            FeeFailure::CalculationFailed => Self::CalculationFailed,
+            FeeFailure::EstimateFailed => Self::EstimateFailed,
+            FeeFailure::GasQuoteTooHigh => Self::GasQuoteTooHigh,
+            FeeFailure::ChainRead { rate_limited } => Self::ChainRead { rate_limited },
+            FeeFailure::WouldFail => Self::WouldFail,
+            FeeFailure::Internal => Self::Internal,
+        }
+    }
+}
+
+/// The alert's title when Continue's estimate fails ("Could not prepare
+/// transaction").
+pub const ESTIMATE_FAILED_TITLE_KEY: &str = "send.alertEstimateFailedTitle";
+/// The alert's body for a failure the words below do not name ("Could not
+/// build a valid transaction estimate. Please try again.").
+pub const ESTIMATE_FAILED_BODY_KEY: &str = "send.alertEstimateFailedBody";
+/// The body when the chain's nodes could not be reached: "Can't reach
+/// {{chain}} to price this transaction. Try again in a moment." — `{{chain}}`
+/// is the chain's name, filled by the shell.
+pub const ESTIMATE_CHAIN_DOWN_BODY_KEY: &str = "send.alertEstimateChainDownBody";
+
+impl SendEstimateFailure {
+    /// The corpus key of the alert's body for this failure (PR 2 note 13):
+    /// the chain out of reach is said as that, by the chain's name; a fault
+    /// inside the app as that (`fee_policy::REASON_INTERNAL_KEY`) — never
+    /// "can't reach the chain"; anything else keeps the general sentence.
+    /// The title is [`ESTIMATE_FAILED_TITLE_KEY`] for all of them.
+    #[must_use]
+    pub fn body_key(self) -> &'static str {
+        match self {
+            Self::ChainRead { .. } => ESTIMATE_CHAIN_DOWN_BODY_KEY,
+            Self::Internal => super::fee_policy::REASON_INTERNAL_KEY,
+            Self::MissingPublicKey
+            | Self::FeeTokenUnavailable
+            | Self::QuoteUnavailable
+            | Self::CalculationFailed
+            | Self::EstimateFailed
+            | Self::GasQuoteTooHigh
+            | Self::Timeout
+            | Self::Other
+            | Self::WouldFail => ESTIMATE_FAILED_BODY_KEY,
+        }
+    }
 }
 
 /// How a submit failed — the shell's result-mapping layer runs
@@ -1470,6 +1532,17 @@ pub enum Event {
     FeeBusyChanged {
         busy: bool,
     },
+    /// The fee card's `FeeView.failure` is set — a failure, or the core's own
+    /// re-ask after one — or no longer is. The fee machine holds no figure
+    /// then. Mirrored by the same bridge as [`Event::FeeBusyChanged`], sent
+    /// when it changes. While true the confirm is held, and on the confirm
+    /// page the figure this machine kept from Continue is dropped: between
+    /// two of the core's re-asks the confirm used to open on a figure the fee
+    /// machine had discarded, and shut again with the next re-ask (PR 2
+    /// integration). A settled quote ([`Event::FeeUpdated`]) clears it too.
+    FeeFailedChanged {
+        failed: bool,
+    },
     /// The fee card's coin in force — `FeeView.fee_token`, verbatim (`None` =
     /// the chain's own coin). It names the fee row's coin while no estimate
     /// is in hand ([`SendView::fee_coin`]) — when nobody chose, the fee
@@ -1530,7 +1603,9 @@ pub enum Event {
     /// confirm is held ([`SendView::previous_pending`]): a second send signed
     /// now would take the same nonce. It opens once the first is final, or
     /// has made no progress for ten minutes (`tx_tracker::IN_FLIGHT_STALL_MS`
-    /// — the tracker then leaves it out of the list).
+    /// — the tracker then leaves it out of the list). An [`Event::Open`]
+    /// keeps the last list: a form opened between two renders is held from
+    /// its first frame.
     InFlightOps {
         ops: Vec<super::tx_tracker::InFlightOp>,
     },
@@ -1588,9 +1663,12 @@ pub enum SendTxErrorKey {
     Generic,
     /// The relay refused the submit because another transaction of this
     /// account holds the nonce (`RelayRejection::NonceHeld`, from another
-    /// device, or one this device could not follow): nothing was sent. The
-    /// line is [`super::sign_confirm::PREVIOUS_PENDING_KEY`]'s; "Try again"
-    /// waits for it like any held confirm.
+    /// device, or one this device could not follow): nothing was sent, and
+    /// nothing went wrong. Said calmly, as the signing sheet says it — the
+    /// title [`super::sign_confirm::NOT_SENT_TITLE_KEY`] ("Not sent yet")
+    /// over [`super::sign_confirm::NOT_SENT_BODY_KEY`], with no failure
+    /// styling and no error haptic; "Try again" waits for it like any held
+    /// confirm.
     PreviousPending,
     /// `send.txErrorBundlerFund`.
     BundlerFund,
@@ -1878,6 +1956,9 @@ pub struct Model {
     fee_estimate: Option<FeeEstimate>,
     estimating_gas: bool,
     fee_busy: bool,
+    /// [`Event::FeeFailedChanged`]: the fee card has failed (or is re-asking
+    /// after a failure) and holds no figure.
+    fee_failed: bool,
     gas_fee_token: Option<String>,
     /// The person picked the fee coin (078 M-03). Until then `None` is "the
     /// fee machine's choice" and a quote in any coin is its answer; after a
@@ -1934,7 +2015,8 @@ pub struct Model {
     refused: bool,
     /// Why the relay refused the submitted op, when it did and said.
     refusal: Option<super::tx_tracker::RefusalReason>,
-    /// [`Event::InFlightOps`]: every operation in flight on this device.
+    /// [`Event::InFlightOps`]: every operation in flight on this device. Kept
+    /// across [`Event::Open`]: it is the device's, not the form's.
     in_flight: Vec<super::tx_tracker::InFlightOp>,
     recipient_identity: Option<SendRecipientIdentity>,
     recipient_risk: Option<SendRecipientRisk>,
@@ -2546,6 +2628,18 @@ impl Send {
                 model.fee_busy = busy;
                 render()
             }
+            Event::FeeFailedChanged { failed } => {
+                if model.fee_failed == failed {
+                    return Command::done();
+                }
+                model.fee_failed = failed;
+                if failed && model.step == SendStep::Confirm {
+                    // The fee machine discarded its figure: so does the
+                    // confirm, which draws the failure in its place.
+                    model.fee_estimate = None;
+                }
+                render()
+            }
             Event::FeeTokenChanged { fee_token } => {
                 model.fee_card_coin = form_chain(model).map(|chain_id| FeeCardCoin {
                     chain_id,
@@ -3030,11 +3124,17 @@ fn open(
     // A remount: everything resets except the request-id source (so stale
     // results can never collide with fresh flights) and the recipient-row
     // counter (a module global in TS).
+    // And what the tracker last said is in flight: it is the device's, not
+    // the form's — told on every tracker render, and a form opened between
+    // two renders must be held from its first frame (PR 2 note 6), as the
+    // attempt counter survives for the same kind of reason.
     let attempt = model.attempt;
     let recipient_seq = model.recipient_seq;
+    let in_flight = std::mem::take(&mut model.in_flight);
     *model = Model {
         attempt,
         recipient_seq,
+        in_flight,
         ..Model::default()
     };
     model.account = account;
@@ -5836,6 +5936,8 @@ fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {
         return Command::done();
     };
     model.fee_estimate = Some(fee);
+    // A settled quote is no failure, whatever the bridge says next.
+    model.fee_failed = false;
     if model.step == SendStep::Confirm {
         // A sweep's sim depends on the estimate (reserve math): re-run it
         // when its calls moved, and only then.
@@ -6559,6 +6661,7 @@ fn confirm_gate_open(model: &Model) -> bool {
         && model.tx_error.is_none()
         && !model.estimating_gas
         && !model.fee_busy
+        && !model.fee_failed
         && !relay_stopped(model)
         && previous_in_flight(model).is_none()
 }
@@ -7017,17 +7120,14 @@ fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd
         }
         SendSubmitFailure::PreviousPending => {
             // Not a failure of the network: the account's previous
-            // transaction still holds the nonce. Said as such, and "Try
-            // again" waits for it like any held confirm.
+            // transaction still holds the nonce. Said as such — "Not sent
+            // yet", calmly, with no error buzz: nothing was sent and nothing
+            // went wrong — and "Try again" waits for it like any held
+            // confirm.
             model.tx = SendTxStatus::Error;
             model.tx_error = Some(SendTxErrorKey::PreviousPending);
             model.lock.end(gen);
-            fire(
-                model,
-                SendOperation::Haptic {
-                    kind: SendHapticKind::Error,
-                },
-            )
+            render()
         }
         SendSubmitFailure::VenueBlocked { block } => {
             // Spec 102: not a failure of the network or the relay — this

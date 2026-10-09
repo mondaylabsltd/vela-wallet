@@ -25,8 +25,21 @@
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
+	import { browser } from '$app/environment';
+	import { followSharedTracker } from '$lib/wallet/core/tracker-resident';
 
 	let { data } = $props();
+
+	/**
+	 * PR 2 note 12: the signing resident boots the transaction tracker here —
+	 * it needs the account's in-flight operations to hold a second confirm.
+	 * With the wallet open in the side panel that was a second tracker sweeping
+	 * and polling every stored pending record beside the panel's own. So this
+	 * window follows the one the wallet runs, and runs one of its own only
+	 * while no wallet document is up. Before the components below, which boot
+	 * the resident.
+	 */
+	if (browser) followSharedTracker();
 
 	/**
 	 * ONE live fee session for this window (026's rule): the quote the core

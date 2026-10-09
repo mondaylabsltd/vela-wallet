@@ -33,14 +33,17 @@ vi.mock('$lib/services/wallet-api', () => ({
 			_address: string,
 			options: {
 				onProgress?: (t: APIToken[]) => void;
-				onFailedChains?: (ids: number[]) => void;
+				onFailedChains?: (ids: number[], internal: number[]) => void;
 			} = {}
 		) => {
 			options.onProgress?.([ETH]);
-			options.onFailedChains?.([137]);
+			// Polygon did not answer; Optimism's read never left the app.
+			options.onFailedChains?.([137, 10], [10]);
 			return [ETH];
 		}
-	)
+	),
+	// The real classifier is `wallet-api-chain-outage.test.ts`'s; here, a word.
+	readFailedInsideApp: (error: unknown) => error instanceof Error && error.message === 'inside'
 }));
 vi.mock('$lib/services/rpc-pool', () => ({
 	getRateLimitedChains: vi.fn(() => new Set([56]))
@@ -79,8 +82,10 @@ describe('fetch_tokens', () => {
 			type: 'fetch_settled',
 			address: ADDR,
 			pull: false,
-			failed_chain_ids: [137],
-			rate_limited_chain_ids: [56]
+			failed_chain_ids: [137, 10],
+			rate_limited_chain_ids: [56],
+			// PR 2 note 11: the subset that failed inside the app.
+			internal_chain_ids: [10]
 		});
 		// Spec 092: the chains the round asked, so the core can tell a network
 		// that answered holding nothing from one never read.
@@ -155,7 +160,14 @@ describe('the failure twin', () => {
 				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true }),
 				new Error('net')
 			)
-		).toEqual({ type: 'fetch_errored', address: ADDR, pull: true });
+		).toEqual({ type: 'fetch_errored', address: ADDR, pull: true, internal: false });
+		// PR 2 note 11: a fetch that threw inside the app says so.
+		expect(
+			executor.toFailure(
+				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true }),
+				new Error('inside')
+			)
+		).toEqual({ type: 'fetch_errored', address: ADDR, pull: true, internal: true });
 		expect(
 			executor.toFailure(effect({ type: 'read_balance_cache', address: ADDR }), new Error('io'))
 		).toEqual({ type: 'cached_total_loaded', address: ADDR, usd: null });

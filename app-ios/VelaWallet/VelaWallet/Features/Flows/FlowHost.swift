@@ -418,7 +418,11 @@ struct FlowHost: View {
                     model: m,
                     onNoticeAction: { onNoticeAction?() },
                     onNoticeSecondary: { onNoticeSecondary?() },
-                    onNoticeReport: { onRelayReport?() }
+                    onNoticeReport: { onRelayReport?() },
+                    onRefreshFee: onRefreshFee,
+                    // "Pay with another coin" (PR 2 polish): the coin list the
+                    // form's row opens, over the confirm.
+                    onOpenFee: { onNavigate(.feeToken) }
                 )
             } footer: {
                 // A hairline over the pinned hand-off: figures that run past
