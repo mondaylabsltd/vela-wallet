@@ -82,7 +82,7 @@
     "recipientCount_other": "{{count}} получателей",
     "removeRecipient": "Удалить",
     "alertInsufficientBalanceBody": "Сумма превышает ваш баланс.",
-    "recipientPickAria": "Выбрать получателя или сканировать",
+    "recipientPickAria": "Выбрать контакт",
     "multiSendNoFundsAfterGas": "Недостаточно средств на газ после резерва.",
     "gasReserved": "газ зарезервирован",
     "txErrorGeneric": "Не удалось отправить транзакцию. Ваши средства в безопасности — попробуйте снова.",

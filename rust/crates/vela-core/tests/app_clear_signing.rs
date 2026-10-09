@@ -2875,6 +2875,9 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
     assert!(result.verified, "our contract, the record's own bytes");
     assert!(!result.best_effort && !result.partial);
     assert_eq!(result.risk, ClearRisk::Safe);
+    // The wallet's own sheet draws no header chip, so the rows say the
+    // network first; no name row — the footer's signing account names the
+    // wallet.
     let rows: Vec<(&str, &str)> = result
         .fields
         .iter()
@@ -2883,7 +2886,7 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
     assert_eq!(
         rows,
         vec![
-            ("Registered as", "Interleave"),
+            ("Network", "Ethereum"),
             ("Address", "0x88cCA0…266894"),
             ("Public keys", "3"),
         ]
@@ -2891,6 +2894,71 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
     assert_eq!(
         result.fields[1].address.as_deref(),
         Some("0x88cca0eedbf2c4426110bbfc998f048689266894")
+    );
+    // Every word is a term, so each shell says it in the reader's language
+    // with no relabelling of its own.
+    assert_eq!(result.intent_term, Some(ClearTerm::IntentBackUpPublicKeys));
+    let terms: Vec<Option<ClearTerm>> = result.fields.iter().map(|f| f.label_term).collect();
+    assert_eq!(
+        terms,
+        vec![
+            Some(ClearTerm::LabelNetwork),
+            Some(ClearTerm::LabelAddress),
+            Some(ClearTerm::LabelPublicKeys),
+        ]
+    );
+    assert_eq!(
+        ClearTerm::IntentBackUpPublicKeys.leaf(),
+        "intentBackUpPublicKeys"
+    );
+    assert_eq!(ClearTerm::LabelNetwork.leaf(), "labelNetwork");
+    assert_eq!(ClearTerm::LabelAddress.leaf(), "labelAddress");
+    assert_eq!(ClearTerm::LabelPublicKeys.leaf(), "labelPublicKeys");
+    // The confirm reads the intent — "Back up public keys", not a bare
+    // "Confirm".
+    assert_eq!(
+        view.confirm,
+        ClearConfirm::ConfirmIntent {
+            intent: "Back up public keys".to_owned(),
+            intent_term: Some(ClearTerm::IntentBackUpPublicKeys),
+        }
+    );
+}
+
+/// The Network row is a built-in chain's own name: the Base rehearsal says
+/// "Base", and a chain this build does not ship gets no row rather than a
+/// number.
+#[test]
+fn the_registry_backup_names_the_network_it_goes_to() {
+    let rows_on = |chain_id: u32| {
+        let mut sut = Sut::new();
+        sut.dispatch(Event::ResolveTransaction {
+            to: Some("0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9".to_owned()),
+            data: Some(registry_backup_calldata()),
+            value: Some("0x0".to_owned()),
+            chain_id,
+            locale: ClearLocale::default(),
+        });
+        sut.view()
+            .result
+            .expect("a first-party result")
+            .fields
+            .into_iter()
+            .map(|f| (f.label, f.value))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        rows_on(8453).first(),
+        Some(&("Network".to_owned(), "Base".to_owned()))
+    );
+    let unknown = rows_on(31_337);
+    assert_eq!(
+        unknown
+            .iter()
+            .map(|(label, _)| label.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Address", "Public keys"],
+        "no Network row on a chain the wallet does not ship"
     );
 }
 

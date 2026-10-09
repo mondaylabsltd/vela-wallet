@@ -4,9 +4,12 @@
 //
 //  The `explore_sites` machine's view model, in Swift.
 //
-//  The browser's own memory: which sites are pinned, how they are grouped,
-//  which tabs are open and which one is in front. One JSON document under
-//  `vela.explore`, the same document the other three clients read.
+//  The browser's own memory: which sites are pinned, which tabs are open and
+//  which one is in front. One JSON document under `vela.explore`, the same
+//  document the other three clients read. (Issue #465: there are no custom
+//  groups — a document written before it still loads, and the core drops its
+//  `groups` on the next write.) Also the words of the core's navigation rules
+//  (`browser_tabs.rs`): where Explore lands and where an opened site goes.
 //
 //  Views are `Decodable` through `CoreJSON.decoder`; **operations and results
 //  stay dictionaries**. That is the house rule every Wire file in this app
@@ -34,21 +37,6 @@ struct ExploreSiteWire: Decodable, Equatable, Identifiable {
     let addedMs: Double
 
     var id: String { origin }
-}
-
-/// A named collection of favourites, resolved for drawing.
-///
-/// Membership is by origin and a site may be in several groups: a group is a
-/// VIEW over the favourites, never a container that owns them. Deleting one
-/// keeps its sites — the rule `contacts` settled for contact groups, so a
-/// person meets one behaviour rather than two.
-struct ExploreGroupWire: Decodable, Equatable, Identifiable {
-    let id: String
-    let name: String
-    let hidden: Bool
-    /// Already resolved from the favourites, in membership order. A member
-    /// whose site is gone is dropped here rather than drawn as a blank row.
-    let sites: [ExploreSiteWire]
 }
 
 /// One open tab.
@@ -90,7 +78,6 @@ enum ExploreTabCloseScope: Equatable {
 
 struct ExploreViewWire: Decodable, Equatable {
     let favorites: [ExploreSiteWire]
-    let groups: [ExploreGroupWire]
     let tabs: [ExploreTabWire]
     /// Always a tab that exists, whenever there is one at all.
     let selectedTab: String?
@@ -110,9 +97,13 @@ struct ExploreViewWire: Decodable, Equatable {
     /// The tabs most recently used first (spec 099 R2) — what the core's
     /// `browserEnginePlan` keeps live, in that order.
     var recentTabs: [String] = []
+    /// The home's resume rows (DESIGN N): the tabs that have a page, most
+    /// recently used first, at most the core's `RESUME_SHOWN`. Drawn exactly
+    /// as given — never re-sorted or re-capped here.
+    var resumable: [ExploreTabWire] = []
 
     static let empty = ExploreViewWire(
-        favorites: [], groups: [], tabs: [], selectedTab: nil,
+        favorites: [], tabs: [], selectedTab: nil,
         favoritesHidden: false, recentHidden: false,
         favoritesFull: false, tabsFull: false, ready: false
     )
@@ -122,4 +113,74 @@ struct ExploreViewWire: Decodable, Equatable {
         guard let selectedTab else { return nil }
         return tabs.first { $0.id == selectedTab }
     }
+
+    /// The strip as the navigation rules read it (`exploreLanding`,
+    /// `browserOpenTarget`, `browserLitTab`): the tabs, the one in front and
+    /// the recency — the three fields those rules take, and nothing else.
+    var stripJSON: String {
+        CoreJSON.string([
+            "tabs": tabs.map(\.wire),
+            "selected_tab": selectedTab.map { $0 as Any } ?? NSNull(),
+            "recent_tabs": recentTabs,
+        ])
+    }
+}
+
+// MARK: - Where Explore lands, and where an opened site goes (DESIGN N)
+//
+// The rules are the core's (`browser_tabs.rs`); these are their words, held
+// the way the shell holds them. Nothing here decides.
+
+/// What brought Explore up — the core's `ExploreEntry`, by its wire word.
+enum ExploreEntry: String, Equatable {
+    /// 探索 picked from another section (the first time after a launch too).
+    case section
+    /// 探索 picked again while Explore is up — the way home from a page.
+    case reselect
+    /// Explore came up because a page was opened from outside: the
+    /// external-page sheet, a launch URL.
+    case pageOpened = "page_opened"
+}
+
+/// One Explore visit, as the shell that owns the tab bar hands it over: how
+/// it began, and a serial so the same entry twice (探索, 探索) is still two.
+/// Stable for the whole visit — the landing is re-derived from it as the
+/// strip changes, never re-asked with a different entry mid-visit.
+struct ExploreVisit: Equatable {
+    var entry: ExploreEntry
+    var serial = 0
+
+    mutating func enter(_ entry: ExploreEntry) {
+        self.entry = entry
+        serial &+= 1
+    }
+}
+
+/// What Explore shows on entry — the core's `ExploreLanding`.
+enum ExploreLanding: Equatable {
+    /// The home: search, the resume rows, favourites, recents. Every tab stays
+    /// as it was.
+    case home
+    /// This tab's page — always a tab of the strip that has one.
+    case tab(String)
+}
+
+/// How an open was asked for — the core's `ExploreOpenKind`.
+enum ExploreOpenKind: String {
+    /// Typed into a bar, or handed in from outside (the external-page sheet,
+    /// a scan, a launch URL). It names a page.
+    case address
+    /// A favourite or a recent picked on the home. It names a site.
+    case site
+}
+
+/// Where an open goes — the core's `ExploreOpenTarget`.
+enum ExploreOpenTarget: Equatable {
+    /// Load the address in this tab (the page on screen, or a start-page
+    /// tab's first page): `tab_navigated`.
+    case load(String)
+    /// A tab already on that site: show it as it was left (`tab_selected`).
+    case resume(String)
+    /// A new tab onto the address (`tab_opened`) — nothing open is replaced.
+    case newTab
 }

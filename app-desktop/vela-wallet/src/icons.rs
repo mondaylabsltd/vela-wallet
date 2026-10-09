@@ -76,6 +76,10 @@ pub enum Icon {
     Info,
     /// Lucide `circle-alert` — the send form's refusal line (078 F-09).
     CircleAlert,
+    /// A bare exclamation, for a mark that already sits in a disc: the
+    /// receipt's failed hero (issue 460). The same two strokes as Android's
+    /// `VelaIcons.Exclamation`; a cross there read as a close button.
+    Exclamation,
     LogOut,
     ExternalLink,
     // explore + signing (spec 022; lucide v1.11.0 except `Star`, a computed
@@ -95,12 +99,6 @@ pub enum Icon {
     /// Lucide `lock-open`: a page on plain http (spec 079, owner: a lock, and
     /// only a lock, says whether the connection is https).
     LockOpen,
-    /// The group manager's drag handle. Part of the shared spec-022 glyph
-    /// contract so all four platforms extract the same lucide source; the
-    /// desktop mocks have no group manager (DE2 manages favourites by
-    /// right-click), so nothing here draws it yet.
-    #[allow(dead_code, reason = "cross-platform icon contract, phone-only glyphs")]
-    GripVertical,
     /// The group manager's shown eye on the phones — and, here, the report's
     /// "screenshots are public" line (078 round 3), as the web's.
     Eye,
@@ -244,6 +242,7 @@ fn body(icon: Icon, solid: bool) -> &'static str {
         Icon::CircleAlert => {
             r##"<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>"##
         }
+        Icon::Exclamation => r##"<path d="M12 6v7"/><path d="M12 17h.01"/>"##,
         Icon::LogOut => {
             r##"<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>"##
         }
@@ -265,9 +264,6 @@ fn body(icon: Icon, solid: bool) -> &'static str {
         }
         Icon::LockOpen => {
             r##"<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>"##
-        }
-        Icon::GripVertical => {
-            r##"<circle cx="9" cy="5.5" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="9" cy="18.5" r="1.2"/><circle cx="16" cy="5.5" r="1.2"/><circle cx="16" cy="12" r="1.2"/><circle cx="16" cy="18.5" r="1.2"/>"##
         }
         Icon::Eye => {
             r##"<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>"##
@@ -337,9 +333,14 @@ fn hex_of(color: Hsla) -> (String, u32) {
     (format!("#{r:02x}{g:02x}{b:02x}"), (r << 16) | (g << 8) | b)
 }
 
+/// One glyph's frames through a revolution — [`IconCache::turning`].
+pub type Turns = Arc<[Arc<RenderImage>]>;
+
 #[derive(Default)]
 pub struct IconCache {
     map: HashMap<(Icon, bool, u32, u32), Arc<RenderImage>>,
+    /// [`IconCache::turning`]'s frames, per (icon, color, size, count).
+    turns: HashMap<(Icon, u32, u32, u32), Turns>,
 }
 
 impl IconCache {
@@ -363,17 +364,114 @@ impl IconCache {
         self.map.insert(key, Arc::clone(&image));
         image
     }
+
+    /// The same glyph turned through one revolution, `frames` evenly spaced
+    /// steps clockwise from upright — what a turning glyph draws, one frame
+    /// per moment (issue 462's ↻). Rasterized once per (icon, color, size,
+    /// count): an `img` cannot be rotated at this gpui pin, and the glyph,
+    /// not a stand-in arc, is what the person pressed.
+    pub fn turning(&mut self, icon: Icon, color: Hsla, logical_px: u32, frames: u32) -> Turns {
+        let (hex, color_key) = hex_of(color);
+        let size = logical_px * RASTER_SCALE;
+        let key = (icon, color_key, size, frames);
+        if let Some(turns) = self.turns.get(&key) {
+            return Arc::clone(turns);
+        }
+        let svg = svg_document(icon, false, &hex);
+        let turns: Turns = (0..frames.max(1))
+            .map(|frame| {
+                #[allow(
+                    clippy::cast_precision_loss,
+                    reason = "a frame index and count, far inside f32's exact range"
+                )]
+                let degrees = 360. * frame as f32 / frames.max(1) as f32;
+                rasterize_turned(&svg, size, degrees).unwrap_or_else(empty_render_image)
+            })
+            .collect();
+        self.turns.insert(key, Arc::clone(&turns));
+        turns
+    }
 }
 
 pub(crate) fn rasterize(svg: &str, size: u32) -> Option<Arc<RenderImage>> {
+    rasterize_turned(svg, size, 0.)
+}
+
+/// [`rasterize`], turned `degrees` clockwise about the square's centre.
+fn rasterize_turned(svg: &str, size: u32, degrees: f32) -> Option<Arc<RenderImage>> {
     let options = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_str(svg, &options).ok()?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size)?;
     let view = tree.size();
+    let centre = size as f32 / 2.;
     let transform = resvg::tiny_skia::Transform::from_scale(
         size as f32 / view.width(),
         size as f32 / view.height(),
-    );
+    )
+    .post_rotate_at(degrees, centre, centre);
     resvg::render(&tree, transform, &mut pixmap.as_mut());
     render_image_from_pixmap(&pixmap)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue 460's exclamation draws both of its strokes: the bar, and the
+    /// dot under it — a zero-length `h.01` that only the round cap inks.
+    #[test]
+    fn the_exclamation_draws_its_bar_and_its_dot() {
+        let svg = svg_document(Icon::Exclamation, false, "#000000");
+        let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default())
+            .unwrap_or_else(|_| unreachable!("the exclamation is not an SVG"));
+        let mut pixmap =
+            resvg::tiny_skia::Pixmap::new(24, 24).unwrap_or_else(|| unreachable!("a 24×24 pixmap"));
+        resvg::render(
+            &tree,
+            resvg::tiny_skia::Transform::identity(),
+            &mut pixmap.as_mut(),
+        );
+        let alpha = |x: u32, y: u32| pixmap.pixel(x, y).map_or(0, |p| p.alpha());
+        assert!(alpha(12, 9) > 128, "the bar");
+        assert!(alpha(12, 17) > 128, "the dot");
+        assert!(alpha(12, 15) < 64, "a gap between them");
+        assert_eq!(alpha(3, 3), 0, "and nothing else");
+    }
+
+    /// Issue 462's turning ↻: one revolution in even steps, the first
+    /// upright — the very glyph the control shows at rest, so the turn
+    /// starts where the press found it — and every step a turn of the one
+    /// before, not a blank and not the same picture again. (The ↻ is its
+    /// own half-turn — two arrows — so step 18 looks like step 0 again.)
+    #[test]
+    fn the_turning_glyph_starts_upright_and_turns() {
+        let mut cache = IconCache::default();
+        let color = gpui::hsla(0., 0., 0.4, 1.);
+        let frames = cache.turning(Icon::RefreshCw, color, 14, 36);
+        assert_eq!(frames.len(), 36);
+        let upright = cache.image(Icon::RefreshCw, false, color, 14);
+        let bytes = |image: &RenderImage| image.as_bytes(0).map(<[u8]>::to_vec);
+        assert_eq!(bytes(&frames[0]), bytes(&upright));
+        assert_ne!(
+            bytes(&frames[9]),
+            bytes(&upright),
+            "a quarter turn is turned"
+        );
+        assert!(
+            frames
+                .iter()
+                .zip(frames.iter().cycle().skip(1))
+                .all(|(this, next)| bytes(this) != bytes(next)),
+            "every step moves"
+        );
+        let inked = |image: &RenderImage| {
+            image
+                .as_bytes(0)
+                .is_some_and(|data| data.chunks_exact(4).any(|px| px[3] > 128))
+        };
+        assert!(frames.iter().all(|frame| inked(frame)), "no blank step");
+        // Cached: the same frames, not a second rasterization.
+        let again = cache.turning(Icon::RefreshCw, color, 14, 36);
+        assert!(Arc::ptr_eq(&frames, &again));
+    }
 }

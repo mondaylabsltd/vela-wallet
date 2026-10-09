@@ -34,6 +34,8 @@
 		onbalancetoggle?: () => void;
 		/** The balance status line was tapped (spec 028 Phase 8): the rescue for what it says. */
 		onstatus?: () => void;
+		/** Issue 462: the hero's "↻ Updated 2m" was pressed. Absent in the gallery. */
+		onbalancerefresh?: () => void;
 		/** An activity row was tapped (live): which one, before the flow opens. */
 		onactivity?: (row: ActivityRowModel) => void;
 		/** An asset row was tapped (live): which one, before the token screen opens. */
@@ -52,6 +54,7 @@
 		onactivity,
 		onasset,
 		onstatus,
+		onbalancerefresh,
 		banner
 	}: Props = $props();
 
@@ -76,7 +79,12 @@
 		{/if}
 
 		<div class="balance">
-			<BalanceDisplay balance={model.balance} ontoggle={onbalancetoggle} {onstatus} />
+			<BalanceDisplay
+				balance={model.balance}
+				ontoggle={onbalancetoggle}
+				{onstatus}
+				onrefresh={onbalancerefresh}
+			/>
 		</div>
 
 		<ActionButtonRow

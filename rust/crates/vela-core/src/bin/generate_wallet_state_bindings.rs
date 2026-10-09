@@ -25,6 +25,9 @@ use vela_core::app::batch_import::{
 use vela_core::app::browser_history::{
     BhistOperation, BhistShellResult, BhistView, Event as BhistEvent,
 };
+use vela_core::app::browser_tabs::{
+    ExploreEntry, ExploreLanding, ExploreOpenKind, ExploreOpenTarget,
+};
 use vela_core::app::clear_signing::{
     ClearOperation, ClearShellResult, ClearSigningView, Event as ClearSigningEvent,
 };
@@ -63,6 +66,7 @@ use vela_core::app::payment_request::{
 use vela_core::app::receive_watch::{
     Event as ReceiveWatchEvent, ReceiveWatchOperation, ReceiveWatchShellResult, ReceiveWatchView,
 };
+use vela_core::app::remote_mark::MarkView;
 use vela_core::app::rpc_pool::{Event as RpcEvent, RpcOperation, RpcPoolView, RpcShellResult};
 use vela_core::app::send::{Event as SendEvent, SendOperation, SendShellResult, SendView};
 use vela_core::app::session::{
@@ -215,6 +219,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     ReadSlot::export_all(&config)?; // balanceReadPlan
     ConfirmState::export_all(&config)?; // signConfirmState (spec 099 R7)
     LandingPace::export_all(&config)?; // landingPace (spec 099 R6)
+    MarkView::export_all(&config)?; // tokenMark, chainMark (DESIGN L, 2026-10-08)
+    ExploreEntry::export_all(&config)?; // exploreLanding's question
+    ExploreLanding::export_all(&config)?; // exploreLanding
+    ExploreOpenKind::export_all(&config)?; // browserOpenTarget's question
+    ExploreOpenTarget::export_all(&config)?; // browserOpenTarget
 
     println!("wallet-state bindings written to {}", out_dir.display());
     Ok(())

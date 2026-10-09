@@ -273,6 +273,7 @@ fn arrive(id: &str, method: &str, params: &Value, granted: Option<&str>) -> Even
         requested_address: None,
         request_ts_ms: None,
         now_ms: 1_700_000_000_000.0,
+        first_party: false,
     }
 }
 

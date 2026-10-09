@@ -389,6 +389,13 @@ final class SendExecutor {
     /// detail sheet's "couldn't be priced" list), not its complement: adding
     /// the two listed every unpriceable holding twice in the picker — the
     /// same mistake `WalletLive.assetRows` documents for the home.
+    ///
+    /// `logo_urls` are each coin's logo candidates by the core's one rule on
+    /// the person's endpoint (`Marks.token`; the web's `toSendToken` fills
+    /// them the same way). The core copies them into the records and the
+    /// receipt it writes, so a send made here still wears its coins' logos
+    /// when any shell opens it later — they were empty, and a sweep's coins
+    /// read back from its record could only ever be letters.
     static func sendTokens(_ balance: BalanceViewWire) -> [[String: Any]] {
         balance.tokens.map { token in
             [
@@ -399,7 +406,8 @@ final class SendExecutor {
                 "decimals": token.decimals,
                 "token_address": token.tokenAddress.map { $0 as Any } ?? NSNull(),
                 "price_usd": token.priceUsd.map { $0 as Any } ?? NSNull(),
-                "logo_urls": [String](),
+                "logo_urls": Marks.token(chainId: token.chainId, symbol: token.symbol,
+                                         tokenAddress: token.tokenAddress).logoUrls,
                 "spam": token.spam,
             ] as [String: Any]
         }

@@ -64,6 +64,17 @@ describe('fixture canon (zh mock verbatim)', () => {
 		expect(m.assetRows.every((r) => r.masked)).toBe(true);
 	});
 
+	it('h3 has never been read: the refresh is the glyph alone, as live draws it (issue 462)', () => {
+		const loading = buildMobileState('h3', zh, IDENTICON_STUB).balance;
+		expect(loading.state).toBe('loading');
+		expect(loading.refresh).toMatchObject({ updated: undefined, spinning: false });
+		expect(loading.refresh?.a11yIdle).toBe(zh.balance.refreshBalance);
+		// Every board that has a figure says when it was read.
+		expect(buildMobileState('h1', zh, IDENTICON_STUB).balance.refresh?.updated).toBe(
+			fill(zh.balance.lastUpdated, { ago: fill(zh.balance.ago.minutes, { n: 2 }) })
+		);
+	});
+
 	it('h7 uses the extreme fixtures and single-chain pill', () => {
 		const m = buildMobileState('h7', zh, IDENTICON_STUB);
 		expect(m.header.name).toBe('这是一个非常长');

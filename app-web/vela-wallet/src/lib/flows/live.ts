@@ -23,11 +23,17 @@ import {
 	getAllNetworksSync,
 	nativeSymbol
 } from '$lib/services/networks';
-import { chainLogoURL } from '$lib/services/tokens-model';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
 import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
-import { balanceTokenMark, chainMark, tokenMarkFor } from './marks';
+import {
+	balanceTokenMark,
+	chainLogoURL,
+	chainMark,
+	chainMarkView,
+	drawnMark,
+	tokenMarkFor
+} from './marks';
 import { chainColor, MASK } from '$lib/wallet/fixtures';
 import type {
 	AddTokenTab,
@@ -53,7 +59,11 @@ import {
 } from '$lib/wallet/live';
 import { addressLines } from './fixtures';
 import { liveBatchImport, type BatchLiveInputs } from './live-batch';
-import { liveContactPick, type ContactPickLiveInputs } from './live-contact-pick';
+import {
+	liveContactPick,
+	unreadContactPick,
+	type ContactPickLiveInputs
+} from './live-contact-pick';
 import {
 	liveFeeTokenPick,
 	liveNetworkPill,
@@ -93,7 +103,10 @@ export interface FlowsLiveInputs {
 	batch?: BatchLiveInputs;
 	/**
 	 * The address book, for the recipient picker (spec 028 US5). Present while
-	 * a send is open; absent, the picker stays the gallery's picture.
+	 * a send is open and the book has been read; absent, the live picker lists
+	 * nobody — never the gallery's people, whose addresses a tap would send
+	 * real money to (`unreadContactPick`). The gallery never comes through
+	 * here.
 	 */
 	contactPick?: ContactPickLiveInputs;
 	/**
@@ -216,7 +229,7 @@ function liveReceiveList(model: ReceiveListModel, inputs: FlowsLiveInputs): Rece
 			code: nativeSymbol(n.chainId),
 			badgeColor: chainColor(n.chainId),
 			chainId: n.chainId,
-			logoUrl: chainLogoURL(n.chainId) || undefined,
+			logoUrl: chainLogoURL(n.chainId),
 			addressDisplay: shortenAddress(identity.address),
 			addressFull: identity.address,
 			copyLabel: template?.copyLabel ?? '',
@@ -464,14 +477,17 @@ export interface AddNetworkTabInputs {
 	addedChainId: number | null;
 }
 
-/** A chain's mark for the native tab: its logo when the index has one, its coin's letters otherwise. */
+/**
+ * A chain's mark for the native tab — the network itself (`chain_mark`): its
+ * own logo when the index has one, its coin's letters otherwise. An L2 being
+ * added wears its own logo, never Ethereum's.
+ */
 function wizardMark(chainId: number, symbol: string, hasLogo: boolean): TokenMarkModel {
-	return {
-		ticker: symbol,
-		badgeColor: chainColor(chainId),
-		logoUrls: hasLogo ? [chainLogoURL(chainId)] : undefined,
-		badgeHidden: true
-	};
+	const view = chainMarkView(chainId, symbol);
+	if (view === null || !hasLogo) {
+		return { ticker: symbol, badgeColor: chainColor(chainId), badgeHidden: true };
+	}
+	return drawnMark(view, symbol, chainId);
 }
 
 /**
@@ -605,8 +621,10 @@ export function liveAddToken(model: AddTokenModel, inputs: AddTokenLiveInputs): 
 		: first !== undefined
 			? {
 					kind: 'token',
-					// The found token's own logo, by its contract (T492).
-					mark: tokenMarkFor(first.chain_id, first.symbol, view.input_address.trim() || null),
+					// The found token's own logo, by its contract (T492). It is
+					// always a contract, so never `null` — that would read as
+					// the chain's own coin and wear the chain's logo.
+					mark: tokenMarkFor(first.chain_id, first.symbol, view.input_address.trim()),
 					name: first.name,
 					detail: `${first.symbol} · ${m['tokenDetail.labelDecimals']} ${first.decimals} · ${first.network_name}`,
 					chip: first.added ? { text: m['addToken.tokenAdded'], tone: 'success' } : undefined
@@ -703,12 +721,14 @@ export function withLiveFlow(model: FlowScreenModel, inputs: FlowsLiveInputs): F
 			sheet: { kind: 'token-detail', model: liveTokenDetail(model.sheet.model, inputs) }
 		};
 	}
-	if (inputs.contactPick && model.sheet?.kind === 'contact-pick') {
+	if (model.sheet?.kind === 'contact-pick') {
 		next = {
 			...next,
 			sheet: {
 				kind: 'contact-pick',
-				model: liveContactPick(model.sheet.model, inputs.contactPick)
+				model: inputs.contactPick
+					? liveContactPick(model.sheet.model, inputs.contactPick)
+					: unreadContactPick(model.sheet.model)
 			}
 		};
 	}
@@ -808,15 +828,15 @@ function withLiveDesktopBody(model: DesktopFlowModel, inputs: FlowsLiveInputs): 
 					}
 				: model;
 		case 'contact-pick':
-			return inputs.contactPick
-				? {
-						...model,
-						body: {
-							kind: 'contact-pick',
-							model: liveContactPick(model.body.model, inputs.contactPick)
-						}
-					}
-				: model;
+			return {
+				...model,
+				body: {
+					kind: 'contact-pick',
+					model: inputs.contactPick
+						? liveContactPick(model.body.model, inputs.contactPick)
+						: unreadContactPick(model.body.model)
+				}
+			};
 		default:
 			return model;
 	}

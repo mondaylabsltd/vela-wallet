@@ -399,13 +399,13 @@ class BrowserTabsAndLayersTest {
         assertNull(gate.block)
         assertNull(gate.key)
 
-        // A view that does not read keeps the slide shut — never a guess.
+        // A view that does not read keeps the confirm shut — never a guess.
         assertFalse(SigningLive.confirmState(null, "{}", "{}", null, null).enabled)
         assertFalse(SigningLive.confirmState("{\"nonsense\":1}", "{}", "{}", null, null).enabled)
     }
 
     @Test
-    fun `a transaction waits for its fee, and the sheet says so under the slide`() = runBlocking<Unit> {
+    fun `a transaction waits for its fee, and the sheet says so under the confirm`() = runBlocking<Unit> {
         val tx = """[{"to":"$safe","value":"0x1"}]"""
         val rig = signRig(SignSubmitOutcome.Succeeded("0xtx"))
         arrive(rig, "eth_sendTransaction", tx)
@@ -421,7 +421,7 @@ class BrowserTabsAndLayersTest {
      * failed — not "couldn't submit" — and offers Try again.
      */
     @Test
-    fun `a held signer failure shuts the slide as answered, in the signer's words`() = runBlocking<Unit> {
+    fun `a held signer failure shuts the confirm as answered, in the signer's words`() = runBlocking<Unit> {
         val rig = signRig(SignExecutor.outcomeOf(UserOpSpine.Failure.Signer(FailureKind.Other, "the prompt broke")))
         arrive(rig)
         rig.host.dispatch(SignEvent.ApproveTapped(SignApproveOpts()), SignEvent.serializer())

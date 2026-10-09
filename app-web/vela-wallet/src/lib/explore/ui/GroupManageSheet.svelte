@@ -4,39 +4,24 @@
 	import type { GroupManageRow } from '../model';
 
 	/**
-	 * Group management (E3), mirroring the contacts vocabulary spec 018 set.
-	 *
-	 * System groups (收藏 / 最近的 dApp) can be hidden but never deleted —
-	 * their trash affordance is absent rather than disabled, because an
-	 * affordance that is only ever refused is a lie about what is possible.
+	 * The start page's sections (E3): Favorites and Recent dApps, each with an
+	 * eye. Issue 465 took the person's own groups away, and with them the
+	 * grip, the trash and "New group" — neither section can be deleted or
+	 * moved, and an affordance that is only ever refused is a lie about what
+	 * is possible. Hiding stays: the Favorites heading's Edit is the way back
+	 * to a hidden section.
 	 */
 	interface Props {
 		title: string;
 		rows: GroupManageRow[];
-		newGroup: string;
 		closeLabel: string;
 		hideLabel: string;
 		showLabel: string;
-		deleteLabel: string;
 		onclose?: () => void;
 		ontoggle?: (id: string) => void;
-		ondelete?: (id: string) => void;
-		onnew?: () => void;
 	}
 
-	let {
-		title,
-		rows,
-		newGroup,
-		closeLabel,
-		hideLabel,
-		showLabel,
-		deleteLabel,
-		onclose,
-		ontoggle,
-		ondelete,
-		onnew
-	}: Props = $props();
+	let { title, rows, closeLabel, hideLabel, showLabel, onclose, ontoggle }: Props = $props();
 </script>
 
 <header>
@@ -49,9 +34,6 @@
 <ul>
 	{#each rows as row (row.id)}
 		<li class="row" class:hidden={row.hidden}>
-			<span class="grip" aria-hidden="true">
-				<Icon icon={UTILITY_ICONS['grip-vertical']} size="base" />
-			</span>
 			<span class="title">{row.title}</span>
 			{#if row.meta}
 				<span class="meta">{row.meta}</span>
@@ -64,24 +46,9 @@
 			>
 				<Icon icon={UTILITY_ICONS[row.hidden ? 'eye-off' : 'eye']} size="base" />
 			</button>
-			{#if !row.system}
-				<button
-					type="button"
-					class="icon"
-					aria-label={deleteLabel}
-					onclick={() => ondelete?.(row.id)}
-				>
-					<Icon icon={UTILITY_ICONS['trash-2']} size="base" />
-				</button>
-			{/if}
 		</li>
 	{/each}
 </ul>
-
-<button type="button" class="new" onclick={onnew}>
-	<span class="plus"><Icon icon={UTILITY_ICONS.plus} size="base" /></span>
-	<span>{newGroup}</span>
-</button>
 
 <style>
 	header {
@@ -120,12 +87,6 @@
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
 	}
 
-	.grip {
-		display: flex;
-		color: var(--color-fg-subtle);
-		cursor: grab;
-	}
-
 	.title {
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
@@ -145,36 +106,13 @@
 		opacity: var(--opacity-dim);
 	}
 
+	/* The eye keeps the trailing edge on a row with no meta (Recent) too. */
 	.icon {
 		display: flex;
+		margin-inline-start: auto;
 		border: none;
 		background: none;
 		color: var(--color-fg-muted);
 		cursor: pointer;
-	}
-
-	.new {
-		display: flex;
-		align-items: center;
-		gap: var(--space-lg);
-		width: 100%;
-		padding-block: var(--space-xl);
-		border: none;
-		background: none;
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-lg) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
-		cursor: pointer;
-		text-align: start;
-	}
-
-	.plus {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: var(--space-4xl);
-		height: var(--space-4xl);
-		border-radius: var(--radius-full);
-		background: var(--color-bg-sunken);
 	}
 </style>

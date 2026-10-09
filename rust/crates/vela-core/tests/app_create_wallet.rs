@@ -250,6 +250,63 @@ fn cancelling_registration_persists_nothing() {
     assert!(!view.busy);
 }
 
+/// Issue #459: the same for a key on a phone. Dismissing the "Scan a code"
+/// sheet answers the phone ceremony with `cancelled`, and the person is back
+/// at the key list with the quiet "setup cancelled" line — never the
+/// phone-link failure sheet every other failure on that route gets.
+#[test]
+fn cancelling_a_phone_registration_is_quiet_too() {
+    let mut sut = filled("Ann");
+    sut.dispatch(Event::Submit);
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(group_key_generated());
+    let next = sut.dispatch(Event::AddKey {
+        name: String::new(),
+        method: KeyMethod::Hybrid,
+    });
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::RegisterPasskey {
+                method: KeyMethod::Hybrid,
+                ..
+            }]
+        ),
+        "the phone route shows a code: {next:?}"
+    );
+
+    let next = sut.resolve(ShellResult::PasskeyFailed {
+        kind: FailureKind::Cancelled,
+        message: Some("The code was dismissed".to_owned()),
+    });
+    assert!(
+        next.is_empty(),
+        "no prompt — not the phone-link sheet: {next:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.status, Some(StatusKey::SetupCancelled));
+    assert_eq!(view.stage, CreateStage::AddKeys);
+    assert!(view.keys.is_empty(), "nothing was drafted");
+    assert!(!view.busy);
+
+    // The cancel belonged to that ceremony: the next phone key is asked for
+    // afresh.
+    let next = sut.dispatch(Event::AddKey {
+        name: String::new(),
+        method: KeyMethod::Hybrid,
+    });
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::RegisterPasskey {
+                method: KeyMethod::Hybrid,
+                ..
+            }]
+        ),
+        "{next:?}"
+    );
+}
+
 // The old separate "verification" signature is gone: the register member
 // proof (a single get) is itself proof the passkey can sign, so a cancelled
 // publish resumes via RetryUpload — see

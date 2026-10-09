@@ -12,8 +12,10 @@
  *
  * So this posts an `eth_sendTransaction` into the same seam a dApp transport
  * uses (`signRequest.registerTransport` + `request_arrived`), with the wallet's
- * own origin, pinned to Ethereum by `per_request_chain`. The core cannot tell —
- * and need not — that the requester is the wallet.
+ * own origin, pinned to Ethereum by `per_request_chain`, and marked
+ * `first_party` — this shell's word that the wallet itself is asking, which is
+ * all the sheet needs to show no requester. The core cannot tell that from the
+ * request, so it is never derived from it.
  *
  * Being the sender grants nothing: anyone may submit these bytes, and the
  * registry re-verifies every signature in them. The person's Safe is simply
@@ -73,7 +75,11 @@ function requestSignature(address: string, call: EthereumBackupCall): Promise<Ba
 			granted_address: null,
 			requested_address: null,
 			request_ts_ms: null,
-			now_ms: Date.now()
+			now_ms: Date.now(),
+			// The one place the wallet raises a request of its own. The sheet
+			// drops the requester header for it on this flag alone — never on
+			// the origin or the bytes, which any site can send too.
+			first_party: true
 		});
 	});
 }

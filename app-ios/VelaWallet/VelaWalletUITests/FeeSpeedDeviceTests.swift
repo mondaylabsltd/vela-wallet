@@ -25,7 +25,8 @@ final class FeeSpeedDeviceTests: XCTestCase {
 
     /// The send form's fee row carries a refresh control, and under it the
     /// folded speed control names the tier in force; opened, it offers three
-    /// speeds with their own figures; a pick folds it onto the new speed.
+    /// speeds with their own figures and no descriptions; a pick folds it onto
+    /// the new speed.
     func testTheSendFormOffersASpeedAndARefresh() {
         let app = launch()
         XCTAssertTrue(app.staticTexts["资产"].waitForExistence(timeout: 40), "the home never appeared")
@@ -43,6 +44,10 @@ final class FeeSpeedDeviceTests: XCTestCase {
         // Each option prices itself: give the previews their round trips.
         settle(12)
         attach(app.screenshot(), named: "speed-open")
+        // A name, a price and its gas bid — what each speed buys is Settings'
+        // to say, where the default is chosen, not under every payment's.
+        XCTAssertFalse(app.staticTexts["手续费最低，适合不着急时"].exists,
+                       "the per-payment picker describes the speeds again")
 
         tap(app.staticTexts["较慢"], "较慢")
         settle(6)

@@ -50,11 +50,12 @@ enum TileModel: Identifiable {
     }
 }
 
-/// `favorites` and `recent` are system groups: hideable, never deletable.
-enum GroupKind { case favorites, recent, custom }
+/// `favorites` and `recent` are the only sections (issue #465: no custom
+/// groups): hideable, never deletable.
+enum GroupKind { case favorites, recent }
 
-/// The trailing affordance on a group's header row.
-enum GroupAction { case edit, clear, menu }
+/// The trailing affordance on a section's header row.
+enum GroupAction { case edit, clear }
 
 struct GroupModel: Identifiable {
     let id: String
@@ -69,7 +70,9 @@ struct TabModel: Identifiable {
     let id: String
     let title: String
     let site: SiteModel?
-    let selected: Bool
+    /// The card marked as "this tab" — the core's `browserLitTab` on the
+    /// live switcher (a dApp left for the wallet waits unlit under the home).
+    var selected: Bool
     /// The start page's own tab — drawn with the sail, not a favicon.
     let startPage: Bool
     /// Spec 079: the page as it was last seen (`WKWebView.takeSnapshot`), so
@@ -99,10 +102,14 @@ struct BrowserModel {
     let host: String
     let secure: Bool
     let connected: Bool
+    /// The page has somewhere to go back to. ‹ is never disabled: with no
+    /// history it returns to the Explore home (DESIGN N).
     let canBack: Bool
+    /// Forward lives in the site menu, greyed while this is false.
     let canForward: Bool
     let bookmarked: Bool
     var account: (name: String, seed: String)
+    /// Every open tab, start pages included — the number the switcher holds.
     let tabCount: Int
     let page: DemoPageModel
 }
@@ -113,14 +120,20 @@ struct SiteMenuItem: Identifiable {
     let icon: String
     let label: String
     var danger: Bool = false
+    /// Shown but greyed and inert: a row that cannot act right now (Forward
+    /// with nothing ahead). It keeps its place, so the rows under a thumb do
+    /// not move from one page to the next (DESIGN N).
+    var disabled: Bool = false
 }
 
+/// One row of Manage groups: Favorites or Recent dApps, with an eye (issue
+/// #465 — the two sections are all there is, so nothing is deletable and
+/// nothing is new).
 struct GroupManageRow: Identifiable {
     let id: String
     let title: String
-    /// "8 个网站" / "2 · 已隐藏" — resolved by the fixture layer.
+    /// "8 个网站" — resolved by the fixture layer. `nil` draws no second word.
     let meta: String?
-    let system: Bool
     var hidden: Bool
 }
 
@@ -231,7 +244,7 @@ enum ExploreSheetKind: String, Identifiable {
 }
 
 enum ExploreSheet: Identifiable {
-    case groupManage(title: String, rows: [GroupManageRow], newGroup: String)
+    case groupManage(title: String, rows: [GroupManageRow])
     case siteMenu(site: SiteModel, statusLine: String, items: [SiteMenuItem])
     case connection(ConnectionModel)
     case addNetwork
@@ -263,14 +276,59 @@ struct TabsScreenCopy {
     let closeRight: String
 }
 
+/// One row of the home's resume section: a tab that has a page, as the core
+/// hands it over in `ExploreView.resumable` — drawn as a site row (its title
+/// over its host, its mark) and opened by the TAB's id.
+struct ResumeTabModel: Identifiable {
+    let id: String
+    let site: SiteModel
+}
+
+/// The home's resume section (DESIGN N): drawn only while a tab has a page.
+/// The header counts EVERY open tab — the switcher's number — and its action
+/// opens the switcher; the rows are the core's, in the core's order.
+///
+/// One pointer, like `SettingsScreenModel`: `ExploreHomeModel` sits right at
+/// the screen-model stack budget (`ScreenModelStackTests`), and every byte
+/// added inline is paid in every unoptimised frame that copies it. Immutable,
+/// so sharing the box is never seen.
+struct ResumeSectionModel {
+    private final class Box {
+        let title: String
+        let action: String
+        let tabs: [ResumeTabModel]
+
+        init(title: String, action: String, tabs: [ResumeTabModel]) {
+            self.title = title
+            self.action = action
+            self.tabs = tabs
+        }
+    }
+
+    private let box: Box
+
+    init(title: String, action: String, tabs: [ResumeTabModel]) {
+        box = Box(title: title, action: action, tabs: tabs)
+    }
+
+    /// `explore.openTabs_*`, the form for the number of open tabs, filled with it.
+    var title: String { box.title }
+    /// `explore.tabs`.
+    var action: String { box.action }
+    var tabs: [ResumeTabModel] { box.tabs }
+}
+
 struct ExploreHomeModel {
     let state: ExploreStateId
     let view: ExploreView
     let title: String
-    let tabCountLabel: String?
     let searchPlaceholder: String
     let scanLabel: String
     let empty: (title: String, caption: String, cta: String)?
+    /// Under the search field; `nil` while no tab has a page. The title row
+    /// carries no tab count any more: this header says it, in words, and
+    /// opens the same switcher.
+    let resume: ResumeSectionModel?
     let favorites: (title: String, action: String, tiles: [TileModel])?
     var groups: [GroupModel]
     var browser: BrowserModel

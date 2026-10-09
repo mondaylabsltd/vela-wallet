@@ -332,6 +332,13 @@ pub fn tokens_loaded(tokens: &[BalanceToken], failed_chain_ids: &[u32]) -> SendS
     }
 }
 
+/// A holding as the send machine takes it.
+///
+/// `logo_urls` are the coin's logo candidates by the core's one rule (the
+/// web's `toSendToken` fills them the same way): the core copies them into
+/// the records and the receipt it writes, so a send made here still wears its
+/// coins' logos when any shell opens it later. They used to be empty, and a
+/// desktop sweep's coins could only ever be letters afterwards.
 pub fn to_send_token(token: &BalanceToken) -> SendToken {
     SendToken {
         network: network_id(token.chain_id),
@@ -341,7 +348,16 @@ pub fn to_send_token(token: &BalanceToken) -> SendToken {
         decimals: token.decimals,
         token_address: token.token_address.clone(),
         price_usd: token.price_usd,
-        logo_urls: Vec::new(),
+        logo_urls: crate::marks::token_logos(
+            token.chain_id,
+            &token.symbol,
+            token.token_address.as_deref(),
+            &[],
+        )
+        .logo_urls
+        .iter()
+        .map(ToString::to_string)
+        .collect(),
         spam: token.spam,
     }
 }
@@ -930,6 +946,43 @@ mod tests {
             ctx.trusted_signer.chosen().as_deref(),
             Some("https://sign.example.test")
         );
+    }
+
+    /// A holding goes to the send machine wearing its logo candidates — the
+    /// core's rule, on the person's endpoint — which the records and the
+    /// receipt then carry: an ERC-20 its asset entry (checksummed, then
+    /// lowercase), the chain's own coin its home chain's logo.
+    #[test]
+    fn a_send_token_carries_its_coins_logos() {
+        crate::executor::storage::tests::with_temp_state("send-token-logos", || {
+            let holding = |chain_id: u32, symbol: &str, address: Option<&str>| BalanceToken {
+                chain_id,
+                symbol: symbol.to_owned(),
+                name: symbol.to_owned(),
+                balance: "1".to_owned(),
+                decimals: 18,
+                token_address: address.map(str::to_owned),
+                price_usd: None,
+                spam: false,
+            };
+            let usdc = to_send_token(&holding(
+                100,
+                "USDC",
+                Some("0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"),
+            ));
+            assert_eq!(
+                usdc.logo_urls,
+                vec![
+                    "https://ethereum-data.getvela.app/assets/eip155-100/0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83/logo.png".to_owned(),
+                    "https://ethereum-data.getvela.app/assets/eip155-100/0xddafbb505ad214d7b80b1f830fccc89b60fb7a83/logo.png".to_owned(),
+                ]
+            );
+            let eth_on_base = to_send_token(&holding(8453, "ETH", None));
+            assert_eq!(
+                eth_on_base.logo_urls,
+                vec!["https://ethereum-data.getvela.app/chainlogos/eip155-1.png".to_owned()]
+            );
+        });
     }
 
     #[test]

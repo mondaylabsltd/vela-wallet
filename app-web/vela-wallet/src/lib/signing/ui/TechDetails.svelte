@@ -2,6 +2,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
+	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
 	import KeyValueRows from './KeyValueRows.svelte';
 	import type { TechModel } from '../model';
 
@@ -40,7 +41,16 @@
 			{#each tech.identities as identity, i (i)}
 				<div class="identity">
 					{#if identity.mark}
-						<LetterAvatar letter={identity.mark.letter} tint={identity.mark.tint} size={24} />
+						<TokenIcon
+							ticker={identity.mark.ticker}
+							badgeColor={identity.mark.badgeColor}
+							logoUrls={identity.mark.logoUrls}
+							badgeLogoUrl={identity.mark.badgeLogoUrl}
+							badgeHidden={identity.mark.badgeHidden}
+							size="inline"
+						/>
+					{:else if identity.avatar}
+						<LetterAvatar letter={identity.avatar.letter} tint={identity.avatar.tint} size={24} />
 					{/if}
 					<span class="identity-text">
 						<span class="role">{identity.role} · {identity.name}</span>

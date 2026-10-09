@@ -43,7 +43,7 @@ struct Case {
 /// or a partial checkout would make all four surfaces report "green" over a corpus
 /// that had silently shrunk — the precise false confidence this feature exists to
 /// prevent.
-const REQUIRED_SUITES: [&str; 12] = [
+const REQUIRED_SUITES: [&str; 14] = [
     "abi",
     "eip712",
     // `i18n-*` sorts before `identicon`: '1' is 0x31, 'd' is 0x64.
@@ -53,7 +53,14 @@ const REQUIRED_SUITES: [&str; 12] = [
     "i18n-plural-legacy",
     "identicon",
     "identicon-bulk",
+    // Which logo a token or a network wears (`app::remote_mark`), hand-written
+    // from the four shells' rule rather than dumped from a TypeScript oracle.
+    "marks",
     "primitives",
+    // The compact relative time ("now", "2m", "3h", a weekday, the date),
+    // hand-written: the engine's rule, and the same rule spelt from the words
+    // a caller holds without the catalog (the web client).
+    "relative-time",
     "safe",
     // `safe` before `safe-multi`: a prefix sorts before its extension.
     "safe-multi",
@@ -573,10 +580,101 @@ fn run_case(case: &Case) -> Result<(), String> {
                 })),
             )
         }
+        // --- relative time (I18n::format_relative_time) ---------------------
+        //
+        // Both spellings of the one rule must give the vector's answer: the
+        // engine's, and `format_relative_time_with` over the words that engine
+        // resolves — what the web prerenders and its client then spells with.
+        "format_relative_time" => {
+            let lng = in_str(input, "lng")?;
+            let ts_seconds = in_i64(input, "ts_seconds")?;
+            let now_ms = in_i64(input, "now_ms")?;
+            let offset = i32::try_from(in_i64(input, "utc_offset_minutes")?)
+                .map_err(|e| format!("utc_offset_minutes: {e}"))?;
+            let preset = vela_core::l10n::date_preset_of(&in_str(input, "date_format")?);
+            let engine = i18n_engine(&lng, &lng, i18n::PluralMode::Cldr)
+                .map_err(|e| format!("engine for `{lng}`: {e}"))?;
+            check_string(
+                expect,
+                engine.format_relative_time(ts_seconds, now_ms, offset, preset),
+            )
+            .map_err(|e| format!("engine: {e}"))?;
+            let word = |key: &str| {
+                engine
+                    .t(key, &i18n::Options::default())
+                    .map_err(|e| format!("{key}: {e}"))
+            };
+            let (now, minutes, hours) = (
+                word("time.now")?,
+                word("time.minutesShort")?,
+                word("time.hoursShort")?,
+            );
+            let words = i18n::RelativeTimeWords {
+                now: &now,
+                minutes_short: &minutes,
+                hours_short: &hours,
+            };
+            check_string(
+                expect,
+                i18n::format_relative_time_with(&words, &lng, ts_seconds, now_ms, offset, preset),
+            )
+            .map_err(|e| format!("from the words: {e}"))
+        }
+        // --- marks (app::remote_mark; the module needs the `crux` feature) ---
+        #[cfg(feature = "crux")]
+        "token_mark" => {
+            let address = in_opt_str(input, "token_address")?;
+            let mark = vela_core::app::remote_mark::token_mark(
+                &in_str(input, "ethereum_data_url")?,
+                in_u32(input, "chain_id")?,
+                &in_str(input, "symbol")?,
+                address.as_deref(),
+                &in_str_list(input, "named")?,
+            );
+            check_object(expect, Ok(serde_json::to_value(mark).unwrap_or_default()))
+        }
+        #[cfg(feature = "crux")]
+        "chain_mark" => {
+            let mark = vela_core::app::remote_mark::chain_mark(
+                &in_str(input, "ethereum_data_url")?,
+                in_u32(input, "chain_id")?,
+                &in_str(input, "native_symbol")?,
+            );
+            check_object(expect, Ok(serde_json::to_value(mark).unwrap_or_default()))
+        }
+        #[cfg(feature = "crux")]
+        "chain_logo_url" => check_with(
+            expect,
+            Ok(vela_core::app::remote_mark::chain_logo_url(
+                &in_str(input, "ethereum_data_url")?,
+                in_u32(input, "chain_id")?,
+            )
+            .map_or(Value::Null, Value::String)),
+        ),
         other => Err(format!(
             "no dispatch arm for fn `{other}` — add it to conformance.rs"
         )),
     }
+}
+
+/// A string input that may be JSON `null` (an absent value the function
+/// takes as `None`). Missing altogether is a malformed vector, not `None`.
+#[cfg(feature = "crux")]
+fn in_opt_str(input: &Value, key: &str) -> Result<Option<String>, String> {
+    match input.get(key) {
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(Value::Null) => Ok(None),
+        _ => Err(format!("missing string-or-null input `{key}`")),
+    }
+}
+
+#[cfg(feature = "crux")]
+fn in_u32(input: &Value, key: &str) -> Result<u32, String> {
+    input
+        .get(key)
+        .and_then(Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or_else(|| format!("missing u32 input `{key}`"))
 }
 
 // ---------------------------------------------------------------------------
@@ -934,6 +1032,17 @@ fn conformance_corpus() {
             }
         };
         seen_suites.push(suite.suite.clone());
+        // The marks rule lives in `app::remote_mark`, which only exists with
+        // the `crux` feature. Every CI run has it (the workspace build turns it
+        // on through vela-core-uniffi and vela-core-wasm); a crate-only run
+        // without it says so instead of counting cases it could not check.
+        if suite.suite == "marks" && !cfg!(feature = "crux") {
+            println!(
+                "conformance: the marks suite ({} cases) needs the `crux` feature — skipped",
+                suite.cases.len()
+            );
+            continue;
+        }
         for case in &suite.cases {
             total += 1;
             if let Err(e) = run_case(case) {

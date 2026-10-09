@@ -16,12 +16,11 @@
 	 *
 	 * The options are NAMED by speed — 超快 / 标准 / 较慢 — never by a number
 	 * and never by what they cost: the control's own label is "Speed", so an
-	 * option called "Economy" would be answering a question nobody asked. What
-	 * each speed buys is the line under it, which is what stops the slow tier
-	 * reading as a defect. It is line 2, under the name; the gas bid shares
-	 * that line, under the fee (078 round 2 — two lines, not three with a hole
-	 * under every name). When the two cannot share it, the reason wraps under
-	 * itself and the bid, a figure, is never cut.
+	 * option called "Economy" would be answering a question nobody asked. No
+	 * sentence under the name says what each speed buys (the owner's call,
+	 * 2026-10-08): here each option carries its own fee and gas bid, and the
+	 * figures say it. The Settings default-speed sheet, which shows neither,
+	 * keeps its descriptions.
 	 *
 	 * Under each fee, quietly, is the effective gas price
 	 * that tier buys (issue 684). That is a number, and it is deliberately NOT
@@ -57,17 +56,6 @@
 	}
 
 	let { speed, ontoggle, onselect }: Props = $props();
-
-	/**
-	 * Each option's last drawn gas-bid width, by tier. While a tier
-	 * re-measures its bid is blank, and a blank slot is narrower than a figure
-	 * — the description beside it would take the room and re-wrap, and the
-	 * option would change height twice: the picker jumping on every tap and
-	 * refresh. Held at the width it last had, line 2 keeps its shape until the
-	 * new figure lands. (The first figure a mounted control ever draws has no
-	 * width to hold; the label's width is reserved for it instead.)
-	 */
-	let gasWidths = $state<Record<string, number>>({});
 </script>
 
 <section class="speed">
@@ -123,38 +111,26 @@
 								<Icon icon={UTILITY_ICONS.check} size="sm" />
 							{/if}
 						</span>
-						<!-- Line 2 (078 round 2): what the speed buys on the left, the gas
-						     bid on the right — under the name and under the fee, where
-						     each belongs. It used to be two lines of its own, the bid
-						     right-aligned over an empty left half and the description
-						     under that: a hole under every name. -->
-						{#if option.detail !== undefined || speed.gasPriceLine}
+						<!-- Line 2 is the gas bid alone, under the fee it qualifies and
+						     ending on its right edge. Where the chain has no honest bid
+						     (`gas_price_line` false) the option is one line. -->
+						{#if speed.gasPriceLine}
 							<span class="sub">
-								<span class="detail">{option.detail ?? ''}</span>
-								{#if speed.gasPriceLine}
-									<!-- Named, and drawn: a bare "3,244 wei" reads as a second
-									     amount being charged. Held open EMPTY while the set is
-									     measuring, so the option keeps its shape. -->
-									<span
-										class="gas"
-										bind:offsetWidth={gasWidths[option.id]}
-										style:min-width={option.gasPrice === undefined &&
-										gasWidths[option.id] !== undefined
-											? `${gasWidths[option.id]}px`
-											: undefined}
-									>
-										{#if option.gasPrice !== undefined}
-											<span class="gas-label">{speed.gasPriceLabel}</span>
-											<span class="gas-value">{option.gasPrice}</span>
-										{:else}
-											<!-- Saying nothing, but holding the room: the label's
-											     width, unseen, and a line exactly as tall as a
-											     figure's. -->
-											<span class="gas-reserve" aria-hidden="true">{speed.gasPriceLabel}</span>
-											<span class="gas-value">&nbsp;</span>
-										{/if}
-									</span>
-								{/if}
+								<!-- Named, and drawn: a bare "3,244 wei" reads as a second
+								     amount being charged. Held open EMPTY while the set is
+								     measuring, so the option keeps its height and nothing
+								     below it jumps on a tap or a refresh. -->
+								<span class="gas">
+									{#if option.gasPrice !== undefined}
+										<span class="gas-label">{speed.gasPriceLabel}</span>
+										<span class="gas-value">{option.gasPrice}</span>
+									{:else}
+										<!-- Saying nothing, but holding the room: a line
+										     exactly as tall as a figure's. -->
+										<span class="gas-reserve" aria-hidden="true">{speed.gasPriceLabel}</span>
+										<span class="gas-value">&nbsp;</span>
+									{/if}
+								</span>
 							</span>
 						{/if}
 					</button>
@@ -246,10 +222,9 @@
 		overflow: hidden;
 	}
 
-	/* Two lines (078 round 2): [name …… fee] ✓ over [description …… gas bid].
-	   A grid, so each line-2 piece sits under the line-1 piece it belongs to
-	   — the reason under the name, the bid under the money — and the tick
-	   keeps a column of its own, top-aligned with line 1. */
+	/* Two lines: [name …… fee] ✓ over [………… gas bid]. A grid, so the bid
+	   sits under the money it qualifies, and the tick keeps a column of its
+	   own, level with line 1. */
 	.option {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto var(--space-lg);
@@ -313,33 +288,18 @@
 		color: var(--color-fg-base);
 	}
 
-	/* The reason and the bid, both caption-sized and quiet: the fee and the
-	   name are what is being compared. The bid never gives way — it is a
-	   figure — so when the two cannot share the line, the reason wraps under
-	   itself, in its own column; it is never cut, since a truncated reason is
-	   worse than none.
-
-	   One floor under that: the reason keeps a column of at least six of its
-	   own characters. Only the widest range the formatter can write, under the
-	   longest label, at the narrowest phone, leaves less — and a column one
-	   word wide stacks the sentence into a tower. There, and only there, the
-	   bid drops under the reason, still whole and on the fee's right edge. */
+	/* The bid, caption-sized and quiet: the fee and the name are what is being
+	   compared. It spans the name's column too, so the widest range the
+	   formatter can write still fits whole at the narrowest phone. */
 	.sub {
 		grid-area: sub;
 		display: flex;
-		flex-wrap: wrap;
+		justify-content: flex-end;
 		align-items: baseline;
-		column-gap: var(--space-md);
-		row-gap: var(--space-xs);
 		min-width: 0;
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		color: var(--color-fg-subtle);
-	}
-
-	.detail {
-		flex: 1 1 6em;
-		min-width: 0;
 	}
 
 	/* The UI face with tabular DIGITS for the figure — not a monospace face for
@@ -348,7 +308,6 @@
 		flex: 0 0 auto;
 		display: flex;
 		column-gap: var(--space-xs);
-		margin-inline-start: auto;
 		white-space: nowrap;
 		font-family: var(--font-ui);
 	}

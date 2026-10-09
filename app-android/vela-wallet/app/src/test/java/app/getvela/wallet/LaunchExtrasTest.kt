@@ -36,7 +36,7 @@ class LaunchExtrasTest {
             assertEquals(name, "x", LaunchExtras.honoured(name, "x", debug = true))
         }
         // The galleries, the route, the page door and the parallel space are all on the list.
-        for (name in listOf("vela.gallery", "vela.startDestination", "vela.openUrl", "vela.parallelSpace", "vela.settingsState", "vela.flowState")) {
+        for (name in listOf("vela.gallery", "vela.startDestination", "vela.openUrl", "vela.parallelSpace", "vela.settingsState", "vela.flowState", "vela.signingState", "vela.exploreState")) {
             assert(name in LaunchExtras.DEBUG_ONLY) { name }
         }
     }

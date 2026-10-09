@@ -21,14 +21,22 @@ enum SigningFixtures {
     static let network = (name: "Ethereum", dot: ChainPalette.ethereum)
     static let feeValue = "~0.0021 ETH ≈ $5.40"
 
-    /// Token marks: brand content, exactly like the wallet's chain colours.
+    /// The coins as the drawings name them: each one's token mark on
+    /// Ethereum, by the core's rule — its logo over its letters, as a live
+    /// line would wear it (the glyph alone where no logo loads). Each by its
+    /// mainnet contract; spWETH, which the drawings name no contract for, is
+    /// one the rule cannot place, so it gets no guessed logo.
     enum Mark {
-        static let usdc = TokenMark(letter: "U", tint: BrandPalette.usdc)
-        static let eth = TokenMark(letter: "E", tint: BrandPalette.eth)
-        static let weth = TokenMark(letter: "W", tint: BrandPalette.weth)
-        static let spweth = TokenMark(letter: "S", tint: BrandPalette.spweth)
-        static let usdt = TokenMark(letter: "T", tint: BrandPalette.usdt)
-        static let contact = TokenMark(letter: "A", tint: BrandPalette.contact)
+        static let usdc = coin("USDC", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+        static let eth = coin("ETH", nil)
+        static let weth = coin("WETH", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+        static let spweth = coin("spWETH", "")
+        static let usdt = coin("USDT", "0xdac17f958d2ee523a2206206994597c13d831ec7")
+
+        private static func coin(_ symbol: String, _ contract: String?) -> TokenMarkModel {
+            TokenMarkModel.of(chainId: 1, symbol: symbol, tokenAddress: contract,
+                              color: network.dot)
+        }
     }
 
     /// dApps as the signing header draws them.
@@ -113,9 +121,9 @@ enum SigningFixtures {
             ],
             identities: [
                 TechIdentity(role: t(loc, "techIdentityToken"), name: "USD Coin",
-                             address: Addr.usdcFull, mark: Mark.usdc),
+                             address: Addr.usdcFull, lead: .token(Mark.usdc)),
                 TechIdentity(role: t(loc, "techIdentityRecipient"), name: "Alice Chen",
-                             address: Addr.aliceFull, mark: Mark.contact),
+                             address: Addr.aliceFull, lead: .identicon(Addr.aliceFull)),
             ],
             simResult: SigningRow(label: t(loc, "simResultLabel"),
                                   value: "−1,000 USDC · \(t(loc, "balanceMatchesHero"))"),
@@ -154,8 +162,7 @@ enum SigningFixtures {
                 ],
                 tech: transferTech(loc), techOpen: state == .cs29, fee: onchainFee(loc),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -173,8 +180,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "firstTimeTag"), tone: .caution)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -192,8 +198,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "walletTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -211,8 +216,7 @@ enum SigningFixtures {
                            address: Addr.vitalik),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -240,8 +244,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
                 // Unlimited, seen and said — signable as asked.
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentApprove"),
-                          enabled: true),
+                confirm: (action: t(loc, "intentApprove"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -265,8 +268,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentApprove"),
-                          enabled: true),
+                confirm: (action: t(loc, "intentApprove"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -291,8 +293,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentApprove"),
-                          enabled: true),
+                confirm: (action: t(loc, "intentApprove"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -316,8 +317,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentRevoke"),
-                          enabled: true),
+                confirm: (action: t(loc, "intentRevoke"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -335,8 +335,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "contactTag"), tone: .neutral)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -362,8 +361,7 @@ enum SigningFixtures {
                     .warning(tone: .caution, text: a(loc, "setApprovalAllWarn")),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: a(loc, "verbApproveAll"),
-                          enabled: true),
+                confirm: (action: a(loc, "verbApproveAll"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -371,10 +369,15 @@ enum SigningFixtures {
         case .cs11, .cs33:
             let feeSelector: (title: String, options: [FeeTokenOption])? = state == .cs33
                 ? (title: t(loc, "feeTokenTitle"), options: [
-                    FeeTokenOption(id: "eth", mark: Mark.eth, name: "ETH",
+                    FeeTokenOption(id: "eth",
+                                   mark: TokenMarkModel.of(chainId: 1, symbol: "ETH", color: network.dot),
+                                   name: "ETH",
                                    balance: "\(loc.t("componentsUi.gas.rowBalance")) 0.0689",
                                    fee: "~0.0021 ETH", selected: true),
-                    FeeTokenOption(id: "usdc", mark: Mark.usdc, name: "USDC",
+                    FeeTokenOption(id: "usdc",
+                                   mark: TokenMarkModel.of(chainId: 1, symbol: "USDC",
+                                                           tokenAddress: Addr.usdcFull, color: network.dot),
+                                   name: "USDC",
                                    balance: "\(loc.t("componentsUi.gas.rowBalance")) 1,240.00",
                                    fee: "~5.55 USDC", selected: false),
                 ])
@@ -403,8 +406,7 @@ enum SigningFixtures {
                 fee: .onchain(label: loc.t("componentsUi.gas.networkFee"), value: feeValue,
                               selector: feeSelector),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSwap"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSwap"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -428,8 +430,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSwap"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSwap"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -453,8 +454,7 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "simWillFail")),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSwap"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSwap"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -477,8 +477,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmDeposit"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmDeposit"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -496,8 +495,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmWithdraw"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmWithdraw"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -524,8 +522,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc), techOpen: false, fee: .offchain(note: t(loc, "noNetworkFee")),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -547,8 +544,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc), techOpen: false, fee: .offchain(note: t(loc, "noNetworkFee")),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -571,8 +567,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc, summary: t(loc, "byteSize", ["n": "412"])), techOpen: false,
                 fee: .offchain(note: t(loc, "noNetworkFee")), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -592,8 +587,7 @@ enum SigningFixtures {
                 ],
                 tech: tech(loc), techOpen: false, fee: .offchain(note: t(loc, "noNetworkFee")),
                 signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -619,8 +613,7 @@ enum SigningFixtures {
                                   Addr.selfShort]),
                 ],
                 tech: tech(loc), techOpen: false, fee: .hidden, signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -637,8 +630,7 @@ enum SigningFixtures {
                     .rows([SigningRow(label: t(loc, "signingFor"), value: "dapp.example.com")]),
                 ],
                 tech: tech(loc), techOpen: false, fee: .hidden, signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "signLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "signLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -653,8 +645,7 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "ethSignWarning")),
                 ],
                 tech: tech(loc), techOpen: false, fee: .hidden, signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -676,8 +667,7 @@ enum SigningFixtures {
                               note: t(loc, "blindButSimulated"), noteTone: .neutral),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -698,8 +688,7 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "blindDecodeWarning", ["bytes": "4"])),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -718,8 +707,7 @@ enum SigningFixtures {
                     ]),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -748,8 +736,7 @@ enum SigningFixtures {
                               note: t(loc, "balanceMatchesHero"), noteTone: .neutral),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -771,8 +758,7 @@ enum SigningFixtures {
                            badge: PartyBadge(text: t(loc, "verifiedTag"), tone: .success)),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -790,8 +776,7 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "tokenToContractWarning")),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmSend"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmSend"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -826,8 +811,7 @@ enum SigningFixtures {
                               note: t(loc, "bestEffortSimulated"), noteTone: .neutral),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -854,8 +838,7 @@ enum SigningFixtures {
                               note: t(loc, "balanceMatchesHero"), noteTone: .neutral),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -881,10 +864,41 @@ enum SigningFixtures {
                           note: "(\(t(loc, "byteSize", ["n": "132"])))"),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "confirmLabel"),
-                          enabled: true),
+                confirm: (action: t(loc, "confirmLabel"), enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
+
+        // -- cs36: the wallet's own key backup (first party) --------------
+        case .cs36:
+            // What the live sheet draws for RootView.openEthereumBackup: the
+            // core's rows in its words (Network first — there is no chip),
+            // no requester header, the intent as the headline and the
+            // confirm's label, and no "· Vela passkey registry" summary.
+            var model = SigningModel(
+                id: state,
+                dapp: (name: "Vela Wallet", host: "", letter: "V", tint: BrandPalette.unknown),
+                network: network,
+                blocks: [
+                    .intent(text: t(loc, "intentBackUpPublicKeys"), tone: .success),
+                    .rows([
+                        SigningRow(label: t(loc, "labelNetwork"), value: network.name),
+                        SigningRow(label: t(loc, "labelAddress"), value: Addr.selfShort, mono: true),
+                        SigningRow(label: t(loc, "labelPublicKeys"), value: "3"),
+                    ]),
+                ],
+                tech: tech(
+                    loc,
+                    fn: (label: t(loc, "techFunction"), signature: t(loc, "intentBackUpPublicKeys")),
+                    simResult: SigningRow(label: t(loc, "simResultLabel"),
+                                          value: t(loc, "balanceNoAssetsMove")),
+                    raw: (label: t(loc, "techRawData"), hex: "0xcd438f9b0000000000000000000000000000…")
+                ),
+                techOpen: false, fee: onchainFee(loc), signer: signer(loc),
+                confirm: (action: t(loc, "intentBackUpPublicKeys"), enabled: true),
+                panelTitle: t(loc, "signatureRequest")
+            )
+            model.dappOwn = true
+            return model
         }
     }
 }

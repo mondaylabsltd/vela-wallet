@@ -6,7 +6,7 @@
 //
 //  The drawn model keeps only its labels. The dApp is the **host** — guessing
 //  a pretty name from a domain is exactly the counterfeit route — the blocks
-//  are the core's reading, the fee is the fee policy's, and the slide opens
+//  are the core's reading, the fee is the fee policy's, and the confirm opens
 //  only when the core's one gate says it may (`signConfirmState`, spec 099
 //  R7), with its line under it when it does not.
 //
@@ -26,6 +26,11 @@ enum SigningLive {
         let nativeSymbol: String
         let walletName: String
         let walletAddress: String
+        /// The REQUEST's chain (`RootView.signingContext`), for the fee coins'
+        /// marks — never the estimate's, which is absent while a quote is out,
+        /// and never 0. `nil` only in hand-built contexts, where the coins
+        /// draw their glyph.
+        var chainId: Int? = nil
         /// The display currency the fee's "≈" half is written in (issue 201).
         var display: WalletLive.Display = .usd
         /// The page's host, for the sign-in verdict's words.
@@ -47,8 +52,8 @@ enum SigningLive {
         /// Spec 079: the chain's usual inclusion time (the core's table,
         /// `networkTypicalInclusionS`), for the receipt's ring.
         var typicalS: Int?
-        /// Spec 079: this account signs on the Trusted Signer's page — its
-        /// slide is the one consent.
+        /// Spec 079: this account signs on the Trusted Signer's page — the
+        /// page's own slide is the one consent.
         var trustedSignerRoute = false
         /// Spec 082 RF5: the quote could not even start (the account's
         /// deployment could not be read) — the core's failure name for it,
@@ -57,6 +62,9 @@ enum SigningLive {
         /// The clock the landing's pace is read at (spec 099 R6); the screen
         /// counts the seconds itself once a countdown runs.
         var nowMs: Double = Date().timeIntervalSince1970 * 1000
+        /// The wallet's networks, the person's own included — what names the
+        /// native coin a fee figure is in.
+        var networks: WalletNetworks = .builtin
 
         /// The Trusted Signer's waiting card is up: the account signs on the
         /// page and the signature is under way. The card speaks for the
@@ -82,9 +90,8 @@ enum SigningLive {
     }
 
     /// The transport of a request the WALLET made of itself (`RootView`).
+    /// Nothing listens on it: an answer addressed here never reaches a page.
     static let walletTransport = "wallet"
-    /// `registry_backup::REGISTRY` — the one contract the wallet's own backup calls.
-    private static let passkeyRegistry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
 
     /// Where a site's icon conventionally lives, best first. Https only: never
     /// over plain http, where anybody on the path could answer with somebody
@@ -105,20 +112,6 @@ enum SigningLive {
         return [.warning(tone: notice == .closed ? .caution : .danger, text: loc.t(notice.key))]
     }
 
-    /// The wallet's own key backup, in the person's language. The core's
-    /// built-in results are English, like the descriptors beside them ("the
-    /// words stay in the shell"); this one is OURS. Matched on the request being
-    /// first-party AND the verified registry address — never on the English words.
-    static func localizedOwnBackup(_ clear: ClearSigningViewWire, own: Bool, loc: Loc) -> ClearSigningViewWire {
-        guard own, let result = clear.result, result.verified,
-              result.contractAddress?.lowercased() == passkeyRegistry
-        else { return clear }
-        let labels = ["settingsModals.backup.registeredAs", "contacts.addressLabel", "settingsModals.backup.publicKeys"].map { loc.t($0) }
-        var next = clear
-        next.result = result.relabelled(intent: loc.t("settingsModals.backup.intent"), labels: labels)
-        return next
-    }
-
     /// The core's words in the reader's language. A clear-signing result is
     /// English — a descriptor's intent and labels, the "Unlimited" a threshold
     /// prints — and the core names the ones it recognises (`intentTerm`,
@@ -127,6 +120,10 @@ enum SigningLive {
     /// the descriptor wrote it. Same rule in every shell; runs before
     /// `cappedApproval`. The confirm is left alone: `confirmLabel` switches on
     /// its English intent and falls back to the term.
+    ///
+    /// The wallet's own key backup is no exception: the core names every word
+    /// on it (the intent, Network, Address, Public keys), so nothing here
+    /// matches a contract or relabels rows by position.
     static func localizedTerms(_ clear: ClearSigningViewWire, loc: Loc) -> ClearSigningViewWire {
         func word(_ term: String?, _ text: String) -> String {
             guard let term else { return text }
@@ -223,16 +220,16 @@ enum SigningLive {
         /// The sheet's speed control (spec 069); `nil` draws the fee alone.
         speed: SendLive.SpeedInputs? = nil,
         /// The core's gate over these views (`SigningController.confirmState`).
-        /// `nil` — nobody asked the core — keeps the slide shut.
+        /// `nil` — nobody asked the core — keeps the confirm shut.
         gate: SignConfirmStateWire? = nil
     ) -> SigningModel {
         let loc = context.loc
         let host = BrowserEngine.hostOf(origin: request.origin)
-        let own = request.transportId == walletTransport
-        let clear = cappedApproval(
-            localizedTerms(localizedOwnBackup(rawClear, own: own, loc: loc), loc: loc),
-            guard: guardView
-        )
+        // The wallet asking itself (the key backup) — the core's word, which
+        // the shell said once, where it raised the request; never read off
+        // the reading, which a site can submit byte for byte.
+        let own = sign.request?.firstParty ?? request.firstParty
+        let clear = cappedApproval(localizedTerms(rawClear, loc: loc), guard: guardView)
         let facts = SigningController.firstCall(paramsJson: request.paramsJson, method: request.method)
         // 089 S1: a batch's technical details are the whole batch, never call 1's calldata.
         let wholeBatch = clear.surface == .batch
@@ -285,7 +282,9 @@ enum SigningLive {
             blocks: blocks,
             tech: TechModel(
                 title: fallback.tech.title,
-                summary: refused ? nil : clear.result?.contractName,
+                // "· Vela passkey registry" names the wallet's own contract
+                // to the wallet's own person: dropped on its own request.
+                summary: refused || own ? nil : clear.result?.contractName,
                 fn: refused
                     ? nil
                     : clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
@@ -311,8 +310,7 @@ enum SigningLive {
                      seed: context.walletAddress),
             confirm: refused
                 ? nil
-                : (hint: s(loc, "slideToConfirm"),
-                   action: confirmLabel(clear: clear, loc: loc),
+                : (action: confirmLabel(clear: clear, loc: loc),
                    enabled: (gate ?? .shut).enabled),
             panelTitle: s(loc, "signatureRequest")
         )
@@ -322,19 +320,22 @@ enum SigningLive {
         model.confirmAsButton = !refused && context.trustedSignerRoute
         model.confirmButtonLabel = s(loc, "openSigner")
         model.receipt = refused ? nil : receipt(sign: sign, blocks: blocks, context: context)
-        // Spec 099 R7: a shut slide says which part of the gate is shut — the
-        // core's line for it — never a dead control with no reason.
+        // Spec 099 R7: a shut confirm says which part of the gate is shut —
+        // the core's line for it — never a dead control with no reason.
         if !refused, let gate, !gate.enabled, let key = gate.key {
             model.confirmBlockLine = loc.t(key)
         }
-        // The wallet's own request (the key backup) is not a site: its own mark
-        // and name, and no host — "getvela.app" under a letter read as a stranger.
+        // The wallet's own request (the key backup) is not a site: no
+        // requester header at all — "getvela.app" under a letter read as a
+        // stranger, and "Vela Wallet" over the wallet's own sheet said
+        // nothing. Its headline and the ✕ take the row (`SigningModel.headline`).
         model.dappOwn = own
         model.dappIconUrls = own ? [] : siteIconUrls(origin: request.origin)
         model.networkLogoUrl = Marks.chainLogoURL(request.chainId)
         if !isOffChain(clear) {
             model.feeSpeed = speed.map {
-                SendLive.speedModel($0, view: nil, display: context.display, loc: loc)
+                SendLive.speedModel($0, view: nil, display: context.display, loc: loc,
+                                    networks: context.networks)
             }
         }
         if !refused {
@@ -347,7 +348,7 @@ enum SigningLive {
     // MARK: - What the fee row draws
 
     // The GATE is the core's (`SignConfirmStateWire`, spec 099 R7): this file
-    // no longer decides whether the slide arms. The two readings below only
+    // no longer decides whether the confirm arms. The two readings below only
     // pick what the fee row DRAWS — the "no network fee" line for a message,
     // and no figure under a speed it was not priced at — and the core's gate
     // applies the same two rules (`sign_confirm::off_chain`,
@@ -863,7 +864,9 @@ enum SigningLive {
                 resultBlocks($0, native: clear.nativeValue, context: context)
             } ?? []
         case .ethSign, .messageSign:
-            return clear.message.map { messageBlocks($0, loc: loc, origin: context.origin) } ?? []
+            return clear.message.map {
+                messageBlocks($0, loc: loc, origin: context.origin, networks: context.networks)
+            } ?? []
         case .blindTypedData:
             guard let typed = clear.blindTyped else { return [] }
             var blocks: [SigningBlock] = [
@@ -1080,7 +1083,7 @@ enum SigningLive {
     }
 
     private static func messageBlocks(
-        _ message: ClearMessageViewWire, loc: Loc, origin: String?
+        _ message: ClearMessageViewWire, loc: Loc, origin: String?, networks: WalletNetworks
     ) -> [SigningBlock] {
         let signingIn = message.siwe != nil
         let danger = message.dangerClass == .ethSign || message.dangerClass == .siwePhish
@@ -1119,7 +1122,8 @@ enum SigningLive {
             if let chainId = siwe.chainId {
                 rows.append(SigningRow(
                     label: s(loc, "labelChain"),
-                    value: ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
+                    // From the wallet's list, the person's own included.
+                    value: networks.meta(chainId)?.displayName ?? String(chainId)
                 ))
             }
             if let nonce = siwe.nonce, !nonce.isEmpty {
@@ -1307,7 +1311,8 @@ enum SigningLive {
             // in-band ERC-20 fee is its own amount under its own ticker, never
             // the native figure — and what it costs. The design sheet is
             // explicit that these two surfaces must not drift.
-            value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display)
+            value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
+                                           networks: context.networks)
         } else if fee?.failed != nil || (fee == nil && context.feeStartFailure != nil) {
             value = context.loc.t("componentsUi.gas.estimateFailed")
         } else {
@@ -1322,8 +1327,14 @@ enum SigningLive {
             ? (title: s(context.loc, "feeTokenTitle"), options: options.map { option in
                 FeeTokenOption(
                     id: option.contract ?? nativeFeeId,
-                    mark: TokenMark(letter: String(option.symbol.prefix(1)).uppercased(),
-                                    tint: context.chainDot),
+                    // The coin's real logo — the send form's fee-coin sheet's
+                    // own mark (chain + symbol + contract; the native coin
+                    // wears its chain's logo), over the drawn ticker. A letter
+                    // on a disc drew USDC and USDT as the same "U".
+                    mark: context.chainId.map {
+                        TokenMarkModel.of(chainId: $0, symbol: option.symbol,
+                                          tokenAddress: option.contract, color: context.chainDot)
+                    } ?? TokenMarkModel(ticker: option.symbol, badgeColor: context.chainDot),
                     name: option.symbol,
                     balance: "\(SendLive.trim(SendLive.fromBase(option.balance, decimals: option.decimals))) \(option.symbol)",
                     fee: option.amount.map {
@@ -1340,7 +1351,7 @@ enum SigningLive {
             : nil
         // Issue #262: the core shut the gate because the selected coin cannot
         // pay this fee — the send form's own sentence (#211), about the same
-        // shortfall. A dark slide with no reason is issue 204.
+        // shortfall. A dark confirm with no reason is issue 204.
         var warning: String?
         if let fee, fee.fee != nil, fee.noCoinPays {
             // Issue #408: and not one coin on offer can pay — the core's
@@ -1382,7 +1393,8 @@ enum SigningLive {
         return FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: fee?.busy ?? false)
     }
 
-    /// The slide's verb: the core's intent id, **in the corpus's words**.
+    /// The confirm's label (issue #461: the action alone, no "slide to"
+    /// prefix): the core's intent id, **in the corpus's words**.
     ///
     /// Printing the id raw is how Android shipped a button reading 确认send.
     static func confirmLabel(clear: ClearSigningViewWire, loc: Loc) -> String {

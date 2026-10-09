@@ -4,8 +4,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /*
- * The `explore_sites` machine's wire (spec 044) — favourites, groups and
- * open tabs. `added_ms` / `created_ms` are `f64` in the core.
+ * The `explore_sites` machine's wire (spec 044) — favourites and open tabs.
+ * Issue #465: custom groups are gone; Favorites and Recent dApps are the only
+ * sections, and each can only be hidden. `added_ms` is `f64` in the core.
  */
 
 @Serializable
@@ -26,21 +27,11 @@ data class ExploreSite(
 )
 
 @Serializable
-data class ExploreGroup(
-    val id: String,
-    val name: String,
-    val members: List<String> = emptyList(),
-    val hidden: Boolean = false,
-    val created_ms: Double,
-)
-
-@Serializable
 data class ExploreTab(val id: String, val url: String? = null, val title: String = "", val host: String = "")
 
 @Serializable
 data class ExploreDoc(
     val favorites: List<ExploreSite> = emptyList(),
-    val groups: List<ExploreGroup> = emptyList(),
     val tabs: List<ExploreTab> = emptyList(),
     val selected_tab: String? = null,
     val hidden_system: List<ExploreSystemGroup> = emptyList(),
@@ -55,12 +46,8 @@ data class ExploreDoc(
 )
 
 @Serializable
-data class ExploreGroupView(val id: String, val name: String, val hidden: Boolean = false, val sites: List<ExploreSite> = emptyList())
-
-@Serializable
 data class ExploreView(
     val favorites: List<ExploreSite> = emptyList(),
-    val groups: List<ExploreGroupView> = emptyList(),
     val tabs: List<ExploreTab> = emptyList(),
     val selected_tab: String? = null,
     val favorites_hidden: Boolean = false,
@@ -70,6 +57,12 @@ data class ExploreView(
     val ready: Boolean = false,
     /** Spec 099 R2: every tab id, most recently used first — what the engine plan keeps by. */
     val recent_tabs: List<String> = emptyList(),
+    /**
+     * The home's resume rows (spec 099 navigation): the tabs that have a
+     * page, most recently used first, at most `RESUME_SHOWN` — the core's
+     * order and cap, never re-sorted or re-capped here.
+     */
+    val resumable: List<ExploreTab> = emptyList(),
 )
 
 @Serializable
@@ -122,32 +115,8 @@ sealed class ExploreEvent {
     data class FavoriteRenamed(val origin: String, val name: String) : ExploreEvent()
 
     @Serializable
-    @SerialName("group_created")
-    data class GroupCreated(val name: String, val now_ms: Double) : ExploreEvent()
-
-    @Serializable
-    @SerialName("group_renamed")
-    data class GroupRenamed(val id: String, val name: String) : ExploreEvent()
-
-    @Serializable
-    @SerialName("group_deleted")
-    data class GroupDeleted(val id: String) : ExploreEvent()
-
-    @Serializable
-    @SerialName("group_hidden_set")
-    data class GroupHiddenSet(val id: String, val hidden: Boolean) : ExploreEvent()
-
-    @Serializable
     @SerialName("system_group_hidden_set")
     data class SystemGroupHiddenSet(val group: ExploreSystemGroup, val hidden: Boolean) : ExploreEvent()
-
-    @Serializable
-    @SerialName("group_member_added")
-    data class GroupMemberAdded(val id: String, val origin: String) : ExploreEvent()
-
-    @Serializable
-    @SerialName("group_member_removed")
-    data class GroupMemberRemoved(val id: String, val origin: String) : ExploreEvent()
 
     @Serializable
     @SerialName("tab_opened")

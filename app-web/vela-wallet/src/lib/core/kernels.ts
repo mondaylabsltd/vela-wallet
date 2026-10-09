@@ -34,6 +34,7 @@ import type { GuardView } from '$lib/core/generated/GuardView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
+import type { MarkView } from '$lib/core/generated/MarkView';
 
 export {
 	PROXY_CREATION_CODE,
@@ -798,9 +799,9 @@ export function typicalInclusionSeconds(chainId: number): number {
 }
 
 /**
- * Spec 099 R7: may the signing slide arm, and if not, why — the core's one
+ * Spec 099 R7: may the signing confirm open, and if not, why — the core's one
  * gate (`sign_confirm::confirm_state`), the same on every client. `null`
- * when a view does not read: the slide stays shut.
+ * when a view does not read: the confirm stays shut.
  */
 export function signConfirmState(
 	sign: SignView,
@@ -917,6 +918,47 @@ export function amountTextClean(
  */
 export function amountTextCaret(raw: string, clean: string, caret: number): number {
 	return wasm.amountTextCaret(raw, clean, caret);
+}
+
+/** The corpus's `time.now` / `time.minutesShort` / `time.hoursShort`, `{{n}}` unfilled. */
+export interface RelativeTimeWords {
+	now: string;
+	minutes: string;
+	hours: string;
+}
+
+/**
+ * The core's compact relative time (`I18n::format_relative_time`): "now"
+ * under 45 s, then rounded minutes and hours, a short weekday under a week,
+ * else the date — one rule for every app. The web carries no catalog, so it
+ * hands the core the three words its prerendered messages hold; `language`
+ * (the page's locale) names the weekday. `atMs` is the moment, `nowMs` the
+ * clock; `utcOffsetMinutes` what to add to UTC for local time;
+ * `dateFormat` the person's preset with `auto` resolved
+ * (`resolvedFormatKeys().date`).
+ */
+export function formatRelativeTime(
+	atMs: number,
+	nowMs: number,
+	utcOffsetMinutes: number,
+	dateFormat: string,
+	language: string,
+	words: RelativeTimeWords
+): string {
+	// The core reads the moment in WHOLE seconds; milliseconds there would
+	// read as the future, which is "now".
+	return translated(() =>
+		wasm.formatRelativeTime(
+			Math.floor(atMs / 1000),
+			nowMs,
+			utcOffsetMinutes,
+			dateFormat,
+			language,
+			words.now,
+			words.minutes,
+			words.hours
+		)
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -1227,6 +1269,37 @@ export function browserSiteLabel(title: string, host: string): SiteLabel {
  */
 export function markMissTtlMs(kind: string, status?: number | null): number | null {
 	return wasm.markMissTtlMs(kind, status ?? null) ?? null;
+}
+
+/**
+ * What a COIN's circle wears (`remote_mark::token_mark`): its glyph, its logo
+ * candidates best first, and the corner badge's chain and logo (`null` = no
+ * badge). `ethereumDataUrl` is the person's endpoint as stored; a blank one
+ * is the built-in host, the core's call. `tokenAddress` is `null` for the
+ * chain's own coin, never `''`. `named` are logos the API already named.
+ */
+export function tokenMark(
+	ethereumDataUrl: string,
+	chainId: number,
+	symbol: string,
+	tokenAddress: string | null,
+	named: readonly string[]
+): MarkView {
+	return wasm.tokenMark(ethereumDataUrl, chainId, symbol, tokenAddress, [...named]) as MarkView;
+}
+
+/** What a NETWORK's circle wears (`remote_mark::chain_mark`): its own logo, never a badge. */
+export function chainMark(
+	ethereumDataUrl: string,
+	chainId: number,
+	nativeSymbol: string
+): MarkView {
+	return wasm.chainMark(ethereumDataUrl, chainId, nativeSymbol) as MarkView;
+}
+
+/** A chain's logo on the endpoint (`remote_mark::chain_logo_url`); none for chain 0. */
+export function chainLogoUrl(ethereumDataUrl: string, chainId: number): string | undefined {
+	return wasm.chainLogoUrl(ethereumDataUrl, chainId) ?? undefined;
 }
 
 /** Which balances one chain's read covers, in order (RE9). */

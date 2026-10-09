@@ -63,10 +63,18 @@ struct TokenMarkModel {
     var badgeLogoURL: String?
     /// ETH on Ethereum: the badge would repeat the token, so there is none.
     var badgeHidden: Bool = false
+    /// The letters the core chose for a mark it answered (`MarkView.glyph`).
+    /// `nil` on a drawn mark, which letters itself from the ticker.
+    var coreGlyph: String?
+
+    /// The letters drawn in the circle, under any logo: the core's, else the
+    /// ticker's first three upper-cased — the same rule, for the gallery's
+    /// marks that never asked the core.
+    var glyph: String { coreGlyph ?? String(ticker.prefix(3)).uppercased() }
 
     /// The mark for one holding — glyph, logo candidates and badge in one
     /// place, so a caller cannot fill three of the four and draw a mark that
-    /// disagrees with itself.
+    /// disagrees with itself. The core decides all of it (`Marks.token`).
     static func of(
         chainId: Int,
         symbol: String,
@@ -74,25 +82,27 @@ struct TokenMarkModel {
         color: Color,
         named: [String] = []
     ) -> TokenMarkModel {
-        let mark = Marks.token(chainId: chainId, symbol: symbol,
-                               tokenAddress: tokenAddress, named: named)
-        return TokenMarkModel(
-            ticker: symbol,
-            badgeColor: color,
-            logoURLs: mark.logoURLs,
-            badgeLogoURL: mark.badgeLogoURL,
-            badgeHidden: mark.badgeHidden
-        )
+        from(Marks.token(chainId: chainId, symbol: symbol,
+                         tokenAddress: tokenAddress, named: named),
+             ticker: symbol, color: color)
     }
 
-    /// A NETWORK by itself — its own logo, no badge.
+    /// A NETWORK by itself — its own logo, no badge (the kind rule: a network
+    /// row never wears its coin's logo).
     static func chain(chainId: Int, symbol: String, color: Color) -> TokenMarkModel {
+        from(Marks.chain(chainId: chainId, nativeSymbol: symbol), ticker: symbol, color: color)
+    }
+
+    /// The core's answer as the model the views draw. The badge is drawn
+    /// exactly when the core names its chain, over `color` — that chain's dot.
+    static func from(_ mark: MarkView, ticker: String, color: Color) -> TokenMarkModel {
         TokenMarkModel(
-            ticker: symbol,
+            ticker: ticker,
             badgeColor: color,
-            logoURLs: [Marks.chainLogoURL(chainId)].compactMap { $0 },
-            badgeLogoURL: nil,
-            badgeHidden: true
+            logoURLs: mark.logoUrls,
+            badgeLogoURL: mark.badgeLogoUrl,
+            badgeHidden: mark.badgeChainId == nil,
+            coreGlyph: mark.glyph
         )
     }
 }
@@ -431,7 +441,9 @@ struct FilterChipModel: Identifiable {
 }
 
 struct SendNoticeModel {
-    let mark: TokenMarkModel
+    /// The network the notice is about, in its own mark — `nil` for a notice
+    /// that names no network (a blank disc said nothing).
+    let mark: TokenMarkModel?
     let text: String
 }
 
@@ -532,10 +544,9 @@ struct FeeRowModel {
 struct FeeSpeedOptionModel: Identifiable {
     /// The wire tier — `fast` / `standard` / `slow`.
     let id: String
-    /// The SPEED — 超快 / 标准 / 较慢 — never a number.
+    /// The SPEED — 超快 / 标准 / 较慢 — never a number. What each one buys is
+    /// said on Settings' default speed, not in this per-payment picker.
     let label: String
-    /// What that speed buys, one line under the name.
-    let detail: String
     /// This option's OWN fee, or the "…" / "—" standing in for it.
     let value: String
     /// Its gas bid as a range, already formatted by the core over the set.
@@ -656,17 +667,27 @@ struct FillEmptyModel: Equatable {
 }
 
 /// SD2e — the contact picker.
+///
+/// Rows are keyed by what they ARE (issue #467): a group by the book's own
+/// id, a person by their address. A `UUID()` minted per build gave every row
+/// a new identity on each render — 56 rows rebuilt under the finger whenever
+/// a fee, a balance or a name landed, which can drop a tap in progress.
 struct ContactGroupModel: Identifiable {
-    let id = UUID()
+    /// The book's group id; a pick adds THIS group's members.
+    let id: String
     let name: String
     let count: String
     let colors: [Color]
 }
 
 struct ContactEntryModel: Identifiable {
-    let id = UUID()
+    var id: String { address }
     let name: String
     var group: String?
+    /// The person's full address — what a tap hands back. Never a position:
+    /// the core re-sorts the book (favourites, recency, names as they
+    /// resolve), so an index can name the neighbour by the time it lands.
+    let address: String
     let addressDisplay: String
     let identiconSeed: String
 }
@@ -839,6 +860,10 @@ struct SendConfirmModel {
     /// looking at the page (spec 054 US4).
     var noticeAction: String?
     var noticeSecondary: String?
+    /// Issue #466: a relay stop's "Report this" — the in-app report, seeded
+    /// with the core's. `nil` when the core built no report (a network the
+    /// person added: nobody else to tell).
+    var noticeReport: String? = nil
     /// A split's repeated payees, said again on the page that signs (issue
     /// 203): two lines paying one address are hardest to spot exactly here,
     /// where the avatars are identical and the sum looks right.

@@ -7,7 +7,7 @@
 	 * that is working.
 	 *
 	 * The line is always in the layout and only its INK is toggled. Below a fee
-	 * row sit the speed control and the button (or the slide) that pays;
+	 * row sit the speed control and the button that pays;
 	 * letting the note appear would push them down by a line at the moment
 	 * somebody is reaching for them, and a control that moves under a thumb is
 	 * how a wrong tap happens. The owner chose the standing blank over that.

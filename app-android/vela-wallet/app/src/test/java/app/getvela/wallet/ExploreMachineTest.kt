@@ -33,8 +33,8 @@ import uniffi.vela_core_uniffi.ExploreSitesCore
 
 /**
  * Spec 044 T021: the browser's memory through the real machines and the
- * store shape the other clients read — favourites deduped by origin, groups,
- * tabs with the core's selection rule, recents deduped by origin, and all of
+ * store shape the other clients read — favourites deduped by origin, tabs
+ * with the core's selection rule, recents deduped by origin, and all of
  * it back after a "process death" (a second host over the same store).
  */
 class ExploreMachineTest {
@@ -171,7 +171,7 @@ class ExploreMachineTest {
         store.values[ExploreExecutor.KEY]?.let { runCatching { Wire.json.decodeFromString(ExploreDoc.serializer(), it) }.getOrNull() }
 
     @Test
-    fun `favourites, a group and tabs survive a second host over the same store`() = runBlocking {
+    fun `favourites and tabs survive a second host over the same store`() = runBlocking {
         val h = explore()
         withTimeout(10_000) { h.view.first { it.ready } }
         h.dispatch(ExploreEvent.FavoriteAdded("https://app.uniswap.org/swap?x=1", "Uniswap", 1.0e12), ExploreEvent.serializer())
@@ -180,11 +180,6 @@ class ExploreMachineTest {
         assertEquals("deduped by origin, url refreshed, name kept", 1, fav.favorites.size)
         assertEquals("https://app.uniswap.org", fav.favorites.single().origin)
         assertEquals("Uniswap", fav.favorites.single().name)
-        h.dispatch(ExploreEvent.GroupCreated("交易", 1.0e12 + 2), ExploreEvent.serializer())
-        val grouped = withTimeout(10_000) { h.view.first { it.groups.isNotEmpty() } }
-        val groupId = grouped.groups.single().id
-        h.dispatch(ExploreEvent.GroupMemberAdded(groupId, "https://app.uniswap.org"), ExploreEvent.serializer())
-        withTimeout(10_000) { h.view.first { it.groups.single().sites.size == 1 } }
         h.dispatch(ExploreEvent.TabOpened("https://app.uniswap.org/swap", "Uniswap", 1.0e12 + 3), ExploreEvent.serializer())
         val one = withTimeout(10_000) { h.view.first { it.tabs.size == 1 } }
         assertEquals("opening a tab selects it", one.tabs.single().id, one.selected_tab)
@@ -201,7 +196,7 @@ class ExploreMachineTest {
         // that has raced ahead of the write reads a doc that is one dispatch
         // short: green on a fast machine, red on a loaded runner. Wait for the
         // write the restore is about (the second tab, whose doc carries the
-        // favourite and the group with it) before reading it back.
+        // favourite with it) before reading it back.
         withTimeout(10_000) {
             while (
                 store.values[ExploreExecutor.KEY]
@@ -212,9 +207,42 @@ class ExploreMachineTest {
         val again = explore()
         val restored = withTimeout(10_000) { again.view.first { it.ready } }
         assertEquals(listOf("Uniswap"), restored.favorites.map { it.name })
-        assertEquals(listOf("交易"), restored.groups.map { it.name })
         assertEquals(2, restored.tabs.size)
         assertEquals(two.selected_tab, restored.selected_tab)
+    }
+
+    /**
+     * Issue #465: custom groups are gone. A document written before — a group
+     * holding a favourite, a hidden empty one, Recent dApps hidden — goes
+     * through THIS store's decoder (the core never sees a key it drops), keeps
+     * every favourite and the hidden section, and the next write has no
+     * `groups` at all. A decode failure here would read as "no document" and
+     * the next write would erase the person's favourites.
+     */
+    @Test
+    fun `a document from before custom groups went keeps every favourite and loses its groups on the next write`() = runBlocking {
+        store.values[ExploreExecutor.KEY] = """
+            {"favorites":[
+               {"origin":"https://curve.fi","url":"https://curve.fi/","host":"curve.fi","name":"Curve","renamed":false,"added_ms":1.0E12},
+               {"origin":"https://app.uniswap.org","url":"https://app.uniswap.org/","host":"app.uniswap.org","name":"Uniswap","renamed":true,"added_ms":1.0E12}],
+             "groups":[
+               {"id":"g1","name":"交易","members":["https://curve.fi"],"hidden":false,"created_ms":1.0E12},
+               {"id":"g2","name":"New group","members":[],"hidden":true,"created_ms":1.0E12}],
+             "tabs":[],"selected_tab":null,"hidden_system":["recent"],"name_rule":1}
+        """.trimIndent()
+        val h = explore()
+        val loaded = withTimeout(10_000) { h.view.first { it.ready } }
+        assertEquals(listOf("https://curve.fi", "https://app.uniswap.org"), loaded.favorites.map { it.origin })
+        assertEquals(listOf("Curve", "Uniswap"), loaded.favorites.map { it.name })
+        assertTrue("the hidden section stays hidden", loaded.recent_hidden)
+
+        h.dispatch(ExploreEvent.TabOpened("https://curve.fi/", "Curve", 1.0e12 + 1), ExploreEvent.serializer())
+        withTimeout(10_000) {
+            while (stored()?.tabs?.size != 1) kotlinx.coroutines.delay(20)
+        }
+        val raw = store.values[ExploreExecutor.KEY]!!
+        assertTrue("the next write drops the groups: $raw", "\"groups\"" !in raw)
+        assertEquals(listOf("https://curve.fi", "https://app.uniswap.org"), stored()!!.favorites.map { it.origin })
     }
 
     @Test

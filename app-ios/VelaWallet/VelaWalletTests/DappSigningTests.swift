@@ -556,31 +556,36 @@ struct SigningLiveTests {
     /// to say is never folded away, not even on the wallet's own.
     @Test func theWalletsOwnBackupFoldsASimulationThatMovesNothing() throws {
         let registry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
+        // The core's reading of the backup since the rows say the network:
+        // every word a term (`label_term`), so no shell relabels them.
         let result = try CoreJSON.decode(ClearSignResultWire.self, from: [
-            "intent": "Back up public keys", "contract_name": "Vela passkey registry", "fields": [
-                ["label": "Registered as", "value": "Me", "format": "raw", "warning": false,
-                 "unverified": false, "role": "generic", "detail": false, "expired": false],
-                ["label": "Address", "value": "0x88cca0…266894", "format": "addressName", "warning": false,
-                 "unverified": false, "role": "generic", "detail": false, "expired": false,
-                 "address": "0x88cca0eedbf2c4426110bbfc998f048689266894"],
-                ["label": "Public keys", "value": "1", "format": "raw", "warning": false,
-                 "unverified": false, "role": "generic", "detail": false, "expired": false],
+            "intent": "Back up public keys", "intent_term": "intentBackUpPublicKeys",
+            "contract_name": "Vela passkey registry", "fields": [
+                ["label": "Network", "label_term": "labelNetwork", "value": "Ethereum", "format": "raw",
+                 "warning": false, "unverified": false, "role": "generic", "detail": false, "expired": false],
+                ["label": "Address", "label_term": "labelAddress", "value": "0x88cca0…266894",
+                 "format": "addressName", "warning": false, "unverified": false, "role": "generic",
+                 "detail": false, "expired": false, "address": "0x88cca0eedbf2c4426110bbfc998f048689266894"],
+                ["label": "Public keys", "label_term": "labelPublicKeys", "value": "1", "format": "raw",
+                 "warning": false, "unverified": false, "role": "generic", "detail": false, "expired": false],
             ],
             "risk": "safe", "contract_address": registry, "verified": true, "provenance": "built_in",
             "sign_type": "transaction", "partial": false, "best_effort": false, "to_own_token": false,
         ])
         let backup = clear(surface: .clearSign, result: result)
         let params = #"[{"to":"0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9","data":"0xcd438f9b","value":"0x0"}]"#
-        func sheet(transport: String, simulation: SigningController.Simulation, judgments: [[String: Any]] = []) throws -> SigningModel {
+        func sheet(own: Bool, simulation: SigningController.Simulation, judgments: [[String: Any]] = []) throws -> SigningModel {
             var ctx = context()
             ctx.sim = try CoreJSON.decode(TrustSimViewWire.self, from: ["ready": true, "judgments": judgments])
             ctx.simulation = simulation
+            var request = SigningController.Incoming(
+                id: "r", method: "eth_sendTransaction", paramsJson: params,
+                origin: "https://getvela.app", transportId: own ? SigningLive.walletTransport : "tab-1", chainId: 1
+            )
+            request.firstParty = own
             return SigningLive.model(
                 fallback: SigningFixtures.build(.cs1, loc: loc),
-                request: SigningController.Incoming(
-                    id: "r", method: "eth_sendTransaction", paramsJson: params,
-                    origin: "https://getvela.app", transportId: transport, chainId: 1
-                ),
+                request: request,
                 sign: .empty, clear: backup, guard: .empty, fee: nil, context: ctx
             )
         }
@@ -588,29 +593,100 @@ struct SigningLiveTests {
             model.blocks.contains { if case .balances = $0 { return true } else { return false } }
         }
 
-        let own = try sheet(transport: SigningLive.walletTransport, simulation: .answered)
+        let own = try sheet(own: true, simulation: .answered)
         #expect(own.dappOwn)
         #expect(!hasBalances(own), "the no-change card is still on the sheet")
         #expect(own.tech.simResult?.label == loc.t("componentsUi.signing.simResultLabel"))
         #expect(own.tech.simResult?.value == loc.t("componentsUi.signing.balanceNoAssetsMove"))
 
-        let dapp = try sheet(transport: "tab-1", simulation: .answered)
+        let dapp = try sheet(own: false, simulation: .answered)
         #expect(hasBalances(dapp), "a dApp keeps its balance card")
         #expect(dapp.tech.simResult == nil)
 
         let reverts = try sheet(
-            transport: SigningLive.walletTransport,
+            own: true,
             simulation: .notice(risk: "danger", key: "componentsUi.signing.simWillFail", reason: nil)
         )
         #expect(reverts.blocks.contains { if case .warning(.danger, _) = $0 { return true } else { return false } },
                 "a revert is never folded away")
         #expect(reverts.tech.simResult == nil)
         let moves = try sheet(
-            transport: SigningLive.walletTransport, simulation: .answered,
+            own: true, simulation: .answered,
             judgments: [["type": "native", "delta": "-1000000000000000"]]
         )
         #expect(hasBalances(moves), "a balance that would move stays on the sheet")
         #expect(moves.tech.simResult == nil)
+    }
+
+    /// The wallet's own backup, on the REAL core: the `register()` bytes the
+    /// core's own test reads (`registry-register-unit10.hex`), on Ethereum.
+    /// The rows are Network, Address and Public keys, in the reader's words,
+    /// because the core names each one — the index relabel that called row 0
+    /// "Registered as" is gone — and the confirm reads the intent.
+    ///
+    /// Whose sheet it is comes from the request alone: the same bytes from a
+    /// page are a page's sheet, with the same honest rows.
+    @Test func theBackupsRowsAreTheCoresWordsInTheReadersLanguage() throws {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let hex = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("rust/crates/vela-core/tests/fixtures/registry-register-unit10.hex"),
+            encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let tx: [[String: Any]] = [[
+            "to": "0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9", "data": "0x\(hex)", "value": "0x0",
+        ]]
+        let params = String(decoding: try JSONSerialization.data(withJSONObject: tx), as: UTF8.self)
+        let kickoff = try #require(SigningController.clearKickoff(
+            method: "eth_sendTransaction", paramsJson: params, chainId: 1, origin: nil
+        ))
+        let core = ClearSigningCore()
+        let result = try core.dispatch(eventJson: CoreJSON.string(kickoff))
+        let view = try CoreJSON.decode(
+            ClearSigningViewWire.self, from: CoreJSON.object(result)["view"] as? [String: Any] ?? [:]
+        )
+        #expect(view.result?.intentTerm == "intentBackUpPublicKeys")
+
+        func sheet(own: Bool) -> SigningModel {
+            let base = context()
+            let ctx = SigningLive.Context(
+                loc: zh, chainName: "Ethereum", chainDot: .blue, nativeSymbol: "ETH",
+                walletName: base.walletName, walletAddress: base.walletAddress
+            )
+            var request = SigningController.Incoming(
+                id: "r", method: "eth_sendTransaction", paramsJson: params,
+                origin: own ? "https://getvela.app" : "https://evil.example",
+                transportId: own ? SigningLive.walletTransport : "tab-1", chainId: 1
+            )
+            request.firstParty = own
+            return SigningLive.model(
+                fallback: SigningFixtures.build(.cs1, loc: zh), request: request,
+                sign: .empty, clear: view, guard: .empty, fee: nil, context: ctx
+            )
+        }
+        for own in [true, false] {
+            let model = sheet(own: own)
+            #expect(model.dappOwn == own)
+            #expect(intents(model.blocks) == [zh.t("componentsUi.signing.intentBackUpPublicKeys")])
+            let drawn = rows(model.blocks)
+            #expect(drawn.map(\.label) == [
+                zh.t("componentsUi.signing.labelNetwork"),
+                zh.t("componentsUi.signing.labelAddress"),
+                zh.t("componentsUi.signing.labelPublicKeys"),
+            ], "rows: \(drawn.map(\.label))")
+            #expect(drawn.map(\.label) == ["网络", "地址", "公钥数量"])
+            #expect(drawn.first?.value == "Ethereum", "the network the backup goes to is a row")
+            #expect(drawn.allSatisfy { !$0.label.hasPrefix("settingsModals.") && !$0.label.hasPrefix("componentsUi.") })
+            #expect(model.confirm?.action == "备份公钥", "the confirm reads the intent, not a bare 确认")
+            // The wallet's own sheet has no requester header: the intent is
+            // its title (drawn once, in the header row with the ✕), and the
+            // technical details do not name the wallet's own contract to it.
+            #expect(model.headline?.text == (own ? "备份公钥" : nil))
+            #expect(model.formBlocks.count == model.blocks.count - (own ? 1 : 0))
+            #expect(model.tech.summary == (own ? nil : "Vela passkey registry"))
+        }
     }
 
     /// The REAL core's reading of a batch, kicked off as the sheet kicks it off.
@@ -892,11 +968,11 @@ struct SigningLiveTests {
             zh.t("componentsUi.signing.labelAmount"), zh.t("componentsUi.signing.labelSpender"), "Referral code",
         ])
         #expect(result.fields.map(\.value) == [zh.t("componentsUi.signing.valueUnlimited"), "0x1111", "abc"])
-        // The slide says the core's word for an intent it has no verb of its own for.
+        // The confirm says the core's word for an intent it has no verb of its own for.
         #expect(SigningLive.confirmLabel(clear: view, loc: zh) == zh.t("componentsUi.signing.intentApprove"))
     }
 
-    /// **The slide's verb is a corpus string, never a raw intent id.**
+    /// **The confirm's verb is a corpus string, never a raw intent id.**
     ///
     /// Android shipped a button reading 确认send — the id concatenated onto a
     /// prefix. Asserting the absence of the id would be wrong in English,
@@ -928,7 +1004,7 @@ struct SigningLiveTests {
                 == zh.t("componentsUi.signing.signLabel"))
     }
 
-    /// The slide is three machines ANDed — and an **off-chain** signature has
+    /// The confirm is three machines ANDed — and an **off-chain** signature has
     /// no fee to be ready about.
     // MARK: - Spec 096 (part B): what you see is what you sign
 
@@ -1138,9 +1214,9 @@ struct SigningLiveTests {
     }
 
     /// F7: the request is still being read — the sheet says "Loading…". (The
-    /// slide staying shut under it is the core's gate since spec 099 R7:
+    /// confirm staying shut under it is the core's gate since spec 099 R7:
     /// `ConfirmGateTests`.)
-    @Test func theSlideWaitsForTheReading() {
+    @Test func theConfirmWaitsForTheReading() {
         let reading = ClearSigningViewWire(
             resolving: true, resolved: false, result: nil, message: nil,
             surface: .loading, confirm: .confirm, blindTyped: nil, dangerHaptic: false
@@ -1157,7 +1233,7 @@ struct SigningLiveTests {
     /// Spec 069: the sheet's fee card carries the send form's speed control,
     /// drawn by the same builder — and a fee left from the speed just walked
     /// away from does not show under the new one's name (issue 681). That it
-    /// does not open the slide either is the core's gate (spec 099 R7,
+    /// does not open the confirm either is the core's gate (spec 099 R7,
     /// `ConfirmGateTests`).
     @Test func theFeeCardCarriesTheSpeedControlAndNeverSignsAnotherSpeed() {
         let openGate = SignViewWire(
@@ -1400,6 +1476,58 @@ struct SigningLiveTests {
         #expect(everyCoinGreyed)
         #expect(open.options[0].reason == "Need ~0.001334 ETH, have 0 ETH")
         #expect(open.options[1].reason == "Need ~3.58361 USDT, have 0.754189 USDT")
+    }
+
+    /// The coin list draws each coin's real logo — the send form's fee-coin
+    /// sheet's own mark, on the REQUEST's chain: ETH on Ethereum wears the
+    /// Ethereum logo and no badge; USDC and USDT their own contract's logos
+    /// (checksummed path first), so they are no longer both a "U". With the
+    /// quote still out there is no estimate to take a chain from, and the
+    /// marks still name chain 1, never 0.
+    @Test func theCoinListDrawsEachCoinsOwnLogoOnTheRequestsChain() {
+        let eth = option("ETH", contract: nil, decimals: 18, balance: "0",
+                         amount: "1000", insufficient: false, selected: true)
+        let usdc = option("USDC", contract: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                          decimals: 6, balance: "0", amount: "1000", insufficient: false, selected: false)
+        let usdt = option("USDT", contract: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                          decimals: 6, balance: "0", amount: "1000", insufficient: false, selected: false)
+        // Busy: no estimate, so nothing on the fee says which chain.
+        let fee = FeeViewWire(
+            busy: true, failed: nil, fee: nil, stale: false, feeToken: nil,
+            options: [eth, usdc, usdt], confirmFeeReady: false
+        )
+        var ctx = context()
+        ctx.feeOpen = true
+        ctx.chainId = 1
+        guard case .onchain(_, _, let list?, _, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: fee, context: ctx
+        ) else {
+            Issue.record("an open list with three coins is drawn")
+            return
+        }
+        // Whichever endpoint this host adopted (the built-in one when none
+        // is stored), the paths are the rule's.
+        #expect(list.options.map(\.mark.ticker) == ["ETH", "USDC", "USDT"])
+        #expect(list.options[0].mark.logoURLs == [Marks.chainLogoURL(1)].compactMap { $0 })
+        #expect(list.options[0].mark.logoURLs.first?.hasSuffix("/chainlogos/eip155-1.png") == true)
+        #expect(list.options[0].mark.badgeHidden, "ETH on Ethereum: the badge would repeat the coin")
+        #expect(list.options[1].mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png") == true)
+        #expect(list.options[2].mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-1/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png") == true)
+        #expect(list.options.allSatisfy { mark in
+            !mark.mark.logoURLs.contains { $0.contains("eip155-0") }
+        })
+
+        // A hand-built context names no chain: the drawn tickers, no guess.
+        ctx.chainId = nil
+        guard case .onchain(_, _, let glyphs?, _, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: fee, context: ctx
+        ) else {
+            Issue.record("an open list with three coins is drawn")
+            return
+        }
+        #expect(glyphs.options.allSatisfy { $0.mark.logoURLs.isEmpty })
     }
 
     /// One coin short, one able: only the short one says why, and the line is

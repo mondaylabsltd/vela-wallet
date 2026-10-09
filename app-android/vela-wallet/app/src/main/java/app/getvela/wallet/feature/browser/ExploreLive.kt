@@ -164,11 +164,8 @@ object ExploreLive {
     ): ExploreScreenModel {
         val connected = tab?.connected_address != null
         val favorites = view.favorites.map { tileOf(it) }
-        val populated = favorites.isNotEmpty() || history.entries.isNotEmpty() || view.groups.isNotEmpty()
-        val groups = buildList {
-            if (!view.recent_hidden) recentGroup(history.entries, strings)?.let { add(it) }
-            addAll(customGroups(view))
-        }
+        val populated = favorites.isNotEmpty() || history.entries.isNotEmpty()
+        val groups = listOfNotNull(recentGroup(history.entries, strings).takeUnless { view.recent_hidden })
         val tabs = view.tabs.map { open ->
             TabModel(
                 id = open.id,
@@ -190,7 +187,7 @@ object ExploreLive {
         val shownOrigin = bar?.url?.takeIf { it.isNotBlank() }?.let { uniffi.vela_core_uniffi.dappOriginOf(it) } ?: engine?.origin ?: tab?.origin
         val bookmarked = shownOrigin != null && view.favorites.any { it.origin == shownOrigin }
         return fallback.copy(
-            tabCountLabel = tabs.size.takeIf { it > 0 }?.toString(),
+            resume = resume(view, strings),
             // No CTA: there is no curated list behind "browse", and a button
             // that goes nowhere is worse than none (spec 070).
             empty = if (populated) null else ExploreEmptyCopy(strings.t("explore.startTitle"), strings.t("explore.startHint"), ""),
@@ -233,16 +230,14 @@ object ExploreLive {
             ),
             connection = engine?.let { e -> connection(fallback.connection, e, strings, tab, identity) } ?: fallback.connection,
             tabs = tabs,
+            // Issue #465: the start page's two sections and nothing else — no
+            // groups of the person's own, so no "System" tag to tell them apart.
             groupManageSheet = ExploreSheet.GroupManage(
                 title = strings.t("explore.manageGroups"),
-                newGroup = strings.t("explore.newGroup"),
-                rows = buildList {
-                    add(GroupManageRow("favorites", strings.t("explore.favorites"), strings.t("explore.siteCount", mapOf("n" to view.favorites.size.toString())), system = true, hidden = view.favorites_hidden))
-                    add(GroupManageRow("recent", strings.t("explore.recent"), strings.t("explore.systemGroup"), system = true, hidden = view.recent_hidden))
-                    view.groups.forEach { group ->
-                        add(GroupManageRow(group.id, group.name, strings.t("explore.siteCount", mapOf("n" to group.sites.size.toString())), system = false, hidden = group.hidden))
-                    }
-                },
+                rows = listOf(
+                    GroupManageRow("favorites", strings.t("explore.favorites"), strings.t("explore.siteCount", view.favorites.size), hidden = view.favorites_hidden),
+                    GroupManageRow("recent", strings.t("explore.recent"), meta = null, hidden = view.recent_hidden),
+                ),
             ),
             siteMenuSheet = engine?.let { e ->
                 val secure = tab?.secure ?: false
@@ -256,13 +251,48 @@ object ExploreLive {
                     // site that is connected.
                     items = fallback.siteMenuSheet.items.mapNotNull { item ->
                         when (item.id) {
-                            "favorite" -> if (bookmarked) item.copy(label = strings.t("explore.removeFromFavorites")) else item
+                            // Greyed, never hidden: the rows under it keep their places.
+                            "forward" -> item.copy(enabled = e.canForward)
+                            // While a load runs the row stops it (iOS spec 082 RE5).
+                            "refresh" -> if (e.loading) item.copy(id = STOP, icon = app.getvela.wallet.core.designsystem.components.VelaIcons.Close, label = strings.t("connect.dapp.stop")) else item
+                            "favorite" -> if (bookmarked) item.copy(icon = app.getvela.wallet.core.designsystem.components.VelaIcons.StarFilled, label = strings.t("explore.removeFromFavorites")) else item
                             "disconnect" -> item.takeIf { connected }
                             else -> item
                         }
                     },
                 )
             } ?: fallback.siteMenuSheet,
+        )
+    }
+
+    /** The site menu's refresh row while a load runs (iOS spec 082 RE5): it stops the load. */
+    const val STOP = "stop"
+
+    /**
+     * The home's resume section (spec 099 navigation) from the core's
+     * `resumable` — its rows, order and cap are the core's, never re-sorted or
+     * re-capped here. Drawn only while some tab has a page; the header's n is
+     * every tab, start pages included (`tabs.count`, the switcher's number).
+     * A row names the tab by the core's label rule, the recents' own
+     * (`browserSiteLabel`), and its id is the TAB's: a tap resumes it.
+     */
+    fun resume(view: ExploreView, strings: VelaStrings): app.getvela.wallet.feature.explore.ResumeSection? {
+        if (!view.ready || view.resumable.isEmpty()) return null
+        return app.getvela.wallet.feature.explore.ResumeSection(
+            title = strings.t("explore.openTabs", view.tabs.size),
+            action = strings.t("explore.tabs"),
+            tabs = view.resumable.map { tab ->
+                val label = uniffi.vela_core_uniffi.browserSiteLabel(tab.title, tab.host)
+                SiteModel(
+                    id = tab.id,
+                    name = label.name,
+                    host = tab.host,
+                    letter = letterOf(tab.host),
+                    tint = tintOf(tab.host),
+                    subtitle = label.hostLine.orEmpty(),
+                    iconUrls = tab.url?.let(::iconsOf).orEmpty(),
+                )
+            },
         )
     }
 
@@ -498,18 +528,6 @@ object ExploreLive {
             sites = entries.map { siteOf(it) },
         )
     }
-
-    fun customGroups(view: ExploreView): List<GroupModel> = view.groups
-        .filter { !it.hidden }
-        .map { group ->
-            GroupModel(
-                id = group.id,
-                title = group.name,
-                kind = GroupKind.Custom,
-                action = GroupAction.Menu,
-                sites = group.sites.map { tileOf(it) },
-            )
-        }
 
     /** The avatar letter — the core's rule (spec 079): `app.uniswap.org` is "U", not "A". */
     fun letterOf(host: String): String = uniffi.vela_core_uniffi.browserSiteLetter(host)

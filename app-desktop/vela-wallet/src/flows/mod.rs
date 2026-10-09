@@ -512,7 +512,9 @@ pub struct FlowStrings {
     pub gas_tier_fast: SharedString,
     pub gas_tier_standard: SharedString,
     pub gas_tier_slow: SharedString,
-    /// …and what each one buys, the line under the name.
+    /// …and what each one buys — said only by the Settings default-speed
+    /// sheet, which has no fee or gas bid to say it. The picker for one
+    /// transaction shows those figures instead.
     pub gas_tier_hint_fast: SharedString,
     pub gas_tier_hint_standard: SharedString,
     pub gas_tier_hint_slow: SharedString,
@@ -558,6 +560,10 @@ pub struct FlowStrings {
     /// draws the stop inline rather than as a sheet, so this is the way back
     /// to the form.
     pub funding_close: SharedString,
+    /// "Report this" (issue 466): files the core's report about the stop
+    /// through the in-app reporter — on a network Vela ships only, whose
+    /// relayer is the operator's to fix.
+    pub funding_report: SharedString,
     /// The relay cannot serve this chain at all (spec 098 §2).
     pub unreachable_title: SharedString,
     pub unreachable_operator_lead: SharedString,
@@ -565,6 +571,8 @@ pub struct FlowStrings {
     pub unreachable_hint: SharedString,
     pub unreachable_retry: SharedString,
     pub unreachable_close: SharedString,
+    /// The same "Report this" on the can't-reach stop (issue 466).
+    pub unreachable_report: SharedString,
     /// A locked payment request that cannot be fulfilled.
     pub lock_net_title: SharedString,
     pub lock_net_body: String,
@@ -897,12 +905,14 @@ impl FlowStrings {
             funding_check_now: s("componentsUi.treasuryBootstrap.retryBtn"),
             funding_copy: s("componentsUi.treasuryBootstrap.copyBtn"),
             funding_close: s("componentsUi.treasuryBootstrap.closeBtn"),
+            funding_report: s("componentsUi.treasuryBootstrap.reportBtn"),
             unreachable_title: s("componentsUi.relayUnreachable.title"),
             unreachable_operator_lead: s("componentsUi.relayUnreachable.operatorLead"),
             unreachable_custom_lead: s("componentsUi.relayUnreachable.customLead"),
             unreachable_hint: s("componentsUi.relayUnreachable.settingsHint"),
             unreachable_retry: s("componentsUi.relayUnreachable.retryBtn"),
             unreachable_close: s("componentsUi.relayUnreachable.closeBtn"),
+            unreachable_report: s("componentsUi.relayUnreachable.reportBtn"),
             lock_net_title: s("send.lock.netTitle"),
             lock_net_body: raw("send.lock.netBody"),
             lock_token_title: s("send.lock.tokenTitle"),

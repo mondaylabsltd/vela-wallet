@@ -6,7 +6,7 @@
 //  line (总余额 · USD), hero amount with de-emphasised decimals, exactly
 //  one of normal / zero-live (pulsing dot + 实时·监听收款中) / loading
 //  (skeleton block) / hidden (six dots + eye-off), plus an optional
-//  warning/refreshing status line.
+//  warning/refreshing status line, then the refresh control (issue 462).
 //
 
 import SwiftUI
@@ -19,6 +19,17 @@ struct BalanceDisplay: View {
     /// Where the status line goes. Absent in the gallery, where the line is a
     /// picture of a state rather than a way out of one.
     var onStatusTap: (() -> Void)?
+    /// Issue 462: the refresh control's tap. Absent in the gallery, where the
+    /// control is drawn and takes no tap.
+    var onRefresh: (() -> Void)?
+    /// Spec 051's "tap the figure to hide it", as VoiceOver hears it: the
+    /// button trait, the "Hide balance" hint and the action sit on the FIGURE
+    /// alone. This stack is not one accessibility element, so a hint set on
+    /// it reached every element inside — and overrode their own: the refresh
+    /// control under the figure was announced "…, button, Hide balance",
+    /// and double-tapping it refreshed. The sighted tap stays on the caller's
+    /// stack. Absent in the gallery, where a tap would mutate a picture.
+    var onToggle: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
@@ -32,10 +43,20 @@ struct BalanceDisplay: View {
             if let status = model.status {
                 statusDoor(status)
             }
+            if let refresh = model.refresh {
+                BalanceRefreshControl(model: refresh, onRefresh: onRefresh)
+            }
         }
     }
 
-    @ViewBuilder private var amount: some View {
+    private var amount: some View {
+        // Hidden, the figure is already called "Show balance": no hint to add.
+        figure.modifier(BalanceToggleA11y(
+            hint: model.state == .hidden ? nil : model.a11yHide, onToggle: onToggle
+        ))
+    }
+
+    @ViewBuilder private var figure: some View {
         switch model.state {
         case .loading:
             SkeletonBlock(width: WalletGeometry.skeletonBalanceWidth, height: WalletGeometry.skeletonBalanceHeight)
@@ -103,6 +124,137 @@ struct BalanceDisplay: View {
             LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
                 .foregroundStyle(theme.fgSubtle)
         }
+    }
+}
+
+/// The figure's hide/show switch for VoiceOver (`BalanceDisplay.onToggle`).
+private struct BalanceToggleA11y: ViewModifier {
+    let hint: String?
+    let onToggle: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let onToggle {
+            content
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(Text(verbatim: hint ?? ""))
+                .accessibilityAction { onToggle() }
+        } else {
+            content
+        }
+    }
+}
+
+/// The hero's "↻ Updated 2m" (issue 462) — the same control on all four
+/// shells, under the total and its status line.
+///
+/// Tapping it reads every chain again (the caller's `onRefresh`:
+/// `RefreshRequested{force, pull}` plus the activity tick). While that is out
+/// (`model.refreshing`, which the store holds for at least 650 ms) the glyph
+/// turns, the words read "Updating…", and a second tap does nothing. Under
+/// Reduce Motion the glyph stays still and the words alone say it is reading,
+/// as on the web. At rest
+/// before any read has settled it draws the glyph alone, and is called
+/// "Refresh balance" (`home.refreshBalance`) — never "Updating…" over a
+/// control that is not.
+///
+/// **Nothing moves.** Both labels are laid out in one box, the one not
+/// showing invisible, so the box is the wider one's width in both states and
+/// its height never changes: the control does not slide out from under the
+/// finger that tapped it. Quiet ink like the status line — a fresh figure is
+/// the normal case.
+struct BalanceRefreshControl: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let model: BalanceRefreshModel
+    var onRefresh: (() -> Void)?
+
+    /// The control's test hook — the desktop's element id for the same control.
+    static let testId = "balance-refresh"
+
+    var body: some View {
+        Button { if !model.refreshing { onRefresh?() } } label: {
+            HStack(spacing: Tokens.Space.s8) {
+                glyph
+                ZStack(alignment: .leading) {
+                    label(model.updated ?? "", shown: !model.refreshing)
+                    label(model.updating, shown: model.refreshing)
+                }
+            }
+            // The words swap at once. The press's spring rides the same
+            // transaction as the tap's state change, and cross-faded the two
+            // labels into each other ("更新中新 · 刚刚") — on a simulator run.
+            .transaction { $0.animation = nil }
+            .frame(minHeight: Tokens.Control.sm)
+            .contentShape(Rectangle())
+        }
+        // Inert while it turns — and in the gallery — without dimming: a
+        // refresh in flight is busy, not disabled. The tap is still taken
+        // (and dropped) rather than let through: under the control the hero
+        // hides the figure on a tap.
+        .buttonStyle(RefreshPressStyle(live: onRefresh != nil && !model.refreshing))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: Self.spoken(model)))
+        // "Updated 2m" names when, not what a double-tap does.
+        .accessibilityHint(Text(verbatim: model.refreshing || model.updated == nil ? "" : model.named))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(model.refreshing ? .updatesFrequently : [])
+        .accessibilityIdentifier(Self.testId)
+    }
+
+    /// Whether the glyph turns: while a refresh is out, never under Reduce
+    /// Motion — "Updating…" says it there.
+    static func turns(_ model: BalanceRefreshModel, reduceMotion: Bool) -> Bool {
+        model.refreshing && !reduceMotion
+    }
+
+    /// What VoiceOver calls the control: "Updating…" only while it turns.
+    static func spoken(_ model: BalanceRefreshModel) -> String {
+        model.refreshing ? model.updating : (model.updated ?? model.named)
+    }
+
+    @ViewBuilder private var glyph: some View {
+        if Self.turns(model, reduceMotion: reduceMotion) {
+            // A clock-driven turn, composed only while turning: an idle home
+            // runs no frame clock, and no implicit animation can leak into the
+            // hero's layout. One revolution at the CTA spinner's speed.
+            TimelineView(.animation) { context in
+                let period = Tokens.Motion.slow * 2
+                let turn = context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: period) / period
+                LucideIcon(.refreshCw, size: LucideIconSize.statusIcon)
+                    .foregroundStyle(theme.fgSubtle)
+                    .rotationEffect(.degrees(turn * 360))
+            }
+        } else {
+            LucideIcon(.refreshCw, size: LucideIconSize.statusIcon)
+                .foregroundStyle(theme.fgSubtle)
+        }
+    }
+
+    private func label(_ text: String, shown: Bool) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .foregroundStyle(theme.fgSubtle)
+            .lineLimit(1)
+            .opacity(shown ? 1 : 0)
+    }
+}
+
+/// The refresh control's press: it dims and taps back like every text button
+/// here while it can be pressed, and answers nothing while it cannot. No
+/// scale — the control must not move under the finger.
+private struct RefreshPressStyle: ButtonStyle {
+    let live: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(live && configuration.isPressed ? Interaction.pressedOpacity : 1)
+            .animation(Interaction.pressSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, pressed in
+                if live && pressed { VelaHaptic.press.play() }
+            }
     }
 }
 

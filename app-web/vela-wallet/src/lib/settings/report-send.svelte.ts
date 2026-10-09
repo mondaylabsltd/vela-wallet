@@ -105,3 +105,11 @@ export class ReportSend {
 
 /** The one send the settings route drives — it outlives the route, too. */
 export const reportSend = new ReportSend();
+
+/**
+ * A relay stop's report (issue 466), sent from the wallet route. Its own
+ * draft, seeded with the core's words when "Report this" is pressed — never
+ * the one Settings → Send feedback keeps, which may hold something else the
+ * person was writing. It outlives the sheet and the route like that one.
+ */
+export const relayReportSend = new ReportSend();

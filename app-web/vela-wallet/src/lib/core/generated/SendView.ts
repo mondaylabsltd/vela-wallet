@@ -3,6 +3,7 @@ import type { FeeEstimateView } from "./FeeEstimateView";
 import type { SendAddNetworkMsg } from "./SendAddNetworkMsg";
 import type { SendAmountWarning } from "./SendAmountWarning";
 import type { SendDuplicateRowView } from "./SendDuplicateRowView";
+import type { SendFeeCoin } from "./SendFeeCoin";
 import type { SendFeeIssueView } from "./SendFeeIssueView";
 import type { SendLockError } from "./SendLockError";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
@@ -11,6 +12,7 @@ import type { SendReceiptView } from "./SendReceiptView";
 import type { SendRecipientDraft } from "./SendRecipientDraft";
 import type { SendRecipientIdentity } from "./SendRecipientIdentity";
 import type { SendRecipientRisk } from "./SendRecipientRisk";
+import type { SendRelayReport } from "./SendRelayReport";
 import type { SendRelayUnreachable } from "./SendRelayUnreachable";
 import type { SendSplitRowIssue } from "./SendSplitRowIssue";
 import type { SendStage } from "./SendStage";
@@ -85,13 +87,13 @@ denom_toggle_enabled: boolean,
  */
 denom_toggle_reason: SendUnitIssue | null, 
 /**
- * **Why** the confirm slide is disarmed, when what disarmed it is the
+ * **Why** the confirm is disabled, when what disabled it is the
  * money.
  *
  * [`SendView::can_confirm`] never looked at the amount at all: a
  * display-currency commit landing while the confirm page is open
  * re-denominates the field to empty (`redenominate_to_display`), and the
- * slider stayed armed over a figure that resolved to nothing — a
+ * confirm stayed enabled over a figure that resolved to nothing — a
  * zero-value transfer, signable, unexplained. The gate now asks the same
  * question `can_continue` asks, and this is the sentence that goes with
  * the refusal (`send.warnCannotConvert`, the key that round added).
@@ -175,7 +177,30 @@ multi_specs: Array<SendMultiSpecView>, show_scanner: boolean, show_contact_picke
 /**
  * Chain-guarded (`selectedFeeEstimate`) — never a prior network's quote.
  */
-fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendAmountWarning | null, same_asset_fee_issue: SendFeeIssueView | null, 
+fee: FeeEstimateView | null, gas_fee_token: string | null, 
+/**
+ * The coin the form's fee row wears, whether or not a figure is beside
+ * it. The four shells each had their own answer for the frames with no
+ * estimate — a quote out, a quote that failed, a speed being measured —
+ * and drew one state three ways (an empty disc, the chain's coin, the
+ * chosen coin). In order:
+ *
+ * 1. the estimate in hand — this speed's own when it has one, otherwise
+ *    the speed just left's, which this machine keeps across a speed
+ *    change and which names the coin that will pay (the coin does not
+ *    change with the speed; the fee machine's `keep_quote_coin` keeps a
+ *    quote on screen in the coin in force);
+ * 2. the coin in force — the fee card's (`FeeView.fee_token`, mirrored by
+ *    [`Event::FeeTokenChanged`] under its bridge rule, and only when it
+ *    was said about this chain), else the person's pick on this form;
+ *    named by the form's holdings;
+ * 3. the chain's own coin;
+ *
+ * on the selected token's chain, else the sweep's, else the estimate's.
+ * `None` only while no chain is known. The figure is not here: the row
+ * still shows only this speed's own (issue 681).
+ */
+fee_coin: SendFeeCoin | null, amount_warning: SendAmountWarning | null, same_asset_fee_issue: SendFeeIssueView | null, 
 /**
  * The form's button gate — the whole of it. While a relay stop is up the
  * button is that stop's retry, and pressing it sends [`Event::Continue`]
@@ -184,7 +209,7 @@ fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendA
  */
 can_continue: boolean, 
 /**
- * The confirm slide gate, the whole of it: fee settled ∧ nothing
+ * The confirm gate, the whole of it: fee settled ∧ nothing
  * re-quoting ∧ no same-asset breach ∧ idle ∧ no signature under way ∧ no
  * refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
  * the same predicate; a shell adds nothing to it (issue 424).
@@ -193,7 +218,15 @@ can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendT
 /**
  * Spec 098 §2: the relay cannot serve this chain; the send stops here.
  */
-relay_unreachable: SendRelayUnreachable | null, recipient_identity: SendRecipientIdentity | null, 
+relay_unreachable: SendRelayUnreachable | null, 
+/**
+ * What the stop's "Report this" files (issue 466). `Some` exactly while
+ * a relay stop is up on a network Vela ships — the stops whose
+ * `operator_served` is true; on a network the person added there is no
+ * operator to tell. The shell snapshots it when the button is pressed:
+ * the stop may close (funded) while the report is being read.
+ */
+relay_report: SendRelayReport | null, recipient_identity: SendRecipientIdentity | null, 
 /**
  * Who the money goes to, as the form's recipient line and the confirm
  * page name them (spec 097 F, S2): the address always, a name only
@@ -213,7 +246,7 @@ payees: Array<SendPayee>, recipient_risk: SendRecipientRisk | null,
  * list there — the registry's stablecoins and wrapped coin they hold, and
  * tokens they added. A token contract almost never has a way to give
  * back what is sent to it, so the form and the confirm page say so
- * plainly before the slide; it does not block. Not asked of a split's
+ * plainly before the confirm; it does not block. Not asked of a split's
  * rows.
  */
 recipient_is_token_contract: boolean, sim_json: string | null, };

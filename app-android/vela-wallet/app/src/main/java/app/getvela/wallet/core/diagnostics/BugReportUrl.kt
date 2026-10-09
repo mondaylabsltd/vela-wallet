@@ -23,10 +23,12 @@ import java.net.URLEncoder
  * ## What may be in one
  *
  * The same rule the whole feature runs on: version, platform, language, the
- * NAMES of unreachable networks and recent failure classes. Never an address,
- * a balance, an endpoint or RPC URL (they carry API keys), or a raw `vela.*`
- * value. Nothing here reads storage, which is what makes that true rather
- * than merely intended.
+ * NAMES of unreachable networks and recent failure classes. Never the
+ * person's address or balance, an endpoint or RPC URL (they carry API keys),
+ * or a raw `vela.*` value. Nothing here reads storage, which is what makes
+ * that true rather than merely intended. The one address a report may carry
+ * is a relayer treasury's (issue #466) — the operator's, public — and only in
+ * the `what` the core wrote and the person saw ([BugReport]).
  */
 object BugReportUrl {
 

@@ -2,13 +2,18 @@
  * The live wallet-home builders (spec 025 T125): BalanceView + currency pair
  * → the drawn models. Presentation only — the numbers are the core's.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { formatRelativeTime } from '$lib/core/kernels';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { UnreachableNetwork } from '$lib/core/generated/UnreachableNetwork';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
+import type { Locale } from '$lib/i18n/locales';
+import { fill } from './messages';
 import { buildMobileState } from './fixtures';
 import {
+	agoText,
 	liveAssetRow,
 	liveBalance,
 	moneyParts,
@@ -24,6 +29,23 @@ import { buildFlowState } from '$lib/flows/fixtures';
 import { withLiveFlow } from '$lib/flows/live';
 
 const m = resolveWalletMessages('en');
+
+/** The core's relative-time conformance vectors (issue 462). */
+const RELATIVE_TIME = JSON.parse(
+	readFileSync('../../rust/crates/vela-core/tests/vectors/relative-time.json', 'utf8')
+) as {
+	cases: {
+		name: string;
+		input: {
+			lng: string;
+			ts_seconds: number;
+			now_ms: number;
+			utc_offset_minutes: number;
+			date_format: string;
+		};
+		expect: { value: string };
+	}[];
+};
 const USD: CurrencyView = { code: 'USD', rate: 1, committed: true };
 const EUR: CurrencyView = { code: 'EUR', rate: 0.5, committed: true };
 const UNPRICED_JPY: CurrencyView = { code: 'JPY', rate: null, committed: true };
@@ -223,6 +245,128 @@ describe('liveBalance', () => {
 		expect(liveBalance({ ...live, notice: 'still_updating' }, USD, m).status?.kind).toBe(
 			'refreshing'
 		);
+	});
+});
+
+describe('the hero refresh control (issue 462)', () => {
+	const NOW = Date.UTC(2026, 9, 8, 12, 0, 0);
+	const read = {
+		...PRISTINE,
+		balance_unknown: false,
+		display_total_usd: 4500,
+		tokens: [ETH],
+		last_refreshed_at_ms: NOW - 120_000
+	};
+	const at = (ms: number) => agoText(NOW - ms, NOW, m.balance.ago, 'en');
+
+	it('ages in the core’s compact words, on the core’s thresholds', () => {
+		expect(at(0)).toBe('now');
+		expect(at(44_000)).toBe('now');
+		expect(at(45_000)).toBe('1m');
+		expect(at(89_000)).toBe('1m');
+		expect(at(90_000)).toBe('2m');
+		expect(at(3_599_000)).toBe('60m');
+		expect(at(3_600_000)).toBe('1h');
+		expect(at(86_399_000)).toBe('24h');
+		// A read stamped ahead of this clock is "now", never a negative age.
+		expect(at(-5_000)).toBe('now');
+		// Past a day the core names the weekday, in the page's language…
+		expect(at(86_400_000)).toMatch(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/);
+		expect(agoText(NOW - 2 * 86_400_000, NOW, m.balance.ago, 'zh')).toMatch(/^周[一二三四五六日]$/);
+		// …and past a week writes the date, in the person's preset.
+		expect(at(8 * 86_400_000)).toMatch(/\d/);
+		// The corpus's own words, in another language.
+		const zh = resolveWalletMessages('zh');
+		expect(agoText(NOW - 120_000, NOW, zh.balance.ago, 'zh')).toBe('2分钟前');
+		expect(fill(zh.balance.lastUpdated, { ago: zh.balance.ago.now })).not.toContain('{{');
+	});
+
+	it('is the core’s answer for every vector, in the words each page ships', () => {
+		// tests/vectors/relative-time.json, the suite every app replays: the
+		// page's prerendered time.* words and its locale, handed to the core.
+		expect(RELATIVE_TIME.cases.length).toBeGreaterThan(100);
+		for (const c of RELATIVE_TIME.cases) {
+			const words = resolveWalletMessages(c.input.lng as Locale).balance.ago;
+			const got = formatRelativeTime(
+				c.input.ts_seconds * 1000,
+				c.input.now_ms,
+				c.input.utc_offset_minutes,
+				c.input.date_format,
+				c.input.lng,
+				words
+			);
+			expect(got, c.name).toBe(c.expect.value);
+		}
+	});
+
+	it('says when the figure was read, and turns while the read the person asked for is out', () => {
+		const rest = liveBalance(read, USD, m, { now: NOW, held: false, language: 'en' });
+		expect(rest.refresh).toEqual({
+			updated: fill(m.balance.lastUpdated, { ago: '2m' }),
+			updating: m.balance.updating,
+			a11yIdle: m.balance.refreshBalance,
+			spinning: false
+		});
+		expect(rest.refresh?.updated).toBe('Updated 2m');
+		expect(m.balance.refreshBalance).toBe('Refresh balance');
+		expect(m.balance.updating).toBe('Updating…');
+		// The core's flag turns it…
+		expect(
+			liveBalance({ ...read, refreshing: true }, USD, m, { now: NOW, held: false, language: 'en' })
+				.refresh
+		).toMatchObject({ spinning: true });
+		// …and so does a press's 650 ms hold, after the core has already answered.
+		expect(
+			liveBalance(read, USD, m, { now: NOW, held: true, language: 'en' }).refresh?.spinning
+		).toBe(true);
+	});
+
+	it('a refresh the person asked for adds no status line above the control', () => {
+		const model = liveBalance({ ...read, refreshing: true }, USD, m, {
+			now: NOW,
+			held: false,
+			language: 'en'
+		});
+		expect(model.status).toBeUndefined();
+		// A figure that really is not final keeps its line: the cache, still updating.
+		const cached = { ...PRISTINE, cached_total_usd: 1383.28, refreshing: true };
+		expect(liveBalance(cached, USD, m).status).toEqual({
+			kind: 'refreshing',
+			text: m.balance.stale
+		});
+		expect(
+			liveBalance({ ...read, refreshing: true, notice: 'still_updating' }, USD, m).status?.kind
+		).toBe('refreshing');
+	});
+
+	it('is drawn under a skeleton and a hidden figure too, and nowhere it was not asked for', () => {
+		const input = { now: NOW, held: false, language: 'en' };
+		const loading = liveBalance({ ...PRISTINE, refreshing: true }, USD, m, input);
+		expect(loading.state).toBe('loading');
+		expect(loading.refresh).toMatchObject({ updated: undefined, spinning: true });
+		const hidden = liveBalance({ ...read, hidden: true }, USD, m, input);
+		expect(hidden.state).toBe('hidden');
+		expect(hidden.refresh?.updated).toBe('Updated 2m');
+		expect(liveBalance(read, USD, m).refresh).toBeUndefined();
+	});
+
+	it('reaches the home and the wide layout through the live inputs', () => {
+		const inputs = {
+			balance: read,
+			currency: USD,
+			m,
+			refresh: { now: NOW, held: false, language: 'en' }
+		};
+		const home = withLiveWallet(
+			buildMobileState('h1', m, () => ''),
+			inputs
+		);
+		expect(home.balance.refresh?.updated).toBe('Updated 2m');
+		const wide = withLiveWalletDesktop(
+			buildDesktopState('d1', m, () => ''),
+			inputs
+		);
+		expect(wide.balance.refresh?.updated).toBe('Updated 2m');
 	});
 });
 

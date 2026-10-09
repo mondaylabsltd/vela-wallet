@@ -99,7 +99,7 @@
     "removeRecipient": "Entfernen",
     "scanAria": "QR-Code scannen",
     "alertInsufficientBalanceBody": "Die Summe übersteigt Ihr Guthaben.",
-    "recipientPickAria": "Empfänger wählen oder scannen",
+    "recipientPickAria": "Kontakt wählen",
     "multiSendNoFundsAfterGas": "Nach der Gas-Reserve reicht das Guthaben nicht.",
     "gasReserved": "Gas reserviert",
     "batchImport": "Liste importieren",

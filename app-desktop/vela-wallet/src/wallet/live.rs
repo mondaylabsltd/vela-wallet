@@ -95,6 +95,27 @@ impl Money {
     }
 }
 
+/// The least time the hero's refresh control turns once pressed (issue 462).
+///
+/// The core holds `refreshing` for exactly as long as the round is out, and
+/// a round answered from warm connections can be out for less than a frame
+/// or two — a press that "did nothing". The core's doc gives this hold to
+/// the shell; every shell holds the same 650 ms.
+pub const REFRESH_MIN_SPIN: std::time::Duration = std::time::Duration::from_millis(650);
+
+/// Whether the refresh control turns: while the core says a read the person
+/// asked for is out, and in any case until the press's minimum hold ends.
+/// `hold_until` is the press time plus [`REFRESH_MIN_SPIN`]; `None` once it
+/// has run out, or before any press.
+#[must_use]
+pub fn refresh_turning(
+    core_refreshing: bool,
+    hold_until: Option<std::time::Instant>,
+    now: std::time::Instant,
+) -> bool {
+    core_refreshing || hold_until.is_some_and(|until| now < until)
+}
+
 /// The balance hero.
 ///
 /// Four states, and the two that look like edge cases are the ones the core
@@ -126,6 +147,10 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             live: None,
             status: None,
             updated: None,
+            // The control under a hidden hero still turns: hiding the
+            // figure is not hiding that it is being read.
+            refreshing: view.refreshing,
+            updating: s.updating.clone(),
         };
     }
 
@@ -146,6 +171,8 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
                 .unreachable
                 .then(|| (StatusKind::Warning, s.balance_unreachable.clone())),
             updated: None,
+            refreshing: view.refreshing,
+            updating: s.updating.clone(),
         };
     };
 
@@ -155,12 +182,14 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     // them and opens their list. Then a figure being brought up to date —
     // grey, because it is not wrong, only not final. Then what could not be
     // priced.
+    //
+    // NOT a read the person asked for (issue 462): the control they pressed
+    // says that itself, turning in place. As a line here it landed ABOVE the
+    // control, pushing it a row down under the pointer mid-press — and a
+    // figure being re-read on request is not "still updating", it is current.
     let status = match unreachable_line(view, s) {
         Some(line) => Some((StatusKind::Warning, line)),
-        None if view.refreshing
-            || on_cache
-            || view.notice == Some(BalanceNotice::StillUpdating) =>
-        {
+        None if on_cache || view.notice == Some(BalanceNotice::StillUpdating) => {
             Some((StatusKind::Refreshing, s.balance_stale.clone()))
         }
         None if view.notice == Some(BalanceNotice::Unpriced) => {
@@ -198,6 +227,9 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         status,
         // Filled by the page, which holds the clock and the language (#443).
         updated: None,
+        // The page also holds this one for at least `REFRESH_MIN_SPIN`.
+        refreshing: view.refreshing,
+        updating: s.updating.clone(),
     }
 }
 
@@ -1654,6 +1686,82 @@ mod tests {
             balance(&loading, &s, "en", &money).status,
             Some((StatusKind::Warning, _))
         ));
+    }
+
+    /// Issue 462: a read the person asked for turns the control under the
+    /// figure and says nothing above it — the grey "still updating" line
+    /// used to appear there and push the control a row down under the
+    /// pointer. A cached figure and the core's own "still updating" notice
+    /// keep their line: those figures really are not final.
+    #[test]
+    fn a_refresh_the_person_asked_for_turns_the_control_and_adds_no_line() {
+        let s = strings();
+        let money = Money::default();
+
+        let mut pulled = view(Some(10.0));
+        pulled.refreshing = true;
+        let model = balance(&pulled, &s, "en", &money);
+        assert!(model.refreshing, "the control turns");
+        assert!(
+            model.status.is_none(),
+            "no line above the control: {:?}",
+            model.status.map(|s| s.1)
+        );
+        assert_eq!(model.updating, s.updating);
+        // The corpus's own word, in two languages: not a key echo.
+        let words = |tag: &str| WalletStrings::resolve(&crate::loc::Loc::for_tag(tag)).updating;
+        assert_eq!(words("en"), SharedString::from("Updating…"));
+        assert_eq!(words("zh"), SharedString::from("更新中…"));
+
+        let idle = balance(&view(Some(10.0)), &s, "en", &money);
+        assert!(!idle.refreshing);
+
+        // Under a skeleton and under a hidden figure the control still says
+        // the read is out.
+        let mut loading = view(None);
+        loading.refreshing = true;
+        assert!(balance(&loading, &s, "en", &money).refreshing);
+        let mut hidden = view(Some(10.0));
+        hidden.hidden = true;
+        hidden.refreshing = true;
+        assert!(balance(&hidden, &s, "en", &money).refreshing);
+
+        let mut cached = view(None);
+        cached.cached_total_usd = Some(42.5);
+        cached.refreshing = true;
+        assert!(matches!(
+            balance(&cached, &s, "en", &money).status,
+            Some((StatusKind::Refreshing, _))
+        ));
+        let mut still = view(Some(10.0));
+        still.refreshing = true;
+        still.notice = Some(BalanceNotice::StillUpdating);
+        assert!(matches!(
+            balance(&still, &s, "en", &money).status,
+            Some((StatusKind::Refreshing, _))
+        ));
+    }
+
+    /// Issue 462: a press turns the control for at least 650 ms, however
+    /// fast the core answers, and for as long as the core's round is out
+    /// after that.
+    #[test]
+    fn the_refresh_control_turns_for_at_least_650_ms() {
+        let pressed = std::time::Instant::now();
+        let until = pressed + REFRESH_MIN_SPIN;
+        assert_eq!(REFRESH_MIN_SPIN, std::time::Duration::from_millis(650));
+
+        // The round settled at once: the hold keeps it turning.
+        let soon = pressed + std::time::Duration::from_millis(100);
+        assert!(refresh_turning(false, Some(until), soon));
+        // Past the hold, with the round settled: still.
+        let later = pressed + std::time::Duration::from_millis(651);
+        assert!(!refresh_turning(false, Some(until), later));
+        // Past the hold, the round still out: it turns until the core says.
+        assert!(refresh_turning(true, Some(until), later));
+        assert!(refresh_turning(true, None, later));
+        // Never pressed, nothing out.
+        assert!(!refresh_turning(false, None, later));
     }
 
     /// Spec 092: the list names every network in the core's order, each with

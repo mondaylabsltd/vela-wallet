@@ -65,21 +65,30 @@ enum WalletLive {
     }
 
     /// Swap the balance hero and the asset rows onto the drawn home.
+    ///
+    /// `now` ages the refresh control's "Updated 2m"; `spinning` is the
+    /// store's held spin (`WalletStore.spin`), the core's `refreshing` when
+    /// absent.
     static func apply(
         _ view: BalanceViewWire,
         currency: CurrencyViewWire? = nil,
         feed: FeedViewWire? = nil,
         feedRead: Bool = false,
         on model: WalletHomeModel,
-        loc: Loc
+        loc: Loc,
+        now: Date = Date(),
+        spinning: Bool? = nil,
+        networks: WalletNetworks = .builtin
     ) -> WalletHomeModel {
         var copy = model
         let display = Display.from(currency)
-        copy.balance = balance(view, display: display, fallback: model.balance, loc: loc)
-        copy.assetRows = assetRows(view, display: display)
+        copy.balance = balance(view, display: display, fallback: model.balance, loc: loc,
+                               networks: networks)
+        copy.balance.refresh = refresh(view, loc: loc, now: now, spinning: spinning)
+        copy.assetRows = assetRows(view, display: display, networks: networks)
         copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection)
         if let feed {
-            copy.activityGroups = activityGroups(feed, loc: loc, hidden: view.hidden)
+            copy.activityGroups = activityGroups(feed, loc: loc, hidden: view.hidden, networks: networks)
             copy.activitySection = section(copy.activityGroups, read: feedRead,
                                            fallback: model.activitySection,
                                            empty: homeEmpty(feed, fallback: model.activitySection, loc: loc))
@@ -140,7 +149,8 @@ enum WalletLive {
         _ view: BalanceViewWire,
         display: Display = .usd,
         fallback: BalanceModel,
-        loc: Loc? = nil
+        loc: Loc? = nil,
+        networks: WalletNetworks = .builtin
     ) -> BalanceModel {
         var model = BalanceModel(
             label: fallback.label,
@@ -149,7 +159,7 @@ enum WalletLive {
             integer: nil,
             decimals: nil,
             liveText: nil,
-            status: status(view, fallback: fallback, loc: loc),
+            status: status(view, fallback: fallback, loc: loc, networks: networks),
             a11yHide: fallback.a11yHide,
             a11yShow: fallback.a11yShow
         )
@@ -177,40 +187,66 @@ enum WalletLive {
         return total == 0 ? .zeroLive : .normal
     }
 
-    /// The line under the figure. A partial total says so; a refresh over a
-    /// cached figure says that instead — in `home.balanceStale`, as the other
-    /// three clients say it. The drawn fixture's own status was nil on the
+    /// The line under the figure. A partial total says so; a figure the core
+    /// is still reading over says that instead — in `home.balanceStale`, as
+    /// the other three clients say it. The drawn fixture's own status was nil on the
     /// live home, which left a ⚠ › line with no words (082 X-DEADPROXY).
     private static func status(
         _ view: BalanceViewWire,
         fallback: BalanceModel,
-        loc: Loc?
+        loc: Loc?,
+        networks: WalletNetworks
     ) -> BalanceStatusModel? {
         // Spec 092: networks the wallet cannot reach come first — every one,
         // held or not, said without "RPC"; the line opens their list.
-        if let loc, let line = unreachableLine(view, loc: loc) {
+        if let loc, let line = unreachableLine(view, loc: loc, networks: networks) {
             return BalanceStatusModel(kind: .warning, text: line)
         }
         let text = loc?.t("home.balanceStale") ?? fallback.status?.text ?? ""
         if view.balancePartial || !view.failedChainIds.isEmpty {
             return BalanceStatusModel(kind: .warning, text: text)
         }
-        if view.refreshing || view.notice == .stillUpdating {
+        // A refresh the person asked for (`view.refreshing`) is NOT a reason
+        // for this line (issue 462): the refresh control under it turns and
+        // says "Updating…" instead. When it was one, every pull inserted
+        // "Some balances are still updating." above the control and pushed it
+        // out from under the finger.
+        if view.notice == .stillUpdating {
             return BalanceStatusModel(kind: .refreshing, text: text)
         }
         return nil
     }
 
+    /// The hero's refresh control (issue 462): when the figure was last read —
+    /// "Updated 2m", the core's `last_refreshed_at_ms` in the core's relative
+    /// words — and whether a refresh the person asked for is out. The home
+    /// re-reads the clock at least every 30 s, so the label ages on screen.
+    static func refresh(
+        _ view: BalanceViewWire, loc: Loc, now: Date = Date(), spinning: Bool? = nil
+    ) -> BalanceRefreshModel {
+        BalanceRefreshModel(
+            updated: view.lastRefreshedAtMs.map { at in
+                loc.t("home.lastUpdated", vars: ["ago": loc.relativeTime(atMs: at, now: now)])
+            },
+            updating: loc.t("home.updating"),
+            named: loc.t("home.refreshBalance"),
+            refreshing: spinning ?? view.refreshing
+        )
+    }
+
     /// The line over the networks the wallet cannot reach (spec 092) — the
     /// hero's status line and the title of the list it opens. The core
     /// chooses the sentence (`unreachableKey`: one network named, several
-    /// counted); this only fills it. `nil` when every network answered.
-    static func unreachableLine(_ view: BalanceViewWire, loc: Loc) -> String? {
+    /// counted); this only fills it. `nil` when every network answered. A
+    /// network is named from the wallet's list, the person's own included.
+    static func unreachableLine(
+        _ view: BalanceViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> String? {
         let k = I18nKeys.SettingsUi.self
         guard let first = view.unreachableNetworks.first else { return nil }
         switch view.unreachableKey {
         case k.unreachableOne?:
-            let name = ChainCatalog.meta(first.chainId)?.displayName
+            let name = networks.meta(first.chainId)?.displayName
                 ?? loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(first.chainId)])
             return loc.t(k.unreachableOne, vars: ["name": name])
         case k.unreachableMany?:
@@ -250,11 +286,18 @@ enum WalletLive {
     ///
     /// Invisible until the balance was real — with a fixture there was nothing
     /// to duplicate.
-    static func assetRows(_ view: BalanceViewWire, display: Display = .usd) -> [AssetRowModel] {
+    ///
+    /// The chain is named from the wallet's networks, the person's own
+    /// included — a token on a network they added had a blank chain line.
+    static func assetRows(
+        _ view: BalanceViewWire,
+        display: Display = .usd,
+        networks: WalletNetworks = .builtin
+    ) -> [AssetRowModel] {
         view.tokens.map { token in
             AssetRowModel(
                 ticker: token.symbol,
-                chain: ChainCatalog.meta(token.chainId)?.displayName ?? "",
+                chain: networks.meta(token.chainId)?.displayName ?? "",
                 badgeColor: chainColor(token.chainId),
                 // The one token-amount rule every shell prints (spec 078,
                 // `tokenAmountText`): the core's ladder, so this row, the Send
@@ -422,7 +465,7 @@ extension WalletLive {
     /// What is the shell's: the day's WORDING (今天 / 昨天 / a date), the
     /// counterparty's label, and how an amount reads.
     static func activityGroups(
-        _ feed: FeedViewWire, loc: Loc, hidden: Bool
+        _ feed: FeedViewWire, loc: Loc, hidden: Bool, networks: WalletNetworks = .builtin
     ) -> [ActivityGroupModel] {
         var groups: [(label: String, rows: [ActivityRowModel])] = []
         for row in feed.rows {
@@ -430,7 +473,7 @@ extension WalletLive {
             case .header(_, let dayStartMs, let timestamp):
                 groups.append((dayLabel(dayStartMs: dayStartMs, timestamp: timestamp, loc: loc), []))
             case .item(let item):
-                let built = activityRow(item, loc: loc, hidden: hidden)
+                let built = activityRow(item, loc: loc, hidden: hidden, networks: networks)
                 if groups.isEmpty {
                     // A row before any header — the core does not emit that, so
                     // this is a build reading a shape it does not know. The row
@@ -458,9 +501,9 @@ extension WalletLive {
     /// back beside it), else the allowance it granted, 无限额 in the danger
     /// tone; a signature that granted nothing has no figure at all.
     static func activityRow(
-        _ item: FeedItemWire, loc: Loc, hidden: Bool
+        _ item: FeedItemWire, loc: Loc, hidden: Bool, networks: WalletNetworks = .builtin
     ) -> ActivityRowModel {
-        let subtitle = subtitleText(item.subtitle, loc: loc)
+        let subtitle = subtitleText(item.subtitle, loc: loc, networks: networks)
         if let dapp = item.dapp {
             return dappRow(item, dapp: dapp, subtitle: subtitle, loc: loc, hidden: hidden)
         }
@@ -578,7 +621,9 @@ extension WalletLive {
     /// words this shell already says it with, "至 / 来自" somebody (named, or
     /// their short address), a site verbatim, a network by its name, a day as
     /// the date headers say it.
-    static func subtitleText(_ lines: [FeedLineWire], loc: Loc) -> String {
+    static func subtitleText(
+        _ lines: [FeedLineWire], loc: Loc, networks: WalletNetworks = .builtin
+    ) -> String {
         lines.compactMap { line -> String? in
             switch line {
             case .status(let status): statusPrefix(status, loc: loc)
@@ -587,7 +632,7 @@ extension WalletLive {
             case .from(let address, let name):
                 loc.t("history.fromName", vars: ["name": name ?? AddressText.short(address)])
             case .site(let site): site
-            case .network(let chainId): chainName(chainId)
+            case .network(let chainId): chainName(chainId, networks: networks)
             // A contact's row has no headers over it: its day is worded as
             // a header is (its midnight names the date).
             case .day(let dayStartMs): dayLabel(dayStartMs: dayStartMs, timestamp: dayStartMs / 1000, loc: loc)
@@ -598,9 +643,10 @@ extension WalletLive {
         .joined(separator: " · ")
     }
 
-    /// A network as people name it.
-    static func chainName(_ chainId: Int) -> String {
-        ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
+    /// A network as people name it — from the wallet's list, so a network
+    /// the person added is its own name, not its chain id.
+    static func chainName(_ chainId: Int, networks: WalletNetworks = .builtin) -> String {
+        networks.meta(chainId)?.displayName ?? String(chainId)
     }
 
     /// "处理中" / "失败" / "未知" for a row that is not confirmed; `nil` for one

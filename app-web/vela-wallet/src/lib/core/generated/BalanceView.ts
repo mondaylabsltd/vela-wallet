@@ -26,7 +26,22 @@ notice: BalanceNotice | null,
  * Every money surface (feed amounts, holdings, switcher, receipt toast)
  * masks on this together — a leak in one defeats the mask everywhere.
  */
-hidden: boolean, refreshing: boolean, last_refreshed_at_ms: number | null, 
+hidden: boolean, 
+/**
+ * A refresh the PERSON asked for is out: true from the dispatch of
+ * `RefreshRequested { pull: true }` (the pull gesture, the hero's
+ * "↻ Updated <ago>" control — both send `force: true, pull: true`)
+ * until that round settles or errors; reset by an account switch. The
+ * polls and focus refreshes (`pull: false`) never set it. While it
+ * holds, the control spins and reads `home.updating` (issue 462); the
+ * 650 ms minimum spin is the shell's to hold.
+ */
+refreshing: boolean, 
+/**
+ * When the last round SETTLED (an errored round does not move it) — the
+ * `<ago>` of `home.lastUpdated`.
+ */
+last_refreshed_at_ms: number | null, 
 /**
  * USD-sorted holdings for the Assets tab.
  */

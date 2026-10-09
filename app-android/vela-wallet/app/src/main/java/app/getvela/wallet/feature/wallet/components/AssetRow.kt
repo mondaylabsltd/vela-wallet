@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
@@ -58,9 +59,22 @@ fun TokenIcon(
      * only the box clips a three-letter ticker out of it.
      */
     inline: Boolean = false,
+    /**
+     * A hairline ring round the drawn disc, for a mark that sits on a grey
+     * (`bg.sunken`) card, where the disc is the card's own colour and its
+     * letters would float. A ticker-less disc always has it.
+     */
+    ring: Boolean = false,
+    /**
+     * The circle's diameter, when a row draws its mark at another size than
+     * the [inline] / row one — a fact row draws it at its identicons' size,
+     * so the two marks on one page are one size. The glyph shrinks with it.
+     */
+    size: Dp? = null,
 ) {
     val colors = VelaTheme.colors
-    val circle = if (inline) VelaIconSize.xl else WalletMetrics.avatarSize
+    val natural = if (inline) VelaIconSize.xl else WalletMetrics.avatarSize
+    val circle = size ?: natural
     Box(modifier = modifier, contentAlignment = Alignment.BottomEnd) {
         // Spec 047: the logo from the chain-data endpoint when it answers; the
         // drawn ticker glyph is the whole fallback (the web's TokenIcon).
@@ -72,17 +86,18 @@ fun TokenIcon(
                     // No ticker = no coin yet (a fee still being measured): a
                     // hairline ring, so the empty disc still reads as a place
                     // on a raised card in dark (design review, 078 round 3).
-                    .then(if (ticker.isEmpty()) Modifier.border(VelaBorder.hairline, colors.borderStrong, CircleShape) else Modifier),
+                    .then(if (ticker.isEmpty() || ring) Modifier.border(VelaBorder.hairline, colors.borderStrong, CircleShape) else Modifier),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = ticker.take(3).uppercase(),
+                    text = tokenGlyph(ticker),
                     color = colors.fgMuted,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.bold,
                     // Two thirds of the row glyph, which keeps a three-letter
-                    // ticker inside the smaller circle.
-                    fontSize = if (inline) VelaTextSize.xs * 0.66f else VelaTextSize.xs,
+                    // ticker inside the smaller circle; a circle drawn at
+                    // another size scales its glyph with it.
+                    fontSize = (if (inline) VelaTextSize.xs * 0.66f else VelaTextSize.xs) * (circle / natural),
                     maxLines = 1,
                 )
             }
@@ -96,9 +111,28 @@ fun TokenIcon(
     }
 }
 
+/**
+ * The letters a mark's circle draws: the core's `MarkView.glyph` rule, the
+ * ticker's first three characters upper-cased ("USD" for USDC). Drawn here
+ * from the ticker so a fixture without a core answer letters the same way;
+ * `MarksTest` holds it to the core's vectors.
+ *
+ * Three CHARACTERS — code points, as the core's `chars()` counts them and as
+ * the web's `tokenGlyph` does — never three UTF-16 units: an emoji ticker
+ * ("AB🚀") would otherwise end on half a surrogate pair and draw "�", and
+ * "🚀MOON" would draw "🚀M" where every other shell draws "🚀MO".
+ */
+internal fun tokenGlyph(ticker: String): String {
+    val end = if (ticker.codePointCount(0, ticker.length) <= GLYPH_CHARS) ticker.length else ticker.offsetByCodePoints(0, GLYPH_CHARS)
+    return ticker.substring(0, end).uppercase()
+}
+
+/** The core's `GLYPH_CHARS`. */
+private const val GLYPH_CHARS = 3
+
 /** The same icon from a flow's mark model. */
 @Composable
-fun TokenIcon(mark: TokenMarkModel, modifier: Modifier = Modifier, inline: Boolean = false) = TokenIcon(
+fun TokenIcon(mark: TokenMarkModel, modifier: Modifier = Modifier, inline: Boolean = false, ring: Boolean = false, size: Dp? = null) = TokenIcon(
     ticker = mark.ticker,
     badgeColor = mark.badgeColor,
     modifier = modifier,
@@ -106,6 +140,8 @@ fun TokenIcon(mark: TokenMarkModel, modifier: Modifier = Modifier, inline: Boole
     badgeLogoUrl = mark.badgeLogoUrl,
     badgeHidden = mark.badgeHidden,
     inline = inline,
+    ring = ring,
+    size = size,
 )
 
 /**

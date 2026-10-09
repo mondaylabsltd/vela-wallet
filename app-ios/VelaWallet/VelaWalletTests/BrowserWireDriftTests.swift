@@ -108,6 +108,35 @@ struct BrowserWireDriftTests {
         #expect(tags(try effects(from: closed)) == ["write_explore"], "one write for the batch")
     }
 
+    /// DESIGN N: the home's resume rows (`resumable`) decode as the core
+    /// sends them — the tabs that have a page, most recently used first, at
+    /// most three — and a pick moves its tab to the front of them. A renamed
+    /// field would leave the home with no way back to an open dApp.
+    @Test func exploreResumableDecodes() throws {
+        let core = ExploreSitesCore()
+        let start = try effects(from: core.dispatch(eventJson: CoreJSON.string(["type": "start"])))
+        let read = try #require(start.first { ($0["operation"] as? [String: Any])?["type"] as? String == "read_explore" })
+        let id = try #require((read["id"] as? NSNumber)?.uint64Value)
+        let tab = { (id: String) -> [String: Any] in
+            ["id": id, "url": "https://\(id).example/", "title": id, "host": "\(id).example"]
+        }
+        let blank: [String: Any] = ["id": "s", "url": NSNull(), "title": "", "host": ""]
+        let loaded = try core.resolveEffect(effectId: id, resultJson: CoreJSON.string([
+            "type": "loaded",
+            "doc": ["tabs": ["a", "b", "c", "d"].map(tab) + [blank], "selected_tab": "s"],
+        ]))
+        let home = try CoreJSON.decode(ExploreViewWire.self, from: try view(from: loaded))
+        #expect(home.ready)
+        #expect(home.tabs.count == 5)
+        #expect(home.resumable.count == 3, "the core caps the rows at RESUME_SHOWN")
+        #expect(home.resumable.allSatisfy { $0.url != nil }, "a start page is never a row")
+
+        let picked = try core.dispatch(eventJson: CoreJSON.string(["type": "tab_selected", "id": "d"]))
+        let after = try CoreJSON.decode(ExploreViewWire.self, from: try view(from: picked))
+        #expect(after.resumable.first?.id == "d", "the tab used last leads")
+        #expect(after.resumable.count == 3)
+    }
+
     /// Issue #425: a favourite pinned under v0.9.5 while its site had failed
     /// kept the engine's error page as its name ("网页无法打开") — #329's fix
     /// named new favourites, not stored ones. A document from before the rule
@@ -382,6 +411,77 @@ struct BrowserWireDriftTests {
                 SignExecutor.operations.contains(tag),
                 "sign_request asks for `\(tag)`, which this build's executor does not handle"
             )
+        }
+    }
+
+    /// The wallet's own request is marked as its own by the shell — the one
+    /// place it raises one — and the core carries that word onto the view;
+    /// a page that submits the very same bytes is never first-party. The raw
+    /// key is checked too, because the mirror's default would hide its drift.
+    @Test func firstPartyIsTheShellsWordCarriedOnTheView() throws {
+        func arrive(firstParty: Bool, transport: String) throws -> [String: Any] {
+            let core = SignRequestCore()
+            _ = try core.dispatch(eventJson: CoreJSON.string(["type": "networks_changed", "chain_ids": [1]]))
+            _ = try core.dispatch(eventJson: CoreJSON.string([
+                "type": "accounts_changed",
+                "accounts": [["address": "0x88cca0eedbf2c4426110bbfc998f048689266894", "credential_id": "cred-1"]],
+                "active_index": 0,
+            ]))
+            return try view(from: core.dispatch(eventJson: CoreJSON.string([
+                "type": "request_arrived",
+                "id": "backup-1",
+                "method": "eth_sendTransaction",
+                "params_json": #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x0","data":"0x"}]"#,
+                "origin": "https://getvela.app",
+                "transport_id": transport,
+                "first_party": firstParty,
+                "dedicated_transport": true,
+                "per_request_chain": 1,
+                "dapp": NSNull(),
+                "granted_address": NSNull(),
+                "requested_address": NSNull(),
+                "request_ts_ms": NSNull(),
+                "now_ms": 1_757_000_000_000,
+            ])))
+        }
+
+        let own = try arrive(firstParty: true, transport: SigningLive.walletTransport)
+        #expect((own["request"] as? [String: Any])?["first_party"] as? Bool == true, "the core sends the key")
+        #expect(try CoreJSON.decode(SignViewWire.self, from: own).request?.firstParty == true)
+
+        let page = try arrive(firstParty: false, transport: "tab-1")
+        #expect((page["request"] as? [String: Any])?["first_party"] as? Bool == false)
+        #expect(try CoreJSON.decode(SignViewWire.self, from: page).request?.firstParty == false,
+                "the same bytes from a page are a page's")
+    }
+
+    /// The controller sends the request's own word: `Incoming.firstParty` —
+    /// set by the wallet's backup alone — reaches the view, and every other
+    /// request (the default) arrives as a page's.
+    @Test func theControllerSaysFirstPartyOnlyWhenTheWalletAsked() async {
+        for firstParty in [true, false] {
+            let defaults = UserDefaults(suiteName: UUID().uuidString)!
+            let store = VelaStore(defaults: defaults)
+            let relay = RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
+            let accounts = ScriptedAccounts()
+            let controller = SigningController(
+                wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
+                relay: relay, accounts: accounts,
+                spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
+                store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
+                ports: SigningController.Ports(knownChains: { [1] })
+            )
+            var incoming = SigningController.Incoming(
+                id: "r1", method: "eth_sendTransaction",
+                paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x0"}]"#,
+                origin: "https://getvela.app",
+                transportId: firstParty ? SigningLive.walletTransport : "tab-1", chainId: 1
+            )
+            incoming.firstParty = firstParty
+            controller.open(incoming)
+            await Wait.until { controller.sign.request != nil }
+            #expect(controller.sign.request?.firstParty == firstParty)
+            controller.swipeDismissed()
         }
     }
 

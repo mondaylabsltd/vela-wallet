@@ -1,7 +1,8 @@
 //! Rules of the browser's own memory — one test per rule the machine states.
 //!
 //! The rules here were WRITTEN rather than ported: spec 022 drew favourites,
-//! groups and tabs, and no client owned what they mean. Each test is the
+//! groups and tabs, and no client owned what they mean (custom groups are
+//! gone since issue #465; the two sections can still be hidden). Each test is the
 //! statement of one of those decisions, so a later change has to argue with a
 //! sentence rather than with a diff.
 
@@ -13,8 +14,8 @@ use support::DomainDriver;
 use vela_core::app::browser_load::{visit_to_record, LoadFinished};
 use vela_core::app::explore_sites::{tabs_closed_by, TabCloseScope};
 use vela_core::app::explore_sites::{
-    Event, ExploreDoc, ExploreGroup, ExploreOperation as Op, ExploreShellResult as Res,
-    ExploreSites, ExploreSystemGroup, ExploreTab, FAVORITES_CAP, NAME_RULE,
+    Event, ExploreDoc, ExploreOperation as Op, ExploreShellResult as Res, ExploreSites,
+    ExploreSystemGroup, ExploreTab, ExploreView, FAVORITES_CAP, NAME_RULE, RESUME_SHOWN, TABS_CAP,
 };
 
 type Sut = DomainDriver<ExploreSites>;
@@ -47,17 +48,6 @@ fn favorite(sut: &mut Sut, url: &str, title: Option<&str>, at: f64) -> ExploreDo
     }))
 }
 
-fn group(sut: &mut Sut, name: &str, at: f64) -> String {
-    let doc = written(sut.dispatch(Event::GroupCreated {
-        name: name.to_owned(),
-        now_ms: at,
-    }));
-    doc.groups
-        .last()
-        .map(|g| g.id.clone())
-        .expect("the group was created")
-}
-
 // ---------------------------------------------------------------------------
 // Hydration
 // ---------------------------------------------------------------------------
@@ -68,7 +58,7 @@ fn a_wallet_that_has_never_browsed_starts_empty_and_ready() {
     let sut = ready(None);
     let view = sut.view();
     assert!(view.ready);
-    assert!(view.favorites.is_empty() && view.groups.is_empty() && view.tabs.is_empty());
+    assert!(view.favorites.is_empty() && view.tabs.is_empty());
     assert!(!view.favorites_full);
 }
 
@@ -90,23 +80,69 @@ fn edits_before_hydration_are_dropped() {
     assert!(sut.view().favorites.is_empty());
 }
 
-/// A stored membership naming a site the document no longer carries is
-/// dropped at hydration — a group must never draw a blank row.
+/// A `vela.explore` document written before issue #465, with custom groups —
+/// a named one listing a favourite (desktop's "Move to group…") and an empty
+/// one a phone made — in the shape the shells store.
+const PRE_465_DOC: &str = r#"{
+    "favorites": [
+        {"origin": "https://curve.fi", "url": "https://curve.fi/",
+         "host": "curve.fi", "name": "Curve", "renamed": false,
+         "added_ms": 1759051384000.0},
+        {"origin": "https://polymarket.com", "url": "https://polymarket.com/",
+         "host": "polymarket.com", "name": "Polymarket", "renamed": false,
+         "added_ms": 1759051385000.0}
+    ],
+    "groups": [
+        {"id": "g-1759051390000", "name": "Trading",
+         "members": ["https://curve.fi", "https://gone.example"],
+         "hidden": false, "created_ms": 1759051390000.0},
+        {"id": "g-1759051391000", "name": "New group", "members": [],
+         "hidden": true, "created_ms": 1759051391000.0}
+    ],
+    "tabs": [],
+    "selected_tab": null,
+    "hidden_system": ["recent"],
+    "name_rule": 1
+}"#;
+
+/// Issue #465: custom groups are gone. A document that still carries them
+/// reads — on the wire the shell answers with, too — keeps every favourite
+/// and the hidden sections, and the next write leaves `groups` out.
 #[test]
-fn hydration_drops_memberships_whose_site_is_gone() {
-    let doc = ExploreDoc {
-        favorites: Vec::new(),
-        groups: vec![ExploreGroup {
-            id: "g-1".to_owned(),
-            name: "Trading".to_owned(),
-            members: vec!["https://gone.example".to_owned()],
-            hidden: false,
-            created_ms: T0,
-        }],
-        ..ExploreDoc::default()
-    };
-    let sut = ready(Some(doc));
-    assert!(sut.view().groups[0].sites.is_empty());
+fn a_document_from_before_465_keeps_every_favourite_and_loses_its_groups() {
+    let stored: ExploreDoc = serde_json::from_str(PRE_465_DOC).expect("the pre-#465 shape reads");
+    let answer: Res = serde_json::from_str(&format!(r#"{{"type":"loaded","doc":{PRE_465_DOC}}}"#))
+        .expect("the shell's answer reads with the old groups in it");
+    assert_eq!(
+        answer,
+        Res::Loaded {
+            doc: Some(stored.clone())
+        }
+    );
+
+    let mut sut = ready(Some(stored));
+    let view = sut.view();
+    let origins: Vec<&str> = view
+        .favorites
+        .iter()
+        .map(|site| site.origin.as_str())
+        .collect();
+    assert_eq!(origins, vec!["https://curve.fi", "https://polymarket.com"]);
+    assert!(view.recent_hidden, "a hidden section stays hidden");
+    assert!(!view.favorites_hidden);
+
+    // The next write is the document without groups.
+    let doc = written(sut.dispatch(Event::FavoriteRenamed {
+        origin: "https://curve.fi".to_owned(),
+        name: "Stables".to_owned(),
+    }));
+    let json = serde_json::to_value(&doc).expect("the document serialises");
+    assert!(
+        json.get("groups").is_none(),
+        "groups were written back: {json}"
+    );
+    assert_eq!(doc.favorites.len(), 2, "every favourite is kept");
+    assert_eq!(doc.hidden_system, vec![ExploreSystemGroup::Recent]);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,26 +210,16 @@ fn a_renamed_tile_is_never_renamed_by_the_page() {
     assert_eq!(sut.view().favorites[0].name, "My swap");
 }
 
-/// Un-pinning takes the site out of every group it was in.
+/// Un-pinning takes the tile away.
 #[test]
-fn unpinning_a_site_removes_it_from_its_groups() {
+fn unpinning_a_site_removes_its_tile() {
     let mut sut = ready(None);
     favorite(&mut sut, "https://curve.fi/", Some("Curve"), T0);
-    let id = group(&mut sut, "Trading", T0);
-    written(sut.dispatch(Event::GroupMemberAdded {
-        id: id.clone(),
-        origin: "https://curve.fi".to_owned(),
-    }));
-    assert_eq!(sut.view().groups[0].sites.len(), 1);
-
     let doc = written(sut.dispatch(Event::FavoriteRemoved {
         origin: "https://curve.fi".to_owned(),
     }));
     assert!(doc.favorites.is_empty());
-    assert!(
-        doc.groups[0].members.is_empty(),
-        "a group kept a membership pointing at nothing"
-    );
+    assert!(sut.view().favorites.is_empty());
 }
 
 /// Only a real web address can be pinned, and the grid has an end.
@@ -443,75 +469,8 @@ fn an_untitled_page_is_pinned_under_its_host() {
 }
 
 // ---------------------------------------------------------------------------
-// Groups
+// The two sections (the only groups since issue #465)
 // ---------------------------------------------------------------------------
-
-/// Deleting a group keeps its sites — the rule contacts already settled.
-///
-/// A group is a shelf, not a box: throwing the shelf away does not throw away
-/// the books. A person meets one behaviour across the wallet, not two.
-#[test]
-fn deleting_a_group_keeps_its_sites() {
-    let mut sut = ready(None);
-    favorite(&mut sut, "https://curve.fi/", Some("Curve"), T0);
-    let id = group(&mut sut, "Trading", T0);
-    written(sut.dispatch(Event::GroupMemberAdded {
-        id: id.clone(),
-        origin: "https://curve.fi".to_owned(),
-    }));
-
-    let doc = written(sut.dispatch(Event::GroupDeleted { id }));
-    assert!(doc.groups.is_empty());
-    assert_eq!(doc.favorites.len(), 1, "the favourite went with the shelf");
-}
-
-/// A group lists FAVOURITES. An origin nobody pinned is not one.
-#[test]
-fn a_group_cannot_hold_a_site_that_is_not_pinned() {
-    let mut sut = ready(None);
-    let id = group(&mut sut, "Trading", T0);
-    assert!(
-        sut.dispatch(Event::GroupMemberAdded {
-            id: id.clone(),
-            origin: "https://never-pinned.example".to_owned(),
-        })
-        .is_empty(),
-        "a group took a site the grid above cannot show"
-    );
-    // And the same site twice is one membership.
-    favorite(&mut sut, "https://curve.fi/", Some("Curve"), T0);
-    written(sut.dispatch(Event::GroupMemberAdded {
-        id: id.clone(),
-        origin: "https://curve.fi".to_owned(),
-    }));
-    assert!(sut
-        .dispatch(Event::GroupMemberAdded {
-            id,
-            origin: "https://curve.fi".to_owned(),
-        })
-        .is_empty());
-    assert_eq!(sut.view().groups[0].sites.len(), 1);
-}
-
-/// Two groups made in the same millisecond are two groups.
-///
-/// The shell's clock is the only id source this core has, and a shared id
-/// would mean renaming one renames the other.
-#[test]
-fn groups_made_in_the_same_millisecond_keep_their_own_identities() {
-    let mut sut = ready(None);
-    let first = group(&mut sut, "Trading", T0);
-    let second = group(&mut sut, "Prediction", T0);
-    assert_ne!(first, second);
-
-    written(sut.dispatch(Event::GroupRenamed {
-        id: second,
-        name: "Markets".to_owned(),
-    }));
-    let view = sut.view();
-    assert_eq!(view.groups[0].name, "Trading");
-    assert_eq!(view.groups[1].name, "Markets");
-}
 
 /// A system group can be hidden and can never be deleted.
 ///
@@ -542,26 +501,6 @@ fn system_groups_hide_rather_than_disappear() {
     assert!(doc.hidden_system.is_empty());
 }
 
-/// A blank name creates and renames nothing.
-#[test]
-fn a_group_needs_a_name() {
-    let mut sut = ready(None);
-    assert!(sut
-        .dispatch(Event::GroupCreated {
-            name: "   ".to_owned(),
-            now_ms: T0,
-        })
-        .is_empty());
-    let id = group(&mut sut, "Trading", T0);
-    assert!(sut
-        .dispatch(Event::GroupRenamed {
-            id,
-            name: "\t\n".to_owned(),
-        })
-        .is_empty());
-    assert_eq!(sut.view().groups[0].name, "Trading");
-}
-
 // ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
@@ -585,6 +524,107 @@ fn a_new_tab_is_the_selected_one() {
     assert_eq!(
         doc.tabs[1].title, "b.example",
         "an untitled page is its host"
+    );
+}
+
+/// The strip holds TABS_CAP tabs and refuses the next `tab_opened`, so an
+/// open into a full strip must not ask for one: the core's open target names
+/// a tab already open, the shell selects it and its `tab_navigated` puts the
+/// address in the strip — the open is never silently lost. And that tab is
+/// never the dApp the person just left (the selected one): the tab used
+/// longest ago takes it, or, when there is one, a start-page tab.
+#[test]
+fn an_open_into_a_full_strip_never_replaces_the_dapp_just_left() {
+    use vela_core::app::browser_tabs::{open_target, ExploreOpenKind, ExploreOpenTarget};
+    let mut sut = ready(None);
+    for i in 0..TABS_CAP {
+        #[allow(clippy::cast_precision_loss, reason = "two dozen test timestamps")]
+        let at = T0 + i as f64;
+        written(sut.dispatch(Event::TabOpened {
+            url: Some(format!("https://site{i}.example/")),
+            title: None,
+            now_ms: at,
+        }));
+    }
+    let ids = ids_of(&sut.view().tabs);
+    // The person is on the sixth tab's dApp, then goes to the wallet.
+    let dapp = ids[5].clone();
+    written(sut.dispatch(Event::TabSelected { id: dapp.clone() }));
+    let view = sut.view();
+    assert!(view.tabs_full);
+
+    // The machine refuses a tab past the cap: nothing written.
+    assert!(sut
+        .dispatch(Event::TabOpened {
+            url: Some("https://late.example/".to_owned()),
+            title: None,
+            now_ms: T0 + 100.0,
+        })
+        .is_empty());
+    assert_eq!(sut.view().tabs.len(), TABS_CAP);
+
+    // So the open target never says "new tab" here — nor the dApp: the
+    // first tab opened was used longest ago.
+    let target = open_target(
+        &view,
+        None,
+        false,
+        "https://late.example/",
+        ExploreOpenKind::Address,
+    );
+    let ExploreOpenTarget::Load { id: spare } = target else {
+        panic!("a full strip loads in a tab it has, got {target:?}");
+    };
+    assert_eq!(spare, ids[0]);
+
+    // What every shell sends for that answer: select it, then the address.
+    written(sut.dispatch(Event::TabSelected { id: spare.clone() }));
+    let doc = written(sut.dispatch(Event::TabNavigated {
+        id: spare.clone(),
+        url: "https://late.example/".to_owned(),
+        title: None,
+    }));
+    assert_eq!(doc.tabs.len(), TABS_CAP);
+    let url_of = |id: &str| {
+        doc.tabs
+            .iter()
+            .find(|t| t.id == id)
+            .and_then(|t| t.url.clone())
+    };
+    assert_eq!(url_of(&spare).as_deref(), Some("https://late.example/"));
+    assert_eq!(
+        url_of(&dapp).as_deref(),
+        Some("https://site5.example/"),
+        "the dApp left for the wallet is as it was"
+    );
+    let view = sut.view();
+    assert_eq!(view.selected_tab.as_deref(), Some(spare.as_str()));
+    assert_eq!(
+        view.resumable[0].id, spare,
+        "the open is what was used last"
+    );
+    assert_eq!(view.resumable[1].id, dapp);
+
+    // A start-page tab in a full strip has nothing to lose: it is the one.
+    written(sut.dispatch(Event::TabClosed { id: ids[9].clone() }));
+    written(sut.dispatch(Event::TabOpened {
+        url: None,
+        title: None,
+        now_ms: T0 + 200.0,
+    }));
+    let start = sut.view().selected_tab.clone().expect("the new tab");
+    written(sut.dispatch(Event::TabSelected { id: dapp.clone() }));
+    let view = sut.view();
+    assert!(view.tabs_full);
+    assert_eq!(
+        open_target(
+            &view,
+            None,
+            false,
+            "https://later.example/",
+            ExploreOpenKind::Site
+        ),
+        ExploreOpenTarget::Load { id: start }
     );
 }
 
@@ -699,8 +739,8 @@ fn a_stale_selection_falls_back_to_the_first_tab() {
 // Recency (spec 099 R2) — the order browser_tabs keeps engines alive in
 // ---------------------------------------------------------------------------
 
-/// Opening and selecting a tab put it first; closing one forgets it, and the
-/// tab that takes over from a closed selected one is the one in use now.
+/// Opening and selecting a tab put it first; closing one forgets it. The
+/// tab a close hands the selection to keeps its place: nobody opened it.
 #[test]
 fn recency_follows_the_person() {
     let mut sut = ready(None);
@@ -725,11 +765,11 @@ fn recency_follows_the_person() {
         vec![ids[0].clone(), ids[2].clone(), ids[1].clone()]
     );
 
-    // Closing the selected tab selects its right-hand neighbour, which is
-    // the tab in use now.
+    // Closing the selected tab selects its right-hand neighbour — and the
+    // tab used before the closed one is still the most recent.
     written(sut.dispatch(Event::TabClosed { id: ids[0].clone() }));
     assert_eq!(sut.view().selected_tab.as_deref(), Some(ids[1].as_str()));
-    assert_eq!(sut.view().recent_tabs, vec![ids[1].clone(), ids[2].clone()]);
+    assert_eq!(sut.view().recent_tabs, vec![ids[2].clone(), ids[1].clone()]);
 }
 
 /// At launch only the selected tab has had a page this session.
@@ -857,4 +897,165 @@ fn a_surviving_selection_stays_and_all_leaves_the_start_page() {
     let doc = written(sut.dispatch(Event::TabsClosed { ids: all }));
     assert!(doc.tabs.is_empty());
     assert_eq!(sut.view().selected_tab, None);
+}
+
+// ---------------------------------------------------------------------------
+// The home's resume rows (spec 099 navigation)
+// ---------------------------------------------------------------------------
+
+fn ids_of(tabs: &[ExploreTab]) -> Vec<String> {
+    tabs.iter().map(|tab| tab.id.clone()).collect()
+}
+
+/// The tabs with a page, the one used last first. A start-page tab is never
+/// a row — there is nothing in it to go back to.
+#[test]
+fn the_resume_rows_are_the_tabs_with_a_page_most_recent_first() {
+    let mut sut = ready(None);
+    for (i, url) in [
+        Some("https://a.example/"),
+        Some("https://b.example/"),
+        None,
+        Some("https://c.example/"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "four test timestamps")]
+        let at = T0 + i as f64;
+        written(sut.dispatch(Event::TabOpened {
+            url: url.map(str::to_owned),
+            title: None,
+            now_ms: at,
+        }));
+    }
+    let ids = ids_of(&sut.view().tabs);
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[3].clone(), ids[1].clone(), ids[0].clone()]
+    );
+
+    written(sut.dispatch(Event::TabSelected { id: ids[0].clone() }));
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[0].clone(), ids[3].clone(), ids[1].clone()]
+    );
+
+    // The start-page tab gets a page: it is a row now, and the first.
+    written(sut.dispatch(Event::TabSelected { id: ids[2].clone() }));
+    written(sut.dispatch(Event::TabNavigated {
+        id: ids[2].clone(),
+        url: "https://d.example/".to_owned(),
+        title: None,
+    }));
+    let rows = sut.view().resumable;
+    assert_eq!(rows.len(), RESUME_SHOWN);
+    assert_eq!(rows[0].id, ids[2]);
+    assert_eq!(rows[0].host, "d.example", "a row carries what it draws");
+}
+
+/// At most [`RESUME_SHOWN`]: the switcher, one tap away, is the full list.
+#[test]
+fn the_resume_rows_stop_at_three() {
+    let (sut, ids) = five_tabs();
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[4].clone(), ids[3].clone(), ids[2].clone()]
+    );
+}
+
+/// At launch recency knows only the selected tab: it comes first, then the
+/// restored tabs in strip order.
+#[test]
+fn restored_tabs_resume_from_the_selected_one_then_in_strip_order() {
+    let tab = |id: &str, url: Option<&str>| ExploreTab {
+        id: id.to_owned(),
+        url: url.map(str::to_owned),
+        title: id.to_owned(),
+        host: String::new(),
+    };
+    let sut = ready(Some(ExploreDoc {
+        tabs: vec![
+            tab("t-1", Some("https://a.example/")),
+            tab("t-2", None),
+            tab("t-3", Some("https://c.example/")),
+            tab("t-4", Some("https://d.example/")),
+        ],
+        selected_tab: Some("t-3".to_owned()),
+        ..ExploreDoc::default()
+    }));
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec!["t-3".to_owned(), "t-1".to_owned(), "t-4".to_owned()]
+    );
+}
+
+/// Closing the page in front (⋯ → close page, the switcher's ✕) returns the
+/// person to the home with a neighbour selected. That neighbour was not
+/// opened — the rows still lead with the tab used before the closed one, in
+/// the order the person used them, one close or several.
+#[test]
+fn a_close_never_moves_the_neighbour_it_selects_up_the_rows() {
+    let (mut sut, ids) = five_tabs();
+    // Used: c, then a, then e (the rows read e, a, c).
+    for at in [2, 0, 4] {
+        written(sut.dispatch(Event::TabSelected {
+            id: ids[at].clone(),
+        }));
+    }
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[4].clone(), ids[0].clone(), ids[2].clone()]
+    );
+
+    // Close e: d, its left-hand neighbour, is selected but was never used.
+    written(sut.dispatch(Event::TabClosed { id: ids[4].clone() }));
+    let view = sut.view();
+    assert_eq!(view.selected_tab.as_deref(), Some(ids[3].as_str()));
+    assert_eq!(
+        ids_of(&view.resumable),
+        vec![ids[0].clone(), ids[2].clone(), ids[3].clone()],
+        "a, then c, as used; d, only selected by the close, where it was"
+    );
+
+    // A batch close that takes the selection: the same.
+    written(sut.dispatch(Event::TabSelected { id: ids[2].clone() }));
+    written(sut.dispatch(Event::TabsClosed {
+        ids: vec![ids[2].clone(), ids[3].clone()],
+    }));
+    let view = sut.view();
+    assert_eq!(view.selected_tab.as_deref(), Some(ids[1].as_str()));
+    assert_eq!(
+        ids_of(&view.resumable),
+        vec![ids[0].clone(), ids[1].clone()],
+        "a was used; b only selected by the close"
+    );
+}
+
+/// A closed tab leaves the rows with its engine; closing them all leaves
+/// none, and the home draws no section.
+#[test]
+fn a_closed_tab_is_no_longer_a_row() {
+    let (mut sut, ids) = five_tabs();
+    written(sut.dispatch(Event::TabClosed { id: ids[3].clone() }));
+    assert_eq!(
+        ids_of(&sut.view().resumable),
+        vec![ids[4].clone(), ids[2].clone(), ids[1].clone()]
+    );
+    let all = tabs_closed_by(&sut.view().tabs, &TabCloseScope::All);
+    written(sut.dispatch(Event::TabsClosed { ids: all }));
+    assert!(sut.view().resumable.is_empty());
+}
+
+/// A view written before the rows existed still reads — every shell decodes
+/// the view it is sent, and an older one simply has no rows.
+#[test]
+fn a_view_without_resume_rows_still_reads() {
+    let view: ExploreView = serde_json::from_str(
+        r#"{"favorites":[],"groups":[],"tabs":[],"selected_tab":null,
+            "favorites_hidden":false,"recent_hidden":false,"favorites_full":false,
+            "tabs_full":false,"ready":true}"#,
+    )
+    .expect("an older view reads");
+    assert!(view.resumable.is_empty() && view.recent_tabs.is_empty());
 }

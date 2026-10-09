@@ -27,14 +27,19 @@
 	{#if fact.lead?.kind === 'dot'}
 		<span class="dot" style:background={fact.lead.color} aria-hidden="true"></span>
 	{:else if fact.lead?.kind === 'token'}
-		<TokenIcon
-			ticker={fact.lead.mark.ticker}
-			badgeColor={fact.lead.mark.badgeColor}
-			logoUrls={fact.lead.mark.logoUrls}
-			badgeLogoUrl={fact.lead.mark.badgeLogoUrl}
-			badgeHidden={fact.lead.mark.badgeHidden}
-			size="inline"
-		/>
+		<!-- In the same box as the identicons beside it: a network mark at 26
+		     over a 20 face read as two sizes of one thing (the confirm's From,
+		     To and Network rows; the detail's). -->
+		<span class="mark">
+			<TokenIcon
+				ticker={fact.lead.mark.ticker}
+				badgeColor={fact.lead.mark.badgeColor}
+				logoUrls={fact.lead.mark.logoUrls}
+				badgeLogoUrl={fact.lead.mark.badgeLogoUrl}
+				badgeHidden={fact.lead.mark.badgeHidden}
+				size="inline"
+			/>
+		</span>
 	{:else if fact.lead?.kind === 'identicon'}
 		<span class="mark"
 			><Identicon svg={fact.lead.svg} size="row" address={fact.lead.address} /></span
@@ -94,9 +99,11 @@
 		flex-shrink: 0;
 	}
 
-	/* The row-size token mark and identicon both shrink to this row's
-	   scale here — a fact row is a line of text with a hint of art, not a
-	   row with an avatar. */
+	/* The token mark and the identicon both shrink to this row's scale here
+	   — a fact row is a line of text with a hint of art, not a row with an
+	   avatar — and to ONE box, so a network beside a face is the face's size.
+	   The art's own size class is outranked on purpose (the wrapper's scope
+	   plus the row's), and its border is inside the box. */
 	.mark {
 		display: flex;
 		width: var(--icon-lg);
@@ -104,7 +111,8 @@
 		flex-shrink: 0;
 	}
 
-	.mark :global(> *) {
+	.value-wrap .mark :global(> *) {
+		box-sizing: border-box;
 		width: 100%;
 		height: 100%;
 	}

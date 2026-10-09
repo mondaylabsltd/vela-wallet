@@ -194,7 +194,7 @@ Vibration marks what the eye cannot confirm and what really changed. Nothing els
 | Class | When | Android constant |
 |---|---|---|
 | Press | a button under the finger (press = deformation + haptic, the standing rule) | VIRTUAL_KEY |
-| Detent | a slider step crossed, a picker snapping, the signing slider's threshold, the index rail's letters | SEGMENT_TICK (34+) / CLOCK_TICK |
+| Detent | a slider step crossed, a picker snapping, the index rail's letters | SEGMENT_TICK (34+) / CLOCK_TICK |
 | Select | a selection that takes effect: a switch, a class or network filter, a network / fee-token / account pick, a favourite, a copy | CONFIRM (30+) / KEYBOARD_TAP |
 | Success | an outcome the core decided: money sent, money arrived | the two-beat pattern (`Haptics.success`) |
 | Reject | an outcome the core decided: a refusal | the heavy click (`Haptics.error`) |

@@ -270,3 +270,25 @@ describe('FeeQuote — the fee coin nobody chose (spec 078)', () => {
 		).toBe(USDC);
 	});
 });
+
+describe('FeeQuote.pricingChainId — the chain the fee card’s coin is a coin on', () => {
+	it('names the chain of the last question that reached the core, and nothing before or after', async () => {
+		const quote = new FeeQuote();
+		expect(quote.pricingChainId).toBeNull();
+		// Still reading the deployment: no question has reached the core yet.
+		let deployed: (value: boolean) => void = () => {};
+		seams.deployed.mockImplementationOnce(
+			() => new Promise<boolean>((resolve) => (deployed = resolve))
+		);
+		void quote.requestQuote(REQUEST);
+		await vi.waitFor(() => expect(seams.deployed).toHaveBeenCalledTimes(1));
+		expect(quote.pricingChainId).toBeNull();
+		deployed(true);
+		await vi.waitFor(() => expect(seams.start).toHaveBeenCalledTimes(1));
+		expect(quote.pricingChainId).toBe(BSC);
+		void quote.requestQuote({ ...REQUEST, chainId: 1 });
+		await vi.waitFor(() => expect(quote.pricingChainId).toBe(1));
+		quote.dispose();
+		expect(quote.pricingChainId).toBeNull();
+	});
+});

@@ -549,6 +549,10 @@ class SigningController(
                 id = request.id, method = request.method, params_json = request.paramsJson, origin = request.origin,
                 transport_id = request.transportId, dedicated_transport = true, per_request_chain = request.chainId,
                 dapp = null, granted_address = request.grantedAddress, requested_address = null, request_ts_ms = null, now_ms = now(),
+                // The one place the wallet's own request is told apart: its
+                // transport, which only `openEthereumBackup` uses — a page's
+                // request carries its tab's id and is never first-party.
+                first_party = request.transportId == app.getvela.wallet.feature.signing.SigningLive.WALLET_TRANSPORT,
             ),
         )
         // What it does. A transaction decodes from its call; typed data and a
@@ -573,7 +577,7 @@ class SigningController(
             }
             // A quote goes stale while the person reads (the policy's TTL);
             // while the sheet is still up and nothing is signing, ask again —
-            // otherwise the slide stays shut with no way to open it.
+            // otherwise the confirm stays shut with no way to open it.
             scope.launch {
                 fee.collect { fee ->
                     val view = signHost.view.value

@@ -167,10 +167,42 @@ data class SendTreasuryCoin(
  * treasury probe. Not the funding sheet: gas cannot help a relay that cannot
  * reach the network. `operator_served` is the core's verdict, as above.
  */
+/**
+ * The coin the form's fee row names (`SendView.fee_coin`) — what the shell
+ * hands the core's token mark to draw, figure or no figure.
+ */
+@Serializable
+data class SendFeeCoin(
+    /** The ticker as the wallet writes it. Empty only for an ERC-20 nothing on the form names: the mark draws its logo alone. */
+    val symbol: String,
+    /** `null` = the chain's own coin. */
+    val contract: String? = null,
+    /** The chain the fee is paid on — never 0. */
+    val chain_id: Int,
+)
+
 @Serializable
 data class SendRelayUnreachable(
     val chain_id: Int,
     val operator_served: Boolean = false,
+)
+
+/**
+ * What a relay stop's "Report this" files (issue #466), built by the core once
+ * so every shell files the same words under the same dedup key. English on
+ * purpose — the operator reads it, not the person. It names the relay
+ * treasury's address and figures, which are the operator's and public.
+ */
+@Serializable
+data class SendRelayReport(
+    /** The first line is the issue's title (≤ 80 characters); the facts follow after a blank line. */
+    val what: String,
+    /** How the person got there, numbered as the bug form asks. */
+    val steps: String,
+    /** The bug form's area option, verbatim (`"Send"`). */
+    val area: String,
+    /** `relay-gas-<chain>` / `relay-unreachable-<chain>`: one open issue per outage per chain. */
+    val fingerprint: String,
 )
 
 /** What the relay's treasury can front on this chain — `unknown` when it could not be asked. */
@@ -649,6 +681,13 @@ data class SendView(
     /** Chain-guarded: never a prior network's quote. */
     val fee: FeeEstimateView? = null,
     val gas_fee_token: String? = null,
+    /**
+     * The coin the fee row wears, whether or not a figure is beside it — the
+     * core's one answer for a quote out, a quote that failed and a speed
+     * being measured (the estimate in hand, else the coin in force, else the
+     * chain's own). `null` only while no chain is known.
+     */
+    val fee_coin: SendFeeCoin? = null,
     val amount_warning: SendAmountWarning? = null,
     val same_asset_fee_issue: SendFeeIssueView? = null,
     val can_continue: Boolean = false,
@@ -662,6 +701,12 @@ data class SendView(
     val treasury_bootstrap: SendTreasuryStatus? = null,
     /** Spec 098 §2: the relay cannot serve this chain; the send stops here. */
     val relay_unreachable: SendRelayUnreachable? = null,
+    /**
+     * Issue #466: what the stop's "Report this" files — set exactly while a
+     * relay stop is up on a network Vela ships. Snapshot it at the tap: the
+     * stop may close (funded) while the report is being read.
+     */
+    val relay_report: SendRelayReport? = null,
     val recipient_identity: SendRecipientIdentity? = null,
     /**
      * Spec 097 F (S2): who the money goes to, as the form line and the confirm
@@ -1075,6 +1120,16 @@ sealed class SendEvent {
     @Serializable
     @SerialName("fee_busy_changed")
     data class FeeBusyChanged(val busy: Boolean) : SendEvent()
+
+    /**
+     * The fee card's coin in force (`FeeView.fee_token`, verbatim; `null` =
+     * the chain's own coin), sent beside [FeeBusyChanged] whenever it differs
+     * from what this send session was last told. It names the fee row's coin
+     * while no estimate is in hand; it prices and signs nothing.
+     */
+    @Serializable
+    @SerialName("fee_token_changed")
+    data class FeeTokenChanged(val fee_token: String? = null) : SendEvent()
 
     @Serializable
     @SerialName("slide_confirm")

@@ -3,7 +3,7 @@
 //  VelaWallet
 //
 //  The fee row, its expanded fee-token selector, and the signer row — the
-//  three things that sit between the last block and the slide, in that order
+//  three things that sit between the last block and the confirm, in that order
 //  on every scenario.
 //
 
@@ -28,6 +28,17 @@ struct SigningFeeView: View {
     var onRefresh: (() -> Void)?
     /// The chevron: only where a tap opens a coin list.
     var chevron = true
+    /// The fee is being measured again (the 30 s re-quote, a refresh, a new
+    /// speed): the line under the card holds its height (`heldWarning`).
+    var measuring = false
+
+    /// The line under the card, the last time it was said. While the fee is
+    /// measured again that verdict is about the last quote, so it is not said
+    /// — but its line keeps its height, holding these words: a line that came
+    /// and went with every measurement moved the confirm under the finger
+    /// (25 pt; the web's rule). A fee that lands with nothing to say lets it
+    /// go — a change, not a jump.
+    @State private var heldWarning: String?
 
     var body: some View {
         switch fee {
@@ -38,19 +49,40 @@ struct SigningFeeView: View {
         case .onchain(let label, let value, let selector, let warning, let tappable):
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                 onchainBody(label: label, value: value, selector: selector, tappable: tappable)
-                // Issue #262: the reason the slide below is shut, said where
+                // Issue #262: the reason the confirm below is shut, said where
                 // the fix is — and spec 079's "the service cannot be reached,
                 // it will be asked again".
                 if let warning {
-                    Text(verbatim: warning)
-                        .typeRole(Typography.rowSub.scaled(textScale))
-                        .foregroundStyle(theme.errorBase)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, Tokens.Space.s16)
+                    reason(warning)
                         .accessibilityIdentifier("signing.fee.reason")
+                } else if measuring, let heldWarning {
+                    reason(heldWarning)
+                        .hidden()
+                        .accessibilityHidden(true)
+                }
+            }
+            .onChange(of: Said(warning: warning, measuring: measuring), initial: true) { _, said in
+                if let warning = said.warning {
+                    heldWarning = warning
+                } else if !said.measuring {
+                    heldWarning = nil
                 }
             }
         }
+    }
+
+    /// What the line under the card follows.
+    private struct Said: Equatable {
+        let warning: String?
+        let measuring: Bool
+    }
+
+    private func reason(_ text: String) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .foregroundStyle(theme.errorBase)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Tokens.Space.s16)
     }
 
     @ViewBuilder
@@ -79,8 +111,7 @@ struct SigningFeeView: View {
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         Button { onPick(option.id) } label: {
                             HStack(spacing: Tokens.Space.s12) {
-                                LetterAvatarView(letter: option.mark.letter, tint: option.mark.tint,
-                                                 size: Tokens.Space.s32)
+                                TokenIconView(mark: option.mark)
                                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                                     Text(verbatim: option.name)
                                         .typeRole(Typography.rowTitle.scaled(textScale))
@@ -114,7 +145,7 @@ struct SigningFeeView: View {
                                 .typeRole(Typography.rowSub.scaled(textScale))
                                 .foregroundStyle(theme.errorBase)
                                 .fixedSize(horizontal: false, vertical: true)
-                                .padding(.leading, Tokens.Space.s8 + Tokens.Space.s32 + Tokens.Space.s12)
+                                .padding(.leading, Tokens.Space.s8 + WalletGeometry.rowIcon + Tokens.Space.s12)
                                 .padding(.trailing, Tokens.Space.s8)
                                 .padding(.bottom, Tokens.Space.s4)
                                 .accessibilityIdentifier("signing.fee.option.reason")

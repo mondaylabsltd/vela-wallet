@@ -1,21 +1,20 @@
 <script lang="ts">
 	import type { Tone } from '../model';
 
+	/**
+	 * The eyebrow over a hero — "Send", "Approve", "Blind signature". The
+	 * wallet's own request, which has no figure to lead with, says its intent
+	 * as the header's headline instead (`SigningHeader`), not here.
+	 */
 	interface Props {
 		text: string;
 		tone: Tone;
-		/**
-		 * The sheet's headline rather than the eyebrow over a hero (issue 314):
-		 * a request with no figure to lead with — the wallet's own — leads with
-		 * what it does.
-		 */
-		lead?: boolean;
 	}
 
-	let { text, tone, lead = false }: Props = $props();
+	let { text, tone }: Props = $props();
 </script>
 
-<p class="intent" class:lead data-tone={tone}>{text}</p>
+<p class="intent" data-tone={tone}>{text}</p>
 
 <style>
 	.intent {
@@ -24,13 +23,6 @@
 		font-weight: var(--weight-semibold);
 		letter-spacing: var(--letterSpacing-sectionLabel);
 		color: var(--color-fg-muted);
-	}
-
-	/* The headline: the base ink unless its tone is a warning (below). */
-	.lead {
-		font-size: calc(var(--text-2xl) * var(--text-scale, 1));
-		letter-spacing: normal;
-		color: var(--color-fg-base);
 	}
 
 	[data-tone='danger'] {

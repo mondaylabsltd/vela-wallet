@@ -2,9 +2,11 @@
 //  SiteMenuSheetView.swift
 //  VelaWallet
 //
-//  The ⋯ sheet over a page (mock E6): who the site is, then the seven things
-//  you can do to it — refresh, share, copy, favourite, open in Safari,
-//  disconnect, close.
+//  The ⋯ sheet over a page (mock E6): who the site is, then the things you
+//  can do to it — forward, refresh, share, copy, favourite, open in Safari,
+//  disconnect, close. Forward leads since DESIGN N moved it out of the old
+//  bottom toolbar, and is greyed — never hidden — while there is nothing
+//  ahead, so the rows under a thumb keep their places.
 //
 
 import SwiftUI
@@ -69,11 +71,14 @@ struct SiteMenuSheetView: View {
                             .typeRole(Typography.body.scaled(textScale))
                         Spacer()
                     }
-                    .foregroundStyle(item.danger ? theme.errorBase : theme.fgBase)
+                    .foregroundStyle(item.disabled ? theme.fgSubtle
+                                     : item.danger ? theme.errorBase : theme.fgBase)
+                    .opacity(item.disabled ? Tokens.Opacity.disabled : 1)
                     .padding(.vertical, Tokens.Space.s16)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(item.disabled)
                 if item.id != items.last?.id {
                     Rectangle().fill(theme.borderBase).frame(height: Tokens.BorderWidth.hairline)
                 }

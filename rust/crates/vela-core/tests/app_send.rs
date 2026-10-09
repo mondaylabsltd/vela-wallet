@@ -2308,6 +2308,189 @@ fn max_after_a_fee_coin_switch_does_not_reserve_the_old_coins_fee() {
 }
 
 // ===========================================================================
+// The fee row's coin: one answer for the frames with no estimate
+// ===========================================================================
+
+const BSC_USDT: &str = "0x55d398326f99059ff775485246999027b3197955";
+/// The same contract as a picker hands it on: checksummed.
+const BSC_USDT_CHECKSUMMED: &str = "0x55d398326F99059fF775485246999027B3197955";
+
+fn bnb(balance: &str) -> SendToken {
+    SendToken {
+        network: "bsc".to_owned(),
+        chain_id: 56,
+        symbol: "BNB".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(600.0),
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
+fn bsc_usdt(balance: &str) -> SendToken {
+    SendToken {
+        network: "bsc".to_owned(),
+        chain_id: 56,
+        symbol: "USDT".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: Some(BSC_USDT.to_owned()),
+        price_usd: Some(1.0),
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
+/// Pick `token` and settle what the pick starts — the credential, and a warm
+/// quote that FAILS: the form is left with no estimate in hand.
+fn select_with_a_failed_quote(sut: &mut Sut, token: &SendToken) {
+    let ops = sut.dispatch(Event::SelectToken {
+        token_id: token.id(),
+    });
+    assert_eq!(
+        ops,
+        vec![Op::LoadAccountCredential {
+            account_id: "cred-1".to_owned()
+        }]
+    );
+    settle_warm_quote(sut);
+}
+
+#[track_caller]
+fn assert_fee_coin(
+    view: &SendView,
+    symbol: &str,
+    contract: Option<&str>,
+    chain_id: u32,
+    why: &str,
+) {
+    let coin = view
+        .fee_coin
+        .as_ref()
+        .unwrap_or_else(|| panic!("{why}: no fee coin"));
+    assert_eq!(coin.symbol, symbol, "{why}");
+    assert_eq!(coin.contract.as_deref(), contract, "{why}");
+    assert_eq!(coin.chain_id, chain_id, "{why}");
+}
+
+#[test]
+fn with_no_chain_known_the_fee_row_names_no_coin() {
+    let sut = boot(vec![eth("2"), bnb("1")]);
+    assert_eq!(
+        sut.view().fee_coin,
+        None,
+        "nothing picked: no chain to name a coin on"
+    );
+}
+
+#[test]
+fn a_failed_quote_names_the_chains_own_coin_never_an_empty_disc() {
+    // Chain 56 is not in the shell's network list here: the registry names it.
+    let mut sut = boot(vec![bsc_usdt("50"), bnb("1")]);
+    select_with_a_failed_quote(&mut sut, &bnb("1"));
+    let view = sut.view();
+    assert!(view.fee.is_none(), "the quote failed");
+    assert_fee_coin(&view, "BNB", None, 56, "failed quote, nobody chose");
+
+    // Sending the USDT, the fee is still the chain's coin until someone says
+    // otherwise — never the coin being sent.
+    let mut sut = boot(vec![bsc_usdt("50"), bnb("1")]);
+    select_with_a_failed_quote(&mut sut, &bsc_usdt("50"));
+    assert_fee_coin(&sut.view(), "BNB", None, 56, "sending USDT, nobody chose");
+}
+
+#[test]
+fn a_chosen_coin_names_the_row_before_any_estimate_of_it() {
+    let mut sut = boot(vec![bsc_usdt("50"), bnb("1")]);
+    select_with_a_failed_quote(&mut sut, &bnb("1"));
+    sut.dispatch(Event::ChooseFeeToken {
+        token: Some(BSC_USDT_CHECKSUMMED.to_owned()),
+    });
+    let view = sut.view();
+    assert!(view.fee.is_none(), "no estimate of the chosen coin yet");
+    assert_fee_coin(
+        &view,
+        "USDT",
+        Some(BSC_USDT_CHECKSUMMED),
+        56,
+        "the pick, named by the holdings (contracts compared case aside)",
+    );
+
+    // Back to the chain's coin, chosen on purpose.
+    sut.dispatch(Event::ChooseFeeToken { token: None });
+    assert_fee_coin(&sut.view(), "BNB", None, 56, "BNB chosen");
+}
+
+#[test]
+fn the_fee_cards_coin_in_force_names_the_row_when_its_quote_failed() {
+    let mut sut = boot(vec![bsc_usdt("50"), bnb("0.0000001")]);
+    select_with_a_failed_quote(&mut sut, &bnb("0.0000001"));
+    // Nobody chose: the card picked the coin that can pay, and its quote then
+    // failed. The sheet shows USDT selected; the row must not say BNB.
+    sut.dispatch(Event::FeeTokenChanged {
+        fee_token: Some(BSC_USDT.to_owned()),
+    });
+    assert_fee_coin(&sut.view(), "USDT", Some(BSC_USDT), 56, "the card's pick");
+
+    // The person's pick is newer than the card's word until the card speaks.
+    sut.dispatch(Event::ChooseFeeToken { token: None });
+    assert_fee_coin(&sut.view(), "BNB", None, 56, "the person's pick");
+    sut.dispatch(Event::FeeTokenChanged { fee_token: None });
+    assert_fee_coin(&sut.view(), "BNB", None, 56, "the card took it up");
+
+    // A word about the chain the form left never names this chain's coin.
+    let mut sut = boot(vec![bsc_usdt("50"), eth("2")]);
+    select_with_a_failed_quote(&mut sut, &bsc_usdt("50"));
+    sut.dispatch(Event::FeeTokenChanged {
+        fee_token: Some(BSC_USDT.to_owned()),
+    });
+    select_with_a_failed_quote(&mut sut, &eth("2"));
+    assert_fee_coin(
+        &sut.view(),
+        "ETH",
+        None,
+        1,
+        "a BSC contract is not Ethereum's coin",
+    );
+}
+
+#[test]
+fn a_speed_being_measured_keeps_the_coin_that_will_pay() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    // The estimate in hand is in USDC — the coin that pays.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    assert_fee_coin(&sut.view(), "USDC", Some(USDC), 1, "the estimate's coin");
+
+    // Another speed is picked and measured: the card is busy, and asking
+    // afresh it says nothing was chosen. The estimate in hand is the speed
+    // just left's, and its coin is still the one that will pay — not ETH.
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    sut.dispatch(Event::FeeTokenChanged { fee_token: None });
+    let view = sut.view();
+    assert!(view.fee_busy);
+    assert_fee_coin(&view, "USDC", Some(USDC), 1, "measuring a new speed");
+
+    // An estimate that does not spell its coin is named by the holdings.
+    let mut unnamed = usdc_fee(1, 1_000_000);
+    if let FeeAssetView::Erc20 { symbol, .. } = &mut unnamed.fee_asset {
+        *symbol = None;
+    }
+    sut.dispatch(Event::FeeUpdated { estimate: unnamed });
+    assert_fee_coin(&sut.view(), "USDC", Some(USDC), 1, "named by the holdings");
+
+    // A native estimate names the chain's coin in the network list's words.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 1_000),
+    });
+    assert_fee_coin(&sut.view(), "ETH", None, 1, "the chain's own coin pays");
+}
+
+// ===========================================================================
 // Fiat input toggle (ported display math)
 // ===========================================================================
 
@@ -4639,6 +4822,247 @@ fn a_pick_from_the_book_fills_the_recipient_and_closes_the_picker() {
         .recipients
         .iter()
         .any(|r| r.id == second && r.address == RECIPIENT_B));
+}
+
+const RECIPIENT_C: &str = "0xdddddddddddddddddddddddddddddddddddddddd";
+
+fn split_row(id: &str, address: &str, amount: &str, name: Option<&str>) -> SendRecipientDraft {
+    SendRecipientDraft {
+        id: id.to_owned(),
+        address: address.to_owned(),
+        amount: amount.to_owned(),
+        name: name.map(str::to_owned),
+    }
+}
+
+/// A split's "from contacts" opens the book for the split, not for a row:
+/// the pick fills the first row with no address yet — never the single
+/// form's recipient, which a split hides and never pays (Android's 从通讯录
+/// did exactly that; the web and iOS each added a row of their own to aim
+/// it).
+#[test]
+fn a_targetless_pick_in_a_split_fills_the_first_row_with_no_address() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::SetRecipient {
+        recipient: RECIPIENT.to_owned(),
+    });
+    sut.drop_matching(|op| matches!(op, Op::ResolveIdentity { .. }));
+    sut.dispatch(Event::EnterSplitMode);
+    let before = sut.view().recipients;
+    assert_eq!(
+        before.len(),
+        2,
+        "the split opens as [the recipient, a blank]"
+    );
+
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_B.to_owned(),
+    });
+    let view = sut.view();
+    assert!(!view.show_contact_picker, "the pick closes the picker");
+    assert!(view.split_mode);
+    assert_eq!(
+        view.recipients.len(),
+        2,
+        "no row is added while one is free"
+    );
+    assert_eq!(view.recipients[0], before[0], "the first row is untouched");
+    assert_eq!(view.recipients[1].id, before[1].id);
+    assert_eq!(view.recipients[1].address, RECIPIENT_B);
+    assert_eq!(
+        view.recipient, RECIPIENT,
+        "the hidden single recipient is not where a split's pick goes"
+    );
+
+    // A row with a figure but no address is the free one: it is waiting
+    // for its person, and it keeps its figure.
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", RECIPIENT, "0.5", None),
+            split_row("rcpt_2", "  ", "0.25", None),
+            split_row("rcpt_3", "", "", None),
+        ],
+    });
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_C.to_owned(),
+    });
+    let rows = sut.view().recipients;
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[1].address, RECIPIENT_C);
+    assert_eq!(rows[1].amount, "0.25", "its figure stays");
+    assert_eq!(rows[2].address, "", "only the first free row is taken");
+}
+
+/// With every row taken, a targetless pick is a new row at the end — fresh
+/// id, no figure yet — and at the split's cap, nothing (invariant ⑩).
+#[test]
+fn a_targetless_pick_in_a_full_split_adds_a_row_up_to_the_cap() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", RECIPIENT, "0.5", None),
+            split_row("rcpt_2", RECIPIENT_B, "", Some("Bea")),
+        ],
+    });
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_C.to_owned(),
+    });
+    let view = sut.view();
+    assert!(!view.show_contact_picker);
+    assert_eq!(view.recipients.len(), 3);
+    assert_eq!(
+        view.recipients[0],
+        split_row("rcpt_1", RECIPIENT, "0.5", None)
+    );
+    assert_eq!(
+        view.recipients[1],
+        split_row("rcpt_2", RECIPIENT_B, "", Some("Bea"))
+    );
+    let added = &view.recipients[2];
+    assert_eq!(added.address, RECIPIENT_C);
+    assert_eq!(added.amount, "");
+    assert_eq!(added.name, None);
+    assert!(added.id.starts_with("rcpt_"), "{}", added.id);
+    assert!(
+        view.recipients[..2].iter().all(|row| row.id != added.id),
+        "a new row is a new id"
+    );
+
+    let full: Vec<SendRecipientDraft> = (0..BATCH_MAX_RECIPIENTS)
+        .map(|i| split_row(&format!("row_{i}"), &format!("0x{:040x}", i + 1), "1", None))
+        .collect();
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: full.clone(),
+    });
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_C.to_owned(),
+    });
+    let view = sut.view();
+    assert!(!view.show_contact_picker);
+    assert_eq!(view.recipients, full, "⑩: never a sixty-first row");
+}
+
+/// A pick for a row that has gone since the picker opened is not lost: it
+/// takes the row a targetless pick would. And a pick that changes a row's
+/// address takes its name with it — the name was the old person's.
+#[test]
+fn a_split_pick_never_lands_nowhere_and_never_keeps_a_strangers_name() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", RECIPIENT, "0.5", Some("Ann")),
+            split_row("rcpt_2", "", "", None),
+            split_row("rcpt_3", RECIPIENT_C, "", None),
+        ],
+    });
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_9".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_B.to_owned(),
+    });
+    let rows = sut.view().recipients;
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[1].address, RECIPIENT_B, "the free row, not nowhere");
+
+    // The same person picked again for their own row keeps their name.
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_1".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT.to_owned(),
+    });
+    assert_eq!(sut.view().recipients[0].name.as_deref(), Some("Ann"));
+
+    // The same address in another case (the book stores it checksummed) is
+    // the same person, and keeps the name too.
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_1".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
+    });
+    assert_eq!(
+        sut.view().recipients[0].name.as_deref(),
+        Some("Ann"),
+        "the same address in another case is the same person"
+    );
+
+    // Somebody else picked for it does not wear it.
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some("rcpt_1".to_owned()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_C.to_owned(),
+    });
+    let rows = sut.view().recipients;
+    assert_eq!(rows[0].address, RECIPIENT_C);
+    assert_eq!(rows[0].name, None);
+    assert_eq!(
+        rows[0].amount, "0.5",
+        "the figure is the row's, not the name's"
+    );
+}
+
+/// The picker's scan row is a pick (issue #270), and a split's targetless
+/// picker scans into the split: only the address, into the first free row —
+/// a full request does not re-lock the flow over the rows (invariant ⑬),
+/// and nothing goes to the hidden single recipient.
+#[test]
+fn a_scan_from_a_splits_targetless_picker_lands_in_the_split() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            split_row("rcpt_1", RECIPIENT, "0.5", None),
+            split_row("rcpt_2", "", "0.25", None),
+        ],
+    });
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::OpenScanner);
+    let ops = sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Request {
+            recipient: RECIPIENT_B.to_owned(),
+            chain_id: Some(1),
+            token_address: Some(USDC.to_owned()),
+            amount_base_units: Some("123".to_owned()),
+        },
+    });
+    assert!(ops.is_empty(), "no re-lock: {ops:?}");
+    let view = sut.view();
+    assert!(view.split_mode);
+    assert!(!view.locked);
+    assert!(!view.show_scanner);
+    assert!(!view.show_contact_picker);
+    assert_eq!(
+        view.recipients[0],
+        split_row("rcpt_1", RECIPIENT, "0.5", None)
+    );
+    assert_eq!(view.recipients[1].address, RECIPIENT_B);
+    assert_eq!(view.recipients[1].amount, "0.25");
+    assert_ne!(view.recipient, RECIPIENT_B);
+
+    // A plain address with every row taken: a new row.
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Text {
+            data: RECIPIENT_C.to_owned(),
+        },
+    });
+    let rows = sut.view().recipients;
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[2].address, RECIPIENT_C);
 }
 
 #[test]
@@ -7597,6 +8021,153 @@ fn continue_into_a_relay_still_empty_brings_the_stop_back() {
         view.treasury_bootstrap.map(|stop| stop.chain_id),
         Some(UNICHAIN)
     );
+}
+
+// ===========================================================================
+// Issue #466 — "Report this" files a complete report, built by the core
+// ===========================================================================
+
+/// The Unichain stop of the issue, whose "Report this" opened an empty GitHub
+/// form. The core builds what it files: a title line, the relay treasury's
+/// full address, what it holds against its floor in ETH, the bug form's area
+/// — and a fingerprint that stays put while the watch re-reads the balance,
+/// so every report of one outage lands on one issue.
+#[test]
+fn the_operator_stop_carries_a_complete_report_466() {
+    let mut sut = unichain_to_the_treasury_answer();
+    assert!(sut.view().relay_report.is_none(), "no stop, no report");
+    sut.resolve(unichain_empty_treasury());
+    let report = sut
+        .view()
+        .relay_report
+        .expect("a stop on a network Vela ships has a report");
+    let title = report.what.lines().next().unwrap_or_default();
+    assert_eq!(title, "Relayer out of gas on Unichain (130)");
+    assert!(title.chars().count() <= 80, "{title:?}");
+    assert!(
+        report.what.contains(&format!("Treasury: {RELAY_TREASURY}")),
+        "the full address: {}",
+        report.what
+    );
+    assert!(
+        report
+            .what
+            .contains("Has 0 ETH of its 0.0001 ETH floor (short 0.0001 ETH)."),
+        "have and floor, in the coin: {}",
+        report.what
+    );
+    assert_eq!(report.area, "Send");
+    assert_eq!(report.fingerprint, "relay-gas-130");
+    assert!(
+        report
+            .steps
+            .starts_with("1. Send on Unichain (130)\n2. Continue:"),
+        "{}",
+        report.steps
+    );
+
+    // The watch re-reads a balance still short: the figures follow, the key
+    // does not.
+    elapse_the_watch(&mut sut);
+    assert_only_the_watch(
+        &answer_the_watch(
+            &mut sut,
+            short_treasury(
+                UNICHAIN,
+                SendTreasuryAsset::Native,
+                "40000000000000",
+                RELAY_NATIVE_FLOOR,
+            ),
+        ),
+        "still short: waits again",
+    );
+    let refreshed = sut.view().relay_report.expect("still up");
+    assert!(
+        refreshed
+            .what
+            .contains("Has 0.00004 ETH of its 0.0001 ETH floor (short 0.00006 ETH)."),
+        "{}",
+        refreshed.what
+    );
+    assert_eq!(
+        refreshed.fingerprint, "relay-gas-130",
+        "one outage, one issue"
+    );
+
+    // The stop goes, and the report with it.
+    sut.dispatch(Event::DismissTreasurySheet);
+    assert!(sut.view().relay_report.is_none());
+}
+
+/// Figures the core cannot put in a coin are still filed — as the relay's
+/// own base units, with their unit — never left out.
+#[test]
+fn a_report_whose_figures_do_not_read_files_them_raw_466() {
+    let mut sut = unichain_to_the_treasury_answer();
+    sut.resolve(short_treasury(
+        UNICHAIN,
+        SendTreasuryAsset::Native,
+        "12.5",
+        RELAY_NATIVE_FLOOR,
+    ));
+    let report = sut.view().relay_report.expect("the stop is up");
+    assert!(
+        report
+            .what
+            .contains("Has 12.5 wei of its 100000000000000 wei floor."),
+        "{}",
+        report.what
+    );
+}
+
+/// The can't-reach stop has its own report under its own key — and a stop
+/// raised by the pre-sign recheck says it was the confirm.
+#[test]
+fn the_cant_reach_stop_carries_its_own_report_466() {
+    let mut sut = unichain_to_the_treasury_answer();
+    sut.resolve(uncovered());
+    let report = sut.view().relay_report.expect("the can't-reach stop");
+    assert_eq!(
+        report.what.lines().next(),
+        Some("Relay can't reach Unichain (130)")
+    );
+    assert_eq!(report.area, "Send");
+    assert_eq!(report.fingerprint, "relay-unreachable-130");
+
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    sut.dispatch(Event::SlideConfirm);
+    sut.resolve(uncovered());
+    let report = sut.view().relay_report.expect("the can't-reach stop");
+    assert_eq!(
+        report.what.lines().next(),
+        Some("Relay can't reach Ethereum (1)")
+    );
+    assert_eq!(report.fingerprint, "relay-unreachable-1");
+    assert!(
+        report.steps.contains("\n2. Confirm:"),
+        "the pre-sign recheck stopped it: {}",
+        report.steps
+    );
+}
+
+/// A network the person added has no operator to tell: neither stop carries
+/// a report there (the same predicate as `operator_served`).
+#[test]
+fn a_stop_on_a_network_someone_added_files_no_report_466() {
+    let mut sut = boot(vec![devnet_coin("3")]);
+    continue_with(&mut sut, &devnet_coin("3"), "1");
+    sut.resolve(empty_relayer(7_777_001));
+    let view = sut.view();
+    assert!(view.treasury_bootstrap.is_some(), "the stop is up");
+    assert!(view.relay_report.is_none());
+
+    let mut sut = boot(vec![devnet_coin("3")]);
+    continue_with(&mut sut, &devnet_coin("3"), "1");
+    sut.resolve(uncovered());
+    let view = sut.view();
+    assert!(view.relay_unreachable.is_some(), "the stop is up");
+    assert!(view.relay_report.is_none());
 }
 
 /// The confirm page's gate is one predicate too. A relay stop opened by the

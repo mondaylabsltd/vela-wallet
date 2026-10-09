@@ -10,7 +10,7 @@ import app.getvela.wallet.feature.wallet.WalletFixtures
  * Canonical explore fixtures (spec 022, data-model.md §2 — the single canon all
  * four platforms port; web reference: `src/lib/explore/fixtures.ts`).
  *
- * Site names, hosts, group titles and the demo page are verbatim mock content
+ * Site names, hosts and the demo page are verbatim mock content
  * and are never translated; every label resolves through the corpus. Brand hex
  * values are FIXTURE DATA, exempt from the tokens-only rule exactly as the
  * wallet's chain dots are.
@@ -28,8 +28,6 @@ object ExploreFixtures {
         val lido = Color(0xFFF0616D)
         val ens = Color(0xFF5284FF)
         val hyperliquid = Color(0xFF50D2C1)
-        val curve = Color(0xFF7B7BE8)
-        val limitless = Color(0xFF8B6DFF)
 
         /** The stand-in web page's own palette (spec 022 §2). */
         object DemoPage {
@@ -50,8 +48,6 @@ object ExploreFixtures {
     val ens = SiteModel("ens", "ENS", "app.ens.domains", "E", Brand.ens)
     val hyperliquid =
         SiteModel("hyperliquid", "Hyperliquid", "app.hyperliquid.xyz", "H", Brand.hyperliquid)
-    val curve = SiteModel("curve", "Curve", "curve.fi", "C", Brand.curve)
-    val limitless = SiteModel("limitless", "Limitless", "limitless.exchange", "L", Brand.limitless)
 
     /** The favourites grid, in mock order (E2/DE2). */
     val favorites: List<SiteModel> =
@@ -81,43 +77,54 @@ object ExploreFixtures {
             action = GroupAction.Clear,
             sites = listOf(hyperliquid.copy(meta = "刚刚")),
         ),
-        // Custom group titles and blurbs are what the person typed — mock
-        // content, verbatim, never translated (the spec-015 rule).
-        GroupModel(
-            id = "trading",
-            title = "交易",
-            kind = GroupKind.Custom,
-            action = GroupAction.Menu,
-            sites = listOf(
-                curve.copy(subtitle = "稳定币兑换"),
-                hyperliquid.copy(subtitle = "永续合约交易"),
-            ),
-        ),
-        GroupModel(
-            id = "prediction",
-            title = "预测市场",
-            kind = GroupKind.Custom,
-            action = GroupAction.Menu,
-            sites = listOf(
-                polymarket.copy(subtitle = "事件预测市场"),
-                limitless.copy(subtitle = "预测市场"),
-            ),
-        ),
     )
 
-    private fun tabs(s: VelaStrings, selected: String): List<TabModel> = listOf(
-        TabModel("uniswap", uniswap.name, uniswap, selected == "uniswap", startPage = false),
-        TabModel(
-            "polymarket", polymarket.name, polymarket, selected == "polymarket", startPage = false,
-        ),
-        TabModel("start", s.t("explore.startPage"), null, selected == "start", startPage = true),
-    )
+    /**
+     * The sites open in tabs, in strip order (the web board's phone strip):
+     * three, so the home's resume section shows full — three rows under a
+     * header that counts four tabs, because the start page is one of them.
+     * The order is also the recency the fixture assumes: Uniswap was left last.
+     */
+    val tabSites: List<SiteModel> = listOf(uniswap, polymarket, aave)
 
-    /** E6's site menu, in mock order. */
-    fun siteMenu(s: VelaStrings) = ExploreSheet.SiteMenu(
+    /**
+     * The most rows the resume section draws — the core's
+     * `explore_sites::RESUME_SHOWN`, which decides it live; mirrored here only
+     * so the fixture is the shape the core hands over.
+     */
+    const val RESUME_SHOWN = 3
+
+    /** The strip: one tab per site, then the start page's own tab. */
+    private fun tabs(s: VelaStrings, selected: String, sites: List<SiteModel>): List<TabModel> =
+        sites.map { site -> TabModel(site.id, site.name, site, selected == site.id, startPage = false) } +
+            TabModel("start", s.t("explore.startPage"), null, selected == "start", startPage = true)
+
+    /**
+     * The home's resume section, built the way the core builds `resumable`:
+     * the tabs with a page (never a start page), most recent first, at most
+     * [RESUME_SHOWN]; the header counts every tab. No page anywhere, no section.
+     */
+    private fun resume(s: VelaStrings, strip: List<TabModel>): ResumeSection? {
+        val withPage = strip.mapNotNull { tab -> tab.site?.takeUnless { tab.startPage }?.let { it.copy(id = tab.id, name = tab.title, subtitle = it.host) } }
+        if (withPage.isEmpty()) return null
+        return ResumeSection(
+            title = s.t("explore.openTabs", strip.size),
+            action = s.t("explore.tabs"),
+            tabs = withPage.take(RESUME_SHOWN),
+        )
+    }
+
+    /**
+     * E6's site menu, in the board's order. Spec 099 navigation moved Forward
+     * here when the app's tab bar took the browser toolbar's place: it leads,
+     * greyed when there is nothing ahead, so every row under it keeps its
+     * place from page to page. The star moved here from the toolbar too.
+     */
+    fun siteMenu(s: VelaStrings, canForward: Boolean = false) = ExploreSheet.SiteMenu(
         site = uniswap,
         statusLine = s.t("explore.secureSite"),
         items = listOf(
+            SiteMenuItem("forward", VelaIcons.ArrowRight, s.t("explore.forward"), enabled = canForward),
             SiteMenuItem("refresh", VelaIcons.RefreshCw, s.t("explore.refresh")),
             SiteMenuItem("share", VelaIcons.Share2, s.t("explore.share")),
             SiteMenuItem("copy", VelaIcons.Copy, s.t("explore.copyLink")),
@@ -161,19 +168,12 @@ object ExploreFixtures {
         footnote = s.t("explore.autoRequestHint"),
     )
 
+    /** E3: the start page's two sections (issue #465), each with its eye. */
     fun groupManage(s: VelaStrings) = ExploreSheet.GroupManage(
         title = s.t("explore.manageGroups"),
-        newGroup = s.t("explore.newGroup"),
         rows = listOf(
-            GroupManageRow(
-                "favorites", s.t("explore.favorites"),
-                s.t("explore.siteCount", mapOf("n" to "8")), system = true,
-            ),
-            GroupManageRow("recent", s.t("explore.recent"), s.t("explore.systemGroup"), true),
-            GroupManageRow("trading", "交易", s.t("explore.siteCount", mapOf("n" to "4")), false),
-            GroupManageRow(
-                "prediction", "预测市场", s.t("explore.siteCount", mapOf("n" to "2")), false,
-            ),
+            GroupManageRow("favorites", s.t("explore.favorites"), s.t("explore.siteCount", 8)),
+            GroupManageRow("recent", s.t("explore.recent"), meta = null),
         ),
     )
 
@@ -188,15 +188,24 @@ object ExploreFixtures {
             state == ExploreScreenState.E5 -> ExploreView.Tabs
             else -> ExploreView.Start
         }
+        // E5 opens the switcher FROM a page, so the page's tab is the
+        // selected one — the mock's accent border is on Uniswap, not on
+        // 起始页 (device-found against E5, 2026-09-02). E1 is the first visit:
+        // the start page is the only tab there is.
+        val strip = tabs(
+            s,
+            if (browsing || state == ExploreScreenState.E5) "uniswap" else "start",
+            if (populated) tabSites else emptyList(),
+        )
+        val canForward = false
         val groupManage = groupManage(s)
-        val siteMenu = siteMenu(s)
+        val siteMenu = siteMenu(s, canForward)
         val connection = connection(s)
 
         return ExploreScreenModel(
             state = state,
             view = view,
             title = s.t("explore.title"),
-            tabCountLabel = if (populated) "2" else null,
             searchPlaceholder = s.t("explore.searchPlaceholder"),
             scanLabel = s.t("explore.scan"),
             empty = if (populated) {
@@ -206,6 +215,7 @@ object ExploreFixtures {
                     s.t("explore.startTitle"), s.t("explore.startHint"), s.t("explore.startCta"),
                 )
             },
+            resume = resume(s, strip),
             favorites = if (populated) {
                 FavoritesSection(
                     title = s.t("explore.favorites"),
@@ -218,24 +228,18 @@ object ExploreFixtures {
             },
             groups = if (populated) groups(s) else emptyList(),
             browser = BrowserModel(
-                url = uniswap.host,
+                url = "https://${uniswap.host}/swap",
                 host = uniswap.host,
                 secure = true,
                 connected = true,
                 canBack = true,
-                canForward = false,
+                canForward = canForward,
                 bookmarked = false,
                 accountSeed = WalletFixtures.ADDRESS_FULL,
-                tabCount = 2,
+                tabCount = strip.size,
                 page = demoPage,
             ),
-            // E5 opens the switcher FROM a page, so the page's tab is the
-            // selected one — the mock's accent border is on Uniswap, not on
-            // 起始页 (device-found against E5, 2026-09-02).
-            tabs = tabs(
-                s,
-                if (browsing || state == ExploreScreenState.E5) "uniswap" else "start",
-            ),
+            tabs = strip,
             tabsScreen = TabsScreenCopy(
                 title = s.t("explore.tabs"),
                 done = s.t("explore.done"),

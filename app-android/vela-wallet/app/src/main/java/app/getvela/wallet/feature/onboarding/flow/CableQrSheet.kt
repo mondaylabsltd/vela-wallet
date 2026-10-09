@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.onboarding.flow
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,19 +25,25 @@ import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.LocalVelaStrings
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import uniffi.vela_core_uniffi.cableQrMatrix
 
 /**
  * "Sign in with your phone": the caBLE QR the OTHER device scans. Shown while a
- * [KeyMethod.Hybrid] ceremony is finding and talking to that phone; cleared the
- * moment it connects or fails. The matrix comes from the core (`cableQrMatrix`,
- * the same encoder every platform draws with), so the shell owns only pixels.
+ * [KeyMethod.Hybrid] ceremony is finding that phone; cleared when the phone's
+ * own prompt takes over, or the ceremony ends. The matrix comes from the core
+ * (`cableQrMatrix`, the same encoder every platform draws with), so the shell
+ * owns only pixels.
+ *
+ * Putting it away — Cancel, a tap outside, a swipe down, Back — is [onCancel]:
+ * the ceremony ends as the core's quiet cancel (issue #459). It used to let the
+ * scan run its 90 s out and then say the phone had not connected.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CableQrSheet(payload: String, chooser: KeyChooser) {
+fun CableQrSheet(payload: String, chooser: KeyChooser, onCancel: () -> Unit) {
     val strings = LocalVelaStrings.current
     // The hybrid row's own words, as the chooser that opened this card drew
     // them (087 F02): a sign-in's line is the scan — it creates nothing.
@@ -45,9 +52,7 @@ fun CableQrSheet(payload: String, chooser: KeyChooser) {
     val matrix = remember(payload) { cableQrMatrix(payload) }
 
     VelaModalSheet(
-        // Dismissing is allowed — it simply lets the scan window time out — but
-        // there is nothing to answer here; the person acts on the other phone.
-        onDismissRequest = {},
+        onDismissRequest = onCancel,
         containerColor = colors.bgRaised,
         // Issue #447: the sheet's one job is this code. Opened half-way, its
         // lower part ran off the screen until somebody thought to drag it up.
@@ -104,6 +109,12 @@ fun CableQrSheet(payload: String, chooser: KeyChooser) {
                     }
                 }
             }
+            // The desktop's QR card has the same button (`common.cancel`).
+            VelaSecondaryButton(
+                text = strings.t(I18nKeys.Common.CANCEL),
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

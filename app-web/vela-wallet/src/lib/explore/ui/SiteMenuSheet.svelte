@@ -37,6 +37,7 @@
 				type="button"
 				class="item"
 				class:danger={item.danger}
+				disabled={item.disabled}
 				onclick={() => onpick?.(item.id)}
 			>
 				<Icon icon={UTILITY_ICONS[item.icon as UtilityIconId]} size="lg" />
@@ -112,8 +113,15 @@
 		text-align: start;
 	}
 
-	.item:active {
+	.item:active:not(:disabled) {
 		transform: scale(var(--motion-press-row));
+	}
+
+	/* Greyed, never hidden: the row keeps its place under the thumb. */
+	.item:disabled {
+		color: var(--color-fg-subtle);
+		opacity: var(--opacity-disabled);
+		cursor: default;
 	}
 
 	.danger {

@@ -55,6 +55,34 @@
    }
   },
   {
+   "name": "en/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 tabs open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 sites"
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -147,6 +175,34 @@
    },
    "expect": {
     "value": "1 send"
+   }
+  },
+  {
+   "name": "en/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 tab open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 site"
    }
   },
   {
@@ -245,6 +301,34 @@
    }
   },
   {
+   "name": "en/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 tabs open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 sites"
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -337,6 +421,34 @@
    },
    "expect": {
     "value": "3 sends"
+   }
+  },
+  {
+   "name": "en/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 tabs open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 sites"
    }
   },
   {
@@ -435,6 +547,34 @@
    }
   },
   {
+   "name": "en/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 tabs open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 sites"
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -527,6 +667,34 @@
    },
    "expect": {
     "value": "11 sends"
+   }
+  },
+  {
+   "name": "en/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 tabs open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 sites"
    }
   },
   {
@@ -625,6 +793,34 @@
    }
   },
   {
+   "name": "en/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 tabs open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 sites"
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -720,6 +916,34 @@
    }
   },
   {
+   "name": "en/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 tabs open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 sites"
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -812,6 +1036,34 @@
    },
    "expect": {
     "value": "1000000 sends"
+   }
+  },
+  {
+   "name": "en/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 tabs open"
+   }
+  },
+  {
+   "name": "en/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 sites"
    }
   },
   {
@@ -923,6 +1175,34 @@
    }
   },
   {
+   "name": "zh/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "已打开 0 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 个网站"
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1015,6 +1295,34 @@
    },
    "expect": {
     "value": "1 笔转账"
+   }
+  },
+  {
+   "name": "zh/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "已打开 1 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 个网站"
    }
   },
   {
@@ -1113,6 +1421,34 @@
    }
   },
   {
+   "name": "zh/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "已打开 2 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 个网站"
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1205,6 +1541,34 @@
    },
    "expect": {
     "value": "3 笔转账"
+   }
+  },
+  {
+   "name": "zh/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "已打开 3 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 个网站"
    }
   },
   {
@@ -1303,6 +1667,34 @@
    }
   },
   {
+   "name": "zh/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "已打开 5 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 个网站"
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1395,6 +1787,34 @@
    },
    "expect": {
     "value": "11 笔转账"
+   }
+  },
+  {
+   "name": "zh/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "已打开 11 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 个网站"
    }
   },
   {
@@ -1493,6 +1913,34 @@
    }
   },
   {
+   "name": "zh/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "已打开 21 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 个网站"
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1588,6 +2036,34 @@
    }
   },
   {
+   "name": "zh/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "已打开 101 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 个网站"
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1680,6 +2156,34 @@
    },
    "expect": {
     "value": "1000000 笔转账"
+   }
+  },
+  {
+   "name": "zh/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "已打开 1000000 个标签页"
+   }
+  },
+  {
+   "name": "zh/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 个网站"
    }
   },
   {
@@ -1791,6 +2295,34 @@
    }
   },
   {
+   "name": "zh-TW/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "已開啟 0 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 個網站"
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1883,6 +2415,34 @@
    },
    "expect": {
     "value": "已發送 1 次"
+   }
+  },
+  {
+   "name": "zh-TW/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "已開啟 1 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 個網站"
    }
   },
   {
@@ -1981,6 +2541,34 @@
    }
   },
   {
+   "name": "zh-TW/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "已開啟 2 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 個網站"
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2073,6 +2661,34 @@
    },
    "expect": {
     "value": "已發送 3 次"
+   }
+  },
+  {
+   "name": "zh-TW/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "已開啟 3 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 個網站"
    }
   },
   {
@@ -2171,6 +2787,34 @@
    }
   },
   {
+   "name": "zh-TW/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "已開啟 5 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 個網站"
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2263,6 +2907,34 @@
    },
    "expect": {
     "value": "已發送 11 次"
+   }
+  },
+  {
+   "name": "zh-TW/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "已開啟 11 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 個網站"
    }
   },
   {
@@ -2361,6 +3033,34 @@
    }
   },
   {
+   "name": "zh-TW/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "已開啟 21 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 個網站"
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2456,6 +3156,34 @@
    }
   },
   {
+   "name": "zh-TW/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "已開啟 101 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 個網站"
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2548,6 +3276,34 @@
    },
    "expect": {
     "value": "已發送 1000000 次"
+   }
+  },
+  {
+   "name": "zh-TW/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "已開啟 1000000 個分頁"
+   }
+  },
+  {
+   "name": "zh-TW/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 個網站"
    }
   },
   {
@@ -2659,6 +3415,34 @@
    }
   },
   {
+   "name": "zh-HK/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "開咗 0 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 個網站"
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2751,6 +3535,34 @@
    },
    "expect": {
     "value": "1 次發送"
+   }
+  },
+  {
+   "name": "zh-HK/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "開咗 1 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 個網站"
    }
   },
   {
@@ -2849,6 +3661,34 @@
    }
   },
   {
+   "name": "zh-HK/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "開咗 2 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 個網站"
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2941,6 +3781,34 @@
    },
    "expect": {
     "value": "3 次發送"
+   }
+  },
+  {
+   "name": "zh-HK/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "開咗 3 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 個網站"
    }
   },
   {
@@ -3039,6 +3907,34 @@
    }
   },
   {
+   "name": "zh-HK/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "開咗 5 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 個網站"
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3131,6 +4027,34 @@
    },
    "expect": {
     "value": "11 次發送"
+   }
+  },
+  {
+   "name": "zh-HK/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "開咗 11 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 個網站"
    }
   },
   {
@@ -3229,6 +4153,34 @@
    }
   },
   {
+   "name": "zh-HK/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "開咗 21 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 個網站"
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3324,6 +4276,34 @@
    }
   },
   {
+   "name": "zh-HK/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "開咗 101 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 個網站"
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3416,6 +4396,34 @@
    },
    "expect": {
     "value": "1000000 次發送"
+   }
+  },
+  {
+   "name": "zh-HK/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "開咗 1000000 個分頁"
+   }
+  },
+  {
+   "name": "zh-HK/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 個網站"
    }
   },
   {
@@ -3527,6 +4535,34 @@
    }
   },
   {
+   "name": "ja/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 件のサイト"
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3619,6 +4655,34 @@
    },
    "expect": {
     "value": "1 回送付"
+   }
+  },
+  {
+   "name": "ja/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 件のサイト"
    }
   },
   {
@@ -3717,6 +4781,34 @@
    }
   },
   {
+   "name": "ja/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 件のサイト"
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3809,6 +4901,34 @@
    },
    "expect": {
     "value": "3 回送付"
+   }
+  },
+  {
+   "name": "ja/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 件のサイト"
    }
   },
   {
@@ -3907,6 +5027,34 @@
    }
   },
   {
+   "name": "ja/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 件のサイト"
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3999,6 +5147,34 @@
    },
    "expect": {
     "value": "11 回送付"
+   }
+  },
+  {
+   "name": "ja/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 件のサイト"
    }
   },
   {
@@ -4097,6 +5273,34 @@
    }
   },
   {
+   "name": "ja/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 件のサイト"
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4192,6 +5396,34 @@
    }
   },
   {
+   "name": "ja/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 件のサイト"
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4284,6 +5516,34 @@
    },
    "expect": {
     "value": "1000000 回送付"
+   }
+  },
+  {
+   "name": "ja/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 件のタブを表示中"
+   }
+  },
+  {
+   "name": "ja/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 件のサイト"
    }
   },
   {
@@ -4395,6 +5655,34 @@
    }
   },
   {
+   "name": "ko/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "탭 0개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "사이트 0개"
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4487,6 +5775,34 @@
    },
    "expect": {
     "value": "1회 전송"
+   }
+  },
+  {
+   "name": "ko/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "탭 1개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "사이트 1개"
    }
   },
   {
@@ -4585,6 +5901,34 @@
    }
   },
   {
+   "name": "ko/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "탭 2개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "사이트 2개"
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4677,6 +6021,34 @@
    },
    "expect": {
     "value": "3회 전송"
+   }
+  },
+  {
+   "name": "ko/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "탭 3개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "사이트 3개"
    }
   },
   {
@@ -4775,6 +6147,34 @@
    }
   },
   {
+   "name": "ko/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "탭 5개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "사이트 5개"
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4867,6 +6267,34 @@
    },
    "expect": {
     "value": "11회 전송"
+   }
+  },
+  {
+   "name": "ko/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "탭 11개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "사이트 11개"
    }
   },
   {
@@ -4965,6 +6393,34 @@
    }
   },
   {
+   "name": "ko/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "탭 21개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "사이트 21개"
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5060,6 +6516,34 @@
    }
   },
   {
+   "name": "ko/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "탭 101개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "사이트 101개"
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5152,6 +6636,34 @@
    },
    "expect": {
     "value": "1000000회 전송"
+   }
+  },
+  {
+   "name": "ko/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "탭 1000000개 열림"
+   }
+  },
+  {
+   "name": "ko/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "사이트 1000000개"
    }
   },
   {
@@ -5263,6 +6775,34 @@
    }
   },
   {
+   "name": "vi/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Đang mở 0 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 trang"
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5355,6 +6895,34 @@
    },
    "expect": {
     "value": "1 lần gửi"
+   }
+  },
+  {
+   "name": "vi/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Đang mở 1 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 trang"
    }
   },
   {
@@ -5453,6 +7021,34 @@
    }
   },
   {
+   "name": "vi/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Đang mở 2 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 trang"
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5545,6 +7141,34 @@
    },
    "expect": {
     "value": "3 lần gửi"
+   }
+  },
+  {
+   "name": "vi/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Đang mở 3 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 trang"
    }
   },
   {
@@ -5643,6 +7267,34 @@
    }
   },
   {
+   "name": "vi/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Đang mở 5 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 trang"
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5735,6 +7387,34 @@
    },
    "expect": {
     "value": "11 lần gửi"
+   }
+  },
+  {
+   "name": "vi/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Đang mở 11 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 trang"
    }
   },
   {
@@ -5833,6 +7513,34 @@
    }
   },
   {
+   "name": "vi/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Đang mở 21 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 trang"
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5928,6 +7636,34 @@
    }
   },
   {
+   "name": "vi/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Đang mở 101 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 trang"
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6020,6 +7756,34 @@
    },
    "expect": {
     "value": "1000000 lần gửi"
+   }
+  },
+  {
+   "name": "vi/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Đang mở 1000000 tab"
+   }
+  },
+  {
+   "name": "vi/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 trang"
    }
   },
   {
@@ -6131,6 +7895,34 @@
    }
   },
   {
+   "name": "id/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 situs"
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6223,6 +8015,34 @@
    },
    "expect": {
     "value": "1 kiriman"
+   }
+  },
+  {
+   "name": "id/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 situs"
    }
   },
   {
@@ -6321,6 +8141,34 @@
    }
   },
   {
+   "name": "id/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 situs"
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6413,6 +8261,34 @@
    },
    "expect": {
     "value": "3 kiriman"
+   }
+  },
+  {
+   "name": "id/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 situs"
    }
   },
   {
@@ -6511,6 +8387,34 @@
    }
   },
   {
+   "name": "id/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 situs"
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6603,6 +8507,34 @@
    },
    "expect": {
     "value": "11 kiriman"
+   }
+  },
+  {
+   "name": "id/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 situs"
    }
   },
   {
@@ -6701,6 +8633,34 @@
    }
   },
   {
+   "name": "id/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 situs"
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6796,6 +8756,34 @@
    }
   },
   {
+   "name": "id/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 situs"
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6888,6 +8876,34 @@
    },
    "expect": {
     "value": "1000000 kiriman"
+   }
+  },
+  {
+   "name": "id/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 tab terbuka"
+   }
+  },
+  {
+   "name": "id/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 situs"
    }
   },
   {
@@ -6999,6 +9015,34 @@
    }
   },
   {
+   "name": "tr/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 site"
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7091,6 +9135,34 @@
    },
    "expect": {
     "value": "1 gönderim"
+   }
+  },
+  {
+   "name": "tr/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 site"
    }
   },
   {
@@ -7189,6 +9261,34 @@
    }
   },
   {
+   "name": "tr/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 site"
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7281,6 +9381,34 @@
    },
    "expect": {
     "value": "3 gönderim"
+   }
+  },
+  {
+   "name": "tr/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 site"
    }
   },
   {
@@ -7379,6 +9507,34 @@
    }
   },
   {
+   "name": "tr/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 site"
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7471,6 +9627,34 @@
    },
    "expect": {
     "value": "11 gönderim"
+   }
+  },
+  {
+   "name": "tr/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 site"
    }
   },
   {
@@ -7569,6 +9753,34 @@
    }
   },
   {
+   "name": "tr/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 site"
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7664,6 +9876,34 @@
    }
   },
   {
+   "name": "tr/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 site"
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7756,6 +9996,34 @@
    },
    "expect": {
     "value": "1000000 gönderim"
+   }
+  },
+  {
+   "name": "tr/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 sekme açık"
+   }
+  },
+  {
+   "name": "tr/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 site"
    }
   },
   {
@@ -7867,6 +10135,34 @@
    }
   },
   {
+   "name": "es-MX/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 pestañas abiertas"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 sitios"
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7959,6 +10255,34 @@
    },
    "expect": {
     "value": "1 envío"
+   }
+  },
+  {
+   "name": "es-MX/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 pestaña abierta"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 sitio"
    }
   },
   {
@@ -8057,6 +10381,34 @@
    }
   },
   {
+   "name": "es-MX/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 pestañas abiertas"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 sitios"
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8149,6 +10501,34 @@
    },
    "expect": {
     "value": "3 envíos"
+   }
+  },
+  {
+   "name": "es-MX/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 pestañas abiertas"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 sitios"
    }
   },
   {
@@ -8247,6 +10627,34 @@
    }
   },
   {
+   "name": "es-MX/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 pestañas abiertas"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 sitios"
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8339,6 +10747,34 @@
    },
    "expect": {
     "value": "11 envíos"
+   }
+  },
+  {
+   "name": "es-MX/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 pestañas abiertas"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 sitios"
    }
   },
   {
@@ -8437,6 +10873,34 @@
    }
   },
   {
+   "name": "es-MX/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 pestañas abiertas"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 sitios"
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8532,6 +10996,34 @@
    }
   },
   {
+   "name": "es-MX/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 pestañas abiertas"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 sitios"
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8624,6 +11116,34 @@
    },
    "expect": {
     "value": "1000000 envíos"
+   }
+  },
+  {
+   "name": "es-MX/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 pestañas abiertas"
+   }
+  },
+  {
+   "name": "es-MX/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 sitios"
    }
   },
   {
@@ -8735,6 +11255,34 @@
    }
   },
   {
+   "name": "pt-BR/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 abas abertas"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 sites"
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8827,6 +11375,34 @@
    },
    "expect": {
     "value": "1 envio"
+   }
+  },
+  {
+   "name": "pt-BR/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 aba aberta"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 site"
    }
   },
   {
@@ -8925,6 +11501,34 @@
    }
   },
   {
+   "name": "pt-BR/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 abas abertas"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 sites"
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9017,6 +11621,34 @@
    },
    "expect": {
     "value": "3 envios"
+   }
+  },
+  {
+   "name": "pt-BR/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 abas abertas"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 sites"
    }
   },
   {
@@ -9115,6 +11747,34 @@
    }
   },
   {
+   "name": "pt-BR/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 abas abertas"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 sites"
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9207,6 +11867,34 @@
    },
    "expect": {
     "value": "11 envios"
+   }
+  },
+  {
+   "name": "pt-BR/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 abas abertas"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 sites"
    }
   },
   {
@@ -9305,6 +11993,34 @@
    }
   },
   {
+   "name": "pt-BR/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 abas abertas"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 sites"
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9400,6 +12116,34 @@
    }
   },
   {
+   "name": "pt-BR/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 abas abertas"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 sites"
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9492,6 +12236,34 @@
    },
    "expect": {
     "value": "1000000 envios"
+   }
+  },
+  {
+   "name": "pt-BR/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 abas abertas"
+   }
+  },
+  {
+   "name": "pt-BR/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 sites"
    }
   },
   {
@@ -9603,6 +12375,34 @@
    }
   },
   {
+   "name": "fr/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 onglets ouverts"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 sites"
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9695,6 +12495,34 @@
    },
    "expect": {
     "value": "1 envoi"
+   }
+  },
+  {
+   "name": "fr/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 onglet ouvert"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 site"
    }
   },
   {
@@ -9793,6 +12621,34 @@
    }
   },
   {
+   "name": "fr/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 onglets ouverts"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 sites"
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9885,6 +12741,34 @@
    },
    "expect": {
     "value": "3 envois"
+   }
+  },
+  {
+   "name": "fr/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 onglets ouverts"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 sites"
    }
   },
   {
@@ -9983,6 +12867,34 @@
    }
   },
   {
+   "name": "fr/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 onglets ouverts"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 sites"
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10075,6 +12987,34 @@
    },
    "expect": {
     "value": "11 envois"
+   }
+  },
+  {
+   "name": "fr/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 onglets ouverts"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 sites"
    }
   },
   {
@@ -10173,6 +13113,34 @@
    }
   },
   {
+   "name": "fr/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 onglets ouverts"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 sites"
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10268,6 +13236,34 @@
    }
   },
   {
+   "name": "fr/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 onglets ouverts"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 sites"
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10360,6 +13356,34 @@
    },
    "expect": {
     "value": "1000000 envois"
+   }
+  },
+  {
+   "name": "fr/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 onglets ouverts"
+   }
+  },
+  {
+   "name": "fr/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 sites"
    }
   },
   {
@@ -10471,6 +13495,34 @@
    }
   },
   {
+   "name": "de/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 Tabs geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 Websites"
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10563,6 +13615,34 @@
    },
    "expect": {
     "value": "1 Überweisung"
+   }
+  },
+  {
+   "name": "de/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 Tab geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 Website"
    }
   },
   {
@@ -10661,6 +13741,34 @@
    }
   },
   {
+   "name": "de/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 Tabs geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 Websites"
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10753,6 +13861,34 @@
    },
    "expect": {
     "value": "3 Überweisungen"
+   }
+  },
+  {
+   "name": "de/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 Tabs geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 Websites"
    }
   },
   {
@@ -10851,6 +13987,34 @@
    }
   },
   {
+   "name": "de/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 Tabs geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 Websites"
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10943,6 +14107,34 @@
    },
    "expect": {
     "value": "11 Überweisungen"
+   }
+  },
+  {
+   "name": "de/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 Tabs geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 Websites"
    }
   },
   {
@@ -11041,6 +14233,34 @@
    }
   },
   {
+   "name": "de/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 Tabs geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 Websites"
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11136,6 +14356,34 @@
    }
   },
   {
+   "name": "de/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 Tabs geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 Websites"
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11228,6 +14476,34 @@
    },
    "expect": {
     "value": "1000000 Überweisungen"
+   }
+  },
+  {
+   "name": "de/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 Tabs geöffnet"
+   }
+  },
+  {
+   "name": "de/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 Websites"
    }
   },
   {
@@ -11339,6 +14615,34 @@
    }
   },
   {
+   "name": "ru/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 вкладок открыто"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 сайтов"
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11431,6 +14735,34 @@
    },
    "expect": {
     "value": "1 отправка"
+   }
+  },
+  {
+   "name": "ru/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 вкладка открыта"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 сайт"
    }
   },
   {
@@ -11529,6 +14861,34 @@
    }
   },
   {
+   "name": "ru/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 вкладок открыто"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 сайтов"
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11621,6 +14981,34 @@
    },
    "expect": {
     "value": "3 отправок"
+   }
+  },
+  {
+   "name": "ru/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 вкладок открыто"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 сайтов"
    }
   },
   {
@@ -11719,6 +15107,34 @@
    }
   },
   {
+   "name": "ru/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 вкладок открыто"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 сайтов"
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11811,6 +15227,34 @@
    },
    "expect": {
     "value": "11 отправок"
+   }
+  },
+  {
+   "name": "ru/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 вкладок открыто"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 сайтов"
    }
   },
   {
@@ -11909,6 +15353,34 @@
    }
   },
   {
+   "name": "ru/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 вкладок открыто"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 сайтов"
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12004,6 +15476,34 @@
    }
   },
   {
+   "name": "ru/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 вкладок открыто"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 сайтов"
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12096,6 +15596,34 @@
    },
    "expect": {
     "value": "1000000 отправок"
+   }
+  },
+  {
+   "name": "ru/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 вкладок открыто"
+   }
+  },
+  {
+   "name": "ru/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 сайтов"
    }
   },
   {
@@ -12207,6 +15735,34 @@
    }
   },
   {
+   "name": "it/explore.openTabs/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 schede aperte"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 siti"
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12299,6 +15855,34 @@
    },
    "expect": {
     "value": "1 invio"
+   }
+  },
+  {
+   "name": "it/explore.openTabs/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 scheda aperta"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 sito"
    }
   },
   {
@@ -12397,6 +15981,34 @@
    }
   },
   {
+   "name": "it/explore.openTabs/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 schede aperte"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 siti"
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12489,6 +16101,34 @@
    },
    "expect": {
     "value": "3 invii"
+   }
+  },
+  {
+   "name": "it/explore.openTabs/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 schede aperte"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 siti"
    }
   },
   {
@@ -12587,6 +16227,34 @@
    }
   },
   {
+   "name": "it/explore.openTabs/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 schede aperte"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 siti"
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12679,6 +16347,34 @@
    },
    "expect": {
     "value": "11 invii"
+   }
+  },
+  {
+   "name": "it/explore.openTabs/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 schede aperte"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 siti"
    }
   },
   {
@@ -12777,6 +16473,34 @@
    }
   },
   {
+   "name": "it/explore.openTabs/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 schede aperte"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 siti"
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12872,6 +16596,34 @@
    }
   },
   {
+   "name": "it/explore.openTabs/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 schede aperte"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 siti"
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12964,6 +16716,34 @@
    },
    "expect": {
     "value": "1000000 invii"
+   }
+  },
+  {
+   "name": "it/explore.openTabs/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.openTabs",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 schede aperte"
+   }
+  },
+  {
+   "name": "it/explore.siteCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "explore.siteCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 siti"
    }
   },
   {

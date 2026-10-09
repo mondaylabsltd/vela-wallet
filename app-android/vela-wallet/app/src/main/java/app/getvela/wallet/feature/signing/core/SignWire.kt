@@ -114,8 +114,8 @@ enum class ConfirmBlock {
 
 /**
  * The one confirm gate (spec 099 R7, `sign_confirm::confirm_state` through
- * `signConfirmState`): whether the slide arms, which part is shut, and the
- * line under a shut slide (`componentsUi.signing.confirmBlock.*`) — `null`
+ * `signConfirmState`): whether the confirm arms, which part is shut, and the
+ * line under a shut confirm (`componentsUi.signing.confirmBlock.*`) — `null`
  * where the sheet already says it its own way.
  */
 @Serializable
@@ -486,6 +486,12 @@ data class SignRequestView(
     val dapp: SignDappIdentity? = null,
     val chain_id: Int,
     val signer_address: String? = null,
+    /**
+     * The wallet asked itself ([SignEvent.RequestArrived]'s `first_party`): no
+     * requester header — no mark, no "Vela Wallet", no network chip. `false`
+     * for every request a page raised.
+     */
+    val first_party: Boolean = false,
 )
 
 @Serializable
@@ -638,6 +644,12 @@ sealed class SignEvent {
         val requested_address: String? = null,
         val request_ts_ms: Double? = null,
         val now_ms: Double,
+        /**
+         * The wallet raised this request of itself (the Ethereum backup) —
+         * set at that one place, never derived from what the request reads
+         * like: a page can submit the same bytes.
+         */
+        val first_party: Boolean = false,
     ) : SignEvent()
 
     @Serializable

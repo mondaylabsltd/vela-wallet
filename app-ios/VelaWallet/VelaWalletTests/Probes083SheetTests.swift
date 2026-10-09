@@ -91,7 +91,7 @@ struct Probes083Sheet {
             context: context
         )
         let blocks = model.blocks.map { String(describing: $0) }.joined(separator: "\n      ")
-        SProbe.log(id, "\(what)\n   resolved=\(controller.clear.resolved) surface=\(controller.clear.surface) intent=«\(controller.clear.result?.intent ?? "nil")» contract=«\(controller.clear.result?.contractName ?? "nil")»\n   confirm=\(String(describing: model.confirm?.action)) slide-enabled=\(String(describing: model.confirm?.enabled))\n   BLOCKS:\n      \(blocks)")
+        SProbe.log(id, "\(what)\n   resolved=\(controller.clear.resolved) surface=\(controller.clear.surface) intent=«\(controller.clear.result?.intent ?? "nil")» contract=«\(controller.clear.result?.contractName ?? "nil")»\n   confirm=\(String(describing: model.confirm?.action)) confirm-enabled=\(String(describing: model.confirm?.enabled))\n   BLOCKS:\n      \(blocks)")
         controller.swipeDismissed()   // the ✕: one 4001, nothing signed
     }
 

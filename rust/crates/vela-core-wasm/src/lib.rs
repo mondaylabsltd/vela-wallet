@@ -891,7 +891,7 @@ pub fn typical_inclusion_seconds(chain_id: u32) -> u32 {
 
 /// Issue 212: how long a chain's fee signals may be held, in ms — the one
 /// number every shell's cache used to carry its own copy of.
-/// May the signing slide arm, and if not why (spec 099 R7) — the one gate
+/// May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
 /// every client reads: the four views' JSON, the speed in force, a
 /// `ConfirmState` JSON back (`undefined` when a view does not read).
 #[wasm_bindgen(js_name = signConfirmState)]
@@ -1521,6 +1521,68 @@ pub fn i18n_plural_suffixes_legacy() -> Vec<String> {
 #[wasm_bindgen(js_name = i18nTextDirection)]
 pub fn i18n_text_direction(lng: &str) -> String {
     vela_core::l10n::text_direction(lng).as_str().to_owned()
+}
+
+/// The core's compact relative time — `"now"`, `"2m"`, `"3h"`, a short
+/// weekday under a week, else the date — spelt with the words the caller
+/// holds (`I18n::format_relative_time`'s rule, `format_relative_time_with`).
+///
+/// For the web client, which carries no catalog: `now` / `minutes` /
+/// `hours` are `time.now`, `time.minutesShort` and `time.hoursShort` as the
+/// prerendered messages hold them (`{{n}}` in place); `language` the page's
+/// locale, which names the weekday. `ts_seconds` is the moment in WHOLE
+/// SECONDS (`Math.floor(atMs / 1000)` — milliseconds there read as the
+/// future, which is "now"); `now_ms` the clock; `utc_offset_minutes` what to
+/// add to UTC for local time (`-new Date(atMs).getTimezoneOffset()`);
+/// `date_format` the person's preset as stored (`resolvedFormatKeys().date`),
+/// `auto` already resolved.
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
+#[wasm_bindgen(js_name = formatRelativeTime)]
+pub fn format_relative_time(
+    ts_seconds: f64,
+    now_ms: f64,
+    utc_offset_minutes: i32,
+    date_format: &str,
+    language: &str,
+    now: &str,
+    minutes: &str,
+    hours: &str,
+) -> JsResult<String> {
+    format_relative_time_inner(
+        ts_seconds,
+        now_ms,
+        utc_offset_minutes,
+        date_format,
+        language,
+        vela_core::i18n::RelativeTimeWords {
+            now,
+            minutes_short: minutes,
+            hours_short: hours,
+        },
+    )
+    .map_err(err)
+}
+
+fn format_relative_time_inner(
+    ts_seconds: f64,
+    now_ms: f64,
+    utc_offset_minutes: i32,
+    date_format: &str,
+    language: &str,
+    words: vela_core::i18n::RelativeTimeWords<'_>,
+) -> Result<String, vela_core::CoreError> {
+    // A JS number is whole milliseconds or seconds well inside i64; `as`
+    // saturates anything else (NaN reads as 0), which the rule clamps.
+    #[allow(clippy::cast_possible_truncation, clippy::allow_attributes)]
+    let (ts_seconds, now_ms) = (ts_seconds.floor() as i64, now_ms.floor() as i64);
+    vela_core::i18n::format_relative_time_with(
+        &words,
+        language,
+        ts_seconds,
+        now_ms,
+        utc_offset_minutes,
+        vela_core::l10n::date_preset_of(date_format),
+    )
 }
 
 /// An amount field's text as the core reads it, or `undefined` for a paste
@@ -2258,6 +2320,56 @@ pub fn mark_miss_ttl_ms(kind: &str, status: Option<u16>) -> Option<u32> {
     vela_core::app::remote_mark::mark_miss_ttl_ms(mark_miss_of(kind, status))
 }
 
+/// A `MarkView` as the JS object its generated type (`MarkView.ts`) promises:
+/// `null`, not `undefined`, for an absent badge.
+fn mark_to_js(mark: &vela_core::app::remote_mark::MarkView) -> JsValue {
+    mark.serialize(&serde_wasm_bindgen::Serializer::new().serialize_missing_as_null(true))
+        .unwrap_or(JsValue::NULL)
+}
+
+/// A COIN's mark, a `MarkView` (`remote_mark::token_mark`):
+/// `ethereumDataUrl` is the person's chain-data endpoint ("" = the built-in
+/// one), `tokenAddress` `undefined`/`null` for the chain's native coin, `named`
+/// the logo URLs an index already gave (tried first).
+#[wasm_bindgen(js_name = tokenMark)]
+#[must_use]
+pub fn token_mark(
+    ethereum_data_url: &str,
+    chain_id: u32,
+    symbol: &str,
+    token_address: Option<String>,
+    named: Vec<String>,
+) -> JsValue {
+    mark_to_js(&vela_core::app::remote_mark::token_mark(
+        ethereum_data_url,
+        chain_id,
+        symbol,
+        token_address.as_deref(),
+        &named,
+    ))
+}
+
+/// A NETWORK drawn as itself, a `MarkView` (`remote_mark::chain_mark`): its
+/// own logo, never a badge.
+#[wasm_bindgen(js_name = chainMark)]
+#[must_use]
+pub fn chain_mark(ethereum_data_url: &str, chain_id: u32, native_symbol: &str) -> JsValue {
+    mark_to_js(&vela_core::app::remote_mark::chain_mark(
+        ethereum_data_url,
+        chain_id,
+        native_symbol,
+    ))
+}
+
+/// `{base}/chainlogos/eip155-{chainId}.png` on the person's chain-data
+/// endpoint ("" = the built-in one); `undefined` for chain 0, which names no
+/// network.
+#[wasm_bindgen(js_name = chainLogoUrl)]
+#[must_use]
+pub fn chain_logo_url(ethereum_data_url: &str, chain_id: u32) -> Option<String> {
+    vela_core::app::remote_mark::chain_logo_url(ethereum_data_url, chain_id)
+}
+
 fn balance_read_plan_inner(
     chain_id: u32,
     stables_json: &str,
@@ -2592,6 +2704,60 @@ mod core_082_exports {
             parse(&browser_site_label("Uniswap", "app.uniswap.org")),
             json!({"name": "Uniswap", "host_line": "app.uniswap.org"})
         );
+    }
+
+    /// `tokenMark` / `chainMark` hand back a JsValue, which only exists inside
+    /// a wasm host: verify-web.mjs replays tests/vectors/marks.json through
+    /// them. The plain-string export is checked here.
+    #[test]
+    fn a_chain_logo_is_on_the_persons_endpoint_and_never_on_chain_zero() {
+        assert_eq!(
+            chain_logo_url("", 56).as_deref(),
+            Some("https://ethereum-data.getvela.app/chainlogos/eip155-56.png")
+        );
+        assert_eq!(
+            chain_logo_url("https://data.example/", 1).as_deref(),
+            Some("https://data.example/chainlogos/eip155-1.png")
+        );
+        assert_eq!(chain_logo_url("", 0), None);
+    }
+
+    /// `formatRelativeTime` with the words the web's prerendered messages
+    /// hold: the engine's rule, the weekday from the page's locale, the date
+    /// in the stored preset. verify-web.mjs replays the vector suite through
+    /// the shipped export itself.
+    #[test]
+    fn a_relative_time_is_the_cores_with_the_pages_words() {
+        // 2026-06-13 13:45:00.999 UTC, a Saturday.
+        const NOW_MS: f64 = 1_781_358_300_999.0;
+        let now_s = (NOW_MS / 1000.0).floor();
+        let zh = |ts: f64, offset: i32, date: &str| {
+            format_relative_time_inner(
+                ts,
+                NOW_MS,
+                offset,
+                date,
+                "zh",
+                vela_core::i18n::RelativeTimeWords {
+                    now: "刚刚",
+                    minutes_short: "{{n}}分钟前",
+                    hours_short: "{{n}}小时前",
+                },
+            )
+            .unwrap_or_else(|e| unreachable!("{e}"))
+        };
+        assert_eq!(zh(now_s - 44.0, 0, "iso"), "刚刚");
+        assert_eq!(zh(now_s - 90.0, 0, "iso"), "2分钟前");
+        assert_eq!(zh(now_s - 5_400.0, 0, "iso"), "2小时前");
+        assert_eq!(zh(now_s - 3.0 * 86_400.0, 0, "iso"), "周三");
+        // 2026-06-10 13:45 UTC is already Thursday at UTC+14.
+        assert_eq!(zh(now_s - 3.0 * 86_400.0, 840, "iso"), "周四");
+        assert_eq!(zh(now_s - 30.0 * 86_400.0, 0, "dmy_slash"), "14/05/2026");
+        // A fractional second floors, as `Math.floor(atMs / 1000)` would:
+        // 44.5 s ago is the second 45 s ago, never rounded back to 44.
+        assert_eq!(zh(now_s - 44.5, 0, "iso"), "1分钟前");
+        // Milliseconds where seconds belong: the future, so "now".
+        assert_eq!(zh(NOW_MS - 3_600_000.0, 0, "iso"), "刚刚");
     }
 
     #[test]

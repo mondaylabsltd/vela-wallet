@@ -81,7 +81,7 @@
     "recipientCount_other": "{{count}} destinatários",
     "removeRecipient": "Remover",
     "alertInsufficientBalanceBody": "O total excede seu saldo.",
-    "recipientPickAria": "Escolher destinatário ou escanear",
+    "recipientPickAria": "Escolher um contato",
     "multiSendNoFundsAfterGas": "Saldo insuficiente para o gas após a reserva.",
     "gasReserved": "gas reservado",
     "txErrorGeneric": "Não foi possível enviar a transação. Seus fundos estão seguros — tente de novo.",

@@ -10,7 +10,10 @@
 //  the evidence the fix is checked against.
 //
 //  Parallel space, so nothing here needs a finger. The one transaction it may
-//  send is the harness's Send dust from the fixture Safe.
+//  send is the harness's Send dust from the fixture Safe — real money on
+//  Gnosis, so it is confirmed only in a build with `-DVELA_LIVE_SEND`, the
+//  opt-in BrowserAcceptanceTests' dust uses. Without it the sheet is
+//  photographed and closed by its ✕: a device run never spends.
 //
 
 import XCTest
@@ -41,6 +44,18 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         app.launchArguments += ["-AppleLanguages", "(zh)"]
         app.launch()
         return app
+    }
+
+    /// `VELA_URL` is a page opened from outside (DESIGN N): Explore lands ON
+    /// it, with the app's tab bar under it — so 探索 is not tapped while the
+    /// page is up (it is the way back to the Explore home). Should the app
+    /// be elsewhere, 探索 and the home's resume row bring the page back.
+    private func landOnThePage(_ app: XCUIApplication) {
+        if app.buttons["explore.bar.back"].waitForExistence(timeout: 15) { return }
+        let tab = app.buttons["探索"].firstMatch
+        if tab.exists, tab.isHittable { tab.tap() }
+        let row = app.buttons.matching(identifier: "explore.resume.row").firstMatch
+        if row.waitForExistence(timeout: 10) { row.tap() }
     }
 
     /// A screenshot and the texts on screen, under one step name.
@@ -75,23 +90,25 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
     }
 
     private func sheetOpen(_ app: XCUIApplication) -> Bool {
-        app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] '滑动以确认' OR label CONTAINS[c] '签名消息' OR label CONTAINS[c] '签名账户'")).firstMatch.exists
-            || app.otherElements.containing(NSPredicate(format: "label CONTAINS[c] '滑动以确认'")).firstMatch.exists
+        app.buttons["signing.confirm"].exists
+            || app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] '签名消息' OR label CONTAINS[c] '签名账户'")).firstMatch.exists
     }
 
-    /// Drags the slide (the element whose label starts "滑动以确认") to its end.
-    private func slide(_ app: XCUIApplication) {
-        let slider = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] '滑动以确认'")).firstMatch
-        guard slider.waitForExistence(timeout: 10) else { return }
-        let start = slider.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5))
-        let end = slider.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5))
-        start.press(forDuration: 0.15, thenDragTo: end)
+    /// Taps the sheet's confirm (issue #461: a button, by its stable hook),
+    /// once the core's gate has opened it.
+    private func confirm(_ app: XCUIApplication) {
+        let button = app.buttons["signing.confirm"]
+        guard button.waitForExistence(timeout: 10) else { return }
+        _ = XCTWaiter().wait(
+            for: [expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: button)],
+            timeout: 30
+        )
+        button.tap()
     }
 
     func testProbeTheBrowserCheckpoints() throws {
         let app = launch()
-        let tab = app.buttons["探索"].firstMatch
-        if tab.waitForExistence(timeout: 5), tab.isHittable { tab.tap() }
+        landOnThePage(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 40))
         record(app, "01-page")
 
@@ -128,17 +145,21 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
             app.webViews.buttons["Sign"].firstMatch.tap()
             Thread.sleep(forTimeInterval: 3)
         }
-        slide(app)
+        confirm(app)
         frames(app, "07-after-sign", count: 8, every: 0.5)
 
-        // A transaction: the fee row, then what follows the slide.
+        // A transaction: the fee row, then what follows the confirm.
         app.webViews.buttons["Switch to Gnosis"].firstMatch.tap()
         Thread.sleep(forTimeInterval: 2)
         app.webViews.buttons["Send dust"].firstMatch.tap()
         Thread.sleep(forTimeInterval: 6)
         record(app, "08-send-sheet")
-        slide(app)
+        #if VELA_LIVE_SEND
+        confirm(app)
         frames(app, "09-after-send", count: 24, every: 1.5)
+        #else
+        XCTContext.runActivity(named: "Send dust not confirmed: build with -DVELA_LIVE_SEND to spend") { _ in }
+        #endif
         // Spec 079: the ✕ is the one way out; the scrim no longer closes it.
         let close = app.buttons["关闭"].firstMatch
         if close.exists, close.isHittable {
@@ -148,7 +169,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         }
 
         // Chrome: site menu, connection panel, pickers, tabs.
-        let menu = app.buttons["站点菜单"].firstMatch
+        let menu = app.buttons["explore.bar.menu"].firstMatch
         if menu.waitForExistence(timeout: 5) {
             menu.tap()
             Thread.sleep(forTimeInterval: 1.5)
@@ -156,7 +177,8 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
             Thread.sleep(forTimeInterval: 1)
         }
-        let account = app.buttons["账户"].firstMatch
+        // Named "账户, 已连接" while connected (DESIGN N): by its hook.
+        let account = app.buttons["explore.bar.account"].firstMatch
         if account.waitForExistence(timeout: 5) {
             account.tap()
             Thread.sleep(forTimeInterval: 1.5)
@@ -170,7 +192,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
             Thread.sleep(forTimeInterval: 1)
         }
-        let tabs = app.buttons["标签页"].firstMatch
+        let tabs = app.buttons["explore.bar.tabs"].firstMatch
         if tabs.waitForExistence(timeout: 5) {
             tabs.tap()
             Thread.sleep(forTimeInterval: 1.5)
@@ -201,8 +223,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
     /// and says "正在重试…"; never WebKit's own page, never a blank.
     func testProbeALoadThatFails() throws {
         let app = launch(url: "http://127.0.0.1:1/")
-        let tab = app.buttons["探索"].firstMatch
-        if tab.waitForExistence(timeout: 5), tab.isHittable { tab.tap() }
+        landOnThePage(app)
         let retry = app.buttons["重试"].firstMatch
         _ = retry.waitForExistence(timeout: 20)
         record(app, "14-load-failed")
@@ -227,8 +248,7 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         // The harness page first, then the silent site typed into the bar —
         // so the clock starts at the Go, not somewhere in the launch.
         let app = launch()
-        let tab = app.buttons["探索"].firstMatch
-        if tab.waitForExistence(timeout: 5), tab.isHittable { tab.tap() }
+        landOnThePage(app)
         let host = app.staticTexts["127.0.0.1:\(LocalDappServer.port)"].firstMatch
         XCTAssertTrue(host.waitForExistence(timeout: 40), "the harness page never loaded")
         host.tap()

@@ -18,13 +18,19 @@ enum class SigningScreenState {
     CS1, CS2, CS3, CS4, CS5, CS6, CS7, CS8, CS9, CS10, CS11,
     CS12, CS13, CS14, CS15, CS16, CS17, CS18, CS19, CS20, CS21, CS22,
     CS23, CS24, CS25, CS26, CS27, CS28, CS29, CS30, CS31, CS32, CS33,
+
+    /**
+     * The wallet's own request (the key backup to Ethereum, the core's
+     * `first_party`): no requester header, its intent and the ✕ in one row,
+     * the rows Network / Address / Public keys, the speed control open with
+     * a tier still measuring. The canon's cs34/cs35 (a cap being typed) are
+     * not drawn on this platform yet; the number stays the canon's.
+     */
+    CS36,
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
 enum class SigningTone { Neutral, Accent, Success, Caution, Danger }
-
-@Immutable
-data class TokenMark(val letter: String, val tint: Color)
 
 @Immutable
 data class AmountLine(
@@ -32,7 +38,12 @@ data class AmountLine(
     val sign: String,
     val value: String,
     val symbol: String,
-    val token: TokenMark? = null,
+    /**
+     * The coin's mark — the send flow's token mark (`WalletLive.mark` on the
+     * request's chain): its logo over its ticker's letters. Never a first
+     * letter on a tinted disc (USDC and USDT were both "U").
+     */
+    val token: app.getvela.wallet.feature.flows.TokenMarkModel? = null,
     val fiat: String? = null,
     /** "支付" / "最少收到" / "存入资产" — the line's own small label. */
     val caption: String? = null,
@@ -132,7 +143,12 @@ data class TechIdentity(
     val role: String,
     val name: String,
     val address: String,
-    val mark: TokenMark? = null,
+    /**
+     * What stands beside it: a token's mark (`FactLead.Token`, the send
+     * flow's) or a person's identicon (`FactLead.Identicon`, from the
+     * address) — the leads a fact row draws, never a letter avatar.
+     */
+    val lead: app.getvela.wallet.feature.flows.FactLead? = null,
 )
 
 @Immutable
@@ -165,7 +181,13 @@ data class TechModel(
 @Immutable
 data class FeeTokenOption(
     val id: String,
-    val mark: TokenMark,
+    /**
+     * The coin's real mark — the send form's fee-coin sheet's own: its logo
+     * on the REQUEST's chain (a native coin wears its chain's), over the drawn
+     * ticker when the logo cannot load. Never a first letter (USDC and USDT
+     * were both "U").
+     */
+    val mark: app.getvela.wallet.feature.flows.TokenMarkModel,
     val name: String,
     val balance: String,
     val fee: String,
@@ -192,13 +214,26 @@ sealed interface FeeModel {
         /** The row answers a tap: a failed quote to retry, or more than one coin to choose from. */
         val tappable: Boolean = false,
         /**
-         * Issue #262: why the slide is shut — the paying coin is not there;
+         * Issue #262: why the confirm is shut — the paying coin is not there;
          * issue #408: or no coin on offer can pay, said as that.
          */
         val warning: String? = null,
         /** Spec 079: the send form's refresh control, and whether a measurement is out. */
         val refreshLabel: String? = null,
         val refreshing: Boolean = false,
+        /**
+         * The figure is being measured again — a measurement is out, or the
+         * one in hand is another speed's. The line under the card keeps its
+         * last words' height meanwhile ([HeldLine]), so the sheet does not move.
+         */
+        val measuring: Boolean = false,
+        /**
+         * The last [warning], kept while the fee is measured again: its room
+         * only. The verdict is about the last quote, so it is not said —
+         * drawn invisible and silent — and it goes when a fee lands with
+         * nothing to say. Set by the sheet, never by the builder.
+         */
+        val heldWarning: String? = null,
         /** The chevron: only where a tap opens the coin list. */
         val chevron: Boolean = true,
     ) : FeeModel
@@ -212,7 +247,7 @@ sealed interface FeeModel {
 
 /**
  * The Trusted Signer's page is open (spec 071): the sheet says so instead of
- * offering the slide, with a way back to the page and a way out.
+ * offering the confirm, with a way back to the page and a way out.
  */
 @Immutable
 data class TrustedSignerWaitModel(
@@ -232,15 +267,23 @@ data class SigningScreenModel(
     val networkName: String,
     val networkDot: Color,
     /**
-     * The wallet asking ITSELF (the key backup): its own mark and name, and no
-     * host — it is not a site.
+     * The wallet asking ITSELF (the key backup) — the core's `first_party`,
+     * never read off the request's bytes or origin. There is no requester to
+     * name: no mark, no name, no network chip (its rows say the network). The
+     * header is one row, [headline] and the ✕.
      */
     val dappOwn: Boolean = false,
+    /**
+     * The wallet's own request: what it does ("备份公钥"), drawn as the
+     * header's title beside the ✕. The intent block it comes from is not
+     * repeated below. `null` for a site's request, whose header names the site.
+     */
+    val headline: String? = null,
     /** The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19). Https only. */
     val dappIconUrls: List<String> = emptyList(),
     /** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
     val networkLogoUrl: String? = null,
-    /** Spec 071: the Trusted Signer is open; the slide gives way to this. */
+    /** Spec 071: the Trusted Signer is open; the confirm gives way to this. */
     val trustedSignerWait: TrustedSignerWaitModel? = null,
     /** Spec 071: why the last Trusted Signer attempt did not sign. */
     val trustedSignerNotice: String? = null,
@@ -254,19 +297,20 @@ data class SigningScreenModel(
     val signerName: String,
     val signerSeed: String,
     /**
-     * The slide. There is no reject BUTTON anywhere in this vocabulary; the
-     * header's ✕ is the explicit refusal, and since spec 079 nothing else
-     * closes the sheet (owner ruling: no swipe, scrim or Back rejection).
+     * The confirm's words — the action alone ("确认兑换", "签名", "备份公钥"),
+     * on a tap button (issue #461: the Send screen's Confirm, not a slide).
+     * There is no reject BUTTON anywhere in this vocabulary; the header's ✕ is
+     * the explicit refusal, and since spec 079 nothing else closes the sheet
+     * (owner ruling: no swipe, scrim or Back rejection).
      *
-     * `null` under a refusal: a dead slide reads as an option somebody merely
-     * failed to use, rather than one the wallet never offered.
+     * `null` under a refusal: a dead confirm reads as an option somebody
+     * merely failed to use, rather than one the wallet never offered.
      */
-    val confirmHint: String?,
     val confirmAction: String?,
     val confirmEnabled: Boolean,
     val panelTitle: String,
     /**
-     * Spec 099 R7: why the slide is shut, one line under it — the core's
+     * Spec 099 R7: why the confirm is shut, one line under it — the core's
      * `ConfirmState.key`, translated. `null` while it is armed, or where the
      * sheet already says it its own way.
      */
@@ -286,7 +330,46 @@ data class SigningScreenModel(
      * transaction and a send look the same while they land.
      */
     val receipt: app.getvela.wallet.feature.flows.SendReceiptModel? = null,
+    /**
+     * Which request this sheet is drawing (the request's id; the gallery's
+     * state). What the sheet holds across frames — a line kept while the fee
+     * is measured again — is held per request, never carried to the next.
+     */
+    val requestKey: String = "",
 )
+
+/**
+ * A line whose room outlives its words. The signing sheet is anchored at the
+ * bottom and wraps its content, so a line that came and went with every 30 s
+ * re-quote, speed pick and refresh moved the whole form under the person's
+ * eyes (~33 px on the Xiaomi; the web measured 29). The web's rule, kept
+ * here: what is not said now is drawn invisible and silent, at the last
+ * words' height. A plain holder, not state: reading it schedules no
+ * recomposition, and the same inputs always give the same line.
+ */
+internal class HeldLine {
+    private var last: String? = null
+
+    /**
+     * The line under the fee card: [line] when there is one; while
+     * [measuring], the last one there was (to hold its room, not to say it);
+     * otherwise none — a fee landed with nothing to say lets it go.
+     */
+    fun next(line: String?, measuring: Boolean): String? {
+        if (line != null || !measuring) last = line
+        return line ?: last
+    }
+
+    /**
+     * The confirm's note: the last one said, said now or not. `null` until a
+     * note has been said — a board that never shut its confirm gains no blank
+     * line — and from then on its line stays.
+     */
+    fun room(line: String?): String? {
+        if (line != null) last = line
+        return last
+    }
+}
 
 /** The signed-in wallet's identity over the fixture's signer row. */
 fun SigningScreenModel.withIdentity(name: String, address: String): SigningScreenModel =

@@ -18,6 +18,10 @@ enum SigningStateId: String, CaseIterable, Identifiable {
     case cs1, cs2, cs3, cs4, cs5, cs6, cs7, cs8, cs9, cs10, cs11
     case cs12, cs13, cs14, cs15, cs16, cs17, cs18, cs19, cs20, cs21, cs22
     case cs23, cs24, cs25, cs26, cs27, cs28, cs29, cs30, cs31, cs32, cs33
+    /// The wallet's own key backup (first party): the headline row, no
+    /// requester. Numbered after web and desktop's cs34/cs35 (the cap being
+    /// typed), which this client does not draw as boards.
+    case cs36
     var id: String { rawValue }
     /// Gallery chip label — mock naming, not translatable copy.
     var label: String { rawValue.uppercased() }
@@ -26,17 +30,15 @@ enum SigningStateId: String, CaseIterable, Identifiable {
 /// Semantic weight. `accent` is the intent sentence; the rest colour warnings.
 enum SigningTone { case neutral, accent, success, caution, danger }
 
-struct TokenMark {
-    let letter: String
-    let tint: Color
-}
-
 struct AmountLine {
     /// Rendered ahead of the value and coloured with it: "−", "+", or "".
     let sign: String
     let value: String
     let symbol: String
-    var token: TokenMark?
+    /// The coin's token mark — its logo over its letters, the send flow's
+    /// in-line mark, by the core's rule. It was a first letter on a brand-
+    /// coloured disc, so USDC and USDT were both "U".
+    var token: TokenMarkModel?
     var fiat: String?
     /// "支付" / "最少收到" / "存入资产" — the line's own small label.
     var caption: String?
@@ -136,7 +138,9 @@ struct TechIdentity: Identifiable {
     let role: String
     let name: String
     let address: String
-    var mark: TokenMark?
+    /// What stands beside it, as on a fact row: a token's mark, or a
+    /// person's identicon from their address — never a letter.
+    var lead: FactLead?
 }
 
 struct TechModel {
@@ -162,7 +166,8 @@ struct TechModel {
 
 struct FeeTokenOption: Identifiable {
     let id: String
-    let mark: TokenMark
+    /// The coin's mark — logo over its drawn ticker, the send flow's own.
+    let mark: TokenMarkModel
     let name: String
     let balance: String
     let fee: String
@@ -175,7 +180,7 @@ struct FeeTokenOption: Identifiable {
 }
 
 enum FeeModel {
-    /// `warning` says why the slide is shut when the coin that pays is not
+    /// `warning` says why the confirm is shut when the coin that pays is not
     /// there (issue #262); it sits under the row, where the other coins are.
     /// `tappable` is whether the row can DO anything: ask a failed quote
     /// again, or open a list with more than one coin in it. With one coin and
@@ -211,14 +216,16 @@ struct SigningModel {
     /// send is a number about nothing.
     let fee: FeeModel?
     var signer: (label: String, name: String, seed: String)
-    /// The slide. There is no reject BUTTON anywhere in this vocabulary; the
-    /// header's ✕ is the explicit refusal, and since spec 079 nothing else
-    /// closes the sheet (owner ruling: no swipe rejection).
+    /// The confirm (issue #461): one tap on the shared primary button, its
+    /// label the action alone — "确认兑换", "签名", "授权", "备份公钥". There is
+    /// no reject BUTTON anywhere in this vocabulary; the header's ✕ is the
+    /// explicit refusal, and since spec 079 nothing else closes the sheet
+    /// (owner ruling: no swipe rejection).
     ///
-    /// `nil` under a refusal: a dead slide reads as an option somebody merely
+    /// `nil` under a refusal: a dead button reads as an option somebody merely
     /// failed to use, rather than one the wallet never offered.
-    let confirm: (hint: String, action: String, enabled: Bool)?
-    /// Spec 099 R7: why the slide is shut, in the core's words for the part
+    let confirm: (action: String, enabled: Bool)?
+    /// Spec 099 R7: why the confirm is shut, in the core's words for the part
     /// of the gate that is (`componentsUi.signing.confirmBlock.*`) — one line
     /// under it. `nil` while it may arm, or where the sheet says it its own way.
     var confirmBlockLine: String?
@@ -228,8 +235,8 @@ struct SigningModel {
     /// gallery, which draws no ✕.
     var closeLabel = ""
     /// Spec 079 (owner: one slide): the account signs on the Trusted Signer's
-    /// page, whose slide is the consent — the sheet's action is a button that
-    /// goes there (`confirmButtonLabel`, "去签名页确认"), not a second slide.
+    /// page, whose slide is the consent — the sheet's confirm goes there and
+    /// says so (`confirmButtonLabel`, "去签名页确认") instead of the action.
     var confirmAsButton = false
     var confirmButtonLabel = ""
     /// Spec 079: once the person has approved, the sheet stops being a form
@@ -237,8 +244,9 @@ struct SigningModel {
     /// transaction and a send look the same while they land. Also the ending
     /// the sheet keeps after the core has closed it (`SigningAftercare`).
     var receipt: SendReceiptModel?
-    /// The wallet asking ITSELF (the key backup): its own mark and name, and
-    /// no host — it is not a site.
+    /// The wallet asking ITSELF (the key backup; the core's `first_party`):
+    /// not a site, so no requester header — no mark, no name, no chain chip.
+    /// The header is one row, `headline` and the ✕.
     var dappOwn = false
     /// The speed control under the fee (spec 069) — the send form's own.
     var feeSpeed: FeeSpeedModel?
@@ -253,4 +261,26 @@ struct SigningModel {
     /// The fee row's chevron: only where a tap opens a coin list. A failed
     /// quote is still asked again by a tap, but the refresh control says so.
     var feeChevron = true
+
+    /// The wallet's own request leads with its outcome (issue #314): its
+    /// first intent ("备份公钥") is the sheet's title, in the header row
+    /// beside the ✕. `nil` on a site's request, whose intent is the eyebrow
+    /// over its figure.
+    var headline: (text: String, tone: SigningTone)? {
+        guard dappOwn, let index = headlineIndex,
+              case .intent(let text, let tone) = blocks[index] else { return nil }
+        return (text, tone)
+    }
+
+    /// What the form draws: every block, less the intent the header carries.
+    var formBlocks: [SigningBlock] {
+        guard dappOwn, let index = headlineIndex else { return blocks }
+        var rest = blocks
+        rest.remove(at: index)
+        return rest
+    }
+
+    private var headlineIndex: Int? {
+        blocks.firstIndex { if case .intent = $0 { return true } else { return false } }
+    }
 }

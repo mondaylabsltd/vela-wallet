@@ -2239,7 +2239,7 @@ pub fn enforce_no_unlimited(
     // Off-chain permit SIGNATURES (typed data) are redeemed by the dApp with
     // its OWN struct — the wallet can't cap what it doesn't submit, so a
     // forced cap only desyncs the signature and reverts the dApp's tx. These
-    // are gated by an explicit, deliberate UI risk-consent (slide-to-confirm),
+    // are gated by an explicit, deliberate UI risk-consent (the sheet's confirm),
     // not by this amount guard, which only governs txs the WALLET submits.
     if matches!(detected.locus, GuardLocus::TypedPath { .. }) {
         return Ok(());

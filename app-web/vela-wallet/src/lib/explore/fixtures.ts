@@ -4,6 +4,7 @@
  * builders merge it with resolved messages into display-ready view models.
  * Pure data + assembly: no fetching, no URL parsing, no business state.
  */
+import { pluralForm } from '$lib/i18n/plural';
 import { IDENTITY } from '$lib/wallet/fixtures';
 import type { SidebarModel } from '$lib/wallet/model';
 import type { ExploreMessages } from './messages';
@@ -18,6 +19,7 @@ import type {
 	ExploreStateId,
 	GroupModel,
 	MenuItemModel,
+	ResumeSectionModel,
 	SiteModel,
 	TabModel,
 	TileModel
@@ -50,6 +52,13 @@ export const MOBILE_STATES = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'] as
 
 /** Every desktop state. DE4 is the third column carrying a signing request. */
 export const DESKTOP_STATES = ['de1', 'de2', 'de3', 'de4'] as const;
+
+/**
+ * The most rows the home's resume section draws — the core's
+ * `explore_sites::RESUME_SHOWN`, which decides it; mirrored here only so the
+ * fixture is the shape the core hands over.
+ */
+export const RESUME_SHOWN = 3;
 
 // --- Canon ----------------------------------------------------------------
 
@@ -86,14 +95,6 @@ export const SITES = {
 		host: 'app.hyperliquid.xyz',
 		letter: 'H',
 		tint: '#50D2C1'
-	},
-	curve: { id: 'curve', name: 'Curve', host: 'curve.fi', letter: 'C', tint: '#7B7BE8' },
-	limitless: {
-		id: 'limitless',
-		name: 'Limitless',
-		host: 'limitless.exchange',
-		letter: 'L',
-		tint: '#8B6DFF'
 	}
 } satisfies Record<string, SiteModel>;
 
@@ -124,36 +125,13 @@ const RECENT_DESKTOP: SiteModel[] = [
 ];
 
 /**
- * Custom groups. Titles and blurbs are what the person typed, so they are
- * fixture content — verbatim from the mock, never translated (spec 015 rule).
+ * The sites open in tabs, in strip order. The phone has one more than the
+ * desktop mock so its home can show the resume section full: three rows, and
+ * a header that counts four tabs because the start page is one of them.
+ * The order is also the recency the fixture assumes — Uniswap was left last.
  */
-const CUSTOM_GROUPS: GroupModel[] = [
-	{
-		id: 'trading',
-		title: '交易',
-		kind: 'custom',
-		action: 'menu',
-		hidden: false,
-		sites: [
-			{ ...SITES.curve, subtitle: '稳定币兑换' },
-			{ ...SITES.hyperliquid, subtitle: '永续合约交易' }
-		]
-	},
-	{
-		id: 'prediction',
-		title: '预测市场',
-		kind: 'custom',
-		action: 'menu',
-		// NOT pre-hidden: E2 and DE2 both draw this group. E3 shows it hidden
-		// because the sheet is where hiding HAPPENS — shipping it hidden made
-		// the web the only client missing a group (caught by fixtures.test.ts).
-		hidden: false,
-		sites: [
-			{ ...SITES.polymarket, subtitle: '事件预测市场' },
-			{ ...SITES.limitless, subtitle: '预测市场' }
-		]
-	}
-];
+const PHONE_TAB_SITES: SiteModel[] = [SITES.uniswap, SITES.polymarket, SITES.aave];
+const DESKTOP_TAB_SITES: SiteModel[] = [SITES.uniswap, SITES.polymarket];
 
 /**
  * The page the browser is showing. Fixture content: this is a stand-in for a
@@ -181,6 +159,10 @@ function favoritesSection(m: ExploreMessages) {
 	return { title: m.favorites, action: m.edit, tiles };
 }
 
+/**
+ * The sections under Favorites: Recent dApps, and nothing else — there are no
+ * groups of the person's own (issue 465).
+ */
 function groups(m: ExploreMessages, recent: SiteModel[]): GroupModel[] {
 	return [
 		{
@@ -190,14 +172,13 @@ function groups(m: ExploreMessages, recent: SiteModel[]): GroupModel[] {
 			action: 'clear',
 			hidden: false,
 			sites: recent
-		},
-		...CUSTOM_GROUPS.filter((g) => !g.hidden)
+		}
 	];
 }
 
-function browser(m: ExploreMessages, identicon: Identicon, connected: boolean): BrowserModel {
+function browser(identicon: Identicon, connected: boolean, tabCount: number): BrowserModel {
 	return {
-		url: SITES.uniswap.host,
+		url: `https://${SITES.uniswap.host}/swap`,
 		host: SITES.uniswap.host,
 		secure: true,
 		connected,
@@ -205,38 +186,52 @@ function browser(m: ExploreMessages, identicon: Identicon, connected: boolean): 
 		canForward: false,
 		bookmarked: false,
 		account: { name: IDENTITY.name, identiconSvg: identicon(IDENTITY.addressFull) },
-		tabCount: 2,
+		tabCount,
 		page: DEMO_PAGE
 	};
 }
 
-function tabs(m: ExploreMessages, selected: 'uniswap' | 'polymarket' | 'start'): TabModel[] {
+/** The strip: one tab per site, then the start page's own tab. */
+function tabs(m: ExploreMessages, selected: string, sites: SiteModel[]): TabModel[] {
 	return [
-		{
-			id: 'uniswap',
-			title: SITES.uniswap.name,
-			site: SITES.uniswap,
-			selected: selected === 'uniswap',
+		...sites.map((site) => ({
+			id: site.id,
+			title: site.name,
+			site,
+			selected: selected === site.id,
 			startPage: false
-		},
-		{
-			id: 'polymarket',
-			title: SITES.polymarket.name,
-			site: SITES.polymarket,
-			selected: selected === 'polymarket',
-			startPage: false
-		},
+		})),
 		{ id: 'start', title: m.startPage, selected: selected === 'start', startPage: true }
 	];
 }
 
+/**
+ * The home's resume section, built the way the core builds `resumable`: the
+ * tabs that have a page (never a start page — there is nothing in it to go
+ * back to), most recent first, at most RESUME_SHOWN. The header counts every
+ * tab. No page anywhere, no section.
+ */
+function resumeSection(m: ExploreMessages, strip: TabModel[]): ResumeSectionModel | undefined {
+	const withPage = strip.flatMap((tab) =>
+		tab.site && !tab.startPage
+			? [{ id: tab.id, title: tab.title, host: tab.site.host, site: tab.site }]
+			: []
+	);
+	if (withPage.length === 0) return undefined;
+	return {
+		title: fill(pluralForm(m.openTabs, strip.length), { count: String(strip.length) }),
+		action: m.tabs,
+		tabs: withPage.slice(0, RESUME_SHOWN)
+	};
+}
+
 /** E6's site menu, in mock order. */
-function siteMenuSheet(m: ExploreMessages): SiteMenuSheet {
+function siteMenuSheet(m: ExploreMessages, browsing: BrowserModel): SiteMenuSheet {
 	return {
 		kind: 'site-menu',
 		site: SITES.uniswap,
 		statusLine: m.secureSite,
-		items: siteMenuItems(m)
+		items: siteMenuItems(m, browsing.canForward)
 	};
 }
 
@@ -252,8 +247,15 @@ function recentMenuSheet(m: ExploreMessages): SiteMenuSheet {
 	};
 }
 
-function siteMenuItems(m: ExploreMessages): MenuItemModel[] {
+/**
+ * The site menu (⋯). Spec 099 navigation moved Forward here when the app's
+ * tab bar took the browser toolbar's place: it leads, greyed when there is
+ * nothing ahead, so every row under it keeps its place from page to page.
+ * Add to favourites moved here from the toolbar's star for the same reason.
+ */
+function siteMenuItems(m: ExploreMessages, canForward: boolean): MenuItemModel[] {
 	return [
+		{ id: 'forward', icon: 'arrow-right', label: m.forward, disabled: !canForward },
 		{ id: 'refresh', icon: 'refresh-cw', label: m.refresh },
 		{ id: 'share', icon: 'share-2', label: m.share },
 		{ id: 'copy', icon: 'copy', label: m.copyLink },
@@ -285,7 +287,6 @@ function tileMenuItems(m: ExploreMessages): MenuItemModel[] {
 	return [
 		{ id: 'new-tab', icon: 'external-link', label: m.openInNewTab },
 		{ id: 'rename', icon: 'pencil', label: m.rename },
-		{ id: 'move', icon: 'folder-plus', label: m.moveToGroup },
 		{ id: 'remove', icon: 'trash-2', label: m.removeFromFavorites, danger: true }
 	];
 }
@@ -312,34 +313,23 @@ function connectionSheet(m: ExploreMessages, identicon: Identicon): ConnectionSh
 	};
 }
 
+/**
+ * E3: the start page's two sections, each with its eye (issue 465). No grip,
+ * no trash, no "New group", and no "System" tag — with no groups of the
+ * person's own there is nothing to tell them apart from.
+ */
 function groupManageSheet(m: ExploreMessages): GroupManageSheet {
 	return {
 		kind: 'group-manage' as const,
 		title: m.manageGroups,
-		newGroup: m.newGroup,
 		rows: [
 			{
 				id: 'favorites',
 				title: m.favorites,
-				meta: fill(m.siteCount, { n: '8' }),
-				system: true,
+				meta: fill(pluralForm(m.siteCount, 8), { count: '8' }),
 				hidden: false
 			},
-			{ id: 'recent', title: m.recent, meta: m.systemGroup, system: true, hidden: false },
-			{
-				id: 'trading',
-				title: CUSTOM_GROUPS[0].title,
-				meta: fill(m.siteCount, { n: '4' }),
-				system: false,
-				hidden: false
-			},
-			{
-				id: 'prediction',
-				title: CUSTOM_GROUPS[1].title,
-				meta: fill(m.hiddenCount, { n: '2' }),
-				system: false,
-				hidden: true
-			}
+			{ id: 'recent', title: m.recent, hidden: false }
 		]
 	};
 }
@@ -355,19 +345,22 @@ export function buildMobileState(
 	// E5 opens the switcher FROM a page, so the page's tab is the selected one
 	// — the mock's accent border is on Uniswap, not on 起始页.
 	const selected = browsing || state === 'e5' ? 'uniswap' : 'start';
+	// E1 is the first visit: the start page is the only tab there is.
+	const strip = tabs(m, selected, populated ? PHONE_TAB_SITES : []);
+	const page = browser(identicon, true, strip.length);
 
 	const base: ExploreHomeModel = {
 		state,
 		view: browsing ? 'browsing' : state === 'e5' ? 'tabs' : 'start',
 		title: m.title,
-		tabCountLabel: populated ? '2' : undefined,
 		searchPlaceholder: m.searchPlaceholder,
 		scanLabel: m.scan,
 		empty: populated ? undefined : { title: m.startTitle, caption: m.startHint, cta: m.startCta },
+		resume: resumeSection(m, strip),
 		favorites: populated ? favoritesSection(m) : undefined,
 		groups: populated ? groups(m, RECENT_PHONE) : [],
-		browser: browser(m, identicon, true),
-		tabs: tabs(m, selected),
+		browser: page,
+		tabs: strip,
 		tabsScreen: {
 			title: m.tabs,
 			done: m.done,
@@ -377,7 +370,7 @@ export function buildMobileState(
 		},
 		menus: {
 			groupManage: groupManageSheet(m),
-			siteMenu: siteMenuSheet(m),
+			siteMenu: siteMenuSheet(m, page),
 			recentMenu: recentMenuSheet(m),
 			connection: connectionSheet(m, identicon)
 		},
@@ -411,7 +404,7 @@ export function buildDesktopState(
 		state,
 		tabStrip: {
 			tabs: browsing
-				? tabs(m, 'uniswap').filter((t) => !t.startPage)
+				? tabs(m, 'uniswap', DESKTOP_TAB_SITES).filter((t) => !t.startPage)
 				: [{ id: 'start', title: m.newTab, selected: true, startPage: true }],
 			newTabLabel: m.newTab,
 			newTabTitle: m.newTab
@@ -424,7 +417,7 @@ export function buildDesktopState(
 			bookmark: m.addToFavorites,
 			menu: m.siteMenu
 		},
-		browser: browser(m, identicon, browsing),
+		browser: browser(identicon, browsing, DESKTOP_TAB_SITES.length),
 		start: {
 			empty: populated ? undefined : { title: m.startTitle, caption: m.startHint, cta: m.startCta },
 			favorites: populated ? favoritesSection(m) : undefined,

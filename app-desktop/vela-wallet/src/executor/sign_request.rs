@@ -1601,6 +1601,7 @@ mod tests {
             requested_address: None,
             request_ts_ms: None,
             now_ms: 1_000.0,
+            first_party: false,
         });
         let ops = host.dispatch(Event::ApproveTapped {
             opts: SignApproveOpts::default(),

@@ -9,11 +9,11 @@
 //  answered exactly once. Which of those may happen next is entirely the
 //  core's — this file only gives the answer a Swift shape.
 //
-//  ## The slide's gate is one core function (spec 099 R7)
+//  ## The confirm's gate is one core function (spec 099 R7)
 //
 //  `confirmGateOpen` is `sign_request`'s own opinion: the request is
 //  reviewable, the granted account is reconciled, no pipeline is in flight.
-//  Whether the slide may arm is the core's `signConfirmState` over this view,
+//  Whether the confirm may arm is the core's `signConfirmState` over this view,
 //  `approval_guard`'s, `clear_signing`'s and `fee_policy`'s — with the rules
 //  every client used to add on top (a message has no fee, another speed's
 //  figure is not this speed's, a request still being read is not signable)
@@ -108,14 +108,14 @@ enum SignErrorKind: String, Decodable {
     }
 }
 
-/// May the signing slide arm, and if not, why not — the core's
+/// May the signing confirm arm, and if not, why not — the core's
 /// `sign_confirm::ConfirmState`, from `signConfirmState` over the four views
 /// as the core last wrote them (spec 099 R7).
 struct SignConfirmStateWire: Decodable, Equatable {
     let enabled: Bool
     /// `ConfirmBlock` wire name: which part of the gate is shut.
     let block: String?
-    /// The line under the shut slide (`componentsUi.signing.confirmBlock.*`),
+    /// The line under the shut confirm (`componentsUi.signing.confirmBlock.*`),
     /// or `nil` where the sheet already says it its own way.
     let key: String?
 
@@ -124,7 +124,7 @@ struct SignConfirmStateWire: Decodable, Equatable {
 
     /// The core's verdict. `fee` is `nil` with no fee session (a message);
     /// `speedTier` the speed in force, `nil` with no speed control. Any view
-    /// missing or unreadable keeps the slide shut.
+    /// missing or unreadable keeps the confirm shut.
     static func of(
         sign: String?, guard guardJson: String?, clear: String?, fee: String?, speedTier: String?
     ) -> SignConfirmStateWire {
@@ -190,6 +190,12 @@ struct SignRequestViewWire: Decodable, Equatable {
     /// one when the request stamped a chain.
     let chainId: Int
     let signerAddress: String?
+    /// The wallet's own request (the key backup), never a page's: the shell
+    /// said so at `request_arrived` — the one place it raises one — and the
+    /// core carries it here. Never derived from the reading, which a site can
+    /// submit byte for byte. The core always sends it; the default is only
+    /// for hand-built views.
+    var firstParty: Bool = false
 }
 
 /// What the tracker must be handed the moment it appears. Idempotent — the
@@ -289,7 +295,7 @@ struct SignViewWire: Decodable, Equatable {
     let pendingOpHash: String?
     let error: SignErrorNoticeWire?
     let funding: SignFundingViewWire?
-    /// This machine's own part of the gate. See the file header: the slide
+    /// This machine's own part of the gate. See the file header: the confirm
     /// reads `SignConfirmStateWire`, never this alone.
     let confirmGateOpen: Bool
     /// The granted-account switch has not acknowledged yet.

@@ -402,7 +402,8 @@
 			bind:value={draft.what}
 			placeholder={panel.placeholder}
 			aria-label={panel.placeholder}
-			rows="4"></textarea>
+			rows="4"
+			style:--rows="4"></textarea>
 
 		{#if draft.stepsOpen}
 			<textarea
@@ -411,7 +412,8 @@
 				bind:value={draft.steps}
 				placeholder={panel.stepsPlaceholder}
 				aria-label={panel.stepsPlaceholder}
-				rows="3"></textarea>
+				rows="3"
+				style:--rows="3"></textarea>
 		{:else}
 			<button type="button" class="steps" inert={busy} onclick={() => (draft.stepsOpen = true)}
 				>{panel.addSteps}</button
@@ -647,6 +649,16 @@
 		color: var(--color-fg-base);
 		resize: vertical;
 		outline: none;
+		/* As tall as what it holds, never shorter than its rows: a report
+		   seeded from a relay stop (issue 466) is a title, the treasury's whole
+		   address and its figures — past four rows at phone width — and read in
+		   a box that scrolls inside a sheet that scrolls, half of it was hidden. */
+		field-sizing: content;
+		box-sizing: border-box;
+		min-block-size: calc(
+			var(--rows) * var(--text-base) * var(--text-scale, 1) * var(--leading-normal) + 2 *
+				(var(--space-lg) + var(--border-hairline))
+		);
 	}
 
 	textarea::placeholder {

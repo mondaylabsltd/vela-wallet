@@ -41,11 +41,14 @@ sealed interface TileModel {
     data class Add(val label: String) : TileModel
 }
 
-/** `Favorites` and `Recent` are system groups: hideable, never deletable. */
-enum class GroupKind { Favorites, Recent, Custom }
+/**
+ * `Favorites` and `Recent` are the start page's only groups (issue #465):
+ * hideable, never deletable.
+ */
+enum class GroupKind { Favorites, Recent }
 
 /** The trailing affordance on a group's header row. */
-enum class GroupAction { Edit, Clear, Menu }
+enum class GroupAction { Edit, Clear }
 
 @Immutable
 data class GroupModel(
@@ -92,10 +95,13 @@ data class BrowserModel(
     val host: String,
     val secure: Boolean,
     val connected: Boolean,
+    /** The page has history behind it. The bar's ‹ is never greyed: without history it goes to the home. */
     val canBack: Boolean,
+    /** Drives the site menu's Forward row, greyed (never hidden) when there is nothing ahead. */
     val canForward: Boolean,
     val bookmarked: Boolean,
     val accountSeed: String,
+    /** Every open tab — the bar's box, the switcher's number, the resume header's n. */
     val tabCount: Int,
     val page: DemoPageModel,
     /** Spec 070: a live page's load, 0–100; drawn as a hairline under the address bar while `loading`. */
@@ -174,9 +180,8 @@ data class SiteMenuItem(
 data class GroupManageRow(
     val id: String,
     val title: String,
-    /** "8 个网站" / "2 · 已隐藏" — resolved by the fixture layer. */
+    /** "8 个网站" — resolved by the fixture layer; Recent dApps has none. */
     val meta: String?,
-    val system: Boolean,
     val hidden: Boolean = false,
 )
 
@@ -249,10 +254,10 @@ enum class AddNetworkAction { Approve, Decline, Retry }
 
 @Immutable
 sealed interface ExploreSheet {
+    /** Issue #465: exactly two rows, Favorites and Recent dApps, each with an eye. */
     data class GroupManage(
         val title: String,
         val rows: List<GroupManageRow>,
-        val newGroup: String,
     ) : ExploreSheet
 
     data class SiteMenu(
@@ -294,15 +299,31 @@ data class ExploreEmptyCopy(val title: String, val caption: String, val cta: Str
 @Immutable
 data class FavoritesSection(val title: String, val action: String, val tiles: List<TileModel>)
 
+/**
+ * The home's resume section (spec 099 navigation): the tabs that have a page,
+ * in the core's order and cap (`ExploreView.resumable`), under a header that
+ * counts every open tab and opens the switcher. Each row's `id` is its TAB's
+ * id — a tap resumes that tab, live, with no reload.
+ */
+@Immutable
+data class ResumeSection(
+    /** "已打开 {{n}} 个标签页" — n is every tab, start pages included: the switcher's number. */
+    val title: String,
+    /** "标签页 ›" — opens the switcher. */
+    val action: String,
+    val tabs: List<SiteModel>,
+)
+
 @Immutable
 data class ExploreScreenModel(
     val state: ExploreScreenState,
     val view: ExploreView,
     val title: String,
-    val tabCountLabel: String?,
     val searchPlaceholder: String,
     val scanLabel: String,
     val empty: ExploreEmptyCopy?,
+    /** Drawn only while some tab has a page — there is no empty or loading form of it. */
+    val resume: ResumeSection?,
     val favorites: FavoritesSection?,
     val groups: List<GroupModel>,
     val browser: BrowserModel,

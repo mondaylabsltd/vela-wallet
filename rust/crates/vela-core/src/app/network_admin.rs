@@ -257,6 +257,16 @@ pub fn builtin_native_symbol(chain_id: u32) -> Option<&'static str> {
         .map(|chain| chain.native_symbol)
 }
 
+/// A built-in chain's name as the wallet writes it ("Ethereum", "Unichain")
+/// — or `None` for a chain it does not ship. For words the core writes
+/// itself (the registry backup's Network row, the relay report's title); a
+/// network someone added is named by its own document, which the core does
+/// not hold here.
+#[must_use]
+pub fn builtin_display_name(chain_id: u32) -> Option<&'static str> {
+    builtin(chain_id).map(|chain| chain.display_name)
+}
+
 /// A holding's symbol as the wallet writes it: a built-in chain's own coin
 /// (no contract) takes the registry spelling; everything else is left as
 /// read. Only the CASE is ever changed — a native row whose symbol is some
@@ -1963,7 +1973,12 @@ pub fn parse_chain_data(
         rpc_url: extract_rpc_url(&data.rpc),
         rpc_urls: extract_all_rpc_urls(&data.rpc),
         explorer_url: data.explorers.first().cloned().unwrap_or_default(),
-        logo_url: format!("{ethereum_data_url}/chainlogos/eip155-{requested_chain_id}.png"),
+        // The marks' one rule (`remote_mark::chain_logo_url`): the base trimmed
+        // of spaces and trailing slashes, a blank one the built-in endpoint.
+        // Formatted here it stored `…//chainlogos/…` for a base saved with a
+        // trailing slash, a URL no other network mark used.
+        logo_url: super::remote_mark::chain_logo_url(ethereum_data_url, requested_chain_id)
+            .unwrap_or_default(),
         is_testnet: data.testnet,
     }
 }
@@ -2645,7 +2660,8 @@ fn site_chain_info(ask: &DappChainAsk, ethereum_data_url: &str) -> NetChainInfo 
         rpc_url: ask.rpc_urls.first().cloned().unwrap_or_default(),
         rpc_urls: ask.rpc_urls.clone(),
         explorer_url: ask.explorer_url.clone().unwrap_or_default(),
-        logo_url: format!("{ethereum_data_url}/chainlogos/eip155-{chain_id}.png"),
+        logo_url: super::remote_mark::chain_logo_url(ethereum_data_url, chain_id)
+            .unwrap_or_default(),
         is_testnet: false,
     }
 }

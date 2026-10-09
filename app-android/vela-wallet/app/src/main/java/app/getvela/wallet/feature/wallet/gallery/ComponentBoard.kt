@@ -26,6 +26,7 @@ import app.getvela.wallet.feature.wallet.components.ActionButtonRow
 import app.getvela.wallet.feature.wallet.components.ActivityRow
 import app.getvela.wallet.feature.wallet.components.AssetRow
 import app.getvela.wallet.feature.wallet.components.BalanceDisplay
+import app.getvela.wallet.feature.wallet.components.BalanceRefreshControl
 import app.getvela.wallet.feature.wallet.components.ChainFilterList
 import app.getvela.wallet.feature.wallet.components.EmptyState
 import app.getvela.wallet.feature.wallet.components.NetworkFilterPill
@@ -82,6 +83,13 @@ internal fun ComponentBoard() {
         BalanceDisplay(model = h4.balance)
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         BalanceDisplay(model = h6.balance)
+
+        // Issue 462: the refresh control, idle and turning — the same box in
+        // both, so the board shows nothing moves.
+        BoardLabel("BalanceRefreshControl · idle / updating / never read")
+        BalanceRefreshControl(model = WalletFixtures.refresh(strings), spinning = false, onRefresh = null)
+        BalanceRefreshControl(model = WalletFixtures.refresh(strings, refreshing = true), spinning = true, onRefresh = null)
+        BalanceRefreshControl(model = WalletFixtures.refresh(strings, read = false), spinning = false, onRefresh = null)
 
         BoardLabel("ActionButtonRow")
         ActionButtonRow(actions = h1.actions)

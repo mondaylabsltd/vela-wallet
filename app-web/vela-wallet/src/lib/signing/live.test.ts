@@ -4,7 +4,7 @@
  * Two properties matter more than any layout question, and both are asserted
  * here: the confirm gate is an AND of three separate answers, and the
  * never-unlimited mandate reaches the screen as a DISABLED chip plus a shut
- * slider — not as a warning somebody can slide past.
+ * confirm — not as a warning somebody can tap past.
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -30,6 +30,7 @@ import { txKickoff } from './core/tx-params';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
 import { fill } from '$lib/wallet/messages';
+import { tokenMarkFor } from '$lib/flows/marks';
 import {
 	approveOptsOf,
 	buildSigningModel,
@@ -58,7 +59,8 @@ const REQUEST = {
 	origin: 'https://app.example',
 	dapp: null,
 	chain_id: 1,
-	signer_address: identity.address
+	signer_address: identity.address,
+	first_party: false
 };
 
 const OPEN_SIGN: SignView = {
@@ -269,7 +271,7 @@ describe('the fee the sheet shows', () => {
 
 	// Issue 262: 0 ETH and 2 USDT on mainnet, quoted in ETH. The core keeps the
 	// quote (the person sees the figure) and shuts the gate; the row says why.
-	it('says why the slide is shut when the coin that pays is not there', () => {
+	it('says why the confirm is shut when the coin that pays is not there', () => {
 		const eth = {
 			symbol: 'ETH',
 			contract: null,
@@ -507,7 +509,7 @@ describe('the sheet’s one close (spec 079)', () => {
 /**
  * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): from the
  * approval on, the sheet is a status — Android's signing receipt, word for
- * word — and never the form with a greyed slide.
+ * word — and never the form with a greyed confirm.
  */
 describe('after the approval the sheet is a status', () => {
 	const SUMMARY = 'Send USDC · -100 USDC';
@@ -748,14 +750,15 @@ describe('the speed under the fee', () => {
 		expect(fee.speed?.open).toBe(false);
 	});
 
-	it('opens onto three speeds, each with what it buys', () => {
+	it('opens onto three speeds, each its name and its own fee — no description', () => {
 		const model = buildSigningModel(
 			inputs({ speed: { view: speedView('fast', undefined, true), feeOptions: () => [] } })
 		);
 		const fee = model?.fee;
 		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
 		expect(fee.speed?.options.map((option) => option.id)).toEqual(['fast', 'standard', 'slow']);
-		expect(fee.speed?.options[2].detail).toBe(m.speed.hints.slow);
+		expect(fee.speed?.options[2].label).toBe(m.speed.names.slow);
+		expect(fee.speed?.options[2]).not.toHaveProperty('detail');
 		// The option in force is this sheet's own fee.
 		expect(fee.speed?.options[0].value).toBe('0.0021 ETH');
 	});
@@ -768,12 +771,12 @@ describe('the speed under the fee', () => {
 		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
 		expect(fee.value).toBe(m.feeEstimating);
 		expect(fee.speed?.value).toBe(m.speed.names.slow);
-		// …and the slide stays shut: the core's gate is still open on the old
+		// …and the confirm stays shut: the core's gate is still open on the old
 		// figure, which is exactly the speed the person just walked away from.
 		expect(model?.confirm.enabled).toBe(false);
 	});
 
-	it('opens the slide once the fee in hand is the tier in force', () => {
+	it('opens the confirm once the fee in hand is the tier in force', () => {
 		const model = buildSigningModel(
 			inputs({ speed: { view: speedView('fast'), feeOptions: () => [] } })
 		);
@@ -968,7 +971,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		}
 	};
 
-	it('opens on its own chip, in the danger tone, with the warning, and arms the slider', () => {
+	it('opens on its own chip, in the danger tone, with the warning, and opens the confirm', () => {
 		const model = buildSigningModel(inputs({ guard: unbounded }))!;
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		expect(allowance).toBeDefined();
@@ -1231,15 +1234,15 @@ describe('a capped unlimited approval reads the cap, not the request', () => {
 	});
 });
 
-describe('the slide control says a phrase, never a template', () => {
+describe('the confirm control says a phrase, never a template', () => {
 	it('falls back to the generic word when the core names no intent', () => {
-		// The control renders `hint · action`. Falling back to the TEMPLATE put
-		// its own placeholder on screen — a person read "Slide to confirm · Slide
-		// to confirm · {{action}}" the first time a real dApp request reached the
-		// sheet (spec 027). Same class as 026's `{{bytes}}`.
+		// The control's label is the action alone. Falling back to a TEMPLATE
+		// put its own placeholder on screen — a person read "Slide to confirm ·
+		// Slide to confirm · {{action}}" the first time a real dApp request
+		// reached the sheet (spec 027). Same class as 026's `{{bytes}}`.
 		const model = buildSigningModel(inputs())!;
 		expect(model.confirm.action).not.toContain('{{');
-		expect(model.confirm.hint).not.toContain('{{');
+		expect(model.confirm.action).toBe(m.confirmPlain);
 	});
 });
 
@@ -1373,6 +1376,23 @@ describe('the fee coin can be switched, as it can when sending', () => {
 		expect(fee.selector.options[1].balance).toBe('42 USDC');
 	});
 
+	// The send form's fee-coin marks, by the same rule (`tokenMarkFor`): a
+	// first letter on a disc drew USDC and USDT alike as "U". Priced on the
+	// REQUEST's chain — never a chain the estimate happens to name, or none.
+	it('marks every coin with its own logo, on the request’s chain', () => {
+		const onBase = { ...OPEN_SIGN, request: { ...REQUEST, chain_id: 8453 } };
+		const fee = feeOf({ sign: onBase, fee: two, feeOpen: true });
+		if (fee.kind !== 'onchain' || !fee.selector) throw new Error('no selector');
+		const [eth, usdc] = fee.selector.options;
+		expect(eth.mark).toEqual(tokenMarkFor(8453, 'ETH', null));
+		expect(usdc.mark).toEqual(tokenMarkFor(8453, 'USDC', '0x' + 'a0'.repeat(20)));
+		expect(usdc.mark.ticker).toBe('USDC');
+		expect(usdc.mark.logoUrls?.[0]).toContain('eip155-8453');
+		// The coin on its own chain wears its logo once; a token wears its chain's badge.
+		expect(usdc.mark.badgeHidden).toBe(false);
+		expect(usdc.mark.badgeLogoUrl).toContain('eip155-8453');
+	});
+
 	it('with one coin there is nothing to choose, so nothing opens', () => {
 		const fee = feeOf({ fee: { ...two, options: [option({})] }, feeOpen: true });
 		expect(fee.kind === 'onchain' && fee.selector).toBeUndefined();
@@ -1477,9 +1497,9 @@ describe('the fee coin can be switched, as it can when sending', () => {
 	});
 
 	// Issue 438 (Android v0.9.6, the key backup on Ethereum): "No token can
-	// pay this fee" in red under the fee, and again in grey under the slide.
+	// pay this fee" in red under the fee, and again in grey under the confirm.
 	// The core's gate names no line for a short coin, because the fee says it.
-	it('issue 438: a short coin is said once — under the fee, never again under the slide', () => {
+	it('issue 438: a short coin is said once — under the fee, never again under the confirm', () => {
 		const nothingPays = buildSigningModel(inputs({ fee: issue408 }))!;
 		expect(nothingPays.fee).toMatchObject({ warning: m.feeNoCoinPays });
 		expect(nothingPays.confirm.enabled).toBe(false);
@@ -1557,6 +1577,81 @@ describe("localizedTerms — the core names the word, the sheet says it in the r
 
 	it('every term the core can name has a word in this locale', () => {
 		for (const term of CLEAR_TERMS) expect(zh.terms[term], term).toBeTruthy();
+	});
+});
+
+/**
+ * The wallet's own key backup (spec 062), read by the REAL core: every word on
+ * it is a core term, so the sheet says it in the reader's language with no
+ * relabel of its own — and it is the wallet's own because the request says so
+ * (`first_party`), never because of its bytes or its origin.
+ */
+describe("the wallet's own backup, as the core reads it", () => {
+	const REGISTRY = '0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9';
+	const DATA = `0x${readFileSync('../../rust/crates/vela-core/tests/fixtures/registry-register-unit10.hex', 'utf8').trim()}`;
+	const backup = (first_party: boolean): SignView => ({
+		...OPEN_SIGN,
+		request: {
+			...REQUEST,
+			first_party,
+			params_json: JSON.stringify([{ to: REGISTRY, data: DATA, value: '0x0' }])
+		}
+	});
+
+	function coreView(): ClearSigningView {
+		const core = new ClearSigningCore();
+		try {
+			core.dispatch(
+				JSON.stringify({
+					type: 'resolve_transaction',
+					to: REGISTRY,
+					data: DATA,
+					value: '0x0',
+					chain_id: 1,
+					locale: toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })
+				})
+			);
+			return JSON.parse(core.view()) as ClearSigningView;
+		} finally {
+			core.free();
+		}
+	}
+
+	it('names the network, the address and the keys in the reader’s words, and confirms with the intent', () => {
+		const zh = resolveSigningMessages('zh');
+		const model = buildSigningModel(inputs({ m: zh, sign: backup(true), clear: coreView() }))!;
+		// The intent is the header's headline, and is not said again below it.
+		// The core grades it safe; the headline keeps the title's ink for that.
+		expect(model.headline).toEqual({ text: zh.terms.intentBackUpPublicKeys, tone: 'success' });
+		expect(model.blocks.some((b) => b.kind === 'intent')).toBe(false);
+		const rows = model.blocks.find((b) => b.kind === 'rows');
+		expect(rows && 'rows' in rows ? rows.rows.map((r) => [r.label, r.value]) : null).toEqual([
+			[zh.terms.labelNetwork, 'Ethereum'],
+			[zh.terms.labelAddress, '0x88cCA0…266894'],
+			[zh.terms.labelPublicKeys, '3']
+		]);
+		expect(model.confirm.action).toBe(zh.terms.intentBackUpPublicKeys);
+		expect(zh.terms.intentBackUpPublicKeys).not.toBe('Back up public keys');
+	});
+
+	it('is the wallet’s own only when the request says so — a site sending the same bytes stays a site', () => {
+		const clear = coreView();
+		const own = buildSigningModel(inputs({ sign: backup(true), clear }))!;
+		expect(own.headline?.text).toBe(m.terms.intentBackUpPublicKeys);
+		// The toggle names no contract on the wallet's own request…
+		expect(own.tech.summary).toBeUndefined();
+		const site = buildSigningModel(inputs({ sign: backup(false), clear }))!;
+		expect(site.headline).toBeUndefined();
+		expect(site.dapp.name).toBe('app.example');
+		// …and a site's request still opens on its intent, under the site's name.
+		expect(site.blocks[0]).toMatchObject({ kind: 'intent', text: m.terms.intentBackUpPublicKeys });
+		expect(site.tech.summary).toBe('Vela passkey registry');
+	});
+
+	it('holds the headline’s line with the sheet’s title while the reading is still out', () => {
+		const loading = { ...coreView(), surface: 'loading' as const, result: null };
+		const model = buildSigningModel(inputs({ sign: backup(true), clear: loading }))!;
+		expect(model.headline).toEqual({ text: m.panelTitle, tone: 'neutral' });
 	});
 });
 
@@ -1701,7 +1796,7 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 		expect(line?.kind === 'amount' ? line.line.sign : '').toBe('−');
 	});
 
-	it('the relay’s estimate says it reverts → the danger line under the intent; the slide stays live (RJ19, G57)', () => {
+	it('the relay’s estimate says it reverts → the danger line under the intent; the confirm stays live (RJ19, G57)', () => {
 		recordEstimateReverts(
 			REQUEST.chain_id,
 			identity.address,
@@ -2098,7 +2193,7 @@ describe('what the approve carries (spec 093)', () => {
 describe('the readable part says what the call does (096)', () => {
 	const BNB = { ...OPEN_SIGN, request: { ...REQUEST, chain_id: 56 } };
 
-	it('still reading: "Loading…", never the cap prompt, and the slide stays shut (F7)', () => {
+	it('still reading: "Loading…", never the cap prompt, and the confirm stays shut (F7)', () => {
 		const loading: ClearSigningView = {
 			...INITIAL_CLEAR_VIEW,
 			resolving: true,

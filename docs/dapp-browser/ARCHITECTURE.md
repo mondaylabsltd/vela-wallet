@@ -44,7 +44,8 @@ tabs. What a page may ask, and what it is answered, is decided in ONE place.
 | The routing table | `dapp_rpc::classify` — the extension's `lib/protocol.js` `classifyMethod` is a mirror pinned by `src/lib/dapp/core-table.test.ts` |
 | Everything a page is answered | the `dapp_browser` machine; contract in `specs/070-dapp-browser-core/contracts/dapp-browser.md` |
 | Address-bar input | `dapp_rpc::browser_input` (a host → https, a loopback/LAN host → http, anything else → a DuckDuckGo search) |
-| Tabs, favourites, groups | `app::explore_sites` |
+| Tabs, favourites, which of the two home sections (Favorites, Recent dApps) show — no custom groups since #465 | `app::explore_sites` |
+| What Explore shows on entry; which tab an opened site goes into | `app::browser_tabs` — `explore_landing`, `open_target`, `lit_tab` (UniFFI `explore_landing`, `browser_open_target`, `browser_lit_tab`, `browser_waiting_tab`) |
 | Recents | `app::browser_history` |
 | What a signature does | `app::sign_request` + `clear_signing` + `approval_guard` (unchanged by 070) |
 
@@ -127,6 +128,21 @@ client says and logs it the same way.
 - **Live engines.** `browser_tabs::plan_engines` keeps the shown tab and every
   busy tab, then the most recently used up to six (one under memory pressure);
   the rest are suspended and say "reloaded to save memory" when shown again.
+- **Where Explore lands.** `browser_tabs::explore_landing`: Explore chosen from
+  another section, or again while it is up, shows its home — the dApp's tab
+  kept live and offered first in `ExploreView.resumable` (at most three rows);
+  a page opened from outside shows its tab; a tab with a request waiting on
+  the person (`waiting_tab`) shows that tab, whatever the entry.
+- **Where an opened site goes.** `browser_tabs::open_target`: on a page, the
+  address bar loads there; over the home, a picked site a tab is already on
+  resumes that tab, otherwise the selected start-page tab gets its first page,
+  otherwise a new tab — a live dApp is never replaced from the home. A typed
+  address never takes the same-site rule. A full strip (24 tabs) has no room
+  for a new tab, so an open tab takes the address rather than the open doing
+  nothing — a start-page tab, else the tab used longest ago, never the dApp
+  just left while another tab will do; the shell selects the tab it is given.
+  Closing a tab hands the selection to a neighbour without moving that
+  neighbour up the resume rows: nobody opened it.
 - **Every read settles** by `READ_DEADLINE_MS` (30 s), whatever the endpoints
   are doing.
 - **The landing** counts the chain's usual time from when the relay put the
@@ -138,7 +154,7 @@ client says and logs it the same way.
 
 - Core: `rust/crates/vela-core/tests/app_dapp_browser.rs` (every rule),
   `app_dapp_browser_099.rs` (the record, the layers, the deadline),
-  `app_browser_tabs_099.rs` (live engines), `app_sign_landing_099.rs` (the
+  `app_browser_tabs_099.rs` (live engines, the landing, the open target), `app_sign_landing_099.rs` (the
   gate, the forgotten op, the countdown), and the unit tests in `dapp_rpc.rs`.
 - Extension: `src/lib/dapp/core-table.test.ts` (table + provider constants vs
   the core over wasm), `protocol.test.ts`, the extension e2e.

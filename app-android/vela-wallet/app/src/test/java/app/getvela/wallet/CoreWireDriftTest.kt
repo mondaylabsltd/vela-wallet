@@ -753,6 +753,12 @@ class CoreWireDriftTest {
         assertFieldsExist<SendTreasuryStatus>("SendTreasuryStatus")
         // Issue #422: the stop's coin and figures are the core's, field for field.
         assertFieldsExhaustive<SendTreasuryCoin>("SendTreasuryCoin")
+        // Issue #466: what "Report this" files is the core's, field for field.
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.SendRelayReport>("SendRelayReport")
+        assertTrue("relay_report" in serializer<SendView>().descriptor.elementNames)
+        // The fee row's coin is the core's, field for field (C10).
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.SendFeeCoin>("SendFeeCoin")
+        assertTrue("fee_coin" in serializer<SendView>().descriptor.elementNames)
         assertFieldsExist<SendQuotedFee>("SendQuotedFee")
         assertFieldsExist<SendTxRecord>("SendTxRecord")
         assertFieldsExist<SendRecipientIdentity>("SendRecipientIdentity")
@@ -1318,18 +1324,23 @@ class CoreWireDriftTest {
     @Test
     fun exploreAndHistoryWiresMatchTheMirrors() {
         assertFieldsExist<ExploreView>("ExploreView")
-        assertFieldsExist<ExploreGroupView>("ExploreGroupView")
         // Stored THROUGH these classes (issue #425): a core field missing here
         // is dropped on every write, so they must match the mirror exactly.
         assertFieldsExhaustive<ExploreDoc>("ExploreDoc")
         assertFieldsExhaustive<ExploreSite>("ExploreSite")
-        assertFieldsExist<ExploreGroup>("ExploreGroup")
         assertFieldsExist<ExploreTab>("ExploreTab")
         assertVariantsExhaustive<ExploreOperation>("ExploreOperation")
         assertVariantsExhaustive<ExploreShellResult>("ExploreShellResult")
         assertStringUnion<ExploreSystemGroup>("ExploreSystemGroup")
         assertVariantsExist<ExploreEvent>("ExploreEvent")
         assertVariantFields(ExploreEvent.serializer(), "ExploreEvent")
+        // Spec 099 navigation: where 探索 lands and where an opened site goes.
+        assertStringUnion<app.getvela.wallet.feature.browser.core.ExploreEntry>("ExploreEntry")
+        assertStringUnion<app.getvela.wallet.feature.browser.core.ExploreOpenKind>("ExploreOpenKind")
+        assertVariantsExhaustive<app.getvela.wallet.feature.browser.core.ExploreLanding>("ExploreLanding")
+        assertVariantFieldsExhaustive(app.getvela.wallet.feature.browser.core.ExploreLanding.serializer(), "ExploreLanding")
+        assertVariantsExhaustive<app.getvela.wallet.feature.browser.core.ExploreOpenTarget>("ExploreOpenTarget")
+        assertVariantFieldsExhaustive(app.getvela.wallet.feature.browser.core.ExploreOpenTarget.serializer(), "ExploreOpenTarget")
         assertFieldsExist<BhistView>("BhistView")
         assertFieldsExist<BhistEntry>("BhistEntry")
         assertVariantsExhaustive<BhistOperation>("BhistOperation")
@@ -1398,6 +1409,21 @@ class CoreWireDriftTest {
         assertVariantsExist<SignEvent>("SignEvent")
         assertVariantFields(SignOperation.serializer(), "SignOperation")
         assertVariantFields(SignEvent.serializer(), "SignEvent")
+        // The wallet's own request is marked as such where it is raised, and
+        // the view says so; a request that does not say is a page's.
+        assertTrue("first_party" in serializer<SignRequestView>().descriptor.elementNames)
+        val own = Wire.json.encodeToString(
+            SignEvent.serializer(),
+            SignEvent.RequestArrived(
+                id = "1", method = "eth_sendTransaction", params_json = "[]", origin = "https://getvela.app",
+                transport_id = "wallet", dedicated_transport = true, now_ms = 1.0, first_party = true,
+            ),
+        )
+        assertTrue(own, "\"first_party\":true" in own)
+        assertEquals(
+            false,
+            roundTrip<SignRequestView>("""{"id":"1","method":"eth_sign","kind":"eth_sign","params_json":"[]","origin":"https://x","chain_id":1}""").first_party,
+        )
     }
 
     @Test

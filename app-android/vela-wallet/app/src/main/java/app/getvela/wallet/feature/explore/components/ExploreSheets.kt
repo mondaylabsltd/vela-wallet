@@ -183,7 +183,13 @@ private fun MenuRows(items: List<SiteMenuItem>, onPick: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
         ) {
-            val ink = if (item.danger) colors.errorBase else colors.fgBase
+            // A row that cannot act now is drawn in the subtle ink at the
+            // disabled opacity (spec 099 navigation: Forward with nothing ahead).
+            val ink = when {
+                !item.enabled -> colors.fgSubtle
+                item.danger -> colors.errorBase
+                else -> colors.fgBase
+            }
             Icon(item.icon, null, tint = ink)
             Text(
                 text = item.label,
@@ -509,10 +515,10 @@ fun AddNetworkPanel(
 }
 
 /**
- * Group management (mock E3), mirroring the contacts vocabulary spec 018 set.
- * System groups (收藏 / 最近的 dApp) can be hidden but never deleted: their
- * trash affordance is ABSENT rather than disabled, because an affordance that
- * is only ever refused is a lie about what is possible.
+ * Manage groups (mock E3). Issue #465: the start page has two sections only,
+ * Favorites and Recent dApps; each can be hidden and shown again, never
+ * deleted, and there is nothing to add or reorder — so a row is its name, its
+ * meta and an eye.
  */
 @Composable
 fun GroupManageSheetContent(
@@ -521,13 +527,9 @@ fun GroupManageSheetContent(
     closeLabel: String,
     hideLabel: String,
     showLabel: String,
-    deleteLabel: String,
     onClose: () -> Unit,
     onToggle: (String) -> Unit,
-    onNew: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Issue #439: a group of the person's own, deleted. Never offered for a system group. */
-    onDelete: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.padding(horizontal = VelaSizing.screenPaddingX)) {
@@ -551,10 +553,10 @@ fun GroupManageSheetContent(
             )
         }
 
-        sheet.rows.forEach { row ->
+        sheet.rows.forEachIndexed { index, row ->
             val isHidden = row.hidden || hidden.contains(row.id)
-            // The row's two controls are hit targets, not bare 24 dp glyphs; the
-            // row's padding gives back what their boxes add.
+            // The eye is a hit target, not a bare 24 dp glyph; the row's
+            // padding gives back what its box adds.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -562,7 +564,6 @@ fun GroupManageSheetContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
             ) {
-                Icon(VelaIcons.GripVertical, null, tint = colors.fgSubtle)
                 // Hidden reads as hidden: the row dims, so the eye is a
                 // confirmation rather than the only clue.
                 Row(
@@ -588,62 +589,20 @@ fun GroupManageSheetContent(
                         )
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(VelaSizing.hitTarget)
-                            .clickable { onToggle(row.id) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            if (isHidden) VelaIcons.EyeOff else VelaIcons.Eye,
-                            if (isHidden) showLabel else hideLabel,
-                            tint = colors.fgMuted,
-                        )
-                    }
-                    if (!row.system) {
-                        // Issue #439: drawn, and now answered. No confirmation —
-                        // the core keeps every site in it favourited, as on
-                        // iOS and the desktop.
-                        Box(
-                            modifier = Modifier
-                                .size(VelaSizing.hitTarget)
-                                .clickable { onDelete(row.id) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(VelaIcons.Trash2, deleteLabel, tint = colors.fgMuted)
-                        }
-                    }
+                Box(
+                    modifier = Modifier
+                        .size(VelaSizing.hitTarget)
+                        .clickable { onToggle(row.id) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (isHidden) VelaIcons.EyeOff else VelaIcons.Eye,
+                        if (isHidden) showLabel else hideLabel,
+                        tint = colors.fgMuted,
+                    )
                 }
             }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(VelaBorder.hairline)
-                    .background(colors.borderBase),
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onNew)
-                .padding(vertical = VelaSpacing.xl),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(VelaSpacing.xl4)
-                    .background(colors.bgSunken, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) { Icon(VelaIcons.Plus, null, tint = colors.fgSubtle) }
-            Text(
-                text = sheet.newGroup,
-                color = colors.fgSubtle,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.xl,
-            )
+            if (index < sheet.rows.lastIndex) Divider()
         }
         Spacer(Modifier.height(VelaSpacing.xl))
     }

@@ -1,7 +1,9 @@
 <script lang="ts">
 	/**
 	 * The send receipt's centrepiece (spec 021 component 20) — SD4a's spinner,
-	 * SD4b's clock, SD4c's tick, and the failure cross.
+	 * SD4b's clock, SD4c's tick, and the failure's exclamation (issue 460: the
+	 * ✕ is the sheet's close, so a red one here read as a dead close button —
+	 * the four apps draw '!' instead).
 	 *
 	 * One disc size for all four so the mark does not resize as the
 	 * transaction moves between them: the person is watching this circle, and
@@ -64,7 +66,7 @@
 		{:else if stage === 'confirmed'}
 			<span class="landed"><Icon icon={UTILITY_ICONS.check} size="xl" /></span>
 		{:else}
-			<Icon icon={UTILITY_ICONS.x} size="xl" />
+			<Icon icon={UTILITY_ICONS.exclamation} size="xl" />
 		{/if}
 	</span>
 	<p class="title">{title}</p>

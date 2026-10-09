@@ -207,6 +207,11 @@ class SendMachineTest {
         assertEquals("send", row.optString("type"))
         assertEquals("", row.optString("status"))
         assertTrue(row.optString("to").equals(recipient, ignoreCase = true))
+        // The coin's logo addresses ride into the record, so any shell that
+        // opens it later draws its logo (they were written empty).
+        val logos = row.getJSONArray("logoUrls").let { urls -> List(urls.length()) { urls.getString(it) } }
+        assertEquals(app.getvela.wallet.core.marks.Marks.tokenMark(100, "XDAI", null).logoUrls, logos)
+        assertTrue(logos.toString(), logos.single().endsWith("/chainlogos/eip155-100.png"))
         assertNotNull(events.firstOrNull { it == "track:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:persisted" })
         assertTrue(events.indexOf("sign") < events.indexOf("relay.send"))
         trace.cancel()

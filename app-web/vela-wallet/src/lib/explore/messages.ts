@@ -6,6 +6,7 @@
  * `nav.*` re-resolves the spec-015 tab-bar keys so one messages object feeds
  * the whole screen, chrome included.
  */
+import type { PluralCopy } from '$lib/i18n/plural';
 
 export interface ExploreMessages {
 	title: string;
@@ -20,29 +21,28 @@ export interface ExploreMessages {
 	done: string;
 	add: string;
 	clear: string;
-	groupOptions: string;
 	manageGroups: string;
-	newGroup: string;
 	rename: string;
 	hide: string;
 	show: string;
 	delete: string;
-	moveToGroup: string;
 	openInNewTab: string;
 	removeFromFavorites: string;
-	systemGroup: string;
-	hiddenTag: string;
-	/** Template — '{{n}} sites'. */
-	siteCount: string;
-	/** Template — '{{n}} · Hidden'. */
-	hiddenCount: string;
+	/**
+	 * "{{count}} sites", in each plural form this locale has (`pluralForm`):
+	 * "1 site", and Russian's 2–4 is not its 5.
+	 */
+	siteCount: PluralCopy;
 	tabs: string;
 	newTab: string;
 	startPage: string;
 	closeAllTabs: string;
 	closeTab: string;
-	/** Template — '{{n}} tabs open'. */
-	openTabs: string;
+	/**
+	 * "{{count}} tabs open", in each plural form this locale has
+	 * (`pluralForm`): one tab is "1 tab open", not "1 tabs open".
+	 */
+	openTabs: PluralCopy;
 	addToFavorites: string;
 	addedToFavorites: string;
 	share: string;

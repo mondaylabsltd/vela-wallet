@@ -198,6 +198,11 @@ struct RootView: View {
     /// always, more people.
     @State private var importReplaces = false
     @State private var feeSheetOpen = false
+    /// Issue #466: the relay stop's report, snapshotted when "Report this"
+    /// was tapped, while its sheet is up — and the sender that files it,
+    /// which outlives the sheet so a report closed mid-send still lands.
+    @State private var relayReport: BugReport.Seed?
+    @State private var relayReportSender = FeedbackSender()
     /// Whether the token picker is showing tick boxes.
     ///
     /// **The shell's**, and deliberately so: the core's `multiSelectMode` flips
@@ -215,6 +220,16 @@ struct RootView: View {
     /// launch that names a page (`VELA_URL`) starts where that page opens, so
     /// a device pass can reach it through Web Inspector without a tap.
     @State private var section: WalletSection = PageOverride.browserURL == nil ? .wallet : .explore
+    /// How the current Explore visit began (DESIGN N) — the core's landing
+    /// question, stable for the visit: 探索 from another section or again
+    /// while browsing lands on the home with every tab kept; a page opened
+    /// from outside (the external-page sheet, a launch URL) lands on it.
+    @State private var exploreVisit = ExploreVisit(
+        entry: PageOverride.browserURL == nil ? .section : .pageOpened
+    )
+    /// The debug launch URL is opened once per run — not on every visit to
+    /// 探索, where each open would now be a new tab.
+    @State private var launchURLOpened = false
     /// Where the contacts section is, inside itself.
     @State private var contactsRoute: ContactsRoute?
     /// The add/edit form, while it is open. `nil` means no form — the presence
@@ -340,6 +355,9 @@ struct RootView: View {
         // through this same `AccountStore` so onboarding's endpoint override
         // survives a settings write (data-model §5).
         let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
+        // The logos come from the person's chain-data endpoint, and follow it
+        // the moment Settings saves a new one — it used to take a relaunch.
+        settingsStore.onEndpointsWritten = { endpoints in Marks.adopt(endpoints) }
         _settings = State(initialValue: settingsStore)
         // ONE Trusted Signer for the whole app (spec 075). It is a passkey
         // route now, not only a way to sign: onboarding's ceremonies and the
@@ -543,8 +561,8 @@ struct RootView: View {
         // 058 nothing read `vela.language` at all.
         loc.apply(prefs.language)
         // Which chain-data endpoint the logos come from (058). The person's
-        // own endpoint wins; the default is what every other read uses, so a
-        // wallet that can fetch balances can fetch the pictures beside them.
+        // own endpoint wins; an empty one is the built-in endpoint, as the
+        // core reads it. Settings' saves re-adopt it (`onEndpointsWritten`).
         Marks.adopt(accounts.loadServiceEndpoints())
         Formats.apply(prefs)
         UiScale.apply(prefs)
@@ -724,7 +742,10 @@ struct RootView: View {
             set: { if $0 == nil { browser.answerExternal(false) } }
         )) { page in
             ExternalPageSheet(loc: loc, page: page) { open in
-                if browser.answerExternal(open) { section = .explore }
+                if browser.answerExternal(open) {
+                    exploreVisit.enter(.pageOpened)
+                    section = .explore
+                }
             }
             .themed(scheme)
         }
@@ -1095,6 +1116,15 @@ struct RootView: View {
                 .onChange(of: fees.view?.busy) { _, busy in
                     if let busy { send.feeBusyChanged(busy) }
                 }
+                // …and the card's coin in force, which names the fee row's coin
+                // while no estimate is in hand (`SendView.fee_coin`).
+                .modifier(FeeTokenBridge(
+                    said: FeeTokenBridge.Said(
+                        token: fees.view?.feeToken, pricing: fees.pricingChainId,
+                        form: send.formChainId, journey: send.journey
+                    ),
+                    tell: { token, pricing in send.feeTokenChanged(token, pricing: pricing) }
+                ))
                 // Spec 069: a free upgrade is only decided while the person is
                 // still on the form, and a send already open follows a default
                 // Settings just changed. One modifier, not two `.onChange`s:
@@ -1178,37 +1208,44 @@ struct RootView: View {
                     // answers `.sd2f` when this flag is already true, so the
                     // flag could never become true and the sheet never opened.
                     feeSheetOpen = (drawn == .sd2f)
-                    // Android's trap, avoided: its contacts machine only opened
-                    // on the contacts page, so the picker was empty. `boot` is
-                    // idempotent, so opening it from here costs nothing.
-                    if drawn == .sd2e { contacts.open(myAddress: session.view.address) }
                 }
             } else {
                 switch section {
                 case .wallet:
-                    WalletScreen(
-                        model: walletModel,
-                        loc: loc,
-                        onSelectTab: selectTab,
-                        onFlow: { enterFlow($0) },
-                        onOpenActivity: { activityItemId = $0 },
-                        onToggleBalance: { wallet.togglePrivacy() },
-                        onStatusTap: { openRescue() },
-                        // The name line's chevron has drawn a disclosure since
-                        // spec 015 and led nowhere on this screen until now.
-                        onOpenAccounts: {
-                            openAccountSwitcher()
-                            homeSwitcherOpen = true
-                        },
-                        onRefresh: RefreshAction {
-                            // `pull: true` is carried so the core can tell a
-                            // person's own gesture from the 30-second tick and
-                            // answer it differently.
-                            wallet.refresh(pull: true)
-                            activity.focusTick()
-                            await wallet.settled()
-                        }
-                    )
+                    // The hero's "Updated 2m" ages on screen (issue 462): the
+                    // home is rebuilt at least every 30 s while it is shown,
+                    // and whenever the balance moves.
+                    TimelineView(.periodic(from: .now, by: Self.homeClockTick)) { _ in
+                        WalletScreen(
+                            model: walletModel,
+                            loc: loc,
+                            onSelectTab: selectTab,
+                            onFlow: { enterFlow($0) },
+                            onOpenActivity: { activityItemId = $0 },
+                            onToggleBalance: { wallet.togglePrivacy() },
+                            onStatusTap: { openRescue() },
+                            // The name line's chevron has drawn a disclosure since
+                            // spec 015 and led nowhere on this screen until now.
+                            onOpenAccounts: {
+                                openAccountSwitcher()
+                                homeSwitcherOpen = true
+                            },
+                            onRefresh: RefreshAction {
+                                // The same refresh as the hero's control, held
+                                // until its spin ends — one spin for both, so a
+                                // pull while the control turns starts nothing new.
+                                if wallet.pullRefresh() { activity.focusTick() }
+                                await wallet.settled()
+                            },
+                            // Issue 462: `pull: true` is carried so the core can
+                            // tell a person's own tap from the 10-minute poll and
+                            // answer it differently — `refreshing` holds until
+                            // this round settles, and the control turns until then.
+                            onRefreshNow: {
+                                if wallet.pullRefresh() { activity.focusTick() }
+                            }
+                        )
+                    }
                     // The hero's status line, as a sheet over the wallet —
                     // which is what SR2 and SR3 are drawn as. The settings
                     // route would put the settings list behind a sentence
@@ -1296,6 +1333,10 @@ struct RootView: View {
                         // as Android's contact picker, which was empty because
                         // its machine only booted on the contacts page.
                         settings.open()
+                        // …and so is the address book (issue #467): Send's
+                        // picker draws it, and a book first opened by the tap
+                        // that raised the picker was a sheet of nobody.
+                        contacts.open(myAddress: session.view.address)
                         wallet.open(address: session.view.address)
                     }
                     // The 10-minute balance refresh runs exactly while this
@@ -1337,6 +1378,7 @@ struct RootView: View {
                                 wallet.balance, display: WalletLive.Display.from(settings.currency)
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
+                            networks: walletNetworks,
                             loc: loc
                         ),
                         loc: loc,
@@ -1354,7 +1396,7 @@ struct RootView: View {
                         // editor's chip is an event the editor does not
                         // answer, and the chip silently does nothing.
                         // Device-found: 撤销 was tapped, the sheet kept saying
-                        // 无限额, and the slide stayed shut.
+                        // 无限额, and the confirm stayed shut.
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
                         onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
@@ -1369,7 +1411,7 @@ struct RootView: View {
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
                             failed: pool.failedChains, unreached: pool.unreachedChains,
-                            rateLimited: pool.rateLimitedChains, loc: loc
+                            rateLimited: pool.rateLimitedChains, loc: loc, networks: walletNetworks
                         ),
                         onChainRetry: { retryPageChain() },
                         chainRetrying: chainRetrying,
@@ -1387,7 +1429,8 @@ struct RootView: View {
                         addNetwork: settings.networkAdmin?.dappAdd.map { ExploreLive.addNetwork($0, loc: loc) },
                         onAddNetworkApprove: { settings.dappAddApproved() },
                         onAddNetworkRetry: { settings.dappAddRetried() },
-                        onAddNetworkDismiss: { settings.dappAddDeclined() }
+                        onAddNetworkDismiss: { settings.dappAddDeclined() },
+                        visit: exploreVisit
                     )
                     .onChange(of: signing?.closed) { _, closed in
                         // The page has its answer and the core cleared the
@@ -1472,7 +1515,10 @@ struct RootView: View {
                         // The device harness opens its own page. Not a product
                         // affordance: a browser that launched a URL somebody
                         // else chose is a browser nobody should install.
-                        if let url = PageOverride.browserURL { browser.open(url) }
+                        if let url = PageOverride.browserURL, !launchURLOpened {
+                            launchURLOpened = true
+                            browser.open(url)
+                        }
                     }
                 }
             }
@@ -1709,14 +1755,12 @@ struct RootView: View {
         }
     }
 
-    /// The transport of a request the WALLET made of itself. Nothing is
-    /// listening on it: an answer addressed here must never reach a page.
-    private static let walletTransport = "wallet"
-
     /// The wallet's own request to copy its founding keys to Ethereum (spec
     /// 062), through the same sheet a page's request gets — the person reads
-    /// what it is, sees the fee, and slides. There is no page to answer, so the
-    /// answer goes nowhere; the settings row re-reads the chain when it closes.
+    /// what it is, sees the fee, and confirms. There is no page to answer, so
+    /// the answer goes nowhere; the settings row re-reads the chain when it
+    /// closes. The one place the wallet says a request is its own
+    /// (`firstParty`).
     private func openEthereumBackup(_ call: RegistryBackup.Call) {
         let tx: [String: Any] = [
             "from": session.view.address, "to": call.to, "value": "0x0", "data": call.data,
@@ -1728,8 +1772,9 @@ struct RootView: View {
                 method: "eth_sendTransaction",
                 paramsJson: String(decoding: params, as: UTF8.self),
                 origin: "https://getvela.app",
-                transportId: Self.walletTransport,
-                chainId: call.chainId
+                transportId: SigningLive.walletTransport,
+                chainId: call.chainId,
+                firstParty: true
             ),
             respond: { _, _, _, _ in }
         )
@@ -1774,7 +1819,12 @@ struct RootView: View {
                     tracker.withdrawn(userOpHash: hash, recordIds: ids)
                 },
                 recordsPersisted: { [activity] in activity.reconciled() },
-                nativeSymbol: { chainId in ChainCatalog.meta(chainId)?.nativeSymbol ?? "" },
+                // The coin a dApp's record names: from the wallet's list at
+                // the moment it is written, so a network the person added
+                // has its own coin, not none.
+                nativeSymbol: { [settings] chainId in
+                    WalletNetworks(settings.networkAdmin?.networks).meta(chainId)?.nativeSymbol ?? ""
+                },
                 knownChains: { [settings] in
                     settings.networkAdmin?.networks.map(\.chainId) ?? []
                 },
@@ -1794,7 +1844,7 @@ struct RootView: View {
                     trust.simDeltasComputed(address: address, chainId: chainId, deltas: deltas)
                 },
                 // The same judged view the sheet draws (`signingContext`),
-                // read at the slide for the record (spec 093).
+                // read at the confirm for the record (spec 093).
                 simView: { [trust] in trust.trust?.sim }
             )
         )
@@ -1877,7 +1927,12 @@ struct RootView: View {
         case .settings: section = .settings
         case .wallet: section = .wallet
         case .contacts: section = .contacts
-        case .explore: section = .explore
+        case .explore:
+            // DESIGN N: from another section, Explore lands on its home; 探索
+            // again while it is up is the way home from a page. Either way
+            // the tabs stay alive — the core's `exploreLanding` decides.
+            exploreVisit.enter(section == .explore ? .reselect : .section)
+            section = .explore
         }
     }
 
@@ -1914,7 +1969,8 @@ struct RootView: View {
                                 // (`contact_filter_changed`, spec 093).
                                 rows: activity.feed?.contactRows ?? [],
                                 hidden: wallet.balance?.hidden ?? false, loc: loc,
-                                form: contactForm(), groupPick: groupPick
+                                form: contactForm(), groupPick: groupPick,
+                                networks: walletNetworks
                             ),
                             onBack: { contactsRoute = nil },
                             // The pencil shipped doing nothing (survey, 054).
@@ -2239,12 +2295,14 @@ struct RootView: View {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
             let display = WalletLive.Display.from(settings.currency)
-            model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc)
-            model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc)
+            model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
+                                                   networks: walletNetworks)
+            model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
+                                                 networks: walletNetworks)
         }
         if let chainId = rescueChain {
             model = SettingsLive.withRpcFix(chainId: chainId, endpoint: rpcDraft,
-                                            on: model, loc: loc)
+                                            on: model, loc: loc, networks: walletNetworks)
         }
         return model
     }
@@ -2289,7 +2347,7 @@ struct RootView: View {
         guard let token = wallet.balance?.tokens[safe: assetRow] else { return }
         // The catalog's name, or the chain id in words nobody has to invent —
         // the balance wire carries the TOKEN's name, which is not the network's.
-        let network = ChainCatalog.meta(token.chainId)?.displayName ?? String(token.chainId)
+        let network = walletNetworks.meta(token.chainId)?.displayName ?? String(token.chainId)
         startPaymentRequest()
         paymentRequest.pickAsset(
             chainId: token.chainId,
@@ -2373,14 +2431,38 @@ struct RootView: View {
     /// follows, and it matters more here: a fixture total under a real address
     /// is the app telling somebody their money is somewhere it is not.
     private var walletModel: WalletHomeModel {
-        let base = WalletFixtures
+        var base = WalletFixtures
             .buildMobileState(.h1, loc: loc)
             .withAddress(session.view.address)
             .withName(session.view.activeName)
-        guard let view = wallet.balance else { return base }
+        guard let view = wallet.balance else {
+            // The drawing's "Updated 2m" is a fixture's; nothing has been read.
+            base.balance.refresh = nil
+            return base
+        }
         return WalletLive.apply(view, currency: settings.currency, feed: activity.feed,
-                                feedRead: activity.hasRead, on: base, loc: loc)
+                                feedRead: activity.hasRead, on: base, loc: loc,
+                                now: Date(), spinning: wallet.spin.spinning,
+                                networks: walletNetworks)
     }
+
+    /// The networks this wallet has, as the core lists them — the built-ins
+    /// and the person's own (the catalogue until the networks machine has
+    /// read its stores). Every list and name a screen draws from comes from
+    /// here, and every receive row's index is an index into its `chains`.
+    private var walletNetworks: WalletNetworks {
+        WalletNetworks(settings.networkAdmin?.networks)
+    }
+
+    /// The receive list's row `receiveNetwork`, from the same list it was
+    /// drawn from.
+    private var receiveChain: ChainMeta? {
+        let chains = walletNetworks.chains
+        return chains.indices.contains(receiveNetwork) ? chains[receiveNetwork] : nil
+    }
+
+    /// How often the home re-reads the clock, so "Updated 2m" ages (issue 462).
+    private static let homeClockTick: TimeInterval = 30
 
     /// A flow screen, with the parts that have machines behind them swapped
     /// in and the rest still drawn.
@@ -2395,7 +2477,8 @@ struct RootView: View {
         // is not embarrassing but dangerous: money sent to the drawn address is
         // money gone.
         if case .receive(let list) = model.base {
-            model.base = .receive(FlowsLive.receiveList(address, on: list, loc: loc))
+            model.base = .receive(FlowsLive.receiveList(address, on: list, loc: loc,
+                                                        networks: walletNetworks))
         }
         if case .receiveQr(let qr)? = model.sheet {
             // R2 is a NETWORK's code and R3 is one ASSET's. The state is the
@@ -2405,9 +2488,7 @@ struct RootView: View {
             let asset = state == .r3 ? paymentRequest.view?.asset : nil
             model.sheet = .receiveQr(FlowsLive.receiveQr(
                 address, name: session.view.activeName,
-                chain: asset.flatMap { ChainCatalog.meta($0.chainId) }
-                    ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
-                        ? ChainCatalog.chains[receiveNetwork] : nil),
+                chain: asset.flatMap { walletNetworks.meta($0.chainId) } ?? receiveChain,
                 asset: asset,
                 pay: paymentRequest.view,
                 on: qr, loc: loc
@@ -2416,7 +2497,7 @@ struct RootView: View {
         if case .assets(let assets) = model.base, let balance = wallet.balance {
             model.base = .assets(FlowsLive.assets(
                 balance, currency: settings.currency, selected: chainFilter,
-                on: assets, loc: loc
+                on: assets, loc: loc, networks: walletNetworks
             ))
         }
         // The history screen the home's 全部 opens — the same feed, not a
@@ -2424,7 +2505,7 @@ struct RootView: View {
         if case .history(let history) = model.base, let feed = activity.feed {
             model.base = .history(FlowsLive.history(
                 feed, selected: chainFilter, on: history, loc: loc,
-                hidden: wallet.balance?.hidden ?? false
+                hidden: wallet.balance?.hidden ?? false, networks: walletNetworks
             ))
         }
         if case .txDetail(let detail)? = model.sheet, let feed = activity.feed,
@@ -2435,7 +2516,8 @@ struct RootView: View {
                 on: detail, loc: loc,
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
-                readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) }
+                readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
+                networks: walletNetworks
             ))
         }
         if case .tokenDetail(let detail)? = model.sheet,
@@ -2444,7 +2526,7 @@ struct RootView: View {
                 balance.tokens[assetRow],
                 feed: activity.feed,
                 display: WalletLive.Display.from(settings.currency),
-                on: detail, loc: loc
+                on: detail, loc: loc, networks: walletNetworks
             ))
         }
         // The send journey. SD1's rows are the holdings the balance machine
@@ -2456,7 +2538,7 @@ struct RootView: View {
                 model.base = .sendPick(
                     SendLive.pick(
                         view, on: pick, picking: sweepPicking,
-                        classFilter: sendClassFilter, loc: loc
+                        classFilter: sendClassFilter, loc: loc, networks: walletNetworks
                     )
                 )
             }
@@ -2465,20 +2547,23 @@ struct RootView: View {
                     view, fee: fees.view, display: display, on: form, loc: loc,
                     speed: fees.speed.map { speed in
                         SendLive.SpeedInputs(view: speed, feeView: { [fees] tier in fees.view(of: tier) })
-                    }
+                    },
+                    networks: walletNetworks
                 ))
             }
             if case .sendReceipt(let receipt) = model.base {
                 model.base = .sendReceipt(SendLive.receipt(
                     view, display: display, on: receipt, loc: loc,
                     // Spec 099 R6: the countdown starts when the relay sent it.
-                    relaySentAtMs: tracker.view?.entry(userOpHash: view.userOpHash)?.relaySentAtMs
+                    relaySentAtMs: tracker.view?.entry(userOpHash: view.userOpHash)?.relaySentAtMs,
+                    networks: walletNetworks
                 ))
             }
             if case .sendConfirm(let confirm) = model.base {
                 var live = SendLive.confirm(
                     view, from: (session.view.address, session.view.activeName),
-                    display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed
+                    display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed,
+                    networks: walletNetworks
                 )
                 // The Trusted Signer's ending (spec 071): the core heard a
                 // cancelled ceremony and kept the confirmation up; this says
@@ -2488,11 +2573,26 @@ struct RootView: View {
                 }
                 model.base = .sendConfirm(live)
             }
-            if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
-                model.sheet = .feeToken(SendLive.feeSheet(fee, on: sheet, loc: loc))
+            // The fee session's coins — or, before it has said anything, the
+            // sheet's chrome and no coins. Never the drawing's ETH, USDC and
+            // USDT at somebody else's balances over a live send.
+            if case .feeToken(let sheet)? = model.sheet {
+                model.sheet = .feeToken(fees.view.map { fee in
+                    SendLive.feeSheet(
+                        fee, on: sheet, loc: loc,
+                        chainId: view.selectedToken?.chainId ?? view.multiChainId
+                    )
+                } ?? SendLive.feeSheetReading(on: sheet))
             }
-            if case .contactPick(let sheet)? = model.sheet, let book = contacts.view {
-                model.sheet = .contactPick(SendLive.contactSheet(book, on: sheet, loc: loc))
+            // The person's own book, or — while it is still being read — the
+            // drawn chrome with nobody in it. Never the drawing's people: a
+            // fixture Alice under a live form is a tap that sends nowhere
+            // anyone meant (issue #467).
+            if case .contactPick(let sheet)? = model.sheet {
+                model.sheet = .contactPick(
+                    contacts.view.map { SendLive.contactSheet($0, on: sheet, loc: loc) }
+                        ?? SendLive.contactSheetReading(on: sheet)
+                )
             }
             if case .batchImport(let sheet)? = model.sheet {
                 model.sheet = .batchImport(
@@ -2506,7 +2606,8 @@ struct RootView: View {
         // `network_admin`'s wizard and not this machine's.
         if case .addToken(let sheet) = model.sheet, sheet.tab == .erc20,
            let view = tokens.view {
-            model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc))
+            model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc,
+                                                       networks: walletNetworks))
         }
         return model
     }
@@ -2612,12 +2713,52 @@ struct RootView: View {
         feeSheetOpen = false
     }
 
-    /// Somebody was picked from the address book.
-    private func pickSendContact(_ index: Int) {
-        guard let contact = contacts.view?.contacts[safe: index] else { return }
-        recipientDraft = contact.address
-        send.pickedAddress(contact.address)
-        send.closeContactPicker()
+    /// The person icon (and a split's 从通讯录): the core's picker, over the
+    /// form (issue #467). The book is app-resident from the home; opening it
+    /// here too costs nothing (`boot` is idempotent) and covers a send that
+    /// started somewhere else, a scanned code say.
+    private func openContactPicker() {
+        contacts.open(myAddress: session.view.address)
+        send.openContactPicker(target: nil)
+    }
+
+    /// Somebody was picked from the address book — by ADDRESS (issue #467).
+    ///
+    /// The row hands back the address it was drawn for. An index into
+    /// `contacts.view` could name a neighbour by the time the tap lands: the
+    /// core re-sorts the book (favourites, recency, names as they resolve).
+    ///
+    /// Where the pick lands is the core's (`apply_picked_address`): the
+    /// single form's recipient, or — in a split — the row the picker was
+    /// opened for, else the first row with no address, else a new row. The
+    /// shell adds no row of its own to aim it, and the single field's text
+    /// follows only a pick that went there.
+    private func pickSendContact(_ address: String) {
+        guard let view = send.view else { return }
+        if !view.splitMode { recipientDraft = address }
+        send.pickedAddress(address)
+        if send.view?.showContactPicker == true { send.closeContactPicker() }
+    }
+
+    /// A flow sheet went away — × or a drag, or the screen under it moved on.
+    ///
+    /// The two sheets the SEND machine raises lower its flag too: left up,
+    /// FlowHost keeps the closed sheet hidden and the door that opened it is
+    /// dead from then on (issue #467's second half). Not while the scanner is
+    /// on top — the picker's own scan row went there, and coming back from it
+    /// returns to the picker.
+    ///
+    /// The stack loses a level only for a state that IS a sheet: the scan
+    /// row's push takes the sheet away with `state` already the scanner, and
+    /// popping that would close the camera the person just opened.
+    private func flowSheetClosed(_ state: FlowStateId) {
+        if let view = send.view, let top = flows.top, sendStates.contains(top) {
+            if view.showContactPicker { send.closeContactPicker() }
+            if view.showBatchImport { send.closeBatchImport() }
+        }
+        if WalletFlowFixtures.build(state, loc: loc).sheet != nil {
+            flows.sheetClosed(state)
+        }
     }
 
     /// An assets row was tapped. The list may be narrowed to one chain, so its
@@ -2637,17 +2778,18 @@ struct RootView: View {
     private func chainSheet(for state: FlowStateId) -> ChainSheetModel? {
         let assetStates: Set<FlowStateId> = [.t1, .t2, .t3, .t3b, .t4, .t5, .t5b]
         if assetStates.contains(state), let balance = wallet.balance {
-            return FlowsLive.assetChainSheet(balance, selected: chainFilter, loc: loc)
+            return FlowsLive.assetChainSheet(balance, selected: chainFilter, loc: loc,
+                                             networks: walletNetworks)
         }
         return activity.feed.map {
-            FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
+            FlowsLive.chainSheet($0, selected: chainFilter, loc: loc, networks: walletNetworks)
         }
     }
 
-    /// A whole group from the picker: its members JOIN the form, amounts
-    /// blank. The core shuts the picker itself.
-    private func pickSendGroup(_ index: Int) {
-        guard let group = contacts.view?.groups[safe: index],
+    /// A whole group from the picker, by its id: its members JOIN the form,
+    /// amounts blank. The core shuts the picker itself.
+    private func pickSendGroup(_ id: String) {
+        guard let group = contacts.view?.groups.first(where: { $0.id == id }),
               let rows = SendLive.groupRecipients(group) else { return }
         send.appendSplitRecipients(rows)
     }
@@ -2867,11 +3009,12 @@ struct RootView: View {
     private func signingContext(chain: Int, live: SigningController?) -> SigningLive.Context {
         SigningLive.Context(
             loc: loc,
-            chainName: ChainCatalog.meta(chain)?.displayName ?? String(chain),
+            chainName: walletNetworks.meta(chain)?.displayName ?? String(chain),
             chainDot: SettingsLive.chainColor(chain),
-            nativeSymbol: ChainCatalog.meta(chain)?.nativeSymbol ?? "",
+            nativeSymbol: walletNetworks.meta(chain)?.nativeSymbol ?? "",
             walletName: session.view.activeName,
             walletAddress: session.view.address,
+            chainId: chain,
             display: WalletLive.Display.from(settings.currency),
             origin: live?.request?.origin,
             // What the chain said this transaction would do, and how far the
@@ -2886,7 +3029,8 @@ struct RootView: View {
             track: tracker.view?.entry(userOpHash: live?.shownSign.pendingOpHash),
             typicalS: SigningController.typicalInclusionS(chainId: chain),
             trustedSignerRoute: live?.trustedSignerRoute ?? false,
-            feeStartFailure: live?.quoteStartFailure
+            feeStartFailure: live?.quoteStartFailure,
+            networks: walletNetworks
         )
     }
 
@@ -2909,14 +3053,22 @@ struct RootView: View {
                     // pushed as A2 is drawn as A3 when it names a contract,
                     // and the model's state then never matched the top, so
                     // nothing popped (082 X-HISTORY, device).
-                    onSheetClosed: { _ in flows.sheetClosed(state) },
+                    onSheetClosed: { _ in flowSheetClosed(state) },
                     onNavigate: { step in
-                        // 导入表格 is the CORE's flag, not a push: the live
-                        // router derives the send journey's state from the
-                        // machine, so a pushed SD2c would be overridden back to
-                        // the form — the dead-button shape twice already found
-                        // in this flow.
-                        if step == .batchImport { openBatch() } else { flows.push(step) }
+                        // 导入表格 and the address book are the CORE's flags,
+                        // not pushes: the live router derives the send
+                        // journey's state from the machine, so a pushed SD2c or
+                        // SD2e was overridden back to the form — the
+                        // dead-button shape, found twice in this flow and then
+                        // a third time as issue #467 (the person icon opened
+                        // nothing at all).
+                        if step == .batchImport {
+                            openBatch()
+                        } else if step == .contactPick, sendStates.contains(state) {
+                            openContactPicker()
+                        } else {
+                            flows.push(step)
+                        }
                     },
                     addTokenInput: addTokenInput(for: state),
                     onAddToken: addTokenAction(for: state),
@@ -2926,7 +3078,7 @@ struct RootView: View {
                         // A network row asks to be paid in that chain's OWN
                         // coin. Telling the machine keeps the sheet's mark and
                         // the machine's asset from disagreeing.
-                        guard let chain = ChainCatalog.chains[safe: index] else { return }
+                        guard let chain = walletNetworks.chains[safe: index] else { return }
                         paymentRequest.pickAsset(
                             chainId: chain.chainId,
                             tokenAddress: nil,
@@ -2975,6 +3127,8 @@ struct RootView: View {
                         SendLive.stopNotice($0, loc: loc) ?? SendLive.formWarning($0, loc: loc)
                     },
                     sendFund: send.view.flatMap { SendLive.fundAddress($0, loc: loc) },
+                    sendReport: send.view.flatMap { SendLive.reportLabel($0, loc: loc) },
+                    onRelayReport: { openRelayReport() },
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
                     onSelectAllTokens: { visible in selectAllValuable(visible) },
@@ -3061,6 +3215,23 @@ struct RootView: View {
                     onBatchMerge: { importReplaces.toggle() },
                     scan: scanInputs()
                 )
+                .modifier(RelayReportSheet(
+                    seed: $relayReport,
+                    sender: relayReportSender,
+                    model: { settingsModel(.st1) },
+                    scheme: scheme
+                ))
+    }
+
+    /// "Report this" on a relay stop (issue #466): the in-app report sheet,
+    /// seeded with what the core built for the stop as it stands NOW — the
+    /// stop closes itself once funded and its figures move with each watch,
+    /// so the sheet keeps what the person was shown. A fresh form, unless a
+    /// report is still on its way, whose sheet this then reopens on.
+    private func openRelayReport() {
+        guard let seed = send.view.flatMap(SendLive.reportSeed) else { return }
+        relayReportSender.reset()
+        relayReport = seed
     }
     /// A picked photo with no code in it. Its own alert rather than a silent
     /// return: somebody who chose a picture is owed an answer about it.
@@ -3169,9 +3340,7 @@ struct RootView: View {
         let card = FlowsLive.shareCard(
             session.view.address,
             name: session.view.activeName,
-            chain: pay.flatMap { ChainCatalog.meta($0.asset.chainId) }
-                ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
-                    ? ChainCatalog.chains[receiveNetwork] : nil),
+            chain: pay.flatMap { walletNetworks.meta($0.asset.chainId) } ?? receiveChain,
             pay: pay,
             on: drawnShareCard,
             loc: loc
@@ -3249,8 +3418,7 @@ struct RootView: View {
                 ?? ExplorerLinks.address(chainId: token.chainId, session.view.address,
                                          store: shelf)
         case .r2, .r3:
-            let chainId = ChainCatalog.chains.indices.contains(receiveNetwork)
-                ? ChainCatalog.chains[receiveNetwork].chainId : 0
+            guard let chainId = receiveChain?.chainId else { return nil }
             return ExplorerLinks.address(chainId: chainId, session.view.address, store: shelf)
         case .sd4a, .sd4b, .sd4c:
             // The send receipt. The chain is the token's, never the wallet's
@@ -3808,8 +3976,8 @@ struct RootView: View {
 
     /// The single onboarding sheet's presentation. A swipe-to-dismiss routes to
     /// `dismissOnboardingSheet`, which cancels whatever the active prompt is
-    /// waiting for; the touch and connecting states disable interactive dismiss,
-    /// so they never reach it.
+    /// waiting for; a security key's touch and the connecting state disable
+    /// interactive dismiss, so they never reach it.
     private var onboardingSheet: Binding<Bool> {
         Binding(
             get: { onboarding.onboardingSheetPresented },
@@ -3828,7 +3996,7 @@ struct RootView: View {
             UsbWalletPickerSheet(loc: loc, pending: pick, onPick: onboarding.answerWalletPick)
                 .themed(scheme)
         } else if let touch = onboarding.usbTouch {
-            UsbTouchSheet(loc: loc, touch: touch)
+            UsbTouchSheet(loc: loc, touch: touch, onCancel: onboarding.cancelCable)
                 .themed(scheme)
         } else if onboarding.pendingInsertKey != nil {
             UsbInsertKeySheet(loc: loc, onCancel: { onboarding.answerInsertKey(false) })
@@ -3836,8 +4004,11 @@ struct RootView: View {
         } else if let payload = onboarding.cableQr {
             // Below touch on purpose: once the phone connects and the ceremony
             // is waiting on ITS sheet, "look at your phone" replaces the QR.
-            CableQrSheet(loc: loc, payload: payload, chooser: onboarding.cableQrCreates ? .create : .signIn)
-                .themed(scheme)
+            CableQrSheet(
+                loc: loc, payload: payload, chooser: onboarding.cableQrCreates ? .create : .signIn,
+                onCancel: onboarding.cancelCable
+            )
+            .themed(scheme)
         } else if let prompt = onboarding.pending {
             FlowSheet(
                 loc: loc,
@@ -3981,6 +4152,27 @@ enum ThemeOverride {
         default: nil
         }
     }()
+}
+
+/// The fee card's coin into the send machine (`fee_token_changed`). Watches
+/// the coin, the chain the fee session prices, the form's chain and the
+/// journey; `SendStore.feeTokenChanged` decides whether there is anything new
+/// to say. Its own modifier: the chain it sits in is at the type checker's
+/// limit.
+private struct FeeTokenBridge: ViewModifier {
+    struct Said: Equatable {
+        let token: String?
+        let pricing: Int?
+        let form: Int?
+        let journey: Int
+    }
+
+    let said: Said
+    let tell: (String?, Int?) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: said, initial: true) { _, said in tell(said.token, said.pricing) }
+    }
 }
 
 /// The two facts the speed core hears from outside the send flow (spec 069):

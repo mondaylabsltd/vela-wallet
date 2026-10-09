@@ -90,6 +90,12 @@ final class NetworkAdminExecutor {
     /// (`add_network_answered`). Set by the app once both exist.
     var onDappAddSettled: (_ tab: String, _ id: String, _ outcome: [String: Any]) -> Void = { _, _, _ in }
 
+    /// The endpoints were written — with the whole stored blob, as it now
+    /// reads. Set by the app, so the logos follow a changed 服务节点 without a
+    /// relaunch (`Marks.adopt`); a test's stand-in endpoint never reaches
+    /// another test's marks.
+    var onEndpointsWritten: (_ endpoints: [String: Any]) -> Void = { _ in }
+
     init(store: VelaStore, accounts: AccountStore, pool: RpcPool? = nil) {
         self.store = store
         self.accounts = accounts
@@ -146,6 +152,7 @@ final class NetworkAdminExecutor {
             if let updated = endpoints["ethereum_data_url"] as? String, !updated.isEmpty {
                 ethereumDataURL = updated
             }
+            onEndpointsWritten(await accounts.loadServiceEndpoints())
             return Self.written
 
         case "write_rpc_providers":

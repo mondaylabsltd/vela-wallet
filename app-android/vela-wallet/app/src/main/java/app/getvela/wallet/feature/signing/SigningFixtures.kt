@@ -3,6 +3,11 @@ package app.getvela.wallet.feature.signing
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.explore.ExploreFixtures
+import app.getvela.wallet.core.i18n.I18nKeys
+import app.getvela.wallet.feature.flows.FeeSpeedModel
+import app.getvela.wallet.feature.flows.FeeSpeedOptionModel
+import app.getvela.wallet.feature.flows.FactLead
+import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.feature.wallet.WalletFixtures
 
 /**
@@ -21,14 +26,18 @@ object SigningFixtures {
     private const val NETWORK = "Ethereum"
     private const val FEE_VALUE = "~0.0021 ETH ≈ $5.40"
 
-    /** Token marks: brand content, exactly like the wallet's chain colours. */
+    /**
+     * The coins' marks, as the send flow's gallery draws them: the token
+     * mark over Ethereum's colour, lettered from the ticker (a gallery names
+     * no endpoint, so no logo).
+     */
     private object Mark {
-        val usdc = TokenMark("U", Color(0xFF2775CA))
-        val eth = TokenMark("E", Color(0xFF627EEA))
-        val weth = TokenMark("W", Color(0xFF8A92B2))
-        val spweth = TokenMark("S", Color(0xFF4C6FFF))
-        val usdt = TokenMark("T", Color(0xFF26A17B))
-        val contact = TokenMark("A", Color(0xFFE8572A))
+        private fun on(ticker: String) = TokenMarkModel(ticker, WalletFixtures.ChainColors.ethereum)
+        val usdc = on("USDC")
+        val eth = on("ETH")
+        val weth = on("WETH")
+        val spweth = on("spWETH")
+        val usdt = on("USDT")
     }
 
     private object Dapp {
@@ -117,8 +126,8 @@ object SigningFixtures {
             ),
         ),
         identities = listOf(
-            TechIdentity(sg("techIdentityToken"), "USD Coin", Addr.USDC_FULL, Mark.usdc),
-            TechIdentity(sg("techIdentityRecipient"), "Alice Chen", Addr.ALICE_FULL, Mark.contact),
+            TechIdentity(sg("techIdentityToken"), "USD Coin", Addr.USDC_FULL, FactLead.Token(Mark.usdc)),
+            TechIdentity(sg("techIdentityRecipient"), "Alice Chen", Addr.ALICE_FULL, FactLead.Identicon(Addr.ALICE_FULL)),
         ),
         simResult = SigningRow(sg("simResultLabel"), "−1,000 USDC · ${sg("balanceMatchesHero")}"),
         rawLabel = "${sg("techRawData")} · ${sg("byteSize", mapOf("n" to "68"))}",
@@ -151,11 +160,58 @@ object SigningFixtures {
         signerLabel = sg("signingAccount"),
         signerName = WalletFixtures.NAME,
         signerSeed = WalletFixtures.ADDRESS_FULL,
-        confirmHint = sg("slideToConfirm"),
         confirmAction = confirmAction,
         confirmEnabled = confirmEnabled,
         panelTitle = sg("signatureRequest"),
+        requestKey = state.name,
     )
+
+    /**
+     * CS36: the wallet's own key backup, as the live sheet draws it — no
+     * requester to name, so the header is the intent and the ✕; the core's
+     * rows (network first); "Technical details" with no contract name; the
+     * fee's speed control open, the slow tier still measuring, its gas-bid
+     * line held so nothing moves when it lands; the confirm says the intent.
+     */
+    private fun VelaStrings.ownBackup(): SigningScreenModel {
+        val intent = sg("intentBackUpPublicKeys")
+        return model(
+            SigningScreenState.CS36, listOf("", "", ""), Dapp.unknownTint,
+            blocks = listOf(
+                SigningBlock.Rows(
+                    listOf(
+                        SigningRow(sg("labelNetwork"), NETWORK),
+                        SigningRow(sg("labelAddress"), WalletFixtures.ADDRESS_DISPLAY, mono = true),
+                        SigningRow(sg("labelPublicKeys"), "3"),
+                    ),
+                ),
+            ),
+            confirmAction = intent,
+            tech = tech(
+                functionLabel = sg("techFunction"),
+                signature = intent,
+                simResult = SigningRow(sg("simResultLabel"), sg("simResultNoChange")),
+            ),
+            fee = FeeModel.OnChain(
+                t("componentsUi.gas.networkFee"), "~0.00093 ETH ≈ $2.40",
+                refreshLabel = t(I18nKeys.Flows.FEE_REFRESH),
+                speed = FeeSpeedModel(
+                    label = t(I18nKeys.Flows.FEE_SPEED_LABEL),
+                    value = t(I18nKeys.Flows.GAS_TIER_STANDARD),
+                    open = true,
+                    onceNote = t(I18nKeys.Flows.FEE_SPEED_ONCE),
+                    gasPriceLabel = t(I18nKeys.Flows.GAS_PRICE_LABEL),
+                    gasPriceLine = true,
+                    options = listOf(
+                        FeeSpeedOptionModel("fast", t(I18nKeys.Flows.GAS_TIER_FAST), "0.0012 ETH ≈ $3.10", "2.4 ~ 2.9 gwei"),
+                        FeeSpeedOptionModel("standard", t(I18nKeys.Flows.GAS_TIER_STANDARD), "0.00093 ETH ≈ $2.40", "1.8 ~ 2.1 gwei", selected = true),
+                        // Still measuring: "…", and its bid line held unseen.
+                        FeeSpeedOptionModel("slow", t(I18nKeys.Flows.GAS_TIER_SLOW), "…"),
+                    ),
+                ),
+            ),
+        ).copy(dappOwn = true, headline = intent)
+    }
 
     // --- The catalogue --------------------------------------------------------
 
@@ -408,12 +464,12 @@ object SigningFixtures {
                         selectorTitle = sg("feeTokenTitle"),
                         options = listOf(
                             FeeTokenOption(
-                                "eth", Mark.eth, "ETH",
+                                "eth", TokenMarkModel("ETH", WalletFixtures.ChainColors.ethereum), "ETH",
                                 "${t("componentsUi.gas.rowBalance")} 0.0689",
                                 "~0.0021 ETH", selected = true,
                             ),
                             FeeTokenOption(
-                                "usdc", Mark.usdc, "USDC",
+                                "usdc", TokenMarkModel("USDC", WalletFixtures.ChainColors.ethereum), "USDC",
                                 "${t("componentsUi.gas.rowBalance")} 1,240.00",
                                 "~5.55 USDC", selected = false,
                             ),
@@ -902,6 +958,8 @@ object SigningFixtures {
                 ),
                 confirmAction = sg("confirmLabel"),
             )
+
+            SigningScreenState.CS36 -> ownBackup()
 
             SigningScreenState.CS32 -> model(
                 state, unknownDapp, Dapp.unknownTint,

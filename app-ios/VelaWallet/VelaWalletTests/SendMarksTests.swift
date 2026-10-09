@@ -1,0 +1,488 @@
+//
+//  SendMarksTests.swift
+//  VelaWalletTests
+//
+//  The send flow's marks (DESIGN L): a NETWORK wears the network's own mark,
+//  a COIN wears the coin's — the core's kind rule — and no mark is built on
+//  chain 0, on a fixture's network, or from an empty ticker. The views are the
+//  core's own starting view with a few fields patched, as the other send
+//  tests build them.
+//
+
+import Foundation
+import SwiftUI
+import Testing
+import VelaCore
+@testable import VelaWallet
+
+@MainActor
+struct SendMarksTests {
+
+    private let loc = Loc(overrideTag: "en", preferredLanguages: [])
+    private static let me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+    private static let alice = "0x1111111111111111111111111111111111111111"
+    /// USDC on Base, by its real contract.
+    private static let usdcBase = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+
+    private func sendView(_ patch: [String: Any]) -> SendViewWire {
+        var object = try! CoreJSON.object(SendCore().view())
+        for (key, value) in patch { object[key] = value }
+        return try! CoreJSON.decode(SendViewWire.self, from: object)
+    }
+
+    private func token(
+        _ symbol: String, chainId: Int, address: String? = nil, balance: String = "1"
+    ) -> [String: Any] {
+        [
+            "symbol": symbol, "network": "chain-\(chainId)", "chain_id": chainId,
+            "token_address": address.map { $0 as Any } ?? NSNull(), "decimals": address == nil ? 18 : 6,
+            "balance": balance, "price_usd": 1.0, "logo_urls": [], "spam": false,
+        ]
+    }
+
+    private func drawnPick() -> SendPickModel {
+        guard case .sendPick(let model) = WalletFlowFixtures.build(.sd1b, loc: loc).base
+        else { fatalError("SD1b does not draw the picker") }
+        return model
+    }
+
+    private func drawnConfirm(_ state: FlowStateId) -> SendConfirmModel {
+        guard case .sendConfirm(let model) = WalletFlowFixtures.build(state, loc: loc).base
+        else { fatalError("\(state) does not draw the confirm page") }
+        return model
+    }
+
+    private func isNetwork(_ mark: TokenMarkModel?, _ chainId: Int) -> Bool {
+        guard let mark else { return false }
+        return mark.logoURLs == [Marks.chainLogoURL(chainId)].compactMap { $0 } && mark.badgeHidden
+    }
+
+    // MARK: - Notices name a network in the network's mark
+
+    /// The sweep's notice ("1 token · Base") wears the chain it is locked
+    /// to — never the drawing's Ethereum "ETH", never a blank disc.
+    @Test func theSweepNoticeWearsTheLockedChainsOwnMark() throws {
+        let view = sendView([
+            "multi_select_mode": true, "multi_chain_id": 8453,
+            "multi_selected_ids": ["chain-8453_native_ETH"],
+            "tokens": [token("ETH", chainId: 8453)],
+        ])
+        let notice = try #require(SendLive.pick(view, on: drawnPick(), picking: true, loc: loc).notice)
+        #expect(isNetwork(notice.mark, 8453), "Base's logo, no badge")
+        #expect(notice.mark?.glyph == "ETH", "its coin's letters under it")
+        #expect(notice.text.contains("Base"))
+    }
+
+    /// A scanned code's network wears that network's mark.
+    @Test func aScannedCodesNetworkWearsItsOwnMark() throws {
+        let view = sendView(["request_chain_id": 56, "tokens": [token("BNB", chainId: 56)]])
+        let notice = try #require(SendLive.requestNotice(view, loc: loc))
+        #expect(isNetwork(notice.mark, 56))
+        #expect(notice.mark?.glyph == "BNB")
+    }
+
+    /// A notice that names no network wears no mark: these were an empty grey
+    /// disc. A code for a chain the wallet cannot name has no letters to fall
+    /// back on, so it gets none either; a chain it can name gets its own.
+    @Test func aNoticeThatNamesNoNetworkWearsNoMark() throws {
+        let unknown = sendView(["lock_error": ["type": "network", "chain_id": 424242]])
+        #expect(try #require(SendLive.lockNotice(unknown, loc: loc)).mark == nil)
+        let token = sendView(["lock_error": ["type": "token"]])
+        #expect(try #require(SendLive.lockNotice(token, loc: loc)).mark == nil)
+        for tag in ["net_not_found", "net_not_compatible", "net_add_error"] {
+            let failed = sendView(["add_network_msg": ["type": tag]])
+            #expect(try #require(SendLive.lockNotice(failed, loc: loc)).mark == nil, "\(tag)")
+        }
+        let known = sendView(["lock_error": ["type": "network", "chain_id": 100]])
+        #expect(isNetwork(try #require(SendLive.lockNotice(known, loc: loc)).mark, 100))
+    }
+
+    // MARK: - Coins wear the coin's mark
+
+    private func drawnForm(_ state: FlowStateId = .sd2) -> SendFormModel {
+        guard case .sendForm(let model) = WalletFlowFixtures.build(state, loc: loc).base
+        else { fatalError("\(state) does not draw the form") }
+        return model
+    }
+
+    /// The picker's rows wear each coin's own mark, as the home's rows do:
+    /// BNB on BNB Chain is BNB's logo with no badge (it was "BNB" letters and
+    /// a yellow dot); USDC on Base is USDC's asset logo, checksummed first,
+    /// with Base's badge.
+    @Test func thePickerRowsWearEachCoinsOwnMark() throws {
+        let view = sendView(["tokens": [
+            token("BNB", chainId: 56),
+            token("USDC", chainId: 8453, address: Self.usdcBase),
+        ]])
+        let rows = SendLive.pick(view, on: drawnPick(), loc: loc).rows
+        let bnb = try #require(rows.first?.mark)
+        #expect(bnb.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(bnb.badgeHidden)
+        let usdc = try #require(rows.last?.mark)
+        #expect(usdc.logoURLs.first?
+            .hasSuffix("/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/logo.png") == true)
+        #expect(usdc.logoURLs.count == 2, "the lowercase spelling second")
+        #expect(!usdc.badgeHidden)
+        #expect(usdc.badgeLogoURL == Marks.chainLogoURL(8453))
+        #expect(rows.last?.chain == "Base")
+    }
+
+    /// The URLs the core already named for a coin come first.
+    @Test func aCoinsNamedLogoComesFirst() throws {
+        var usdc = token("USDC", chainId: 8453, address: Self.usdcBase)
+        usdc["logo_urls"] = ["https://logos.example/usdc.png"]
+        let rows = SendLive.pick(sendView(["tokens": [usdc]]), on: drawnPick(), loc: loc).rows
+        #expect(try #require(rows.first?.mark).logoURLs.first == "https://logos.example/usdc.png")
+    }
+
+    /// A sweep's rows carry each coin's mark to the form (the body used to
+    /// drop it and draw letters with a dot).
+    @Test func aSweepsRowsWearEachCoinsOwnMark() {
+        let view = sendView([
+            "multi_select_mode": true, "multi_chain_id": 8453, "recipient": Self.alice,
+            "multi_selected_ids": ["chain-8453_native_ETH", "chain-8453_\(Self.usdcBase)_USDC"],
+            "tokens": [token("ETH", chainId: 8453), token("USDC", chainId: 8453, address: Self.usdcBase)],
+        ])
+        let form = SendLive.form(view, fee: nil, display: .usd, on: drawnForm(), loc: loc)
+        #expect(form.sweepRows.map(\.symbol) == ["ETH", "USDC"])
+        #expect(form.sweepRows[0].mark.logoURLs == [Marks.chainLogoURL(1)].compactMap { $0 })
+        #expect(form.sweepRows[0].mark.badgeLogoURL == Marks.chainLogoURL(8453))
+        #expect(form.sweepRows[1].mark.logoURLs.first?.contains("/assets/eip155-8453/") == true)
+    }
+
+    // MARK: - The fee coin
+
+    /// A fee estimate as the send machine holds it, paid in `asset`.
+    private func estimate(chainId: Int, asset: [String: Any], tier: String = "fast") -> [String: Any] {
+        [
+            "chain_id": chainId, "total_wei": "2100000000000000", "max_fee_per_gas": "2000000000",
+            "network_fee_per_gas": "1000000000", "relayer_fee_per_gas": "1000000000",
+            "bundler_gas_price": "1000000000", "in_band_gas_basis": "0",
+            "effective_gas_price": NSNull(), "max_gas_price": NSNull(), "total_gas": "21000",
+            "deployed": true, "tier": tier, "quoted": true, "fee_asset": asset,
+            "fee_recipient": "0xfee",
+        ]
+    }
+
+    private static let usdcFee: [String: Any] = [
+        "type": "erc20", "token": usdcBase, "decimals": 6, "amount": "50000", "symbol": "USDC",
+    ]
+
+    /// The fee session in force while it measures: no figure, pricing in
+    /// `feeToken` (`nil` = the chain's own coin), its rows not back yet.
+    private func measuring(feeToken: String?, options: [FeeOptionWire] = []) -> FeeViewWire {
+        FeeViewWire(busy: true, failed: nil, fee: nil, stale: false, feeToken: feeToken,
+                    options: options, confirmFeeReady: false)
+    }
+
+    /// The speed control with `tier` in force — picked by the person, its own
+    /// figure not in yet.
+    private func speed(_ tier: String) -> SendLive.SpeedInputs {
+        SendLive.SpeedInputs(
+            view: FeeSpeedViewWire(
+                tier: tier, preferred: "fast", previews: [], open: false, picked: true,
+                free: false, freeNote: false, single: false, gasPriceLine: false, options: []
+            ),
+            feeView: { _ in nil }
+        )
+    }
+
+    /// The REAL send machine, on a form: the holdings loaded, `native` (a
+    /// chain's own coin) selected, then `events` — the fee bridge's words.
+    /// Only the token load is answered; every other effect stays in flight,
+    /// so no estimate lands that the events do not hand over.
+    private func liveForm(
+        holding tokens: [[String: Any]], selecting id: String, then events: [[String: Any]] = []
+    ) throws -> SendViewWire {
+        let core = SendCore()
+        var latest: [String: Any] = [:]
+        func run(_ event: [String: Any]) throws {
+            var result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(event)))
+            var queue = result["effects"] as? [[String: Any]] ?? []
+            latest = result["view"] as? [String: Any] ?? latest
+            while !queue.isEmpty {
+                let effect = queue.removeFirst()
+                guard let id = (effect["id"] as? NSNumber)?.uint64Value,
+                      let op = effect["operation"] as? [String: Any],
+                      op["type"] as? String == "fetch_tokens"
+                else { continue }
+                let chains = Set(tokens.compactMap { $0["chain_id"] as? Int }).sorted().map { chain in
+                    ["network": "chain-\(chain)", "chain_id": chain,
+                     "native_symbol": (tokens.first { $0["chain_id"] as? Int == chain && $0["token_address"] is NSNull }?["symbol"] as? String) ?? ""] as [String: Any]
+                }
+                result = try CoreJSON.object(core.resolveEffect(effectId: id, resultJson: CoreJSON.string([
+                    "type": "tokens_loaded", "tokens": tokens, "chains": chains,
+                ])))
+                latest = result["view"] as? [String: Any] ?? latest
+                queue += result["effects"] as? [[String: Any]] ?? []
+            }
+        }
+        try run([
+            "type": "open",
+            "account": ["id": "cred-0", "address": Self.me, "name": NSNull()] as [String: Any],
+            "params": [
+                "preselected_symbol": NSNull(), "preselected_network": NSNull(),
+                "prefilled_recipient": NSNull(), "prefilled_chain_id": NSNull(),
+                "prefilled_token_address": NSNull(), "prefilled_amount_base": NSNull(),
+                "locked": false, "preselected_multi": NSNull(),
+            ] as [String: Any],
+            "display": ["code": "USD", "rate": 1.0, "fiat_decimals": 2] as [String: Any],
+        ])
+        try run(["type": "select_token", "token_id": id])
+        for event in events { try run(event) }
+        return try CoreJSON.decode(SendViewWire.self, from: latest)
+    }
+
+    private static let usdtBsc = "0x55d398326f99059ff775485246999027b3197955"
+
+    private func feeToken(_ token: String?) -> [String: Any] {
+        ["type": "fee_token_changed", "fee_token": token.map { $0 as Any } ?? NSNull()]
+    }
+
+    /// A USDC fee wears USDC's own logo — by its contract, which the row
+    /// left out, so it would have worn the chain's logo by the native-coin
+    /// rule — with the chain's badge. The coin is the core's
+    /// (`SendView.fee_coin`), from the estimate the fee card handed over.
+    @Test func anERC20FeeWearsItsOwnContractsLogo() throws {
+        let view = try liveForm(
+            holding: [token("ETH", chainId: 8453), token("USDC", chainId: 8453, address: Self.usdcBase)],
+            selecting: "chain-8453_native_ETH",
+            then: [["type": "fee_updated", "estimate": estimate(chainId: 8453, asset: Self.usdcFee)]]
+        )
+        #expect(view.feeCoin == SendFeeCoinWire(symbol: "USDC", contract: Self.usdcBase, chainId: 8453))
+        let row = SendLive.form(view, fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(row.mark.ticker == "USDC")
+        #expect(row.mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/logo.png") == true)
+        #expect(!row.mark.logoURLs.contains { $0.contains("/chainlogos/") })
+        #expect(row.mark.badgeLogoURL == Marks.chainLogoURL(8453))
+    }
+
+    /// With no estimate in hand (a quote out, or one that failed) and no coin
+    /// in force, the row wears the send's chain's own coin — BNB on a BNB
+    /// Chain send — never the drawing's ETH. With no chain known there is no
+    /// coin to name: an empty disc, and no drawing's coin either.
+    @Test func withNoEstimateTheFeeRowWearsTheChainsOwnCoin() throws {
+        let view = try liveForm(holding: [token("BNB", chainId: 56)], selecting: "chain-56_native_BNB")
+        #expect(view.feeCoin == SendFeeCoinWire(symbol: "BNB", contract: nil, chainId: 56))
+        let row = SendLive.form(view, fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(row.mark.ticker == "BNB")
+        #expect(row.mark.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(row.mark.badgeHidden)
+        let none = SendLive.form(sendView([:]), fee: nil, display: .usd, on: drawnForm(), loc: loc).fee
+        #expect(none.mark.ticker.isEmpty)
+        #expect(none.mark.logoURLs.isEmpty)
+    }
+
+    /// A USDC fee keeps USDC's own logo while a newly picked speed is
+    /// measured: the estimate in hand is the speed just left's, the card has
+    /// no figure yet — and says nobody chose, afresh — and the coin does not
+    /// change with the speed, so the row never drops to the chain's coin for
+    /// that moment. The old speed's figure never shows.
+    @Test func theFeeCoinKeepsItsLogoWhileANewSpeedIsMeasured() throws {
+        let view = try liveForm(
+            holding: [token("ETH", chainId: 8453), token("USDC", chainId: 8453, address: Self.usdcBase)],
+            selecting: "chain-8453_native_ETH",
+            then: [
+                ["type": "fee_updated", "estimate": estimate(chainId: 8453, asset: Self.usdcFee, tier: "fast")],
+                ["type": "fee_busy_changed", "busy": true],
+                feeToken(nil),
+            ]
+        )
+        let usdc = TokenMarkModel.of(chainId: 8453, symbol: "USDC", tokenAddress: Self.usdcBase,
+                                     color: SendLive.chainColor(8453))
+        // Fast is the estimate's own speed; slow is a pick still measuring.
+        for tier in ["fast", "slow"] {
+            let row = SendLive.form(view, fee: measuring(feeToken: nil), display: .usd,
+                                    on: drawnForm(), loc: loc, speed: speed(tier)).fee
+            #expect(row.mark.ticker == "USDC", "\(tier)")
+            #expect(row.mark.logoURLs == usdc.logoURLs, "\(tier)")
+            #expect(row.mark.badgeLogoURL == usdc.badgeLogoURL, "\(tier)")
+        }
+        let slow = SendLive.form(view, fee: measuring(feeToken: nil), display: .usd,
+                                 on: drawnForm(), loc: loc, speed: speed("slow")).fee
+        #expect(slow.value == loc.t("send.estimatingFee"), "the old speed's figure never shows")
+    }
+
+    /// With no estimate in hand at all, the row names the coin in force — the
+    /// card's, as the bridge mirrors it — named by the form's holdings; the
+    /// chain's own when the card is on it.
+    @Test func withNoEstimateTheRowNamesTheCoinInForce() throws {
+        let holdings = [token("ETH", chainId: 8453), token("USDC", chainId: 8453, address: Self.usdcBase)]
+        let usdc = try liveForm(holding: holdings, selecting: "chain-8453_native_ETH",
+                                then: [feeToken(Self.usdcBase)])
+        let usdcRow = SendLive.form(usdc, fee: measuring(feeToken: Self.usdcBase), display: .usd,
+                                    on: drawnForm(), loc: loc, speed: speed("slow")).fee
+        #expect(usdcRow.mark.ticker == "USDC")
+        #expect(usdcRow.mark.logoURLs.first?
+            .hasSuffix("/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/logo.png") == true)
+        let native = try liveForm(holding: holdings, selecting: "chain-8453_native_ETH",
+                                  then: [feeToken(Self.usdcBase), feeToken(nil)])
+        let nativeRow = SendLive.form(native, fee: measuring(feeToken: nil), display: .usd,
+                                      on: drawnForm(), loc: loc, speed: speed("slow")).fee
+        #expect(nativeRow.mark.ticker == "ETH")
+        #expect(nativeRow.mark.logoURLs == TokenMarkModel.of(chainId: 8453, symbol: "ETH",
+                                                              color: SendLive.chainColor(8453)).logoURLs)
+    }
+
+    /// A quote that failed on BNB Chain — the simulator's "ETH —" for the
+    /// golden Safe — names BNB, the chain's own coin, beside its "—". When the
+    /// card picked USDT to pay (nobody chose), USDT is named; a pick on the
+    /// form is newer than the card's word. Never the drawing's ETH. One state,
+    /// one picture: this is the core's answer on all four shells.
+    @Test func aFailedQuoteNamesTheChainsCoinOrTheCoinInForce() throws {
+        let holdings = [token("BNB", chainId: 56), token("USDT", chainId: 56, address: Self.usdtBsc)]
+        let failed = FeeViewWire(busy: false, failed: "quote_unavailable", fee: nil, stale: false,
+                                 feeToken: nil, options: [], confirmFeeReady: false)
+        func row(_ events: [[String: Any]]) throws -> FeeRowModel {
+            let view = try liveForm(holding: holdings, selecting: "chain-56_native_BNB", then: events)
+            return SendLive.form(view, fee: failed, display: .usd, on: drawnForm(), loc: loc).fee
+        }
+        let bnb = try row([])
+        #expect(bnb.mark.ticker == "BNB")
+        #expect(bnb.mark.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(bnb.value == "—")
+        let card = try row([feeToken(Self.usdtBsc)])
+        #expect(card.mark.ticker == "USDT")
+        #expect(card.mark.logoURLs.first?.contains("/assets/eip155-56/") == true)
+        #expect(card.mark.badgeLogoURL == Marks.chainLogoURL(56))
+        #expect(card.value == "—")
+        let picked = try row([feeToken(Self.usdtBsc), ["type": "choose_fee_token", "token": NSNull()]])
+        #expect(picked.mark.ticker == "BNB", "the person's pick is newer than the card's word")
+        for row in [bnb, card, picked] {
+            #expect(row.mark.ticker != "ETH" && row.mark.glyph != "ETH")
+        }
+    }
+
+    /// The row draws whatever coin the core names, through the core's token
+    /// mark — the shell keeps no rule of its own, and the fee card's coin in
+    /// the shell no longer stands in for it.
+    @Test func theRowDrawsTheCoresCoinAndNothingElse() {
+        let view = sendView([
+            "selected_token": token("BNB", chainId: 56),
+            "fee_coin": ["symbol": "USDT", "contract": Self.usdtBsc, "chain_id": 56] as [String: Any],
+        ])
+        let mark = SendLive.form(view, fee: measuring(feeToken: nil), display: .usd, on: drawnForm(), loc: loc).fee.mark
+        let core = TokenMarkModel.of(chainId: 56, symbol: "USDT", tokenAddress: Self.usdtBsc,
+                                     color: SendLive.chainColor(56))
+        #expect(mark.ticker == "USDT")
+        #expect(mark.logoURLs == core.logoURLs)
+        #expect(mark.badgeLogoURL == core.badgeLogoURL)
+        #expect(mark.glyph == core.glyph)
+        // No coin from the core (no chain known): the card's coin does not
+        // stand in — an empty disc.
+        let bare = sendView(["selected_token": token("BNB", chainId: 56)])
+        let empty = SendLive.form(bare, fee: measuring(feeToken: Self.usdtBsc), display: .usd,
+                                  on: drawnForm(), loc: loc).fee.mark
+        #expect(empty.ticker.isEmpty && empty.logoURLs.isEmpty)
+    }
+
+    /// The fee-coin sheet before any quote was asked draws its chrome and no
+    /// coins — never the drawing's ETH, USDC and USDT at its own balances,
+    /// which stood in on a live send.
+    @Test func theFeeCoinSheetBeforeAnyQuoteDrawsNoDrawnCoins() {
+        guard case .feeToken(let drawn)? = WalletFlowFixtures.build(.sd2f, loc: loc).sheet
+        else { fatalError("SD2f does not draw the fee sheet") }
+        #expect(drawn.rows.contains { $0.symbol == "ETH" }, "the drawing that used to stand in")
+        let reading = SendLive.feeSheetReading(on: drawn)
+        #expect(reading.rows.isEmpty)
+        #expect(reading.title == drawn.title)
+        #expect(reading.hint == drawn.hint)
+    }
+
+    /// The fee-coin sheet with no estimate names the SEND's chain — never 0.
+    @Test func theFeeCoinSheetNeverAsksForChainZero() {
+        func option(_ symbol: String, contract: String?) -> FeeOptionWire {
+            FeeOptionWire(
+                symbol: symbol, contract: contract, decimals: 18, balance: "0", recipient: "0x1",
+                usdBalance: "0", usdPrice: "1", amount: nil, insufficient: false, selected: contract == nil
+            )
+        }
+        let fee = FeeViewWire(
+            busy: true, failed: nil, fee: nil, stale: false, feeToken: nil,
+            options: [option("BNB", contract: nil), option("USDT", contract: "0x55d398326f99059ff775485246999027b3197955")],
+            confirmFeeReady: false
+        )
+        guard case .feeToken(let drawn)? = WalletFlowFixtures.build(.sd2f, loc: loc).sheet
+        else { fatalError("SD2f does not draw the fee sheet") }
+        let sheet = SendLive.feeSheet(fee, on: drawn, loc: loc, chainId: 56)
+        let urls = sheet.rows.flatMap { $0.mark.logoURLs + [$0.mark.badgeLogoURL].compactMap { $0 } }
+        #expect(!urls.isEmpty)
+        #expect(!urls.contains { $0.contains("eip155-0") })
+        #expect(sheet.rows[0].mark.logoURLs == [Marks.chainLogoURL(56)].compactMap { $0 })
+        #expect(sheet.rows[1].mark.logoURLs.first?.contains("/assets/eip155-56/") == true)
+        // With no chain at all: letters, and nothing asked of anybody.
+        let blind = SendLive.feeSheet(fee, on: drawn, loc: loc)
+        #expect(blind.rows.allSatisfy { $0.mark.logoURLs.isEmpty && $0.mark.badgeHidden })
+    }
+
+    /// A sweep's receipt with no chain in hand draws its coins' named logos,
+    /// never a URL on chain 0.
+    @Test func aReceiptWithNoChainNeverAsksForChainZero() {
+        let view = sendView([
+            "receipt": [
+                "status": "submitted", "hold_reason": NSNull(), "kind": "multi_select",
+                "transfers": [[String: Any]](), "amount": "", "usd_value": 0,
+                "submitted_at_ms": NSNull(), "typical_inclusion_s": NSNull(),
+                "coins": [
+                    ["symbol": "ETH", "amount": "0.1", "token_address": NSNull(),
+                     "logo_urls": [String](), "usd_value": 0],
+                    ["symbol": "USDC", "amount": "5", "token_address": Self.usdcBase,
+                     "logo_urls": ["https://logos.example/usdc.png"], "usd_value": 0],
+                ],
+            ],
+        ])
+        let parts = SendLive.receiptParts(view, symbol: "", loc: loc)
+        #expect(parts.rows.count == 2)
+        let urls = parts.rows.flatMap { ($0.lead?.logoURLs ?? []) + [$0.lead?.badgeLogoURL].compactMap { $0 } }
+        #expect(!urls.contains { $0.contains("eip155-0") })
+        #expect(parts.rows[1].lead?.logoURLs == ["https://logos.example/usdc.png"])
+    }
+
+    // MARK: - The confirm page
+
+    /// The confirm page's From row has the account's face, and its Network
+    /// row the NETWORK's own mark: ETH sent on Base is "Base" beside Base's
+    /// logo — never Ethereum's, the coin's.
+    @Test func theConfirmsFromHasAFaceAndItsNetworkTheNetworksMark() {
+        let view = sendView([
+            "stage": "confirm", "recipient": Self.alice, "confirm_amount": "0.1",
+            "selected_token": token("ETH", chainId: 8453),
+        ])
+        let model = SendLive.confirm(view, from: (Self.me, nil), display: .usd,
+                                     on: drawnConfirm(.sd3), loc: loc)
+        guard case .identicon(let seed)? = model.facts[0].lead else {
+            Issue.record("the From row has no face")
+            return
+        }
+        #expect(seed == Self.me)
+        #expect(model.facts[2].value == "Base")
+        guard case .token(let mark)? = model.facts[2].lead else {
+            Issue.record("the Network row has no mark")
+            return
+        }
+        #expect(isNetwork(mark, 8453))
+        #expect(!mark.logoURLs.contains { $0.hasSuffix("eip155-1.png") }, "the coin's logo on a network row")
+        // The coin itself, above, is still the coin: Ethereum's logo with
+        // Base's badge.
+        #expect(model.mark?.logoURLs == [Marks.chainLogoURL(1)].compactMap { $0 })
+        #expect(model.mark?.badgeHidden == false)
+    }
+
+    /// A sweep's Network row is the chain it is locked to.
+    @Test func aSweepsConfirmNamesTheLockedChain() {
+        let view = sendView([
+            "stage": "confirm", "multi_select_mode": true, "recipient": Self.alice,
+            "multi_chain_id": 8453, "multi_selected_ids": ["chain-8453_native_ETH"],
+            "tokens": [token("ETH", chainId: 8453)],
+        ])
+        let model = SendLive.confirm(view, from: (Self.me, nil), display: .usd,
+                                     on: drawnConfirm(.sd3c), loc: loc)
+        let network = model.facts.first { $0.value == "Base" }
+        guard case .token(let mark)? = network?.lead else {
+            Issue.record("the sweep's Network row has no mark")
+            return
+        }
+        #expect(isNetwork(mark, 8453))
+    }
+}

@@ -13,7 +13,7 @@
 //    told (timed out, rate limited, no endpoint) is the one it names;
 //  - the shell's clock reaches the record (`consent_rejected` with `now_ms`);
 //  - the tab's status line and record, in the core's words;
-//  - the signing slide's gate (`signConfirmState`) and its line;
+//  - the signing confirm's gate (`signConfirmState`) and its line;
 //  - the landing's countdown (`landingPace`), from the relay's send;
 //  - a passkey failure carries its kind, and the sheet names the signer.
 //
@@ -37,7 +37,7 @@ struct EnginePlanTests {
 
     private func explore(_ ids: [String], selected: String?, recent: [String]) -> ExploreViewWire {
         var view = ExploreViewWire(
-            favorites: [], groups: [],
+            favorites: [],
             tabs: ids.map { ExploreTabWire(id: $0, url: "https://\($0).example", title: $0, host: "\($0).example") },
             selectedTab: selected, favoritesHidden: false, recentHidden: false,
             favoritesFull: false, tabsFull: false, ready: true
@@ -369,7 +369,7 @@ struct BrowserStatusTests {
     }
 }
 
-// MARK: - The signing slide's gate (FR-010)
+// MARK: - The signing confirm's gate (FR-010)
 
 @MainActor
 struct ConfirmGateTests {
@@ -421,7 +421,7 @@ struct ConfirmGateTests {
         SignConfirmStateWire.of(sign: sign, guard: guardJson, clear: clear, fee: fee, speedTier: speed)
     }
 
-    @Test func everyPartSaysYesAndTheSlideArms() throws {
+    @Test func everyPartSaysYesAndTheConfirmArms() throws {
         let state = gate(sign: try openSign(), guard: try guardView(), clear: try clear("clear_sign"),
                          fee: try fee(ready: true, tier: "fast"), speed: "fast")
         #expect(state.enabled)
@@ -460,7 +460,7 @@ struct ConfirmGateTests {
         let short = gate(sign: try openSign(), guard: try guardView(), clear: try clear("clear_sign"),
                          fee: try fee(ready: false, tier: "fast"), speed: "fast")
         #expect(short.block == "fee_short")
-        // Issue #438: the fee section says a short coin; the slide repeated it.
+        // Issue #438: the fee section says a short coin; the confirm repeated it.
         #expect(short.key == nil)
 
         // Issue 681: the figure is another speed's — not this one's to sign.
@@ -470,9 +470,9 @@ struct ConfirmGateTests {
         #expect(another.block == "fee_measuring")
     }
 
-    /// Spec 096 F8: a failure held on the sheet shuts the slide, and its line
+    /// Spec 096 F8: a failure held on the sheet shuts the confirm, and its line
     /// says what opens it — Try again when the core offers it, else that the
-    /// request has ended. Drawn under the slide by the sheet's model.
+    /// request has ended. Drawn under the confirm by the sheet's model.
     @Test func aHeldFailureNamesTheWayOn() throws {
         let held = { (retryable: Bool) throws -> SignConfirmStateWire in
             self.gate(
@@ -488,7 +488,7 @@ struct ConfirmGateTests {
         #expect(retry.key == "componentsUi.signing.confirmBlock.answeredRetry")
         #expect(try held(false).key == "componentsUi.signing.confirmBlock.answered")
 
-        // The sheet draws the line under the shut slide, in the person's words.
+        // The sheet draws the line under the shut confirm, in the person's words.
         let model = SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
             request: SigningController.Incoming(
@@ -505,7 +505,7 @@ struct ConfirmGateTests {
         #expect(model.confirm?.enabled == false)
         #expect(model.confirmBlockLine == loc.t("componentsUi.signing.confirmBlock.answeredRetry"))
 
-        // A view that does not read keeps the slide shut, silently.
+        // A view that does not read keeps the confirm shut, silently.
         #expect(gate(sign: "{}", guard: try guardView(), clear: try clear("clear_sign"), fee: nil) == .shut)
     }
 }
@@ -616,7 +616,7 @@ struct SignerKindTests {
     }
 
     /// End to end through the real controller and core: the passkey cannot be
-    /// used, the core names the signer, the slide stays shut with its line,
+    /// used, the core names the signer, the confirm stays shut with its line,
     /// and the sheet says it in the signer's words — tried again only when a
     /// retry can help.
     @Test(.timeLimit(.minutes(2)))
@@ -733,7 +733,7 @@ struct TabBatchCloseTests {
     @Test func theMenuOffersOnlyWhatTakesATab() {
         func view(_ ids: [String]) -> ExploreViewWire {
             ExploreViewWire(
-                favorites: [], groups: [], tabs: strip(ids), selectedTab: ids.first,
+                favorites: [], tabs: strip(ids), selectedTab: ids.first,
                 favoritesHidden: false, recentHidden: false,
                 favoritesFull: false, tabsFull: false, ready: true
             )
@@ -746,10 +746,11 @@ struct TabBatchCloseTests {
         #expect(one.map(\.closesOthers) == [false])
         #expect(one.map(\.closesRight) == [false])
 
-        // The gallery's switcher asks the same core.
+        // The gallery's switcher asks the same core (DESIGN N's board strip:
+        // three sites and the start page).
         let gallery = ExploreFixtures.buildMobileState(.e5, loc: loc).tabs
-        #expect(gallery.map(\.closesOthers) == [true, true, true])
-        #expect(gallery.map(\.closesRight) == [true, true, false])
+        #expect(gallery.map(\.closesOthers) == [true, true, true, true])
+        #expect(gallery.map(\.closesRight) == [true, true, true, false])
     }
 
     /// The menu's words are the corpus's, never a key echoed back.
@@ -849,7 +850,9 @@ struct TabBatchCloseTests {
     /// End to end on real engines: the tabs a batch close takes lose their
     /// pages — a live one torn down, a suspended one forgotten — and the
     /// browser machine hears `tab_closed` for each, as for a single close;
-    /// the tab kept keeps its page, and its record.
+    /// the tab kept keeps its record. The selection that falls onto it is
+    /// not anybody asking to see it (DESIGN N): it wakes — said — only when
+    /// it is resumed.
     ///
     /// Each tab is a real WKWebView (see `DebugModeTests` on why the limit).
     @Test(.timeLimit(.minutes(5)))
@@ -893,11 +896,18 @@ struct TabBatchCloseTests {
         #expect(h.browser.dbr.tab(b) == nil, "the browser machine heard tab_closed for b")
         #expect(h.browser.dbr.tab(c) == nil, "the browser machine heard tab_closed for c")
 
-        // The selection fell left, onto `a`: its page loads again, said.
+        // The selection fell left, onto `a`, behind the switcher the batch
+        // close came from: nobody asked to see it, so it stays dormant.
         #expect(h.browser.explore.selectedTab == a)
-        await Wait.until { h.browser.engineForTesting(a) != nil }
+        #expect(h.browser.engineForTesting(a) == nil, "the batch close woke the tab it selected")
+        #expect(h.browser.current == nil)
+        #expect(h.browser.dbr.tab(a) != nil, "the tab kept keeps its record")
+
+        // Resumed, its page loads again, said.
+        h.browser.selectTab(a)
+        #expect(h.browser.engineForTesting(a) != nil)
         #expect(h.browser.reloadedTab == a)
         #expect(h.browser.current === h.browser.engineForTesting(a))
-        #expect(h.browser.dbr.tab(a) != nil, "the tab kept keeps its record")
+        #expect(h.browser.dbr.tab(a) != nil)
     }
 }

@@ -248,6 +248,13 @@ fun FactRow(
     }
 }
 
+/**
+ * The one diameter of a fact row's token mark and identicon (icon.lg, 20):
+ * a fact row is a line of text with a hint of art, not a row with an avatar
+ * — the web's FactRow says the same of its `.mark`.
+ */
+internal val FACT_MARK = VelaIconSize.lg
+
 /** A fact row's leading art — a chain dot, a token mark, an identicon — and the gap after it. */
 @Composable
 private fun FactLeadArt(lead: FactLead?) {
@@ -260,14 +267,15 @@ private fun FactLeadArt(lead: FactLead?) {
             )
             Spacer(modifier = Modifier.width(VelaSpacing.sm))
         }
+        // One size for every mark a fact row leads with (FACT_MARK): a
+        // network's logo beside the identicons on the confirm page and the
+        // transaction detail was 26 against their 20 — two sizes on one page.
         is FactLead.Token -> {
-            TokenIcon(mark = lead.mark,
-                inline = true,
-            )
+            TokenIcon(mark = lead.mark, inline = true, size = FACT_MARK)
             Spacer(modifier = Modifier.width(VelaSpacing.sm))
         }
         is FactLead.Identicon -> {
-            IdenticonImage(seed = lead.seed, size = VelaIconSize.lg)
+            IdenticonImage(seed = lead.seed, size = FACT_MARK)
             Spacer(modifier = Modifier.width(VelaSpacing.sm))
         }
         null -> Unit

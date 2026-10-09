@@ -576,11 +576,81 @@ pub fn explore_tabs_closed_by(tabs_json: String, scope_json: String) -> Option<S
     vela_core::app::explore_sites::tabs_closed_by_json(&tabs_json, &scope_json)
 }
 
-/// May the signing slide arm, and if not why (spec 099 R7): the sign, guard,
+/// What Explore shows when somebody enters it: the explore view (JSON — only
+/// `tabs`, `selected_tab` and `recent_tabs` are read), what brought it up
+/// (`"section"` from another section, `"reselect"` chosen again while up,
+/// `"page_opened"` a page opened from outside — asked once that open is in
+/// the view) and the tab whose request waits on the person
+/// (`browser_waiting_tab`) in; an `ExploreLanding` JSON out —
+/// `{"type":"home"}` or `{"type":"tab","id":…}`. `None` for input that does
+/// not read. See `vela_core::app::browser_tabs::explore_landing`.
+#[uniffi::export]
+#[must_use]
+pub fn explore_landing(
+    view_json: String,
+    entry: String,
+    waiting: Option<String>,
+) -> Option<String> {
+    vela_core::app::browser_tabs::explore_landing_json(&view_json, &entry, waiting.as_deref())
+}
+
+/// Which tab an open goes into — never over a live dApp from the home: the
+/// explore view (JSON), the tab whose page is in the view, whether that page
+/// is on screen (`false` for anything asked from the home or from outside),
+/// the address, and how it was asked for (`"address"` typed or handed in,
+/// `"site"` a favourite, recent or featured tile picked) in; an
+/// `ExploreOpenTarget` JSON out — `{"type":"load","id":…}` (send
+/// `tab_selected` when it is not the selected tab, then `tab_navigated`, and
+/// load it there), `{"type":"resume","id":…}` (a tab already on that site:
+/// `tab_selected`, shown as it was left) or `{"type":"new_tab"}`
+/// (`tab_opened`; never for a full strip, whose open loads in a start-page
+/// tab, else the tab used longest ago — never the dApp just left while
+/// another tab will do). `None` for input that does not read.
+/// See `vela_core::app::browser_tabs::open_target`.
+#[uniffi::export]
+#[must_use]
+pub fn browser_open_target(
+    view_json: String,
+    shown: Option<String>,
+    on_page: bool,
+    url: String,
+    kind: String,
+) -> Option<String> {
+    vela_core::app::browser_tabs::open_target_json(
+        &view_json,
+        shown.as_deref(),
+        on_page,
+        &url,
+        &kind,
+    )
+}
+
+/// The tab a strip or switcher marks as "this tab": the page's tab while a
+/// page is on screen; over the home, the selected tab only when it is a
+/// start-page tab — a tab waiting unlit is not "this tab" under a home page.
+/// `None` when nothing is lit or the view does not read. See
+/// `vela_core::app::browser_tabs::lit_tab`.
+#[uniffi::export]
+#[must_use]
+pub fn browser_lit_tab(view_json: String, shown: Option<String>, on_page: bool) -> Option<String> {
+    vela_core::app::browser_tabs::lit_tab_json(&view_json, shown.as_deref(), on_page)
+}
+
+/// The tab whose request is in front of the person — the browser machine's
+/// consent, signature or add-network sheet — from a `DbrView` JSON: what
+/// `explore_landing` takes as `waiting`. `None` while nothing waits. See
+/// `vela_core::app::browser_tabs::waiting_tab`.
+#[uniffi::export]
+#[must_use]
+pub fn browser_waiting_tab(dapp_view_json: String) -> Option<String> {
+    vela_core::app::browser_tabs::waiting_tab_json(&dapp_view_json)
+}
+
+/// May the signing confirm be tapped, and if not why (spec 099 R7): the sign, guard,
 /// clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
 /// no fee session) and the speed in force (`"fast"`…, `None` with no speed
 /// control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
-/// a view does not read, and the slide stays shut. See
+/// a view does not read, and the confirm stays disabled. See
 /// `vela_core::app::sign_confirm`.
 #[uniffi::export]
 #[must_use]
@@ -1057,6 +1127,31 @@ impl I18n {
             .dir()
             .as_str()
             .to_owned())
+    }
+
+    /// The core's compact relative time in the active language — `"now"`,
+    /// `"2m"`, `"3h"`, a short weekday under a week, else the date — for the
+    /// home's "Updated <ago>" and anything else that says how long ago.
+    ///
+    /// `ts_seconds` is the moment in WHOLE SECONDS (`floor(at_ms / 1000)`;
+    /// handing it milliseconds reads as the future, which is "now");
+    /// `now_ms` the clock in milliseconds; `utc_offset_minutes` what to add
+    /// to UTC for local time at that moment; `date_format` the person's date
+    /// preset as stored (`ymd_slash`, `mdy_slash`, `dmy_slash`, `dmy_dot`,
+    /// `iso`) with `auto` already resolved — an unknown word is `mdy_slash`.
+    pub fn format_relative_time(
+        &self,
+        ts_seconds: i64,
+        now_ms: i64,
+        utc_offset_minutes: i32,
+        date_format: String,
+    ) -> Result<String, CoreError> {
+        Ok(self.inner.read().map_err(lock_err)?.format_relative_time(
+            ts_seconds,
+            now_ms,
+            utc_offset_minutes,
+            vela_core::l10n::date_preset_of(&date_format),
+        )?)
     }
 }
 
@@ -2483,6 +2578,72 @@ pub fn mark_miss_ttl_ms(kind: String, status: Option<u16>) -> Option<u32> {
     mark::mark_miss_ttl_ms(miss)
 }
 
+/// What a circle standing for a token or a network wears
+/// (`vela_core::app::remote_mark::MarkView`): draw `glyph`, then the first of
+/// `logo_urls` that loads over it; the corner badge only when
+/// `badge_chain_id` is set (its dot, `badge_logo_url` over it).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MarkView {
+    /// The ticker's first three characters, upper-cased: always drawn.
+    pub glyph: String,
+    /// Logo candidates, best first. Empty = the glyph alone.
+    pub logo_urls: Vec<String>,
+    /// The chain the badge names; `None` = no badge.
+    pub badge_chain_id: Option<u32>,
+    /// The badge chain's logo; `None` whenever there is no badge.
+    pub badge_logo_url: Option<String>,
+}
+
+impl From<vela_core::app::remote_mark::MarkView> for MarkView {
+    fn from(mark: vela_core::app::remote_mark::MarkView) -> Self {
+        Self {
+            glyph: mark.glyph,
+            logo_urls: mark.logo_urls,
+            badge_chain_id: mark.badge_chain_id,
+            badge_logo_url: mark.badge_logo_url,
+        }
+    }
+}
+
+/// A COIN's mark (`remote_mark::token_mark`): `ethereum_data_url` is the
+/// person's chain-data endpoint ("" = the built-in one), `token_address`
+/// `None` for the chain's native coin, `named` the logo URLs an index already
+/// gave (tried first). A native coin wears its home chain's logo, and its
+/// badge is hidden on that chain.
+#[uniffi::export]
+pub fn token_mark(
+    ethereum_data_url: String,
+    chain_id: u32,
+    symbol: String,
+    token_address: Option<String>,
+    named: Vec<String>,
+) -> MarkView {
+    vela_core::app::remote_mark::token_mark(
+        &ethereum_data_url,
+        chain_id,
+        &symbol,
+        token_address.as_deref(),
+        &named,
+    )
+    .into()
+}
+
+/// A NETWORK drawn as itself (`remote_mark::chain_mark`): network rows and
+/// facts, chain-locking notices, receive rows, the QR centre, chips. Its own
+/// logo, never a badge.
+#[uniffi::export]
+pub fn chain_mark(ethereum_data_url: String, chain_id: u32, native_symbol: String) -> MarkView {
+    vela_core::app::remote_mark::chain_mark(&ethereum_data_url, chain_id, &native_symbol).into()
+}
+
+/// `{base}/chainlogos/eip155-{chain_id}.png` on the person's chain-data
+/// endpoint ("" = the built-in one); `None` for chain 0, which names no
+/// network.
+#[uniffi::export]
+pub fn chain_logo_url(ethereum_data_url: String, chain_id: u32) -> Option<String> {
+    vela_core::app::remote_mark::chain_logo_url(&ethereum_data_url, chain_id)
+}
+
 /// A shipped network's usual time to include an operation, in seconds; `None`
 /// for a network Vela does not ship (the receipt then circles instead of
 /// drawing a promise). The dApp signing sheet's wait reads the same number as
@@ -3177,6 +3338,67 @@ mod tests_082 {
             format_signed_token_amount("0".into(), 18, "comma_dot".into()),
             None
         );
+    }
+
+    #[test]
+    fn a_mark_crosses_the_ffi_whole() {
+        let eth_on_base = token_mark(String::new(), 8453, "ETH".into(), None, Vec::new());
+        assert_eq!(eth_on_base.glyph, "ETH");
+        assert_eq!(
+            eth_on_base.logo_urls,
+            vec!["https://ethereum-data.getvela.app/chainlogos/eip155-1.png".to_owned()]
+        );
+        assert_eq!(eth_on_base.badge_chain_id, Some(8453));
+        assert_eq!(
+            eth_on_base.badge_logo_url.as_deref(),
+            Some("https://ethereum-data.getvela.app/chainlogos/eip155-8453.png")
+        );
+        let base = chain_mark("https://data.example/".into(), 8453, "ETH".into());
+        assert_eq!(
+            base.logo_urls,
+            vec!["https://data.example/chainlogos/eip155-8453.png".to_owned()]
+        );
+        assert_eq!(base.badge_chain_id, None);
+        assert_eq!(chain_logo_url(String::new(), 0), None);
+    }
+
+    /// The phones' "Updated 2m" is the core's sentence in the active
+    /// language, the weekday and the stored date word included.
+    #[test]
+    fn a_relative_time_crosses_the_ffi_in_the_active_language() {
+        // 2026-06-13 13:45:00.999 UTC, a Saturday.
+        const NOW_MS: i64 = 1_781_358_300_999;
+        let asset = |lng: &str| {
+            let path = format!(
+                "{}/../../../assets/i18n/{lng}.json",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            std::fs::read(&path).unwrap_or_else(|e| unreachable!("{path}: {e}"))
+        };
+        let i18n = I18n::new(asset("en")).unwrap_or_else(|e| unreachable!("{e}"));
+        let ago = |ts_seconds: i64, date: &str| {
+            i18n.format_relative_time(ts_seconds, NOW_MS, 0, date.into())
+                .unwrap_or_else(|e| unreachable!("{e}"))
+        };
+        let now_s = NOW_MS / 1000;
+        assert_eq!(ago(now_s - 44, "iso"), "now");
+        assert_eq!(ago(now_s - 90, "iso"), "2m");
+        assert_eq!(ago(now_s - 5_400, "iso"), "2h");
+        assert_eq!(ago(now_s - 3 * 86_400, "iso"), "Wed");
+        assert_eq!(ago(now_s - 30 * 86_400, "iso"), "2026-05-14");
+        assert_eq!(ago(now_s - 30 * 86_400, "dmy_dot"), "14.05.2026");
+        // Milliseconds where seconds belong are the future: "now", never a
+        // date thousands of years out.
+        assert_eq!(ago(NOW_MS - 30 * 86_400_000, "iso"), "now");
+
+        i18n.load_catalog("zh".into(), asset("zh"))
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        i18n.change_language("zh".into())
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(ago(now_s, "ymd_slash"), "刚刚");
+        assert_eq!(ago(now_s - 120, "ymd_slash"), "2分钟前");
+        assert_eq!(ago(now_s - 3 * 86_400, "ymd_slash"), "周三");
+        assert_eq!(ago(now_s - 30 * 86_400, "ymd_slash"), "2026/05/14");
     }
 
     #[test]

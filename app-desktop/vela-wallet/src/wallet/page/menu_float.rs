@@ -357,7 +357,7 @@ mod mac {
             let display = window.display(cx)?;
             let frame = window.bounds();
             let titlebar = (frame.size.height - window.viewport_size().height).max(px(0.));
-            let card = self.menu_card_size_of(kind, cx);
+            let card = self.menu_card_size_of(kind);
             Some((
                 display.id(),
                 float_bounds(frame, titlebar, at, anchor, card, display.visible_bounds()),
@@ -726,7 +726,6 @@ mod tests {
             ContactsMenu::Tile,
             ContactsMenu::Recent,
             ContactsMenu::Contact,
-            ContactsMenu::MoveGroup,
         ] {
             assert!(!drops_over_page(kind), "{kind:?}");
         }

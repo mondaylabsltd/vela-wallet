@@ -44,12 +44,15 @@ export type SigningStateId =
 	| 'cs33'
 	/** Spec 032 phase 39: a cap being TYPED, and the same field refused. */
 	| 'cs34'
-	| 'cs35';
+	| 'cs35'
+	/** The wallet's own key backup (first-party): its headline, no requester. */
+	| 'cs36';
 
 /** Semantic weight. `accent` is the intent sentence; the rest colour warnings. */
 export type Tone = 'neutral' | 'accent' | 'success' | 'caution' | 'danger';
 
-export interface TokenMark {
+/** A party's letter on a tint of its own colour — a person or a site, never a coin. */
+export interface LetterMark {
 	letter: string;
 	tint: string;
 }
@@ -59,7 +62,12 @@ export interface AmountLine {
 	sign: string;
 	value: string;
 	symbol: string;
-	token?: TokenMark;
+	/**
+	 * The coin's mark, the wallet's token circle (`tokenMarkFor`): its logo
+	 * over its glyph, the same circle the send flow draws for it. A letter on
+	 * a disc drew USDC and USDT alike as "U".
+	 */
+	token?: TokenMarkModel;
 	fiat?: string;
 	/** "支付" / "最少收到" / "存入资产" — the line's own small label. */
 	caption?: string;
@@ -155,7 +163,10 @@ export interface TechIdentity {
 	role: string;
 	name: string;
 	address: string;
-	mark?: TokenMark;
+	/** A coin this call names (the token it moves): the wallet's token circle. */
+	mark?: TokenMarkModel;
+	/** Anyone else it names (the recipient): their letter, as before. */
+	avatar?: LetterMark;
 }
 
 export interface TechModel {
@@ -173,7 +184,13 @@ export interface TechModel {
 
 export interface FeeTokenOption {
 	id: string;
-	mark: TokenMark;
+	/**
+	 * The coin's real mark — the send form's fee-coin sheet's, by the same
+	 * rule (`tokenMarkFor`): its logo over its drawn ticker, the chain badge
+	 * unless it is the chain's own coin. A first letter on a disc drew USDC
+	 * and USDT as the same "U".
+	 */
+	mark: TokenMarkModel;
 	name: string;
 	balance: string;
 	fee: string;
@@ -187,7 +204,7 @@ export interface FeeTokenOption {
 	reason?: string;
 }
 
-import type { FeeSpeedModel, ReceiptStage } from '$lib/flows/model';
+import type { FeeSpeedModel, ReceiptStage, TokenMarkModel } from '$lib/flows/model';
 
 export type FeeModel =
 	| {
@@ -213,7 +230,7 @@ export type FeeModel =
 			 */
 			speed?: FeeSpeedModel;
 			/**
-			 * Why the slide is shut: the coin that pays is not there (issue 262 —
+			 * Why the confirm is shut: the coin that pays is not there (issue 262 —
 			 * 0 ETH on mainnet, quoted in ETH, signed and never bundled) — or,
 			 * spec 079, why there is no fee at all: the relay could not be
 			 * reached, and the sheet will ask again by itself.
@@ -222,7 +239,7 @@ export type FeeModel =
 			/**
 			 * Spec 082 G47: the cause line is hidden while a re-quote runs (it
 			 * said why the LAST ask failed, under "estimating"), but its height
-			 * is kept, so the speed row and the slide below do not jump each
+			 * is kept, so the speed row and the confirm below do not jump each
 			 * time the sheet asks again. The held words, drawn invisibly: the
 			 * reserved line is exactly as tall as the one it stands in for.
 			 */
@@ -282,8 +299,6 @@ export interface SigningModel {
 		host: string;
 		letter: string;
 		tint: string;
-		/** The wallet asking ITSELF (the key backup): drawn with the wallet's own mark. */
-		own?: boolean;
 		/**
 		 * The site's own icon, tried in order over the letter (founder ruling
 		 * 2026-09-19, superseding spec 022's "never fetch"): the letter is what
@@ -298,6 +313,16 @@ export interface SigningModel {
 		/** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
 		logoUrl?: string;
 	};
+	/**
+	 * The wallet asking ITSELF — the key backup, which the core marks
+	 * `first_party` (never the origin or the bytes: a site can send the same
+	 * register() call). There is no requester to show, so the header is this
+	 * one line, the request's intent in the sheet's title type, and the ✕ —
+	 * no mark, no "Vela Wallet", no network chip (the rows say the network).
+	 * `dapp` and `network` are not drawn then, and the intent is not repeated
+	 * in `blocks`. Absent for every request a site makes.
+	 */
+	headline?: { text: string; tone: Tone };
 	blocks: Block[];
 	tech: TechModel;
 	/** cs29 ships the disclosure open — the whole point of that mock. */
@@ -311,28 +336,29 @@ export interface SigningModel {
 		address?: string;
 	};
 	/**
-	 * The slide. There is no reject BUTTON anywhere in this vocabulary; the
-	 * header's quiet ✕ is the refusal, and since spec 079 nothing else closes
-	 * the sheet (owner ruling: no swipe, scrim or Escape rejection).
+	 * The confirm — a tap on the shared primary button (issue 461). There is
+	 * no reject BUTTON anywhere in this vocabulary; the header's quiet ✕ is
+	 * the refusal, and since spec 079 nothing else closes the sheet (owner
+	 * ruling: no swipe, scrim or Escape rejection).
 	 */
 	confirm: {
-		hint: string;
+		/** The action alone ("Confirm send"): the control's whole label (issue 461). */
 		action: string;
 		enabled: boolean;
-		/** Spec 099 R7: why the slide is shut, in the core's words. Live only. */
+		/** Spec 099 R7: why the confirm is shut, in the core's words. Live only. */
 		note?: string;
 	};
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;
 	/**
 	 * Spec 079 (F11): the person has approved — the sheet is a status now, not
-	 * a form. No fee controls, no slide (never a greyed one): the request's one
+	 * a form. No fee controls, no confirm (never a greyed one): the request's one
 	 * line and where it stands. Absent while the request is still a request.
 	 */
 	status?: SigningStatus;
 	/**
 	 * Spec 081: the request was refused outright (it would have changed who
-	 * controls the account). There is no fee to show and nothing to slide —
+	 * controls the account). There is no fee to show and nothing to confirm —
 	 * the only thing the sheet offers is the way out, labelled with this word.
 	 */
 	dismissOnly?: string;

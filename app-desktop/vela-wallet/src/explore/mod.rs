@@ -33,16 +33,11 @@ pub struct ExploreStrings {
     pub add: SharedString,
     pub clear: SharedString,
     pub manage_groups: SharedString,
-    pub new_group: SharedString,
     pub rename: SharedString,
     pub hide: SharedString,
     pub delete: SharedString,
-    pub move_to_group: SharedString,
     pub open_in_new_tab: SharedString,
     pub remove_from_favorites: SharedString,
-    /// Template carrying `{{n}}`.
-    pub site_count: String,
-    pub system_group: SharedString,
     pub tabs: SharedString,
     pub new_tab: SharedString,
     pub start_page: SharedString,
@@ -101,6 +96,12 @@ pub struct ExploreStrings {
     pub request_open: SharedString,
 }
 
+/// How many sites a section holds — "1 site", "3 sites" — the plural key's
+/// form chosen by the language's own rule (`Loc::t_count`): Russian has four.
+pub fn site_count(loc: &Loc, count: usize) -> SharedString {
+    loc.t_count("explore.siteCount", count)
+}
+
 impl ExploreStrings {
     pub fn resolve(loc: &Loc) -> Self {
         let s = |key: &str| loc.t(key);
@@ -117,15 +118,11 @@ impl ExploreStrings {
             add: s("explore.add"),
             clear: s("explore.clear"),
             manage_groups: s("explore.manageGroups"),
-            new_group: s("explore.newGroup"),
             rename: s("explore.rename"),
             hide: s("explore.hide"),
             delete: s("explore.delete"),
-            move_to_group: s("explore.moveToGroup"),
             open_in_new_tab: s("explore.openInNewTab"),
             remove_from_favorites: s("explore.removeFromFavorites"),
-            site_count: raw("explore.siteCount"),
-            system_group: s("explore.systemGroup"),
             tabs: s("explore.tabs"),
             new_tab: s("explore.newTab"),
             start_page: s("explore.startPage"),
@@ -221,14 +218,52 @@ mod tests {
             ]
         );
         assert_eq!(menu.divider_after, Some(0));
+        // Issue 465: a favourite's menu is open, rename, then — behind the
+        // divider — remove. Nothing moves a site into a group any more, and
+        // the page arms these three rows by their place.
+        let tile = fixtures::tile_menu(&s);
+        let labels: Vec<_> = tile.items.iter().map(|item| item.label.clone()).collect();
+        assert_eq!(
+            labels,
+            [
+                s.open_in_new_tab.clone(),
+                s.rename.clone(),
+                s.remove_from_favorites.clone()
+            ]
+        );
+        assert_eq!(tile.divider_after, Some(1));
+        assert_eq!(
+            tile.items
+                .iter()
+                .map(|item| item.destructive)
+                .collect::<Vec<_>>(),
+            [false, false, true]
+        );
+        // …and the drawn start page has one section under the favourites,
+        // Recent; the mock's 交易 / 预测市场 groups are gone with the feature.
+        let sections: Vec<_> = fixtures::groups(&s)
+            .iter()
+            .map(|group| group.title.clone())
+            .collect();
+        assert_eq!(sections, std::slice::from_ref(&s.recent));
         assert!(
             s.consent_title.contains("{{host}}"),
             "connect.browser.title must keep its host slot"
         );
-        assert!(
-            s.site_count.contains("{{n}}"),
-            "siteCount must be a template"
-        );
+        // "1 site" / "2 sites": a plural key, its form chosen by the
+        // language's own rule, never one sentence for every count.
+        assert_eq!(site_count(&Loc::for_tag("en"), 1).as_ref(), "1 site");
+        assert_eq!(site_count(&Loc::for_tag("en"), 2).as_ref(), "2 sites");
+        for lng in ["en", "zh", "de", "ru", "ja"] {
+            let loc = Loc::for_tag(lng);
+            for count in [0, 1, 2, 5, 21] {
+                let line = site_count(&loc, count);
+                assert!(
+                    line.contains(&count.to_string()) && !line.contains("{{"),
+                    "{lng}/{count}: {line}"
+                );
+            }
+        }
         assert!(
             s.chain_down.contains("{{chain}}"),
             "chainDown must name the chain"

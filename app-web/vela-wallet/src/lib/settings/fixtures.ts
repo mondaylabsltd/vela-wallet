@@ -911,7 +911,17 @@ function eraseSheet(m: SettingsMessages): ConfirmSheetModel {
 	};
 }
 
-function feedback(m: SettingsMessages): FeedbackModel {
+/** What the report sheet reads: the corpus's report words, and "Try again". */
+export type FeedbackMessages = Pick<SettingsMessages, 'bugReport'> & {
+	common: Pick<SettingsMessages['common'], 'tryAgain'>;
+};
+
+/**
+ * ST15, the report sheet. One builder for every door into it: Settings →
+ * Send feedback, and a relay stop's "Report this" on the wallet (issue 466),
+ * whose route carries only the report's slice of the corpus.
+ */
+export function feedbackPanel(m: FeedbackMessages): FeedbackModel {
 	return {
 		title: m.bugReport.title,
 		subtitle: m.bugReport.subtitle,
@@ -1221,7 +1231,7 @@ export function buildMobileState(
 		]),
 		clearCachesSheet: clearCachesSheet(m),
 		eraseSheet: eraseSheet(m),
-		feedback: feedback(m),
+		feedback: feedbackPanel(m),
 		rpcBanner: state === 'sr1' ? rpcBanner(m) : undefined,
 		rpcFix: rpcFix(m, state === 'sr2b'),
 		balanceDetail: balanceDetail(m),
@@ -1378,7 +1388,7 @@ export function buildDesktopState(
 		storage: storage(m),
 		clearCachesSheet: clearCachesSheet(m),
 		eraseSheet: eraseSheet(m),
-		feedback: feedback(m),
+		feedback: feedbackPanel(m),
 		community: { title: m.sections.community, rows: communityRows() },
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),

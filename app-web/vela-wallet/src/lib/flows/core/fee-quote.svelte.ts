@@ -211,6 +211,8 @@ export class FeeQuote {
 	 * for the operation that is now on screen rather than the one that was.
 	 */
 	#lastRequest = $state<FeeQuoteRequest | null>(null);
+	/** See {@link pricingChainId}. */
+	#pricing = $state<number | null>(null);
 	/** See {@link generation}. */
 	#generation = $state(0);
 	#neverReachedCore = false;
@@ -249,6 +251,18 @@ export class FeeQuote {
 	 */
 	get lastRequest(): FeeQuoteRequest | null {
 		return this.#lastRequest;
+	}
+
+	/**
+	 * The chain the session in force prices: the chain of the last question
+	 * that reached its core — what {@link view}'s `fee_token` is a contract
+	 * on. `null` before any question reached it, and once disposed.
+	 *
+	 * The send bridge reads it (`FeeTokenWord`): the card's coin is told to
+	 * the send machine only while this is the form's own chain.
+	 */
+	get pricingChainId(): number | null {
+		return this.#pricing;
 	}
 
 	/**
@@ -344,6 +358,7 @@ export class FeeQuote {
 				number: resolvedFormatKeys().number
 			};
 			this.#dispatching = true;
+			this.#pricing = request.chainId;
 			try {
 				if (started.has(session)) session.dispatch(event);
 				else {
@@ -455,6 +470,7 @@ export class FeeQuote {
 		this.#port.owner = null;
 		this.#session?.dispose();
 		this.#session = null;
+		this.#pricing = null;
 	}
 
 	/**
@@ -534,6 +550,7 @@ export class FeeQuote {
 		this.#raw = donor.#raw;
 		this.#latest = donor.#latest;
 		this.#lastRequest = request;
+		this.#pricing = donor.#pricing;
 		this.#publicKey = donor.#publicKey;
 		// The donor priced the same operation and was told the same measurement.
 		this.#measured = donor.#measured ?? this.#measured;
@@ -559,6 +576,7 @@ export class FeeQuote {
 		donor.#seq += 1;
 		donor.#resolve({ kind: 'abandoned' });
 		donor.#lastRequest = null;
+		donor.#pricing = null;
 		donor.#measured = null;
 		donor.#raw = IDLE_FEE_VIEW;
 		donor.#latest = IDLE_FEE_VIEW;

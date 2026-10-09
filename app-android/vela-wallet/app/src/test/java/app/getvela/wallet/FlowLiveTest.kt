@@ -4,6 +4,7 @@ import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.core.marks.Marks
+import app.getvela.wallet.feature.flows.FactLead
 import app.getvela.wallet.feature.flows.FlowBase
 import app.getvela.wallet.feature.flows.FlowFixtures
 import app.getvela.wallet.feature.flows.FlowLive
@@ -213,16 +214,21 @@ class FlowLiveTest {
         }
     }
 
-    /** No chain-data endpoint: the lettered disc is the whole mark, not a blank circle. */
+    /**
+     * No endpoint set yet (Settings not loaded, or the field left blank) is
+     * the built-in endpoint — the core's reading, not "letters only", which
+     * left the centre lettered until the container caught up — and the
+     * lettered disc stays under the logo as its fallback.
+     */
     @Test
-    fun `without an endpoint the centre mark falls back to its letters`() {
+    fun `without an endpoint the centre mark asks the built-in one, over its letters`() {
         Marks.base = ""
         val live = FlowLive.receiveQr(
             qrFixture(), mine, "Me",
             PaymentRequestView(asset = ReceiveAsset(chain_id = 56, symbol = "BNB")),
         )
 
-        assertTrue(live.centre.logoUrls.isEmpty())
+        assertEquals(listOf("https://ethereum-data.getvela.app/chainlogos/eip155-56.png"), live.centre.logoUrls)
         assertEquals("BNB", live.centre.ticker)
     }
 
@@ -471,6 +477,38 @@ class FlowLiveTest {
         assertTrue(detail.amount.contains("USDT"))
         assertEquals(true, detail.positive)
         assertEquals("≈ $120.00", detail.fiat)
+    }
+
+    /**
+     * The kind rule: the 网络 fact names a NETWORK, so it wears the network's
+     * own logo. It wore the transfer's coin's mark, and ETH sent on Base
+     * showed Ethereum's logo beside "Base" (the web and the desktop agree on
+     * the chain's logo; the desktop had the same bug).
+     */
+    @Test
+    fun `a transaction's network fact wears the network's own logo`() {
+        Marks.base = "https://data.example/"
+        try {
+            val feed = feedOf(feedItem("eth-on-base", received = false, value = "0.01", symbol = "ETH", chainId = 8453))
+            val detail = FlowLive.txDetail(
+                txFixture(), feed, id = "eth-on-base", strings = strings,
+                chainNames = mapOf(8453 to "Base"), nativeSymbols = mapOf(8453 to "ETH"),
+            )!!
+            val network = detail.facts.first { it.label == strings.t(I18nKeys.Flows.DETAIL_CHAIN) }
+            assertEquals("Base", network.value)
+            val mark = (network.lead as FactLead.Token).mark
+            assertEquals(listOf("https://data.example/chainlogos/eip155-8453.png"), mark.logoUrls)
+            assertTrue("a network never wears a badge", mark.badgeHidden)
+            assertEquals("lettered with the network's coin", "ETH", mark.ticker)
+
+            // A token sent there: still the network's logo, never the token's.
+            val usdc = feedOf(feedItem("usdc", received = false, value = "5", symbol = "USDC", chainId = 100))
+            val gnosis = FlowLive.txDetail(txFixture(), usdc, id = "usdc", strings = strings, chainNames = mapOf(100 to "Gnosis"))!!
+                .facts.first { it.label == strings.t(I18nKeys.Flows.DETAIL_CHAIN) }
+            assertEquals(listOf("https://data.example/chainlogos/eip155-100.png"), (gnosis.lead as FactLead.Token).mark.logoUrls)
+        } finally {
+            Marks.base = ""
+        }
     }
 
     /**

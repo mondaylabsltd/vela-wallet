@@ -137,7 +137,7 @@
     "recipientCount_other": "{{count}} penerima",
     "removeRecipient": "Hapus",
     "alertInsufficientBalanceBody": "Totalnya melebihi saldo Anda.",
-    "recipientPickAria": "Pilih penerima atau pindai",
+    "recipientPickAria": "Pilih dari kontak",
     "scanAria": "Pindai kode QR",
     "multiSendNoFundsAfterGas": "Tidak cukup untuk gas setelah cadangan.",
     "gasReserved": "gas dicadangkan",

@@ -65,7 +65,6 @@ class GroupEyeToggleTest {
                     ),
                 )
             },
-            onGroupNew = {},
             onSiteMenuPick = {},
             onBookmark = {},
             onRecentClear = {},

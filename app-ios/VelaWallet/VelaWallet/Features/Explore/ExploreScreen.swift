@@ -11,6 +11,12 @@
 //  local view state layered over the model, so swapping the model (a locale
 //  change, the gallery's state picker) still lands.
 //
+//  DESIGN N (2026-10): where Explore lands is the core's (`exploreLanding`):
+//  entering from another section, or 探索 again while browsing, is the home
+//  — the tab kept alive, nothing reloaded — and the home's resume rows bring
+//  it back in one tap. The app's tab bar stays under a page; the browser's
+//  controls live in the one top bar and its site menu.
+//
 
 import AVFoundation
 import SwiftUI
@@ -89,10 +95,26 @@ struct ExploreScreen: View {
     var onAddNetworkRetry: () -> Void = {}
     /// Any way out of that sheet; the core decides what it answers.
     var onAddNetworkDismiss: () -> Void = {}
+    /// How this Explore visit began (DESIGN N) — the core's landing question,
+    /// held stable for the visit by whoever owns the tab bar. A new serial is
+    /// a new entry: the screen drops what the person last chose and lands
+    /// again.
+    var visit = ExploreVisit(entry: .section)
 
     @State private var viewOverride: ExploreView?
+    /// The person has acted inside this visit (opened a tab, answered a
+    /// site): from then on the tabs decide — a page in front is the page —
+    /// and the landing rule, which is only about ENTERING, is not asked again
+    /// until the next visit.
+    @State private var followTabs = false
+    /// Where the switcher was opened from: its Done goes back there.
+    @State private var tabsFrom: ExploreView = .start
+    /// The site menu's own height, measured: its sheet is exactly that tall,
+    /// so Close page — the last row, and since DESIGN N the way to close a
+    /// page — never sits under a half-height sheet's edge.
+    @State private var siteMenuHeight: CGFloat = 0
     /// **Which** sheet is open — never a snapshot of what it said when it
-    /// opened. A sheet holding a captured model shows the group you deleted,
+    /// opened. A sheet holding a captured model shows the section you hid,
     /// the site you unpinned, and — the one that matters — a CONNECTED panel
     /// for a site that is still asking. Android found the same bug on its
     /// group sheet; this one was device-found here.
@@ -107,15 +129,9 @@ struct ExploreScreen: View {
     /// once it is really gone — presenting one sheet in the same breath as
     /// dismissing another is how iOS ends up showing neither.
     @State private var signingHeld = false
-    /// Groups hidden here rather than in the fixture: hiding is something a
+    /// Sections hidden here rather than in the fixture: hiding is something a
     /// person does, and the sheet has to show it happening.
     @State private var hidden: Set<String> = []
-    /// Naming a new group. The drawn sheet has a 新建分组 row and **no field**
-    /// to type into, so the name is asked for with the platform's own prompt
-    /// — the same call the document picker and the share sheet make elsewhere.
-    /// Recorded as a deviation from the drawing.
-    @State private var namingGroup = false
-    @State private var groupName = ""
     /// The open sheet is a site ASKING to connect, not a review of one that
     /// already is. Kept so a swipe can be read as the refusal it is.
     @State private var consentOpen = false
@@ -142,15 +158,80 @@ struct ExploreScreen: View {
 
     /// Which of the three views is on screen.
     ///
-    /// A person's own choice wins. Otherwise, **when the browser is live the
-    /// tabs decide**: a tab with a page showing means the browsing view, and
-    /// no such tab means the start page. Before this the view came from the
-    /// fixture, so a page could load, run, and be invisible — the browser was
-    /// working and the screen was still drawing the start page over it.
+    /// A person's own choice wins. Otherwise, **when the browser is live**:
+    /// on entering, the core's landing (DESIGN N) — the home, unless a page
+    /// was opened from outside or a site's request waits on the person; once
+    /// the person has acted, the tabs decide — a tab with a page showing is
+    /// the browsing view, no such tab the home. Before this the view came
+    /// from the fixture, so a page could load, run, and be invisible; and
+    /// before DESIGN N every 探索 tap landed inside whatever dApp was left
+    /// there, so the home was out of reach.
     private var view: ExploreView {
         if let viewOverride { return viewOverride }
-        if controller != nil { return engine != nil ? .browsing : .start }
-        return model.view
+        guard let controller else { return model.view }
+        if followTabs { return engine != nil ? .browsing : .start }
+        if case .tab(let id) = landing, id == controller.explore.selectedTab, engine != nil {
+            return .browsing
+        }
+        return .start
+    }
+
+    /// The core's answer for this visit's entry, over the strip as it is
+    /// NOW: a page opened from outside is the page once its tab is in the
+    /// view, and the home until then.
+    private var landing: ExploreLanding {
+        controller?.landing(visit.entry) ?? .home
+    }
+
+    /// A landing on a tab that is not the one in front — a request waiting
+    /// in another tab — brings that tab forward, so the page behind the sheet
+    /// is the one the sheet names.
+    private var landingElsewhere: String? {
+        guard viewOverride == nil, !followTabs, let controller,
+              case .tab(let id) = landing, id != controller.explore.selectedTab
+        else { return nil }
+        return id
+    }
+
+    /// The person acted: from here the tabs decide what shows.
+    private func followTheTabs() {
+        viewOverride = nil
+        followTabs = true
+    }
+
+    /// The Explore home, with every tab kept as it was — ‹ with no history,
+    /// a closed page, the gallery's 探索. Nothing is shown, so no tab is
+    /// asked for: none wakes behind the home (`BrowserController.wanted`).
+    private func goHome() {
+        viewOverride = .start
+        controller?.landedHome()
+    }
+
+    /// The tab bar inside Explore. 探索 again is the way home from a page;
+    /// whoever owns the bar answers it (`visit`), and the gallery, which owns
+    /// nothing, goes home here.
+    private func selectTab(_ tab: WalletTab) {
+        if tab == .explore, controller == nil { goHome() }
+        onSelectTab(tab)
+    }
+
+    /// Open the switcher from `view`; its Done comes back here.
+    private func openTabs(from origin: ExploreView) {
+        tabsFrom = origin
+        viewOverride = .tabs
+    }
+
+    /// The switcher's cards, the live one's "this tab" being the core's lit
+    /// tab: the page's own tab when opened from a page; from the home, only a
+    /// selected start page.
+    private var switcherTabs: [TabModel] {
+        guard let controller else { return model.tabs }
+        let lit = controller.litTab(onPage: tabsFrom == .browsing)
+        return model.tabs.map { tab in
+            var tab = tab
+            tab.selected = tab.id == lit
+            return tab
+        }
     }
 
     /// The engine in front of the person, if the browser is live and a tab
@@ -302,19 +383,42 @@ struct ExploreScreen: View {
             searchFocus += 1
             return
         }
+        // A picked site goes where the core says — the start-page tab, a new
+        // tab, or the tab already on it — never over a live dApp; whichever
+        // it is, it is the tab in front once it lands.
         controller.openSite(id: siteId)
-        viewOverride = nil
+        viewOverride = .browsing
+    }
+
+    /// A resume row: that tab, as it was left. A live page comes to the
+    /// front with no reload; a dormant one loads like any tab switch.
+    private func resume(tab id: String) {
+        controller?.selectTab(id)
+        viewOverride = .browsing
+    }
+
+    /// ‹ — the page's own history first; with none left, the Explore home
+    /// with the tab kept alive (the same place 探索 again goes).
+    private func back() {
+        guard let controller, let engine else {
+            goHome()
+            return
+        }
+        _ = controller.engineTick
+        if engine.canGoBack { controller.goBack() } else { goHome() }
     }
 
     /// The ⋯ sheet's items.
     private func pick(menuItem id: String, site: SiteModel) {
         guard let controller else {
-            if id == "close" { viewOverride = .start }
+            if id == "close" { goHome() }
             return
         }
         // What the bar names — the page on screen (spec 082 RE1).
         let url = controller.current?.bar.url ?? ""
         switch id {
+        case "forward":
+            controller.goForward()
         case "refresh":
             controller.reload()
         case "stop":
@@ -333,8 +437,10 @@ struct ExploreScreen: View {
         case "disconnect":
             if let origin = currentTab?.origin { controller.revoke(origin: origin) }
         case "close":
+            // Closes the TAB, and the home is what is left (DESIGN N: the
+            // bar has no × any more; closing lives here and in the switcher).
             if let tab = controller.explore.selectedTab { controller.closeTab(tab) }
-            viewOverride = .start
+            goHome()
         default:
             break
         }
@@ -411,7 +517,7 @@ struct ExploreScreen: View {
         }) { sheet in
             sheetContent(sheet)
                 .presentationDragIndicator(consentOpen || addNetworkOpen ? .hidden : .visible)
-                .presentationDetents([.medium, .large])
+                .presentationDetents(detents(for: sheet))
                 .presentationCornerRadius(Tokens.Radius.r20)
                 .presentationBackground(theme.bgBase)
                 // Spec 079: like the signing sheet, the consent closes only on
@@ -494,16 +600,6 @@ struct ExploreScreen: View {
             signingHeld = true
             sheet = nil
         }
-        .alert(loc.t("explore.newGroup"), isPresented: $namingGroup) {
-            TextField(loc.t("explore.newGroup"), text: $groupName)
-            Button(loc.t("explore.close"), role: .cancel) { groupName = "" }
-            Button(loc.t("explore.done")) {
-                let name = groupName.trimmingCharacters(in: .whitespacesAndNewlines)
-                groupName = ""
-                guard !name.isEmpty else { return }
-                controller?.createGroup(name: name)
-            }
-        }
         .alert(loc.t("explore.scan"), isPresented: $walletConnectRefused) {
             Button(loc.t("explore.close"), role: .cancel) {}
         } message: {
@@ -541,6 +637,20 @@ struct ExploreScreen: View {
             sheet = model.sheet?.kind
             if controller?.dbr.consent != nil { presentConsent() } else { presentAddNetwork() }
         }
+        // A new visit lands again (DESIGN N): 探索 again while browsing is the
+        // home, a page opened from outside is that page. Whatever the person
+        // last chose here belonged to the visit before.
+        .onChange(of: visit) { _, _ in
+            viewOverride = nil
+            followTabs = false
+            if landing == .home { controller?.landedHome() }
+        }
+        // The landing names a tab that is not in front (a request waiting in
+        // another tab): bring it forward, so the page is the one that asks.
+        .onChange(of: landingElsewhere, initial: true) { _, tab in
+            guard let tab else { return }
+            controller?.selectTab(tab)
+        }
         // The viewfinder runs only while it is on screen, as in 发送. A camera
         // left running behind the start page is a light nobody asked for.
         .task(id: scanning) {
@@ -558,6 +668,13 @@ struct ExploreScreen: View {
         }
     }
 
+    /// How tall a sheet may be: the site menu as tall as its rows, the rest
+    /// half or whole.
+    private func detents(for kind: ExploreSheetKind) -> Set<PresentationDetent> {
+        if kind == .siteMenu, siteMenuHeight > 0 { return [.height(siteMenuHeight)] }
+        return [.medium, .large]
+    }
+
     /// Spec 100: the add-network sheet, over the page that asked — never over
     /// a consent, which is the question the page usually needs answered first.
     private func presentAddNetwork() {
@@ -569,7 +686,7 @@ struct ExploreScreen: View {
         if let controller, let tab = controller.dbr.addingNetwork?.tab,
            controller.explore.tabs.contains(where: { $0.id == tab }) {
             controller.selectTab(tab)
-            viewOverride = nil
+            followTheTabs()
         }
         addNetworkOpen = true
         sheet = .addNetwork
@@ -588,7 +705,7 @@ struct ExploreScreen: View {
         // the sheet is the one the sheet names.
         if controller.explore.tabs.contains(where: { $0.id == consent.tab }) {
             controller.selectTab(consent.tab)
-            viewOverride = nil
+            followTheTabs()
         }
         consentOpen = true
         sheet = .connection
@@ -597,7 +714,7 @@ struct ExploreScreen: View {
     @ViewBuilder private var toastView: some View {
         if let toast {
             NoticeCapsule(text: toast)
-                .padding(.bottom, ExploreGeometry.browserBar + Tokens.Space.s16)
+                .padding(.bottom, WalletGeometry.tabBarHeight + Tokens.Space.s16)
                 .transition(.opacity)
                 .accessibilityIdentifier("explore.toast")
         }
@@ -610,25 +727,48 @@ struct ExploreScreen: View {
         switch view {
         case .tabs:
             ExploreTabsScreen(
-                tabs: model.tabs, copy: model.tabsScreen,
-                onDone: { viewOverride = nil },
+                tabs: switcherTabs, copy: model.tabsScreen,
+                // Back to where it was opened from: the home, or the page.
+                // From a page that is the tab in front NOW — the person may
+                // have closed the one they came from, and the core's
+                // selection is what they return to, asked for (as Android
+                // does); a start page in front is the home.
+                onDone: {
+                    guard let controller else {
+                        viewOverride = tabsFrom
+                        return
+                    }
+                    guard tabsFrom == .browsing, let id = controller.explore.selectedTab else {
+                        goHome()
+                        return
+                    }
+                    controller.selectTab(id)
+                    if engine != nil { viewOverride = .browsing } else { goHome() }
+                },
                 onOpen: { id in
                     controller?.selectTab(id)
-                    viewOverride = controller == nil ? .browsing : nil
+                    // A start page's card is the home; any other is its page.
+                    let startPage = model.tabs.first { $0.id == id }?.startPage ?? false
+                    viewOverride = startPage ? .start : .browsing
                 },
+                // The person is tidying the strip, not leaving it: the
+                // switcher stays, with the cards that are left (Android
+                // does the same). Nothing behind it wakes — the neighbour
+                // a close selects is not a tab anybody asked to see.
                 onClose: { id in
-                    controller?.closeTab(id)
-                    // With a live browser the strip decides what is left;
-                    // the core never leaves it empty or unselected.
-                    viewOverride = controller == nil ? .start : nil
+                    guard let controller else {
+                        goHome()
+                        return
+                    }
+                    controller.closeTab(id)
                 },
                 onNew: {
                     controller?.newTab()
-                    viewOverride = .start
+                    goHome()
                 },
                 onCloseAll: {
                     controller?.closeAllTabs()
-                    viewOverride = .start
+                    goHome()
                 },
                 // Spec 099: the batch closes from a card's long press. The
                 // switcher stays — a tab is always left, and the person is
@@ -640,19 +780,35 @@ struct ExploreScreen: View {
             AddressBarView(
                 host: browserHost,
                 secure: addressBar.map { $0.lock == "closed" } ?? browserSecure,
-                closeLabel: loc.t("explore.closePage"),
+                backLabel: loc.t("explore.back"),
                 menuLabel: loc.t("explore.siteMenu"),
                 insecureLabel: loc.t("connect.browser.a11yInsecure"),
                 showsLock: addressBar.map { $0.lock != "none" } ?? true,
-                url: addressBar?.url ?? "",
+                url: addressBar?.url ?? model.browser.url,
                 addressLabel: loc.t("explore.addressBar"),
                 progress: loadProgress,
+                accountSeed: liveBrowser.account.seed,
+                connected: liveBrowser.connected,
+                accountLabel: loc.t("explore.account"),
+                connectedLabel: loc.t("explore.connectedTag"),
+                tabCount: liveBrowser.tabCount,
+                tabsLabel: loc.t("explore.tabs"),
                 // The page keeps running — leaving it is not closing it
-                // (FR-013). The tab is still there, and the switcher
-                // brings it straight back.
-                onClose: { viewOverride = .start },
+                // (FR-013). The tab is still there, and the home's resume
+                // row brings it straight back.
+                onBack: back,
+                onAccount: { sheet = .connection },
+                // The page in front is photographed first, so its card in
+                // the switcher shows it as it is (spec 079).
+                onTabs: {
+                    guard let controller else { openTabs(from: .browsing); return }
+                    controller.snapshotCurrent { openTabs(from: .browsing) }
+                },
                 onMenu: { sheet = .siteMenu },
-                onSubmit: controller == nil ? nil : { text in controller?.open(text) }
+                // The address bar of the page on screen: the core puts it in
+                // THIS tab (`onPage`). The gallery edits too, so the board's
+                // editing state can be seen; its Go opens nothing.
+                onSubmit: { text in controller?.open(text, onPage: true) }
             )
             if engine != nil, let chainNotice {
                 chainNoticeView(chainNotice)
@@ -660,98 +816,73 @@ struct ExploreScreen: View {
             if let statusLine {
                 statusLineView(statusLine)
             }
-            if let engine {
-                ZStack {
-                    BrowserWebView(engine: engine)
-                        .accessibilityIdentifier("explore.page")
-                    // A page that could not be reached SAYS SO — and why, in
-                    // the core's words for its class, and it stays up while a
-                    // retry runs (spec 079). Before 058 both failure callbacks
-                    // set `loading = false` and nothing else, so an unreachable
-                    // dApp was a white rectangle under an empty address bar.
-                    if currentTab?.crashed == true {
-                        BrowserCrashedView(
-                            title: loc.t("explore.pageCrashedTitle"),
-                            detail: loc.t("explore.pageCrashedBody"),
-                            reload: loc.t("explore.reload"),
-                            onReload: { engine.reload() }
-                        )
-                    } else if let reasonKey = engine.failureReasonKey {
-                        failurePanel(reasonKey: reasonKey, engine: engine)
+            Group {
+                if let engine {
+                    ZStack {
+                        BrowserWebView(engine: engine)
+                            .accessibilityIdentifier("explore.page")
+                        // A page that could not be reached SAYS SO — and why, in
+                        // the core's words for its class, and it stays up while a
+                        // retry runs (spec 079). Before 058 both failure callbacks
+                        // set `loading = false` and nothing else, so an unreachable
+                        // dApp was a white rectangle under an empty address bar.
+                        if currentTab?.crashed == true {
+                            BrowserCrashedView(
+                                title: loc.t("explore.pageCrashedTitle"),
+                                detail: loc.t("explore.pageCrashedBody"),
+                                reload: loc.t("explore.reload"),
+                                onReload: { engine.reload() }
+                            )
+                        } else if let reasonKey = engine.failureReasonKey {
+                            failurePanel(reasonKey: reasonKey, engine: engine)
+                        }
                     }
-                }
-                .onAppear { controller?.browsingVisible(true) }
-                .onDisappear { controller?.browsingVisible(false) }
-            } else if controller != nil {
-                // The live browser between the address and its engine (one
-                // core round trip): the page's own background under the
-                // hairline — never the gallery's drawn page (spec 079 F3).
-                theme.bgBase.frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    DemoPageView(page: model.browser.page) {
-                        if signing != nil { signingUp = true }
+                    .onAppear { controller?.browsingVisible(true) }
+                    .onDisappear { controller?.browsingVisible(false) }
+                } else if controller != nil {
+                    // The live browser between the address and its engine (one
+                    // core round trip): the page's own background under the
+                    // hairline — never the gallery's drawn page (spec 079 F3).
+                    theme.bgBase.frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        DemoPageView(page: model.browser.page) {
+                            if signing != nil { signingUp = true }
+                        }
                     }
+                    // The drawn site fills its page, down to the tab bar.
+                    .background(BrandPalette.DemoPage.surface)
                 }
             }
-            BrowserToolbarView(
-                browser: liveBrowser,
-                backLabel: loc.t("explore.back"),
-                forwardLabel: loc.t("explore.forward"),
-                accountLabel: loc.t("explore.account"),
-                connectedLabel: loc.t("explore.connectedTag"),
-                bookmarkLabel: loc.t("explore.addToFavorites"),
-                tabsLabel: loc.t("explore.tabs"),
-                removeBookmarkLabel: loc.t("explore.removeFromFavorites"),
-                onBack: { controller?.goBack() },
-                onForward: { controller?.goForward() },
-                onAccount: { sheet = .connection },
-                onBookmark: { controller?.toggleFavorite() },
-                // The page in front is photographed first, so its card in
-                // the switcher shows it as it is (spec 079).
-                onTabs: {
-                    guard let controller else { viewOverride = .tabs; return }
-                    controller.snapshotCurrent { viewOverride = .tabs }
-                }
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // DESIGN N: the app's tab bar stays under the page — the wallet
+            // is one tap away, and 探索 again is the way home. The browser's
+            // own bottom toolbar is gone: never two bars at the bottom.
+            WalletTabBar(tabs: model.nav, selected: .explore, onSelect: selectTab)
         case .start:
             startPage
-            WalletTabBar(tabs: model.nav, selected: .explore, onSelect: onSelectTab)
+            WalletTabBar(tabs: model.nav, selected: .explore, onSelect: selectTab)
         }
     }
 
     private var startPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Tokens.Space.s0) {
-                HStack {
-                    Text(verbatim: model.title)
-                        .typeRole(Typography.display.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
-                    Spacer()
-                    if let count = model.tabCountLabel {
-                        Button {
-                            viewOverride = .tabs
-                        } label: {
-                            Text(verbatim: count)
-                                .typeRole(Typography.label.scaled(textScale))
-                                .foregroundStyle(theme.fgBase)
-                                .frame(minWidth: ExploreGeometry.tabCount,
-                                       minHeight: ExploreGeometry.tabCount)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: Tokens.Radius.r4)
-                                        .stroke(theme.fgBase,
-                                                lineWidth: Tokens.BorderWidth.emphasis)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(model.tabsScreen.title)
-                    }
-                }
-                .padding(.top, Tokens.Space.s20)
-                .padding(.bottom, Tokens.Space.s16)
+                // No tab count up here any more (DESIGN N): the resume
+                // section's header says how many tabs are open, in words, and
+                // opens the same switcher — one control per job, and not in
+                // the corner a thumb reaches last.
+                Text(verbatim: model.title)
+                    .typeRole(Typography.display.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, Tokens.Space.s20)
+                    .padding(.bottom, Tokens.Space.s16)
 
                 ExploreSearchField(
                     placeholder: model.searchPlaceholder, scanLabel: model.scanLabel,
+                    // From the home: the start-page tab or a new one, never
+                    // over a live dApp (the core's `browserOpenTarget`).
                     onSubmit: { text in
                         controller?.open(text)
                         viewOverride = .browsing
@@ -764,6 +895,10 @@ struct ExploreScreen: View {
                     focusRequest: searchFocus
                 )
                 .padding(.bottom, Tokens.Space.s20)
+
+                if let section = model.resume {
+                    resumeSection(section)
+                }
 
                 if let empty = model.empty {
                     ExploreEmptyView(title: empty.title, caption: empty.caption, cta: empty.cta) {
@@ -792,16 +927,13 @@ struct ExploreScreen: View {
                 }
 
                 ForEach(visibleGroups) { group in
+                    // The one section under Favorites is Recent, and its
+                    // heading clears it (issue #465: no custom groups, so no
+                    // ⋯ that opened Manage groups).
                     WalletSectionHeader(
                         title: group.title,
-                        action: group.action == .clear ? loc.t("explore.clear") : "⋯",
-                        onAction: {
-                            if group.action == .clear {
-                                controller?.clearRecent()
-                            } else {
-                                sheet = .groupManage
-                            }
-                        }
+                        action: loc.t("explore.clear"),
+                        onAction: { controller?.clearRecent() }
                     )
                     ForEach(group.sites) { site in
                         SiteRowView(site: site) { id in open(siteId: id) }
@@ -811,6 +943,31 @@ struct ExploreScreen: View {
             .padding(.horizontal, Tokens.Layout.screenPaddingX)
             .padding(.bottom, Tokens.Space.s24)
         }
+    }
+
+    /// The tabs left open, under the search field (DESIGN N): the core's
+    /// rows in the core's order, each one tap back to its page as it was
+    /// left; the header's action is the switcher.
+    private func resumeSection(_ section: ResumeSectionModel) -> some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+            // The action is a control of its own, the way to the switcher
+            // from the home: a full 44 target, like Android's.
+            WalletSectionHeader(
+                title: section.title, action: section.action,
+                onAction: { openTabs(from: .start) },
+                actionHitTarget: true
+            )
+            .padding(.vertical, Tokens.Space.s12)
+            .accessibilityIdentifier("explore.resume.header")
+            ForEach(section.tabs) { row in
+                // The host is cut from its start, like the pill's.
+                SiteRowView(site: row.site, hostLine: true) { _ in resume(tab: row.id) }
+                    .accessibilityIdentifier("explore.resume.row")
+            }
+        }
+        .padding(.bottom, Tokens.Space.s12)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.resume")
     }
 
     // MARK: - The scanner (issue 273, spec 070 US5)
@@ -905,7 +1062,7 @@ struct ExploreScreen: View {
     private func sheetContent(_ kind: ExploreSheetKind) -> some View {
         // Read the CURRENT model, every render. See `sheet`'s own comment.
         switch kind.resolved(in: model) {
-        case .groupManage(let title, let rows, let newGroup):
+        case .groupManage(let title, let rows):
             ScrollView {
                 GroupManageSheetView(
                     title: title,
@@ -914,27 +1071,19 @@ struct ExploreScreen: View {
                         copy.hidden = hidden.contains(row.id) || row.hidden
                         return copy
                     },
-                    newGroup: newGroup,
                     closeLabel: loc.t("explore.close"),
                     hideLabel: loc.t("explore.hide"),
                     showLabel: loc.t("explore.show"),
-                    deleteLabel: loc.t("explore.delete"),
                     onClose: { self.sheet = nil },
                     onToggle: { id in
                         guard let controller else {
                             if hidden.contains(id) { hidden.remove(id) } else { hidden.insert(id) }
                             return
                         }
+                        // Favorites and Recent dApps are the only rows.
                         let isHidden = rows.first { $0.id == id }?.hidden ?? false
-                        switch id {
-                        case "favorites", "recent":
-                            controller.setSystemGroupHidden(id, hidden: !isHidden)
-                        default:
-                            controller.setGroupHidden(id: id, hidden: !isHidden)
-                        }
-                    },
-                    onDelete: { id in controller?.deleteGroup(id: id) },
-                    onNew: { namingGroup = true }
+                        controller.setSystemGroupHidden(id, hidden: !isHidden)
+                    }
                 )
             }
         case .siteMenu(let site, let statusLine, let items):
@@ -950,6 +1099,8 @@ struct ExploreScreen: View {
                         pick(menuItem: id, site: site)
                     }
                 )
+                .padding(.top, Tokens.Space.s8)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { siteMenuHeight = $0 }
             }
         case .addNetwork:
             ScrollView {

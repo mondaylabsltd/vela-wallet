@@ -620,11 +620,13 @@ enum WalletFlowFixtures {
             groupsTitle: loc.t("contacts.sectionGroups"),
             groups: [
                 ContactGroupModel(
+                    id: "fixture-family",
                     name: "家人",
                     count: loc.t("contacts.groupMembers", vars: ["count": "3"]),
                     colors: [ChainPalette.polygon, ChainPalette.bnb]
                 ),
                 ContactGroupModel(
+                    id: "fixture-work",
                     name: "工作",
                     count: loc.t("contacts.groupMembers", vars: ["count": "5"]),
                     colors: [ChainPalette.gnosis, ChainPalette.arbitrum]
@@ -632,9 +634,12 @@ enum WalletFlowFixtures {
             ],
             contactsTitle: loc.t("contacts.title"),
             contacts: [
-                ContactEntryModel(name: "Alice", group: "家人", addressDisplay: aliceDisplay, identiconSeed: aliceFull),
-                ContactEntryModel(name: "阿豪", addressDisplay: "0x77Bd…4F02", identiconSeed: aHaoFull),
-                ContactEntryModel(name: "hold on", addressDisplay: holdOnDisplay, identiconSeed: holdOnFull),
+                ContactEntryModel(name: "Alice", group: "家人", address: aliceFull,
+                                  addressDisplay: aliceDisplay, identiconSeed: aliceFull),
+                ContactEntryModel(name: "阿豪", address: aHaoFull,
+                                  addressDisplay: "0x77Bd…4F02", identiconSeed: aHaoFull),
+                ContactEntryModel(name: "hold on", address: holdOnFull,
+                                  addressDisplay: holdOnDisplay, identiconSeed: holdOnFull),
             ]
         )
     }
@@ -783,7 +788,12 @@ enum WalletFlowFixtures {
         case .single:
             return SendConfirmModel(
                 header: header,
-                mark: TokenMarkModel.of(chainId: 1, symbol: "USDT", color: ChainPalette.ethereum),
+                // USDT by its mainnet contract. Without one the native-coin
+                // rule took it for the chain's own coin and drew Ethereum's
+                // logo beside "120 USDT".
+                mark: TokenMarkModel.of(chainId: 1, symbol: "USDT",
+                                        tokenAddress: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                                        color: ChainPalette.ethereum),
                 amount: "120",
                 amountUnit: "USDT",
                 subline: "≈ $120.00",

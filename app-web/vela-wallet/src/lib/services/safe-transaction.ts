@@ -569,7 +569,7 @@ export interface TransactionFeeEstimate {
 				symbol?: string;
 		  };
 	/** In-band: the quote's transfer recipient. The submit path signs THIS quote
-	 *  (amount + recipient) verbatim — what the confirm slide shows is what executes. */
+	 *  (amount + recipient) verbatim — what the confirm shows is what executes. */
 	feeRecipient?: string;
 }
 
@@ -2150,8 +2150,8 @@ async function sendUserOpInBand(
 		});
 	} catch (err) {
 		// What the relay said, as the core reads it (spec 082 RJ19): a revert is
-		// not "the network is busy". The sheet warned about it before the slide
-		// (the quote's own estimate, `estimate-verdict`); the person slid anyway —
+		// not "the network is busy". The sheet warned about it before the confirm
+		// (the quote's own estimate, `estimate-verdict`); the person confirmed anyway —
 		// a warning informs, never blocks (L-D5) — so the op goes with the
 		// defaults and the relay's refusal is answered as one (RJ3). The call's
 		// shape (`isPlainTransferCall`) no longer decides for a revert.

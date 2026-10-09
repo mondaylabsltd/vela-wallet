@@ -62,6 +62,7 @@ import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.send.core.SendFeeCoin
 import app.getvela.wallet.feature.send.core.SendNameSource
 import app.getvela.wallet.feature.send.core.SendPayee
 import app.getvela.wallet.feature.send.core.SendHoldReason
@@ -197,7 +198,9 @@ object SendLive {
         // also why the list is empty.
         val requestNotice = view.request_chain_id?.let { chainId ->
             SendNoticeModel(
-                mark = WalletLive.mark(chainId, nativeSymbol(chainId, ctx), null),
+                // A notice that locks a NETWORK wears the network's own mark
+                // (the kind rule): Base's logo, not its coin's (Ethereum's).
+                mark = WalletLive.chainMark(chainId, nativeSymbol(chainId, ctx)),
                 text = s.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to (ctx.chainNames[chainId] ?: "chain-$chainId"))),
             )
         }
@@ -225,7 +228,7 @@ object SendLive {
             empty = empty,
             notice = requestNotice ?: chain?.let {
                 SendNoticeModel(
-                    mark = WalletLive.mark(it, nativeSymbol(it, ctx), null),
+                    mark = WalletLive.chainMark(it, nativeSymbol(it, ctx)),
                     text = s.t(I18nKeys.Flows.MULTI_SEND_NOTICE, mapOf("network" to chainName)),
                 )
             },
@@ -499,23 +502,27 @@ object SendLive {
             ctaEnabled = view.can_continue,
             warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
             fund = fundAddress(view, ctx),
+            report = reportLabel(view, ctx),
         )
     }
 
-    private fun assetRow(token: SendToken, ctx: Context): AssetRowModel = AssetRowModel(
-        id = tokenId(token),
-        ticker = token.symbol,
-        chain = ctx.chainNames[token.chain_id] ?: token.network,
-        badgeColor = WalletLive.badge(token.chain_id.toLong()),
-        logoUrls = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).logoUrls,
-        badgeLogoUrl = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).badgeLogoUrl,
-        badgeHidden = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).badgeHidden,
-        balance = "${trim(token.balance)} ${token.symbol}",
-        fiat = token.price_usd?.let { price ->
-            AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
-        } ?: AssetFiatModel.NoPrice("—"),
-        masked = false,
-    )
+    private fun assetRow(token: SendToken, ctx: Context): AssetRowModel {
+        val mark = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls)
+        return AssetRowModel(
+            id = tokenId(token),
+            ticker = token.symbol,
+            chain = ctx.chainNames[token.chain_id] ?: token.network,
+            badgeColor = mark.badgeColor,
+            logoUrls = mark.logoUrls,
+            badgeLogoUrl = mark.badgeLogoUrl,
+            badgeHidden = mark.badgeHidden,
+            balance = "${trim(token.balance)} ${token.symbol}",
+            fiat = token.price_usd?.let { price ->
+                AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
+            } ?: AssetFiatModel.NoPrice("—"),
+            masked = false,
+        )
+    }
 
     // -- SD2 ---------------------------------------------------------------------
 
@@ -572,6 +579,7 @@ object SendLive {
             ctaEnabled = view.can_continue,
             warning = stopNotice(view, ctx) ?: formWarning(view, ctx),
             fund = fundAddress(view, ctx),
+            report = reportLabel(view, ctx),
             hint = splitHint(view, ctx),
             fillEmpty = splitFillEmpty(view, symbol, ctx),
         )
@@ -660,7 +668,11 @@ object SendLive {
         lines = addressLines(view.recipient),
         identiconSeed = view.recipient.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
         pickLabel = ctx.strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
-        scanLabel = null,
+        // Issue #468: the QR door beside the person, as on iOS, web and
+        // desktop. It was null only because this row was written the day
+        // before Android had a scanner; its tap was already wired to
+        // `open_scanner` (FlowHost → onScanOpen), with nothing to tap.
+        scanLabel = ctx.strings.t(I18nKeys.Flows.SCAN_ARIA),
         note = recipientNote(view, ctx),
         noteWarning = view.recipient_is_token_contract,
         raw = view.recipient,
@@ -792,13 +804,16 @@ object SendLive {
         // tier change — and "measuring" is the honest thing to say.
         val ofAnotherTier = inHand != null && speed != null && offered(inHand.tier) != speed.view.tier
         val estimate = inHand.takeIf { !ofAnotherTier }
-        val (text, mark) = feeText(estimate, view, fee, ctx)
+        val text = feeText(estimate, view, fee, ctx).first
         val s = ctx.strings
         return fallback.copy(
-            // No figure yet, no coin: an empty neutral mark. The fixture's
-            // "ETH" stood in while Gnosis was measuring (design review, 078
-            // round 3) — a coin the fee may never be paid in.
-            mark = mark ?: fallback.mark.copy(ticker = "", logoUrls = emptyList(), badgeLogoUrl = null),
+            // The coin is the core's, in every state (SendView.fee_coin): the
+            // estimate in hand — the speed just left's while a newly picked
+            // one is measured, since the coin does not change with the speed
+            // — else the coin in force, else the chain's own. A quote out or
+            // a quote that failed used to draw an empty disc here, where the
+            // other shells each drew a coin of their own choosing.
+            mark = feeRowMark(view.fee_coin, fallback.mark),
             // A figure in hand stays on screen while a re-quote is out (spec
             // 028); only a figure of ANOTHER speed gives way to "measuring".
             value = when {
@@ -819,6 +834,15 @@ object SendLive {
     }
 
     /**
+     * The fee row's coin mark: the core's `SendView.fee_coin` through the
+     * core's token mark (`WalletLive.mark`). `null` only while no chain is
+     * known — then the empty disc, claiming no coin, as web and desktop draw it.
+     */
+    internal fun feeRowMark(coin: SendFeeCoin?, template: TokenMarkModel): TokenMarkModel =
+        coin?.let { WalletLive.mark(it.chain_id, it.symbol, it.contract) }
+            ?: template.copy(ticker = "", logoUrls = emptyList(), badgeLogoUrl = null, badgeHidden = true)
+
+    /**
      * The speed control's inputs (spec 069): the `fee_speed` core's view, and
      * the fee session pricing each tier — whose fee-coin options format that
      * option's fee, as the fee row formats its own.
@@ -833,14 +857,6 @@ object SendLive {
             FeeTier.Standard -> I18nKeys.Flows.GAS_TIER_STANDARD
             FeeTier.Slow -> I18nKeys.Flows.GAS_TIER_SLOW
             else -> I18nKeys.Flows.GAS_TIER_FAST
-        },
-    )
-
-    private fun tierHint(tier: FeeTier, s: VelaStrings): String = s.t(
-        when (offered(tier)) {
-            FeeTier.Standard -> I18nKeys.Flows.GAS_TIER_HINT_STANDARD
-            FeeTier.Slow -> I18nKeys.Flows.GAS_TIER_HINT_SLOW
-            else -> I18nKeys.Flows.GAS_TIER_HINT_FAST
         },
     )
 
@@ -880,7 +896,6 @@ object SendLive {
                 FeeSpeedOptionModel(
                     id = option.tier.name.lowercase(),
                     label = tierName(option.tier, s),
-                    detail = tierHint(option.tier, s),
                     // "measuring" while this tier's own quote is out, "—" when
                     // there is none to be had.
                     value = when {
@@ -983,10 +998,10 @@ object SendLive {
 
     // -- SD2F --------------------------------------------------------------------
 
-    internal fun feeSheet(fallback: FeeTokenPickModel, fee: FeeView, ctx: Context): FeeTokenPickModel = fallback.copy(
+    internal fun feeSheet(fallback: FeeTokenPickModel, fee: FeeView, view: SendView, ctx: Context): FeeTokenPickModel = fallback.copy(
         rows = fee.options.map { option ->
             FeeTokenRowModel(
-                mark = WalletLive.mark((fee.fee?.chain_id ?: 0).toInt(), option.symbol, option.contract),
+                mark = WalletLive.mark(feeSheetChain(fee, view), option.symbol, option.contract),
                 symbol = option.symbol,
                 balanceLabel = ctx.strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to tokenAmountText(humanOfBase(option.balance, option.decimals)))),
                 // A fee reads as the fee row writes it — rounded UP.
@@ -1018,9 +1033,24 @@ object SendLive {
                 group = null,
                 addressDisplay = shortAddress(contact.address),
                 identiconSeed = contact.address,
+                address = contact.address,
             )
         },
     )
+
+    /**
+     * The chain the fee coins are on: the send's own (a sweep's, else the
+     * picked coin's), then the estimate's. Never chain 0 — the list opens
+     * while the fee is still being measured or after it failed, and the
+     * estimate's absence made every coin ask for an `eip155-0` logo and draw
+     * its letters over a neutral dot. Ethereum, as the web, only when no
+     * coin is picked at all.
+     */
+    internal fun feeSheetChain(fee: FeeView, view: SendView): Int =
+        (if (view.multi_select_mode) view.multi_chain_id else null)
+            ?: view.selected_token?.chain_id
+            ?: fee.fee?.chain_id
+            ?: 1
 
     // -- SD3 ---------------------------------------------------------------------
 
@@ -1082,7 +1112,10 @@ object SendLive {
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.DETAIL_CHAIN),
                     value = chain,
-                    lead = token?.let { FactLead.Token(WalletLive.mark(it.chain_id.toInt(), it.symbol, it.token_address, it.logo_urls)) },
+                    // The network row wears the NETWORK's mark (the kind
+                    // rule), as web and desktop do: it wore the coin's, so a
+                    // USDC send on Gnosis showed USDC's logo beside "Gnosis".
+                    lead = token?.let { FactLead.Token(WalletLive.chainMark(it.chain_id, nativeSymbol(it.chain_id, ctx))) },
                 ),
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.EST_FEE),
@@ -1123,6 +1156,7 @@ object SendLive {
             ctaEnabled = view.can_confirm,
             notice = confirmNotice(view, ctx),
             noticeFund = fundAddress(view, ctx),
+            noticeReport = reportLabel(view, ctx),
             // The treasury pause has two exits (spec 045 US4): the core's retry,
             // and "not now" — DismissTreasurySheet, the facts kept. The
             // can't-reach stop (spec 098 §2) has the same two, its own.
@@ -1236,6 +1270,20 @@ object SendLive {
             copy = s.t(I18nKeys.Flows.TREASURY_COPY),
             copied = s.t(I18nKeys.Flows.TREASURY_COPIED),
         )
+    }
+
+    /**
+     * Issue #466: the stop's "Report this" — only while the core has a report
+     * to file (`relay_report`: a stop up on a network Vela ships, whose
+     * operator can be told). A network the person added has nobody to tell.
+     */
+    internal fun reportLabel(view: SendView, ctx: Context): String? {
+        if (view.relay_report == null) return null
+        return when {
+            view.relay_unreachable != null -> ctx.strings.t(I18nKeys.Flows.RELAY_UNREACHABLE_REPORT)
+            view.treasury_bootstrap != null -> ctx.strings.t(I18nKeys.Flows.TREASURY_REPORT)
+            else -> null
+        }
     }
 
     /** The form's button while a relay stop is up: its retry, which is Continue again. */

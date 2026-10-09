@@ -1419,6 +1419,8 @@ internal fun SettingsSheet(
     onFeedbackGithub: () -> Unit = {},
     onFeedbackClosed: () -> Unit = {},
     onFeedbackOpened: () -> Unit = {},
+    /** Issue #466: the report's opening words, when a relay stop wrote them. */
+    feedbackSeed: FeedbackSeed? = null,
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
@@ -1527,7 +1529,7 @@ internal fun SettingsSheet(
                     onConfirm = onErase,
                     onCancel = onDismiss,
                 )
-                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub, onOpen = onOpenLink, onDone = onDismiss, onOpened = onFeedbackOpened, onClosed = onFeedbackClosed)
+                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, seed = feedbackSeed, onSend = onFeedbackSend, onGithub = onFeedbackGithub, onOpen = onOpenLink, onDone = onDismiss, onOpened = onFeedbackOpened, onClosed = onFeedbackClosed)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onRpcFixPrimary, onRpcFixField)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail, onBalanceRetry)
                 SettingsOverlay.Unreachable -> UnreachableSheetBody(model.unreachable, onUnreachableFix)
@@ -1838,6 +1840,8 @@ internal fun AccountsSheetBody(
 @Composable
 private fun FeedbackSheetBody(
     model: FeedbackModel,
+    /** Issue #466: the boxes' first words (a relay stop's report); `null` opens them empty. */
+    seed: FeedbackSeed? = null,
     onSend: (what: String, steps: String, screenshots: List<ByteArray>) -> Unit = { _, _, _ -> },
     onGithub: () -> Unit = {},
     onOpen: (String) -> Unit = {},
@@ -1909,9 +1913,10 @@ private fun FeedbackSheetBody(
     SheetTitle(model.title, model.subtitle)
     val sending = status is FeedbackStatus.Sending
     // Spec 048: the box is typed into; what is typed goes into the report.
-    var what by rememberSaveable { mutableStateOf("") }
-    var steps by rememberSaveable { mutableStateOf("") }
-    var stepsOpen by rememberSaveable { mutableStateOf(false) }
+    var what by rememberSaveable { mutableStateOf(seed?.what.orEmpty()) }
+    var steps by rememberSaveable { mutableStateOf(seed?.steps.orEmpty()) }
+    // Seeded steps are shown, not folded away behind "add steps".
+    var stepsOpen by rememberSaveable { mutableStateOf(!seed?.steps.isNullOrBlank()) }
     var previewOpen by rememberSaveable { mutableStateOf(true) }
     // 发送 pressed while a tile is still being prepared: waiting for it.
     var awaitingTiles by remember { mutableStateOf(false) }

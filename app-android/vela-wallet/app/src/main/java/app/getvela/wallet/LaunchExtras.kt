@@ -22,6 +22,8 @@ object LaunchExtras {
     val DEBUG_ONLY: Set<String> = setOf(
         "vela.startDestination",
         "vela.flowState",
+        "vela.signingState",
+        "vela.exploreState",
         "vela.settingsState",
         "vela.settingsDark",
         "vela.gallery",

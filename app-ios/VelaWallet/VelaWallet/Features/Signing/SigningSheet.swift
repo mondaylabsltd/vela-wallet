@@ -3,9 +3,17 @@
 //  VelaWallet
 //
 //  The signing sheet (spec 022): the universal block renderer plus a fixed
-//  footer — technical details → fee → signer → slide — over the page that
+//  footer — technical details → fee → signer → confirm — over the page that
 //  asked for the signature, so the site you are dealing with never leaves
 //  the screen.
+//
+//  The confirm is one tap (issue #461): the shared primary button the Send
+//  screen's Confirm is, labelled with the action alone. The slide it replaces
+//  was the one confirm in the app that wanted a drag; the passkey or Face ID
+//  prompt that follows is the second step.
+//
+//  The wallet's own request (the key backup, the core's `first_party`) has no
+//  requester: the header is one row, its headline and the ✕.
 //
 //  The header's ✕ is the one way to refuse (spec 079, owner ruling: "除非用户
 //  明确关掉，不应该很容易误操作，比如下滑就关掉了" — a stray swipe used to throw
@@ -49,6 +57,13 @@ struct SigningSheet: View {
     var onRetry: (() -> Void)?
 
     @State private var techOverride: Bool?
+    /// The confirm's note, the last time it was said. The note comes and goes
+    /// with the gate — "正在计算网络费用…" on every re-quote, refresh and new
+    /// speed — and each time it went, the content under a sheet scrolled to
+    /// its end shrank and pulled everything down a line (41 pt; the Android
+    /// device moved ~33 px, the web 29). Once said, its line stays, holding
+    /// these words invisibly while the gate is open (the web's rule).
+    @State private var heldNote: String?
 
     private var techOpen: Binding<Bool> {
         Binding(get: { techOverride ?? model.techOpen }, set: { techOverride = $0 })
@@ -58,6 +73,7 @@ struct SigningSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Tokens.Space.s16) {
                 SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
+                                  headline: model.headline,
                                   iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl,
                                   onClose: onClose, closeLabel: model.closeLabel)
                     .padding(.top, Tokens.Space.s8)
@@ -73,6 +89,15 @@ struct SigningSheet: View {
         }
         .background(theme.bgRaised.ignoresSafeArea())
         .accessibilityLabel(model.panelTitle)
+        .onChange(of: saidNote, initial: true) { _, said in
+            if let said { heldNote = said }
+        }
+    }
+
+    /// The confirm's note as the gate says it now; `nil` while it is open.
+    private var saidNote: String? {
+        guard let confirm = model.confirm, !confirm.enabled else { return nil }
+        return model.confirmBlockLine
     }
 
     /// The send receipt's own body and its one button, so a dApp transaction
@@ -103,7 +128,8 @@ struct SigningSheet: View {
 
     @ViewBuilder
     private var form: some View {
-        ForEach(model.blocks) { block in
+        // The wallet's own request: its intent is already the header's title.
+        ForEach(model.formBlocks) { block in
             blockView(block)
         }
 
@@ -116,7 +142,8 @@ struct SigningSheet: View {
             SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
                            speed: model.feeSpeed, onSpeed: onSpeed,
                            refresh: onRefreshFee == nil ? nil : model.feeRefresh,
-                           onRefresh: onRefreshFee, chevron: model.feeChevron)
+                           onRefresh: onRefreshFee, chevron: model.feeChevron,
+                           measuring: model.feeRefresh?.refreshing ?? false)
         }
         SigningSignerRow(label: model.signer.label, name: model.signer.name,
                          seed: model.signer.seed)
@@ -124,33 +151,44 @@ struct SigningSheet: View {
         // all. It is not disabled — it is absent, because the wallet
         // never offered it.
         if let confirm = model.confirm {
-            if model.confirmAsButton {
-                // Spec 079: one slide per signature — the page's own. The
-                // button sends the same approve the slide would.
-                VelaButton(title: model.confirmButtonLabel, kind: .primary,
-                           enabled: confirm.enabled, action: onConfirm)
-                    .padding(.bottom, Tokens.Space.s16)
-                    .accessibilityIdentifier("signing.openSigner")
-            } else {
-                SlideToConfirmView(
-                    hint: confirm.hint, action: confirm.action,
-                    enabled: confirm.enabled, onConfirm: onConfirm
-                )
-                .padding(.bottom, model.confirmBlockLine == nil ? Tokens.Space.s16 : Tokens.Space.s0)
-            }
-            // Spec 099 R7: a shut slide says why — the core's line for the
+            let note = confirm.enabled ? nil : model.confirmBlockLine
+            let noteLine = note ?? heldNote
+            // Issue #461: one tap, full width, shut while the core's gate is
+            // (`confirm.enabled`). The approve leaves the form for the
+            // receipt in the same pass, so the button is never seen dimmed
+            // as a "busy" — busy is the receipt, not a disabled control.
+            // Spec 079: an account that signs on the Trusted Signer's page
+            // says where it goes instead — that page's slide is the consent.
+            VelaButton(title: model.confirmAsButton ? model.confirmButtonLabel : confirm.action,
+                       kind: .primary, enabled: confirm.enabled, action: onConfirm)
+                .padding(.bottom, noteLine != nil ? Tokens.Space.s0 : Tokens.Space.s16)
+                // The Trusted Signer route's button opens a page; it signs
+                // nothing here, so it carries its own hook (Android and
+                // desktop: `signing-open-signer`).
+                .accessibilityIdentifier(model.confirmAsButton ? "signing.openSigner" : "signing.confirm")
+            // Spec 099 R7: a shut confirm says why — the core's line for the
             // part of the gate that is shut, and the action that opens it.
-            if !confirm.enabled, let line = model.confirmBlockLine {
-                Text(verbatim: line)
-                    .typeRole(Typography.rowSub)
-                    .foregroundStyle(theme.fgMuted)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, Tokens.Space.s8)
-                    .padding(.bottom, Tokens.Space.s16)
+            // Once said, the line stays: open, it holds the last words as
+            // space, unseen and unread (`heldNote`).
+            if let note {
+                confirmNote(note)
                     .accessibilityIdentifier("signing.confirmBlock")
+            } else if let noteLine {
+                confirmNote(noteLine)
+                    .hidden()
+                    .accessibilityHidden(true)
             }
         }
+    }
+
+    private func confirmNote(_ text: String) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub)
+            .foregroundStyle(theme.fgMuted)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.top, Tokens.Space.s8)
+            .padding(.bottom, Tokens.Space.s16)
     }
 
     /// The universal renderer: blocks in mock order, out. Nothing here knows
@@ -160,10 +198,9 @@ struct SigningSheet: View {
     private func blockView(_ block: SigningBlock) -> some View {
         switch block {
         case .intent(let text, let tone):
-            // Issue #314: the wallet's own request has no figure to lead with
-            // — its intent IS the outcome, so it is the sheet's headline
-            // rather than the eyebrow over a hero.
-            SigningIntentLabel(text: text, tone: tone, lead: model.dappOwn)
+            // The eyebrow over a hero. The wallet's own request has no figure
+            // to lead with (issue #314): its intent is the header's title.
+            SigningIntentLabel(text: text, tone: tone)
         case .amount(let line, let card, let note):
             SigningAmountView(line: line, card: card, note: note)
         case .swap(let pay, let receive):

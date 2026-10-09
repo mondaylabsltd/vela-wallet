@@ -34,6 +34,18 @@ struct FlowFixturesTests {
         }
     }
 
+    /// Issue #460: an error badge is a "!" in the error colour, never the
+    /// close glyph. The sheet's column is leading-aligned, so a red × in a
+    /// disc sat top-left — where a close button goes — and did nothing.
+    @Test func anErrorBadgeIsAnExclamationNeverAClose() {
+        #expect(StatusBadge.glyphName(.error) == "exclamationmark")
+        for variant: BadgeVariant in [.success, .warning, .neutral, .error, .timeout, .info] {
+            #expect(StatusBadge.glyphName(variant) != "xmark", "\(variant) draws the close glyph")
+        }
+        #expect(sheets.contains { FlowSheet.badge(for: $0.1.type) == .error },
+                "the failure sheets wear the error badge this pins")
+    }
+
     @Test func everyFixtureResolvesToTheScreenItsNameClaims() {
         let expected: [String: FlowScreen] = [
             "name · empty": .name,

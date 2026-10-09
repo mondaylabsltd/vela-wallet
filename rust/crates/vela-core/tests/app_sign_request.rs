@@ -80,6 +80,7 @@ struct Arrive {
     granted: Option<String>,
     requested: Option<String>,
     ts: Option<f64>,
+    first_party: bool,
 }
 
 impl Arrive {
@@ -95,6 +96,7 @@ impl Arrive {
             granted: None,
             requested: None,
             ts: None,
+            first_party: false,
         }
     }
 
@@ -113,6 +115,7 @@ impl Arrive {
             granted: None,
             requested: None,
             ts: None,
+            first_party: false,
         }
     }
 
@@ -130,6 +133,7 @@ impl Arrive {
             requested_address: self.requested,
             request_ts_ms: self.ts,
             now_ms: NOW,
+            first_party: self.first_party,
         }
     }
 }
@@ -888,6 +892,60 @@ fn f3_f4_request_uses_its_own_chain_and_dapp_identity() {
         matches!(ops.as_slice(), [Op::PersistRecord { record }] if record.dapp_url == ORIGIN),
         "{ops:?}"
     );
+}
+
+/// The wallet's own request (the passkey-registry backup) is first-party
+/// only because the shell that raised it says so — the view passes the flag
+/// through, a page's request never carries it, and a shell that predates the
+/// field (no `first_party` on the wire) gets a third-party sheet.
+#[test]
+fn the_wallets_own_request_is_first_party_and_a_pages_never_is() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("rid-page", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    let request = sut.view().request.expect("request");
+    assert!(
+        !request.first_party,
+        "a page's request is never first-party"
+    );
+    sut.dispatch(Event::RejectTapped);
+
+    let mut own = Arrive::global("rid-own", "eth_sendTransaction", &plain_send_params());
+    own.transport_id = "wallet".to_owned();
+    own.first_party = true;
+    sut.dispatch(own.event());
+    let request = sut.view().request.expect("request");
+    assert_eq!(request.id, "rid-own");
+    assert!(
+        request.first_party,
+        "the flag the shell set reaches the sheet"
+    );
+
+    // A newer request taking the sheet does not inherit it.
+    sut.dispatch(Event::RejectTapped);
+    sut.dispatch(Arrive::global("rid-next", "personal_sign", r#"["0xbeef","0x0"]"#).event());
+    let request = sut.view().request.expect("request");
+    assert_eq!(request.id, "rid-next");
+    assert!(!request.first_party, "first-party belongs to one request");
+
+    // On the wire: absent means false; present is read as written.
+    let wire = |extra: &str| {
+        format!(
+            r#"{{"type":"request_arrived","id":"w","method":"personal_sign","params_json":"[]","origin":"{ORIGIN}","transport_id":"{WP}","dedicated_transport":false,"per_request_chain":null,"dapp":null,"granted_address":null,"requested_address":null,"request_ts_ms":null,"now_ms":1{extra}}}"#
+        )
+    };
+    for (extra, expected) in [
+        ("", false),
+        (r#","first_party":false"#, false),
+        (r#","first_party":true"#, true),
+    ] {
+        let event: Event = serde_json::from_str(&wire(extra)).expect("a request_arrived event");
+        match event {
+            Event::RequestArrived { first_party, .. } => {
+                assert_eq!(first_party, expected, "first_party from {extra:?}")
+            }
+            other => panic!("parsed as {other:?}"),
+        }
+    }
 }
 
 // ===========================================================================
@@ -4883,6 +4941,7 @@ fn n4_submitted(rid: &str) -> Sut {
         requested_address: None,
         request_ts_ms: None,
         now_ms: NOW,
+        first_party: false,
     });
     assert_eq!(sut.view().surface, SignSurface::Sheet, "the sheet is up");
     sut.dispatch(approve(SignApproveOpts::default()));

@@ -110,7 +110,7 @@ struct BrowserChromeTests {
     /// page keeps its drawing; a tab never photographed keeps the stand-in.
     @Test func eachTabsCardIsItsOwnPage() {
         let explore = ExploreViewWire(
-            favorites: [], groups: [],
+            favorites: [],
             tabs: [
                 ExploreTabWire(id: "a", url: "https://app.uniswap.org/", title: "Uniswap", host: "app.uniswap.org"),
                 ExploreTabWire(id: "b", url: "https://bscscan.com/", title: "BscScan", host: "bscscan.com"),

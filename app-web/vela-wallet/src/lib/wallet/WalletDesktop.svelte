@@ -24,6 +24,8 @@
 		onbalancetoggle?: () => void;
 		/** The balance status line was tapped (spec 028 Phase 8): the rescue for what it says. */
 		onstatus?: () => void;
+		/** Issue 462: the hero's "↻ Updated 2m" was pressed. Absent in the gallery. */
+		onbalancerefresh?: () => void;
 		/**
 		 * Spec 021: the dock and the two section actions open a flow in the
 		 * third column. When it is wired the flow host owns that column, so
@@ -73,6 +75,7 @@
 		onassetclose,
 		onactivity,
 		onstatus,
+		onbalancerefresh,
 		column,
 		banner
 	}: Props = $props();
@@ -96,7 +99,12 @@
 			{#if banner}
 				<div class="banner">{@render banner()}</div>
 			{/if}
-			<BalanceDisplay balance={model.balance} ontoggle={onbalancetoggle} {onstatus} />
+			<BalanceDisplay
+				balance={model.balance}
+				ontoggle={onbalancetoggle}
+				{onstatus}
+				onrefresh={onbalancerefresh}
+			/>
 
 			<!-- Everything two-ended lives inside one measure (issue 195): the
 			     dock, the section headers and both lists end on the same line,

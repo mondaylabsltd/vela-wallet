@@ -22,8 +22,6 @@ export interface SigningMessages {
 	signingAccount: string;
 	advancedToggle: string;
 	close: string;
-	slideToConfirm: string;
-	slideConfirmAction: string;
 	confirmSend: string;
 	confirmSwap: string;
 	confirmDeposit: string;
@@ -199,7 +197,7 @@ export interface SigningMessages {
 	 */
 	feeReasons: Record<string, string>;
 	/**
-	 * Spec 099 R7: the line under a shut slide, by the corpus key the core's
+	 * Spec 099 R7: the line under a shut confirm, by the corpus key the core's
 	 * `confirm_state` names (`componentsUi.signing.confirmBlock.*`).
 	 */
 	confirmBlock: Record<string, string>;
@@ -231,11 +229,6 @@ export interface SigningMessages {
 	 * swaps in these. Keyed by term (`signing/terms.ts` lists them).
 	 */
 	terms: Record<string, string>;
-	/** The wallet's own key backup, in the person's language (the core's built-in result is English). */
-	backupIntent: string;
-	backupRegisteredAs: string;
-	backupAddress: string;
-	backupPublicKeys: string;
 	/**
 	 * Spec 077: the landing a submitted transaction shows, in the SEND
 	 * receipt's own words. Borrowed rather than written again so the two
@@ -290,7 +283,7 @@ export interface SigningMessages {
 	/**
 	 * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): what
 	 * the sheet says once the person has approved, in the SEND receipt's words,
-	 * as Android's signing receipt says them — never a greyed slide.
+	 * as Android's signing receipt says them — never a greyed confirm.
 	 */
 	status: {
 		/**

@@ -86,6 +86,18 @@ how a user recognises an account at a glance. Two files back it: `identicon.json
 `identicon-bulk.json` (20,000 hashes). A further 200,000-seed differential run
 lives in `npm run verify:identicon`, which regenerates rather than commits.
 
+Two suites are hand-written. `marks.json`: which logo a token or a network
+wears (`app/remote_mark.rs`), pinned from the rule the four shells each used to
+copy (2026-10-08). There is no oracle to dump it from; edit it by hand, and its
+URLs are spelled out in full so a case never asks the code under test what the
+answer is. `relative-time.json`: the compact relative time ("now", "2m", "3h",
+a weekday, the date — `I18n::format_relative_time`), which the phones and the
+web client used to port (2026-10-08); its expectations come from the shipped
+catalogs' `time.*` words, the ICU weekday table and an independent calendar,
+never from the code under test. Every runner replays it
+through its own route: the engine and the words form in Rust, the words form
+in wasm (`formatRelativeTime`), the `I18n` object in Kotlin and Swift.
+
 Regenerate the corpus only by re-running the dump against the TypeScript oracle,
 and review the resulting diff like code. A changed expectation means either a
 TypeScript bug was fixed (document it) or the oracle drifted (investigate).

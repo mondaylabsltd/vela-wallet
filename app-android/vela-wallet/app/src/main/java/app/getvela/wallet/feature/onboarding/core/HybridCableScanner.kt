@@ -63,6 +63,9 @@ class HybridCableScanner(context: Context) {
             val handler = Handler(Looper.getMainLooper())
             var finished = false
             var gattStarted = false
+            // The iOS fallback's link, so a scan cancelled mid-read (the code
+            // dismissed, issue #459) does not leave the radio busy for a retry.
+            val gattLink = java.util.concurrent.atomic.AtomicReference<BluetoothGatt?>(null)
             lateinit var cb: ScanCallback
             fun finish(result: AdvertHit?) {
                 if (finished) return
@@ -95,7 +98,9 @@ class HybridCableScanner(context: Context) {
                         gattStarted = true
                         runCatching { scanner.stopScan(cb) }
                         VelaLog.event("cable.scan", "bare 0xFFF9 UUID (iOS authenticator?) — reading GATT 0xFFFA")
-                        readAdvertViaGatt(result.device, qrSecret) { hit -> finish(hit) }
+                        gattLink.set(readAdvertViaGatt(result.device, qrSecret) { hit -> finish(hit) })
+                        // Cancelled while the link was being made: close it here.
+                        if (!cont.isActive) closeGatt(gattLink.getAndSet(null))
                     }
                 }
 
@@ -118,19 +123,30 @@ class HybridCableScanner(context: Context) {
             VelaLog.event("cable.scan", "scanning 0xFFF9/0xFDE2")
             scanner.startScan(filters, settings, cb)
             handler.postDelayed({ finish(null) }, timeoutMs)
-            cont.invokeOnCancellation { finish(null) }
+            cont.invokeOnCancellation {
+                finish(null)
+                closeGatt(gattLink.getAndSet(null))
+            }
         }
+
+    @SuppressLint("MissingPermission")
+    private fun closeGatt(gatt: BluetoothGatt?) {
+        if (gatt == null) return
+        runCatching { gatt.disconnect() }
+        runCatching { gatt.close() }
+    }
 
     /**
      * iOS fallback: the EID (+ suffix) lives on GATT characteristic 0xFFFA.
-     * Calls [onDone] exactly once, with a matching hit or null.
+     * Calls [onDone] exactly once, with a matching hit or null; answers the
+     * link it opened, so a cancelled scan can close it.
      */
     @SuppressLint("MissingPermission")
     private fun readAdvertViaGatt(
         device: BluetoothDevice,
         qrSecret: ByteArray,
         onDone: (AdvertHit?) -> Unit,
-    ) {
+    ): BluetoothGatt? {
         var settled = false
         fun settle(hit: AdvertHit?, gatt: BluetoothGatt?) {
             if (settled) return
@@ -183,7 +199,7 @@ class HybridCableScanner(context: Context) {
                 settle(AdvertHit(device, advert), g)
             }
         }
-        device.connectGatt(appContext, false, cb, BluetoothDevice.TRANSPORT_LE)
+        return device.connectGatt(appContext, false, cb, BluetoothDevice.TRANSPORT_LE)
     }
 
     private companion object {

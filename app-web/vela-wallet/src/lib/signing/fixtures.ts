@@ -10,7 +10,7 @@
  * NOT know what a transaction does.
  */
 import { SITES } from '$lib/explore/fixtures';
-import { IDENTITY } from '$lib/wallet/fixtures';
+import { CHAIN_COLORS, IDENTITY } from '$lib/wallet/fixtures';
 import type { SigningMessages } from './messages';
 import type {
 	AllowanceChip,
@@ -20,9 +20,9 @@ import type {
 	SigningModel,
 	SigningStateId,
 	TechModel,
-	TokenMark,
 	Tone
 } from './model';
+import type { TokenMarkModel } from '$lib/flows/model';
 
 type Identicon = (seed: string) => string;
 
@@ -71,20 +71,25 @@ export const ALL_STATES: SigningStateId[] = [
 	'cs32',
 	'cs33',
 	'cs34',
-	'cs35'
+	'cs35',
+	'cs36'
 ];
 
 const NETWORK = { name: 'Ethereum', dot: '#627EEA' };
 const FEE_VALUE = '~0.0021 ETH ≈ $5.40';
 
-/** Token marks: brand content, exactly like the wallet's chain colours. */
+/**
+ * Token marks: the wallet's token circle, drawn as its glyph (fixtures fetch
+ * nothing), on the boards' Ethereum. ETH there is the chain's own coin and
+ * wears no badge; the inline circle draws none anyway.
+ */
 const T = {
-	usdc: { letter: 'U', tint: '#2775CA' },
-	eth: { letter: 'E', tint: '#627EEA' },
-	weth: { letter: 'W', tint: '#8A92B2' },
-	spweth: { letter: 'S', tint: '#4C6FFF' },
-	usdt: { letter: 'T', tint: '#26A17B' }
-} satisfies Record<string, TokenMark>;
+	usdc: { ticker: 'USDC', badgeColor: CHAIN_COLORS.ethereum },
+	eth: { ticker: 'ETH', badgeColor: CHAIN_COLORS.ethereum, badgeHidden: true },
+	weth: { ticker: 'WETH', badgeColor: CHAIN_COLORS.ethereum },
+	spweth: { ticker: 'spWETH', badgeColor: CHAIN_COLORS.ethereum },
+	usdt: { ticker: 'USDT', badgeColor: CHAIN_COLORS.ethereum }
+} satisfies Record<string, TokenMarkModel>;
 
 /** dApps as the signing header draws them. `unknown` is the no-name case. */
 const D = {
@@ -127,7 +132,7 @@ const line = (
 	sign: string,
 	value: string,
 	symbol: string,
-	token: TokenMark | undefined,
+	token: TokenMarkModel | undefined,
 	tone: Tone,
 	fiat?: string,
 	caption?: string
@@ -181,7 +186,7 @@ function transferTech(m: SigningMessages): TechModel {
 				role: m.techIdentityRecipient,
 				name: 'Alice Chen',
 				address: ADDR.aliceFull,
-				mark: { letter: 'A', tint: '#E8572A' }
+				avatar: { letter: 'A', tint: '#E8572A' }
 			}
 		],
 		simResult: row(m.techSimResult, `−1,000 USDC · ${m.balancesMatchHero}`),
@@ -229,7 +234,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -256,7 +261,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -279,7 +284,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -301,7 +306,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -340,7 +345,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		fee: onchainFee(m),
 		signer: signer(m),
 		// Unlimited, seen and said — signable as asked.
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -378,7 +383,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -414,7 +419,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -452,7 +457,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.intentRevoke, enabled: true },
+		confirm: { action: m.intentRevoke, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -480,7 +485,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -525,7 +530,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.intentApproveAll, enabled: true },
+		confirm: { action: m.intentApproveAll, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -557,7 +562,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSwap, enabled: true },
+		confirm: { action: m.confirmSwap, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -588,7 +593,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSwap, enabled: true },
+		confirm: { action: m.confirmSwap, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -613,7 +618,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSwap, enabled: true },
+		confirm: { action: m.confirmSwap, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -649,7 +654,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmDeposit, enabled: true },
+		confirm: { action: m.confirmDeposit, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -672,7 +677,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmWithdraw, enabled: true },
+		confirm: { action: m.confirmWithdraw, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -709,7 +714,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'offchain', note: m.okNoNetworkFee },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -739,7 +744,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'offchain', note: m.okNoNetworkFee },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -771,7 +776,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'offchain', note: m.okNoNetworkFee },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -801,7 +806,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'offchain', note: m.okNoNetworkFee },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -838,7 +843,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'hidden' },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -863,7 +868,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'hidden' },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.signLabel, enabled: true },
+		confirm: { action: m.signLabel, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -883,7 +888,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: { kind: 'hidden' },
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -913,7 +918,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -946,7 +951,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -969,7 +974,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1005,7 +1010,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1035,7 +1040,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1063,7 +1068,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmSend, enabled: true },
+		confirm: { action: m.confirmSend, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1111,7 +1116,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1148,7 +1153,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1184,7 +1189,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		confirm: { hint: m.slideToConfirm, action: m.confirmPlain, enabled: true },
+		confirm: { action: m.confirmPlain, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1200,7 +1205,9 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				options: [
 					{
 						id: 'eth',
-						mark: T.eth,
+						// The send sheet's marks, drawn as their glyphs (fixtures
+						// fetch nothing); ETH on Ethereum wears no badge.
+						mark: { ticker: 'ETH', badgeColor: CHAIN_COLORS.ethereum, badgeHidden: true },
 						name: 'ETH',
 						balance: `${m.feeBalance} 0.0689`,
 						fee: `~0.0021 ETH`,
@@ -1208,7 +1215,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 					},
 					{
 						id: 'usdc',
-						mark: T.usdc,
+						mark: { ticker: 'USDC', badgeColor: CHAIN_COLORS.ethereum },
 						name: 'USDC',
 						balance: `${m.feeBalance} 1,240.00`,
 						fee: `~5.55 USDC`,
@@ -1224,7 +1231,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 	// cs5 is where this starts: an unlimited request, kept on its Requested
 	// chip. These are what the card becomes once somebody picks Custom — the
 	// field under the chips, the big number above counting what has been
-	// typed, and the slide shut while the typed amount is not one.
+	// typed, and the confirm shut while the typed amount is not one.
 	cs34: (m) => ({
 		dapp: D.oneinch,
 		network: NETWORK,
@@ -1255,8 +1262,8 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		// A finite cap is a cap: the slide may arm.
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		// A finite cap is a cap: the confirm may open.
+		confirm: { action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -1298,7 +1305,39 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		fee: onchainFee(m),
 		signer: signer(m),
 		// A cap nobody could parse is not a cap.
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: false },
+		confirm: { action: m.intentApprove, enabled: false },
+		panelTitle: m.panelTitle
+	}),
+
+	// -- cs36: the wallet's OWN request (spec 062's key backup) -----------
+	//
+	// Nobody else is asking, so there is no requester to show: the header is
+	// the request's intent and (live) the ✕ — no mark, no "Vela Wallet", no
+	// network chip. The network is a row, in the core's words, as are the
+	// address being backed up and the count of its keys; the toggle names no
+	// contract, and the confirm says the intent. Every word is a core term
+	// (`componentsUi.signing.*`), so the board reads in the gallery's locale.
+	cs36: (m) => ({
+		// Who asked, for the record — not drawn while there is a headline.
+		dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)' },
+		network: NETWORK,
+		// The core grades the backup safe (live: `risk: safe`).
+		headline: { text: m.terms.intentBackUpPublicKeys, tone: 'success' },
+		blocks: [
+			{
+				kind: 'rows',
+				rows: [
+					row(m.terms.labelNetwork, NETWORK.name),
+					row(m.terms.labelAddress, ADDR.self, undefined, true),
+					row(m.terms.labelPublicKeys, '2')
+				]
+			}
+		],
+		tech: tech(m),
+		techOpen: false,
+		fee: onchainFee(m),
+		signer: signer(m),
+		confirm: { action: m.terms.intentBackUpPublicKeys, enabled: true },
 		panelTitle: m.panelTitle
 	})
 };

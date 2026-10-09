@@ -32,3 +32,19 @@ export function pluralTemplate(
 	}
 	return lookup(`${key}${suffix}`) ?? lookup(`${key}_other`);
 }
+
+/**
+ * A plural key's forms in one locale, keyed by suffix (`_one`, `_few`,
+ * `_many`, `_other` — exactly the categories the core says the locale has),
+ * with the locale whose rule picks among them. The shape a message manifest
+ * carries for copy whose count is only known where it is drawn.
+ */
+export interface PluralCopy {
+	locale: string;
+	forms: Record<string, string>;
+}
+
+/** The form of `copy` for `count`, `{{count}}` still unfilled; '' when it has none. */
+export function pluralForm(copy: PluralCopy, count: number): string {
+	return pluralTemplate((suffix) => copy.forms[suffix], copy.locale, '', count) ?? '';
+}

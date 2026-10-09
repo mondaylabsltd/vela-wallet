@@ -22,6 +22,19 @@ interface VelaStrings {
      * Russian's rule (2–4 is `_few`), nor Chinese's (one form for every count).
      */
     fun t(key: String, count: Int): String
+
+    /**
+     * How long ago, in the active language — "now", "2m", "3h", a short
+     * weekday under a week, else the date: the core's
+     * `I18n::format_relative_time`, which no shell ports (issue 462).
+     *
+     * [tsSeconds] is the moment in WHOLE seconds (milliseconds here read as
+     * the future, which is "now"); [nowMs] the clock in milliseconds;
+     * [utcOffsetMinutes] what to add to UTC for local time at that moment;
+     * [dateFormat] the person's date preset as stored, `auto` already
+     * resolved. `RelativeTime.ago` fills all four from the device.
+     */
+    fun relativeTime(tsSeconds: Long, nowMs: Long, utcOffsetMinutes: Int, dateFormat: String): String
 }
 
 val LocalVelaStrings = staticCompositionLocalOf<VelaStrings> {

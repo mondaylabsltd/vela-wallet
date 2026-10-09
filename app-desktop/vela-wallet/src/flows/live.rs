@@ -384,7 +384,7 @@ pub fn tx_detail(
             detail: None,
         });
     }
-    facts.push(network_fact(item.chain_id, &item.symbol, s));
+    facts.push(network_fact(item.chain_id, s));
     facts.push(FactRow {
         label: s.detail_date.clone(),
         value: SharedString::from(stamp(item.timestamp, s, locale)),
@@ -503,7 +503,7 @@ fn dapp_detail(
         facts: dapp
             .facts
             .iter()
-            .map(|fact| dapp_fact(fact, item, dapp, s, wallet, hidden, locale))
+            .map(|fact| dapp_fact(fact, dapp, s, wallet, hidden, locale))
             .collect(),
         technical: (!dapp.technical.is_empty()).then(|| crate::flows::fixtures::Technical {
             toggle: s.detail_technical.clone(),
@@ -519,7 +519,6 @@ fn dapp_detail(
 /// the reader's words and format.
 fn dapp_fact(
     fact: &FeedFact,
-    item: &FeedItem,
     dapp: &FeedDapp,
     s: &FlowStrings,
     wallet: &crate::wallet::WalletStrings,
@@ -538,7 +537,7 @@ fn dapp_fact(
     };
     match fact {
         FeedFact::Site { site } => plain(&s.detail_app, SharedString::from(site.clone())),
-        FeedFact::Network { chain_id } => network_fact(*chain_id, &item.symbol, s),
+        FeedFact::Network { chain_id } => network_fact(*chain_id, s),
         // Who got the money (spec 082 RJ16): a plain send's recipient, or the
         // one a token transfer names — never the token contract it was called
         // on. The core names them as the row does.
@@ -659,23 +658,16 @@ fn hash_fact(label: &SharedString, hash: &str) -> FactRow {
     }
 }
 
-/// The network a record is on, wearing the row's coin — or, when the row has
-/// none (a dApp call that moved no coin, a signature, a multi-token sweep),
-/// the chain's own rather than an empty mark (083 H2 review).
-fn network_fact(chain_id: u32, symbol: &str, s: &FlowStrings) -> FactRow {
-    let coin = if symbol.is_empty() {
-        native_symbol(chain_id)
-    } else {
-        symbol.to_owned()
-    };
+/// The network a record is on, wearing the NETWORK's mark: its own logo over
+/// its coin's letters, never a badge (the core's kind rule). It used to wear
+/// the record's coin, and the native coin's home-chain rule put Ethereum's
+/// logo beside "Base" on every ETH sent there; the coin is the amount's, not
+/// the network's.
+fn network_fact(chain_id: u32, s: &FlowStrings) -> FactRow {
     FactRow {
         label: s.detail_chain.clone(),
         value: SharedString::from(chain_name(chain_id)),
-        lead: FactLead::Token(TokenMark {
-            ticker: SharedString::from(coin.clone()),
-            badge: tint(chain_id),
-            logos: crate::marks::token_logos(chain_id, &coin, None, &[]),
-        }),
+        lead: FactLead::Token(network_mark(chain_id)),
         mono: false,
         copy: None,
         note: None,
@@ -779,7 +771,7 @@ pub fn technical_lines(
                 }
             }
             // Nothing here is a balance: hashes and names, never masked.
-            other => TechnicalLine::Fact(dapp_fact(other, item, dapp, s, wallet, false, locale)),
+            other => TechnicalLine::Fact(dapp_fact(other, dapp, s, wallet, false, locale)),
         })
         .collect()
 }
@@ -952,10 +944,13 @@ pub fn add_network_tab(
     };
     use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
 
+    // A network being added is drawn as itself (the core's kind rule): its
+    // own logo, no badge. The native coin's rule put Ethereum's logo on every
+    // ETH L2 the wizard found. Chain 0 — nothing resolved yet — asks for none.
     let mark_of = |chain_id: u32, symbol: &str| TokenMark {
         ticker: SharedString::from(symbol.to_owned()),
         badge: tint(chain_id),
-        logos: crate::marks::token_logos(chain_id, symbol, None, &[]),
+        logos: crate::marks::chain_logos(chain_id),
     };
     let facts = |chain_id: u32, symbol: &str| {
         vec![
@@ -1436,20 +1431,31 @@ fn tier_name(s: &FlowStrings, tier: FeeTier) -> SharedString {
     }
 }
 
-/// …and what it buys, the line under the name.
-fn tier_hint(s: &FlowStrings, tier: FeeTier) -> SharedString {
-    match tier {
-        FeeTier::Standard => s.gas_tier_hint_standard.clone(),
-        FeeTier::Slow => s.gas_tier_hint_slow.clone(),
-        FeeTier::Fast | FeeTier::Rapid => s.gas_tier_hint_fast.clone(),
-    }
-}
-
-fn native_symbol(chain_id: u32) -> String {
-    BUILTIN_CHAINS
+/// A network's own coin: the built-in's, or the one the person gave a network
+/// they added (`receivable_chains` reads the same list). Empty only for a
+/// chain the wallet does not know.
+pub(crate) fn native_symbol(chain_id: u32) -> String {
+    if let Some(chain) = BUILTIN_CHAINS
         .iter()
         .find(|chain| chain.chain_id == chain_id)
-        .map_or_else(String::new, |chain| chain.native_symbol.to_owned())
+    {
+        return chain.native_symbol.to_owned();
+    }
+    receivable_chains()
+        .into_iter()
+        .find(|(id, _)| *id == chain_id)
+        .map_or_else(String::new, |(_, symbol)| symbol)
+}
+
+/// A NETWORK drawn as itself — a network row or fact, a notice that locks a
+/// chain, the add-network wizard: its own logo over its coin's letters, and
+/// never a badge (the core's `chain_mark`).
+pub(crate) fn network_mark(chain_id: u32) -> TokenMark {
+    TokenMark {
+        ticker: SharedString::from(native_symbol(chain_id)),
+        badge: tint(chain_id),
+        logos: crate::marks::chain_logos(chain_id),
+    }
 }
 
 /// A token figure held as a float (a fee in its coin, a parsed balance), on
@@ -1588,26 +1594,33 @@ pub(crate) fn fee_line(
     format!("{coin} · ≈{}", currency.text(usd, locale))
 }
 
-/// The fee coin's symbol, for the row's mark.
-fn fee_symbol(send: &SendView, fee: &FeeView) -> (String, u32) {
-    let quote = send.fee.as_ref().or(fee.fee.as_ref());
-    let chain_id = send
-        .selected_token
-        .as_ref()
-        .map(|token| token.chain_id)
-        .or_else(|| quote.map(|quote| quote.chain_id))
-        .unwrap_or(1);
-    let symbol = match quote.map(|quote| &quote.fee_asset) {
-        Some(FeeAssetView::Erc20 { symbol, .. }) => {
-            symbol.clone().unwrap_or_else(|| native_symbol(chain_id))
-        }
-        _ => native_symbol(chain_id),
-    };
-    (symbol, chain_id)
+/// The fee row's mark: the coin the CORE names (`SendView.fee_coin` — the
+/// estimate in hand, else the coin in force, else the chain's own coin; one
+/// answer on all four shells, figure or none beside it) through the core's
+/// token mark. The rule used to live here, and on a failed quote it drew the
+/// chain's coin where the web drew the chosen one and Android an empty disc.
+/// `None` only while no chain is known: the empty disc — never chain 1's coin.
+fn fee_mark(send: &SendView) -> TokenMark {
+    match &send.fee_coin {
+        Some(coin) => TokenMark {
+            ticker: coin.symbol.clone().into(),
+            badge: tint(coin.chain_id),
+            logos: crate::marks::token_logos(
+                coin.chain_id,
+                &coin.symbol,
+                coin.contract.as_deref(),
+                &[],
+            ),
+        },
+        None => TokenMark {
+            ticker: SharedString::default(),
+            badge: tint(0),
+            logos: crate::marks::Logos::default(),
+        },
+    }
 }
 
 fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
-    let (symbol, chain_id) = fee_symbol(i.send, i.fee);
     let in_hand = i.send.fee.as_ref().or(i.fee.fee.as_ref());
     // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681). On the
     // path where a pick re-measures, the estimate in hand still belongs to the
@@ -1626,19 +1639,7 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
         } else {
             i.s.network_fee.clone()
         },
-        mark: TokenMark {
-            ticker: symbol.clone().into(),
-            badge: tint(chain_id),
-            logos: crate::marks::token_logos(
-                chain_id,
-                &symbol,
-                quote.and_then(|quote| match &quote.fee_asset {
-                    FeeAssetView::Erc20 { token, .. } => Some(token.as_str()),
-                    FeeAssetView::Native => None,
-                }),
-                &[],
-            ),
-        },
+        mark: fee_mark(i.send),
         value: if measuring || of_another_tier {
             i.s.fee_pending.clone()
         } else {
@@ -1712,7 +1713,6 @@ pub fn speed_model(
                 };
                 FeeSpeedOption {
                     label: tier_name(s, option.tier),
-                    detail: tier_hint(s, option.tier),
                     value,
                     gas_price: option.gas_price.clone().map(SharedString::from),
                     selected: option.selected,
@@ -2405,6 +2405,102 @@ mod treasury_tests {
         });
     }
 
+    /// Issue 466: both relay stops offer "Report this" exactly while the
+    /// core has a report for them — which it builds only on a network Vela
+    /// ships, whose relayer is the operator's. On a network the person
+    /// added there is nobody to tell, and no button.
+    #[test]
+    fn a_relay_stop_offers_report_this_only_with_the_cores_report() {
+        crate::executor::storage::tests::with_temp_state("relay-report-466", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let host = CoreHost::<SendMachine>::new();
+            let report = |fingerprint: &str| vela_core::app::send::SendRelayReport {
+                what: "Relayer out of gas on Unichain (130)".to_owned(),
+                steps: "1. Send on Unichain (130)".to_owned(),
+                area: "Send".to_owned(),
+                fingerprint: fingerprint.to_owned(),
+            };
+            let treasury = |served: bool| SendTreasuryStatus {
+                chain_id: 130,
+                address: "0xTreasury".to_owned(),
+                asset: SendTreasuryAsset::Native,
+                balance: "0".to_owned(),
+                floor: "100000000000000".to_owned(),
+                bootstrap_needed: true,
+                operator_served: served,
+                coin: None,
+            };
+            let notice_of = |view: &SendView| {
+                let inputs = SendInputs {
+                    send: view,
+                    fee: &fee,
+                    s: &s,
+                    wallet: &wallet,
+                    locale: "en-US",
+                    money: crate::wallet::live::Money::usd(),
+                    identity_name: "MultiTest",
+                    identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                    speed: None,
+                    relay_sent_at_ms: None,
+                };
+                send_notice(&inputs, false).unwrap_or_else(|| unreachable!("a stop"))
+            };
+
+            let served = SendView {
+                treasury_bootstrap: Some(treasury(true)),
+                relay_report: Some(report("relay-gas-130")),
+                ..host.view()
+            };
+            assert_eq!(notice_of(&served).report, Some(s.funding_report.clone()));
+            let custom = SendView {
+                treasury_bootstrap: Some(treasury(false)),
+                relay_report: None,
+                ..host.view()
+            };
+            assert_eq!(notice_of(&custom).report, None);
+
+            let unreachable = |report: Option<vela_core::app::send::SendRelayReport>| SendView {
+                relay_unreachable: Some(vela_core::app::send::SendRelayUnreachable {
+                    chain_id: 130,
+                    operator_served: report.is_some(),
+                }),
+                relay_report: report,
+                ..host.view()
+            };
+            assert_eq!(
+                notice_of(&unreachable(Some(report("relay-unreachable-130")))).report,
+                Some(s.unreachable_report.clone())
+            );
+            assert_eq!(notice_of(&unreachable(None)).report, None);
+            // The corpus's own words for the two buttons, not key echoes.
+            assert!(!s.funding_report.contains("componentsUi"));
+            assert!(!s.unreachable_report.contains("componentsUi"));
+
+            // No other notice grows the button: the same-coin ceiling, say.
+            let plain = host.view();
+            assert!(
+                send_notice(
+                    &SendInputs {
+                        send: &plain,
+                        fee: &fee,
+                        s: &s,
+                        wallet: &wallet,
+                        locale: "en-US",
+                        money: crate::wallet::live::Money::usd(),
+                        identity_name: "MultiTest",
+                        identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                        speed: None,
+                        relay_sent_at_ms: None,
+                    },
+                    false
+                )
+                .is_none_or(|notice| notice.report.is_none())
+            );
+        });
+    }
+
     /// Issue #422: the stop's coin and figures are the core's. On a Xiaomi
     /// a Polygon send was asked for "0.0001 ETH" — another chain's stop, in
     /// a coin a name lookup guessed. This card writes what the core gives
@@ -2915,6 +3011,13 @@ fn build_notice(
             detail: (!sheet.operator_served).then(|| s.unreachable_hint.clone()),
             action: Some(s.unreachable_retry.clone()),
             copy: None,
+            // Issue 466: the operator is told through the reporter — only
+            // where the core built a report, which is only where the relay
+            // is Vela's (a network the build ships).
+            report: send
+                .relay_report
+                .as_ref()
+                .map(|_| s.unreachable_report.clone()),
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::RetryRelayUnreachable)));
@@ -2978,6 +3081,9 @@ fn build_notice(
             // Spec 098 §4: the address is what a person needs to fund it —
             // read off the screen it is 42 characters to retype.
             copy: Some((s.funding_copy.clone(), treasury.address.clone().into())),
+            // Issue 466: the lead says telling the operator is the fastest
+            // fix; this is how — the core's report, through the reporter.
+            report: send.relay_report.as_ref().map(|_| s.funding_report.clone()),
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::RetryAfterBootstrap)));
@@ -3024,6 +3130,7 @@ fn build_notice(
             detail,
             action,
             copy: None,
+            report: None,
             error: true,
         };
         return Some((notice, way_out));
@@ -3087,6 +3194,7 @@ fn build_notice(
             ),
             action: Some(s.same_fee_edit.clone()),
             copy: None,
+            report: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
@@ -3101,6 +3209,7 @@ fn build_notice(
             detail: None,
             action: None,
             copy: None,
+            report: None,
             error: true,
         };
         return Some((notice, None));
@@ -3115,7 +3224,7 @@ fn build_notice(
 
     // On the confirm page the amount itself may have stopped resolving — a
     // display-currency commit landing under an open page re-denominates the
-    // field, and the slide disarms with nothing said.
+    // field, and the confirm disarms with nothing said.
     if confirming && let Some(issue) = &send.confirm_amount_issue {
         let notice = SendNotice {
             dismiss: None,
@@ -3124,6 +3233,7 @@ fn build_notice(
             detail: None,
             action: Some(s.same_fee_edit.clone()),
             copy: None,
+            report: None,
             error: true,
         };
         return Some((notice, Some(NoticeWayOut::EditAmount)));
@@ -3156,6 +3266,7 @@ fn build_notice(
             detail: None,
             action: None,
             copy: None,
+            report: None,
             error: false,
         },
         None,
@@ -3508,11 +3619,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         FactRow {
             label: s.detail_chain.clone(),
             value: chain_name(chain_id).into(),
-            lead: FactLead::Token(TokenMark {
-                ticker: native_symbol(chain_id).into(),
-                badge: tint(chain_id),
-                logos: crate::marks::chain_logos(chain_id),
-            }),
+            lead: FactLead::Token(network_mark(chain_id)),
             mono: false,
             copy: None,
             note: None,
@@ -3580,6 +3687,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             detail: None,
             action: None,
             copy: None,
+            report: None,
             error: true,
         })
     });
@@ -3654,6 +3762,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                     BreakdownRow {
                         seed: (!payee.address.is_empty())
                             .then(|| SharedString::from(payee.address.clone())),
+                        mark: None,
                         label,
                         mono,
                         detail,
@@ -3732,6 +3841,16 @@ fn sweep_breakdown(
             }
             BreakdownRow {
                 seed: None,
+                mark: Some(TokenMark {
+                    ticker: token.symbol.clone().into(),
+                    badge: tint(token.chain_id),
+                    logos: crate::marks::token_logos(
+                        token.chain_id,
+                        &token.symbol,
+                        token.token_address.as_deref(),
+                        &token.logo_urls,
+                    ),
+                }),
                 label: token.symbol.clone().into(),
                 mono: false,
                 detail: None,
@@ -4036,10 +4155,26 @@ fn receipt_parts(
 ) -> (Option<SharedString>, Vec<BreakdownRow>) {
     let coins = sweep_coins(send);
     if !coins.is_empty() {
+        // The sweep's one network (never chain 0): the coins were all sent
+        // on it.
+        let chain_id = send
+            .multi_chain_id
+            .or_else(|| send.selected_token.as_ref().map(|token| token.chain_id))
+            .unwrap_or(1);
         let rows = coins
             .iter()
             .map(|coin| BreakdownRow {
                 seed: None,
+                mark: Some(TokenMark {
+                    ticker: coin.symbol.clone().into(),
+                    badge: tint(chain_id),
+                    logos: crate::marks::token_logos(
+                        chain_id,
+                        &coin.symbol,
+                        coin.token_address.as_deref(),
+                        &coin.logo_urls,
+                    ),
+                }),
                 label: coin.symbol.clone().into(),
                 mono: false,
                 detail: None,
@@ -4058,6 +4193,7 @@ fn receipt_parts(
             .iter()
             .map(|transfer| BreakdownRow {
                 seed: Some(SharedString::from(transfer.to.clone())),
+                mark: None,
                 label: transfer
                     .to_name
                     .clone()
@@ -4081,6 +4217,7 @@ fn receipt_parts(
             .map(|draft| BreakdownRow {
                 seed: (!draft.address.is_empty())
                     .then(|| SharedString::from(draft.address.clone())),
+                mark: None,
                 label: draft
                     .name
                     .clone()
@@ -4104,9 +4241,36 @@ fn receipt_parts(
     (Some(title.into()), rows)
 }
 
+/// One coin of a stored sweep, as its mark: the logo addresses its record
+/// carries first, then the core's own.
+///
+/// A stored line has no contract address, so the coin rule is given what the
+/// record does say: the network's own coin by its ticker (the home chain's
+/// logo, and no badge on its own chain, as on the confirm), any other coin as
+/// a contract the rule cannot place (`Some("")`: no logo guessed for it, its
+/// network's badge shown).
+fn swept_coin_mark(
+    chain_id: u32,
+    transfer: &vela_core::app::activity_feed::FeedBatchTransfer,
+) -> TokenMark {
+    let native = transfer
+        .symbol
+        .eq_ignore_ascii_case(&native_symbol(chain_id));
+    TokenMark {
+        ticker: transfer.symbol.clone().into(),
+        badge: tint(chain_id),
+        logos: crate::marks::token_logos(
+            chain_id,
+            &transfer.symbol,
+            (!native).then_some(""),
+            transfer.logo_urls.as_deref().unwrap_or_default(),
+        ),
+    }
+}
+
 /// Spec 038 #D2: a folded batch row opens to what it folded — the split's
-/// recipients by name and avatar, the sweep's assets — under the facts,
-/// where the single send's "To" would have been.
+/// recipients by name and avatar, the sweep's assets by their marks — under
+/// the facts, where the single send's "To" would have been.
 fn detail_parts(
     item: &vela_core::app::activity_feed::FeedItem,
     s: &FlowStrings,
@@ -4120,6 +4284,7 @@ fn detail_parts(
         .iter()
         .map(|transfer| BreakdownRow {
             seed: split.then(|| SharedString::from(transfer.to.clone())),
+            mark: (!split).then(|| swept_coin_mark(item.chain_id, transfer)),
             label: if split {
                 transfer
                     .to_name
@@ -4248,19 +4413,10 @@ pub fn contact_pick(view: &ContactsView, s: &FlowStrings) -> ContactPick {
                     .into(),
                 group: group_of(&contact.address),
                 address: shorten(&contact.address).into(),
-                seed: contact.address.clone().into(),
+                address_full: contact.address.clone().into(),
             })
             .collect(),
     }
-}
-
-/// The addresses in the order `contact_pick` draws them.
-#[must_use]
-pub fn contact_addresses(view: &ContactsView) -> Vec<String> {
-    view.contacts
-        .iter()
-        .map(|contact| contact.address.clone())
-        .collect()
 }
 
 /// The importer's list as the sheet had it: the rows that parsed and the
@@ -4479,6 +4635,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 detail: None,
                 action: None,
                 copy: None,
+                report: None,
                 error: true,
             })
         // Over the balance is said on the total line (`batch_total`), beside
@@ -4491,6 +4648,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 detail: None,
                 action: None,
                 copy: None,
+                report: None,
                 error: false,
             })
         } else {
@@ -5512,6 +5670,238 @@ mod tests {
         }
     }
 
+    /// The wizard draws a network being added as itself (the core's kind
+    /// rule): Base wears Base's own logo and no badge — the native coin's rule
+    /// put Ethereum's logo on every ETH L2 it found — and a card whose chain
+    /// has not resolved yet asks the endpoint for nothing (never chain 0).
+    #[test]
+    fn the_native_tab_wears_each_networks_own_logo() {
+        crate::executor::storage::tests::with_temp_state("flows-wizard-marks", || {
+            use crate::flows::fixtures::AddTokenResult;
+            use vela_core::app::network_admin::{NetChainIndexEntry, NetWizardPhase};
+            let s = strings();
+            let mut wizard = CoreHost::<vela_core::app::network_admin::NetworkAdmin>::new()
+                .view()
+                .wizard;
+            wizard.phase = NetWizardPhase::Suggested;
+            wizard.suggestions = vec![NetChainIndexEntry {
+                chain_id: 8453,
+                name: "Base".to_owned(),
+                short_name: "base".to_owned(),
+                native_currency_symbol: "ETH".to_owned(),
+                has_logo: true,
+            }];
+            match add_network_tab(&wizard, "base", None, &s).result {
+                AddTokenResult::Suggestions(rows) => {
+                    let mark = &rows[0].mark;
+                    assert_eq!(mark.ticker.as_ref(), "ETH");
+                    assert_eq!(
+                        mark.logos.logo_urls,
+                        vec![SharedString::from(
+                            "https://ethereum-data.getvela.app/chainlogos/eip155-8453.png"
+                        )]
+                    );
+                    assert!(mark.logos.badge_hidden && mark.logos.badge_logo.is_none());
+                }
+                _ => unreachable!("a match is offered"),
+            }
+
+            wizard.suggestions.clear();
+            wizard.phase = NetWizardPhase::Resolving;
+            wizard.chain_info = None;
+            match add_network_tab(&wizard, "base", None, &s).result {
+                AddTokenResult::Network { mark, .. } => {
+                    assert!(mark.logos.logo_urls.is_empty(), "nothing asked of chain 0");
+                    assert!(mark.logos.badge_hidden);
+                }
+                _ => unreachable!("a resolving card"),
+            }
+        });
+    }
+
+    /// A stored sweep opens to its coins by their marks: the logo addresses
+    /// its record carries first; the network's own coin by the rule (its home
+    /// chain's logo, no badge on its own chain); a token whose contract the
+    /// record never kept gets no guessed logo, only its network's badge.
+    #[test]
+    fn a_stored_sweep_opens_to_its_coins_by_their_marks() {
+        crate::executor::storage::tests::with_temp_state("flows-sweep-detail", || {
+            use vela_core::app::activity_feed::{
+                FeedBatch, FeedBatchTransfer, FeedDirection, FeedItem, FeedTxKind,
+            };
+            let line = |symbol: &str, logos: Option<Vec<String>>| FeedBatchTransfer {
+                to: "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned(),
+                to_name: None,
+                value: "1".to_owned(),
+                symbol: symbol.to_owned(),
+                decimals: 18,
+                usd_value: 0.0,
+                logo_urls: logos,
+            };
+            let named = "https://data.example/usdc.png".to_owned();
+            let item = |kind: FeedBatchKind| FeedItem {
+                id: "sweep".to_owned(),
+                direction: FeedDirection::Out,
+                counterparty: None,
+                alias: None,
+                value: None,
+                symbol: String::new(),
+                decimals: None,
+                usd_value: 0.0,
+                chain_id: 100,
+                timestamp: 1_756_000_000.0,
+                day_start_ms: 0.0,
+                tx_hash: None,
+                batch: Some(FeedBatch {
+                    kind,
+                    count: 3,
+                    total_usd: 0.0,
+                    transfers: vec![
+                        line("xDAI", None),
+                        line("USDC", Some(vec![named.clone()])),
+                        line("GNO", None),
+                    ],
+                    ids: Vec::new(),
+                    from: "0xme".to_owned(),
+                    chain_id: 100,
+                    timestamp: 1_756_000_000.0,
+                    status: FeedTxStatus::Confirmed,
+                    tx_hash: String::new(),
+                    user_op_hash: String::new(),
+                    symbol: None,
+                    logo_urls: None,
+                    to: None,
+                    to_name: None,
+                }),
+                kind: FeedTxKind::Send,
+                status: FeedTxStatus::Confirmed,
+                site: None,
+                counterparty_role: Default::default(),
+                dapp: None,
+                subtitle: Vec::new(),
+                priced: true,
+            };
+            let s = strings();
+            let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s);
+            let marks: Vec<&TokenMark> = rows
+                .iter()
+                .map(|row| {
+                    row.mark
+                        .as_ref()
+                        .unwrap_or_else(|| unreachable!("a sweep's coin wears its mark"))
+                })
+                .collect();
+            assert_eq!(
+                marks[0].logos,
+                crate::marks::token_logos(100, "xDAI", None, &[])
+            );
+            assert!(
+                marks[0].logos.badge_hidden,
+                "xDAI on Gnosis repeats no badge"
+            );
+            assert_eq!(
+                marks[1].logos.logo_urls,
+                vec![SharedString::from(named.clone())]
+            );
+            assert!(!marks[1].logos.badge_hidden);
+            assert!(
+                marks[2].logos.logo_urls.is_empty(),
+                "no logo guessed for GNO"
+            );
+            assert!(marks[2].logos.badge_logo.is_some());
+
+            // A split's rows are people, not coins.
+            let (_, rows) = detail_parts(&item(FeedBatchKind::Split), &s);
+            assert!(
+                rows.iter()
+                    .all(|row| row.mark.is_none() && row.seed.is_some())
+            );
+        });
+    }
+
+    /// The kind rule on the detail page: ETH sent on Base is a BASE record,
+    /// so its network line wears Base's own logo, no badge — not Ethereum's,
+    /// which the coin's rule gives the coin. On the person's endpoint, read
+    /// when the row is built.
+    #[test]
+    fn the_network_line_wears_the_networks_logo_not_the_coins() {
+        crate::executor::storage::tests::with_temp_state("flows-network-fact", || {
+            use vela_core::app::activity_feed::FeedTxRecord;
+            let record = |endpoint: &str| {
+                let _ = crate::executor::storage::write_value(
+                    crate::executor::storage::KEY_SERVICE_ENDPOINTS,
+                    serde_json::json!({ "ethereumDataURL": endpoint }),
+                );
+                FeedTxRecord {
+                    id: "base-eth".to_owned(),
+                    user_op_hash: String::new(),
+                    tx_hash: "0xbeef".to_owned(),
+                    from: "0xme".to_owned(),
+                    to: "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned(),
+                    to_name: None,
+                    value: "0.01".to_owned(),
+                    symbol: "ETH".to_owned(),
+                    decimals: 18,
+                    logo_urls: None,
+                    chain_id: 8453,
+                    timestamp: 1_756_000_000.0,
+                    day_start_ms: 0.0,
+                    status: FeedTxStatus::Confirmed,
+                    kind: None,
+                    usd: None,
+                    dapp_url: None,
+                    intent: None,
+                    balance_changes: None,
+                    calldata: None,
+                    call_data: None,
+                    summary: None,
+                    settlement: None,
+                }
+            };
+            let (s, w) = (strings(), wallet_strings());
+            for (endpoint, logo) in [
+                (
+                    "",
+                    "https://ethereum-data.getvela.app/chainlogos/eip155-8453.png",
+                ),
+                (
+                    "https://data.example/",
+                    "https://data.example/chainlogos/eip155-8453.png",
+                ),
+            ] {
+                let view = crate::wallet::fixtures::core_feed(vec![record(endpoint)]);
+                let detail = tx_detail(
+                    &view,
+                    "base-eth",
+                    &s,
+                    &w,
+                    false,
+                    "en-US",
+                    crate::wallet::live::Money::usd(),
+                )
+                .unwrap_or_else(|| unreachable!("the row exists"));
+                let network = detail
+                    .facts
+                    .iter()
+                    .find(|fact| fact.label == s.detail_chain)
+                    .unwrap_or_else(|| unreachable!("the detail names its network"));
+                assert_eq!(network.value.as_ref(), "Base");
+                match &network.lead {
+                    FactLead::Token(mark) => {
+                        assert_eq!(mark.ticker.as_ref(), "ETH");
+                        assert_eq!(
+                            mark.logos.logo_urls,
+                            vec![SharedString::from(logo)],
+                            "{endpoint:?}"
+                        );
+                        assert!(mark.logos.badge_hidden, "a network wears no badge");
+                    }
+                    _ => unreachable!("the network line leads with the network's mark"),
+                }
+            }
+        });
+    }
+
     /// A transaction's detail, and the row order the listeners are bound in.
     /// Spec 082 RG2 (T072), spec 093: a dApp's transaction opens under its
     /// row's own title, with the status the core gave its row and, first,
@@ -5964,10 +6354,15 @@ mod tests {
             detail.facts[2].copy.as_deref(),
             Some("0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad")
         );
-        // The network line wears the row's coin.
+        // The network line wears the NETWORK's mark (the core's kind rule):
+        // Ethereum's own logo over its coin's letters, no badge — never the
+        // swapped coin's.
         match &detail.facts[1].lead {
-            FactLead::Token(mark) => assert_eq!(mark.ticker.as_ref(), "USDC"),
-            _ => unreachable!("the network line leads with a coin"),
+            FactLead::Token(mark) => {
+                assert_eq!(mark.ticker.as_ref(), "ETH");
+                assert_eq!(mark.logos, crate::marks::chain_logos(1));
+            }
+            _ => unreachable!("the network line leads with the network's mark"),
         }
         assert!(detail.explorer_url.as_ref().is_some_and(|url| {
             url.ends_with("0x9f2c4e5d6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f")
@@ -6869,6 +7264,70 @@ mod tests {
         assert_eq!(groups[0][2].address, "0xcc");
     }
 
+    /// Issue 467: every row of the picker carries the WHOLE address of the
+    /// contact it draws — what its press picks — in the core's order, so
+    /// a re-sort moves the address with its row instead of handing row N's
+    /// press to whoever is Nth now.
+    #[test]
+    fn every_contact_row_carries_its_own_address() {
+        use vela_core::app::contacts::{Contact, ContactKind, ContactSource};
+        let contact = |address: &str, name: Option<&str>| Contact {
+            address: address.to_owned(),
+            name: name.map(str::to_owned),
+            resolved_name: None,
+            resolved_source: None,
+            kind: ContactKind::Eoa,
+            favorite: false,
+            note: None,
+            tx_count: 0,
+            last_used_ms: 0.0,
+            first_seen_ms: 0.0,
+            source: ContactSource::Manual,
+        };
+        let book = |contacts: Vec<Contact>| ContactsView {
+            loaded: true,
+            sections: Vec::new(),
+            contacts,
+            groups: Vec::new(),
+            last_import: None,
+            import_failure: None,
+            import_failure_key: None,
+            export: None,
+            recipient: None,
+        };
+        let ana = "0xaaaa000000000000000000000000000000000001";
+        let bo = "0xbbbb000000000000000000000000000000000002";
+        let s = strings();
+        let rows = |view: &ContactsView| -> Vec<(String, String)> {
+            contact_pick(view, &s)
+                .contacts
+                .iter()
+                .map(|row| (row.name.to_string(), row.address_full.to_string()))
+                .collect()
+        };
+        let before = book(vec![contact(ana, Some("Ana")), contact(bo, Some("Bo"))]);
+        assert_eq!(
+            rows(&before),
+            vec![
+                ("Ana".to_owned(), ana.to_owned()),
+                ("Bo".to_owned(), bo.to_owned())
+            ]
+        );
+        // The core re-sorted (Bo was just paid): each name keeps its address.
+        let after = book(vec![contact(bo, Some("Bo")), contact(ana, Some("Ana"))]);
+        assert_eq!(
+            rows(&after),
+            vec![
+                ("Bo".to_owned(), bo.to_owned()),
+                ("Ana".to_owned(), ana.to_owned())
+            ]
+        );
+        // The row shows the short form; the press has the whole one.
+        let row = &contact_pick(&after, &s).contacts[0];
+        assert_ne!(row.address, row.address_full);
+        assert_eq!(row.address_full.as_ref(), bo);
+    }
+
     /// DA1L's three modes, the web's `liveHistory`: skeletons while nothing
     /// has been ruled, one line once it has — about the network when the list
     /// is narrowed — and the rows when there are any.
@@ -7125,8 +7584,9 @@ mod speed_tests {
         assert!(none.is_none(), "no sessions behind it, no control");
     }
 
-    /// Open, three options fastest first, each its own fee, its gas bid from
-    /// the core, and the line on what it buys.
+    /// Open, three options fastest first, each its own fee and its gas bid
+    /// from the core — and nothing on what a speed buys: in the picker for
+    /// one transaction the figures say it (the type has no such field).
     #[test]
     fn open_every_option_shows_its_own_figures() {
         let (s, wallet) = strings();
@@ -7160,7 +7620,6 @@ mod speed_tests {
                 Some("1,937 ~ 4,500 wei".to_owned()),
             ]
         );
-        assert_eq!(model.options[2].detail, s.gas_tier_hint_slow);
         assert!(model.options[0].selected);
         assert!(
             model
@@ -7222,6 +7681,167 @@ mod speed_tests {
                 .iter()
                 .any(|fact| fact.label == s.fee_speed_label)
         );
+    }
+
+    /// The real send machine holding `tokens` on `chain` (id, network,
+    /// native symbol), with `pick` selected. Its warm quote is left out, so
+    /// no estimate is in hand — the frame the fee row's coin used to be each
+    /// shell's own guess in.
+    fn form_holding(
+        chain: (u32, &str, &str),
+        tokens: &[SendToken],
+        pick: &SendToken,
+    ) -> CoreHost<SendMachine> {
+        use vela_core::app::send::{
+            Event as SendEvent, SendAccountRef, SendChainInfo, SendDisplayContext, SendOpenParams,
+            SendOperation, SendShellResult,
+        };
+        let drive = |host: &mut CoreHost<SendMachine>, event: SendEvent| {
+            let mut pending = host.dispatch(event);
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                        tokens: Some(tokens.to_vec()),
+                        chains: vec![SendChainInfo {
+                            chain_id: chain.0,
+                            network: chain.1.to_owned(),
+                            native_symbol: chain.2.to_owned(),
+                        }],
+                    },
+                    SendOperation::LoadAccountCredential { .. } => {
+                        SendShellResult::AccountCredential {
+                            public_key_hex: Some("04aa".to_owned()),
+                        }
+                    }
+                    SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                    _ => continue,
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+        };
+        let mut host = CoreHost::<SendMachine>::new();
+        drive(
+            &mut host,
+            SendEvent::Open {
+                account: Some(SendAccountRef {
+                    id: "cred0".to_owned(),
+                    address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                    name: None,
+                }),
+                params: SendOpenParams::default(),
+                display: SendDisplayContext::default(),
+            },
+        );
+        drive(
+            &mut host,
+            SendEvent::SelectToken {
+                token_id: pick.id(),
+            },
+        );
+        host
+    }
+
+    fn held(chain_id: u32, network: &str, symbol: &str, contract: Option<&str>) -> SendToken {
+        SendToken {
+            network: network.to_owned(),
+            chain_id,
+            symbol: symbol.to_owned(),
+            balance: "5".to_owned(),
+            decimals: 18,
+            token_address: contract.map(str::to_owned),
+            price_usd: Some(1.0),
+            logo_urls: Vec::new(),
+            spam: false,
+        }
+    }
+
+    /// A USDC fee keeps USDC's own logo while a newly picked speed is
+    /// measured. The coin does not change with the speed; the row used to
+    /// take the coin's NAME from the estimate in hand and its CONTRACT from
+    /// the speed's own estimate — none, for that moment — so "USDC" fell to
+    /// the native coin's rule and wore the chain's logo. The coin is the
+    /// core's now (`SendView.fee_coin`); this pins that the row wears it.
+    #[test]
+    fn the_fee_coin_keeps_its_logo_while_another_speed_is_measured() {
+        crate::executor::storage::tests::with_temp_state("flows-fee-coin-mark", || {
+            let (s, wallet) = strings();
+            let usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83";
+            let mut paid_in_usdc = quote(FeeTier::Fast, "10000", None);
+            paid_in_usdc.fee_asset = FeeAssetView::Erc20 {
+                token: usdc.to_owned(),
+                decimals: 6,
+                amount: "1".to_owned(),
+                symbol: Some("USDC".to_owned()),
+            };
+            let xdai = held(100, "gnosis", "xDAI", None);
+            let mut host = form_holding(
+                (100, "gnosis", "xDAI"),
+                &[xdai.clone(), held(100, "gnosis", "USDC", Some(usdc))],
+                &xdai,
+            );
+            host.dispatch(vela_core::app::send::Event::FeeUpdated {
+                estimate: paid_in_usdc,
+            });
+            let send = host.view();
+            let fee = CoreHost::<FeePolicy>::new().view();
+            let usdc_logos = crate::marks::token_logos(100, "USDC", Some(usdc), &[]);
+            assert!(usdc_logos.logo_urls[0].contains("/assets/eip155-100/"));
+            // Fast is the estimate's own speed; Slow is a pick still measuring.
+            for tier in [FeeTier::Fast, FeeTier::Slow] {
+                let picked = speed(tier, false, false, None, &[]);
+                let row = send_fee_row(&inputs(&send, &fee, &s, &wallet, Some(&picked)));
+                assert_eq!(row.mark.ticker.as_ref(), "USDC");
+                assert_eq!(row.mark.logos, usdc_logos, "{tier:?}");
+            }
+        });
+    }
+
+    /// With no estimate in hand — a quote out, or one that failed — the row
+    /// wears the coin the core names, the same picture on all four shells:
+    /// the chain's own coin until a coin is in force, then that coin (the fee
+    /// card's, told by the bridge's `FeeTokenChanged`). On BNB Chain with
+    /// USDT in force the desktop drew BNB where the web drew USDT.
+    #[test]
+    fn with_no_estimate_the_fee_row_wears_the_coin_the_core_names() {
+        crate::executor::storage::tests::with_temp_state("flows-fee-coin-none", || {
+            let (s, wallet) = strings();
+            let usdt = "0x55d398326f99059ff775485246999027b3197955";
+            let bnb = held(56, "bsc", "BNB", None);
+            let mut host = form_holding(
+                (56, "bsc", "BNB"),
+                &[bnb.clone(), held(56, "bsc", "USDT", Some(usdt))],
+                &bnb,
+            );
+            let fee = CoreHost::<FeePolicy>::new().view();
+            let send = host.view();
+            assert!(send.fee.is_none(), "the warm quote is still out");
+            let row = send_fee_row(&inputs(&send, &fee, &s, &wallet, None));
+            assert_eq!(row.mark.ticker.as_ref(), "BNB", "the chain's own coin");
+            assert_eq!(
+                row.mark.logos,
+                crate::marks::token_logos(56, "BNB", None, &[])
+            );
+
+            // The card took USDT up; its quote is not in.
+            host.dispatch(vela_core::app::send::Event::FeeTokenChanged {
+                fee_token: Some(usdt.to_owned()),
+            });
+            let send = host.view();
+            let row = send_fee_row(&inputs(&send, &fee, &s, &wallet, None));
+            assert_eq!(row.mark.ticker.as_ref(), "USDT", "the coin in force");
+            assert_eq!(
+                row.mark.logos,
+                crate::marks::token_logos(56, "USDT", Some(usdt), &[])
+            );
+
+            // Nothing picked: no chain, so no coin — the empty disc, never
+            // chain 1's ETH.
+            let blank = CoreHost::<SendMachine>::new().view();
+            assert!(blank.fee_coin.is_none());
+            let row = send_fee_row(&inputs(&blank, &fee, &s, &wallet, None));
+            assert!(row.mark.ticker.is_empty());
+            assert_eq!(row.mark.logos, crate::marks::Logos::default());
+        });
     }
 
     /// Issue 681: the fee row never shows the speed just left under the new
@@ -7618,6 +8238,35 @@ mod parity_tests {
                 confirm.subline
             );
             assert!(confirm.mark.is_none(), "one mark would name the wrong coin");
+            // Each coin wears its own mark on the row, as the web's breakdown
+            // draws it: xDAI on its own chain (no badge), USDC's contract.
+            let marks: Vec<_> = confirm
+                .breakdown
+                .iter()
+                .map(|row| {
+                    row.mark
+                        .as_ref()
+                        .map(|mark| (mark.ticker.to_string(), &mark.logos))
+                })
+                .collect();
+            assert_eq!(
+                marks,
+                vec![
+                    Some((
+                        "xDAI".to_owned(),
+                        &crate::marks::token_logos(100, "xDAI", None, &[])
+                    )),
+                    Some((
+                        "USDC".to_owned(),
+                        &crate::marks::token_logos(100, "USDC", Some("0xdd"), &[])
+                    )),
+                ]
+            );
+            assert!(
+                marks[0]
+                    .as_ref()
+                    .is_some_and(|(_, logos)| logos.badge_hidden)
+            );
         });
     }
 
@@ -8093,6 +8742,7 @@ mod payee_tests {
         crate::executor::storage::tests::with_temp_state("payee-sweep-receipt", || {
             let mut view = CoreHost::<SendMachine>::new().view();
             view.multi_select_mode = true;
+            view.multi_chain_id = Some(8453);
             view.recipient = DEV_WALLET.to_owned();
             view.recipient_identity = Some(SendRecipientIdentity {
                 name: Some("Wallet".to_owned()),
@@ -8131,6 +8781,34 @@ mod payee_tests {
                         rows,
                         [("ETH", "0.000418 ETH"), ("USDC", "0.034929 USDC")],
                         "{status:?}: every coin the operation sent"
+                    );
+                    // Each by its mark, on the sweep's one network: ETH wears
+                    // Ethereum's logo with Base's badge, USDC its asset entry
+                    // on Base.
+                    let logos: Vec<_> = shown
+                        .breakdown
+                        .iter()
+                        .map(|row| row.mark.as_ref().map(|mark| mark.logos.clone()))
+                        .collect();
+                    assert_eq!(
+                        logos,
+                        vec![
+                            Some(crate::marks::token_logos(8453, "ETH", None, &[])),
+                            Some(crate::marks::token_logos(
+                                8453,
+                                "USDC",
+                                Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+                                &[]
+                            )),
+                        ],
+                        "{status:?}"
+                    );
+                    assert!(
+                        logos[1]
+                            .as_ref()
+                            .is_some_and(|logos| logos.logo_urls[0].contains(
+                                "/assets/eip155-8453/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913/"
+                            ))
                     );
                     if status == SendReceiptStatus::Confirmed {
                         assert_eq!(shown.title, s.tx_sent);

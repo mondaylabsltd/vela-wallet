@@ -575,14 +575,6 @@ export interface FeeSpeedOptionModel {
 	 */
 	label: string;
 	/**
-	 * What that speed buys, one short line under the name — "Lowest fee, if
-	 * you can wait". The owner's ruling (spec 068): under a heading that asks
-	 * about speed every option has to BE a speed, so the advantage cannot live
-	 * in the name. It lives here, and it is the reason the slow tier reads as
-	 * a choice rather than a defect.
-	 */
-	detail?: string;
-	/**
 	 * This option's OWN fee, priced at this option's tier — "0.0021 ETH", or
 	 * the "…" / "—" that stands in for it. The whole point of opening the
 	 * control is seeing the trade, and a row of names without prices asks

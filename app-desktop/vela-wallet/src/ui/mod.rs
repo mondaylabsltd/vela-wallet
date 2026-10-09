@@ -31,5 +31,8 @@ pub use rail::{RailSlot, onboarding_rail};
 pub use scrollbar::vertical_scrollbar;
 pub use smooth_scroll::SmoothScroll;
 pub use spinner::spinner;
+/// The badge's glyph, for the gallery's check that no failure wears a ×.
+#[cfg(test)]
+pub(crate) use status_badge::glyph as badge_glyph;
 pub use status_badge::status_badge;
 pub use step_slider::{StepSlider, step_slider_picture};

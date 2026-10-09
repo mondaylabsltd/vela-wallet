@@ -718,6 +718,8 @@ object FlowFixtures {
                 lines = addressLines(ALICE_FULL),
                 identiconSeed = ALICE_FULL,
                 pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                // Issue #468: the live single form has the QR door; so does its picture.
+                scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
             ),
             addRecipient = s.t(I18nKeys.Flows.ADD_RECIPIENT),
             fee = fee,

@@ -7,7 +7,6 @@ import app.getvela.wallet.feature.browser.core.BhistEntry
 import app.getvela.wallet.feature.browser.core.BhistView
 import app.getvela.wallet.feature.browser.core.DbrTabView
 import app.getvela.wallet.feature.browser.core.EngineState
-import app.getvela.wallet.feature.browser.core.ExploreGroupView
 import app.getvela.wallet.feature.browser.core.ExploreSite
 import app.getvela.wallet.feature.browser.core.ExploreTab
 import app.getvela.wallet.feature.browser.core.ExploreView
@@ -33,13 +32,11 @@ class ExploreLiveTest {
     }
     private val fallback = ExploreFixtures.buildState(ExploreScreenState.E2, strings)
     private val uniswap = ExploreSite(origin = "https://app.uniswap.org", url = "https://app.uniswap.org/swap", host = "app.uniswap.org", name = "Uniswap", added_ms = 1.0)
-    private val curve = ExploreSite(origin = "https://curve.fi", url = "https://curve.fi/", host = "curve.fi", name = "Curve", added_ms = 2.0)
 
     @Test
-    fun `favourites, groups, recents and tabs are the core's, and a site's id opens it`() {
+    fun `favourites, recents and tabs are the core's, and a site's id opens it`() {
         val view = ExploreView(
             favorites = listOf(uniswap),
-            groups = listOf(ExploreGroupView("g1", "交易", hidden = false, sites = listOf(curve)), ExploreGroupView("g2", "隐藏", hidden = true, sites = listOf(curve))),
             tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/swap", "Uniswap", "app.uniswap.org"), ExploreTab("t2", null, "", "")),
             selected_tab = "t1",
             ready = true,
@@ -54,7 +51,7 @@ class ExploreLiveTest {
         assertEquals(2, tiles.size)
         assertEquals("https://app.uniswap.org/swap", (tiles[0] as TileModel.Site).site.id)
         assertTrue(tiles[1] is TileModel.Add)
-        assertEquals(listOf("recent", "g1"), model.groups.map { it.id })
+        assertEquals("issue #465: Recent dApps is the only group under Favorites", listOf("recent"), model.groups.map { it.id })
         assertEquals(GroupAction.Clear, model.groups[0].action)
         assertEquals("an untitled recent falls back to its host", "curve.fi", model.groups[0].sites.single().name)
         assertEquals("https://curve.fi/dex", model.groups[0].sites.single().id)
@@ -62,12 +59,21 @@ class ExploreLiveTest {
         assertTrue(model.tabs[0].selected)
         assertTrue(model.tabs[1].startPage)
         assertEquals(strings.t("explore.startPage"), model.tabs[1].title)
-        assertEquals("2", model.tabCountLabel)
+        assertEquals("the bar's box counts every tab, start pages included", 2, model.browser.tabCount)
+        // The view carries no `resumable` here, so there is no resume section:
+        // the rows are the core's, never derived from the strip by this shell.
+        assertNull(model.resume)
         assertTrue("the page is a favourite", model.browser.bookmarked)
         assertTrue(model.browser.canBack)
         assertEquals("app.uniswap.org", model.browser.host)
-        assertEquals(listOf("favorites", "recent", "g1", "g2"), model.groupManageSheet.rows.map { it.id })
-        assertTrue(model.groupManageSheet.rows[3].hidden)
+        // Issue #465: Manage groups is the two sections, each with its eye — no
+        // "System" tag on Recent dApps, since there is nothing else to tell it from.
+        assertEquals(listOf("favorites", "recent"), model.groupManageSheet.rows.map { it.id })
+        // A plural (explore.siteCount_one/_other, chosen by the core's CLDR
+        // rule): one favourite is "1 site", never "1 sites".
+        assertEquals("1 site", model.groupManageSheet.rows[0].meta)
+        assertNull(model.groupManageSheet.rows[1].meta)
+        assertTrue(model.groupManageSheet.rows.none { it.hidden })
         assertEquals("app.uniswap.org", model.siteMenuSheet.site.host)
         assertTrue(model.browser.secure)
         assertTrue(model.siteMenuSheet.secure)
@@ -371,8 +377,62 @@ class ExploreLiveTest {
         assertNotNull(model.empty)
         assertNull(model.favorites)
         assertTrue(model.groups.isEmpty())
-        assertNull(model.tabCountLabel)
+        assertNull("no tab with a page, no resume section", model.resume)
         assertFalse(model.browser.bookmarked)
+    }
+
+    /**
+     * Spec 099 navigation: the home's resume rows are the core's `resumable`,
+     * in its order and cap — the header counts every tab (the switcher's
+     * number) and its action is the switcher's word; a row's id is its TAB's,
+     * and it is named by the recents' own label rule.
+     */
+    @Test
+    fun `the resume section is the core's resumable, under a header that counts every tab`() {
+        val a = ExploreTab("t1", "https://app.uniswap.org/swap", "Uniswap", "app.uniswap.org")
+        val b = ExploreTab("t2", "https://polymarket.com/", "", "polymarket.com")
+        val view = ExploreView(
+            tabs = listOf(a, b, ExploreTab("t3", null, "", "")),
+            selected_tab = "t3",
+            recent_tabs = listOf("t2", "t3", "t1"),
+            // The core's order, which this shell must keep — not the strip's.
+            resumable = listOf(b, a),
+            ready = true,
+        )
+        val resume = ExploreLive.home(fallback, view, BhistView(), null, strings).resume!!
+        assertEquals(strings.t("explore.openTabs", 3), resume.title)
+        // A plural (explore.openTabs_one/_other): three tabs, and one is "1 tab open".
+        assertEquals("3 tabs open", resume.title)
+        assertEquals("1 tab open", strings.t("explore.openTabs", 1))
+        assertEquals(strings.t("explore.tabs"), resume.action)
+        assertEquals(listOf("t2", "t1"), resume.tabs.map { it.id })
+        assertEquals("an untitled tab is said once, by its host", "polymarket.com", resume.tabs[0].name)
+        assertEquals("", resume.tabs[0].subtitle)
+        assertEquals("Uniswap", resume.tabs[1].name)
+        assertEquals("app.uniswap.org", resume.tabs[1].subtitle)
+        // Before the mirror is live there is no section — never one to correct a frame later.
+        assertNull(ExploreLive.home(fallback, view.copy(ready = false), BhistView(), null, strings).resume)
+    }
+
+    /**
+     * Spec 099 navigation: the site menu leads with Forward (the toolbar is
+     * gone) — greyed, never hidden, when there is nothing ahead; its refresh
+     * row stops a load under way; the star row says what it will do.
+     */
+    @Test
+    fun `the site menu's forward follows the page, and refresh stops a load under way`() {
+        val view = ExploreView(tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "", "app.uniswap.org")), selected_tab = "t1", ready = true)
+        fun menu(engine: EngineState) = ExploreLive.home(fallback, view, BhistView(), engine, strings).siteMenuSheet.items
+        val idle = menu(EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", shown = "https://app.uniswap.org/"))
+        assertEquals(listOf("forward", "refresh", "share", "copy", "favorite", "system", "close"), idle.map { it.id })
+        assertFalse("nothing ahead: greyed", idle.first().enabled)
+        assertEquals(strings.t("explore.forward"), idle.first().label)
+        assertEquals(strings.t("explore.addToFavorites"), idle.first { it.id == "favorite" }.label)
+        val ahead = menu(EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", canForward = true, shown = "https://app.uniswap.org/"))
+        assertTrue(ahead.first().enabled)
+        val loading = menu(EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", loading = true, shown = "https://app.uniswap.org/"))
+        assertEquals("the refresh row's place, so nothing under it moves", ExploreLive.STOP, loading[1].id)
+        assertEquals(strings.t("connect.dapp.stop"), loading[1].label)
     }
 
     @Test
@@ -398,10 +458,9 @@ class ExploreLiveTest {
     @Test
     fun `with every group hidden, the Favorites heading stays the way to Manage groups`() {
         val recents = BhistView(listOf(BhistEntry("https://curve.fi", "https://curve.fi/", "curve.fi", "Curve", "", 1.0)))
-        val custom = ExploreGroupView("g1", "交易", hidden = true, sites = listOf(curve))
         val everyHidden = ExploreLive.home(
             fallback,
-            ExploreView(favorites = listOf(uniswap), groups = listOf(custom), favorites_hidden = true, recent_hidden = true, ready = true),
+            ExploreView(favorites = listOf(uniswap), favorites_hidden = true, recent_hidden = true, ready = true),
             recents, null, strings,
         )
         val heading = everyHidden.favorites!!
@@ -410,8 +469,8 @@ class ExploreLiveTest {
         assertTrue(heading.tiles.isEmpty())
         assertTrue("every group is off the page", everyHidden.groups.isEmpty())
         assertNull("not the empty start page", everyHidden.empty)
-        // Manage groups still lists every group, each with its eye.
-        assertEquals(listOf("favorites", "recent", "g1"), everyHidden.groupManageSheet.rows.map { it.id })
+        // Manage groups still lists both, each with its eye.
+        assertEquals(listOf("favorites", "recent"), everyHidden.groupManageSheet.rows.map { it.id })
         assertTrue(everyHidden.groupManageSheet.rows.all { it.hidden })
 
         // Only Favorites hidden: Recent's heading offers Clear, never Manage.

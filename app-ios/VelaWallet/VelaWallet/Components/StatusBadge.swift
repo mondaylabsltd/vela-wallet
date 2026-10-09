@@ -6,6 +6,11 @@
 //  circle in the variant's soft tint with the variant's base-color glyph.
 //  Decorative — the outcome headline carries the meaning for a11y.
 //
+//  Issue #460: an error is a "!" like every other non-success, in the error
+//  colour. It was an × — and the sheet's column is leading-aligned, so a red
+//  × in a disc sat top-left, exactly where a close button goes, and did
+//  nothing when tapped.
+//
 
 import SwiftUI
 
@@ -16,7 +21,7 @@ struct StatusBadge: View {
     var body: some View {
         ZStack {
             Circle().fill(background)
-            Image(systemName: glyphName)
+            Image(systemName: Self.glyphName(variant))
                 .font(GlyphFont.badge)
                 .foregroundStyle(foreground)
         }
@@ -24,11 +29,11 @@ struct StatusBadge: View {
         .accessibilityHidden(true)
     }
 
-    private var glyphName: String {
+    /// The colour says how bad; the glyph never says "close".
+    static func glyphName(_ variant: BadgeVariant) -> String {
         switch variant {
         case .success: "checkmark"
-        case .warning, .neutral, .info: "exclamationmark"
-        case .error: "xmark"
+        case .warning, .neutral, .info, .error: "exclamationmark"
         case .timeout: "clock.fill"
         }
     }

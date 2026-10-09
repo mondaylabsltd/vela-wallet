@@ -283,6 +283,7 @@ fn record_of(name: &str, opts: SignApproveOpts, op_hash: &str) -> SignRecord {
         requested_address: None,
         request_ts_ms: None,
         now_ms: NOW,
+        first_party: false,
     });
     let ops = sut.dispatch(Event::ApproveTapped { opts });
     let persisted = |ops: &[Op]| {

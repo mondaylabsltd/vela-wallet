@@ -467,6 +467,20 @@ class BrowserEngine(
         requested(url)
         webView.loadUrl(url)
     }
+
+    /**
+     * The site menu's Stop while a load runs (iOS spec 082 RE5): the load is
+     * let go, the page that was showing stays, and nothing retries it.
+     */
+    fun stop() {
+        if (!_state.value.loading) return
+        cancelRetry()
+        disarmWatchdog()
+        committed = true
+        webView.stopLoading()
+        _state.value = _state.value.copy(loading = false, progress = 100, pending = null, retrying = false)
+    }
+
     fun back() { if (webView.canGoBack()) { requested(historyUrl(-1)); webView.goBack() } }
     fun forward() { if (webView.canGoForward()) { requested(historyUrl(1)); webView.goForward() } }
 
@@ -510,6 +524,21 @@ class BrowserEngine(
     }
 
     fun deliver(json: String) = ProviderBridge.deliver(webView, json)
+
+    private var visualRequest = 0L
+
+    /**
+     * [then], on the main thread, once the page's content as it is now is
+     * ready for the WebView's next draw (`postVisualStateCallback`) — how the
+     * page view knows a WebView put back on screen has something to show.
+     * `false` when this WebView cannot say (then is never called).
+     */
+    fun whenDrawn(then: () -> Unit): Boolean {
+        if (!androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.VISUAL_STATE_CALLBACK)) return false
+        visualRequest += 1
+        androidx.webkit.WebViewCompat.postVisualStateCallback(webView, visualRequest) { then() }
+        return true
+    }
 
     /** Settings' debug mode changed (spec 091): this tab's next document gets the script for it. */
     fun debugModeChanged(on: Boolean) {
@@ -857,6 +886,50 @@ class BrowserController(
     /** The tab that came back from a suspension and is still the one shown — its chrome says "reloaded to save memory". */
     val reloadedTab: StateFlow<String?> = _reloadedTab
 
+    /**
+     * The tab whose page the person asked for (iOS's `pageWanted`, per tab —
+     * spec 099 navigation). [reconcile] mints an engine — and so runs a page's
+     * scripts — only for this tab. A tab restored at launch, or one selected
+     * behind 探索's home (a neighbour of a closed tab, a tab left for the
+     * wallet that lost its engine), stays dormant until somebody resumes it:
+     * a resume row, the switcher, an open, a reload. An engine that already
+     * exists is kept either way; this only gates making one.
+     */
+    private var wanted: String? = null
+
+    /**
+     * An open went to a NEW tab the core has yet to make: the tabs that were
+     * there before it. The selected tab that is not one of them is the page
+     * that was asked for ([reconcile] reads it once).
+     */
+    private var wantOpened: Set<String>? = null
+        set(value) {
+            field = value
+            _pageComing.value = value != null || awaiting != null
+        }
+
+    /**
+     * A tab a resume or an open asked the core to select, before the core has
+     * (spec 099 navigation). Until it has — and while [wantOpened] waits for
+     * a new tab — NO page is in front: the one there now is the dApp the
+     * person left for the home, and showing it would flash it up over the
+     * home for the moment before the page they asked for.
+     */
+    private var awaiting: String? = null
+        set(value) {
+            field = value
+            _pageComing.value = value != null || wantOpened != null
+        }
+
+    private val _pageComing = MutableStateFlow(false)
+
+    /**
+     * An open or a resume is on its way and its page is not in front yet
+     * ([awaiting], [wantOpened]): the screen stays where the person asked
+     * from — the home, the switcher — until it is.
+     */
+    val pageComing: StateFlow<Boolean> = _pageComing
+
     private var started = false
 
     /** Loads the documents once; every entry into 探索 calls it. */
@@ -925,9 +998,18 @@ class BrowserController(
         lastVisits.keys.retainAll(alive)
         _statusSeen.value.keys.filter { it !in alive }.takeIf { it.isNotEmpty() }?.let { gone -> _statusSeen.value = _statusSeen.value - gone.toSet() }
         val selected = view.tabs.firstOrNull { it.id == view.selected_tab } ?: view.tabs.firstOrNull()
+        // The new tab an open asked for is the page that was wanted.
+        val opened = selected != null && wantOpened?.let { before -> selected.id !in before } == true
+        if (opened) wanted = selected!!.id
+        // The selection a resume or an open asked for has landed (or its tab is gone).
+        val landed = awaiting?.let { id -> selected?.id == id || id !in alive } == true
         // "Reloaded to save memory" lasts until the person leaves that tab.
         if (_reloadedTab.value != null && _reloadedTab.value != selected?.id) _reloadedTab.value = null
-        val engine = selected?.url?.takeIf { selected.id !in crashed }?.let { url ->
+        // An engine that exists stays; one is MADE only for the tab somebody
+        // asked to see ([wanted]) — a restored or landed-away tab runs no page.
+        // Nothing is in front while an open or a resume is still on its way.
+        val asking = (wantOpened != null && !opened) || (awaiting != null && !landed)
+        val engine = selected?.url?.takeIf { !asking && selected.id !in crashed && (selected.id in engines || selected.id == wanted) }?.let { url ->
             engines.getOrPut(selected.id) {
                 // Woken: a tab the plan let go of loads its page again, and says so.
                 if (suspended.remove(selected.id)) {
@@ -940,6 +1022,9 @@ class BrowserController(
         // A tab not in front keeps its page but runs no animations or media.
         engines.values.filter { it !== engine }.forEach { it.webView.onPause() }
         if (_current.value !== engine) _current.value = engine
+        // Only now the wait is over ([pageComing]): the page it waited for is in front.
+        if (opened) wantOpened = null
+        if (landed) awaiting = null
         // A tab selected, opened or closed: the core says which engines may go.
         planEngines()
     }
@@ -1078,10 +1163,18 @@ class BrowserController(
     }
 
     /**
-     * Opens a page: in the selected tab when it already shows one, as the
-     * selected start-page tab's first page otherwise, or in a new tab.
+     * Opens a page where the core's open target says (`browser_open_target`,
+     * spec 099 navigation): the page on screen when its own bar asked
+     * ([onPage]); over the home, a tab already on a picked site ([kind]
+     * [ExploreOpenKind.Site]) resumed as it was left, else the selected
+     * start-page tab's first page, else a NEW tab — never a load over a live
+     * dApp from the home. A full strip takes no new tab: the core then names
+     * a tab it can spare (a start page, else the one used longest ago, never
+     * the dApp just left), which [loadInto] selects. [fromOutside] (a deep link, a scan, the
+     * external-page sheet, a launch URL) is an address, and says so to the
+     * host once the open is in the view, so 探索 lands on it.
      */
-    fun open(text: String, fromOutside: Boolean = false) {
+    fun open(text: String, kind: ExploreOpenKind = ExploreOpenKind.Address, onPage: Boolean = false, fromOutside: Boolean = false) {
         val url = coerceUrl(text)
         if (url.isEmpty()) return
         start()
@@ -1090,23 +1183,69 @@ class BrowserController(
         // appeared). Every intent below waits for `ready` first.
         scope.launch(Dispatchers.Main.immediate) {
             val view = exploreHost.view.first { it.ready }
-            val selected = view.tabs.firstOrNull { it.id == view.selected_tab }
-            when {
-                selected != null && engines[selected.id] != null -> engines.getValue(selected.id).load(url)
-                // A start-page tab gets its first page; a crashed one comes back
-                // to life on the new address. Its engine is made HERE, not left to
-                // the next view change — the same address twice changes nothing.
-                selected != null && (selected.url == null || selected.id in crashed) -> {
-                    crashed -= selected.id
-                    exploreHost.dispatch(ExploreEvent.TabNavigated(id = selected.id, url = url, title = null), ExploreEvent.serializer())
-                    val engine = newEngine(selected.id).also { engines[selected.id] = it }
-                    engine.load(url)
-                    _current.value = engine
+            val target = BrowserTabs.openTarget(view, shown = view.selected_tab, onPage = onPage && !fromOutside, url = url, kind = kind)
+            VelaLog.event("browser.tabs", "open", "target" to target::class.simpleName, "kind" to kind.name, "onPage" to onPage)
+            val applied: Long? = when (target) {
+                is ExploreOpenTarget.Load -> loadInto(view, target.id, url)
+                is ExploreOpenTarget.Resume -> resume(target.id)
+                ExploreOpenTarget.NewTab -> {
+                    wantOpened = view.tabs.map { it.id }.toSet()
+                    // Nothing in front until the new tab is: the dApp left for
+                    // the home would flash up over it first.
+                    _current.value = null
+                    exploreHost.dispatchNumbered(ExploreEvent.TabOpened(url = url, title = null, now_ms = now()), ExploreEvent.serializer())
                 }
-                else -> exploreHost.dispatch(ExploreEvent.TabOpened(url = url, title = null, now_ms = now()), ExploreEvent.serializer())
+            }
+            // Once the open is in the view: the new tab's engine is made now
+            // (the collector may not have run yet), and the host asked where
+            // 探索 lands only then — before it, the landing would name the
+            // page that was there.
+            if (applied != null) settle(applied)
+            if (target == ExploreOpenTarget.NewTab) reconcile(exploreHost.view.value)
+            // An open the core never applied waits no longer: the page in front comes back.
+            if (wantOpened != null || awaiting != null) {
+                wantOpened = null
+                awaiting = null
+                reconcile(exploreHost.view.value)
             }
             if (fromOutside) openRequested.value = true
         }
+    }
+
+    /**
+     * The core's `Load`: the page on screen is told directly; a start-page
+     * tab gets its first page, and a crashed one comes back to life on the
+     * address. Such an engine is made HERE, not left to the next view change —
+     * the same address twice changes nothing. The number of the event the
+     * load sent, when it sent one.
+     */
+    private fun loadInto(view: ExploreView, id: String, url: String): Long? {
+        val tab = view.tabs.firstOrNull { it.id == id } ?: return null
+        wanted = tab.id
+        // A tab not selected (the core's pick in a full strip) is selected
+        // first; until the core has, no page is in front ([awaiting]).
+        val selecting = if (view.selected_tab != tab.id) {
+            awaiting = tab.id
+            _current.value = null
+            exploreHost.dispatchNumbered(ExploreEvent.TabSelected(tab.id), ExploreEvent.serializer())
+        } else null
+        val live = engines[tab.id]?.takeIf { tab.id !in crashed }
+        if (live != null) {
+            live.load(url)
+            return selecting
+        }
+        crashed -= tab.id
+        val navigated = exploreHost.dispatchNumbered(ExploreEvent.TabNavigated(id = tab.id, url = url, title = null), ExploreEvent.serializer())
+        val engine = newEngine(tab.id).also { engines[tab.id] = it }
+        engine.load(url)
+        // In front now when its tab already is; else once the selection lands.
+        if (selecting == null) _current.value = engine
+        return navigated
+    }
+
+    /** Waits, briefly, for the core to have applied event [number]. */
+    private suspend fun settle(number: Long) {
+        kotlinx.coroutines.withTimeoutOrNull(SETTLE_MS) { exploreHost.commits.first { exploreHost.applied(number) } }
     }
 
     private fun whenReady(block: () -> Unit) {
@@ -1118,7 +1257,60 @@ class BrowserController(
     }
 
     fun newTab() = whenReady { exploreHost.dispatch(ExploreEvent.TabOpened(url = null, title = null, now_ms = now()), ExploreEvent.serializer()) }
-    fun selectTab(id: String) = exploreHost.dispatch(ExploreEvent.TabSelected(id), ExploreEvent.serializer())
+
+    /**
+     * A tab the person asked to see — a resume row, the switcher, the
+     * core's landing on a page: it gets its page, live as it was left, or
+     * loaded again when it had none. Asked for even when it is the tab
+     * already selected: that is how a tab a launch left dormant wakes.
+     */
+    fun selectTab(id: String) {
+        val selecting = resume(id) ?: return
+        // A selection the core never applied waits no longer: the page in front comes back.
+        scope.launch(Dispatchers.Main.immediate) {
+            settle(selecting)
+            if (awaiting == id) {
+                awaiting = null
+                reconcile(exploreHost.view.value)
+            }
+        }
+    }
+
+    /**
+     * [selectTab]'s work; the number of the selection's event when one was
+     * sent. Until the core has selected [id], no page is in front
+     * ([awaiting]): the one there is another tab's.
+     */
+    private fun resume(id: String): Long? {
+        wanted = id
+        val view = exploreHost.view.value
+        if (view.selected_tab == id) {
+            awaiting = null
+            if (started) reconcile(view)
+            return null
+        }
+        awaiting = id
+        if (_current.value?.id != id) _current.value = null
+        return exploreHost.dispatchNumbered(ExploreEvent.TabSelected(id), ExploreEvent.serializer())
+    }
+
+    /**
+     * 探索 landed on its home (spec 099 navigation): nothing is shown, so no
+     * tab is asked for — the one left for the wallet keeps the engine it has,
+     * and none is woken behind the home until a resume.
+     */
+    fun landedHome() {
+        wanted = null
+    }
+
+    /** The tab whose request waits on the person — the core's `browser_waiting_tab` over the browser machine's view. */
+    fun waitingTab(): String? = BrowserTabs.waitingTab(dbrHost.viewJson.value, dapp.value)
+
+    /** The site menu's Stop: the page in front's load is let go. */
+    fun stop() {
+        _current.value?.stop()
+    }
+
     fun closeTab(id: String) = exploreHost.dispatch(ExploreEvent.TabClosed(id), ExploreEvent.serializer())
 
     /**
@@ -1176,6 +1368,7 @@ class BrowserController(
         val selected = exploreHost.view.value.let { view -> view.tabs.firstOrNull { it.id == view.selected_tab } } ?: return
         if (selected.id in crashed) {
             crashed -= selected.id
+            wanted = selected.id
             reconcile(exploreHost.view.value)
         } else {
             _current.value?.reload()
@@ -1205,14 +1398,14 @@ class BrowserController(
     }
 
     fun removeFavorite(origin: String) = exploreHost.dispatch(ExploreEvent.FavoriteRemoved(origin), ExploreEvent.serializer())
-    fun createGroup(name: String) = exploreHost.dispatch(ExploreEvent.GroupCreated(name = name, now_ms = now()), ExploreEvent.serializer())
-    fun deleteGroup(id: String) = exploreHost.dispatch(ExploreEvent.GroupDeleted(id), ExploreEvent.serializer())
-    fun setGroupHidden(id: String, hidden: Boolean) = exploreHost.dispatch(ExploreEvent.GroupHiddenSet(id, hidden), ExploreEvent.serializer())
     fun setSystemGroupHidden(group: ExploreSystemGroup, hidden: Boolean) =
         exploreHost.dispatch(ExploreEvent.SystemGroupHiddenSet(group, hidden), ExploreEvent.serializer())
     fun clearRecent() = bhistHost.dispatch(BhistEvent.ClearAll, BhistEvent.serializer())
 
     private companion object {
+        /** How long an open waits for the core to apply it before carrying on regardless. */
+        const val SETTLE_MS = 5_000L
+
         /**
          * The document's own address, title and icon, absolute, in one read —
          * three reads could straddle two documents (spec 079 R3).

@@ -196,10 +196,12 @@ struct FactRowView: View {
         switch fact.lead {
         case .dot(let color):
             Circle().fill(color).frame(width: WalletGeometry.badge, height: WalletGeometry.badge)
+        // One size for both (`factMark`): a network's logo beside the From and
+        // To identicons was 26 against their 18 — two sizes on one page.
         case .token(let mark):
-            InlineTokenMark(mark: mark)
+            InlineTokenMark(mark: mark, size: WalletFlowGeometry.factMark)
         case .identicon(let seed):
-            IdenticonAvatar(seed: seed, size: LucideIconSize.flowRowAction)
+            IdenticonAvatar(seed: seed, size: WalletFlowGeometry.factMark)
         case nil:
             EmptyView()
         }
@@ -207,31 +209,49 @@ struct FactRowView: View {
 }
 
 /// The token mark inside a line of text — the fee row's fee token, a fact
-/// row's network, a notice banner's chain.
+/// row's network, a notice banner's chain, a sweep's coins.
 ///
 /// A component and not a scaled `TokenIconView`: the glyph has to shrink with
 /// the circle, and scaling only the box clips a three-letter ticker out of it.
 /// It carries no chain dot either — at this diameter the dot is a few pixels
 /// of colour on an already-crowded glyph, and the row it sits in has said
 /// which chain this is.
+///
+/// The logo is drawn over the glyph, every candidate tried in order — what
+/// the web's inline `TokenIcon`, Android's `TokenIcon(inline = true)` and the
+/// desktop's `inline_mark` draw. It drew the glyph alone, so every in-line
+/// mark on this client was letters where the other three showed the coin or
+/// the network.
 struct InlineTokenMark: View {
     @Environment(\.theme) private var theme
 
     let mark: TokenMarkModel
+    /// A hairline round the drawn disc, for a mark on a grey (`bg.sunken`)
+    /// card, where the disc is the card's own colour.
+    var ring = false
+    /// The circle's diameter: the in-line 26, or a fact row's 20
+    /// (`WalletFlowGeometry.factMark`). The glyph scales with it.
+    var size: CGFloat = WalletFlowGeometry.inlineMark
 
     var body: some View {
-        Circle()
-            .fill(theme.bgSunken)
-            .frame(width: WalletFlowGeometry.inlineMark, height: WalletFlowGeometry.inlineMark)
-            .overlay {
-                Text(verbatim: String(mark.ticker.prefix(3)).uppercased())
-                    .typeRole(Typography.tab)
-                    .foregroundStyle(theme.fgMuted)
-                    .minimumScaleFactor(WalletGeometry.heroMinScale)
-                    .lineLimit(1)
-                    .padding(.horizontal, Tokens.Space.s2)
-            }
-            .accessibilityHidden(true)
+        RemoteLogoView(urls: mark.logoURLs, size: size) {
+            Circle()
+                .fill(theme.bgSunken)
+                .overlay {
+                    Text(verbatim: mark.glyph)
+                        .typeRole(Typography.tab.scaled(size / WalletFlowGeometry.inlineMark))
+                        .foregroundStyle(theme.fgMuted)
+                        .minimumScaleFactor(WalletGeometry.heroMinScale)
+                        .lineLimit(1)
+                        .padding(.horizontal, Tokens.Space.s2)
+                }
+                .overlay {
+                    if ring {
+                        Circle().strokeBorder(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
+                    }
+                }
+        }
+        .accessibilityHidden(true)
     }
 }
 

@@ -19,12 +19,8 @@ import { fetchIncomingTransfers } from './incoming-transfers';
 import { nativeSymbol } from './networks';
 import { mergeTransactions } from './records';
 import { resolveTokenMetadata } from './token-metadata';
-import {
-	nativeLogoURLs,
-	tokenChainId,
-	tokenLogoURLsByAddress,
-	type APIToken
-} from './tokens-model';
+import { tokenChainId, type APIToken } from './tokens-model';
+import { tokenLogoURLs } from '$lib/flows/marks';
 import type { IncomingTransfer } from './transfer-types';
 import type { LocalTransaction } from './transactions-model';
 import { fetchTokens } from './wallet-api';
@@ -109,9 +105,9 @@ export function incomingToRecord(
 				: '$0.00';
 	// Logo candidates captured now, while the contract address is in hand.
 	const logoUrls = tx.isNative
-		? nativeLogoURLs(tx.chainId, symbol)
+		? tokenLogoURLs(tx.chainId, symbol, null)
 		: tx.token
-			? tokenLogoURLsByAddress(tx.chainId, tx.token)
+			? tokenLogoURLs(tx.chainId, symbol, tx.token)
 			: [];
 	return {
 		id: tx.id,
