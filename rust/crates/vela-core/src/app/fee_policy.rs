@@ -913,7 +913,8 @@ pub const QUOTE_DEADLINE_MS: u32 = 15_000;
 /// Bound on each automatic re-quote (spec 082 RJ12): a re-ask that has not
 /// answered in this time is a failure again, and the schedule goes on. With
 /// the 8 s step this puts the fee back within 8 + 6 = 14 s of the relay
-/// returning (SC-003).
+/// returning (SC-003). The machine's own re-asks ask for it as their
+/// [`FeeOperation::StartDeadline`]; a tap gets [`QUOTE_DEADLINE_MS`].
 pub const REQUOTE_TIMEOUT_MS: u32 = 6_000;
 
 /// The wait before automatic re-quote `attempt` (1-based) after a failure a
@@ -2236,6 +2237,12 @@ pub struct Model {
     /// ([`Event::Requote`]): the row keeps saying why while it runs
     /// ([`FeeFailureView::retrying`]). Cleared when the run ends.
     retrying_after: Option<FeeFailure>,
+    /// The run out now is the machine's own re-ask after a failure: bounded
+    /// by [`REQUOTE_TIMEOUT_MS`], not [`QUOTE_DEADLINE_MS`] (spec 082 RJ12) —
+    /// a re-ask that hangs (a black-holed relay) is a failure again in 6 s and
+    /// the schedule goes on, so the fee is back within 8 + 6 s of the relay
+    /// returning. A tap gets the whole bound.
+    auto_reask: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2545,6 +2552,7 @@ impl App for FeePolicy {
                 // A new question: no failure of the last one is retried here.
                 model.retries = 0;
                 model.retrying_after = None;
+                model.auto_reask = false;
                 begin_pipeline(model)
             }
             Event::BalanceChangesMeasured { changes } => balance_changes_measured(model, &changes),
@@ -2572,6 +2580,8 @@ impl App for FeePolicy {
                 if let Phase::Failed(failure) = model.phase {
                     model.retrying_after = Some(failure);
                 }
+                // A person asked: the run gets the whole bound.
+                model.auto_reask = false;
                 model.attempt += 1;
                 // A figure already older than a block is not kept on a
                 // failed refresh ([`Origin::Catchup`]).
@@ -2593,6 +2603,7 @@ impl App for FeePolicy {
                 model.origin = Origin::Initial;
                 model.retries = 0;
                 model.retrying_after = None;
+                model.auto_reask = false;
                 model.fee_token = None;
                 if matches!(
                     model.estimate.as_ref().map(|e| &e.fee_asset),
@@ -2618,6 +2629,7 @@ impl App for FeePolicy {
                 model.origin = Origin::Initial;
                 model.retries = 0;
                 model.retrying_after = None;
+                model.auto_reask = false;
                 model.quotes.clear();
                 model.fee_token = None;
                 model.phase = if model.estimate.is_some() {
@@ -2759,7 +2771,7 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
                     fresh,
                 },
                 FeeOperation::StartDeadline {
-                    ms: QUOTE_DEADLINE_MS,
+                    ms: run_deadline_ms(model),
                 },
             ],
         );
@@ -2814,9 +2826,20 @@ fn begin_gathering(model: &mut Model) -> Command<FeeEffect, Event> {
         account: ctx.account.clone(),
     });
     operations.push(FeeOperation::StartDeadline {
-        ms: QUOTE_DEADLINE_MS,
+        ms: run_deadline_ms(model),
     });
     requests(model, operations)
+}
+
+/// The bound on the run starting now: [`REQUOTE_TIMEOUT_MS`] for the
+/// machine's own re-ask after a failure (spec 082 RJ12: a hung re-ask is a
+/// failure again soon, and the schedule goes on), else [`QUOTE_DEADLINE_MS`].
+fn run_deadline_ms(model: &Model) -> u32 {
+    if model.auto_reask {
+        REQUOTE_TIMEOUT_MS
+    } else {
+        QUOTE_DEADLINE_MS
+    }
 }
 
 fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event> {
@@ -2933,6 +2956,7 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
             model.attempt += 1;
             model.retries = model.retries.saturating_add(1);
             model.retrying_after = Some(failure);
+            model.auto_reask = true;
             model.origin = if model.stale {
                 Origin::Catchup
             } else {
@@ -4294,6 +4318,7 @@ fn settle_quoted(model: &mut Model) -> Command<FeeEffect, Event> {
     model.origin = Origin::Initial;
     model.retries = 0;
     model.retrying_after = None;
+    model.auto_reask = false;
     resume_ticking(model)
 }
 
@@ -4367,6 +4392,7 @@ fn cancel_tick(model: &mut Model) -> bool {
 fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
     // The run that retried ends here, whichever way.
     model.retrying_after = None;
+    model.auto_reask = false;
     let command = fail_now(model, kind);
     match after_failure(model) {
         Some(retry) => Command::all([command, retry]),

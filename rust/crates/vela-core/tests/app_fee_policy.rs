@@ -6800,3 +6800,42 @@ fn a_new_request_starts_the_schedule_over() {
     assert!(sut.view().failure.is_none(), "nothing retried here");
     assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: 3_000 }]);
 }
+
+/// The machine's own re-ask is bounded by `REQUOTE_TIMEOUT_MS` (spec 082
+/// RJ12): one that hangs — a black-holed relay — is a failure again in 6 s
+/// and the schedule goes on, so the fee is back within 8 + 6 s of the relay
+/// returning. A tap gets the whole bound.
+#[test]
+fn the_machine_s_own_re_ask_is_bounded_by_the_re_quote_timeout() {
+    use vela_core::app::fee_policy::{QUOTE_DEADLINE_MS, REQUOTE_TIMEOUT_MS};
+    let deadline = |ops: &[Op]| {
+        ops.iter().find_map(|op| match op {
+            Op::StartDeadline { ms } => Some(*ms),
+            _ => None,
+        })
+    };
+    let mut sut = Timed::new();
+    let ops = sut.dispatch(reading_request());
+    assert_eq!(deadline(&ops), Some(QUOTE_DEADLINE_MS));
+    sut.drop_matching(is_deadline);
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    });
+    // The re-ask: the account read, then the run past it, each on 6 s.
+    let ops = sut.resolve_matching(is_ttl, Res::TtlElapsed);
+    assert_eq!(deadline(&ops), Some(REQUOTE_TIMEOUT_MS));
+    sut.drop_matching(is_deadline);
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(deadline(&ops), Some(REQUOTE_TIMEOUT_MS));
+    // It hangs: a failure again, and the schedule goes on.
+    let ops = sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    assert_eq!(ops, vec![Op::StartTtl { ms: 6_000 }]);
+    // A tap asks with the whole bound.
+    sut.drop_matching(|_| true);
+    let ops = sut.dispatch(Event::Requote);
+    assert_eq!(deadline(&ops), Some(QUOTE_DEADLINE_MS));
+}
