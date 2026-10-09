@@ -63,7 +63,7 @@ Desktop rail: 全部联系人 `8` (selected in dc1) → 分组 label → 家人 
   2026-08-09; the earlier ~96/~64 estimate in this file was wrong and all
   four platforms were re-aligned to the measured values), name **Alice**, short
   address `0x9F3c…21aE` (mobile only), chips: `家人` + `+ 分组`.
-- Actions: 转账 / 收款 / 二维码 (cards mobile, pills desktop).
+- Actions: 转账 only (card mobile, pill desktop; issue #479 retired 收款 / 二维码).
 - 地址 block, mono, mobile wraps as two lines exactly:
   `0x9F3cA71b04E82f5C55d9` / `B21aE00734F8Dd8021aE`; desktop one line;
   trailing copy affordance.

@@ -64,7 +64,9 @@ ScreenState (desktop) = D1 | D2 | D3
 
 ## Activity
 
-**default** (H1 shows group 今天 rows 1–2; H1s/D1 show all):
+**default** (H1 shows group 今天 rows 1–2; H1s/D1 show the newest three — the core's
+`FeedView.home_rows`, `HOME_ACTIVITY_ITEMS` = 3, issue #469; "All" opens History, which draws
+every row):
 
 | group | kind | title key | subtitle | amount |
 |---|---|---|---|---|
