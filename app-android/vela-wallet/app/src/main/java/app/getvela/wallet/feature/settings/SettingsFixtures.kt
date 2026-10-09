@@ -1008,7 +1008,7 @@ object SettingsFixtures {
         SettingsScreenState.ST14, SettingsScreenState.ST14B -> Shape(SettingsPage.About, SettingsOverlay.None)
         SettingsScreenState.ST15 -> Shape(SettingsPage.Home, SettingsOverlay.Feedback)
         SettingsScreenState.ST16 -> Shape(SettingsPage.Home, SettingsOverlay.EraseDevice)
-        SettingsScreenState.ST17, SettingsScreenState.ST17B -> Shape(SettingsPage.Venue, SettingsOverlay.None)
+        SettingsScreenState.ST17, SettingsScreenState.ST17B, SettingsScreenState.ST17C -> Shape(SettingsPage.Venue, SettingsOverlay.None)
         SettingsScreenState.ST18, SettingsScreenState.ST18B -> Shape(SettingsPage.SigningPages, SettingsOverlay.None)
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR2, SettingsScreenState.SR2B ->
@@ -1073,6 +1073,9 @@ object SettingsFixtures {
     /** The version a board's page asks to be trusted, when it does. */
     fun pageToTrust(url: String): String? = ASK_VERSION.takeIf { url == ASK_PAGE }
 
+    /** ST17C: [OWN_PAGE] redeployed — the build this device has not trusted yet. */
+    const val OWN_NEW_VERSION = "9c2e7a41d3b8f6051e4a7c9d2b6f8e30a1c5d7e9f2b4a6c8d0e2f4a6b8c0d2e4"
+
     /**
      * The account the boards draw — on `getvela.app`, reviewing on the
      * official page — and (ST17b) one on its own domain, locked to its page.
@@ -1101,11 +1104,24 @@ object SettingsFixtures {
     /** The live builders over the boards' data: what the gallery shows is what a session would. */
     private fun withSigning(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
         val refused = state == SettingsScreenState.ST18B
+        // ST17C: the account's own page was redeployed — its check asks.
+        val redeployed = state == SettingsScreenState.ST17C
         val view = if (refused) SIGNING_PAGES_VIEW.copy(add_error = "duplicate") else SIGNING_PAGES_VIEW
-        val lines = { url: String -> pageLine(url, refused) }
-        val pages = SettingsLive.withSigningPages(model, view, lines, s, ::pageToTrust)
+        val lines = { url: String ->
+            if (redeployed && url == OWN_PAGE) {
+                uniffi.vela_core_uniffi.SignerIntegrityLine(
+                    uniffi.vela_core_uniffi.SignerIntegrityState.ASK_TO_TRUST, OWN_NEW_VERSION.take(8), null,
+                    "componentsUi.signing.integrity.askTrust", false,
+                )
+            } else {
+                pageLine(url, refused)
+            }
+        }
+        val toTrust = { url: String -> if (redeployed && url == OWN_PAGE) OWN_NEW_VERSION else pageToTrust(url) }
+        val pages = SettingsLive.withSigningPages(model, view, lines, s, toTrust)
         val drafted = if (refused) pages.copy(signingPages = pages.signingPages.copy(draft = OWN_PAGE)) else pages
-        return SettingsLive.withVenue(drafted, venueAccount(own = state == SettingsScreenState.ST17B), SAVED_PAGES, lines, s)
+        val own = state == SettingsScreenState.ST17B || redeployed
+        return SettingsLive.withVenue(drafted, venueAccount(own = own), SAVED_PAGES, lines, s, toTrust)
     }
 
     fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel =

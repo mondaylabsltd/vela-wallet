@@ -71,6 +71,7 @@ fun CreateFlowScreen(
             official = row?.official ?: false,
             line = model.signerLine(url),
             s = strings,
+            trustVersion = model.signerToTrust(url),
         )
     }
     LaunchedEffect(view?.signingPage) { view?.signingPage?.let { model.checkSigningPages() } }
@@ -150,6 +151,7 @@ fun CreateFlowScreen(
                     pickingPage = true
                 },
                 onClearOwnPage = { model.chooseSigningPage(null) },
+                onTrustPage = model::trustSigningPage,
                 onAddKey = model::addKey,
                 onConfirmKey = model::confirmKey,
                 onRemoveKey = model::removeKey,

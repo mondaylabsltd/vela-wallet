@@ -958,7 +958,7 @@ private fun SettingsPageBody(
 ) {
     val colors = VelaTheme.colors
     when (page) {
-        SettingsPage.Venue -> model.venue?.let { VenuePageBody(it, onPick = onVenuePick, onManage = onVenueManage) }
+        SettingsPage.Venue -> model.venue?.let { VenuePageBody(it, onPick = onVenuePick, onManage = onVenueManage, onTrust = onSigningPageTrust) }
         SettingsPage.SigningPages -> SigningPagesPageBody(
             model = model.signingPages,
             onAdd = onSigningPageAdd,

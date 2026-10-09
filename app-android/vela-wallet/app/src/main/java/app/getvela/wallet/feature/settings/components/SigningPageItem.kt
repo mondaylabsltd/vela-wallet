@@ -80,7 +80,13 @@ fun integrityModel(line: SignerIntegrityLine, strings: VelaStrings): IntegrityLi
  * The line itself: a glyph for its tone — the shield that backs the word
  * "trusted", a clock while it is checked, a warning when it will not open
  * (a line that is red only by colour is one some people cannot see is red) —
- * and the words, the version in the mono face.
+ * and the words, the version in the mono face. A self-hosted build asking to
+ * be trusted is a question for the person: the caution glyph and quiet words,
+ * never a refusal's red.
+ *
+ * The words keep two lines' room — what a verdict takes — so the check
+ * landing ("Checking the page…" → "Version … · checked 14:32") never moves
+ * what is under it (the card's Open, the row's Trust).
  */
 @Composable
 fun IntegrityLine(model: IntegrityLineModel, modifier: Modifier = Modifier) {
@@ -119,9 +125,22 @@ fun IntegrityLine(model: IntegrityLineModel, modifier: Modifier = Modifier) {
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.sm,
             lineHeight = VelaLeading.normal * VelaTextSize.sm,
+            // Every line its full height, whatever font draws it: trimmed by
+            // the font's own metrics, a CJK verdict sat a pixel taller than
+            // the room kept for it, and Open moved by that pixel.
+            style = androidx.compose.ui.text.TextStyle(
+                lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+                    alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+                    trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
+                ),
+            ),
+            minLines = INTEGRITY_LINES,
         )
     }
 }
+
+/** The room an integrity line keeps, in lines of its own style: a verdict's. */
+private const val INTEGRITY_LINES = 2
 
 /** One signing page as a person meets it: its name, its address, whose keys it reaches, and its line. */
 @Immutable
@@ -198,19 +217,23 @@ fun SigningPageItem(
                 )
                 actions?.invoke()
             }
-            Text(
-                text = buildAnnotatedString {
-                    if (model.showAddress) withStyle(SpanStyle(fontFamily = VelaMonoFontFamily)) { append(model.address) }
-                    if (model.domain.isNotBlank()) {
-                        if (model.showAddress) append("  ·  ")
-                        append(model.domain)
-                    }
-                },
-                color = colors.fgSubtle,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.sm,
-                modifier = Modifier.alpha(if (enabled) 1f else VelaOpacity.disabled),
-            )
+            // Where it is and whose keys it reaches — said only when the name
+            // has not said it already: no line at all, not an empty one.
+            if (model.showAddress || model.domain.isNotBlank()) {
+                Text(
+                    text = buildAnnotatedString {
+                        if (model.showAddress) withStyle(SpanStyle(fontFamily = VelaMonoFontFamily)) { append(model.address) }
+                        if (model.domain.isNotBlank()) {
+                            if (model.showAddress) append("  ·  ")
+                            append(model.domain)
+                        }
+                    },
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier.alpha(if (enabled) 1f else VelaOpacity.disabled),
+                )
+            }
             if (reason != null) {
                 Text(
                     text = reason,

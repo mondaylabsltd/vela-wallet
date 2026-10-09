@@ -113,20 +113,28 @@ object SettingsLive {
         val address = url.substringAfter("://").trimEnd('/')
         val integrity = integrityModel(line, s)
         val label = if (official) "" else name.trim()
-        val selfHostedDomain = domain.ifBlank { address.substringBefore('/') }
-        val namedByDomain = !official && label.isEmpty()
+        val host = address.substringBefore('/')
+        val title = when {
+            official -> s.t("settings.signing.pageOfficial")
+            label.isNotEmpty() -> label
+            else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { host }))
+        }
         return SigningPageItemModel(
             url = url,
-            title = when {
-                official -> s.t("settings.signing.pageOfficial")
-                label.isNotEmpty() -> label
-                else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to selfHostedDomain))
-            },
+            title = title,
             address = address,
-            // "Self-hosted · sign.example.com" already says the address; the
-            // row does not say it a second time (a page at a path still does).
-            showAddress = !(namedByDomain && address == selfHostedDomain),
-            domain = if (domain.isBlank()) "" else s.t("settings.signing.keysOn", mapOf("domain" to domain)),
+            // A page is named once: "Self-hosted · sign.example.com" already
+            // says the address, so the row does not say it again (a page at a
+            // path, or one named otherwise, still shows where it is).
+            showAddress = !title.contains(address),
+            // "Keys on …" only where it tells the person something: Vela's
+            // official page at sign.getvela.app keeps its keys on getvela.app;
+            // a self-hosted page whose keys are its own host's says nothing more.
+            domain = if (domain.isBlank() || domain.equals(host.substringBefore(':'), ignoreCase = true)) {
+                ""
+            } else {
+                s.t("settings.signing.keysOn", mapOf("domain" to domain))
+            },
             integrity = integrity,
             official = official,
             trustVersion = trustVersion?.takeIf { integrity.asksToTrust && it.isNotBlank() },
@@ -193,7 +201,9 @@ object SettingsLive {
      * the core's choices (`signingVenueChoices`, R1/R2) in its order — Vela's
      * sheet, the official page, the saved pages, then the account's page when
      * it is not saved — each blocked one with its reason. A custom-domain
-     * account's Vela row comes back blocked: it is locked to its page.
+     * account's Vela row comes back blocked: it is locked to its page. A page
+     * whose check asks to be trusted carries the version to trust
+     * ([toTrust], `versionToTrust`), answered by "Trust this version" there.
      */
     fun withVenue(
         model: SettingsScreenModel,
@@ -201,6 +211,7 @@ object SettingsLive {
         saved: List<SigningPage>,
         line: (String) -> SignerIntegrityLine,
         s: VelaStrings,
+        toTrust: (String) -> String? = { null },
     ): SettingsScreenModel {
         account ?: return model.copy(venue = null)
         val savedJson = Wire.json.encodeToString(ListSerializer(SigningPage.serializer()), saved)
@@ -225,6 +236,8 @@ object SettingsLive {
                     page = pageItem(
                         url = url, name = choice.optString("name"), domain = choice.optString("domain"),
                         official = choice.optBoolean("official"), line = line(url), s = s,
+                        // A choice that cannot reach the keys is not asked about.
+                        trustVersion = toTrust(url).takeIf { reason == null },
                     ),
                     selected = choice.optBoolean("active"),
                     reason = reason,
@@ -270,6 +283,7 @@ object SettingsLive {
                 pageSection = onPage?.titleKey?.let(s::t).orEmpty(),
                 pageSectionBody = lineOf(onPage),
                 manage = s.t("settings.signing.title"),
+                trust = s.t("settings.signing.pageTrust"),
             ),
         )
     }

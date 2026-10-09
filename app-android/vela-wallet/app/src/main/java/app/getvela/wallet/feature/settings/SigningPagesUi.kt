@@ -152,6 +152,7 @@ internal fun VenuePageBody(
     model: VenueModel,
     onPick: (venueJson: String) -> Unit,
     onManage: () -> Unit,
+    onTrust: (url: String, version: String) -> Unit = { _, _ -> },
 ) {
     val colors = VelaTheme.colors
     model.choices.filter { it.page == null }.forEach { choice -> InVelaChoice(choice, onPick) }
@@ -179,6 +180,9 @@ internal fun VenuePageBody(
             reason = choice.reason,
             onClick = { if (!choice.selected) onPick(choice.venueJson) },
         )
+        // A self-hosted page's build new to Vela: the question's answer, as
+        // on Signing pages — stored on that page, then it is checked again.
+        page.trustVersion?.let { version -> TrustAnswer(model.trust) { onTrust(page.url, version) } }
         SettingsDivider()
     }
     Row(

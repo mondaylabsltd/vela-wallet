@@ -28,11 +28,12 @@ enum class SettingsScreenState {
     /**
      * Spec 102, the web's boards: "Where you review and sign" for an account
      * on `getvela.app` reviewing on the official page (ST17) and for one on
-     * its own domain, locked to its page (ST17B); Settings → Signing pages
-     * (ST18), and with a page that will not open and an address refused
-     * (ST18B).
+     * its own domain, locked to its page (ST17B) — and, ST17C, that page
+     * redeployed: its check asks to trust the new build, and "Trust this
+     * version" answers on the row; Settings → Signing pages (ST18), and with
+     * a page that will not open and an address refused (ST18B).
      */
-    ST17, ST17B, ST18, ST18B,
+    ST17, ST17B, ST17C, ST18, ST18B,
     SR1, SR2, SR2B, SR3, SR4, SR5,
     /** Spec 092: every network the wallet cannot reach, in one list. */
     SR6,
@@ -275,6 +276,8 @@ data class VenueModel(
     val pageSectionBody: String,
     /** "Signing pages" — the way to the list where pages are added. */
     val manage: String,
+    /** "Trust this version" — a page choice's answer when its line asks (`settings.signing.pageTrust`). */
+    val trust: String = "",
 )
 
 @Immutable

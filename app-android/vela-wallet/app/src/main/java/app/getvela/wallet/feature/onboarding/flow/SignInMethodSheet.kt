@@ -153,6 +153,7 @@ fun SignInMethodSheet(
                     },
                     onClear = { chosen = null },
                     clearLabel = strings.t(I18nKeys.Create.REMOVE_KEY_BTN),
+                    onTrust = onTrustPage,
                 )
             }
         }

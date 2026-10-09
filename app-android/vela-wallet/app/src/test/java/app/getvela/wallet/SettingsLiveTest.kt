@@ -819,7 +819,10 @@ class SettingsLiveTest {
         // The question's answer carries the check's own version, and only where the line asks.
         assertEquals(listOf(null, version, null), rows.map { it.trustVersion })
         assertEquals(listOf("sign.getvela.app", "sign.example.com", "signer.example.org"), rows.map { it.address })
-        assertEquals("Keys on getvela.app", rows[0].domain)
+        // "Keys on …" only where it says something the row does not: the
+        // official page keeps its keys on getvela.app, "My page" on
+        // example.com; a page whose keys are its own host's says nothing more.
+        assertEquals(listOf("Keys on getvela.app", "Keys on example.com", ""), rows.map { it.domain })
         assertTrue(rows[0].integrity.text, rows[0].integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
         assertTrue(rows[0].integrity.opens)
         assertTrue(rows[1].integrity.asksToTrust)
@@ -873,6 +876,14 @@ class SettingsLiveTest {
         assertEquals("sign.example.com", locked.row.subtitle)
         assertEquals("Vela can't reach keys on sign.example.com.", locked.choices.first().reason)
         assertEquals(listOf(false, false, true), locked.choices.map { it.selected })
+        // Its page redeployed: the row asks, and answers ("Trust this version",
+        // the check's own version) — but never on a choice that cannot reach
+        // the keys.
+        val version = "9c2e7a41" + "0".repeat(56)
+        val asks = line(uniffi.vela_core_uniffi.SignerIntegrityState.ASK_TO_TRUST, "askTrust", false)
+        val redeployed = SettingsLive.withVenue(base(), own, saved, { asks }, strings) { version }.venue!!
+        assertEquals("Trust this version", redeployed.trust)
+        assertEquals(listOf(null, null, version), redeployed.choices.map { it.page?.trustVersion })
         // No account, no row.
         assertNull(SettingsLive.withVenue(base(), null, saved, { matches }, strings).venue)
     }

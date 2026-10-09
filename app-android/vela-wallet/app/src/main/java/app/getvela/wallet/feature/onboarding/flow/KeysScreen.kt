@@ -81,6 +81,8 @@ fun ColumnScope.KeysScreen(
     canChoosePage: Boolean = false,
     onChooseOwnPage: () -> Unit = {},
     onClearOwnPage: () -> Unit = {},
+    /** Spec 102: "Trust this version" on the chosen page, when its check asks. */
+    onTrustPage: (String) -> Unit = {},
     onAddKey: (KeyMethod) -> Unit,
     onConfirmKey: (Int) -> Unit,
     onRemoveKey: (Int) -> Unit,
@@ -232,6 +234,7 @@ fun ColumnScope.KeysScreen(
                 canChoosePage = canChoosePage,
                 onChooseOwnPage = onChooseOwnPage,
                 onClearOwnPage = onClearOwnPage,
+                onTrustPage = onTrustPage,
             ) { method ->
                 pickerOpen = false
                 onAddKey(method)
@@ -239,7 +242,7 @@ fun ColumnScope.KeysScreen(
         } else if (signingPage != null) {
             // The page every key of this wallet is made on, said under the
             // list even when the picker is folded away.
-            OwnPageEntry(chosen = signingPage, onOpen = {}, onClear = null, clearLabel = "")
+            OwnPageEntry(chosen = signingPage, onOpen = {}, onClear = null, clearLabel = "", onTrust = onTrustPage)
         }
 
         Spacer(modifier = Modifier.height(VelaSpacing.xl3))
@@ -409,6 +412,7 @@ private fun AddMethodPicker(
     canChoosePage: Boolean,
     onChooseOwnPage: () -> Unit,
     onClearOwnPage: () -> Unit,
+    onTrustPage: (String) -> Unit,
     onPick: (KeyMethod) -> Unit,
 ) {
     val strings = LocalVelaStrings.current
@@ -467,6 +471,7 @@ private fun AddMethodPicker(
                 onOpen = onChooseOwnPage,
                 onClear = onClearOwnPage.takeIf { canChoosePage },
                 clearLabel = strings.t(I18nKeys.Create.REMOVE_KEY_BTN),
+                onTrust = onTrustPage,
             )
         }
     }

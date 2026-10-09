@@ -113,7 +113,8 @@ data class OwnPageModel(
 /**
  * The entry row, in a chooser beside the three places: its two lines and a
  * chevron while no page is chosen; the chosen page itself (address, domain,
- * integrity line) with a ✕ back to the app once one is.
+ * integrity line) with a ✕ back to the app once one is — and, when its check
+ * asks to trust a self-hosted build, "Trust this version" under it ([onTrust]).
  */
 @Composable
 fun OwnPageEntry(
@@ -121,14 +122,20 @@ fun OwnPageEntry(
     onOpen: () -> Unit,
     onClear: (() -> Unit)?,
     clearLabel: String,
+    onTrust: ((String) -> Unit)? = null,
 ) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
     if (chosen != null) {
-        SigningPageItem(
-            model = chosen,
-            trailing = onClear?.let { clear -> { SigningPageAction(VelaIcons.Close, clearLabel, clear) } },
-        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            SigningPageItem(
+                model = chosen,
+                trailing = onClear?.let { clear -> { SigningPageAction(VelaIcons.Close, clearLabel, clear) } },
+            )
+            if (chosen.trustVersion != null && onTrust != null) {
+                app.getvela.wallet.feature.settings.components.TrustAnswer(strings.t("settings.signing.pageTrust")) { onTrust(chosen.url) }
+            }
+        }
         return
     }
     val (title, body) = OwnPageModel.entry(strings)
