@@ -298,6 +298,18 @@ class SignerPageChecks(
         }.getOrDefault(emptyList())
     }
 
+    /**
+     * A page was removed from the list: what was checked about it goes with
+     * it. Its trusted versions were stored on it and are gone, so a ruling
+     * held from before — "trusted on this device" — would be a claim nothing
+     * backs; added again, the page is checked afresh and asks again.
+     */
+    fun forget(base: String) {
+        val key = key(base)
+        _checks.update { it - key }
+        attempts.remove(key)
+    }
+
     private fun publish(key: String, check: Check) {
         _checks.update { it + (key to check) }
     }

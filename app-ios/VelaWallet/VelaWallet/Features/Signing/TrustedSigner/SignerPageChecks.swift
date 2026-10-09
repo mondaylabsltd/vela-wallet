@@ -274,6 +274,17 @@ final class SignerPageChecks {
         return admission
     }
 
+    /// A page was removed from the list: what was checked about it goes
+    /// with it. Its trusted versions were stored on it and are gone, so a
+    /// ruling held from before — "trusted on this device" — would be a claim
+    /// nothing backs; added again, the page is checked afresh and asks again.
+    func forget(_ base: String) {
+        let key = Self.key(base)
+        admissions[key] = nil
+        lastAttempt[key] = nil
+        revision += 1
+    }
+
     /// Forget every ruling — a test's reset, and nothing else.
     func reset() {
         admissions.removeAll()

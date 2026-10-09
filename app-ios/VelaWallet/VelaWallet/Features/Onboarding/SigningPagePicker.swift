@@ -155,6 +155,9 @@ struct SigningPageAddField: View {
     let onAdd: (String) -> Void
 
     @State private var draft = ""
+    /// Saved, the keyboard goes: the new row (and its check) is what the
+    /// person looks at next, and the keys covered it.
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
@@ -172,6 +175,7 @@ struct SigningPageAddField: View {
                     .frame(minHeight: Tokens.Layout.hitTarget)
                     .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r8))
                     .accessibilityIdentifier("signingPage.addField")
+                    .focused($focused)
                     .onSubmit(save)
                 Button(action: save) {
                     Text(loc.t("settings.signing.pageSave"))
@@ -197,6 +201,7 @@ struct SigningPageAddField: View {
         guard !typed.isEmpty else { return }
         onAdd(typed)
         draft = ""
+        focused = false
     }
 }
 

@@ -2532,7 +2532,11 @@ fun VelaNavHost(
                         },
                         onSigningPageAdd = { url, name -> settings.addSigningPage(url, name) },
                         onSigningPageRename = { url, name -> settings.renameSigningPage(url, name) },
-                        onSigningPageRemove = { url -> settings.removeSigningPage(url) },
+                        onSigningPageRemove = { url ->
+                            settings.removeSigningPage(url)
+                            // Its trust went with it: no held "trusted" for a re-add.
+                            application.container.signerPages.forget(url)
+                        },
                         onSigningPageTrust = { url, _ ->
                             // The version is the check's own (`versionToTrust`), stored on that page.
                             scope.launch { application.container.signerPages.trust(url) }
