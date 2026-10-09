@@ -382,7 +382,7 @@ fn the_launch_url_is_the_checked_version() {
         );
         let checked = admitted.page().unwrap_or_else(|| unreachable!("{base}"));
         let url = checked
-            .url_launch(&request, "velawallet://sign-result", "t", 1_000)
+            .url_launch(&request, "velawallet://sign-result", "t", "", 1_000)
             .unwrap_or_else(|_| unreachable!());
         assert!(
             url.starts_with(&format!("{}?ch=url#", chosen.url())),
@@ -636,16 +636,20 @@ fn a_stale_check_opens_nothing_until_it_is_run_again() {
     let request = serde_json::json!({});
     let late = 10 + MAX_CHECK_AGE_MS + 1;
     assert_eq!(
-        checked.url_launch(&request, "velawallet://sign-result", "t", late),
+        checked.url_launch(&request, "velawallet://sign-result", "t", "", late),
         Err(LaunchRefused::Stale)
     );
-    assert_eq!(checked.ws_launch(1, "t", late), Err(LaunchRefused::Stale));
+    assert_eq!(
+        checked.ws_launch(1, "t", "", late),
+        Err(LaunchRefused::Stale)
+    );
     assert_eq!(checked.line(late), IntegrityLine::checking());
     assert!(checked
         .url_launch(
             &request,
             "velawallet://sign-result",
             "t",
+            "",
             10 + MAX_CHECK_AGE_MS
         )
         .is_ok());
