@@ -1135,23 +1135,14 @@ struct RootView: View {
                     stageChanged: { onForm in fees.speedStage(onForm: onForm) },
                     preferenceChanged: { configureSpeed() }
                 ))
+                // Every later figure — a fee-coin pick, a refresh, or the fee
+                // core's own re-pricing once a block (`requote_interval_ms`) —
+                // replaces the estimate the confirm shows. Nothing here
+                // re-asks a stale quote: the core prices the figure on screen
+                // again itself, and `stale` is only ever up while it does
+                // (`FeeView.stale`).
                 .onChange(of: fees.view?.fee) { _, estimate in
                     if let estimate { send.feeUpdated(estimate) }
-                }
-                // A quote has a TTL, and somebody reading the confirm page can
-                // outlast it. When it expires, ask again — once per expiry,
-                // only while the page is open and nothing else is happening.
-                //
-                // The core keeps the request that was priced, so `requote`
-                // re-runs THAT one; the fresh estimate flows back through the
-                // handler above. Asking during a submit or a passkey prompt
-                // would move the fee under a signature already being made.
-                .onChange(of: fees.view?.stale) { _, stale in
-                    guard stale == true, fees.view?.busy == false,
-                          let view = send.view, view.stage == .confirm,
-                          view.txStatus == "idle", !view.sending
-                    else { return }
-                    fees.requote()
                 }
                 // Send shows the asset list's holdings, and follows them: every
                 // round the dashboard settles while a journey is open is handed

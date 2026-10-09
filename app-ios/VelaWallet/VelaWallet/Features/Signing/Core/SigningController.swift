@@ -248,7 +248,6 @@ final class SigningController {
 
     /// The calls this request carries, kept for the re-quote.
     private var feeCalls: [[String: Any]] = []
-    private var requoting = false
     /// Whether the person could still choose, as last told to the speed core.
     private var lastOnForm: Bool?
 
@@ -822,17 +821,11 @@ final class SigningController {
     }
 
     private func commitFee(_ view: FeeViewWire) {
+        // A quote on the sheet is priced again by the fee core itself, once a
+        // block (`requote_interval_ms`) and at once when that fails — `stale`
+        // is only ever up while it does — so nothing here re-asks it. What is
+        // asked again is a quote that FAILED, on the core's schedule.
         scheduleRequote(view)
-        // A quote goes stale while somebody reads. While the sheet is up and
-        // nothing is signing, ask again — otherwise the confirm shuts with no
-        // way to reopen it, which is what Android's phase 5 watched happen.
-        // The core keeps the request it priced; `requote` re-runs THAT one.
-        guard view.stale, !view.busy, !answered, !requoting,
-              sign.surface == .sheet, !sign.isSigning, !sign.isSubmitting
-        else { return }
-        requoting = true
-        fees.requote()
-        Task { @MainActor [weak self] in self?.requoting = false }
     }
 
     // MARK: - Asking again (spec 079)
