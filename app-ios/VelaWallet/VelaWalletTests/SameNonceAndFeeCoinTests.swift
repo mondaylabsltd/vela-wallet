@@ -276,6 +276,44 @@ struct SameNonceAndFeeCoinTests {
         #expect(!plain.provisional)
     }
 
+    /// Issue #483 on Send: a fee that failed says why under its row, in the
+    /// fee machine's words — the chain by name for a chain read, Vela's own
+    /// fault for an internal one — in the line the row already keeps.
+    @Test func theSendFormSaysWhyThereIsNoFee() throws {
+        guard case .sendForm(let drawn) = WalletFlowFixtures.build(.sd2, loc: loc).base else {
+            Issue.record("SD2 does not draw the form")
+            return
+        }
+        var object = try CoreJSON.object(SendCore().view())
+        object["stage"] = "enter_details"
+        object["selected_token"] = [
+            "network": "chain-100", "chain_id": 100, "symbol": "xDAI", "balance": "5",
+            "decimals": 18, "token_address": NSNull(), "price_usd": 1.0, "logo_urls": [], "spam": false,
+        ]
+        let view = try CoreJSON.decode(SendViewWire.self, from: object)
+        func fee(_ failed: Any) throws -> FeeViewWire {
+            try CoreJSON.decode(FeeViewWire.self, from: [
+                "busy": false, "failed": failed, "fee": NSNull(), "stale": false, "fee_token": NSNull(),
+                "options": [], "confirm_fee_ready": false,
+            ])
+        }
+        let speed = try CoreJSON.decoder.decode(FeeSpeedViewWire.self, from: Data(
+            #"{"tier":"standard","preferred":"standard","previews":[],"open":false,"picked":false,"free":false,"free_note":false,"single":false,"gas_price_line":false,"options":[]}"#.utf8
+        ))
+        func note(_ failed: Any) throws -> String? {
+            let feeView = try fee(failed)
+            return SendLive.form(
+                view, fee: feeView, display: .usd, on: drawn, loc: loc,
+                speed: SendLive.SpeedInputs(view: speed, feeView: { _ in feeView })
+            ).fee.failNote
+        }
+        #expect(try note(["chain_read": ["rate_limited": false]])
+                == loc.t("componentsUi.gas.reasonChainDown", vars: ["chain": "Gnosis"]))
+        #expect(try note("internal") == loc.t("componentsUi.gas.reasonInternal"))
+        #expect(try note("internal")?.contains("Gnosis") == false)
+        #expect(try note(NSNull()) == nil)
+    }
+
     /// The relay's published minimum reaches the core verbatim (§5).
     @Test func theRelaysMinimumIsPassedVerbatim() {
         #expect(RelayClient.minimumAmount("0x2386f26fc10000") == "0x2386f26fc10000")

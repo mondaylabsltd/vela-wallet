@@ -543,6 +543,10 @@ struct FeeRowModel {
     var refreshing = false
     /// The quote's 30 s TTL ran out — calm, never a fault. Its line is kept.
     var staleNote: String? = nil
+    /// Why there is no fee (issue #483): the fee machine's own failure in its
+    /// words — the chain out of reach, the relay, or Vela's own fault — in the
+    /// same line `staleNote` keeps, so nothing jumps when it appears.
+    var failNote: String? = nil
 }
 
 /// One option of the speed control (spec 068).

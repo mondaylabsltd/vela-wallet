@@ -22,6 +22,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum SendLive {
 
@@ -734,7 +735,14 @@ enum SendLive {
             // out and nothing said so. Not while a fresh measurement is out, and
             // not over a row with no figure of its own on it.
             staleNote: (speed != nil && fee?.stale == true && !busy && text != nil)
-                ? loc.t("send.feeStale") : nil
+                ? loc.t("send.feeStale") : nil,
+            // The fee machine's failure, in its own words (issue #483): the
+            // chain's name for a chain read, Vela's own fault for an internal
+            // one — never a blank "—" with nothing said. Asked again on the
+            // core's schedule and by the refresh (a real new read).
+            failNote: busy || text != nil ? nil : fee?.failed
+                .flatMap { feeFailureReasonKey(failure: $0) }
+                .map { loc.t($0, vars: ["chain": view.selectedToken.flatMap { networks.meta($0.chainId)?.displayName } ?? ""]) }
         )
     }
 
