@@ -416,6 +416,7 @@
   "recipientCount_other": "{{count}} penerima",
   "removeRecipient": "Hapus",
   "alertInsufficientBalanceBody": "Totalnya melebihi saldo Anda.",
+  "alertEstimateChainDownBody": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya transaksi ini. Coba lagi sebentar lagi.",
   "recipientPickAria": "Pilih dari kontak",
   "scanAria": "Pindai kode QR",
   "multiSendNoFundsAfterGas": "Tidak cukup untuk gas setelah cadangan.",
@@ -1406,6 +1407,7 @@
     "batchUnsettled": "Memeriksa setiap panggilan dalam batch…",
     "feeMeasuring": "Menghitung biaya jaringan…",
     "feeFailed": "Biaya tidak bisa dihitung — ketuk untuk mencoba lagi",
+    "feeRetrying": "Biaya belum bisa dihitung. Mencoba lagi otomatis…",
     "previousPending": "Menunggu transaksi sebelumnya di jaringan ini selesai…"
    }
   },
@@ -1497,7 +1499,7 @@
    "reasonSimulation": "Relay belum bisa menjalankan uji transaksi ini. Mencoba lagi otomatis.",
    "reasonQuoteHigh": "Harga gas relay sedang jauh di atas harga jaringan. Mencoba lagi otomatis.",
    "reasonChainDown": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya. Mencoba lagi otomatis.",
-   "reasonInternal": "Terjadi kesalahan di dalam Vela. Mencoba lagi — jika terus gagal, buka ulang aplikasinya.",
+   "reasonInternal": "Terjadi kesalahan di dalam Vela. Jika terus terjadi, buka ulang aplikasinya.",
    "rowShort": "Perlu ~{{need}}, ada {{have}}",
    "noCoinPays": "Tidak ada token yang cukup untuk biaya ini"
   },

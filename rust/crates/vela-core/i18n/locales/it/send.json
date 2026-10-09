@@ -81,6 +81,7 @@
     "recipientCount_other": "{{count}} destinatari",
     "removeRecipient": "Rimuovi",
     "alertInsufficientBalanceBody": "Il totale supera il tuo saldo.",
+    "alertEstimateChainDownBody": "Impossibile raggiungere {{chain}} per calcolare la commissione di questa transazione. Riprova tra un momento.",
     "recipientPickAria": "Scegli un contatto",
     "scanAria": "Scansiona un codice QR",
     "multiSendNoFundsAfterGas": "Saldo insufficiente per il gas dopo la riserva.",

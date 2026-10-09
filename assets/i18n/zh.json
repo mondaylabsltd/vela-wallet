@@ -299,6 +299,7 @@
   "continueBtn": "继续",
   "alertEstimateFailedTitle": "无法准备交易",
   "alertEstimateFailedBody": "无法生成有效的交易预估，请重试。",
+  "alertEstimateChainDownBody": "暂时连不上 {{chain}}，无法计算这笔交易的费用。请稍后再试。",
   "alertAccountUnavailableBody": "无法加载准备这笔交易所需的账户密钥，请重试。",
   "alertInvalidAddressTitle": "地址无效",
   "alertInvalidAddressBody": "请输入有效的以太坊地址（0x...）。",
@@ -1416,6 +1417,7 @@
     "batchUnsettled": "正在逐一检查这批调用…",
     "feeMeasuring": "正在计算网络费用…",
     "feeFailed": "没能算出费用——点费用重试",
+    "feeRetrying": "暂时没能算出费用，正在自动重试…",
     "previousPending": "正在等待这个网络上的上一笔交易完成…"
    }
   },
@@ -1468,7 +1470,7 @@
    "reasonSimulation": "中继暂时没能试运行这笔交易，正在自动重试。",
    "reasonQuoteHigh": "中继的 gas 价格眼下远高于网络本身，正在自动重试。",
    "reasonChainDown": "暂时连不上 {{chain}}，无法计算费用，正在自动重试。",
-   "reasonInternal": "Vela 内部出了问题，正在重试。如果一直失败，请重新打开应用。",
+   "reasonInternal": "Vela 内部出了问题。如果一直这样，请重新打开应用。",
    "rowShort": "需要 ~{{need}}，现有 {{have}}",
    "noCoinPays": "所有代币都不够付这笔网络费"
   },

@@ -359,6 +359,7 @@
   "recipientCount_other": "{{count}} 名の受取人",
   "removeRecipient": "削除",
   "alertInsufficientBalanceBody": "合計が残高を超えています。",
+  "alertEstimateChainDownBody": "{{chain}} に接続できず、この取引の手数料を計算できません。しばらくしてからもう一度お試しください。",
   "recipientPickAria": "連絡先から選ぶ",
   "multiSendNoFundsAfterGas": "ガス予約後の残高が不足しています。",
   "gasReserved": "ガス確保済み",
@@ -1406,6 +1407,7 @@
     "batchUnsettled": "バッチの各呼び出しを確認中…",
     "feeMeasuring": "ネットワーク手数料を計算中…",
     "feeFailed": "手数料を計算できません。タップで再試行",
+    "feeRetrying": "手数料をまだ計算できません。自動で再試行しています…",
     "previousPending": "このネットワークでの前の取引の完了を待っています…"
    }
   },
@@ -1497,7 +1499,7 @@
    "reasonSimulation": "リレーはまだこの取引を試験実行できていません。自動で再試行しています。",
    "reasonQuoteHigh": "リレーのガス価格がいまネットワークの価格を大きく上回っています。自動で再試行しています。",
    "reasonChainDown": "{{chain}} に接続できず手数料を計算できません。自動で再試行しています。",
-   "reasonInternal": "Vela の内部でエラーが起きました。再試行しています。続く場合はアプリを開き直してください。",
+   "reasonInternal": "Vela の内部でエラーが起きました。続く場合はアプリを開き直してください。",
    "rowShort": "必要 ~{{need}}・残高 {{have}}",
    "noCoinPays": "手数料を払えるトークンがありません"
   },

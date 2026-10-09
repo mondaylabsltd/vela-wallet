@@ -359,6 +359,7 @@
   "recipientCount_other": "{{count}} người nhận",
   "removeRecipient": "Xóa",
   "alertInsufficientBalanceBody": "Tổng vượt quá số dư của bạn.",
+  "alertEstimateChainDownBody": "Không kết nối được {{chain}} để tính phí giao dịch này. Hãy thử lại sau giây lát.",
   "recipientPickAria": "Chọn từ danh bạ",
   "multiSendNoFundsAfterGas": "Không đủ để trả gas sau khi dự trữ.",
   "gasReserved": "đã giữ gas",
@@ -1406,6 +1407,7 @@
     "batchUnsettled": "Đang kiểm tra từng lệnh gọi trong lô…",
     "feeMeasuring": "Đang tính phí mạng…",
     "feeFailed": "Không tính được phí — chạm vào phí để thử lại",
+    "feeRetrying": "Chưa tính được phí. Đang tự động thử lại…",
     "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…"
    }
   },
@@ -1497,7 +1499,7 @@
    "reasonSimulation": "Relay chưa chạy thử được giao dịch này. Đang tự động thử lại.",
    "reasonQuoteHigh": "Giá gas của relay đang cao hơn nhiều so với giá của mạng. Đang tự động thử lại.",
    "reasonChainDown": "Không kết nối được {{chain}} để tính phí. Đang tự động thử lại.",
-   "reasonInternal": "Vela gặp lỗi bên trong. Đang thử lại — nếu vẫn lỗi, hãy mở lại ứng dụng.",
+   "reasonInternal": "Vela gặp lỗi bên trong. Nếu vẫn tiếp diễn, hãy mở lại ứng dụng.",
    "rowShort": "Cần ~{{need}}, có {{have}}",
    "noCoinPays": "Không token nào đủ trả phí này"
   },

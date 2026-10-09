@@ -360,6 +360,7 @@
   "recipientCount_other": "{{count}} destinatários",
   "removeRecipient": "Remover",
   "alertInsufficientBalanceBody": "O total excede seu saldo.",
+  "alertEstimateChainDownBody": "Não foi possível conectar à {{chain}} para calcular a taxa desta transação. Tente de novo em instantes.",
   "recipientPickAria": "Escolher um contato",
   "multiSendNoFundsAfterGas": "Saldo insuficiente para o gas após a reserva.",
   "gasReserved": "gas reservado",
@@ -1410,6 +1411,7 @@
     "batchUnsettled": "Verificando cada chamada do lote…",
     "feeMeasuring": "Calculando a taxa de rede…",
     "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo",
+    "feeRetrying": "Ainda não foi possível calcular a taxa. Tentando de novo automaticamente…",
     "previousPending": "Aguardando sua transação anterior nesta rede terminar…"
    }
   },
@@ -1501,7 +1503,7 @@
    "reasonSimulation": "O relay ainda não conseguiu simular esta transação. Tentando de novo automaticamente.",
    "reasonQuoteHigh": "O preço do gas do relay está bem acima do preço da rede agora. Tentando de novo automaticamente.",
    "reasonChainDown": "Não foi possível conectar à {{chain}} para calcular a taxa. Tentando de novo automaticamente.",
-   "reasonInternal": "Algo deu errado dentro do Vela. Tentando de novo — se continuar, reabra o app.",
+   "reasonInternal": "Algo deu errado dentro do Vela. Se continuar, reabra o app.",
    "rowShort": "Precisa de ~{{need}}, tem {{have}}",
    "noCoinPays": "Nenhum token cobre esta taxa"
   },

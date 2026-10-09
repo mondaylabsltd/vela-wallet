@@ -299,6 +299,7 @@
   "continueBtn": "Continue",
   "alertEstimateFailedTitle": "Could not prepare transaction",
   "alertEstimateFailedBody": "Could not build a valid transaction estimate. Please try again.",
+  "alertEstimateChainDownBody": "Can't reach {{chain}} to price this transaction. Try again in a moment.",
   "alertAccountUnavailableBody": "Could not load the account key required to prepare this transaction. Please try again.",
   "alertInvalidAddressTitle": "Invalid Address",
   "alertInvalidAddressBody": "Please enter a valid Ethereum address (0x...).",
@@ -1458,6 +1459,7 @@
     "batchUnsettled": "Checking each call in this batch…",
     "feeMeasuring": "Working out the network fee…",
     "feeFailed": "Couldn't work out the fee. Tap it to retry",
+    "feeRetrying": "Couldn't work out the fee yet. Retrying…",
     "previousPending": "Waiting for your last transaction on this network…"
    }
   },
@@ -1510,7 +1512,7 @@
    "reasonSimulation": "The relay couldn't test-run this transaction yet. Retrying automatically.",
    "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically.",
    "reasonChainDown": "Can't reach {{chain}} to price this. Retrying automatically.",
-   "reasonInternal": "Something went wrong inside Vela. Retrying — if it keeps failing, reopen the app.",
+   "reasonInternal": "Something went wrong inside Vela. If it keeps happening, reopen the app.",
    "rowShort": "Need ~{{need}}, have {{have}}",
    "noCoinPays": "No token can pay this fee"
   },

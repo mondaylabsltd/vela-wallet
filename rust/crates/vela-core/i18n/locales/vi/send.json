@@ -80,6 +80,7 @@
     "recipientCount_other": "{{count}} người nhận",
     "removeRecipient": "Xóa",
     "alertInsufficientBalanceBody": "Tổng vượt quá số dư của bạn.",
+    "alertEstimateChainDownBody": "Không kết nối được {{chain}} để tính phí giao dịch này. Hãy thử lại sau giây lát.",
     "recipientPickAria": "Chọn từ danh bạ",
     "multiSendNoFundsAfterGas": "Không đủ để trả gas sau khi dự trữ.",
     "gasReserved": "đã giữ gas",

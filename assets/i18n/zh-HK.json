@@ -359,6 +359,7 @@
   "recipientCount_other": "{{count}} 位收款人",
   "removeRecipient": "移除",
   "alertInsufficientBalanceBody": "總額超過你的餘額。",
+  "alertEstimateChainDownBody": "暫時連唔到 {{chain}}，計唔到呢筆交易嘅費用。請稍後再試。",
   "recipientPickAria": "喺通訊錄揀",
   "multiSendNoFundsAfterGas": "扣除 gas 儲備後餘額不足。",
   "gasReserved": "已留 gas",
@@ -1406,6 +1407,7 @@
     "batchUnsettled": "正在逐一檢查呢批調用…",
     "feeMeasuring": "正在計算網絡費用…",
     "feeFailed": "計唔到費用——撳費用重試",
+    "feeRetrying": "暫時計唔到費用，正在自動重試…",
     "previousPending": "正在等這個網絡上的上一筆交易完成…"
    }
   },
@@ -1458,7 +1460,7 @@
    "reasonSimulation": "中繼暫時未能試行這筆交易，正在自動重試。",
    "reasonQuoteHigh": "中繼的 gas 價格目前遠高於網絡本身，正在自動重試。",
    "reasonChainDown": "暫時連唔到 {{chain}}，計唔到費用，正在自動重試。",
-   "reasonInternal": "Vela 內部出咗問題，正在重試。如果一直失敗，請重新開啟 App。",
+   "reasonInternal": "Vela 內部出咗問題。如果一直係咁，請重新開啟 App。",
    "rowShort": "需要 ~{{need}}，而家有 {{have}}",
    "noCoinPays": "所有代幣都唔夠畀呢筆網絡費"
   },

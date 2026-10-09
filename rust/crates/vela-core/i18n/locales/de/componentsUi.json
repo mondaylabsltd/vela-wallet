@@ -245,6 +245,7 @@
         "batchUnsettled": "Jeder Aufruf im Batch wird geprüft…",
         "feeMeasuring": "Netzwerkgebühr wird berechnet…",
         "feeFailed": "Gebühr nicht berechenbar — zum Wiederholen tippen",
+        "feeRetrying": "Gebühr noch nicht berechenbar. Wird automatisch erneut versucht…",
         "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…"
       }
     },
@@ -336,7 +337,7 @@
       "reasonSimulation": "Das Relay konnte diese Transaktion noch nicht testweise ausführen. Wird automatisch erneut versucht.",
       "reasonQuoteHigh": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks. Wird automatisch erneut versucht.",
       "reasonChainDown": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden. Wird automatisch erneut versucht.",
-      "reasonInternal": "In Vela ist etwas schiefgelaufen. Wird erneut versucht – falls es so bleibt, öffne die App neu.",
+      "reasonInternal": "In Vela ist etwas schiefgelaufen. Falls es so bleibt, öffne die App neu.",
       "rowShort": "Benötigt ~{{need}}, vorhanden {{have}}",
       "noCoinPays": "Kein Token reicht für diese Gebühr"
     },

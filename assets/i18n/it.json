@@ -360,6 +360,7 @@
   "recipientCount_other": "{{count}} destinatari",
   "removeRecipient": "Rimuovi",
   "alertInsufficientBalanceBody": "Il totale supera il tuo saldo.",
+  "alertEstimateChainDownBody": "Impossibile raggiungere {{chain}} per calcolare la commissione di questa transazione. Riprova tra un momento.",
   "recipientPickAria": "Scegli un contatto",
   "scanAria": "Scansiona un codice QR",
   "multiSendNoFundsAfterGas": "Saldo insufficiente per il gas dopo la riserva.",
@@ -1410,6 +1411,7 @@
     "batchUnsettled": "Controllo di ogni chiamata del batch…",
     "feeMeasuring": "Calcolo della commissione di rete…",
     "feeFailed": "Impossibile calcolare la commissione: toccala per riprovare",
+    "feeRetrying": "Non è ancora stato possibile calcolare la commissione. Nuovo tentativo automatico…",
     "previousPending": "In attesa della tua transazione precedente su questa rete…"
    }
   },
@@ -1501,7 +1503,7 @@
    "reasonSimulation": "Il relay non è ancora riuscito a simulare questa transazione. Nuovo tentativo automatico.",
    "reasonQuoteHigh": "Il prezzo del gas del relay è ora molto più alto di quello della rete. Nuovo tentativo automatico.",
    "reasonChainDown": "Impossibile raggiungere {{chain}} per calcolare la commissione. Nuovo tentativo automatico.",
-   "reasonInternal": "Qualcosa è andato storto in Vela. Nuovo tentativo: se continua, riapri l’app.",
+   "reasonInternal": "Qualcosa è andato storto in Vela. Se continua, riapri l’app.",
    "rowShort": "Servono ~{{need}}, hai {{have}}",
    "noCoinPays": "Nessun token basta per questa commissione"
   },

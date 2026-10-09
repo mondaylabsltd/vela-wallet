@@ -360,6 +360,7 @@
   "recipientCount_other": "{{count}} destinataires",
   "removeRecipient": "Retirer",
   "alertInsufficientBalanceBody": "Le total dépasse votre solde.",
+  "alertEstimateChainDownBody": "Impossible de joindre {{chain}} pour calculer les frais de cette transaction. Réessayez dans un instant.",
   "recipientPickAria": "Choisir un contact",
   "multiSendNoFundsAfterGas": "Solde insuffisant après la réserve de gas.",
   "gasReserved": "gas réservé",
@@ -1410,6 +1411,7 @@
     "batchUnsettled": "Vérification de chaque appel du lot…",
     "feeMeasuring": "Calcul des frais de réseau…",
     "feeFailed": "Frais incalculables — touchez-les pour réessayer",
+    "feeRetrying": "Frais pas encore calculés. Nouvelle tentative automatique…",
     "previousPending": "En attente de votre transaction précédente sur ce réseau…"
    }
   },
@@ -1501,7 +1503,7 @@
    "reasonSimulation": "Le relais n'a pas encore pu simuler cette transaction. Nouvelle tentative automatique.",
    "reasonQuoteHigh": "Le prix du gas du relais est en ce moment bien au-dessus de celui du réseau. Nouvelle tentative automatique.",
    "reasonChainDown": "Impossible de joindre {{chain}} pour calculer les frais. Nouvelle tentative automatique.",
-   "reasonInternal": "Un problème est survenu dans Vela. Nouvelle tentative — si cela continue, rouvrez l'app.",
+   "reasonInternal": "Un problème est survenu dans Vela. Si cela continue, rouvrez l'app.",
    "rowShort": "Il faut ~{{need}}, vous avez {{have}}",
    "noCoinPays": "Aucun jeton ne couvre ces frais"
   },

@@ -245,6 +245,7 @@
         "batchUnsettled": "Revisando cada llamada del lote…",
         "feeMeasuring": "Calculando la comisión de red…",
         "feeFailed": "No se pudo calcular la comisión: tócala para reintentar",
+        "feeRetrying": "Aún no se pudo calcular la comisión. Reintentando automáticamente…",
         "previousPending": "Esperando a que termine tu transacción anterior en esta red…"
       }
     },
@@ -336,7 +337,7 @@
       "reasonSimulation": "El relay todavía no pudo simular esta transacción. Reintentando automáticamente.",
       "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente.",
       "reasonChainDown": "No se puede conectar con {{chain}} para calcular la comisión. Reintentando automáticamente.",
-      "reasonInternal": "Algo falló dentro de Vela. Reintentando; si sigue fallando, vuelve a abrir la app.",
+      "reasonInternal": "Algo falló dentro de Vela. Si sigue pasando, vuelve a abrir la app.",
       "rowShort": "Necesitas ~{{need}}, tienes {{have}}",
       "noCoinPays": "Ningún token alcanza para esta comisión"
     },
