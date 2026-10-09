@@ -953,16 +953,27 @@ final class SigningController {
         guard !answered, let op = submittedHash,
               let entry = trackerView?.entry(userOpHash: op)
         else { return }
-        let state = "\(entry.userOpHash.lowercased())|\(entry.status)|\(entry.txHash ?? "")"
+        let state = "\(entry.userOpHash.lowercased())|\(entry.status)|\(entry.txHash ?? "")|\(entry.refusal ?? "")"
         guard state != lastTracked else { return }
         lastTracked = state
-        dispatchSign([
+        dispatchSign(Self.opTracked(entry, nowMs: Date().timeIntervalSince1970 * 1000))
+    }
+
+    /// The tracker entry as `op_tracked`: its status, the bundle it names,
+    /// and — for a refusal — WHY, the entry's own `refusal` (PR 2 note 9).
+    /// The sheet's failure then says the sentence the entry's `refusal_key`
+    /// says (`SignView.failure_refusal_key`): one source, the core's
+    /// `refusal_key(reason)`, for the sheet and its ending alike.
+    static func opTracked(_ entry: TrackEntryWire, nowMs: Double) -> [String: Any] {
+        var event: [String: Any] = [
             "type": "op_tracked",
             "user_op_hash": entry.userOpHash,
             "status": entry.status,
             "tx_hash": entry.txHash.map { $0 as Any } ?? NSNull(),
-            "now_ms": Date().timeIntervalSince1970 * 1000,
-        ])
+            "now_ms": nowMs,
+        ]
+        if let refusal = entry.refusal { event["refusal"] = refusal }
+        return event
     }
 
     private func markAnswered() {

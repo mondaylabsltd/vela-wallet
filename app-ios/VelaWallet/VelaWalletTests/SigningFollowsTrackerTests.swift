@@ -143,11 +143,15 @@ struct SigningFollowsTrackerTests {
         return RpcCallResult(outcome: .ok(hash), maybeDelivered: false, heldErrorJson: nil)
     }
 
-    private func view(_ hash: String, status: String, txHash: String?) -> TrackViewWire {
-        TrackViewWire(entries: [TrackEntryWire(
+    private func view(
+        _ hash: String, status: String, txHash: String?, refusal: String? = nil
+    ) -> TrackViewWire {
+        var entry = TrackEntryWire(
             userOpHash: hash, chainId: 100, recordIds: [], status: status, txHash: txHash,
             polling: false, submittedAtMs: 1_757_000_000_000, outcome: "final"
-        )])
+        )
+        entry.refusal = refusal
+        return TrackViewWire(entries: [entry])
     }
 
     private func receiptPolls(_ run: Run) -> Int {
@@ -222,6 +226,39 @@ struct SigningFollowsTrackerTests {
 
         try await Task.sleep(nanoseconds: 500_000_000)
         #expect(run.seen.answers.count == 1, "exactly one answer: \(run.seen.answers)")
+    }
+
+    /// PR 2 note 9: the tracker's refusal reaches the sheet WITH its reason
+    /// (`op_tracked.refusal`, the entry's own), and the sheet's failure says
+    /// it — "another transaction from this account went first" — the same
+    /// sentence the entry's `refusal_key` and the ending say: one source.
+    @Test func aRefusalVerdictIsToldByItsReason() async throws {
+        let run = try await approved(post: { store, _ in Self.accept(store) })
+        await Wait.until { run.seen.tracked.contains { $0.admitted } }
+        let hash = try #require(run.controller.submittedUserOp)
+        await Wait.until { run.controller.sign.pendingOpHash != nil }
+
+        run.controller.trackerChanged(view(hash, status: "rejected", txHash: nil, refusal: "nonce_used"))
+        await Wait.until { run.controller.sign.failureRefused }
+        let sign = run.controller.sign
+        #expect(sign.failureRefusalKey == "componentsUi.signing.wentFirst",
+                "\(String(describing: sign.failureRefusalKey))")
+        let receipt = try #require(SigningLive.receipt(
+            sign: sign, blocks: [], context: Self.receiptContext()
+        ))
+        #expect(receipt.stage == .failed)
+        #expect(receipt.captions.contains(Self.loc.t("componentsUi.signing.wentFirst")))
+        #expect(!receipt.captions.contains(Self.loc.t("componentsUi.signing.refused")))
+        // The event carried the entry's reason.
+        var entry = TrackEntryWire(
+            userOpHash: hash, chainId: 100, recordIds: [], status: "rejected", txHash: nil,
+            polling: false, submittedAtMs: 1, outcome: "final"
+        )
+        #expect(SigningController.opTracked(entry, nowMs: 1)["refusal"] == nil, "no reason, no field")
+        entry.refusal = "fee_below_market"
+        #expect(SigningController.opTracked(entry, nowMs: 1)["refusal"] as? String == "fee_below_market")
+        run.controller.swipeDismissed()
+        await Wait.until { !run.seen.answers.isEmpty }
     }
 
     /// Spec 097 N4: the page went while the refusal showed. The browser

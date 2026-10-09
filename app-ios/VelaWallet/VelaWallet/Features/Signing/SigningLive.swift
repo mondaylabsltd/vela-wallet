@@ -451,9 +451,11 @@ enum SigningLive {
                 error.kind.signerReasonKey.map { loc.t($0) } ?? loc.t("send.txErrorGeneric")
             // Spec 102: this account cannot sign here — the venue's reason.
             case .venueBlocked: error.venueReason(loc) ?? loc.t("send.txErrorGeneric")
-            // The relay refused it (spec 082 RJ3): nothing was sent, and
-            // "try again" would send the same refusal.
-            default: sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric")
+            // The relay refused it (spec 082 RJ3): nothing was sent — said
+            // by its reason (PR 2 note 9, `failure_refusal_key`): the account's
+            // previous op holding the nonce, another that went first, the
+            // fee — else the plain refusal.
+            default: refusalReason(sign, loc: loc) ?? loc.t("send.txErrorGeneric")
             }
             if !text.isEmpty { blocks.append(.warning(tone: .danger, text: text)) }
         }
@@ -465,6 +467,15 @@ enum SigningLive {
             blocks.append(.sentence(text: words.title, tone: .neutral))
         }
         return blocks
+    }
+
+    /// The sentence under a refusal: the core's `failure_refusal_key` — why
+    /// the relay did not take it, at submit or by the tracker's verdict (PR 2
+    /// note 9) — else, for a refusal from a core that does not say, the
+    /// plain one. `nil` for a failure that was no refusal.
+    static func refusalReason(_ sign: SignViewWire, loc: Loc) -> String? {
+        if let key = sign.failureRefusalKey { return loc.t(key) }
+        return sign.failureRefused ? s(loc, "refused") : nil
     }
 
     /// What the sheet says while a request is in flight — from the core's
@@ -531,7 +542,8 @@ enum SigningLive {
             // core never offers a retry for it).
             let reason = error.venueReason(loc)
                 ?? error.kind.signerReasonKey.map { loc.t($0) }
-                ?? (sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"))
+                ?? refusalReason(sign, loc: loc)
+                ?? loc.t("send.txErrorGeneric")
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),

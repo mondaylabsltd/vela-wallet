@@ -349,6 +349,14 @@ struct SignViewWire: Decodable, Equatable {
     /// `error` is the relay refusing the op (spec 082 RJ3): the sheet says
     /// `componentsUi.signing.refused` under `statusFailed`, never "try again".
     var failureRefused: Bool = false
+    /// WHY the relay did not take it (PR 2 note 9), the one sentence under
+    /// the sheet's failure for both ways a refusal arrives: at submit (the
+    /// account's previous op holds the nonce →
+    /// `componentsUi.signing.confirmBlock.previousPending`, retryable; any
+    /// other refusal → `componentsUi.signing.refused`) and after it (the
+    /// tracker's verdict, forwarded with `op_tracked.refusal` — the entry's
+    /// own `refusal_key`). `nil` for a failure that was no refusal.
+    var failureRefusalKey: String? = nil
     /// Spec 096 F8: the failure on the sheet sent nothing and was no refusal,
     /// and its answer is still held — the receipt offers Try again
     /// (`retry_tapped`) beside Done, which answers the page.
