@@ -145,7 +145,7 @@ fn request(chain_id: u32, calls: Vec<FeeCall>) -> Event {
 /// and signing surfaces use once a chip has been tapped.
 fn request_in(chain_id: u32, calls: Vec<FeeCall>, fee_token: Option<&str>) -> Event {
     Event::QuoteRequested {
-        read_deployment: false,
+        read_deployment: None,
         chain_id,
         account: ACCOUNT.to_owned(),
         deployed: true,
@@ -1683,7 +1683,7 @@ fn request_with_preset(number: NumberPreset) -> Event {
         unreachable!("request() builds a QuoteRequested")
     };
     Event::QuoteRequested {
-        read_deployment: false,
+        read_deployment: None,
         chain_id,
         account,
         deployed,
@@ -2943,7 +2943,7 @@ fn a_bundler_under_report_is_floored_at_the_chain_measurement() {
 fn undeployed_without_public_key_never_estimates() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
-        read_deployment: false,
+        read_deployment: None,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -2962,7 +2962,7 @@ fn undeployed_without_public_key_never_estimates() {
     // With the key available, the undeployed account estimates normally.
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
-        read_deployment: false,
+        read_deployment: None,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -2981,7 +2981,7 @@ fn undeployed_without_public_key_never_estimates() {
     // Tempo send on web while native quoted it.
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
-        read_deployment: false,
+        read_deployment: None,
         chain_id: TEMPO_CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -3449,7 +3449,7 @@ fn tempo_undeployed_contract_call_keeps_the_static_model() {
     };
     let mut sut = Sut::new();
     sut.dispatch(Event::QuoteRequested {
-        read_deployment: false,
+        read_deployment: None,
         chain_id: TEMPO_CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -3989,7 +3989,7 @@ fn erc20_transfer_call() -> FeeCall {
 
 fn request_undeployed(calls: Vec<FeeCall>) -> Event {
     Event::QuoteRequested {
-        read_deployment: false,
+        read_deployment: None,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -4373,7 +4373,7 @@ fn usdt_row(balance: &str, usd: &str) -> FeeAssetQuote {
 
 fn auto_request(chain_id: u32, calls: Vec<FeeCall>) -> Event {
     Event::QuoteRequested {
-        read_deployment: false,
+        read_deployment: None,
         chain_id,
         account: ACCOUNT.to_owned(),
         deployed: true,
@@ -6466,7 +6466,7 @@ fn reading_request() -> Event {
         fee_token,
         auto_fee_token,
         number,
-        read_deployment: true,
+        read_deployment: Some(true),
     }
 }
 

@@ -551,6 +551,7 @@ pub enum TrackShellResult {
         /// [`TrackStatusAnswer::rejection_reason`], passed through. Absent
         /// (an older shell or relay): the reason is read from `stage`.
         #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
         rejection_reason: Option<String>,
     },
     /// The status endpoint yielded nothing (unreachable or an older relay).
@@ -780,6 +781,7 @@ pub enum Event {
         /// `SignTrackerHandoff`'s `sender`, forwarded. What makes the op one
         /// this account must wait for ([`in_flight_ops`]).
         #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
         sender: Option<String>,
     },
     /// The op was proven never sent after its write-ahead hand-off (spec 082

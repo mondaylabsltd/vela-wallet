@@ -810,11 +810,11 @@ pub enum Event {
         /// Read the account's deployment here, first
         /// ([`FeeOperation::ReadDeployment`]), instead of trusting `deployed`
         /// — the read's failure is then the fee's, with the fee's words and
-        /// retry (issue #483). `#[serde(default)]`: a shell that does not
-        /// send it reads the deployment itself and passes `deployed`, as
-        /// before.
+        /// retry (issue #483). Absent (or `false`): the shell reads the
+        /// deployment itself and passes `deployed`, as before.
         #[serde(default)]
-        read_deployment: bool,
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        read_deployment: Option<bool>,
     },
     /// A fee-asset chip tap. `None` = native.
     SelectFeeAsset { token: Option<String> },
@@ -2432,8 +2432,8 @@ impl App for FeePolicy {
                     chain_id,
                     account,
                     deployed,
-                    reads_deployment: read_deployment,
-                    needs_deployment_read: read_deployment,
+                    reads_deployment: read_deployment == Some(true),
+                    needs_deployment_read: read_deployment == Some(true),
                     public_key_available,
                     tier,
                     calls,
