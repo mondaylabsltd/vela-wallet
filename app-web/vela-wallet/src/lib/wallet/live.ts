@@ -131,18 +131,23 @@ export function liveChainRows(
  * The feed narrowed to one chain — the phone app's `filterFeedRowsByChain`.
  * A day header whose items all fell away goes with them, or the list would
  * show dates with nothing under them.
+ *
+ * Both lists are narrowed the same way: `rows` (History, every one) and
+ * `home_rows` (the home's newest three, issue 469). Which rows are the
+ * home's is the core's cut — this only drops what is not on the chain, it
+ * never counts.
  */
 export function narrowedFeed(feed: FeedView, filter: number | null): FeedView {
 	if (filter === null) return feed;
-	const kept = feed.rows.filter((row) => row.type === 'header' || row.item.chain_id === filter);
-	return {
-		...feed,
-		rows: kept.filter((row, i) => {
+	const narrowed = (rows: FeedRow[]): FeedRow[] => {
+		const kept = rows.filter((row) => row.type === 'header' || row.item.chain_id === filter);
+		return kept.filter((row, i) => {
 			if (row.type !== 'header') return true;
 			const next = kept[i + 1];
 			return next !== undefined && next.type !== 'header';
-		})
+		});
 	};
+	return { ...feed, rows: narrowed(feed.rows), home_rows: narrowed(feed.home_rows) };
 }
 
 // ---------------------------------------------------------------------------
@@ -733,14 +738,21 @@ export function dappTitle(dapp: FeedDapp, m: RowMessages): string {
 	return dapp.place != null ? fill(m.activity.dappRowTitle, { intent, place: dapp.place }) : intent;
 }
 
-/** The core emits headers and items already interleaved (invariant ⑥). */
+/**
+ * The core emits headers and items already interleaved (invariant ⑥).
+ *
+ * `rows` is the list to draw, and WHICH list is the caller's to say: History
+ * hands `FeedView.rows` (every one), the home hands `FeedView.home_rows` (the
+ * core's newest three, issue 469). Nothing here caps — a cap in this helper
+ * would silently cut History short too.
+ */
 export function liveActivityGroups(
-	view: FeedView,
+	rows: FeedRow[],
 	m: WalletMessages,
 	hidden: boolean
 ): ActivityGroupModel[] {
 	const groups: ActivityGroupModel[] = [];
-	for (const row of view.rows) {
+	for (const row of rows) {
 		if (row.type === 'header') {
 			groups.push({ label: dayLabel(row.day_start_ms, m), rows: [] });
 			continue;
@@ -872,9 +884,12 @@ function liveSections(inputs: WalletLiveInputs) {
 				: assetsMode(view),
 		assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
 		activityMode: activityMode(view, feed),
+		// The home's Activity is the newest three (issue 469): the core's
+		// `home_rows`, never `rows` — a long history pushed Assets off the
+		// screen. "All" opens History, which draws every row.
 		// The feed masks on its own flag (`FeedView.hidden`), never the
 		// balance machine's threaded through (`app::privacy`).
-		activityGroups: feed ? liveActivityGroups(feed, m, feed.hidden) : [],
+		activityGroups: feed ? liveActivityGroups(feed.home_rows, m, feed.hidden) : [],
 		// Spec 082 RG5: which empty line the home says is the core's
 		// (`FeedView.home_empty_key`) — "no activity" or "none on this network".
 		activityEmpty: {

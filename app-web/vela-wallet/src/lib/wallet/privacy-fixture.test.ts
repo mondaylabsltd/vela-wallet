@@ -176,7 +176,8 @@ function maskedSurfaces({ balance, feed }: Side): Record<string, string> {
 		holdings: JSON.stringify(balance.tokens.map((t) => liveAssetRow(t, USD, m, balance.hidden))),
 		assets: JSON.stringify(assets.base.kind === 'assets' ? assets.base.model.rows : null),
 		token_detail: JSON.stringify(tokenDetails),
-		home_activity: JSON.stringify(liveActivityGroups(feed, m, feed.hidden)),
+		// The home draws the core's own cut (`home_rows`, issue 469).
+		home_activity: JSON.stringify(liveActivityGroups(feed.home_rows, m, feed.hidden)),
 		history: JSON.stringify(history.base.kind === 'history' ? history.base.model.groups : null),
 		transfer_detail: JSON.stringify(transfers.map(detail)),
 		dapp_detail: JSON.stringify(dapps.map(detail)),

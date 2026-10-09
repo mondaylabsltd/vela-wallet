@@ -464,6 +464,7 @@ describe('empty activity, chosen by the core', () => {
 	const IDENT = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 	const EMPTY_FEED: FeedView = {
 		rows: [],
+		home_rows: [],
 		transactions: [],
 		new_item_id: null,
 		toast: null,

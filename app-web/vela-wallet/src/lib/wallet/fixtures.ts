@@ -138,6 +138,15 @@ const DEFAULT_ACTIVITY: ActivityFixture[] = [
 	}
 ];
 
+/**
+ * What the HOME draws of the default feed: the newest three (issue 469). Live,
+ * the cut is the core's — `FeedView.home_rows`, `HOME_ACTIVITY_ITEMS` = 3 —
+ * and the boards draw the same picture: the fourth row (昨天, from Alice) is
+ * History's, reached through "All". A full feed on the home pushed Assets
+ * off the first screen.
+ */
+const HOME_ACTIVITY: ActivityFixture[] = DEFAULT_ACTIVITY.slice(0, 3);
+
 const EXTREME_ACTIVITY: ActivityFixture[] = [
 	{
 		kind: 'sent',
@@ -444,7 +453,7 @@ export function buildMobileState(
 		balance: balance(m, 'normal', DEFAULT_BALANCE),
 		actions: { receive: m.actions.receive, send: m.actions.send, scan: m.actions.scan },
 		activitySection: sections('rows')[0],
-		activityGroups: groupByDay(m, DEFAULT_ACTIVITY),
+		activityGroups: groupByDay(m, HOME_ACTIVITY),
 		assetsSection: sections('rows')[1],
 		assetRows: DEFAULT_ASSETS.map((f) => assetRow(m, f)),
 		tabs: { ...m.nav },
@@ -498,7 +507,7 @@ export function buildMobileState(
 			return {
 				...base,
 				balance: balance(m, 'hidden'),
-				activityGroups: groupByDay(m, DEFAULT_ACTIVITY, { masked: true }),
+				activityGroups: groupByDay(m, HOME_ACTIVITY, { masked: true }),
 				assetRows: DEFAULT_ASSETS.map((f) => assetRow(m, f, true))
 			};
 		case 'h6':
@@ -610,7 +619,7 @@ export function buildDesktopState(
 			mode: 'rows',
 			empty: { title: m.activity.emptyTitle, caption: m.activity.emptyCaption }
 		},
-		activityGroups: groupByDay(m, DEFAULT_ACTIVITY, { withTime: true }),
+		activityGroups: groupByDay(m, HOME_ACTIVITY, { withTime: true }),
 		assetsSection: {
 			title: m.sections.assets,
 			action: m.sections.add,

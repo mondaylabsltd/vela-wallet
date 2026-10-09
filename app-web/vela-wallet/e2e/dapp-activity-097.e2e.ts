@@ -245,13 +245,21 @@ async function openWallet(page: Page, locale = 'en'): Promise<void> {
 	await expect(page.getByText('$0', { exact: true }).first()).toBeVisible({ timeout: 20_000 });
 }
 
-const TITLES = [
-	'Withdraw on Aave',
-	'Create order on 1inch',
-	'Approve on Uniswap',
-	'Borrow on Aave',
-	'Swap on PancakeSwap'
-];
+/**
+ * The five rows, newest first. The home draws the newest three (issue 469 —
+ * the core's `FeedView.home_rows`); the other two are History's, reached
+ * through the Activity section's "All".
+ */
+const HOME_TITLES = ['Withdraw on Aave', 'Create order on 1inch', 'Approve on Uniswap'];
+const HISTORY_ONLY_TITLES = ['Borrow on Aave', 'Swap on PancakeSwap'];
+const TITLES = [...HOME_TITLES, ...HISTORY_ONLY_TITLES];
+
+/** The Activity section's "All": the way from the home's three to every row. */
+async function openHistory(page: Page, locale: 'en' | 'zh' = 'en'): Promise<void> {
+	const all = locale === 'en' ? en('history.filterAll') : '全部';
+	await page.getByRole('button', { name: all, exact: true }).first().click();
+	await page.waitForTimeout(500);
+}
 
 async function open(page: Page, title: RegExp) {
 	await page.getByRole('button', { name: title }).first().click({ timeout: 20_000 });
@@ -264,6 +272,34 @@ test.describe('phone width', () => {
 
 	test('the pass reads what the chain proved; a failed row says why', async ({ page }) => {
 		await openWallet(page);
+		// The home: the newest three, and only those (issue 469).
+		for (const title of HOME_TITLES) {
+			await expect(page.getByRole('button', { name: new RegExp(title) }).first()).toBeVisible({
+				timeout: 20_000
+			});
+		}
+		for (const title of HISTORY_ONLY_TITLES) {
+			await expect(page.getByRole('button', { name: new RegExp(title) })).toHaveCount(0);
+		}
+		await page.screenshot({ path: `${SHOTS}/activity-phone-en.png`, fullPage: true });
+
+		await open(page, /Withdraw on Aave/);
+		let sheet = page.getByRole('dialog');
+		await expect(sheet.getByText(en('componentsUi.signing.refused'))).toBeVisible();
+		await page.screenshot({ path: `${SHOTS}/failed-detail-phone-en.png` });
+		await page.keyboard.press('Escape');
+		await page.waitForTimeout(500);
+
+		await open(page, /Create order on 1inch/);
+		sheet = page.getByRole('dialog');
+		await expect(sheet.getByText('NativeOrderFactory')).toBeVisible();
+		await expect(sheet.getByText(/≈ \$0\.00/)).toHaveCount(0);
+		await page.screenshot({ path: `${SHOTS}/order-detail-phone-en.png` });
+		await page.keyboard.press('Escape');
+		await page.waitForTimeout(500);
+
+		// "All" opens History, which draws every row.
+		await openHistory(page);
 		for (const title of TITLES) {
 			await expect(page.getByRole('button', { name: new RegExp(title) }).first()).toBeVisible({
 				timeout: 20_000
@@ -274,10 +310,10 @@ test.describe('phone width', () => {
 		// The swap leads with the USDC it took: BNB Chain's registry stablecoin,
 		// trusted with no simulation on the sheet (097 D).
 		await expect(page.getByText('−1.16', { exact: true })).toBeVisible();
-		await page.screenshot({ path: `${SHOTS}/activity-phone-en.png`, fullPage: true });
+		await page.screenshot({ path: `${SHOTS}/history-phone-en.png`, fullPage: true });
 
 		await open(page, /Borrow on Aave/);
-		let sheet = page.getByRole('dialog');
+		sheet = page.getByRole('dialog');
 		await expect(sheet.getByText('+0.3 USDC', { exact: true }).first()).toBeVisible();
 		await expect(sheet.getByText(/≈ \$0\.00/)).toHaveCount(0);
 		await page.screenshot({ path: `${SHOTS}/borrow-detail-phone-en.png` });
@@ -290,31 +326,24 @@ test.describe('phone width', () => {
 		// The hero and its balance-change line (097 D: the row leads with it).
 		await expect(sheet.getByText('−1.16 USDC', { exact: true })).toHaveCount(2);
 		await page.screenshot({ path: `${SHOTS}/swap-detail-phone-en.png` });
-		await page.keyboard.press('Escape');
-		await page.waitForTimeout(500);
-
-		await open(page, /Withdraw on Aave/);
-		sheet = page.getByRole('dialog');
-		await expect(sheet.getByText(en('componentsUi.signing.refused'))).toBeVisible();
-		await page.screenshot({ path: `${SHOTS}/failed-detail-phone-en.png` });
-		await page.keyboard.press('Escape');
-		await page.waitForTimeout(500);
-
-		await open(page, /Create order on 1inch/);
-		sheet = page.getByRole('dialog');
-		await expect(sheet.getByText('NativeOrderFactory')).toBeVisible();
-		await expect(sheet.getByText(/≈ \$0\.00/)).toHaveCount(0);
-		await page.screenshot({ path: `${SHOTS}/order-detail-phone-en.png` });
 	});
 
 	test('the same rows in Chinese', async ({ page }) => {
 		await openWallet(page, 'zh');
-		await expect(page.getByRole('button', { name: /在 Aave 借入/ }).first()).toBeVisible({
+		await expect(page.getByRole('button', { name: /在 Aave 取出/ }).first()).toBeVisible({
 			timeout: 20_000
 		});
+		// The borrow is the fourth row: History's, not the home's (issue 469).
+		await expect(page.getByRole('button', { name: /在 Aave 借入/ })).toHaveCount(0);
 		await page.screenshot({ path: `${SHOTS}/activity-phone-zh.png`, fullPage: true });
 		await open(page, /在 Aave 取出/);
 		await page.screenshot({ path: `${SHOTS}/failed-detail-phone-zh.png` });
+		await page.keyboard.press('Escape');
+		await page.waitForTimeout(500);
+		await openHistory(page, 'zh');
+		await expect(page.getByRole('button', { name: /在 Aave 借入/ }).first()).toBeVisible({
+			timeout: 20_000
+		});
 	});
 });
 
@@ -325,15 +354,21 @@ test.describe('desktop width', () => {
 		page
 	}) => {
 		await openWallet(page);
-		await expect(page.getByRole('button', { name: /Borrow on Aave/ }).first()).toBeVisible({
-			timeout: 20_000
-		});
+		// The home column: the newest three (issue 469), the borrow not among them.
+		for (const title of HOME_TITLES) {
+			await expect(page.getByRole('button', { name: new RegExp(title) }).first()).toBeVisible({
+				timeout: 20_000
+			});
+		}
+		await expect(page.getByRole('button', { name: /Borrow on Aave/ })).toHaveCount(0);
 		await page.screenshot({ path: `${SHOTS}/activity-desktop-en.png` });
-		await open(page, /Borrow on Aave/);
-		await expect(page.getByText('+0.3 USDC', { exact: true }).first()).toBeVisible();
-		await page.screenshot({ path: `${SHOTS}/borrow-detail-desktop-en.png` });
 		await open(page, /Withdraw on Aave/);
 		await expect(page.getByText(en('componentsUi.signing.refused'))).toBeVisible();
 		await page.screenshot({ path: `${SHOTS}/failed-detail-desktop-en.png` });
+		// "All" opens History in the third column: every row, the borrow too.
+		await openHistory(page);
+		await open(page, /Borrow on Aave/);
+		await expect(page.getByText('+0.3 USDC', { exact: true }).first()).toBeVisible();
+		await page.screenshot({ path: `${SHOTS}/borrow-detail-desktop-en.png` });
 	});
 });

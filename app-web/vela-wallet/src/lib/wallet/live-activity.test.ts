@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
+import type { FeedRow } from '$lib/core/generated/FeedRow';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { chainName } from '$lib/services/networks';
@@ -525,26 +526,32 @@ const NOW_S = 1_790_000_000;
 describe('liveActivityGroups', () => {
 	it('headers open groups, items fill them, in the order the core emitted', () => {
 		const today = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
-		const view: FeedView = {
-			rows: [
-				{ type: 'header', id: `day-${today}`, day_start_ms: today, timestamp: today / 1000 },
-				{ type: 'item', item: item({ id: 'x' }) },
-				{ type: 'item', item: item({ id: 'y', direction: 'out' }) },
-				{ type: 'header', id: `day-${today - DAY}`, day_start_ms: today - DAY, timestamp: 1 },
-				{ type: 'item', item: item({ id: 'z' }) }
-			],
-			transactions: [],
-			new_item_id: null,
-			toast: null,
-			history_empty_key: 'history.emptyTitle',
-			home_empty_key: 'home.emptyNoActivity',
-			hidden: false,
-			contact_rows: []
-		};
-		const groups = liveActivityGroups(view, m, false);
+		const rows: FeedRow[] = [
+			{ type: 'header', id: `day-${today}`, day_start_ms: today, timestamp: today / 1000 },
+			{ type: 'item', item: item({ id: 'x' }) },
+			{ type: 'item', item: item({ id: 'y', direction: 'out' }) },
+			{ type: 'header', id: `day-${today - DAY}`, day_start_ms: today - DAY, timestamp: 1 },
+			{ type: 'item', item: item({ id: 'z' }) }
+		];
+		const groups = liveActivityGroups(rows, m, false);
 		expect(groups.map((g) => [g.label, g.rows.length])).toEqual([
 			[m.activity.today, 2],
 			[m.activity.yesterday, 1]
 		]);
+	});
+
+	// Issue 469: the helper draws the list it is handed and never counts. The
+	// home's three are the core's cut (`FeedView.home_rows`); a cap in here
+	// would cut History — which shares this helper — short as well.
+	it('draws every row it is handed: the cut is the caller’s list, never a cap here', () => {
+		const today = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+		const rows: FeedRow[] = [
+			{ type: 'header', id: `day-${today}`, day_start_ms: today, timestamp: today / 1000 },
+			...Array.from({ length: 9 }, (_, i): FeedRow => ({ type: 'item', item: item({ id: `r${i}` }) }))
+		];
+		const groups = liveActivityGroups(rows, m, false);
+		expect(groups.flatMap((g) => g.rows).map((r) => r.id)).toEqual(
+			Array.from({ length: 9 }, (_, i) => `r${i}`)
+		);
 	});
 });

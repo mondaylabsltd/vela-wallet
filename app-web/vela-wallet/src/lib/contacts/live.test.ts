@@ -279,6 +279,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 /** Alice's page is open: the core's `contact_rows` are hers, newest first. */
 const FEED: FeedView = {
 	rows: [],
+	home_rows: [],
 	transactions: [],
 	new_item_id: null,
 	toast: null,

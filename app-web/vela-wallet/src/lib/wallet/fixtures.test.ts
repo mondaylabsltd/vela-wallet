@@ -47,6 +47,26 @@ describe('fixture canon (zh mock verbatim)', () => {
 		expect(m.assetRows[0]).toMatchObject({ ticker: 'BNB', chain: 'BNB Chain', balance: '0.8533' });
 	});
 
+	// Issue 469: the home's Activity is the newest three — the core's
+	// `FeedView.home_rows` live, and the same cut on the boards. The fourth
+	// row of the default feed (昨天, from Alice) is History's.
+	it('h1s and d1 draw the newest three, under their one day header', () => {
+		for (const model of [
+			buildMobileState('h1s', zh, IDENTICON_STUB),
+			buildMobileState('h5', zh, IDENTICON_STUB),
+			buildDesktopState('d1', zh, IDENTICON_STUB)
+		]) {
+			expect(model.activityGroups.map((g) => g.label)).toEqual(['今天']);
+			expect(model.activityGroups.flatMap((g) => g.rows).map((r) => r.unit)).toEqual([
+				'POL',
+				'USDT',
+				'BNB'
+			]);
+			// "All" is still there: it is the way to the rest.
+			expect(model.activitySection.action).toBe('全部');
+		}
+	});
+
 	it('h4 marks CAKE as unpriced with the mock copy', () => {
 		const m = buildMobileState('h4', zh, IDENTICON_STUB);
 		expect(m.balance.status).toMatchObject({ kind: 'warning', text: '部分代币无法获取价格。' });

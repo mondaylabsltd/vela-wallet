@@ -192,7 +192,8 @@ function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel
 	// list and the page's row index walk one feed.
 	const feed = narrowedFeed(inputs.feed, inputs.chainFilter ?? null);
 	// The feed's own flag (`FeedView.hidden`), as every feed surface reads it.
-	const groups = liveActivityGroups(feed, m, feed.hidden);
+	// Every row (`rows`), never the home's cut of three (`home_rows`).
+	const groups = liveActivityGroups(feed.rows, m, feed.hidden);
 	return {
 		...model,
 		header,

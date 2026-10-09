@@ -85,6 +85,9 @@ const FEED: FeedView = {
 	home_empty_key: 'home.emptyNoActivity',
 	hidden: false,
 	contact_rows: [],
+	// The detail is opened from History's list (`rows`); the home's cut plays
+	// no part in naming a tap.
+	home_rows: [],
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
 		{ type: 'item', item: item('a') },
