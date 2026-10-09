@@ -3440,9 +3440,10 @@ mod tests_082 {
         );
         let chain = r#"{"chain_read":{"rate_limited":false}}"#;
         assert_eq!(fee_requote_delay_ms(chain.into(), 1), Some(3_000));
+        // Issue #483: the fee row's own sentence, not the browser's.
         assert_eq!(
             fee_failure_reason_key(chain.into()).as_deref(),
-            Some("explore.chainDown")
+            Some("componentsUi.gas.reasonChainDown")
         );
         assert_eq!(
             fee_failure_reason_key("quote_unavailable".into()).as_deref(),

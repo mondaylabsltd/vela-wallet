@@ -902,7 +902,7 @@ pub enum SendReceiptOutcome {
         /// plain refusal.
         ///
         /// [`RefusalReason::FeeBelowMarket`]: super::tx_tracker::RefusalReason::FeeBelowMarket
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         refusal: Option<super::tx_tracker::RefusalReason>,
     },
     /// The relay parked the op until fees settle — pending, new wording only

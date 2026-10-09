@@ -301,7 +301,7 @@ pub struct TrackStatusAnswer {
     /// `fix/held-nonce-and-floor`): present on `rejected` / `failed` from a
     /// relay that says. Older relays send none; [`RefusalReason::of`] then
     /// reads the stage.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejection_reason: Option<String>,
 }
 
@@ -1226,17 +1226,17 @@ pub struct TrackEntryView {
     #[serde(default)]
     pub relay_sent_at_ms: Option<f64>,
     /// The account that signed it, lower-cased; `None` when no shell said.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender: Option<String>,
     /// `Rejected` only: why the relay refused it, when the relay (or its
     /// stage) says.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refusal: Option<RefusalReason>,
     /// `Rejected` only: the corpus key of the sentence that says why —
     /// [`RefusalReason::key`], or the plain "refused, nothing was sent" when
     /// the reason is unknown. Every surface that tells a refusal (the send
     /// receipt, the signing sheet's ending, a row's detail) draws THIS.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refusal_key: Option<String>,
 }
 
