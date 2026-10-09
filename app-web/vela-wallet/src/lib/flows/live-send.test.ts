@@ -1010,6 +1010,19 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 				})
 			);
 
+		// Issue 471: every split row has the same two doors the single field
+		// has — the book and the scanner — each for THAT row. Scanning into a
+		// split used to be a row inside the contact picker and nowhere else.
+		it('gives every row the book and the scanner, named as the single field names them', () => {
+			const rows = split({}).recipients ?? [];
+			expect(rows.map((row) => row.id)).toEqual(['a', 'b']);
+			for (const row of rows) {
+				expect(row.pickLabel).toBe(m['send.recipientPickAria']);
+				expect(row.scanLabel).toBe(m['send.scanAria']);
+			}
+			expect(liveSendForm(formModel(), inputs({})).recipient?.scanLabel).toBe(m['send.scanAria']);
+		});
+
 		it('counts the people in the total and prices the sum', () => {
 			const form = split({});
 			expect(form.summary?.label).toBe('Total · 2 recipients');

@@ -238,7 +238,7 @@ test('the scanner opened from the send form fills the row it was opened from', a
 	// recipient row dispatches `open_scanner`, the core's own `show_scanner`
 	// puts the surface on screen, and `scan_resolved` both fills the row and
 	// closes it. No shell flag decides any of that — which is why the sweep
-	// picker's scan button, drawn against the same field, needs nothing new.
+	// form's scan button, drawn against the same field, needs nothing new.
 	await stubCamera(page, 'NotAllowedError');
 	await openHome(page);
 	await page
@@ -258,6 +258,66 @@ test('the scanner opened from the send form fills the row it was opened from', a
 	await pick(page, ALICE);
 	await expect(recipient).toBeVisible({ timeout: 30_000 });
 	await expect(recipient).toHaveValue(ALICE);
+});
+
+test('a split row’s own scan icon fills THAT row, and the picker offers no scan', async ({
+	page
+}) => {
+	// Issue 471. Scanning into a split used to be "Scan to fill the address",
+	// a row inside the contact picker — and the only way to scan there. Each
+	// row now has its own scan icon beside its contacts icon, and the code
+	// lands in the row it was opened from (the core's `open_scanner { target }`).
+	await stubCamera(page, 'NotAllowedError');
+	await openHome(page);
+	await page
+		.getByRole('button', { name: en('componentsUi.dock.send') })
+		.first()
+		.click();
+	await page.getByText('ETH', { exact: true }).first().click();
+	await expect(page.getByRole('textbox', { name: en('send.recipientLabel') })).toBeVisible({
+		timeout: 30_000
+	});
+	// One becomes many, then a third row: the scan below is aimed at the
+	// SECOND of three, so "the first empty row" would be the wrong answer.
+	await page.getByRole('button', { name: en('send.addRecipient') }).click();
+	const rows = page.locator('ul.recipients > li');
+	await expect(rows).toHaveCount(2);
+	await page.getByRole('button', { name: en('send.addRecipient') }).click();
+	await expect(rows).toHaveCount(3);
+
+	// Every row has the two doors: the book and the scanner.
+	for (let i = 0; i < 3; i += 1) {
+		await expect(
+			rows.nth(i).getByRole('button', { name: en('send.recipientPickAria') })
+		).toBeVisible();
+		await expect(rows.nth(i).getByRole('button', { name: en('send.scanAria') })).toBeVisible();
+	}
+
+	// The book, opened from a row, is the book alone — no scan row in it…
+	await rows
+		.nth(0)
+		.getByRole('button', { name: en('send.recipientPickAria') })
+		.click();
+	const picker = page.getByRole('dialog', { name: en('send.pickContactTitle') });
+	await expect(picker).toBeVisible();
+	await expect(picker.getByRole('button', { name: /scan/i })).toHaveCount(0);
+	// …and closing it without a pick aims nothing: the scan that follows is
+	// the second row's own (the core's stale-target fix).
+	await page.keyboard.press('Escape');
+	await expect(picker).toHaveCount(0);
+
+	await rows
+		.nth(1)
+		.getByRole('button', { name: en('send.scanAria') })
+		.click();
+	await expect(page.getByText(en('componentsUi.scanner.gallery')).first()).toBeVisible();
+	await pick(page, ALICE);
+
+	const fields = page.locator('ul.recipients input.address');
+	await expect(fields).toHaveCount(3, { timeout: 30_000 });
+	await expect(fields.nth(1)).toHaveValue(ALICE);
+	await expect(fields.nth(0)).toHaveValue('');
+	await expect(fields.nth(2)).toHaveValue('');
 });
 
 test('a refused camera says so — and still offers the way round it', async ({ page }) => {

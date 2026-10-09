@@ -507,6 +507,13 @@ export interface RecipientCardModel {
 	/** Live rows only: what an empty address field asks for. */
 	addressPlaceholder?: string;
 	pickLabel?: string;
+	/**
+	 * Live rows only: the row's OWN scan door, beside the book's (issue 471).
+	 * A code scanned from it lands in this row — the core's
+	 * `open_scanner { target }` — where the picker's "Scan to fill" used to
+	 * be the only way to scan into a split.
+	 */
+	scanLabel?: string;
 	removeLabel: string;
 	/**
 	 * Live rows only: what the core says is wrong with a field that has
@@ -724,7 +731,10 @@ export interface SendFormModel {
 		address?: string;
 		identiconSvg: string;
 		pickLabel: string;
-		/** sweep shows a scan button beside the picker; single does not. */
+		/**
+		 * The scan door beside the book's: single and sweep both draw it
+		 * (issue 468). Absent, no scan button is drawn.
+		 */
 		scanLabel?: string;
 		/** sweep's "every token goes to the same address". */
 		note?: string;
@@ -781,12 +791,14 @@ export interface SendFormModel {
 	cta: string;
 }
 
-/** SD2e — the contact picker sheet. */
+/**
+ * SD2e — the contact picker sheet: the book alone. Scanning is each
+ * recipient row's own icon (issue 471), never a row in here.
+ */
 export interface ContactPickModel {
 	title: string;
 	closeLabel: string;
 	searchPlaceholder: string;
-	scanRow: string;
 	groupsTitle: string;
 	groups: { name: string; count: string; colors: [string, string] }[];
 	contactsTitle: string;

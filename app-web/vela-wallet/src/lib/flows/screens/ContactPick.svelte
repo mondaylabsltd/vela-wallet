@@ -1,11 +1,11 @@
 <script lang="ts">
 	/**
-	 * SD2e — choosing who gets the money.
+	 * SD2e — choosing who gets the money, from the book.
 	 *
-	 * Scan sits at the top, above the saved people. Most sends go to someone
-	 * already in the book, but the ones that don't are the ones where a person
-	 * is holding a phone in one hand and an address in the other — so the
-	 * escape hatch is the first thing, not the last.
+	 * The book and nothing else (issue 471): "Scan to fill the address" used
+	 * to sit at the top of this sheet, which hid scanning behind a button
+	 * that says contacts. Every recipient row now carries its own scan icon
+	 * beside its contacts icon, so the way to scan is where the address goes.
 	 *
 	 * A row answers with its ADDRESS (issue 467), never its place: the book
 	 * re-sorts by favourite, recency and name while names resolve, so the
@@ -20,13 +20,12 @@
 
 	interface Props {
 		model: ContactPickModel;
-		onscan?: () => void;
 		ongroup?: (index: number) => void;
 		/** The person tapped, by the address the row was drawn for. */
 		onselect?: (address: string) => void;
 	}
 
-	let { model, onscan, ongroup, onselect }: Props = $props();
+	let { model, ongroup, onselect }: Props = $props();
 
 	let query = $state('');
 
@@ -43,12 +42,6 @@
 
 <div class="pick">
 	<SearchField placeholder={model.searchPlaceholder} bind:value={query} />
-
-	<button type="button" class="scan" onclick={onscan}>
-		<Icon icon={UTILITY_ICONS['qr-code']} size="md" />
-		<span class="scan-label">{model.scanRow}</span>
-		<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-	</button>
 
 	{#if model.groups.length > 0 && query.trim() === ''}
 		<p class="section">{model.groupsTitle}</p>
@@ -83,28 +76,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-md);
-	}
-
-	.scan {
-		display: flex;
-		align-items: center;
-		gap: var(--space-md);
-		padding: var(--space-lg);
-		border: none;
-		border-radius: var(--radius-lg);
-		background: var(--color-bg-raised);
-		font-family: var(--font-ui);
-		color: var(--color-fg-subtle);
-		cursor: pointer;
-	}
-
-	.scan-label {
-		flex: 1;
-		min-width: 0;
-		text-align: start;
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		font-weight: var(--weight-medium);
-		color: var(--color-fg-base);
 	}
 
 	.section {

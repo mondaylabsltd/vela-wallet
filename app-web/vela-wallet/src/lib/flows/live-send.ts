@@ -865,6 +865,9 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 						addressLabel: m['send.recipientLabel'],
 						addressPlaceholder: m['send.recipientPlaceholder'],
 						pickLabel: m['send.recipientPickAria'],
+						// The row's own scan door (issue 471): the code lands in THIS
+						// row, as the book's pick does.
+						scanLabel: m['send.scanAria'],
 						removeLabel: m['send.removeRecipient'],
 						// The core flags a row that repeats an earlier payee and says
 						// WHICH row it repeats; this file only picks the template

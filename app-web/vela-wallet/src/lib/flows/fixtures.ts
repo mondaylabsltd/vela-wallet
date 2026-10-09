@@ -907,7 +907,6 @@ function contactPick(m: WalletFlowMessages, identicon: Identicon): ContactPickMo
 		title: m['send.pickContactTitle'],
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		searchPlaceholder: m['send.pickContactSearch'],
-		scanRow: m['send.scanToFill'],
 		groupsTitle: m['contacts.sectionGroups'],
 		groups: GROUPS.slice(0, 2).map((g, i) => ({
 			name: g.name,

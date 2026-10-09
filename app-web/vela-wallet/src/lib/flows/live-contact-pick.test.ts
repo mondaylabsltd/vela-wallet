@@ -114,9 +114,10 @@ describe('the live picker before the book is read', () => {
 		for (const address of fixtures) {
 			expect(JSON.stringify(live.sheet)).not.toContain(address);
 		}
-		// Scan and search stay: the escape hatch does not wait for the book.
-		expect(live.sheet.model.scanRow).toBe(drawn.sheet.model.scanRow);
+		// Search stays: it does not wait for the book. Scanning is not in this
+		// sheet at all (issue 471) — each recipient row has its own scan icon.
 		expect(live.sheet.model.searchPlaceholder).toBe(drawn.sheet.model.searchPlaceholder);
+		expect(live.sheet.model).not.toHaveProperty('scanRow');
 	});
 
 	it('the wide column draws none of them either', () => {

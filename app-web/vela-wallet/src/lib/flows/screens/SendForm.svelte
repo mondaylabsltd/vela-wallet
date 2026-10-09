@@ -47,6 +47,8 @@
 		 */
 		onrecipientRow?: (index: number, patch: { address?: string; amount?: string }) => void;
 		onpickRecipientRow?: (index: number) => void;
+		/** The scanner opened for one row (issue 471): its code lands in that row. */
+		onscanRecipientRow?: (index: number) => void;
 		/**
 		 * The primary action (spec 026). Absent, the CTA is the drawn button it
 		 * has always been — the gallery renders a picture, not a dead promise.
@@ -83,6 +85,7 @@
 		onaddRecipient,
 		onrecipientRow,
 		onpickRecipientRow,
+		onscanRecipientRow,
 		oncontinue,
 		onamount,
 		onrecipient,
@@ -178,6 +181,7 @@
 						onremove={() => onremoveRecipient?.(i)}
 						oninput={onrecipientRow ? (patch) => onrecipientRow(i, patch) : undefined}
 						onpick={onpickRecipientRow ? () => onpickRecipientRow(i) : undefined}
+						onscan={onscanRecipientRow ? () => onscanRecipientRow(i) : undefined}
 					/>
 				</li>
 			{/each}
