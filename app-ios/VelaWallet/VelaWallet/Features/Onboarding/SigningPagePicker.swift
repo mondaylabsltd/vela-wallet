@@ -2,7 +2,8 @@
 //  SigningPagePicker.swift
 //  VelaWallet
 //
-//  "Use my own signing page" (spec 102): the choosers' advanced entry.
+//  "Use a trusted signing page" (spec 102, D6): the choosers' advanced entry.
+//  Its list is Vela's official signing page and the self-hosted ones.
 //
 //  The create and sign-in choosers list where a key LIVES — this device, a
 //  phone or tablet, a USB key — and nothing else. Where a person reviews and
@@ -58,7 +59,9 @@ enum SigningPagePickerModel {
         ] + pages.map { page in
             SigningPageChoiceModel(
                 url: page.url,
-                title: SigningPageNames.name(url: page.url, label: page.name, official: page.official, loc: loc),
+                title: SigningPageNames.name(
+                    url: page.url, label: page.name, official: page.official, domain: page.domain, loc: loc
+                ),
                 subtitle: SigningPageNames.host(page.url),
                 domainLine: page.domain.isEmpty ? nil : loc.t("settings.signing.keysOn", vars: ["domain": page.domain]),
                 line: line(page.url),
@@ -106,13 +109,13 @@ struct SigningPagePicker: View {
     }
 
     private var header: some View {
-        let own = venueWords(row: "own_page")
+        let entry = venueWords(row: "signing_page")
         return HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-                Text(own.map { loc.t($0.titleKey) } ?? "")
+                Text(entry.map { loc.t($0.titleKey) } ?? "")
                     .typeRole(Typography.title)
                     .foregroundStyle(theme.fgBase)
-                Text(own?.lineKey.map { loc.t($0) } ?? "")
+                Text(entry?.lineKey.map { loc.t($0) } ?? "")
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -290,15 +293,15 @@ struct ChosenSigningPageCard: View {
     }
 }
 
-/// The choosers' advanced entry row — "Use my own signing page" and its line,
-/// set apart from the three places it is not one of.
-struct OwnSigningPageEntry: View {
+/// The choosers' advanced entry row — "Use a trusted signing page" and its
+/// line, set apart from the three places it is not one of.
+struct SigningPageEntry: View {
     @Environment(\.theme) private var theme
     let loc: Loc
     let onTap: () -> Void
 
     var body: some View {
-        let words = venueWords(row: "own_page")
+        let words = venueWords(row: "signing_page")
         Button(action: onTap) {
             HStack(spacing: Tokens.Space.s12) {
                 LucideIcon(.globe, size: LucideIconSize.rowGlyph)
@@ -322,23 +325,23 @@ struct OwnSigningPageEntry: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("chooser.ownPage")
+        .accessibilityIdentifier("chooser.signingPage")
     }
 }
 
-/// The gallery's pages: the official one checked and matching, and somebody's
-/// own page whose check could not run — the two lines a person most often
-/// meets. Data, never shown outside the gallery and the screenshot tests.
+/// The gallery's pages: the official one checked and matching, and a
+/// self-hosted page whose check could not run — the two lines a person most
+/// often meets. Data, never shown outside the gallery and the screenshot tests.
 enum SigningPageFixtures {
-    static let ownPage = "https://sign.example.com/"
+    static let selfHosted = "https://sign.example.com/"
 
     static let pages: [SigningPageRowWire] = [
         SigningPageRowWire(url: "https://sign.getvela.app/", name: "", domain: "getvela.app", official: true),
-        SigningPageRowWire(url: ownPage, name: "", domain: "sign.example.com", official: false),
+        SigningPageRowWire(url: selfHosted, name: "", domain: "sign.example.com", official: false),
     ]
 
     static func line(_ url: String) -> SignerIntegrityLine {
-        url == ownPage
+        url == selfHosted
             ? SignerIntegrityLine(
                 state: .couldNotCheck, version: "", checkedAtMs: nil,
                 key: "componentsUi.signing.integrity.couldNotCheck", opens: false

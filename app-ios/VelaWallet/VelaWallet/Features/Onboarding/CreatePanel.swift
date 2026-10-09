@@ -205,7 +205,7 @@ struct KeysScreen: View {
     let onConfirmKey: (Int) -> Void
     let onRemoveKey: (Int) -> Void
     let onFinish: () -> Void
-    /// Spec 102, "Use my own signing page": Vela's own sheet and every page
+    /// Spec 102, "Use a trusted signing page": Vela's own sheet and every page
     /// this device trusts, the chosen one marked. Empty hides the entry.
     var pageChoices: [SigningPageChoiceModel] = []
     /// A page was chosen (`nil`: Vela's own) — `signing_page_chosen`.
@@ -232,7 +232,7 @@ struct KeysScreen: View {
 
     /// The entry is offered only before the first key, and only where there
     /// is somewhere to send the choice.
-    private var offersOwnPage: Bool {
+    private var offersSigningPage: Bool {
         view.canChoosePage && view.signingPage == nil && onChoosePage != nil && !pageChoices.isEmpty
     }
 
@@ -342,9 +342,9 @@ struct KeysScreen: View {
                         // Not a fourth place: where this wallet reviews and
                         // signs. Offered before the first key only — the
                         // first key commits the set to one domain.
-                        if offersOwnPage {
+                        if offersSigningPage {
                             Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s8)
-                            OwnSigningPageEntry(loc: loc) { pagePickerOpen = true }
+                            SigningPageEntry(loc: loc) { pagePickerOpen = true }
                         }
                     }
 

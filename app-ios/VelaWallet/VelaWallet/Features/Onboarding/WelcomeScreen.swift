@@ -83,7 +83,7 @@ struct WelcomeScreen: View {
 /// security key — the same set creating a wallet offers per key. Three places,
 /// no fourth (spec 102).
 ///
-/// Below them, apart: "Use my own signing page". It is not a place a key
+/// Below them, apart: "Use a trusted signing page". It is not a place a key
 /// lives; it says where this sign-in runs and where the account will review
 /// and sign — a page on the person's own domain runs the ceremony itself (its
 /// keys answer nowhere else), a `getvela.app` page signs in here and becomes
@@ -176,7 +176,7 @@ struct SignInMethodSheet: View {
 
                 if chosen == nil, onChoosePage != nil, !pageChoices.isEmpty {
                     Divider().overlay(theme.borderBase).padding(.vertical, Tokens.Space.s8)
-                    OwnSigningPageEntry(loc: loc) {
+                    SigningPageEntry(loc: loc) {
                         picking = true
                         detent = .large
                     }

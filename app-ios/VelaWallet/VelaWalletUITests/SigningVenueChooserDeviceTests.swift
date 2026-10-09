@@ -4,8 +4,9 @@
 //
 //  Spec 102 on the simulator: the create and sign-in choosers list where a key
 //  LIVES — 这台设备 / 手机或平板 / USB 安全密钥 — and nothing else; the trusted
-//  page is no longer a fourth row. Apart from them, "使用我自己的签名页" opens
-//  the list of signing pages (Vela's own first), each with its domain.
+//  page is no longer a fourth row. Apart from them, "使用可信签名页" (D6) opens
+//  the list of signing pages — Vela's own sheet, then 「Vela 官方签名页」 and
+//  any self-hosted ones — each with its domain.
 //
 //  The owner's complaint this answers (2026-10-09): tapping 可信签名器 showed
 //  this device / scan a code / USB key AGAIN, and nothing said what was
@@ -30,19 +31,21 @@ final class SigningVenueChooserDeviceTests: XCTestCase {
     private enum Words {
         static let signIn = "我已有钱包"
         static let places = ["这台设备", "手机或平板", "USB 安全密钥"]
-        static let ownPage = "使用我自己的签名页"
+        static let signingPage = "使用可信签名页"
+        /// D6: "my own" is only ever a self-hosted page — never the entry.
+        static let retired = "使用我自己的签名页"
         static let fourth = "可信签名器"
-        static let inVela = "在 Vela 里"
-        static let official = "官方"
+        static let inVela = "在 Vela 里预览并签名"
+        static let official = "Vela 官方签名页"
     }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
 
-    /// 我已有钱包 → three places, no fourth; "使用我自己的签名页" apart from
-    /// them, opening Vela's own sheet and the official page with its domain.
-    func testTheSignInChooserListsThreePlacesAndOwnPageApart() throws {
+    /// 我已有钱包 → three places, no fourth; "使用可信签名页" apart from them,
+    /// opening Vela's own sheet and the official page with its domain.
+    func testTheSignInChooserListsThreePlacesAndSigningPageApart() throws {
         let app = launch()
         XCTAssertTrue(app.buttons[Words.signIn].waitForExistence(timeout: 30),
                       "Welcome did not appear — is a session left over from another class?")
@@ -52,8 +55,10 @@ final class SigningVenueChooserDeviceTests: XCTestCase {
             XCTAssertTrue(app.staticTexts[place].waitForExistence(timeout: 10), "no \(place)")
         }
         XCTAssertFalse(app.staticTexts[Words.fourth].exists, "the fourth key method came back")
-        let entry = app.descendants(matching: .any)["chooser.ownPage"].firstMatch
-        XCTAssertTrue(entry.waitForExistence(timeout: 10), "no \"\(Words.ownPage)\" entry")
+        let entry = app.descendants(matching: .any)["chooser.signingPage"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 10), "no \"\(Words.signingPage)\" entry")
+        XCTAssertTrue(app.staticTexts[Words.signingPage].exists, "the entry is not worded \(Words.signingPage)")
+        XCTAssertFalse(app.staticTexts[Words.retired].exists, "the pre-D6 wording came back")
         attach(app, "signin-chooser")
 
         entry.tap()
@@ -67,7 +72,7 @@ final class SigningVenueChooserDeviceTests: XCTestCase {
 
     /// The create flow's key list: three places, and — before the first key —
     /// the same entry, apart.
-    func testTheCreateChooserListsThreePlacesAndOwnPageApart() throws {
+    func testTheCreateChooserListsThreePlacesAndSigningPageApart() throws {
         let app = launch()
         XCTAssertTrue(app.buttons["创建钱包"].waitForExistence(timeout: 30))
         app.buttons["创建钱包"].tap()
@@ -88,11 +93,13 @@ final class SigningVenueChooserDeviceTests: XCTestCase {
             XCTAssertTrue(app.staticTexts[place].waitForExistence(timeout: 30), "no \(place)")
         }
         XCTAssertFalse(app.staticTexts[Words.fourth].exists, "the fourth key method came back")
-        let entry = app.descendants(matching: .any)["chooser.ownPage"].firstMatch
-        XCTAssertTrue(entry.waitForExistence(timeout: 10), "no \"\(Words.ownPage)\" entry before the first key")
+        let entry = app.descendants(matching: .any)["chooser.signingPage"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 10), "no \"\(Words.signingPage)\" entry before the first key")
+        XCTAssertTrue(app.staticTexts[Words.signingPage].exists, "the entry is not worded \(Words.signingPage)")
         attach(app, "create-chooser")
         entry.tap()
         XCTAssertTrue(app.descendants(matching: .any)["signingPagePicker"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts[Words.official].waitForExistence(timeout: 5), "the official page is not listed")
         attach(app, "create-picker")
         app.terminate()
     }

@@ -359,16 +359,20 @@ struct TrustedSignerChooserTests {
         #expect(keyMethodWords(method: "trusted_signer", chooser: "create", unlock: "face_id") == nil)
     }
 
-    /// "Use my own signing page" is the venue's words, not a fourth place —
-    /// and so are the two rows of "Where you review and sign".
+    /// "Use a trusted signing page" is the venue's words, not a fourth place
+    /// — and so are the two rows of "Where you review and sign" (D6).
     @Test func theVenueHasItsOwnWords() throws {
-        let own = try #require(venueWords(row: "own_page"))
-        #expect(loc.t(own.titleKey) == "使用我自己的签名页")
-        #expect(own.lineKey.map { loc.t($0) } == "高级：钥匙属于你页面的域名，只能在那里签名")
+        let entry = try #require(venueWords(row: "signing_page"))
+        #expect(loc.t(entry.titleKey) == "使用可信签名页")
+        #expect(entry.lineKey.map { loc.t($0) } == "高级：Vela 官方签名页，或你自己部署的签名页")
         let inVela = try #require(venueWords(row: "in_vela"))
         let onAPage = try #require(venueWords(row: "page"))
-        #expect(loc.t(inVela.titleKey) == "在 Vela 里")
-        #expect(loc.t(onAPage.titleKey) == "在可信签名页")
+        #expect(loc.t(inVela.titleKey) == "在 Vela 里预览并签名")
+        #expect(loc.t(onAPage.titleKey) == "在可信签名页预览并签名")
+        // "My own signing page" is nowhere: only a self-hosted page is "own".
+        for key in [entry.titleKey, inVela.titleKey, onAPage.titleKey] {
+            #expect(!loc.t(key).contains("我自己的签名页"))
+        }
         #expect(venueWords(row: "trusted_signer") == nil)
     }
 

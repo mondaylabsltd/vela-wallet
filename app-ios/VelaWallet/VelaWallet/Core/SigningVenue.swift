@@ -407,12 +407,15 @@ struct SigningPagesViewWire: Decodable, Equatable {
     }
 }
 
-/// How a page is named on screen: the person's label, "Official", or its host.
+/// How a page is named on screen (D6): the person's label; else "Vela's
+/// official signing page"; else "Self-hosted · {{domain}}" — never by its
+/// host alone, and never "my own".
 enum SigningPageNames {
-    static func name(url: String, label: String, official: Bool, loc: Loc) -> String {
+    static func name(url: String, label: String, official: Bool, domain: String? = nil, loc: Loc) -> String {
         if !label.trimmingCharacters(in: .whitespaces).isEmpty { return label }
         if official { return loc.t("settings.signing.pageOfficial") }
-        return host(url)
+        let domain = domain.flatMap { $0.isEmpty ? nil : $0 } ?? signingPageDomain(url: url)
+        return loc.t("settings.signing.pageSelfHosted", vars: ["domain": domain.isEmpty ? host(url) : domain])
     }
 
     /// The page's host (and port, which a loopback page carries), or the
@@ -420,5 +423,10 @@ enum SigningPageNames {
     static func host(_ url: String) -> String {
         guard let parsed = URL(string: url), let host = parsed.host, !host.isEmpty else { return url }
         return parsed.port.map { "\(host):\($0)" } ?? host
+    }
+
+    /// Is `url` Vela's official page?
+    static func isOfficial(_ url: String) -> Bool {
+        SignerPageChecks.key(url) == SignerPageChecks.key(trustedSignerDefaultUrl())
     }
 }

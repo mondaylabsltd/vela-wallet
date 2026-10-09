@@ -58,7 +58,7 @@ final class SettingsStore {
     private(set) var feeTier: FeeTierPrefViewWire?
 
     /// The signing pages this device trusts (spec 102, Settings → Signing
-    /// pages) — app-wide: the create and sign-in choosers' "Use my own signing
+    /// pages) — app-wide: the create and sign-in choosers' "Use a trusted signing
     /// page" and an account's "Where you review and sign" list them too.
     /// Seeded with the machine's own first view (the official page alone).
     private(set) var signingPages: SigningPagesViewWire?

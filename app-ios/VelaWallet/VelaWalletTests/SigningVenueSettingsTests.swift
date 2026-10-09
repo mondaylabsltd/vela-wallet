@@ -53,10 +53,13 @@ struct SigningVenueSettingsTests {
         let venue = try #require(model.venue)
         #expect(venue.title == "Where you review and sign")
         #expect(venue.domainLine == "Keys on getvela.app")
-        #expect(venue.row.subtitle == "In Vela")
+        #expect(venue.row.subtitle == "Review and sign in Vela")
         let inVela = try #require(venue.inVela)
         #expect(inVela.active && inVela.enabled)
-        #expect(venue.pages.map(\.title) == ["Official", "sign.example.com"])
+        #expect(inVela.title == "Review and sign in Vela")
+        #expect(venue.pagesHeader == "Review and sign on a trusted signing page")
+        // D6: the official page by its name; a self-hosted one as such.
+        #expect(venue.pages.map(\.title) == ["Vela's official signing page", "Self-hosted · sign.example.com"])
         let officialRow = try #require(venue.pages.first)
         #expect(officialRow.enabled && !officialRow.active)
         #expect(officialRow.line?.state == .matches)
@@ -87,8 +90,8 @@ struct SigningVenueSettingsTests {
         #expect(venue.inVela?.enabled == false)
         #expect(venue.inVela?.reason == "Vela can't reach keys on sign.example.com.")
         #expect(venue.pages.first { $0.active }?.subtitle == "sign.example.com")
-        #expect(venue.pages.first { $0.title == "Official" }?.enabled == false)
-        #expect(venue.row.subtitle == "On a trusted page · sign.example.com")
+        #expect(venue.pages.first { $0.title == "Vela's official signing page" }?.enabled == false)
+        #expect(venue.row.subtitle == "Self-hosted · sign.example.com")
         #expect(model.keys?.domainLine == "Keys on sign.example.com")
     }
 
@@ -112,9 +115,40 @@ struct SigningVenueSettingsTests {
         #expect(panel.rows.map(\.official) == [true, false])
         #expect(panel.rows.map(\.domainLine) == ["Keys on getvela.app", "Keys on sign.example.com"])
         #expect(panel.rows.first?.line.state == .matches)
+        #expect(panel.rows.map(\.title) == ["Vela's official signing page", "Self-hosted · sign.example.com"])
         let row = try #require(SettingsFixtures.build(.st1, loc: loc).sections.flatMap(\.rows)
             .first { $0.id == SigningPagesPageModel.rowId })
         #expect(row.title == "Signing pages")
+    }
+
+    /// Core round 10: the page's own words — never another screen's — and
+    /// "Trust this version" offered on a self-hosted page whose check asks,
+    /// never on the official page; a page the person named keeps its name.
+    @Test func signingPagesSpeakTheirOwnWordsAndAskToTrust() throws {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let version = String(repeating: "3f", count: 32)
+        let named = SigningPagesViewWire(
+            pages: [
+                SigningPageFixtures.pages[0],
+                SigningPageRowWire(url: own, name: "", domain: "sign.example.com", official: false),
+                SigningPageRowWire(url: "https://sign.work.example/", name: "Work", domain: "sign.work.example",
+                                   official: false, trusted: [version]),
+            ],
+            saved: [SigningPageWire(url: own), SigningPageWire(url: "https://sign.work.example/", name: "Work", trusted: [version])],
+            loaded: true
+        )
+        let panel = SettingsLive.signingPagesPage(
+            named, line: line, asksTrust: { _ in version }, loc: zh
+        )
+        #expect(panel.rename == "重命名" && panel.remove == "移除" && panel.trust == "信任这个版本")
+        #expect(panel.nameLabel == "名称")
+        #expect(panel.addLabel == "添加自己部署的签名页")
+        #expect(panel.rows.map(\.title) == ["Vela 官方签名页", "自己部署的签名页 · sign.example.com", "Work"])
+        #expect(panel.rows.first?.trustVersion == nil, "the official page was offered a trust")
+        #expect(panel.rows.dropFirst().allSatisfy { $0.trustVersion == version })
+        for row in panel.rows {
+            #expect(!row.title.contains("我自己的签名页"))
+        }
     }
 
     // MARK: - The session writes the choice

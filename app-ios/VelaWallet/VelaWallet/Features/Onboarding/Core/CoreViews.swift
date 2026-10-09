@@ -121,7 +121,7 @@ struct CreateView: Equatable {
     /// The places a key may be minted in — always the three (spec 102).
     let addMethods: [KeyMethod]
     /// Spec 102: the domain this wallet's keys are minted for — `getvela.app`,
-    /// or the domain of the page chosen with "Use my own signing page". Shown,
+    /// or the domain of the page chosen with "Use a trusted signing page". Shown,
     /// so a person sees which site their keys will belong to.
     var signingDomain: String = "getvela.app"
     /// That page, normalised, when one was chosen. On a custom domain every

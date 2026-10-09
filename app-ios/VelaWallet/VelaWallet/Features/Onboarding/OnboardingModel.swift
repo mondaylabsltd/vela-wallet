@@ -264,12 +264,12 @@ final class OnboardingModel {
     /// Set by the host; the key itself until then.
     var words: (String) -> String = { $0 }
 
-    /// Spec 102: the page chosen on the sign-in sheet's "Use my own signing
+    /// Spec 102: the page chosen on the sign-in sheet's "Use a trusted signing
     /// page", for the sign-in it is about to start. `nil` signs in in the app.
     var signInPage: String?
 
     /// Spec 102: the signing pages this device trusts (Settings → Signing
-    /// pages), for the choosers' "Use my own signing page". Set by the host;
+    /// pages), for the choosers' "Use a trusted signing page". Set by the host;
     /// nothing until then. `openSigningPages` boots the machine that reads
     /// them — a person on Welcome has not opened Settings.
     var signingPages: () -> SigningPagesViewWire? = { nil }
@@ -343,7 +343,7 @@ final class OnboardingModel {
         openSigningPages()
     }
 
-    /// Spec 102: "Use my own signing page" — a saved page, before the first
+    /// Spec 102: "Use a trusted signing page" — a saved page, before the first
     /// key (`can_choose_page`); `nil` goes back to Vela's own. The core
     /// normalises the address and decides the wallet's signing domain from
     /// it: a page on its own domain is where every key ceremony then runs.
@@ -382,7 +382,7 @@ final class OnboardingModel {
 
     // MARK: - Sign in
 
-    /// `page` is the sign-in sheet's "Use my own signing page" (spec 102):
+    /// `page` is the sign-in sheet's "Use a trusted signing page" (spec 102):
     /// on a custom domain the ceremony runs there and the account is locked
     /// to it; a `getvela.app` page signs in in the app and becomes the
     /// account's venue. `nil`: the app, and the account's venue as it was.

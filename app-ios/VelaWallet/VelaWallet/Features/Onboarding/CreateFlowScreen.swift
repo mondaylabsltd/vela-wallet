@@ -74,7 +74,7 @@ struct CreateFlowScreen: View {
                     onConfirmKey: model.confirmKey,
                     onRemoveKey: model.removeKey,
                     onFinish: model.finishKeys,
-                    // Spec 102: "Use my own signing page" — the pages this
+                    // Spec 102: "Use a trusted signing page" — the pages this
                     // device trusts, each with its domain and this phone's
                     // check of it.
                     pageChoices: SigningPagePickerModel.choices(

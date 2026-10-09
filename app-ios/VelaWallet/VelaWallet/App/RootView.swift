@@ -4162,7 +4162,7 @@ struct RootView: View {
         }
     }
 
-    /// The sign-in chooser: three places, and — apart — "Use my own signing
+    /// The sign-in chooser: three places, and — apart — "Use a trusted signing
     /// page" over the pages Settings keeps, each checked by this phone.
     private var signInMethodSheet: some View {
         let pages = settings.signingPages

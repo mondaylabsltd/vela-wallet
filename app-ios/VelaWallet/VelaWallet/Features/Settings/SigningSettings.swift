@@ -69,8 +69,9 @@ struct SigningPageRowModel: Identifiable, Equatable {
     let official: Bool
     /// The person's own label, for the rename field.
     let label: String
-    /// A custom page's own build this device has not decided about: the
-    /// full version "Confirm" trusts here (D-7). `nil` otherwise.
+    /// A self-hosted page's own build this device has not decided about: the
+    /// full version "Trust this version" stores on this page (D-15). `nil`
+    /// otherwise — never for the official page.
     var trustVersion: String? = nil
 }
 
@@ -140,7 +141,9 @@ extension SettingsLive {
         let rows = (view?.pages ?? SigningPagesViewWire.initial?.pages ?? []).map { page in
             SigningPageRowModel(
                 url: page.url,
-                title: SigningPageNames.name(url: page.url, label: page.name, official: page.official, loc: loc),
+                title: SigningPageNames.name(
+                    url: page.url, label: page.name, official: page.official, domain: page.domain, loc: loc
+                ),
                 host: SigningPageNames.host(page.url),
                 domainLine: loc.t("settings.signing.keysOn", vars: ["domain": page.domain]),
                 line: line(page.url),
@@ -156,12 +159,10 @@ extension SettingsLive {
             addLabel: loc.t("settings.signing.pageAdd"),
             addErrorKey: SigningPagesViewWire.addErrorKey(view?.addError),
             loaded: view?.loaded ?? false,
-            // Borrowed until the corpus has settings-own words for them —
-            // the same borrowings Android makes.
-            rename: loc.t("explore.rename"),
-            remove: loc.t("onboarding.create.removeKeyBtn"),
-            trust: loc.t("onboarding.create.confirmKeyBtn"),
-            nameLabel: loc.t("contacts.nameLabel"),
+            rename: loc.t("settings.signing.pageRename"),
+            remove: loc.t("settings.signing.pageRemove"),
+            trust: loc.t("settings.signing.pageTrust"),
+            nameLabel: loc.t("settings.signing.pageName"),
             save: loc.t("settings.signing.pageSave"),
             cancel: loc.t("common.cancel")
         )
@@ -188,7 +189,9 @@ extension SettingsLive {
                     : choice.name
                 return VenueChoiceRowModel(
                     id: choice.id, venue: choice.venue,
-                    title: SigningPageNames.name(url: url, label: label, official: choice.official, loc: loc),
+                    title: SigningPageNames.name(
+                        url: url, label: label, official: choice.official, domain: choice.domain, loc: loc
+                    ),
                     subtitle: SigningPageNames.host(url),
                     line: line(url),
                     reason: choice.blocked?.text(loc), active: choice.active
@@ -199,12 +202,10 @@ extension SettingsLive {
         let pages = choices.filter { $0.venue != .inVela }.map(model)
         let active = (inVela.map { [$0] } ?? []).first(where: \.active) ?? pages.first(where: \.active)
         let pageWords = venueWords(row: "page")
-        let value: String
-        if let active, active.venue != .inVela {
-            value = "\(pageWords.map { loc.t($0.titleKey) } ?? "") · \(active.title)"
-        } else {
-            value = active?.title ?? ""
-        }
+        // The answer to "Where you review and sign": "Review and sign in
+        // Vela", or the page by its name — "Vela's official signing page",
+        // "Self-hosted · example.com" — which already says it is a page.
+        let value = active?.title ?? ""
         return VenueSettingModel(
             row: SettingsRowModel(
                 id: VenueSettingModel.rowId,
@@ -486,18 +487,19 @@ private struct VenueChoiceRow: View {
 
 // MARK: - The gallery
 
-/// The boards' signing facts: an account in Vela on `getvela.app`, the
-/// official page matching, and somebody's own page that cannot reach this
-/// account's keys.
+/// The boards' signing facts: an account on `getvela.app` whose venue is the
+/// official page, the official page matching, and a self-hosted page that
+/// cannot reach this account's keys.
 enum SigningSettingsFixtures {
     static let plan = SigningPlanWire(
         domain: "getvela.app", venue: .page(url: "https://sign.getvela.app/"),
-        key: KeyRouteWire(credentialId: "a1b2c3d4", method: "platform", transports: "internal")
+        key: KeyRouteWire(credentialId: "a1b2c3d4", method: "platform", transports: "internal"),
+        keyLabel: KeyLabelWire(placeKey: "onboarding.create.methodPlatformTitle")
     )
 
     static let pages = SigningPagesViewWire(
         pages: SigningPageFixtures.pages,
-        saved: [SigningPageWire(url: SigningPageFixtures.ownPage)],
+        saved: [SigningPageWire(url: SigningPageFixtures.selfHosted)],
         loaded: true
     )
 

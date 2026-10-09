@@ -150,14 +150,15 @@ enum FlowFixtures {
             keys: [key("Everyday wallet", synced: false), key("Key 2")],
             canFinish: true
         ))
-        // Spec 102: before the first key a person may choose their own
-        // signing page; once chosen, the screen says which domain the keys
-        // will belong to. Three places either way — never a fourth.
-        flow("keys · own page offered", base(
+        // Spec 102: before the first key a person may choose a trusted
+        // signing page; once a self-hosted one is chosen, the screen says
+        // which domain the keys will belong to. Three places either way —
+        // never a fourth.
+        flow("keys · signing page offered", base(
             stage: .addKeys,
             canChoosePage: true
         ))
-        flow("keys · on my own page", base(
+        flow("keys · on a self-hosted page", base(
             stage: .addKeys,
             signingDomain: "sign.example.com",
             signingPage: "https://sign.example.com/",

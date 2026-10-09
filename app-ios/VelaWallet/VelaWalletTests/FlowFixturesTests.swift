@@ -55,8 +55,8 @@ struct FlowFixturesTests {
             "name · draft waiting": .name,
             "keys · one, needs a second": .keys,
             "keys · two, ready": .keys,
-            "keys · own page offered": .keys,
-            "keys · on my own page": .keys,
+            "keys · signing page offered": .keys,
+            "keys · on a self-hosted page": .keys,
             "keys · unconfirmed row": .keys,
             "keys · at the cap": .keys,
             "progress · verify": .progress,
@@ -159,10 +159,13 @@ struct FlowFixturesTests {
             }
         }
         // Spec 102: three places — the trusted page is a venue, with its own
-        // words ("Use my own signing page"), never a fourth row here.
+        // words ("Use a trusted signing page", D6), never a fourth row here.
         #expect(KeyMethod.allCases.count == 3)
-        let own = try #require(venueWords(row: "own_page"))
-        #expect(!corpus(loc.t(own.titleKey)))
+        let entry = try #require(venueWords(row: "signing_page"))
+        #expect(entry.titleKey == "onboarding.create.signingPageTitle")
+        #expect(!corpus(loc.t(entry.titleKey)))
+        // A shell built before D6 asks by the old name and gets the same words.
+        #expect(venueWords(row: "own_page") == entry)
     }
 
     /// 087 F01: 这台设备 names what unlocks a passkey on THIS device — an

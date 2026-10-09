@@ -83,9 +83,11 @@ enum I18nKeys {
         static let methodHybridTitle = "onboarding.create.methodHybridTitle"
         static let methodHybridBody = "onboarding.create.methodHybridBody"
         static let methodHybridUnavailable = "onboarding.create.methodHybridUnavailable"
-        /// Spec 102: "Use my own signing page" — the choosers' advanced entry.
-        static let ownPageTitle = "onboarding.create.ownPageTitle"
-        static let ownPageBody = "onboarding.create.ownPageBody"
+        /// Spec 102 (D6): "Use a trusted signing page" — the choosers'
+        /// advanced entry, whose list is Vela's official page and the
+        /// self-hosted ones.
+        static let signingPageTitle = "onboarding.create.signingPageTitle"
+        static let signingPageBody = "onboarding.create.signingPageBody"
         static let methodSecurityKeyTitle = "onboarding.create.methodSecurityKeyTitle"
         static let methodSecurityKeyBody = "onboarding.create.methodSecurityKeyBody"
         static let providerPlatform = "onboarding.create.providerPlatform"
@@ -218,7 +220,7 @@ enum I18nKeys {
         Create.methodPlatformTitle, Create.methodPlatformBody,
         Create.methodHybridTitle, Create.methodHybridBody, Create.methodHybridUnavailable,
         Create.methodSecurityKeyTitle, Create.methodSecurityKeyBody,
-        Create.ownPageTitle, Create.ownPageBody,
+        Create.signingPageTitle, Create.signingPageBody,
         Create.providerPlatform, Create.providerGeneric, Create.providerSecurityKey,
         Create.progressTitle, Create.progressSubtitle,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
