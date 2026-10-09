@@ -248,6 +248,11 @@ export function signErrorMessage(notice: SignErrorNotice): string {
 			return 'Gas account funding cancelled';
 		case 'stale_fee_quote':
 			return 'The quoted fee expired. Review the request again.';
+		case 'venue_blocked':
+			// Spec 102 (P2b-W1): the page's sentence is the core's
+			// (`dapp_rpc::sign_error_words`); the person reads the reason on
+			// the sheet, in their language. `venue-blocked.test.ts` pins it.
+			return 'This account cannot sign here';
 		case 'submit_failed':
 		default:
 			return detail ?? 'Signing failed';

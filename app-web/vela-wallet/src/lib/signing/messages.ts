@@ -231,6 +231,12 @@ export interface SigningMessages {
 	 */
 	signerReasons: Record<string, string>;
 	/**
+	 * Spec 102 (P2b-W1): why this account cannot sign here — the core's
+	 * `VenueBlock`, the same words Settings draws under "Where you review and
+	 * sign". The failed status says it in place of the generic hint.
+	 */
+	venueBlock: { blockedApp: string; blockedPage: string; blockedWeb: string };
+	/**
 	 * The speed control under the fee row (spec 069) — the send form's words,
 	 * so the two surfaces name a speed identically.
 	 */

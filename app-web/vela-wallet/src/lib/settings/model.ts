@@ -777,8 +777,12 @@ export interface VenueRowModel {
 	title: string;
 	/** What it is: "Vela's own signing sheet" / "A zero-dependency page shows exactly what you sign". */
 	body: string;
-	/** A page's label ("Official", the person's name for it, else its host) and host. */
-	page?: { name: string; host: string; official: boolean };
+	/**
+	 * A page's name ("Vela's official signing page", the person's label for
+	 * it, else "Self-hosted · {{domain}}") and host — drawn beside the name
+	 * only where the name does not already say it (`hostShown`).
+	 */
+	page?: { name: string; host: string; official: boolean; hostShown: boolean };
 	/** "Keys on getvela.app" — whose keys this choice can use (R1), drawn on every row. */
 	keysOn: string;
 	/** A page's integrity line, where the shell checks pages. */
@@ -807,9 +811,9 @@ export interface VenueModel {
 	rows: VenueRowModel[];
 	/**
 	 * The rows are a statement, not a choice: the web opens no signing page
-	 * (owner, 2026-09-23), so the one venue it has is shown and nothing is
-	 * offered. Absent — a shell that opens pages — every reachable row is a
-	 * choice.
+	 * (owner, 2026-09-23; D-16), so where it signs is marked, every page row
+	 * is disabled with its reason, and nothing is offered. Absent — a shell
+	 * that opens pages — every reachable row is a choice.
 	 */
 	readOnly?: boolean;
 }
@@ -817,21 +821,24 @@ export interface VenueModel {
 /** One row of Settings → Signing pages. */
 export interface SigningPageRowModel {
 	url: string;
-	/** "Official", the person's label for it, or its host. */
+	/** "Vela's official signing page", the person's label for it, or "Self-hosted · {{domain}}". */
 	name: string;
 	host: string;
 	/** "Keys on {{domain}}" — which accounts it can sign for, seen before choosing it (R1). */
 	keysOn: string;
 	official: boolean;
 	integrity?: IntegrityLineModel;
+	/**
+	 * Its check asks to trust a version it does not know (a self-hosted page
+	 * only): "Trust this version", and the version that answer stores.
+	 */
+	trust?: { label: string; version: string };
 }
 
-/** Settings → Signing pages (spec 102): the official page first, then the person's own. */
+/** Settings → Signing pages (spec 102): the official page first, then the self-hosted ones. */
 export interface SigningPagesModel {
 	title: string;
 	subtitle: string;
-	/** The tag beside the official page. */
-	officialTag: string;
 	rows: SigningPageRowModel[];
 	/** "Add a page": the address field (its hint is the refusal, when there is one) and its button. */
 	add: UrlFieldModel;

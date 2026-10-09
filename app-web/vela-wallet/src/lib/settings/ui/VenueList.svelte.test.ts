@@ -5,7 +5,9 @@
  * choice which cannot reach the account's keys is OFF and why (R1 — the row
  * stays, with the core's reason), that a trusted page carries the one line
  * that backs the word "trusted", and that on the web — which opens no page —
- * the one row is a statement, never a control that quietly does nothing.
+ * the list is a statement, never a control that quietly does nothing: where
+ * it signs is marked, and every page row is off with the core's reason
+ * (D-16).
  */
 import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
@@ -41,7 +43,12 @@ const APP: VenueModel = {
 			icon: 'shield-check',
 			title: 'On a trusted page',
 			body: 'A zero-dependency page shows exactly what you sign',
-			page: { name: 'Official', host: 'sign.getvela.app', official: true },
+			page: {
+				name: "Vela's official signing page",
+				host: 'sign.getvela.app',
+				official: true,
+				hostShown: true
+			},
 			keysOn: 'Keys on getvela.app',
 			integrity: {
 				text: "Version 0ba8ee8c · matches Vela's published build list · checked 14:32",
@@ -55,7 +62,12 @@ const APP: VenueModel = {
 			icon: 'shield-check',
 			title: 'On a trusted page',
 			body: 'A zero-dependency page shows exactly what you sign',
-			page: { name: 'My page', host: 'sign.example.com', official: false },
+			page: {
+				name: 'Self-hosted · sign.example.com',
+				host: 'sign.example.com',
+				official: false,
+				hostShown: false
+			},
 			keysOn: 'Keys on sign.example.com',
 			active: false,
 			blocked: "This page is on sign.example.com; this account's keys are on getvela.app."
@@ -117,23 +129,42 @@ describe('Where you review and sign', () => {
 		expect(view.picked).toHaveLength(1);
 	});
 
-	it('the web: one row, stated, and tapping it does nothing', () => {
+	it('names a self-hosted page once: its name already says the host', () => {
+		const view = drawn(APP);
+		const own = view.radios()[2].querySelector('.title');
+		expect(own?.textContent).toBe('Self-hosted · sign.example.com');
+		expect(own?.querySelector('.host')).toBeNull();
+		// The official page's name does not say it, so the host is drawn beside it.
+		expect(view.radios()[1].querySelector('.title .host')?.textContent).toBe('sign.getvela.app');
+	});
+
+	it('the web: stated, every page row off with its reason, and tapping does nothing', () => {
+		const reason = 'Signing pages open from the Vela apps, not the web.';
 		const web: VenueModel = {
 			...APP,
-			value: 'In Vela',
+			value: 'Review and sign in Vela',
 			note: undefined,
-			summary: 'In Vela',
+			summary: 'Review and sign in Vela',
 			readOnly: true,
-			rows: [{ ...APP.rows[0], active: true }]
+			rows: [
+				{ ...APP.rows[0], active: true },
+				{ ...APP.rows[1], active: false, integrity: undefined, blocked: reason }
+			]
 		};
 		const view = drawn(web);
-		expect(view.radios()).toHaveLength(1);
-		expect(view.radios()[0].getAttribute('aria-checked')).toBe('true');
-		expect(view.radios()[0].getAttribute('aria-disabled')).toBe('true');
-		view.radios()[0].click();
+		expect(view.radios()).toHaveLength(2);
+		expect(view.radios().map((radio) => radio.getAttribute('aria-checked'))).toEqual([
+			'true',
+			'false'
+		]);
+		expect(view.radios().map((radio) => radio.getAttribute('aria-disabled'))).toEqual([
+			'true',
+			'true'
+		]);
+		expect(view.radios()[1].disabled).toBe(true);
+		expect(view.radios()[1].textContent).toContain(reason);
+		for (const radio of view.radios()) radio.click();
 		expect(view.picked).toEqual([]);
-		// No pages heading at all: the web has no trusted page to offer.
-		expect(view.root.textContent).not.toContain('zero-dependency');
 	});
 
 	it('fits a 320-wide phone: nothing scrolls sideways', async () => {

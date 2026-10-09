@@ -15,8 +15,9 @@
 	 * say why. The account's own signing domain closes the list: it is the fact
 	 * every reason refers to.
 	 *
-	 * `readOnly` is the web: it opens no signing page, so its one row is where
-	 * signing happens here, stated rather than offered.
+	 * `readOnly` is the web: it opens no signing page, so the list is stated
+	 * rather than offered — where it signs is marked, and every page row is
+	 * drawn disabled with the core's reason (D-16).
 	 */
 	import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 	import type { VenueModel } from '../model';
@@ -68,8 +69,7 @@
 					<span class="line">{row.body}</span>
 				{:else}
 					<span class="title"
-						>{row.page.name}{#if row.page.name !== row.page.host}<span class="host"
-								>{row.page.host}</span
+						>{row.page.name}{#if row.page.hostShown}<span class="host">{row.page.host}</span
 							>{/if}</span
 					>
 				{/if}

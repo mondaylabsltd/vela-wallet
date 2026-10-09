@@ -47,7 +47,7 @@
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-	import { signingVenueBlock, signingVenueChoices } from '$lib/core/kernels';
+	import { signingPlan, signingVenueBlock, signingVenueChoices } from '$lib/core/kernels';
 	import { venueModel } from '$lib/settings/venue';
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
@@ -533,20 +533,23 @@
 
 	/**
 	 * Spec 102: where the active account reviews and signs, from the SESSION's
-	 * record (the core's reader migrated it), never the raw store. On the web
-	 * that is always Vela's own sheet — it opens no signing page (owner,
-	 * 2026-09-23; P2-11), so a page venue signs here natively — or nowhere, for
-	 * an account on its own signing domain, with the core's reason.
+	 * record (the core's reader migrated it), never the raw store. Read-only on
+	 * the web (P2-09, D-16): it opens no signing page, so every page row is
+	 * shown disabled with the core's reason, and the row marked is where the
+	 * web's plan signs — Vela's own sheet (a page venue signs here natively,
+	 * P2-11) — or none, for an account on its own signing domain, with why.
+	 * The web saves no signing pages, so the core is asked with none.
 	 */
 	const activeAccount = $derived(view.accounts[view.active_index]?.account);
 	const liveVenue = $derived.by(() => {
 		if (!activeAccount) return undefined;
 		const domain = activeAccount.signing_domain;
+		const plan = signingPlan(activeAccount, 'web');
 		return venueModel(
 			{
 				domain,
-				choices: signingVenueChoices(domain, activeAccount.signing_venue, []),
-				webOnly: true
+				choices: signingVenueChoices(domain, activeAccount.signing_venue, [], 'web'),
+				web: plan ?? { venue: { type: 'in_vela' }, blocked: null }
 			},
 			m
 		);

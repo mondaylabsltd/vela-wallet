@@ -12,9 +12,11 @@
  * always did: every founding key allowed with its own transports, no hint, the
  * browser left to pick.
  *
- * And spec 102's P2-11: the web opens no signing page. A `getvela.app` account
- * whose venue is a page signs here natively; an account on a custom signing
- * domain is refused with the core's own reason, before any ceremony.
+ * And spec 102's P2-11: the web opens no signing page. The plan asked is the
+ * web's (`signingPlan(record, 'web')`): a `getvela.app` account whose venue is
+ * a page signs here natively; an account on a custom signing domain is
+ * refused, before any ceremony, with the core's own reason — the block the
+ * executors hand back as `venue_blocked` (P2b-W1).
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -190,7 +192,7 @@ describe('an account that names its sign-in key', () => {
 
 /**
  * P2-11: the web opens no page (owner, 2026-09-23). Whether an account can be
- * signed for here is the core's R1 asked of the web's one venue — in Vela.
+ * signed for here is the core's web plan (`SigningPlan::on_web`).
  */
 describe('the web opens no signing page', () => {
 	it('a getvela.app account whose venue is the trusted page signs HERE, natively', async () => {
@@ -232,11 +234,8 @@ describe('the web opens no signing page', () => {
 		const { error } = await attempt();
 		expect(asked).toHaveLength(0);
 		expect(error).toBeInstanceOf(VenueBlockedError);
-		expect((error as VenueBlockedError).block).toEqual({
-			type: 'app_cannot_reach',
-			domain: 'sign.example.com'
-		});
-		expect(String(error)).toContain('sign.example.com');
+		// The web's reason (D-16), which the sheet says in the person's words.
+		expect((error as VenueBlockedError).block).toEqual({ type: 'not_on_web' });
 	});
 
 	it('refuses a custom-domain account even when its own venue is the page', async () => {
@@ -283,7 +282,7 @@ describe('a record from before the sign-in key', () => {
 		const { error } = await attempt();
 		expect(asked).toHaveLength(0);
 		expect(error).toBeInstanceOf(VenueBlockedError);
-		expect(String(error)).toContain('me.example');
+		expect((error as VenueBlockedError).block).toEqual({ type: 'not_on_web' });
 	});
 
 	it('signs as before when its first key was minted on the official page', async () => {

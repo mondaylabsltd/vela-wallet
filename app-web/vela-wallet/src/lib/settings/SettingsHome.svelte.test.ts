@@ -268,7 +268,8 @@ describe('where you review and sign (spec 102)', () => {
 		expect(row?.querySelector('.subtitle')?.textContent).toContain('sign.getvela.app');
 		await view.click(row);
 		expect(view.root.querySelector('[role="radiogroup"]')).not.toBeNull();
-		expect(view.root.querySelectorAll('[role="radio"]')).toHaveLength(3);
+		// Vela's sheet, the official page, and the two self-hosted pages saved here.
+		expect(view.root.querySelectorAll('[role="radio"]')).toHaveLength(4);
 	});
 
 	it('Signing pages sits in Advanced and opens the list', async () => {
@@ -277,7 +278,8 @@ describe('where you review and sign (spec 102)', () => {
 			b.textContent?.includes(String(m.signing.title))
 		);
 		await view.click(row);
-		expect(view.root.querySelectorAll('li.page')).toHaveLength(2);
+		// The official page, then the two self-hosted ones.
+		expect(view.root.querySelectorAll('li.page')).toHaveLength(3);
 	});
 
 	it('a model with no Signing pages (the web) has no such page to open', async () => {

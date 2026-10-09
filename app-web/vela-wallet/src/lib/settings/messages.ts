@@ -108,9 +108,13 @@ export interface SettingsMessages {
 		pageSave: string;
 		/** `Keys on {{domain}}` — the domain whose keys a page (or an account) uses. */
 		keysOn: string;
-		/** A saved page's own actions — the explorer's "Rename" and the network list's "Remove". */
-		rename: string;
-		remove: string;
+		/** `Self-hosted · {{domain}}` — a saved page the person has not named. */
+		pageSelfHosted: string;
+		/** A saved page's own actions, in the signing pages' own words. */
+		pageRename: string;
+		pageRemove: string;
+		/** The answer to a self-hosted page's "trust this version?" (D-15). */
+		pageTrust: string;
 	};
 	/** Spec 102: the account's "Where you review and sign". */
 	venue: {
@@ -124,6 +128,8 @@ export interface SettingsMessages {
 		blockedApp: string;
 		/** `{{pageDomain}}`, `{{domain}}` — R1's reason under a page on another domain. */
 		blockedPage: string;
+		/** The web's reason under every page row: it opens no signing page (D-16). */
+		blockedWeb: string;
 	};
 	/**
 	 * Spec 102 R6: a signing page's integrity line — `{{version}}`, `{{time}}`.
@@ -593,8 +599,10 @@ export const SETTINGS_KEYS = [
 	'settings.signing.pageAdd',
 	'settings.signing.pageSave',
 	'settings.signing.keysOn',
-	'explore.rename',
-	'settingsModals.network.removeConfirm',
+	'settings.signing.pageSelfHosted',
+	'settings.signing.pageRename',
+	'settings.signing.pageRemove',
+	'settings.signing.pageTrust',
 	'settings.venue.title',
 	'settings.venue.subtitle',
 	'settings.venue.inVela',
@@ -603,6 +611,7 @@ export const SETTINGS_KEYS = [
 	'settings.venue.pageBody',
 	'settings.venue.blockedApp',
 	'settings.venue.blockedPage',
+	'settings.venue.blockedWeb',
 	'componentsUi.signing.integrity.checking',
 	'componentsUi.signing.integrity.matches',
 	'componentsUi.signing.integrity.trusted',

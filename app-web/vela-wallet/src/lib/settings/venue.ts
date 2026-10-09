@@ -14,6 +14,8 @@
  */
 import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
+import type { SigningPlan } from '$lib/core/generated/SigningPlan';
+import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
 import { fill } from '$lib/wallet/messages';
@@ -37,11 +39,28 @@ export function hostOf(url: string): string {
 	}
 }
 
-/** R1's reason, in the person's words. */
-export function venueBlockText(block: VenueBlock, m: Words): string {
-	return block.type === 'app_cannot_reach'
-		? fill(m.venue.blockedApp, { domain: block.domain })
-		: fill(m.venue.blockedPage, { pageDomain: block.page_domain, domain: block.domain });
+/** The three reasons' words — Settings' and, for a refusal at sign time, the sheets'. */
+export type VenueBlockWords = Pick<
+	SettingsMessages['venue'],
+	'blockedApp' | 'blockedPage' | 'blockedWeb'
+>;
+
+/**
+ * Why a venue cannot be used, in the person's words — the corpus key the
+ * core's `VenueBlock::key()` names for each variant, with its domains: R1's
+ * two (`blockedApp {{domain}}`, `blockedPage {{pageDomain}} {{domain}}`) and
+ * the web's (`blockedWeb`, no vars — it opens no signing page, D-16).
+ */
+export function venueBlockText(block: VenueBlock, m: Words | VenueBlockWords): string {
+	const words: VenueBlockWords = 'venue' in m ? m.venue : m;
+	switch (block.type) {
+		case 'app_cannot_reach':
+			return fill(words.blockedApp, { domain: block.domain });
+		case 'page_on_other_domain':
+			return fill(words.blockedPage, { pageDomain: block.page_domain, domain: block.domain });
+		case 'not_on_web':
+			return words.blockedWeb;
+	}
 }
 
 /** `Keys on {{domain}}`. */
@@ -89,10 +108,27 @@ export function integrityLineModel(
 	};
 }
 
-/** What a page is called on a row: "Official", the person's label, else its host. */
-function pageName(official: boolean, name: string, url: string, m: Words): string {
+/**
+ * What a page is called on a row (D6, D-19): "Vela's official signing page",
+ * the person's own label, else "Self-hosted · {{domain}}" — never "my own
+ * page", and never a bare host that reads like an address to type.
+ */
+function pageName(official: boolean, name: string, domain: string, m: Words): string {
 	if (official) return m.signing.pageOfficial;
-	return name.trim() !== '' ? name.trim() : hostOf(url);
+	return name.trim() !== '' ? name.trim() : fill(m.signing.pageSelfHosted, { domain });
+}
+
+/**
+ * Whether the host is drawn beside the name: the official page's name and a
+ * person's label do not say it; "Self-hosted · {{domain}}" already does.
+ */
+function hostBesideName(official: boolean, name: string): boolean {
+	return official || name.trim() !== '';
+}
+
+/** Two venues the core named alike (it normalises a page's address). */
+function sameVenue(a: SigningVenue, b: SigningVenue): boolean {
+	return a.type === 'page' ? b.type === 'page' && a.url === b.url : b.type === a.type;
 }
 
 export interface VenueInput {
@@ -103,23 +139,27 @@ export interface VenueInput {
 	/** Each page's integrity line, by address — where the shell checks pages. */
 	integrity?: Partial<Record<string, IntegrityLineModel>>;
 	/**
-	 * The web: it opens no signing page (owner, 2026-09-23), so the only row it
-	 * has is Vela's own sheet, shown as where signing happens HERE — whatever
-	 * the account's stored venue says (P2-11: a page venue signs natively on
-	 * the web) — or, for a custom-domain account, disabled with R1's reason.
+	 * The web (P2-09, D-16): it opens no signing page, so the list is a
+	 * statement, not a choice. `choices` are then `signingVenueChoices(…,
+	 * 'web')` — every page row disabled with its reason — and this is the
+	 * core's web plan (`signingPlan(record, 'web')`): the row it signs with is
+	 * the one marked (Vela's sheet, for a `getvela.app` account whatever its
+	 * stored venue, P2-11), and a `blocked` plan marks none and says why.
 	 */
-	webOnly?: boolean;
+	web?: Pick<SigningPlan, 'venue' | 'blocked'>;
 }
 
 /** "Where you review and sign", from the core's choices (R1, R2). */
 export function venueModel(input: VenueInput, m: Words): VenueModel {
-	const all = input.choices.map((choice): VenueRowModel => {
+	const web = input.web;
+	const rows = input.choices.map((choice): VenueRowModel => {
 		const page =
 			choice.venue.type === 'page'
 				? {
-						name: pageName(choice.official, choice.name, choice.venue.url, m),
+						name: pageName(choice.official, choice.name, choice.domain, m),
 						host: hostOf(choice.venue.url),
-						official: choice.official
+						official: choice.official,
+						hostShown: hostBesideName(choice.official, choice.name)
 					}
 				: undefined;
 		return {
@@ -131,26 +171,36 @@ export function venueModel(input: VenueInput, m: Words): VenueModel {
 			page,
 			keysOn: keysOnText(choice.domain, m),
 			integrity: choice.venue.type === 'page' ? input.integrity?.[choice.venue.url] : undefined,
-			active: choice.active,
+			// The web marks where IT signs (the core's web plan), not the
+			// stored choice it cannot open.
+			active:
+				web === undefined
+					? choice.active
+					: web.blocked == null && sameVenue(choice.venue, web.venue),
 			blocked: choice.blocked ? venueBlockText(choice.blocked, m) : undefined
 		};
 	});
-	const rows = input.webOnly
-		? all
-				.filter((row) => row.venue.type === 'in_vela')
-				.map((row) => ({ ...row, active: row.blocked === undefined }))
-		: all;
 	const active = rows.find((row) => row.active);
-	const blocked = rows.length > 0 && rows.every((row) => row.blocked !== undefined);
+	// Nothing here can sign: the web's plan says why (D-16), else R1's reason
+	// under the first row.
+	const blocked =
+		web?.blocked != null
+			? venueBlockText(web.blocked, m)
+			: rows.length > 0 && rows.every((row) => row.blocked !== undefined)
+				? rows[0].blocked
+				: undefined;
 	const value =
 		active === undefined ? '' : active.page === undefined ? m.venue.inVela : m.venue.page;
-	const note = blocked
-		? rows[0].blocked
-		: active?.page !== undefined
-			? active.page.official
-				? active.page.host
-				: `${active.page.name} · ${active.page.host}`
-			: undefined;
+	const note =
+		blocked !== undefined
+			? blocked
+			: active?.page !== undefined
+				? active.page.official
+					? active.page.host
+					: active.page.hostShown
+						? `${active.page.name} · ${active.page.host}`
+						: active.page.name
+				: undefined;
 	return {
 		title: m.venue.title,
 		subtitle: m.venue.subtitle,
@@ -158,14 +208,15 @@ export function venueModel(input: VenueInput, m: Words): VenueModel {
 		note,
 		// One line for the settings row: where it signs now, then on which
 		// host — or, when nothing here can, why.
-		summary: blocked
-			? (note ?? '')
-			: active?.page !== undefined
-				? `${value} · ${active.page.host}`
-				: value,
+		summary:
+			blocked !== undefined
+				? blocked
+				: active?.page !== undefined
+					? `${value} · ${active.page.host}`
+					: value,
 		domainLine: keysOnText(input.domain, m),
 		rows,
-		readOnly: input.webOnly === true ? true : undefined
+		readOnly: web !== undefined ? true : undefined
 	};
 }
 
@@ -177,6 +228,12 @@ export interface SigningPagesInput {
 	/** What is typed in the add field. */
 	draft?: string;
 	integrity?: Partial<Record<string, IntegrityLineModel>>;
+	/**
+	 * A self-hosted page whose check asks to trust an unknown version
+	 * (`IntegrityState::AskToTrust`), by address → the version to trust
+	 * (`admission.version_to_trust()`).
+	 */
+	askTrust?: Partial<Record<string, string>>;
 }
 
 /** Settings → Signing pages, from the core's view. */
@@ -192,14 +249,19 @@ export function signingPagesModel(input: SigningPagesInput, m: Words): SigningPa
 	return {
 		title: m.signing.title,
 		subtitle: m.signing.subtitle,
-		officialTag: m.signing.pageOfficial,
 		rows: input.pages.map((row): SigningPageRowModel => ({
 			url: row.url,
-			name: pageName(row.official, row.name, row.url, m),
+			name: pageName(row.official, row.name, row.domain, m),
 			host: hostOf(row.url),
 			keysOn: keysOnText(row.domain, m),
 			official: row.official,
-			integrity: input.integrity?.[row.url]
+			integrity: input.integrity?.[row.url],
+			// The core's question (`integrity.askTrust`) gets its own answer:
+			// "Trust this version" sends `version_trusted {url, version}` (D-15).
+			trust:
+				input.askTrust?.[row.url] !== undefined && !row.official
+					? { label: m.signing.pageTrust, version: input.askTrust[row.url] as string }
+					: undefined
 		})),
 		add: {
 			id: 'signing-page-add',
@@ -210,7 +272,7 @@ export function signingPagesModel(input: SigningPagesInput, m: Words): SigningPa
 			tone: refusal === undefined ? 'default' : 'error'
 		},
 		addAction: m.signing.pageSave,
-		renameLabel: m.signing.rename,
-		removeLabel: m.signing.remove
+		renameLabel: m.signing.pageRename,
+		removeLabel: m.signing.pageRemove
 	};
 }

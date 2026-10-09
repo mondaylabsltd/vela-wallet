@@ -52,6 +52,7 @@ import { chainName, nativeSymbol } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
+import { venueBlockText } from '$lib/settings/venue';
 import type { SigningMessages } from './messages';
 import type {
 	AllowanceChip,
@@ -1048,8 +1049,15 @@ export function signingStatus(
 		parts.filter((part): part is string => part !== undefined && part !== '');
 	const error = sign.error;
 	// Spec 099 R8: a passkey that failed is a failure of the request too,
-	// said as the signer's.
-	const signerReason = error === null ? undefined : m.signerReasons[error.kind];
+	// said as the signer's. Spec 102 (P2b-W1): so is an account that cannot
+	// sign here — said with the core's reason (`venue_block`), in the
+	// person's words.
+	const signerReason =
+		error === null
+			? undefined
+			: error.kind === 'venue_blocked' && error.venue_block
+				? venueBlockText(error.venue_block, m.venueBlock)
+				: m.signerReasons[error.kind];
 	if (
 		error !== null &&
 		error.kind !== 'user_rejected' &&

@@ -17,6 +17,7 @@
 	import type { SigningPagesModel } from '../model';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Button from '$lib/ui/Button.svelte';
 	import IntegrityLine from './IntegrityLine.svelte';
 	import UrlField from './UrlField.svelte';
 
@@ -26,9 +27,11 @@
 		onadd?: (url: string) => void;
 		onrename?: (url: string) => void;
 		onremove?: (url: string) => void;
+		/** "Trust this version" — `version_trusted {url, version}`, then check again (D-15). */
+		ontrust?: (url: string, version: string) => void;
 	}
 
-	let { panel, onadd, onrename, onremove }: Props = $props();
+	let { panel, onadd, onrename, onremove, ontrust }: Props = $props();
 
 	let draft = $state('');
 </script>
@@ -60,6 +63,15 @@
 				>
 				{#if row.integrity !== undefined}
 					<IntegrityLine line={row.integrity} />
+				{/if}
+				{#if row.trust !== undefined}
+					{@const trust = row.trust}
+					<!-- The core's question answered in place: one quiet button, no colour. -->
+					<span class="trust">
+						<Button variant="secondary" onclick={() => ontrust?.(row.url, trust.version)}
+							>{trust.label}</Button
+						>
+					</span>
 				{/if}
 			</div>
 		</li>
@@ -153,6 +165,11 @@
 
 	.action.danger {
 		color: var(--color-error-base);
+	}
+
+	.trust {
+		display: flex;
+		padding-block-start: var(--space-sm);
 	}
 
 	.add {

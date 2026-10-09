@@ -14,16 +14,19 @@
  *
  * WHERE it is reviewed and signed is the account's venue (spec 102) — and the
  * web has one venue only: its own sheet. It opens no signing page (owner,
- * 2026-09-23; plan P2-11), so
+ * 2026-09-23; plan P2-11), so the plan asked is the web's
+ * (`signingPlan(record, 'web')`, the core's `SigningPlan::on_web`):
  *
  * - a `getvela.app` account whose venue is a trusted page signs HERE, natively:
  *   its keys are this site's passkeys, and the web has no hand-off to make;
  * - an account on a custom signing domain cannot sign here at all — its keys
- *   answer only on its own page — and the refusal carries the core's reason
- *   (`signingVenueBlock(domain, in_vela)`), never a guess of ours.
+ *   answer only on its own page — and the plan comes back `blocked` with the
+ *   core's reason, never a guess of ours. The refusal carries it to the
+ *   sign/send core (`venue_blocked`), which puts it on the sheet in the
+ *   person's language (P2b-W1).
  */
 
-import { signingPlan, signingVenueBlock, toHex, type TrustedSignerKey } from '$lib/core/kernels';
+import { signingPlan, toHex, type TrustedSignerKey } from '$lib/core/kernels';
 import type { KeyMethod } from '$lib/core/generated/KeyMethod';
 import type { KeyRoute } from '$lib/core/generated/KeyRoute';
 import type { VenueBlock } from '$lib/core/generated/VenueBlock';
@@ -45,15 +48,18 @@ export interface ChallengeSigner {
 }
 
 /**
- * Nothing on the web can reach this account's keys (spec 102 R1): they live on
- * another signing domain, behind that domain's own page. `block` is the core's
- * reason — the same one Settings draws under the account's "Where you review
- * and sign" — so a surface that catches this says it in the person's words.
- * The message is the English line, for logs and for a surface that does not.
+ * This account cannot sign here (spec 102): its keys live on another signing
+ * domain, behind that domain's own page, which the web never opens. `block` is
+ * the core's reason — the same one Settings draws under the account's "Where
+ * you review and sign" — and the executors hand it back to the core as
+ * `venue_blocked { block }` (the sign sheet's `SignErrorNotice.venue_block`,
+ * the send screen's `SendView.tx_venue_block`), which says it in the person's
+ * words. The message is for logs only: it names the block's type, never a
+ * sentence of ours.
  */
 export class VenueBlockedError extends Error {
 	constructor(readonly block: VenueBlock) {
-		super(`Vela can't reach keys on ${block.domain}.`);
+		super(`venue blocked: ${block.type}`);
 		this.name = 'VenueBlockedError';
 	}
 }
@@ -71,12 +77,11 @@ export async function signChallenge(
 		(account) => account.address.toLowerCase() === signer.account.toLowerCase()
 	);
 	// The STORED record, read by the core: it migrates one from before 102.
-	const plan = record === undefined ? null : signingPlan(record);
+	// The web's plan (P2-11): a page venue on `getvela.app` signs here, a
+	// custom-domain account is `blocked` — whatever its own venue says.
+	const plan = record === undefined ? null : signingPlan(record, 'web');
 	if (record === undefined || plan === null) return signAsBefore(challenge, signer);
-	// P2-11: the web's only venue is its own sheet. Asked of THAT venue, so a
-	// custom-domain account is refused whatever its own venue says.
-	const block = signingVenueBlock(plan.domain, { type: 'in_vela' });
-	if (block !== null) throw new VenueBlockedError(block);
+	if (plan.blocked != null) throw new VenueBlockedError(plan.blocked);
 	const key = plan.key ?? null;
 	if (key === null) return signAsBefore(challenge, signer);
 	// The one credential, over the transports the core names — where it was
@@ -105,7 +110,7 @@ function foundWhereChosen(record: object, key: KeyRoute): boolean {
 	};
 	// An older build's copy would win over the probe when it names another key.
 	delete probe.signed_in_with;
-	const chosen = signingPlan(probe)?.key ?? null;
+	const chosen = signingPlan(probe, 'web')?.key ?? null;
 	return chosen === null || chosen.transports === key.transports;
 }
 

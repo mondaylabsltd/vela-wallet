@@ -450,8 +450,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			pageAdd: k('settings.signing.pageAdd'),
 			pageSave: k('settings.signing.pageSave'),
 			keysOn: k('settings.signing.keysOn'),
-			rename: k('explore.rename'),
-			remove: k('settingsModals.network.removeConfirm')
+			pageSelfHosted: k('settings.signing.pageSelfHosted'),
+			pageRename: k('settings.signing.pageRename'),
+			pageRemove: k('settings.signing.pageRemove'),
+			pageTrust: k('settings.signing.pageTrust')
 		},
 		venue: {
 			title: k('settings.venue.title'),
@@ -461,7 +463,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			page: k('settings.venue.page'),
 			pageBody: k('settings.venue.pageBody'),
 			blockedApp: k('settings.venue.blockedApp'),
-			blockedPage: k('settings.venue.blockedPage')
+			blockedPage: k('settings.venue.blockedPage'),
+			blockedWeb: k('settings.venue.blockedWeb')
 		},
 		integrity: {
 			checking: k('componentsUi.signing.integrity.checking'),
@@ -1107,6 +1110,11 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signerReasons: Object.fromEntries(
 			Object.entries(SIGNER_REASON_KEYS).map(([kind, key]) => [kind, k(key)])
 		),
+		venueBlock: {
+			blockedApp: k('settings.venue.blockedApp'),
+			blockedPage: k('settings.venue.blockedPage'),
+			blockedWeb: k('settings.venue.blockedWeb')
+		},
 		speed: {
 			label: k('send.feeSpeedLabel'),
 			once: k('send.feeSpeedOnce'),

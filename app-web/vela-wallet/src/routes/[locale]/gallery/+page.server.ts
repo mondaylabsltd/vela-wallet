@@ -35,9 +35,10 @@ import {
 	buildMobileState as buildSettingsMobileState,
 	DESKTOP_STATES as SETTINGS_DESKTOP_STATES,
 	MOBILE_STATES as SETTINGS_MOBILE_STATES,
-	VENUE_ACCOUNTS
+	webVenue
 } from '$lib/settings/fixtures';
-import { integrityLineModel, venueModel } from '$lib/settings/venue';
+import { boardCheckTime } from '$lib/settings/board-check';
+import { integrityLineModel } from '$lib/settings/venue';
 import { fill } from '$lib/wallet/messages';
 import { identiconSvgFor } from '$lib/wallet/identicon.server';
 import type { WalletHomeModel } from '$lib/wallet/model';
@@ -83,16 +84,12 @@ export const load: PageServerLoad = ({ params }) => {
 	const st17b = buildSettingsMobileState('st17b', settingsMessages, identicon);
 	const st18 = buildSettingsMobileState('st18', settingsMessages, identicon);
 	const st18b = buildSettingsMobileState('st18b', settingsMessages, identicon);
-	/** The web's own reading of the same two accounts: it opens no page (P2-11). */
-	const web = (which: 'app' | 'own') =>
-		venueModel(
-			{
-				domain: VENUE_ACCOUNTS[which].domain,
-				choices: VENUE_ACCOUNTS[which].choices,
-				webOnly: true
-			},
-			settingsMessages
-		);
+	/**
+	 * The web's own reading of the same two accounts: it opens no page, so the
+	 * page rows are disabled with their reason and nothing is offered (P2-09,
+	 * D-16; P2-11).
+	 */
+	const web = (which: 'app' | 'own') => webVenue(settingsMessages, which);
 	/** Every integrity state the core can name, each in words (spec 102 R6). */
 	const integrity = (
 		[
@@ -110,7 +107,7 @@ export const load: PageServerLoad = ({ params }) => {
 	).flatMap(([state, version]) => {
 		const line = integrityLineModel(
 			{ key: `componentsUi.signing.integrity.${state}`, version },
-			'14:32',
+			boardCheckTime(locale),
 			settingsMessages
 		);
 		return line === undefined ? [] : [{ state, line }];
