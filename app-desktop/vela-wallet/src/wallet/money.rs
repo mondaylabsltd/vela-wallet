@@ -20,8 +20,8 @@
 //!
 //! ## What the screen owns
 //!
-//! - `EstimateFee` → a deployment read, then `QuoteRequested` on the fee
-//!   session, answered when that session's view settles (`busy` false, a fee
+//! - `EstimateFee` → `QuoteRequested` on the fee session (whose machine
+//!   reads the account first, issue #483), answered when that view settles (`busy` false, a fee
 //!   or a failure). The web's `FeeQuote.requestQuote`, without the promise.
 //! - `TrackSubmitted` → the app-resident tracker, whose view this host
 //!   observes and forwards as `ReceiptUpdate` — only the three verdicts the
@@ -947,8 +947,9 @@ impl SendHost {
 
     // -- the fee session ------------------------------------------------------
 
-    /// `FeeQuote.requestQuote`: read the deployment status (never guessed),
-    /// then ask the session; the answer arrives when its view settles.
+    /// `FeeQuote.requestQuote`: ask the session — its machine reads the
+    /// account first, never guessed (issue #483); the answer arrives when its
+    /// view settles.
     ///
     /// HOW FAST is the speed control's to say (spec 068): the tier the speed
     /// core has in force — the stored default, a one-shot pick, or a free

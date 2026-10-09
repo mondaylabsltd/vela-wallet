@@ -440,8 +440,8 @@ fn in_force_changed<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     host.in_force_changed(cx);
 }
 
-/// Price the operation at the tier in force: the deployment read first,
-/// then the question. HOW FAST is the speed core's to say (spec 068) — the
+/// Price the operation at the tier in force — the fee machine reads the
+/// account first, then prices it (issue #483). HOW FAST is the speed core's to say (spec 068) — the
 /// stored default, a one-shot pick, or a free upgrade — so `tier` is not a
 /// parameter.
 pub fn ask<H: SpeedHost>(
@@ -573,8 +573,8 @@ pub fn refresh<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     fee_dispatch(host, FeeEvent::Requote, cx);
 }
 
-/// Ask the question in force again from the start — its deployment read,
-/// then the quote — over a measurement still out (spec 082 RJ12): an
+/// Ask the question in force again from the start — the account read, then
+/// the quote — over a measurement still out (spec 082 RJ12): an
 /// automatic re-quote that ran past its bound is superseded, never waited
 /// out, because the relay it hangs on may be back already.
 pub fn reask<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {

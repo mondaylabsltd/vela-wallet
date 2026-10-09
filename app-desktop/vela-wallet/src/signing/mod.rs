@@ -17,6 +17,7 @@ pub mod trusted_signer;
 use gpui::SharedString;
 
 use crate::loc::Loc;
+use vela_core::app::sign_confirm::ConfirmBlock;
 
 /// Semantic weight. `Accent` is the intent sentence; the rest colour warnings.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -271,6 +272,12 @@ pub struct SigningStrings {
     /// The refusal told by its reason (`TrackEntryView.refusal_key`): every
     /// sentence the core may choose, by key.
     pub refusals: Vec<(&'static str, SharedString)>,
+    /// The confirm's held lines the gallery draws (`ConfirmBlock::key`): the
+    /// account's previous transaction still going through, the fee being
+    /// worked out, and the fee that could not be.
+    pub note_previous_pending: SharedString,
+    pub note_fee_measuring: SharedString,
+    pub note_fee_failed: SharedString,
     /// Spec 079 US7: the Trusted Signer route's confirm ("去签名页确认").
     pub open_signer: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
@@ -525,6 +532,9 @@ impl SigningStrings {
                 }),
             refused: s("refused"),
             refusals: crate::flows::refusal_sentences(loc),
+            note_previous_pending: block_note(loc, ConfirmBlock::PreviousPending),
+            note_fee_measuring: block_note(loc, ConfirmBlock::FeeMeasuring),
+            note_fee_failed: block_note(loc, ConfirmBlock::FeeFailed),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             warn_fee_coin_spent: loc.t("componentsUi.gas.feeCoinSpent"),
@@ -564,6 +574,11 @@ impl SigningStrings {
             sent_to_token_contract: s("sendingToTokenContract"),
         }
     }
+}
+
+/// A held confirm's line, in the core's words for its block.
+fn block_note(loc: &Loc, block: ConfirmBlock) -> SharedString {
+    block.key(false).map(|key| loc.t(key)).unwrap_or_default()
 }
 
 /// Every way a fee can fail, so the sheet resolves the words for whichever

@@ -707,11 +707,11 @@ impl SigningHost {
         // sheet's own control picks another. The quoted fee carries it to the
         // relay beside the amount.
         //
-        // An indeterminate deployment read never reaches the core: guessing
-        // "deployed" ships an operation without initCode, and guessing
-        // "undeployed" attaches one to a live account. No quote is better
-        // than a wrong one — the confirm stays shut, which is what
-        // `confirm_fee_ready: false` means.
+        // The fee machine reads the account first (issue #483): a read that
+        // gets no answer is its failure — never a guess, since "deployed"
+        // ships an operation without initCode and "undeployed" attaches one
+        // to a live account. No quote is better than a wrong one: the
+        // confirm stays shut, and the row and the footer say why.
         speed_control::ask(
             self,
             chain_id,

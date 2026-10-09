@@ -3567,15 +3567,14 @@ fn send_confirm(
         advance,
     ));
     // Held for the account's previous transaction: the one line, under the
-    // confirm it holds — no spinner, no countdown (correctness batch item 3).
+    // confirm it holds — no spinner, no countdown (correctness batch item 3)
+    // — set as the signing sheet sets its own held line, so the two
+    // surfaces holding the same nonce say it the same way.
     if let Some(held) = &model.held {
         col = col.child(
             div()
-                .w_full()
-                .flex()
-                .justify_center()
                 .text_size(theme::text_row_sub())
-                .text_color(theme.fg_muted)
+                .text_color(theme.fg_subtle)
                 .child(held.clone()),
         );
     }

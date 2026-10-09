@@ -6750,7 +6750,7 @@ impl WalletPage {
     /// gallery pins a hand-off (`VELA_HANDOFF`): the confirm's own fee rows
     /// above the card, the card with none.
     fn mock_flow_body(&self, panel: FlowPanel) -> flow_fixtures::FlowBody {
-        match (
+        let body = match (
             flow_fixtures::body(panel, &self.flow_strings),
             crate::gallery::handoff_pin(),
         ) {
@@ -6761,7 +6761,8 @@ impl WalletPage {
                 ))
             }
             (body, _) => body,
-        }
+        };
+        crate::gallery::send_state_pin(body, &self.flow_strings, &self.strings)
     }
 
     /// The panel's body: the cores' for a real session, the mocks' otherwise.

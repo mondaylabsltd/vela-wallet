@@ -3996,7 +3996,18 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             cta_accent: false,
             breakdown_title: None,
             breakdown: Vec::new(),
-            title: tx_error_text(send, s).unwrap_or_else(|| s.tx_error_generic.clone()),
+            // A submit that failed says why in its title (the core's error
+            // key). A payment the relay took and then refused or that failed
+            // on the way is "Failed", its reason underneath — never "couldn't
+            // be submitted, please try again", which it was, and which would
+            // meet the same refusal.
+            title: tx_error_text(send, s).unwrap_or_else(|| {
+                if status == Some(SendReceiptStatus::Failed) {
+                    s.status_failed.clone()
+                } else {
+                    s.tx_error_generic.clone()
+                }
+            }),
             captions: rejected.into_iter().collect(),
             hash: None,
             cta: s.done.clone(),
@@ -5219,6 +5230,10 @@ mod tests {
             Some(refusal_key(Some(RefusalReason::NonceUsed))),
         );
         assert_eq!(went_first.stage, ReceiptStage::Failed);
+        assert_eq!(
+            went_first.title, s.status_failed,
+            "\"Failed\", never \"couldn't be submitted, try again\""
+        );
         assert_eq!(
             went_first.captions,
             vec![loc.t("componentsUi.signing.wentFirst")]
