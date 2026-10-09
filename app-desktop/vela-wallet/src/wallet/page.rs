@@ -19865,6 +19865,7 @@ impl Render for WalletPage {
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
+            .font_features(theme::font_ui_features())
             .relative()
             .bg(theme.bg_base)
             .text_color(theme.fg_base)

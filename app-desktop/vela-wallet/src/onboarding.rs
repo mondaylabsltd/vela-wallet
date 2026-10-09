@@ -1353,6 +1353,7 @@ impl Render for OnboardingPage {
             .size_full()
             .relative()
             .font_family(theme::font_ui())
+            .font_features(theme::font_ui_features())
             .bg(theme.bg_base)
             .child(page.opacity(page_opacity));
 

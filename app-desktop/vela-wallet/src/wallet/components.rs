@@ -1130,7 +1130,7 @@ pub fn balanced_wrap_width(
 ) -> Pixels {
     let run = TextRun {
         len: text.len(),
-        font: gpui::font(theme::font_ui()),
+        font: theme::ui_font(),
         color: gpui::black(),
         background_color: None,
         underline: None,
@@ -1190,7 +1190,7 @@ pub fn balanced_wrap_width(
 pub fn kinsoku_width(window: &Window, text: &SharedString, size: Pixels, max: Pixels) -> Pixels {
     let run = TextRun {
         len: text.len(),
-        font: gpui::font(theme::font_ui()),
+        font: theme::ui_font(),
         color: gpui::black(),
         background_color: None,
         underline: None,
@@ -1231,7 +1231,7 @@ pub fn kinsoku_width(window: &Window, text: &SharedString, size: Pixels, max: Pi
 pub fn text_width(window: &Window, text: &str, size: Pixels) -> Pixels {
     let run = TextRun {
         len: text.len(),
-        font: gpui::font(theme::font_ui()),
+        font: theme::ui_font(),
         color: gpui::black(),
         background_color: None,
         underline: None,
