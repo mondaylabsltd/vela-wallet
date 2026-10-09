@@ -369,6 +369,11 @@ struct RootView: View {
         spine.trustedSigner = trustedSigner
         onboarding.trustedSigner = trustedSigner
         onboarding.words = { [loc] key in loc.t(key) }
+        // Spec 102: the choosers' "Use my own signing page" lists the pages
+        // Settings keeps — read by the same machine, so the two never differ.
+        onboarding.signingPages = { [settingsStore] in settingsStore.signingPages }
+        onboarding.openSigningPages = { [settingsStore] in settingsStore.openSigningPages() }
+        onboarding.addSigningPage = { [settingsStore] url in settingsStore.addSigningPage(url: url) }
         // The balance read publishes what it found here, and the receipt scan
         // reads it: which chains this account uses, which tokens it holds, and
         // what they were worth. Web gets the same three facts from its
@@ -4005,9 +4010,30 @@ struct RootView: View {
             UsbConnectingSheet(loc: loc, method: onboarding.signInMethod)
                 .themed(scheme)
         } else if onboarding.showSignInMethods {
-            SignInMethodSheet(loc: loc, onPick: onboarding.pickSignInMethod)
+            signInMethodSheet
                 .themed(scheme)
         }
+    }
+
+    /// The sign-in chooser: three places, and — apart — "Use my own signing
+    /// page" over the pages Settings keeps, each checked by this phone.
+    private var signInMethodSheet: some View {
+        let pages = settings.signingPages
+        return SignInMethodSheet(
+            loc: loc,
+            onPick: onboarding.pickSignInMethod,
+            pageChoices: SigningPagePickerModel.choices(
+                pages: pages?.pages ?? [], selected: onboarding.signInPage, loc: loc,
+                line: { SignerPageChecks.shared.line(for: $0) }
+            ),
+            chosenPage: onboarding.signInPage,
+            onChoosePage: { onboarding.signInPage = $0 },
+            onAddPage: { settings.addSigningPage(url: $0) },
+            pageAddError: SigningPagesViewWire.addErrorKey(pages?.addError),
+            onPagesShown: {
+                for page in pages?.pages ?? [] { SignerPageChecks.shared.prime(page.url) }
+            }
+        )
     }
 
     private var signOutSheet: Binding<SessionSignOutView?> {

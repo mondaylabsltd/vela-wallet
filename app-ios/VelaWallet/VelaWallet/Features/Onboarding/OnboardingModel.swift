@@ -86,7 +86,11 @@ final class OnboardingModel {
     var showSignInMethods = false {
         // A sheet opened afresh starts in the app: a page chosen on an earlier
         // visit is not a choice made for this one.
-        didSet { if showSignInMethods && !oldValue { signInPage = nil } }
+        didSet {
+            guard showSignInMethods && !oldValue else { return }
+            signInPage = nil
+            openSigningPages()
+        }
     }
 
     /// Held from the instant an app-owned sign-in method is chosen until the
@@ -264,6 +268,14 @@ final class OnboardingModel {
     /// page", for the sign-in it is about to start. `nil` signs in in the app.
     var signInPage: String?
 
+    /// Spec 102: the signing pages this device trusts (Settings → Signing
+    /// pages), for the choosers' "Use my own signing page". Set by the host;
+    /// nothing until then. `openSigningPages` boots the machine that reads
+    /// them — a person on Welcome has not opened Settings.
+    var signingPages: () -> SigningPagesViewWire? = { nil }
+    var openSigningPages: () -> Void = {}
+    var addSigningPage: (_ url: String) -> Void = { _ in }
+
     private let session: SessionController
     private let store: AccountStore
     private let registry: RegistryClient
@@ -328,6 +340,7 @@ final class OnboardingModel {
         )
         create = driver
         driver.dispatch(Self.event("start"))
+        openSigningPages()
     }
 
     /// Spec 102: "Use my own signing page" — a saved page, before the first

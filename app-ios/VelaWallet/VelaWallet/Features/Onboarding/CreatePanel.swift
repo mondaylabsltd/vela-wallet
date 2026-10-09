@@ -205,8 +205,36 @@ struct KeysScreen: View {
     let onConfirmKey: (Int) -> Void
     let onRemoveKey: (Int) -> Void
     let onFinish: () -> Void
+    /// Spec 102, "Use my own signing page": Vela's own sheet and every page
+    /// this device trusts, the chosen one marked. Empty hides the entry.
+    var pageChoices: [SigningPageChoiceModel] = []
+    /// A page was chosen (`nil`: Vela's own) — `signing_page_chosen`.
+    var onChoosePage: ((String?) -> Void)?
+    /// "Add a page" in the picker, and the core's refusal of the last one.
+    var onAddPage: ((String) -> Void)?
+    var pageAddError: String?
+    /// The picker is on screen: check the pages it lists.
+    var onPagesShown: () -> Void = {}
 
     @State private var pickerOpen = false
+    @State private var pagePickerOpen = false
+
+    /// The chosen page, as the picker draws it.
+    private var chosenPage: SigningPageChoiceModel? {
+        guard let page = view.signingPage else { return nil }
+        return pageChoices.first { $0.url.map(SignerPageChecks.key) == SignerPageChecks.key(page) }
+            ?? SigningPageChoiceModel(
+                url: page, title: SigningPageNames.host(page), subtitle: SigningPageNames.host(page),
+                domainLine: loc.t("settings.signing.keysOn", vars: ["domain": view.signingDomain]),
+                line: nil, selected: true
+            )
+    }
+
+    /// The entry is offered only before the first key, and only where there
+    /// is somewhere to send the choice.
+    private var offersOwnPage: Bool {
+        view.canChoosePage && view.signingPage == nil && onChoosePage != nil && !pageChoices.isEmpty
+    }
 
     private var full: Bool { view.keys.count >= maxKeys }
 
@@ -223,6 +251,15 @@ struct KeysScreen: View {
                     Text(loc.t(subtitleKey))
                         .typeRole(Typography.body)
                         .foregroundStyle(theme.fgMuted)
+
+                    // Spec 102: where this wallet will review and sign, when
+                    // a page was chosen — and the domain its keys belong to.
+                    if let chosen = chosenPage {
+                        ChosenSigningPageCard(
+                            loc: loc, choice: chosen,
+                            onChange: view.canChoosePage && onChoosePage != nil ? { pagePickerOpen = true } : nil
+                        )
+                    }
 
                     if view.needsSecondKey {
                         HStack(alignment: .top, spacing: Tokens.Space.s12) {
@@ -302,6 +339,13 @@ struct KeysScreen: View {
                             pickerOpen = false
                             onAddKey(method)
                         }
+                        // Not a fourth place: where this wallet reviews and
+                        // signs. Offered before the first key only — the
+                        // first key commits the set to one domain.
+                        if offersOwnPage {
+                            Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s8)
+                            OwnSigningPageEntry(loc: loc) { pagePickerOpen = true }
+                        }
                     }
 
                     Text(loc.t(I18nKeys.Create.keysHint))
@@ -324,6 +368,23 @@ struct KeysScreen: View {
             )
         }
         .padding(.bottom, Tokens.Space.s16)
+        .sheet(isPresented: $pagePickerOpen) {
+            SigningPagePicker(
+                loc: loc,
+                choices: pageChoices,
+                onPick: { url in
+                    pagePickerOpen = false
+                    onChoosePage?(url)
+                },
+                onAdd: onAddPage,
+                addError: pageAddError,
+                onClose: { pagePickerOpen = false }
+            )
+            .task { onPagesShown() }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .task(id: view.signingPage) { if view.signingPage != nil { onPagesShown() } }
     }
 
     private var subtitleKey: String {
