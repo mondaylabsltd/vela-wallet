@@ -41,7 +41,7 @@ import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
 import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
-import { speedControlModel, type OfferedTier, type SpeedWords } from './speed-control';
+import { offeredTier, speedControlModel, type OfferedTier, type SpeedWords } from './speed-control';
 import type {
 	FactRowModel,
 	FeeRowModel,
@@ -1128,7 +1128,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	if (speed?.picked || speed?.free) {
 		facts.push({
 			label: m['send.feeSpeedLabel'],
-			value: m[TIER_LABEL_KEY[speed.tier === 'rapid' ? 'fast' : speed.tier]],
+			value: m[TIER_LABEL_KEY[offeredTier(speed.tier)]],
 			// …and a free upgrade says WHY, here too (issue 686 rule 5): the
 			// person's Settings name a slower speed, and this is the screen they
 			// check before signing. The reason travels with the tier wherever

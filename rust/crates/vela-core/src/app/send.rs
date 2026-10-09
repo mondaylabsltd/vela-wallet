@@ -1866,6 +1866,10 @@ pub struct Model {
     recipient_identity: Option<SendRecipientIdentity>,
     recipient_risk: Option<SendRecipientRisk>,
     sim_json: Option<String>,
+    /// What the confirm's simulation was last asked — the chain, the account
+    /// and the calls byte for byte ([`SimInput`]). A quote priced again while
+    /// the confirm is up runs it again only when this moved ([`fee_updated`]).
+    sim_input: Option<SimInput>,
     /// `prefetchedAccount.current?.publicKeyHex`.
     public_key_hex: Option<String>,
     pipeline: Pipeline,
@@ -4427,14 +4431,18 @@ fn sync_identity(model: &mut Model) -> Cmd {
 fn confirm_probes(model: &mut Model) -> Cmd {
     model.sim_json = None;
     model.flights.sim = None;
+    model.sim_input = None;
     model.recipient_risk = None;
     model.flights.risk = None;
     if model.step != SendStep::Confirm {
         return Command::done();
     }
-    let (Some(token), Some(account)) = (model.selected_token.clone(), model.account.clone()) else {
+    let Some(token) = model.selected_token.clone() else {
         return Command::done();
     };
+    if model.account.is_none() {
+        return Command::done();
+    }
 
     let mut cmds: Vec<Cmd> = Vec::new();
 
@@ -4450,28 +4458,81 @@ fn confirm_probes(model: &mut Model) -> Cmd {
         ));
     }
 
+    if let Some(input) = sim_input(model) {
+        cmds.push(simulate(model, input));
+    }
+    Command::all(cmds)
+}
+
+/// What the confirm's simulation is asked about. The shell simulates exactly
+/// this — the chain, the account and the calls — and nothing of the fee: not
+/// its gas, its limits, its price or its coin.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SimInput {
+    chain_id: u32,
+    account: String,
+    calls: Vec<FeeCall>,
+}
+
+/// The simulation this confirm asks for, or `None` when it asks for none: an
+/// incomplete or invalid form, or a malformed amount (the `catch`).
+fn sim_input(model: &Model) -> Option<SimInput> {
+    let token = model.selected_token.as_ref()?;
+    let account = model.account.as_ref()?;
     let ok_single =
         !model.split_mode && !model.multi_select_mode && is_valid_address(&model.recipient);
     let ok_split = model.split_mode && recipients_are_valid(&model.recipients);
     let ok_multi = model.multi_select_mode
         && is_valid_address(&model.recipient)
         && !picked_tokens(model).is_empty();
-    if ok_single || ok_split || ok_multi {
-        if let Some(calls) = build_sim_calls(model, &token) {
-            let id = next(model);
-            model.flights.sim = Some(id);
-            cmds.push(issue(
-                id,
-                SendOperation::SimulateCalls {
-                    chain_id: token.chain_id,
-                    account: account.address,
-                    calls,
-                },
-            ));
-        }
-        // A malformed amount → no sim (the `catch`).
+    if !(ok_single || ok_split || ok_multi) {
+        return None;
     }
-    Command::all(cmds)
+    Some(SimInput {
+        chain_id: token.chain_id,
+        account: account.address.clone(),
+        calls: build_sim_calls(model, token)?,
+    })
+}
+
+fn simulate(model: &mut Model, input: SimInput) -> Cmd {
+    let id = next(model);
+    model.flights.sim = Some(id);
+    model.sim_input = Some(input.clone());
+    issue(
+        id,
+        SendOperation::SimulateCalls {
+            chain_id: input.chain_id,
+            account: input.account,
+            calls: input.calls,
+        },
+    )
+}
+
+/// The confirm's probes after its quote was priced again — which the fee
+/// machine does once a block while the confirm is up
+/// (`fee_policy::requote_interval_ms`), besides a refresh or a coin tap.
+///
+/// The risk is about the recipient on this chain, and neither moves while the
+/// confirm is up: it is never asked again here. The simulation is asked again
+/// only when the calls it simulates moved — only a sweep's are built from the
+/// fee, which it holds back from the line in the fee's coin
+/// ([`multi_token_specs`]); a single transfer's and a split's never are. Asking
+/// again for the same calls would blank what the confirm shows (the
+/// simulation and the recipient's risk) and fetch both once a block, for the
+/// same answer.
+fn reprobe_after_fee(model: &mut Model) -> Cmd {
+    let input = sim_input(model);
+    if input == model.sim_input {
+        return Command::done();
+    }
+    model.sim_json = None;
+    model.flights.sim = None;
+    model.sim_input = None;
+    match input {
+        Some(input) => simulate(model, input),
+        None => Command::done(),
+    }
 }
 
 /// The sim's call batch (`useSendController.ts:429-443`): multiSelect uses the
@@ -5608,8 +5669,9 @@ fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {
     };
     model.fee_estimate = Some(fee);
     if model.step == SendStep::Confirm {
-        // The sim depends on the estimate (reserve math) — re-run it.
-        return Command::all([confirm_probes(model), render()]);
+        // A sweep's sim depends on the estimate (reserve math): re-run it
+        // when its calls moved, and only then.
+        return Command::all([reprobe_after_fee(model), render()]);
     }
     // A requote or a chip switch on the form moves what Max holds back.
     Command::all([follow_max(model), render()])

@@ -667,7 +667,7 @@ fn report(sut: &mut Sut, main: TierQuote, previews: Vec<TierPreviewQuote>) -> Fe
     sut.view()
 }
 
-/// The factory default costs nothing: no preview, no partner, one quote.
+/// A default of the fastest costs nothing: no preview, no partner, one quote.
 #[test]
 fn the_fastest_default_prices_nothing_beside_itself() {
     let mut sut = on_form(FeeTier::Fast);

@@ -8,7 +8,7 @@
 //! ```text
 //! QuoteRequested{fee_token} ─► Gathering ──(gas price ∥ bundler quote ∥
 //!   in-band quotes)──► Estimating ──(real-calldata UserOp simulation, fee leg
-//!   included)──► Quoted ──30s──► stale
+//!   included)──► Quoted ──a block──► priced again
 //!        │                                              │
 //!        └── any fatal step ─► Failed{semantic variant}  └─ SelectFeeAsset:
 //!                                                           local recompute
@@ -642,7 +642,9 @@ pub enum FeeOperation {
         from: String,
         calls: Vec<FeeCall>,
     },
-    /// Quote staleness timer.
+    /// The re-pricing timer: answer [`FeeShellResult::TtlElapsed`] after `ms`
+    /// ([`requote_interval_ms`], the chain's block time) and the machine
+    /// prices the quote on screen again.
     StartTtl { ms: u32 },
     /// The bound on this whole run ([`QUOTE_DEADLINE_MS`], spec 094 S9):
     /// answer [`FeeShellResult::DeadlineElapsed`] after `ms`. A run still
@@ -2151,7 +2153,12 @@ pub struct FeeView {
     pub failed: Option<FeeFailure>,
     /// Present only when valid for the current form chain (invariant ①).
     pub fee: Option<FeeEstimateView>,
-    /// The 30s TTL elapsed — advisory; the shell shows a refresh affordance.
+    /// The figure on screen is older than a block — a background re-pricing
+    /// failed, or the shell said the app slept ([`Event::QuoteExpired`]) —
+    /// and the machine is already pricing it again, `busy`, before anything
+    /// may sign it: a shell has nothing to ask. Left `true` without `busy`
+    /// only when the confirm is left mid-way ([`Event::LeaveConfirm`]), on a
+    /// figure the form's Continue prices again anyway.
     pub stale: bool,
     pub fee_token: Option<String>,
     pub options: Vec<FeeOptionView>,
