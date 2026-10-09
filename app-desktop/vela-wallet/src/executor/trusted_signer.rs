@@ -73,7 +73,7 @@ use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::shell::ShellOperation;
 use vela_core::app::{Assertion, FailureKind, KeyMethod, RegistryPublishMember};
 use vela_core::primitives::{to_base64url, to_hex};
-use vela_core::signing_venue::{KeyRoute, VenueBlock};
+use vela_core::signing_venue::KeyRoute;
 use vela_core::trusted_signer::launch::{CheckedPage, IntegrityLine};
 use vela_core::trusted_signer::{
     self, RequestInput, TrustedSignerError, Verified, ceremony as core_ceremony, verify, ws,
@@ -104,9 +104,8 @@ pub enum Refusal {
     Mismatch,
     /// Nothing came back in time.
     TimedOut,
-    /// The page was never opened (spec 102): its check did not admit it, or
-    /// nothing here can reach the account's keys. [`Channel::not_opened`]
-    /// says which, in the words the card draws.
+    /// The page was never opened (spec 102): its check did not admit it.
+    /// [`Channel::not_opened`] says why, in the words the card draws.
     NotOpened,
 }
 
@@ -116,10 +115,9 @@ pub enum Refusal {
 pub enum NotOpened {
     /// R6: the page's check did not admit it — the integrity line says why
     /// ("couldn't check the page, so it won't open", "isn't on Vela's
-    /// published build list", …).
+    /// published build list", …). (Keys out of reach, R1, are not a page
+    /// left unopened: the submit ends `VenueBlocked`, and the core says why.)
     Integrity(IntegrityLine),
-    /// R1: no venue on this device can reach the account's keys.
-    Venue(VenueBlock),
 }
 
 impl Refusal {
@@ -184,6 +182,10 @@ struct State {
     /// five-minute clock — goes on; the card says the page did not open and
     /// offers to try again.
     unreachable: bool,
+    /// The ceremony this attempt runs on the page, by its title's corpus key
+    /// (`Ceremony::title_key`: create / sign in / confirm) — `None` for a
+    /// signature, which is the hand-off's "review and sign".
+    ceremony_title: Option<&'static str>,
 }
 
 /// What one screen and its Trusted Signer attempts say to each other.
@@ -299,6 +301,19 @@ impl Channel {
     #[must_use]
     pub fn unreachable(&self) -> bool {
         self.with(|state| state.waiting.is_some() && state.unreachable)
+    }
+
+    /// The title of the cards this attempt raises (the wait, how it ended):
+    /// a ceremony's own — "Create your key on your signing page", "Sign in on
+    /// your signing page", "Confirm with your key on your signing page" —
+    /// else the hand-off's, for a signature.
+    #[must_use]
+    pub fn title_key(&self) -> &'static str {
+        self.with(|state| {
+            state
+                .ceremony_title
+                .unwrap_or("componentsUi.signing.handoffTitle")
+        })
     }
 
     /// The URL this wait is on — for the check the window's return runs.
@@ -442,6 +457,12 @@ impl Channel {
 
     fn release(&self) {
         self.with(|state| state.claimed = false);
+    }
+
+    /// What this attempt is, for its cards' title: a ceremony's title key,
+    /// or `None` for a signature.
+    fn entitle(&self, ceremony_title: Option<&'static str>) {
+        self.with(|state| state.ceremony_title = ceremony_title);
     }
 
     /// An attempt starts waiting on `url`; `open` hands it to the browser.
@@ -614,14 +635,37 @@ fn open_line(
 /// account's venue — so a person pressing Open finds the page already
 /// checked, and Settings and the choosers already have its line.
 ///
-/// **Why at start and not at signing time.** FR-007 wants the check decoupled
-/// in time from signing, so a server cannot tell "a verification request just
-/// arrived, the next navigation is the target". Running it when the app opens
-/// is the simplest shape of that. A check that is too old by the time a page
-/// is opened is run again first, on the launch path ([`launchable`]).
+/// Each page is checked only when the core says a refresh is due
+/// (`launch::refresh_due`, D-14): never checked, or checked more than half a
+/// day ago — and not within ten minutes of an attempt that could not
+/// complete. Asked at start, on every return of a window to the front, and
+/// hourly while the app runs ([`keep_fresh`]), so Open almost never waits.
+///
+/// **Why not at signing time.** FR-007 wants the check decoupled in time from
+/// signing, so a server cannot tell "a verification request just arrived, the
+/// next navigation is the target". A check that is too old by the time a page
+/// is opened is still run again first, on the launch path ([`launchable`]).
 pub fn prime_in_background() {
     for page in pages_in_use() {
         crate::executor::signer_integrity::check_in_background(&page);
+    }
+}
+
+/// D-14: ask [`prime_in_background`] again every `launch::REFRESH_POLL_MS`
+/// (an hour) for as long as the app runs, on a thread of its own — the
+/// question is two numbers compared, and the answer changes twice a day.
+pub fn keep_fresh() {
+    let polling = std::thread::Builder::new()
+        .name("signer-page-refresh".to_owned())
+        .spawn(|| {
+            let every = Duration::from_millis(vela_core::trusted_signer::launch::REFRESH_POLL_MS);
+            loop {
+                std::thread::sleep(every);
+                prime_in_background();
+            }
+        });
+    if let Err(error) = polling {
+        eprintln!("[vela-wallet] signer page: no hourly refresh: {error}");
     }
 }
 
@@ -781,11 +825,13 @@ impl Line for SchemeLine {
         self.token = to_base64url(&passkey::random(16));
         // R6: the URL is the checked page's, and only an admitted check
         // builds one. A page nothing vouches for is not opened.
+        // The page speaks the app's language (`lang=`), not the browser's.
         let launched = launchable(&self.page).and_then(|page| {
             page.url_launch(
                 request,
                 trusted_signer::CALLBACK_URL,
                 &self.token,
+                &crate::loc::app_language(),
                 crate::executor::now_ms() as u64,
             )
             .map_err(|_| IntegrityLine::checking())
@@ -940,6 +986,7 @@ pub fn sign(
     let Some(_claim) = channel.claim() else {
         return Err(busy());
     };
+    channel.entitle(None);
     let mut line = open_line(page, channel, deadline)?;
     let id = line.next_id();
     let answered = line.ask(&id, request, channel, deadline);
@@ -958,14 +1005,6 @@ pub fn sign(
         }
         Err(refusal) => Err(gave_up(channel, refusal)),
     }
-}
-
-/// Spec 102 R1: nothing on this device can reach the account's keys — no
-/// page is opened and no prompt raised. The screen is told why; the core hears
-/// a cancelled passkey, so the request stays open.
-pub fn unreachable(channel: &Channel, block: VenueBlock) -> PasskeyFailure {
-    channel.refuse_open(NotOpened::Venue(block));
-    gave_up(channel, Refusal::NotOpened)
 }
 
 /// Tell the screen how it ended, and the core that a passkey was cancelled.
@@ -1076,6 +1115,9 @@ fn ceremony_on_flow(
     let Some(_claim) = channel.claim() else {
         return Err(busy());
     };
+    // A ceremony has nothing to review: its cards say what the person is
+    // doing on the page (spec 102 core round 12).
+    channel.entitle(Some(ceremony.title_key()));
     // The flow's visit, when it is a visit to this same page; otherwise a new
     // one, and the old one is told goodbye rather than left open.
     let mut open = channel.take_flow();
@@ -1324,7 +1366,7 @@ pub(crate) mod tests {
 
     /// The one-time token out of a launch URL's fragment.
     pub(crate) fn token_of(url: &str) -> String {
-        assert!(url.contains("?ch=url#"), "{url}");
+        assert!(url.contains("?ch=url"), "{url}");
         let fragment = url.split_once('#').map_or("", |(_, f)| f);
         fragment
             .split('&')
@@ -1457,6 +1499,13 @@ pub(crate) mod tests {
         assert!(
             url.contains("#i="),
             "the request must ride in the fragment: {url}"
+        );
+        // Spec 102: the page is told the app's language, in the query — and
+        // only that: the request stays in the fragment.
+        let (query, _) = url.split_once('#').unwrap_or_default();
+        assert!(
+            query.ends_with(&format!("&lang={}", crate::loc::app_language())),
+            "the app's language is named: {url}"
         );
         let (_, fragment) = url.split_once('#').unwrap_or_default();
         assert!(fragment.contains("cb="), "the callback is named: {url}");
@@ -1650,7 +1699,7 @@ pub(crate) mod tests {
         let url = page_of_channel(&channel);
         assert!(
             url.starts_with("http://localhost:8140/clearsigning/b/")
-                && url.contains("/sign.html?ch=url#i="),
+                && url.contains("/sign.html?ch=url&lang="),
             "not the checked page under its path: {url}"
         );
         channel.cancel();
@@ -1686,6 +1735,36 @@ pub(crate) mod tests {
         // Read, it is gone; the next attempt starts clean.
         channel.forget();
         assert_eq!(channel.not_opened(), None);
+    }
+
+    /// Core round 12: a ceremony's cards say what the person is doing on the
+    /// page — "Sign in on your signing page" — not the hand-off's "review and
+    /// sign"; a signature's say the hand-off's again.
+    #[test]
+    fn a_ceremonys_cards_carry_its_own_title() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .map(|addr| addr.port())
+            .unwrap_or(1);
+        let base = format!("http://127.0.0.1:{closed}/");
+        let (channel, _changed) = Channel::new();
+        let sign_in = ShellOperation::AuthenticatePasskey {
+            method: KeyMethod::SecurityKey,
+            page: Some(base.clone()),
+        };
+        let ended = run_ceremony(
+            &sign_in,
+            &base,
+            None,
+            "https://registry.test",
+            &channel,
+            true,
+        );
+        assert!(matches!(ended, Some(Err(_))), "a page nobody checked ran");
+        assert_eq!(channel.ended(), Some(Refusal::NotOpened));
+        assert_eq!(channel.title_key(), "componentsUi.signing.ceremonySignIn");
+        let _ = sign(&json!({}), &base, &DIGEST, &keys(), &channel);
+        assert_eq!(channel.title_key(), "componentsUi.signing.handoffTitle");
     }
 
     /// R5: the request names the key to use and where it lives, so the

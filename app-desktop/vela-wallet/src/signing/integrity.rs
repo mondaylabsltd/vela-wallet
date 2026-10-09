@@ -72,13 +72,43 @@ pub fn recheck(page: &str, cx: &mut App) {
     let _ = line(page, cx);
 }
 
+/// "Trust this version" on a self-hosted page's question (spec 076 FR-009,
+/// spec 102 D-15): the version the check asked about is stored on THAT page
+/// (`SigningPagesEvent::VersionTrusted`, the core's rule — refused for the
+/// official page and anything that is not a sha256), then the page is checked
+/// again, which now reads "trusted on this device" and opens. Nothing happens
+/// when the line no longer asks.
+pub fn trust(page: &str, cx: &mut App) {
+    use vela_core::app::signing_pages::{Event, SigningPages};
+    let Some(version) = signer_integrity::version_to_trust(page) else {
+        return;
+    };
+    crate::resident::resident::<SigningPages>(cx).update(cx, |pages, cx| {
+        pages.dispatch(
+            Event::VersionTrusted {
+                url: page.to_owned(),
+                version,
+            },
+            cx,
+        );
+    });
+    recheck(page, cx);
+}
+
 /// The line's sentence, its `{{version}}` and `{{time}}` filled — the time
-/// on this machine's clock, in the person's time format ("checked 14:32").
+/// as the core words it for this clock and this person ("checked 14:32",
+/// or the date too for a check from before today, D-13).
 #[must_use]
 pub fn text(loc: &Loc, line: &IntegrityLine) -> SharedString {
+    text_at(loc, line, crate::executor::now_ms() as u64)
+}
+
+/// [`text`] at `now_ms` — the seam the tests use.
+#[must_use]
+pub fn text_at(loc: &Loc, line: &IntegrityLine, now_ms: u64) -> SharedString {
     let time = line
         .checked_at_ms
-        .map(|at| clock(at, loc.language()))
+        .map(|at| checked_time(at, now_ms, loc.language()))
         .unwrap_or_default();
     loc.t_texts(
         &line.key,
@@ -86,15 +116,18 @@ pub fn text(loc: &Loc, line: &IntegrityLine) -> SharedString {
     )
 }
 
-/// A check's moment as the line states it: the time of day, in the format
-/// the person chose (a check vouches for a day at most, so the hour says it).
-fn clock(at_ms: u64, locale: &str) -> String {
-    #[allow(clippy::cast_precision_loss, reason = "epoch milliseconds")]
-    let civil = crate::executor::local_civil(at_ms as f64);
-    vela_core::l10n::datetime::format_time(
-        &civil,
-        crate::executor::format_prefs::current().time,
-        locale,
+/// `{{time}}` — the core's `launch::checked_time`, on this machine's clock
+/// and offset and in the person's date and time formats.
+fn checked_time(at_ms: u64, now_ms: u64, language: &str) -> String {
+    use crate::executor::format_prefs;
+    let formats = format_prefs::current();
+    vela_core::trusted_signer::launch::checked_time(
+        at_ms,
+        now_ms,
+        crate::executor::local_utc_offset_minutes(),
+        format_prefs::date_word(formats.date),
+        format_prefs::time_word(formats.time),
+        language,
     )
 }
 
@@ -137,6 +170,20 @@ pub fn ink(theme: &Theme, tone: Tone) -> gpui::Hsla {
     }
 }
 
+/// The sentence's ink (D7: the sheet's palette, one accent, nothing coloured
+/// for its own sake): good news and a check under way read in the quiet
+/// secondary ink — the tick beside them says which — a question for the
+/// person in the body ink, and only a page that will not open in the danger
+/// ink, because that one must read as a refusal.
+#[must_use]
+pub fn words_ink(theme: &Theme, tone: Tone) -> gpui::Hsla {
+    match tone {
+        Tone::Success | Tone::Neutral => theme.fg_muted,
+        Tone::Accent | Tone::Caution => theme.fg_base,
+        Tone::Danger => theme.error_base,
+    }
+}
+
 /// The line as a row: its mark and its sentence, wrapping under itself.
 pub fn row(theme: &Theme, icons: &mut IconCache, said: SharedString, tone: Tone) -> Div {
     let colour = ink(theme, tone);
@@ -162,11 +209,7 @@ pub fn row(theme: &Theme, icons: &mut IconCache, said: SharedString, tone: Tone)
                 .min_w(px(0.))
                 .text_size(theme::text_row_sub())
                 .line_height(gpui::relative(1.4))
-                .text_color(if tone == Tone::Neutral {
-                    theme.fg_muted
-                } else {
-                    colour
-                })
+                .text_color(words_ink(theme, tone))
                 .child(said),
         )
 }
@@ -214,6 +257,20 @@ mod tests {
                 "{tag}: no version in {said}"
             );
         }
+    }
+
+    /// D-13: `{{time}}` is a moment, worded by the core — the clock time for
+    /// a check made today, the date with it for one from before (a check
+    /// vouches for a day, so "14:32" alone could be yesterday's).
+    #[test]
+    fn checked_names_the_time_and_the_date_once_it_is_not_today() {
+        let loc = Loc::for_tag("en");
+        let at = 1_760_000_000_000;
+        let today = text_at(&loc, &admitted(at), at + 60_000);
+        assert!(!today.contains("2025"), "{today}");
+        assert!(today.contains(':'), "{today}");
+        let older = text_at(&loc, &admitted(at), at + 2 * 24 * 60 * 60 * 1000);
+        assert!(older.contains("2025"), "{older}");
     }
 
     /// "Matches the published list" is the only good news, and it says so in

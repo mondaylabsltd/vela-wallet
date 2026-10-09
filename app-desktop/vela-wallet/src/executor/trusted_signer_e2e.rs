@@ -402,9 +402,13 @@ impl Rig {
     fn launch(&self) -> String {
         let url = page_of_channel(&self.channel);
         assert!(
-            url.contains("/b/") && url.contains("/sign.html?ch=url#i="),
+            url.contains("/b/") && url.contains("/sign.html?ch=url"),
             "not the checked version: {url}"
         );
+        // Spec 102: the page is told the app's language, in the query (the
+        // request rides in the fragment, after it).
+        let lang = format!("&lang={}#i=", crate::loc::app_language());
+        assert!(url.contains(&lang), "no `{lang}` in {url}");
         url
     }
 

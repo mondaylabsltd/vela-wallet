@@ -41,9 +41,14 @@ use vela_core::trusted_signer::launch::{self, Admission, CheckedPage, IntegrityL
 
 use crate::executor::storage;
 
-/// Hashes this person trusted on this device (FR-009), and hashes they blocked
-/// (FR-010). Per device: these never sync, and Settings says so.
-pub const KEY_SIGNER_TRUSTED: &str = "vela.signerPage.trusted";
+/// Hashes this person blocked on this device (FR-010). Per device: these never
+/// sync, and Settings says so.
+///
+/// Trust is no longer a device-wide list (spec 102, D-15): a version the
+/// person trusted is stored on THAT saved page (`SigningPage.trusted`), and
+/// only that page's list is passed when it is checked
+/// ([`trusted_for_page`]). The old `vela.signerPage.trusted` is neither read
+/// nor written.
 pub const KEY_SIGNER_BLOCKED: &str = "vela.signerPage.blocked";
 
 /// Where the endpoint lists what it still publishes (FR-002).
@@ -98,7 +103,8 @@ enum Index {
 fn published(base: &str) -> Index {
     let url = format!("{}{INDEX_PATH}", with_trailing_slash(base));
     let mut response =
-        match crate::executor::proxy::with_routes(&url, TIMEOUT, |agent| agent.get(&url).call()) {
+        match crate::executor::proxy::with_routes(&url, TIMEOUT, |agent| as_a_browser(agent, &url))
+        {
             Ok(response) => response,
             Err(failure) => return unanswered(&url, &failure),
         };
@@ -143,6 +149,23 @@ fn listed(text: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A GET as a browser NAVIGATING to `url` asks for it — the core's
+/// [`launch::CHECK_HEADERS`] — so the host answers the check with the bytes it
+/// answers the launch with. A host may rewrite HTML for a navigation only
+/// (Cloudflare's beacon was injected into `text/html` answers alone), and a
+/// check that asked for `*/*` hashed a page the browser never opened.
+fn as_a_browser(
+    agent: &ureq::Agent,
+    url: &str,
+) -> Result<ureq::http::Response<ureq::Body>, ureq::Error> {
+    launch::CHECK_HEADERS
+        .iter()
+        .fold(agent.get(url), |request, (name, value)| {
+            request.header(*name, *value)
+        })
+        .call()
+}
+
 fn with_trailing_slash(base: &str) -> String {
     if base.ends_with('/') {
         base.to_owned()
@@ -159,7 +182,7 @@ fn with_trailing_slash(base: &str) -> String {
 /// they are all "this wallet could not see the page".
 fn fetch_and_hash(url: &str) -> Result<String, CheckFailure> {
     let mut response =
-        crate::executor::proxy::with_routes(url, TIMEOUT, |agent| agent.get(url).call())
+        crate::executor::proxy::with_routes(url, TIMEOUT, |agent| as_a_browser(agent, url))
             .map_err(|_| CheckFailure::Unreachable)?;
     if response.status() != 200 {
         return Err(CheckFailure::Unreachable);
@@ -175,22 +198,33 @@ fn fetch_and_hash(url: &str) -> Result<String, CheckFailure> {
     Ok(integrity::hash_page(&bytes))
 }
 
-/// The verdict for the page at `base`, having actually gone and looked — and,
-/// when it admits the page, the checked page left for [`checked_page`].
+/// The verdict for the page at `base`, having actually gone and looked — and
+/// the admission left on the board for [`checked_page`] and [`line`].
 ///
 /// `base` is the page an account signs on, or one in Settings → Signing pages.
-/// **Blocks** on the network (two requests, each within [`TIMEOUT`]): run it
-/// off the frame.
+/// The versions passed as trusted are THAT page's own ([`trusted_for_page`],
+/// D-15); the block list is the device's. **Blocks** on the network (two
+/// requests, each within [`TIMEOUT`]): run it off the frame.
 #[must_use]
 pub fn check(base: &str) -> Verdict {
     check_with(
         base,
-        &hashes_at(KEY_SIGNER_TRUSTED),
+        &trusted_for_page(base),
         &hashes_at(KEY_SIGNER_BLOCKED),
     )
 }
 
-/// The same, with the two per-device lists handed in.
+/// The versions the person trusted for the page at `base`, on this device —
+/// stored on that saved page (`SigningPage.trusted`, spec 102 core round).
+/// Empty for the official page (the core ignores trust there anyway) and for
+/// a page that is not saved.
+#[must_use]
+pub fn trusted_for_page(base: &str) -> Vec<String> {
+    vela_core::signing_venue::trusted_versions(&crate::executor::signing_pages::saved(), base)
+}
+
+/// The same, with the page's trusted versions and the device's block list
+/// handed in.
 ///
 /// Separated so the network path can be exercised against a real server
 /// without a configured store — which is how it was first driven end to end,
@@ -198,14 +232,13 @@ pub fn check(base: &str) -> Verdict {
 #[must_use]
 pub fn check_with(base: &str, trusted: &[String], blocked: &[String]) -> Verdict {
     let base = key_of(base);
-    let now = crate::executor::now_ms() as u64;
-    with_board(|board| board.running.insert(base.clone()));
-    let outcome = admission_with(&base, trusted, blocked, now);
+    started(&base, crate::executor::now_ms() as u64);
+    let outcome = admission_with(&base, trusted, blocked);
     let verdict = match &outcome {
         Ok(Admission::Admitted(page)) => page.verdict().clone(),
         Ok(Admission::Refused { verdict, .. }) | Err(verdict) => verdict.clone(),
     };
-    record(&base, outcome);
+    record(&base, outcome, crate::executor::now_ms() as u64);
     verdict
 }
 
@@ -216,16 +249,12 @@ fn admission_with(
     base: &str,
     trusted: &[String],
     blocked: &[String],
-    now_ms: u64,
 ) -> Result<Admission, Verdict> {
     let target = choose(base, &published(base), trusted, blocked)?;
-    Ok(admit_for(
-        &target,
-        fetch_and_hash(target.url()),
-        trusted,
-        blocked,
-        now_ms,
-    ))
+    let observed = fetch_and_hash(target.url());
+    // The shell's clock when the bytes arrived: what "checked {{time}}" says.
+    let checked_at = crate::executor::now_ms() as u64;
+    Ok(admit_for(&target, observed, trusted, blocked, checked_at))
 }
 
 /// The version to ask for, or the verdict without one.
@@ -284,21 +313,41 @@ fn admit_for(
     )
 }
 
+/// What the last check of a page came to.
+#[derive(Clone, Debug)]
+enum Outcome {
+    /// The core's ruling on the bytes: the page admitted (what the launch
+    /// path opens without a network round trip — a person pressing Open must
+    /// not wait on one, and a unit test of the launch path must not reach the
+    /// internet), or refused with its verdict.
+    Ruled(Admission),
+    /// There was no version to ask for at all, and the line says why.
+    NoVersion(IntegrityLine),
+}
+
+impl Outcome {
+    fn admission(&self) -> Option<&Admission> {
+        match self {
+            Self::Ruled(admission) => Some(admission),
+            Self::NoVersion(_) => None,
+        }
+    }
+}
+
 /// What the checks so far came to, by the page's normal address.
 ///
-/// - `checked` — pages a check ADMITTED: what the launch path opens without a
-///   network round trip (a person pressing Open must not wait on one, and a
-///   unit test of the launch path must not reach the internet: three tests
-///   that used to take milliseconds once took five minutes);
-/// - `refused` — the line of the last check that did NOT admit a page, so the
-///   hand-off card, Settings and the choosers can say why it will not open
-///   (a refusal is not "checking…" forever);
-/// - `running` — checks under way, which read as "checking" and are not
-///   started twice.
+/// - `kept` — the check each page is held to: the newest one that COMPLETED,
+///   or the fresh admission before a refresh that could not
+///   (`launch::keep_or_replace`) — so an offline afternoon does not turn a
+///   good line into "couldn't check";
+/// - `attempted` — when a check of each page last STARTED, completed or not,
+///   which spaces retries ([`launch::refresh_due`]);
+/// - `running` — checks under way, which are not started twice and read as
+///   the core's `line_while_checking`.
 #[derive(Default)]
 struct Board {
-    checked: HashMap<String, CheckedPage>,
-    refused: HashMap<String, IntegrityLine>,
+    kept: HashMap<String, Outcome>,
+    attempted: HashMap<String, u64>,
     running: HashSet<String>,
     /// Who hears that a check finished — the screens that draw a line.
     listeners: Vec<UnboundedSender<()>>,
@@ -322,26 +371,28 @@ pub fn key_of(base: &str) -> String {
     vela_core::trusted_signer::signer_url(base).unwrap_or_else(|_| base.trim().to_owned())
 }
 
-/// Put a finished check on the board and tell whoever is drawing a line.
-fn record(base: &str, outcome: Result<Admission, Verdict>) {
+/// A check of `base` starts at `now_ms`.
+fn started(base: &str, now_ms: u64) {
+    with_board(|board| {
+        board.running.insert(base.to_owned());
+        board.attempted.insert(base.to_owned(), now_ms);
+    });
+}
+
+/// Put a finished check on the board — keeping the check before it when this
+/// one could not complete and that one still vouches for the page (the
+/// core's `keep_or_replace`) — and tell whoever is drawing a line.
+fn record(base: &str, outcome: Result<Admission, Verdict>, now_ms: u64) {
     let listeners = with_board(|board| {
         board.running.remove(base);
-        match outcome {
-            Ok(Admission::Admitted(page)) => {
-                board.refused.remove(base);
-                board.checked.insert(base.to_owned(), page);
+        let next = match outcome {
+            Ok(next) => {
+                let previous = board.kept.get(base).and_then(Outcome::admission).cloned();
+                Outcome::Ruled(launch::keep_or_replace(previous, next, now_ms))
             }
-            Ok(refused @ Admission::Refused { .. }) => {
-                board.checked.remove(base);
-                board.refused.insert(base.to_owned(), refused.line());
-            }
-            Err(verdict) => {
-                board.checked.remove(base);
-                board
-                    .refused
-                    .insert(base.to_owned(), IntegrityLine::of(&verdict, "", None));
-            }
-        }
+            Err(verdict) => Outcome::NoVersion(IntegrityLine::of(&verdict, "", None)),
+        };
+        board.kept.insert(base.to_owned(), next);
         board.listeners.retain(|tx| !tx.is_closed());
         board.listeners.clone()
     });
@@ -371,57 +422,91 @@ pub fn checked_page(base: &str, now_ms: u64) -> Option<CheckedPage> {
     let base = key_of(base);
     with_board(|board| {
         board
-            .checked
+            .kept
             .get(&base)
+            .and_then(Outcome::admission)
+            .and_then(Admission::page)
             .filter(|page| page.is_fresh(now_ms))
             .cloned()
     })
 }
 
 /// The integrity line for `base` at `now_ms` — what the hand-off card,
-/// Settings → Signing pages and the choosers draw: the admitted page's line
-/// while it is fresh; "checking" while a check runs (or none has finished);
-/// otherwise why the last check did not admit it.
+/// Settings → Signing pages and the choosers draw.
+///
+/// While a check runs it is the core's `line_while_checking`: the previous
+/// admission's line while that still vouches for the page (a background
+/// refresh does not make a good line flicker), else "checking". Otherwise the
+/// kept check's line — "checking" again once an admission is too old to vouch
+/// for anything — and "checking" before any check has finished.
 #[must_use]
 pub fn line(base: &str, now_ms: u64) -> IntegrityLine {
     let base = key_of(base);
     with_board(|board| {
-        if let Some(page) = board.checked.get(&base).filter(|p| p.is_fresh(now_ms)) {
-            return page.line(now_ms);
-        }
+        let kept = board.kept.get(&base);
         if board.running.contains(&base) {
-            return IntegrityLine::checking();
+            return launch::line_while_checking(kept.and_then(Outcome::admission), now_ms);
         }
-        board
-            .refused
-            .get(&base)
-            .cloned()
-            .unwrap_or_else(IntegrityLine::checking)
+        match kept {
+            Some(Outcome::Ruled(Admission::Admitted(page))) => page.line(now_ms),
+            Some(Outcome::Ruled(refused)) => refused.line(),
+            Some(Outcome::NoVersion(line)) => line.clone(),
+            None => IntegrityLine::checking(),
+        }
     })
 }
 
-/// Should a screen start a check of `base` now? Only when nothing vouches for
-/// it and nothing is running — never again for a page whose last check
-/// REFUSED it: that one is checked again when somebody asks (Retry, or Open,
-/// which checks before it launches), not on every frame that draws its line.
+/// The full version to store when the person answers "Trust this version"
+/// for `base` — `Some` only while the kept check of that page ended in
+/// `AskToTrust` (the core's `Admission::version_to_trust`).
+#[must_use]
+pub fn version_to_trust(base: &str) -> Option<String> {
+    let base = key_of(base);
+    with_board(|board| {
+        board
+            .kept
+            .get(&base)
+            .and_then(Outcome::admission)
+            .and_then(Admission::version_to_trust)
+            .map(str::to_owned)
+    })
+}
+
+/// Should a check of `base` start now? The core's [`launch::refresh_due`]:
+/// when no check vouches for the page or the one that does is older than
+/// half a day — and no attempt started within the last ten minutes, so a
+/// page that cannot be reached is not fetched on every frame that draws its
+/// line. Never while one is running.
 #[must_use]
 pub fn wants_check(base: &str, now_ms: u64) -> bool {
     let base = key_of(base);
     with_board(|board| {
+        let checked_at = board
+            .kept
+            .get(&base)
+            .and_then(Outcome::admission)
+            .and_then(Admission::page)
+            .map(CheckedPage::checked_at_ms);
         !board.running.contains(&base)
-            && !board.refused.contains_key(&base)
-            && board
-                .checked
-                .get(&base)
-                .is_none_or(|page| !page.is_fresh(now_ms))
+            && launch::refresh_due(checked_at, board.attempted.get(&base).copied(), now_ms)
     })
 }
 
-/// Forget the last refusal of `base`, so the next look checks it again — the
-/// "check again" a refused line offers.
+/// Forget the last refusal of `base` and its resting time, so the next look
+/// checks it again — the "check again" a refused line offers, and what
+/// follows "Trust this version". An admission is kept: it is not a refusal.
 pub fn forget_refusal(base: &str) {
     let base = key_of(base);
-    with_board(|board| board.refused.remove(&base));
+    with_board(|board| {
+        if board
+            .kept
+            .get(&base)
+            .is_some_and(|kept| kept.admission().and_then(Admission::page).is_none())
+        {
+            board.kept.remove(&base);
+        }
+        board.attempted.remove(&base);
+    });
 }
 
 /// Check `base` on a thread of its own when [`wants_check`] says so. The
@@ -434,7 +519,7 @@ pub fn check_in_background(base: &str) {
     let base = key_of(base);
     // Marked before the thread starts, so a second frame in the same breath
     // does not start a second check.
-    with_board(|board| board.running.insert(base.clone()));
+    started(&base, now);
     let checking = base.clone();
     let spawned = std::thread::Builder::new()
         .name("signer-page-check".to_owned())
@@ -472,7 +557,7 @@ pub(crate) fn admit_for_tests(base: &str) {
     let target = target.unwrap_or_else(|_| unreachable!("a version to ask for"));
     let admission = admit_for(&target, Ok(observed), &trusted, &[], now);
     assert!(admission.page().is_some(), "{admission:?}");
-    record(&base, Ok(admission));
+    record(&base, Ok(admission), now);
 }
 
 /// [`describe`]'s line without its own `signer page: `, for a log line whose
@@ -598,38 +683,137 @@ mod tests {
         let trusted = vec![A.to_owned()];
         let target = launch::target(BASE, Some(&[A.to_owned()]), &trusted, &[])
             .unwrap_or_else(|_| unreachable!());
+        started(BASE, 1_000);
         let admission = admit_for(&target, Ok(A.to_owned()), &trusted, &[], 1_000);
-        record(BASE, Ok(admission));
+        record(BASE, Ok(admission), 1_000);
         let page = checked_page(BASE, 2_000).unwrap_or_else(|| unreachable!());
         assert_eq!(page.target().url(), target.url());
         // The line says what was checked, and that it opens.
         let said = line(BASE, 2_000);
         assert!(said.opens, "{said:?}");
         assert_eq!(said.version, &A[..8]);
-        // Too old to vouch for anything: nothing opens until it is checked again,
-        // and a screen asks for that check.
+        assert_eq!(said.checked_at_ms, Some(1_000));
+        // Too old to vouch for anything: nothing opens until it is checked
+        // again, the line reads "checking", and a screen asks for that check.
         let stale = 1_000 + launch::MAX_CHECK_AGE_MS + 1;
         assert!(checked_page(BASE, stale).is_none());
+        assert_eq!(line(BASE, stale).key, IntegrityLine::checking().key);
         assert!(wants_check(BASE, stale));
         assert!(!wants_check(BASE, 2_000), "a fresh check is not run again");
-        // A refused check leaves nothing to open — and says why, rather than
-        // "checking…" forever, and is not re-run on every frame.
-        let refused = admit_for(
+        // D-14: half a day on, a background refresh is due — while the page
+        // still opens, so Open almost never waits.
+        let due = 1_000 + launch::REFRESH_AFTER_MS + 1;
+        assert!(wants_check(BASE, due));
+        assert!(checked_page(BASE, due).is_some());
+    }
+
+    /// D-14: a refresh that could not complete keeps the fresh admission
+    /// before it — and draws its line, not "checking", while it runs — and an
+    /// attempt rests ten minutes before the next; one that completed replaces
+    /// it, a refusal included.
+    #[test]
+    fn a_refresh_keeps_a_fresh_check_until_one_completes() {
+        const BASE: &str = "https://board-refresh.example.test/";
+        let trusted = vec![A.to_owned()];
+        let target = launch::target(BASE, Some(&[A.to_owned()]), &trusted, &[])
+            .unwrap_or_else(|_| unreachable!());
+        let at = 10_000;
+        record(
+            BASE,
+            Ok(admit_for(&target, Ok(A.to_owned()), &trusted, &[], at)),
+            at,
+        );
+        // The refresh starts: the line stays the admission's, Open stays on.
+        let refresh = at + launch::REFRESH_AFTER_MS + 1;
+        started(BASE, refresh);
+        let said = line(BASE, refresh);
+        assert!(said.opens, "{said:?}");
+        assert!(!wants_check(BASE, refresh), "one check at a time");
+        // Offline: the admission before it stays, and the next attempt rests.
+        let offline = admit_for(
             &target,
             Err(CheckFailure::Unreachable),
             &trusted,
             &[],
-            3_000,
+            refresh,
         );
-        record(BASE, Ok(refused));
-        assert!(checked_page(BASE, 3_000).is_none());
-        let said = line(BASE, 3_000);
+        record(BASE, Ok(offline), refresh);
+        assert!(checked_page(BASE, refresh).is_some());
+        assert!(line(BASE, refresh).opens);
+        assert!(
+            !wants_check(BASE, refresh + 1),
+            "resting after a failed attempt"
+        );
+        assert!(wants_check(BASE, refresh + launch::RETRY_AFTER_MS + 1));
+        // A completed refresh replaces it — bytes that no longer match are the
+        // news it exists to catch.
+        let later = refresh + launch::RETRY_AFTER_MS + 1;
+        started(BASE, later);
+        let mismatch = admit_for(&target, Ok("bb".repeat(32)), &trusted, &[], later);
+        record(BASE, Ok(mismatch), later);
+        assert!(checked_page(BASE, later).is_none());
+        let said = line(BASE, later);
         assert!(!said.opens);
-        assert_eq!(said.key, "componentsUi.signing.integrity.couldNotCheck");
-        assert!(!wants_check(BASE, 3_000));
-        // "Check again" forgets the refusal; the next look checks.
+        assert_eq!(said.key, "componentsUi.signing.integrity.mismatch");
+        assert!(
+            !wants_check(BASE, later + 1),
+            "a refusal is not re-run on every frame"
+        );
+        // "Check again" forgets the refusal and its rest; the next look checks.
         forget_refusal(BASE);
-        assert!(wants_check(BASE, 3_000));
+        assert!(wants_check(BASE, later + 1));
+        assert_eq!(line(BASE, later + 1).key, IntegrityLine::checking().key);
+    }
+
+    /// With nothing that vouches for the page, a check under way reads
+    /// "checking" — the hand-off card's Open stays off until it lands.
+    #[test]
+    fn a_check_with_nothing_before_it_reads_checking() {
+        const BASE: &str = "https://board-checking.example.test/";
+        started(BASE, 5);
+        let said = line(BASE, 6);
+        assert_eq!(said.key, IntegrityLine::checking().key);
+        assert!(!said.opens);
+    }
+
+    /// "Trust this version" is offered for exactly the version a self-hosted
+    /// page's check asked about — and never for an admitted page.
+    #[test]
+    fn the_version_to_trust_is_the_one_the_check_asked_about() {
+        const BASE: &str = "https://board-ask.example.test/";
+        let target = launch::target(BASE, Some(&[A.to_owned()]), &[], &[])
+            .unwrap_or_else(|_| unreachable!());
+        assert!(target.proposed_by_index());
+        record(
+            BASE,
+            Ok(admit_for(&target, Ok(A.to_owned()), &[], &[], 1)),
+            1,
+        );
+        assert_eq!(version_to_trust(BASE).as_deref(), Some(A));
+        assert_eq!(line(BASE, 2).key, "componentsUi.signing.integrity.askTrust");
+        // Trusted on this page: the next check opens it, and nothing is asked.
+        let trusted = vec![A.to_owned()];
+        let target = launch::target(BASE, Some(&[A.to_owned()]), &trusted, &[])
+            .unwrap_or_else(|_| unreachable!());
+        record(
+            BASE,
+            Ok(admit_for(&target, Ok(A.to_owned()), &trusted, &[], 3)),
+            3,
+        );
+        assert_eq!(version_to_trust(BASE), None);
+        assert_eq!(line(BASE, 4).key, "componentsUi.signing.integrity.trusted");
+    }
+
+    /// The check asks as a browser navigating to the page asks — the core's
+    /// headers — so the host answers it with the bytes the launch gets.
+    #[test]
+    fn the_check_asks_as_a_browser_does() {
+        assert!(
+            launch::CHECK_HEADERS
+                .iter()
+                .any(|(name, value)| name.eq_ignore_ascii_case("accept")
+                    && value.starts_with("text/html"))
+        );
     }
 
     /// Every spelling of one page is one entry on the board.
@@ -656,6 +840,7 @@ mod tests {
             Err(Verdict::NoVersionToAsk(
                 NoVersion::NothingPublishedThisWalletKnows,
             )),
+            1,
         );
         assert!(heard.try_recv().is_ok());
         assert_eq!(
