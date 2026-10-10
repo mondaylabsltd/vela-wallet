@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.signing
 
+import androidx.compose.ui.Alignment
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import androidx.compose.foundation.background
@@ -52,6 +53,9 @@ import app.getvela.wallet.feature.signing.components.TechDetails
 
 /** The signing sheet's confirm (issue #461) — the stable hook UI tests tap. */
 const val CONFIRM_TAG = "signing-confirm"
+
+/** The place the simulation's verdict lands in ([SigningBlock.Held]). */
+const val VERDICT_PLACE_TAG = "signing-verdict-place"
 
 /** The Trusted Signer account's "continue to the signing page" in the confirm's place (spec 079). */
 const val OPEN_SIGNER_TAG = "signing-open-signer"
@@ -226,11 +230,15 @@ fun SigningSheetContent(
                 is SigningBlock.Balances ->
                     SigningBalances(block.title, block.rows, block.note, block.noteTone)
 
-                // A place kept for a verdict that lands late: the room is
-                // drawn unseen and unsaid, so the sheet is this tall from its
-                // first frame and the card arriving moves nothing above it.
-                is SigningBlock.Held -> Box(modifier = Modifier.fillMaxWidth()) {
-                    Box(modifier = Modifier.alpha(0f).clearAndSetSemantics {}) { Draw(block.room) }
+                // A place kept for a verdict that lands late: every verdict
+                // the sheet can end on is drawn unseen and unsaid, one over
+                // the other, so the place is as tall as the tallest from the
+                // first frame and whichever arrives — centred in it — moves
+                // nothing above it and nothing below.
+                is SigningBlock.Held -> Box(modifier = Modifier.fillMaxWidth().testTag(VERDICT_PLACE_TAG), contentAlignment = Alignment.Center) {
+                    block.rooms.forEach { room ->
+                        Box(modifier = Modifier.alpha(0f).clearAndSetSemantics {}) { Draw(room) }
+                    }
                     block.shown?.let { shown -> Draw(shown) }
                 }
             }
