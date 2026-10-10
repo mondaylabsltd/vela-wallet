@@ -163,6 +163,7 @@ import app.getvela.wallet.feature.wallet.core.TrustOperation
 import app.getvela.wallet.feature.wallet.core.TrustRawLog
 import app.getvela.wallet.feature.wallet.core.TrustReceiptLog
 import app.getvela.wallet.feature.wallet.core.TrustShellResult
+import app.getvela.wallet.feature.wallet.core.TrustSimDirection
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.wallet.core.TrustSimView
 import app.getvela.wallet.feature.wallet.core.TrustTokenMeta
@@ -576,6 +577,20 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<TrustLogsOutcome>("TrustLogsOutcome")
         assertVariantsExhaustive<TrustSimJudgment>("TrustSimJudgment")
         assertStringUnion<TrustDeltaKind>("TrustDeltaKind")
+        // PR 3: an unverified token's judgment is a direction and NO figure.
+        // Every direction is named here (one this build could not decode
+        // would lose the whole judged view), and the judgment's fields are
+        // the mirror's exactly — so a `delta` cannot come back unnoticed.
+        assertStringUnion<TrustSimDirection>("TrustSimDirection")
+        assertVariantFieldsExhaustive(TrustSimJudgment.serializer(), "TrustSimJudgment")
+        assertEquals(
+            listOf("token", "direction"),
+            serializer<TrustSimJudgment.Erc20Unverified>().descriptor.elementNames.toList(),
+        )
+        assertEquals(
+            TrustSimJudgment.Erc20Unverified(token = "0xc0", direction = TrustSimDirection.Out),
+            roundTrip<TrustSimJudgment>("""{"type":"erc20_unverified","token":"0xc0","direction":"out"}"""),
+        )
     }
 
     @Test

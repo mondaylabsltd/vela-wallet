@@ -334,12 +334,41 @@ sealed class TrustSimJudgment {
         val in_trusted_set: Boolean = false,
     ) : TrustSimJudgment()
 
+    /**
+     * A token nobody vouches for: which way it moves, and NO figure. The
+     * simulation's number for it is whatever the site being signed for chose
+     * to emit, so the core does not hand it over (PR 3 — it carried the raw
+     * `delta` until then, and this sheet printed it: 「未验证代币
+     * +5,000,000,000,000,000,000,000.00」). There is no field here to print.
+     */
     @Serializable
     @SerialName("erc20_unverified")
     data class Erc20Unverified(
         val token: String? = null,
-        val delta: String,
+        val direction: TrustSimDirection,
     ) : TrustSimJudgment()
+}
+
+/**
+ * Which way an unverified token moves — all a sheet may say of it
+ * (`token_trust::TrustSimDirection`).
+ */
+@Serializable
+enum class TrustSimDirection {
+    /** The account receives it: the row's sign is "+". */
+    @SerialName("in") In,
+
+    /** It leaves the account: the row's sign is "−". */
+    @SerialName("out") Out,
+
+    /** A move of nothing (the figure was a zero): never a row. */
+    @SerialName("still") Still,
+
+    /**
+     * The figure did not read as a signed number: the row with its caution
+     * and no sign — never "nothing moves".
+     */
+    @SerialName("unreadable") Unreadable,
 }
 
 @Serializable

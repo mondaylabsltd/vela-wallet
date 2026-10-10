@@ -6,7 +6,6 @@ import app.getvela.wallet.core.diagnostics.VelaLog
 import java.util.Calendar
 import java.util.TimeZone
 import kotlinx.coroutines.delay
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -233,12 +232,17 @@ class FeedExecutor(
     }
 
     /**
-     * 083 F1: the sheet's simulation judgments, as stored — all of them or
-     * none: a list with a line left out would say something it did not.
+     * 083 F1: the sheet's simulation judgments, exactly as stored. Not read
+     * here (PR 3): the core's own reader takes them — every shape they were
+     * ever stored in, all of them or none (a list with a line left out would
+     * say something it did not). A row stored before an unverified token's
+     * judgment lost its figure still holds `{"type":"erc20_unverified",
+     * "delta":"…"}`; decoded by this shell's mirror, which has no `delta` any
+     * more, that row would have lost all its lines.
      */
-    private fun balanceChanges(row: JSONObject): List<TrustSimJudgment>? {
+    private fun balanceChanges(row: JSONObject): kotlinx.serialization.json.JsonElement? {
         val stored = row.optJSONArray("balanceChanges") ?: return null
-        return runCatching { Wire.json.decodeFromString(JUDGMENTS, stored.toString()) }.getOrNull()
+        return runCatching { Wire.json.parseToJsonElement(stored.toString()) }.getOrNull()
     }
 
     /**
@@ -472,7 +476,5 @@ class FeedExecutor(
 
         /** A dApp's record: a transaction or a signature (the Expo spellings too). */
         val DAPP_TYPES = setOf("dapp_tx", "dappTx", "sign_message", "signMessage", "sign_typed_data", "signTypedData")
-
-        val JUDGMENTS = ListSerializer(TrustSimJudgment.serializer())
     }
 }

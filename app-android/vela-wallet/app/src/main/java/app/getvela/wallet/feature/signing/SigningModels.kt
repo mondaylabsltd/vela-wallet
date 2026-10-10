@@ -125,6 +125,16 @@ enum class SigningScreenState {
      * on the same one line (CS60). Through the live [SigningLive.feeModel].
      */
     CS59, CS60,
+
+    /**
+     * PR 3 — an unverified token is a direction, never a figure: CS57's sheet
+     * once its simulation says one token nobody vouches for leaves and
+     * another arrives — "−" and "+" beside the label, the warning under the
+     * rows, and no number on either (CS68). The judgment carries none: this
+     * sheet printed 「未验证代币 +5,000,000,000,000,000,000,000.00」, a figure
+     * the site being signed for chose. Through the live builders.
+     */
+    CS68,
 }
 
 /**

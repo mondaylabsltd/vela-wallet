@@ -107,8 +107,15 @@ data class FeedTxRecord(
     val call_data: String? = null,
     /** A dApp record's intent, recorded at approve time (`intent`). */
     val intent: String? = null,
-    /** What the sheet's simulation said it moves, as stored (`balanceChanges`). */
-    val balance_changes: List<TrustSimJudgment>? = null,
+    /**
+     * What the sheet's simulation said it moves, as stored (`balanceChanges`)
+     * — handed to the core UNTOUCHED, and never decoded here: the core reads
+     * every shape a record was ever stored in (PR 3: until then an unverified
+     * token's judgment kept the simulation's raw `delta`; the core reads such
+     * a row as the direction it had and drops the figure), and a line no
+     * build can read is no lines there, never a record that fails to load.
+     */
+    val balance_changes: kotlinx.serialization.json.JsonElement? = null,
     /** Spec 093: the record's summary, stored verbatim (`dappSummary`) and handed back untouched. */
     val summary: DappSummary? = null,
     /** Spec 097: how its operation ended, as the tracker's patch stored it (`settlement`). */

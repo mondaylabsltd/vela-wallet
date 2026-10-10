@@ -110,9 +110,10 @@ class SigningFixturesTest {
         // the correctness batch's boards (drawn through the live builders),
         // CS57/CS58: the simulation's verdict's place, kept and taken,
         // CS59/CS60: the fee's worth waiting for the display currency, and
-        // landed, CS61–CS64: the place taken by each other verdict, and
-        // CS65–CS67: a verdict taller than the place, shown whole.
-        assertEquals(65, SigningScreenState.entries.size)
+        // landed, CS61–CS64: the place taken by each other verdict,
+        // CS65–CS67: a verdict taller than the place, shown whole, and
+        // CS68: two unverified tokens, by their directions alone (PR 3).
+        assertEquals(66, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)

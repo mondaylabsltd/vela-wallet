@@ -13,6 +13,7 @@ import app.getvela.wallet.feature.send.core.FeeSpeedOptionView
 import app.getvela.wallet.feature.send.core.FeeSpeedView
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.signing.BalanceDeltaRow
 import app.getvela.wallet.feature.signing.FeeModel
 import app.getvela.wallet.feature.signing.SigningBlock
 import app.getvela.wallet.feature.signing.said
@@ -44,6 +45,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.signing.core.SigningController
 import app.getvela.wallet.feature.signing.core.ClearRisk
+import app.getvela.wallet.feature.wallet.core.TrustSimDirection
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
 import app.getvela.wallet.feature.wallet.core.TrustDeltaKind
@@ -633,14 +635,15 @@ class SigningLiveTest {
             listOf(
                 TrustSimJudgment.Native("-1000000000000000"),
                 TrustSimJudgment.Erc20Trusted(token = "0xddaf", delta = "12000000", symbol = "USDC", decimals = 6),
-                TrustSimJudgment.Erc20Unverified(token = "0xbad", delta = "5"),
+                TrustSimJudgment.Erc20Unverified(token = "0xbad", direction = TrustSimDirection.In),
             ),
         )
         val blocks = SigningLive.simBlocks(ready, ctx)
         val balances = blocks.single() as SigningBlock.Balances
         assertEquals(strings.t("componentsUi.signing.balanceChangesTitle"), balances.title)
         assertEquals(listOf("XDAI", "USDC", strings.t("componentsUi.signing.balanceUnverifiedToken")), balances.rows.map { it.symbol })
-        assertEquals(listOf("−0.001", "+12", "+5"), balances.rows.map { it.delta })
+        // The unverified token's row is its direction alone (PR 3).
+        assertEquals(listOf("−0.001", "+12", "+"), balances.rows.map { it.delta })
         assertEquals(listOf(SigningTone.Neutral, SigningTone.Success, SigningTone.Caution), balances.rows.map { it.tone })
         assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), balances.note)
 
@@ -788,12 +791,12 @@ class SigningLiveTest {
         // could-not-check notice, a caution — never an empty card, and never
         // the quiet line. An empty list with no key (a core that predates the
         // field), a zero the core did not call nothing, a figure nobody can
-        // write out.
+        // write out, an unverified token that moves nothing.
         for (unsaid in listOf(
             SigningController.SimOutcome.Ready(emptyList()),
             SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("0"))),
             SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("not a number"))),
-            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Erc20Unverified(token = "0xbad", delta = "?"))),
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Erc20Unverified(token = "0xbad", direction = TrustSimDirection.Still))),
         )) {
             assertNull(unsaid.noChangeKey)
             assertEquals(unsaid.toString(), listOf<SigningBlock>(couldNotCheck), SigningLive.simBlocks(unsaid, ctx))
@@ -817,15 +820,140 @@ class SigningLiveTest {
      * (`WalletController.judgeSimDeltas`) — as the sheet's controller hands it
      * over: the judgments, and the core's line when nothing moves.
      */
-    private fun judged(vararg deltas: TrustAssetDelta): SigningController.SimOutcome.Ready {
-        val script = app.getvela.wallet.core.crux.CoreScript(uniffi.vela_core_uniffi.TokenTrustCore().asBridge()) { null }
+    private fun judged(vararg deltas: TrustAssetDelta): SigningController.SimOutcome.Ready = judgedView(deltas.toList()).first
+
+    /**
+     * [judged], with what the tokens answer for themselves: [named] is the
+     * `symbol()` / `decimals()` each contract returns when the trust machine
+     * asks (`multicall_erc20_meta`) — a contract not in it answers nothing.
+     * Also the judged view's JSON exactly as the core wrote it.
+     */
+    private fun judgedView(
+        deltas: List<TrustAssetDelta>,
+        named: Map<String, app.getvela.wallet.feature.wallet.core.TrustTokenMeta> = emptyMap(),
+    ): Pair<SigningController.SimOutcome.Ready, String> {
+        val wire = app.getvela.wallet.core.crux.Wire.json
+        val script = app.getvela.wallet.core.crux.CoreScript(uniffi.vela_core_uniffi.TokenTrustCore().asBridge()) { operation ->
+            if (operation.optString("type") != "multicall_erc20_meta") return@CoreScript null
+            val asked = operation.optJSONArray("addrs") ?: org.json.JSONArray()
+            val answer: app.getvela.wallet.feature.wallet.core.TrustShellResult = app.getvela.wallet.feature.wallet.core.TrustShellResult.ErcMeta(
+                chain_id = operation.optInt("chain_id"),
+                entries = (0 until asked.length()).map { index ->
+                    val addr = asked.optString(index)
+                    app.getvela.wallet.feature.wallet.core.TrustMetaEntry(addr, named[addr.lowercase()])
+                },
+            )
+            wire.encodeToString(app.getvela.wallet.feature.wallet.core.TrustShellResult.serializer(), answer)
+        }
         val event: app.getvela.wallet.feature.wallet.core.TrustEvent =
-            app.getvela.wallet.feature.wallet.core.TrustEvent.SimDeltasComputed(address = ctx.walletAddress.lowercase(), chain_id = 100, deltas = deltas.toList())
-        script.dispatch(app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.wallet.core.TrustEvent.serializer(), event))
-        val sim = app.getvela.wallet.core.crux.Wire.json.decodeFromString(app.getvela.wallet.feature.wallet.core.TrustView.serializer(), script.viewJson()).sim
+            app.getvela.wallet.feature.wallet.core.TrustEvent.SimDeltasComputed(address = ctx.walletAddress.lowercase(), chain_id = 100, deltas = deltas)
+        script.dispatch(wire.encodeToString(app.getvela.wallet.feature.wallet.core.TrustEvent.serializer(), event))
+        val json = script.viewJson()
+        val sim = wire.decodeFromString(app.getvela.wallet.feature.wallet.core.TrustView.serializer(), json).sim
             ?: error("the trust machine judged nothing")
-        assertTrue("native moves need no metadata: the judged view is ready at once", sim.ready)
-        return SigningController.SimOutcome.Ready(sim.judgments, noChangeKey = sim.no_change_key)
+        assertTrue("every token was asked about and answered: the judged view is ready", sim.ready)
+        return SigningController.SimOutcome.Ready(sim.judgments, noChangeKey = sim.no_change_key) to json
+    }
+
+    /**
+     * PR 3, fix B — **an unverified token is a direction, never a figure.**
+     *
+     * This sheet printed 「未验证代币 +5,000,000,000,000,000,000,000.00」: the
+     * simulation's raw number for a token nobody vouches for, which the site
+     * being signed for chooses (its own contract emits the log). The core no
+     * longer hands the figure over — the judgment is `{token, direction}` —
+     * and the row is drawn from the direction alone.
+     *
+     * The REAL trust machine judges a simulation in which such a token
+     * arrives with that very figure and another leaves; the sheet is drawn by
+     * the live builders. Its contract even answers "USDC" for itself: for
+     * money coming IN that earns it nothing.
+     */
+    @Test
+    fun `an unverified token's row is its direction and never the simulation's figure`() {
+        val lure = "5000000000000000000000"
+        val arriving = "0x" + "c0".repeat(20)
+        val leaving = "0x" + "d1".repeat(20)
+        val (judged, viewJson) = judgedView(
+            listOf(
+                TrustAssetDelta(TrustDeltaKind.Erc20, token = arriving, delta = lure),
+                TrustAssetDelta(TrustDeltaKind.Erc20, token = leaving, delta = "-$lure"),
+            ),
+            named = mapOf(arriving to app.getvela.wallet.feature.wallet.core.TrustTokenMeta("USDC", 18)),
+        )
+        assertEquals(
+            listOf<TrustSimJudgment>(
+                TrustSimJudgment.Erc20Unverified(token = arriving, direction = TrustSimDirection.In),
+                TrustSimJudgment.Erc20Unverified(token = leaving, direction = TrustSimDirection.Out),
+            ),
+            judged.judgments,
+        )
+        assertNull("something moves: no quiet line", judged.noChangeKey)
+        // What this shell is handed holds nothing of the figure, in any field.
+        val sim = org.json.JSONObject(viewJson).getJSONObject("sim").toString()
+        assertFalse(sim, sim.contains("5000"))
+        assertFalse(sim, sim.contains("delta"))
+
+        // The card: the label, the sign, the caution — twice — and the warning.
+        val label = strings.t("componentsUi.signing.balanceUnverifiedToken")
+        val card = SigningLive.simBlocks(judged, ctx).single() as SigningBlock.Balances
+        assertEquals(
+            listOf(
+                BalanceDeltaRow(label, "+", SigningTone.Caution),
+                BalanceDeltaRow(label, "\u2212", SigningTone.Caution),
+            ),
+            card.rows,
+        )
+        assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), card.note)
+        assertEquals(SigningTone.Caution, card.noteTone)
+        val said = listOf(card.title, card.note.orEmpty()) + card.rows.flatMap { listOf(it.symbol, it.delta) }
+        assertTrue("no digit anywhere in the verdict: $said", said.none { text -> text.any(Char::isDigit) })
+
+        // The whole sheet as drawn, the verdict in its place: nothing of the
+        // figure, grouped or not, anywhere on it.
+        val params = org.json.JSONArray().put(org.json.JSONObject().put("to", founder).put("value", "0x0")).toString()
+        val sign = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://app.example", null, 100, null),
+            confirm_gate_open = true,
+        )
+        val sheet = SigningLive.model(drawn, request(params), sign, ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, judged)
+        assertEquals(card, (sheet.blocks.single { it is SigningBlock.Held } as SigningBlock.Held).shown)
+        val drawnText = sheet.toString()
+        assertFalse("the figure is on the sheet: $drawnText", drawnText.filter(Char::isDigit).contains(lure))
+        // …and in no number preset's grouping, in anything the body says.
+        val body = sheet.blocks.toString() + sheet.tech.toString()
+        for (spelling in listOf("5000", "5,000", "5.000", "5 000", "5\u202f000", "5\u00a0000", "5'000")) {
+            assertFalse("\"$spelling\" is on the sheet: $body", body.contains(spelling))
+        }
+
+        // The other two directions. A figure nobody could read: the row
+        // stands, with its caution and its warning, and says no sign — never
+        // "nothing moves", and never the could-not-check notice either (the
+        // check did run). A move of nothing: no row; with something else
+        // moving, only that is drawn.
+        val unreadable = SigningLive.simBlocks(
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Erc20Unverified(token = arriving, direction = TrustSimDirection.Unreadable))),
+            ctx,
+        ).single() as SigningBlock.Balances
+        assertEquals(listOf(BalanceDeltaRow(label, "", SigningTone.Caution)), unreadable.rows)
+        assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), unreadable.note)
+        val still = SigningLive.simBlocks(
+            SigningController.SimOutcome.Ready(
+                listOf(
+                    TrustSimJudgment.Native("-1000000000000000"),
+                    TrustSimJudgment.Erc20Unverified(token = arriving, direction = TrustSimDirection.Still),
+                ),
+            ),
+            ctx,
+        ).single() as SigningBlock.Balances
+        assertEquals(listOf("XDAI"), still.rows.map { it.symbol })
+        assertNull("no unverified row: no warning about one", still.note)
+
+        // The board a person can open (CS68): the same two rows.
+        val board = SigningFixtures.build(SigningScreenState.CS68, strings).blocks.single { it is SigningBlock.Held } as SigningBlock.Held
+        assertEquals(listOf("\u2212", "+"), (board.shown as SigningBlock.Balances).rows.map { it.delta })
+        assertEquals(listOf(label, label), (board.shown as SigningBlock.Balances).rows.map { it.symbol })
     }
 
     /**

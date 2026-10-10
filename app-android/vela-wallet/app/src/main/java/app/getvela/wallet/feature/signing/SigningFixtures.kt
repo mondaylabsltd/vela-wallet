@@ -325,7 +325,8 @@ object SigningFixtures {
      * not check" card ([SimDeltas.couldNotCheck], through the live
      * [SigningLive.simBlocks]), empty while the simulation is out (CS57) and
      * holding that card once it lands (CS58). And so for each other verdict
-     * ([verdict]): CS61–CS64 the usual ones, CS65–CS67 the tall.
+     * ([verdict]): CS61–CS64 the usual ones, CS65–CS67 the tall, and CS68 —
+     * two unverified tokens, by their directions alone.
      */
     private fun VelaStrings.heldVerdict(state: SigningScreenState): SigningScreenModel {
         val ctx = SigningLive.Context(this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1)
@@ -369,12 +370,13 @@ object SigningFixtures {
                     ),
                 ),
             )
-            // …and a received token nothing verified, with its warning under the rows.
+            // …and a received token nothing verified, with its warning under
+            // the rows: its direction, and no figure (the judgment has none).
             SigningScreenState.CS66 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
                 listOf(
                     usdcOut,
                     app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
-                        token = "0x" + "c0".repeat(20), delta = "5000000000000000000000",
+                        token = "0x" + "c0".repeat(20), direction = app.getvela.wallet.feature.wallet.core.TrustSimDirection.In,
                     ),
                 ),
             )
@@ -389,7 +391,19 @@ object SigningFixtures {
                         token = "0x6b175474e89094c44da98b954eedeac495271d0f", delta = "250000000000000000000", symbol = "DAI", decimals = 18,
                     ),
                     app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
-                        token = "0x" + "c0".repeat(20), delta = "5000000000000000000000",
+                        token = "0x" + "c0".repeat(20), direction = app.getvela.wallet.feature.wallet.core.TrustSimDirection.In,
+                    ),
+                ),
+            )
+            // PR 3: one token nobody vouches for leaves and another arrives —
+            // each row its direction, neither a figure.
+            SigningScreenState.CS68 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
+                listOf(
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
+                        token = "0x" + "d1".repeat(20), direction = app.getvela.wallet.feature.wallet.core.TrustSimDirection.Out,
+                    ),
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
+                        token = "0x" + "c0".repeat(20), direction = app.getvela.wallet.feature.wallet.core.TrustSimDirection.In,
                     ),
                 ),
             )
@@ -1368,7 +1382,8 @@ object SigningFixtures {
 
             SigningScreenState.CS57, SigningScreenState.CS58,
             SigningScreenState.CS61, SigningScreenState.CS62, SigningScreenState.CS63, SigningScreenState.CS64,
-            SigningScreenState.CS65, SigningScreenState.CS66, SigningScreenState.CS67 -> heldVerdict(state)
+            SigningScreenState.CS65, SigningScreenState.CS66, SigningScreenState.CS67,
+            SigningScreenState.CS68 -> heldVerdict(state)
 
             SigningScreenState.CS59, SigningScreenState.CS60 -> currencyFee(state)
 

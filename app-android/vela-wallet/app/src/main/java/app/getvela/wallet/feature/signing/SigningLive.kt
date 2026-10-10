@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.signing
 
+import app.getvela.wallet.feature.wallet.core.TrustSimDirection
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.VelaStrings
@@ -1289,9 +1290,12 @@ object SigningLive {
                     when (judgment) {
                         is TrustSimJudgment.Native -> deltaRow(ctx.nativeSymbol, judgment.delta, 18, ctx.numberPreset)
                         is TrustSimJudgment.Erc20Trusted -> deltaRow(judgment.symbol, judgment.delta, judgment.decimals, ctx.numberPreset)
-                        is TrustSimJudgment.Erc20Unverified -> signedRaw(judgment.delta, ctx.numberPreset)?.let { raw ->
+                        // PR 3: a direction, never a figure — the judgment
+                        // carries none (this row printed the simulation's raw
+                        // number, which the site being signed for chooses).
+                        is TrustSimJudgment.Erc20Unverified -> unverifiedSign(judgment.direction)?.let { sign ->
                             unverified = true
-                            BalanceDeltaRow(s.s("balanceUnverifiedToken"), raw, SigningTone.Caution)
+                            BalanceDeltaRow(s.s("balanceUnverifiedToken"), sign, SigningTone.Caution)
                         }
                     }
                 }
@@ -1325,12 +1329,18 @@ object SigningLive {
     }
 
     /**
-     * An unverified token's change in its raw units — its decimals are not
-     * known, so no decimal point is guessed. The core writes the sign and
-     * drops a zero; the units stay whole (decimals 0).
+     * All an unverified token's row says beside its label (PR 3,
+     * `TrustSimDirection`): "+" coming in, "−" (U+2212, the sign every other
+     * row is written with) going out, nothing at all for a figure nobody
+     * could read — the row still stands, with its caution. `null` for a move
+     * of nothing: a zero is never drawn.
      */
-    private fun signedRaw(delta: String, preset: String): String? =
-        uniffi.vela_core_uniffi.formatSignedTokenAmount(delta, 0u, preset)
+    private fun unverifiedSign(direction: TrustSimDirection): String? = when (direction) {
+        TrustSimDirection.In -> "+"
+        TrustSimDirection.Out -> "−"
+        TrustSimDirection.Unreadable -> ""
+        TrustSimDirection.Still -> null
+    }
 
     fun feeModel(clear: ClearSigningView, fee: FeeView, ctx: Context, speed: SendLive.SpeedInputs? = null): FeeModel {
         if (offChain(clear)) return FeeModel.OffChain(ctx.strings.s("noNetworkFee"))

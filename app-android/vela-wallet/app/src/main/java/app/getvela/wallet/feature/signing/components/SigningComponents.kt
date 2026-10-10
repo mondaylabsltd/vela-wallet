@@ -611,9 +611,9 @@ fun SigningBalances(
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.lg,
                 )
-                // The amount takes the rest of the row and keeps to its end:
-                // an unverified token's change is in raw units ("+5,000,000,
-                // 000,000,000,000,000") and ran straight into its label.
+                // The amount takes the rest of the row and keeps to its end,
+                // however long it is. (An unverified token's row has no
+                // figure at all since PR 3: its sign alone, or nothing.)
                 Text(
                     text = row.delta,
                     color = row.tone.color(colors),
