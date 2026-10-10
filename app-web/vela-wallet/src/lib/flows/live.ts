@@ -10,6 +10,7 @@
  * second builder for four strings.
  */
 
+import { maskedAmount } from '$lib/core/client';
 import { feedPositionOf } from '$lib/wallet/live-detail';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedView } from '$lib/core/generated/FeedView';
@@ -52,7 +53,6 @@ import {
 	liveActivityGroups,
 	liveActivityRow,
 	liveAssetRow,
-	maskedFigure,
 	moneyText,
 	narrowedFeed,
 	tokenAmountText,
@@ -416,7 +416,7 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		symbol: token.symbol,
 		chain: chainName(token.chain_id),
 		balance: hidden
-			? maskedFigure(token.symbol)
+			? maskedAmount(token.symbol)
 			: `${tokenAmountText(token.balance)} ${token.symbol}`,
 		fiat,
 		facts,

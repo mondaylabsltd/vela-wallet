@@ -26,6 +26,7 @@ import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedLine } from '$lib/core/generated/FeedLine';
 import type { FeedRow } from '$lib/core/generated/FeedRow';
 import type { FeedView } from '$lib/core/generated/FeedView';
+import { maskedAmount } from '$lib/core/client';
 import { formatRelativeTime } from '$lib/core/kernels';
 import {
 	formatDate,
@@ -173,24 +174,6 @@ export function fixedTwo(value: number): [string, string] {
 	const places = Number.parseInt(exponent, 10) + 1;
 	const whole = digits.length >= places ? digits.slice(0, places) : digits.padEnd(places, '0');
 	return [value < 0 ? `-${whole}` : whole, '00'];
-}
-
-/**
- * A token figure as balance privacy draws it: the mask where the amount was,
- * and the UNIT KEPT — "•••• xDAI". The unit says what kind of money without
- * saying how much, so a hidden row still reads as the transfer it is.
- *
- * One rule for every masked token figure on the web, and the same on all four
- * apps (PR 3 item 12: a hidden transfer's detail read "•••• xDAI" on iOS and a
- * bare "••••" on Android and here). The activity ROW always kept its unit —
- * it draws the amount and the unit apart; this is for the surfaces that write
- * the two as one string. A fiat worth has no unit apart from its figure, so
- * it stays the bare mask.
- */
-export function maskedFigure(unit: string): string {
-	const kept = unit.trim();
-	// No unit of its own (a sweep's count): the mask alone, never a trailing space.
-	return kept === '' ? MASK : `${MASK} ${kept}`;
 }
 
 /**
@@ -871,7 +854,7 @@ export function liveAssetDetail(
 			ticker: token.symbol,
 			badgeColor: art.badgeColor,
 			balance: hidden
-				? maskedFigure(token.symbol)
+				? maskedAmount(token.symbol)
 				: `${tokenAmountText(token.balance)} ${token.symbol}`,
 			fiatLine: [fiat, chainName(token.chain_id)].filter((part) => part !== undefined).join(' · '),
 			logoUrls: art.logoUrls,

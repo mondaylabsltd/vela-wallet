@@ -4,6 +4,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { maskedAmount } from '$lib/core/client';
 import { formatRelativeTime } from '$lib/core/kernels';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
@@ -17,7 +18,6 @@ import {
 	figureCurrency,
 	liveAssetRow,
 	liveBalance,
-	maskedFigure,
 	MONEY_PENDING,
 	moneyParts,
 	moneyText,
@@ -206,17 +206,29 @@ describe('no money figure before the display currency is the person’s', () => 
 	});
 });
 
-describe('maskedFigure — a hidden amount keeps its unit', () => {
+describe('maskedAmount — a hidden amount keeps its unit (the core’s rule, not a mirror)', () => {
 	it('the mask, then the unit the shown figure carries', () => {
-		expect(maskedFigure('xDAI')).toBe('•••• xDAI');
-		expect(maskedFigure('USDC')).toBe('•••• USDC');
+		expect(maskedAmount('xDAI')).toBe('•••• xDAI');
+		expect(maskedAmount('USDC')).toBe('•••• USDC');
 		// Nothing of the number survives.
-		expect(maskedFigure('ETH')).not.toMatch(/\d/);
+		expect(maskedAmount('ETH')).not.toMatch(/\d/);
 	});
 	it('a figure with no unit is the mask alone — never a trailing space', () => {
-		expect(maskedFigure('')).toBe('••••');
-		expect(maskedFigure('  ')).toBe('••••');
-		expect(maskedFigure(' xDAI ')).toBe('•••• xDAI');
+		expect(maskedAmount('')).toBe('••••');
+		expect(maskedAmount('  ')).toBe('••••');
+		expect(maskedAmount(' xDAI ')).toBe('•••• xDAI');
+	});
+	it('the web keeps no copy of the rule: every hidden figure with a unit is the core’s', () => {
+		// The mirror (`maskedFigure`) is gone from the builders that used it.
+		for (const file of [
+			'src/lib/wallet/live.ts',
+			'src/lib/wallet/live-detail.ts',
+			'src/lib/flows/live.ts'
+		]) {
+			const source = readFileSync(file, 'utf8');
+			expect(source, file).not.toMatch(/maskedFigure/);
+			expect(source, file).toMatch(/maskedAmount\(/);
+		}
 	});
 });
 
