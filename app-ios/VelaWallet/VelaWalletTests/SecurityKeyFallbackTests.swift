@@ -27,6 +27,33 @@ import Testing
 import VelaCore
 @testable import VelaWallet
 
+/// The insert prompt, answered at once with one outcome, and counted.
+private final class CountingPrompts: SmartCardCtapCeremony.Prompts, @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    let outcome: SmartCardCtapCeremony.KeyInsertion
+
+    init(_ outcome: SmartCardCtapCeremony.KeyInsertion) { self.outcome = outcome }
+
+    var asked: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func askPin(product: String, retries: Int, isRetry: Bool) -> String? { nil }
+    func askWhichWallet(_ choices: [CtapCredentialChoice]) -> Int? { nil }
+    func touchWaiting(kind: String?, product: String) {}
+    func awaitKeyInsertion(
+        probe: @escaping @MainActor () async -> Bool
+    ) async -> SmartCardCtapCeremony.KeyInsertion {
+        lock.lock()
+        count += 1
+        lock.unlock()
+        return outcome
+    }
+}
+
 @MainActor
 struct SecurityKeyFallbackTests {
 
@@ -82,6 +109,57 @@ struct SecurityKeyFallbackTests {
         #expect(en.t(I18nKeys.Flow.insertKeyAppleSheetHint) == "For NFC, Lightning or older keys")
         #expect(zh.t(I18nKeys.Flow.insertKeyAppleSheet) == "改用 Apple 的安全密钥面板")
         #expect(zh.t(I18nKeys.Flow.insertKeyAppleSheetHint) == "适用于 NFC、Lightning 或较旧的密钥")
+    }
+
+    /// With no key anywhere (a simulator has none), the ceremony asks ONCE.
+    /// "Use Apple's security-key sheet" hands it over — and the ceremonies
+    /// that follow in the same flow (a new key's proof of signing, a
+    /// recovery's second signature) go the same way without asking again.
+    /// A method picked afresh puts the question back.
+    @Test func theChoiceOfApplesSheetCarriesThroughTheFlow() async {
+        let prompts = CountingPrompts(.useSystemSheet)
+        let ceremony = SmartCardCtapCeremony(prompts: prompts)
+        func handsOver() async -> Bool {
+            do {
+                _ = try await ceremony.assert(challenge: Data(repeating: 7, count: 32), credentialIdHex: nil)
+                return false
+            } catch is SmartCardCtapCeremony.SystemSheetFallback {
+                return true
+            } catch {
+                return false
+            }
+        }
+        #expect(await handsOver(), "the option did not hand the ceremony over")
+        let first = prompts.asked
+        // Asked once here; not at all where nothing would ever answer (a
+        // Lightning model, or no smart-card service).
+        #expect(first <= 1)
+        #expect(await handsOver(), "the ceremony that follows did not go the same way")
+        #expect(prompts.asked == first, "the person was asked a second time in one flow")
+
+        ceremony.forgetSystemSheetChoice()
+        #expect(await handsOver())
+        #expect(prompts.asked == first * 2, "a method picked afresh did not put the question back")
+    }
+
+    /// Closing the insert prompt is a cancel, as the core hears it — never a
+    /// hand-over the person did not ask for.
+    @Test func closingTheInsertPromptCancelsTheCeremony() async {
+        let prompts = CountingPrompts(.cancelled)
+        let ceremony = SmartCardCtapCeremony(prompts: prompts)
+        do {
+            _ = try await ceremony.assert(challenge: Data(repeating: 7, count: 32), credentialIdHex: nil)
+            Issue.record("a ceremony with no key returned an assertion")
+        } catch let failure as PasskeyFailure {
+            #expect(failure.kind == .cancelled)
+            #expect(prompts.asked == 1)
+        } catch is SmartCardCtapCeremony.SystemSheetFallback {
+            // Where nothing would ever answer, the insert prompt is never
+            // shown, so there is nothing to close.
+            #expect(prompts.asked == 0)
+        } catch {
+            Issue.record("an unexpected failure: \(error)")
+        }
     }
 
     // MARK: - A Lightning iPhone is not made to wait

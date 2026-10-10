@@ -113,6 +113,30 @@ struct ScanPathTests {
         #expect(!(try CoreJSON.decode(SendViewWire.self, from: try view(from: closed)).showScanner))
     }
 
+    /// Issue #471: a split row's own scan icon names its row. The REAL core
+    /// takes `open_scanner` with a target and holds it while the viewfinder
+    /// is up; a viewfinder left without a code (`close_scanner`, which this
+    /// shell now sends) drops it, so the row steers nothing later; and the
+    /// single field's scan — no `target` key at all — aims at no row.
+    @Test func aRowsScanNamesItsRowAndLeavingDropsIt() throws {
+        let core = SendCore()
+        func target(_ view: [String: Any]) -> String? { view["picker_target"] as? String }
+
+        let opened = try view(from: core.dispatch(eventJson: CoreJSON.string([
+            "type": "open_scanner", "target": "rcpt_2",
+        ])))
+        #expect(opened["show_scanner"] as? Bool == true)
+        #expect(target(opened) == "rcpt_2")
+
+        let closed = try view(from: core.dispatch(eventJson: CoreJSON.string(["type": "close_scanner"])))
+        #expect(closed["show_scanner"] as? Bool == false)
+        #expect(target(closed) == nil, "a scan left without a code still aims at its row")
+
+        let plain = try view(from: core.dispatch(eventJson: CoreJSON.string(["type": "open_scanner"])))
+        #expect(plain["show_scanner"] as? Bool == true)
+        #expect(target(plain) == nil)
+    }
+
     // MARK: - The camera's refusals
 
     /// There is no camera in a simulator, and that is an ANSWER — not an

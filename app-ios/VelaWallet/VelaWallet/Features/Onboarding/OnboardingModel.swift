@@ -167,6 +167,7 @@ final class OnboardingModel {
     /// no hold. Every app-owned method keeps the shared sheet up via
     /// `signInConnecting` while the ceremony spins up.
     func pickSignInMethod(_ method: KeyMethod) {
+        passkey.methodPickedAfresh()
         showSignInMethods = false
         signInMethod = method
         let page = signInPage
@@ -374,6 +375,7 @@ final class OnboardingModel {
     func toggleAck(_ index: Int) { create?.dispatch(Self.event("ack_toggled", ["index": index])) }
     func submit() { create?.dispatch(Self.event("submit")) }
     func addKey(_ method: KeyMethod) {
+        passkey.methodPickedAfresh()
         create?.dispatch(Self.event("add_key", ["name": "", "method": method.rawValue]))
     }
     func confirmKey(_ index: Int) { create?.dispatch(Self.event("confirm_key", ["index": index])) }
@@ -455,8 +457,9 @@ final class OnboardingModel {
     /// presented into the dismissal. On iOS 26.2 (simulator, 2026-10-10) the
     /// "sign-in failed" sheet came up and went away again by itself within a
     /// second or so, taking the reason with it. The holds now go when the
-    /// prompt is up (the sheet swaps content) or the machine has nothing in
-    /// flight (a cancel, a success: there is nothing more to show).
+    /// prompt is up (the sheet swaps content), or the machine has nothing in
+    /// flight (a cancel, a success: there is nothing more to show), or a
+    /// third of a second has passed.
     ///
     /// `isBusy` reads the machine's own view: a ceremony that started again
     /// (a recovery's second signature) keeps the hold, and the next idle view
@@ -464,19 +467,24 @@ final class OnboardingModel {
     private func releaseHolds(of driver: CoreDriver?, isBusy: @escaping @MainActor () -> Bool) {
         holdRelease?.cancel()
         holdRelease = Task { @MainActor [weak self] in
-            while let self, !Task.isCancelled, !isBusy() {
-                if self.pending != nil || driver?.isIdle != false {
-                    self.signInConnecting = false
-                    self.systemSheetHold = false
-                    return
-                }
-                // The effect that raises the prompt has been started and has
-                // not reached it yet; a few milliseconds, never a wait on a
-                // person (a prompt on screen is `pending`).
+            // The prompt's effect starts in the turn the idle view arrived
+            // in, and reaches `pending` within a few hops. The wait is for
+            // THAT, and bounded: an unrelated effect still in flight (the
+            // index's health probe, say) must not keep a sheet nobody can
+            // dismiss on screen.
+            for _ in 0..<Self.holdReleaseTurns {
+                guard let self, !Task.isCancelled, !isBusy() else { return }
+                if self.pending != nil || driver?.isIdle != false { break }
                 do { try await Task.sleep(nanoseconds: 10_000_000) } catch { return }
             }
+            guard let self, !Task.isCancelled, !isBusy() else { return }
+            self.signInConnecting = false
+            self.systemSheetHold = false
         }
     }
+
+    /// At most 0.3 s of 10 ms turns (see `releaseHolds`).
+    private static let holdReleaseTurns = 30
 
     // MARK: - Prompts
 

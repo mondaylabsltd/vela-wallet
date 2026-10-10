@@ -83,6 +83,13 @@ final class PasskeyExecutor: NSObject {
     /// (previews, the gallery).
     var smartCard: SmartCardCtapCeremony?
 
+    /// The person picked a key method afresh (a row on the keys screen, a
+    /// row on the sign-in sheet): a choice of Apple's sheet made on an
+    /// earlier insert prompt does not carry over to it.
+    func methodPickedAfresh() {
+        smartCard?.forgetSystemSheetChoice()
+    }
+
     /// The caBLE "sign in with your phone" path (spec 019), for the scan
     /// method — OUR initiator, not the system sheet's: it shows a QR, the
     /// phone that holds the passkey scans it, and the ceremony runs over the

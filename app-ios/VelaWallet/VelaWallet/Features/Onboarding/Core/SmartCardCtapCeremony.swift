@@ -79,8 +79,21 @@ final class SmartCardCtapCeremony {
 
     private let prompts: Prompts
 
+    /// The person asked for Apple's sheet on the insert prompt. The
+    /// ceremonies that FOLLOW in the same flow — a new key's proof of
+    /// signing, a recovery's second signature — go there too, without asking
+    /// again: the key that could not be reached here a moment ago has not
+    /// changed. Forgotten the moment a card answers, and whenever the person
+    /// picks a method afresh (`forgetSystemSheetChoice`).
+    private var prefersSystemSheet = false
+
     init(prompts: Prompts) {
         self.prompts = prompts
+    }
+
+    /// The person picked a method again: the insert prompt is theirs to see.
+    func forgetSystemSheetChoice() {
+        prefersSystemSheet = false
     }
 
     /// Is a card/reader with a valid card present for this path to use?
@@ -128,7 +141,7 @@ final class SmartCardCtapCeremony {
             // card already answers (through an adapter — taken above), none
             // will, and "Insert your security key" waited for ever. Its keys —
             // Lightning, NFC — are Apple's sheet's.
-            if KeyPort.lightningPhone { throw SystemSheetFallback() }
+            if KeyPort.lightningPhone || prefersSystemSheet { throw SystemSheetFallback() }
             // No key is a WAITABLE state, not a diagnosis: the person is
             // holding the key they are about to plug in. Failing here said
             // "Biometric authentication is not available on this device" — a
@@ -141,6 +154,7 @@ final class SmartCardCtapCeremony {
             case .inserted:
                 found = await Self.firstValidCard(manager)
             case .useSystemSheet:
+                prefersSystemSheet = true
                 throw SystemSheetFallback()
             case .cancelled:
                 throw PasskeyFailure(kind: .cancelled, message: "No key was inserted")
@@ -152,6 +166,8 @@ final class SmartCardCtapCeremony {
                 message: "No security key is present. Plug in a USB-C security key and try again."
             )
         }
+        // A card answers: this route is the one, whatever was chosen before.
+        prefersSystemSheet = false
         let (card, slotName) = (found.card, found.slot)
         // A card that will not open a session is one this route cannot talk
         // to; Apple's sheet may (it has its own transports).

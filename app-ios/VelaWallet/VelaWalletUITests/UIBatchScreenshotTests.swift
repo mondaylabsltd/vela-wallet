@@ -145,6 +145,41 @@ final class UIBatchScreenshotTests: XCTestCase {
         }
     }
 
+    /// Issues #459 × #480, live: the content-sized sheet still lets a person
+    /// leave — Cancel, a swipe down ON the sheet, and a tap on the page
+    /// above it each take the code away, and Welcome works again.
+    func testTheScanSheetLeavesThreeWays() {
+        let app = launch(env: [:], args: ["-vela.parallelSpace", "0"], lang: "zh", theme: "light")
+        let signIn = app.buttons["我已有钱包"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 40), "no Welcome")
+        for exit in ["cancel", "swipe", "tap-outside"] {
+            signIn.tap()
+            let phone = app.staticTexts["手机或平板"]
+            XCTAssertTrue(phone.waitForExistence(timeout: 10), "no sign-in sheet (\(exit))")
+            phone.tap()
+            let cancel = app.buttons["cable.cancel"]
+            XCTAssertTrue(cancel.waitForExistence(timeout: 15), "the phone's code never came up (\(exit))")
+            settle(1.5)
+            attach(app, "480-live-code-\(exit)")
+            switch exit {
+            case "cancel":
+                cancel.tap()
+            case "swipe":
+                // From the sheet's own title, down past the bottom edge.
+                let title = app.staticTexts["手机或平板"].firstMatch
+                title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99)))
+            default:
+                // The page above the sheet: what a content-sized sheet leaves.
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+            }
+            XCTAssertTrue(cancel.waitForNonExistence(timeout: 6), "the code stayed up after \(exit)")
+            settle(2)
+            XCTAssertTrue(signIn.isHittable, "Welcome is not back after \(exit)")
+        }
+        app.terminate()
+    }
+
     // MARK: - The security key's way to Apple's sheet
 
     /// "Insert your security key" offers Apple's security-key sheet, says
