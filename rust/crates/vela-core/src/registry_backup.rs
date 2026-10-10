@@ -134,11 +134,21 @@ pub struct BackupRow {
     pub subtitle_key: String,
     pub tone: BackupTone,
     pub action: BackupAction,
+    /// The explanation under the Keys block for this state ([`EXPLAIN_KEY`]),
+    /// or `None` when it does not apply: that paragraph says what a copy
+    /// publishes, what it costs and how it is made, and under a wallet that
+    /// can never be copied ([`BackupState::NotCopyable`]) it described a
+    /// thing the row above had just said cannot be done. A shell draws the
+    /// paragraph from here once the walk has answered — and [`EXPLAIN_KEY`]
+    /// itself only while it has not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explain_key: Option<String>,
 }
 
 /// The row's title: "Copy this wallet's record to Ethereum".
 pub const TITLE_KEY: &str = "settingsModals.backup.title";
-/// The explanation under the Keys block.
+/// The explanation under the Keys block — while the walk runs, and for every
+/// state a copy can still be made or checked in ([`BackupRow::explain_key`]).
 pub const EXPLAIN_KEY: &str = "settingsModals.backup.explain";
 /// The second line while the walk runs (before any [`BackupStep::Done`]).
 pub const CHECKING_KEY: &str = "componentsUi.funding.checking";
@@ -176,6 +186,7 @@ impl BackupState {
             subtitle_key: subtitle.to_owned(),
             tone,
             action,
+            explain_key: (self != Self::NotCopyable).then(|| EXPLAIN_KEY.to_owned()),
         })
     }
 }
@@ -828,6 +839,41 @@ mod tests {
         ] {
             assert_eq!(state.row().map(|r| r.title_key), Some(TITLE_KEY.to_owned()));
         }
+    }
+
+    /// The paragraph under the Keys block says what a copy publishes, what
+    /// it costs and how it is made. Under a wallet that can never be copied
+    /// it described what the row had just said cannot be done: there the row
+    /// carries no explanation, and the shell draws none.
+    #[test]
+    fn a_wallet_that_cannot_be_copied_is_not_told_how_to_copy() {
+        for state in [
+            BackupState::BackedUp,
+            BackupState::NotBackedUp,
+            BackupState::CouldNotCheck,
+        ] {
+            assert_eq!(
+                state.row().and_then(|r| r.explain_key).as_deref(),
+                Some(EXPLAIN_KEY),
+                "{state:?}"
+            );
+        }
+        assert_eq!(
+            BackupState::NotCopyable.row().and_then(|r| r.explain_key),
+            None
+        );
+        let json = serde_json::to_value(done(BackupState::NotCopyable))
+            .unwrap_or_else(|e| unreachable!("serialize: {e}"));
+        assert!(json["row"].get("explain_key").is_none());
+        let json = serde_json::to_value(done(BackupState::NotBackedUp))
+            .unwrap_or_else(|e| unreachable!("serialize: {e}"));
+        assert_eq!(json["row"]["explain_key"], EXPLAIN_KEY);
+        // A row from before the field: it reads, with no paragraph named.
+        let old: BackupRow = serde_json::from_str(
+            r#"{"title_key":"t","subtitle_key":"s","tone":"neutral","action":"none"}"#,
+        )
+        .unwrap_or_else(|e| unreachable!("old row: {e}"));
+        assert_eq!(old.explain_key, None);
     }
 
     #[test]
