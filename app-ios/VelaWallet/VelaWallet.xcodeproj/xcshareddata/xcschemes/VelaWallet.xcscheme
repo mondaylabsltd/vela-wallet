@@ -185,6 +185,9 @@
                <Test
                   Identifier = "FinalRoundScreenshotTests">
                </Test>
+               <Test
+                  Identifier = "PR3DeviceTests">
+               </Test>
             </SkippedTests>
          </TestableReference>
       </Testables>
