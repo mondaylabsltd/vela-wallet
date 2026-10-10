@@ -244,14 +244,17 @@ describe('the shared hidden-balance fixture, through every web surface builder',
 	it('hidden: a masked token figure keeps its unit, wherever the two are one string', () => {
 		const { balance, feed } = FIXTURE.hidden;
 		const detail = (id: string) =>
-			liveTxDetail(feedItems(feed).find((item) => item.id === id)!, {
-				m: fm,
-				wm: m,
-				currency: USD,
-				hidden: feed.hidden,
-				identicon,
-				now: NOW
-			});
+			liveTxDetail(
+				feedItems(feed).find((item) => item.id === id)!,
+				{
+					m: fm,
+					wm: m,
+					currency: USD,
+					hidden: feed.hidden,
+					identicon,
+					now: NOW
+				}
+			);
 		// A transfer in, a transfer out, and a dApp's swap.
 		expect(detail('received').amount).toBe(`${MASK} USDT`);
 		expect(detail('sent').amount).toBe(`${MASK} USDC`);
@@ -278,7 +281,12 @@ describe('the shared hidden-balance fixture, through every web surface builder',
 			expect(sheet.model.balance, token.symbol).toBe(`${MASK} ${token.symbol}`);
 		}
 		// The rows draw the amount and the unit apart, and always kept it.
-		const row = liveActivityRow(feedItems(feed).find((i) => i.id === 'received')!, m, true, NOW);
+		const row = liveActivityRow(
+			feedItems(feed).find((i) => i.id === 'received')!,
+			m,
+			true,
+			NOW
+		);
 		expect([row.amount, row.unit]).toEqual([MASK, 'USDT']);
 	});
 

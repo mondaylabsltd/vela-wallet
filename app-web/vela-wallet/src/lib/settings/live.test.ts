@@ -808,9 +808,11 @@ describe('the currency row, before and after the core commits', () => {
 		expect(phoneRow(CNY_ON_ITS_WAY)?.value).toBe('CNY');
 		expect(phoneTicked(CNY_ON_ITS_WAY)).toEqual(['CNY']);
 		expect(wideRow(CNY_ON_ITS_WAY)?.value).toBe('CNY');
-		expect(wideRow(CNY_ON_ITS_WAY)?.options?.filter((o) => o.selected).map((o) => o.id)).toEqual(
-			['CNY']
-		);
+		expect(
+			wideRow(CNY_ON_ITS_WAY)
+				?.options?.filter((o) => o.selected)
+				.map((o) => o.id)
+		).toEqual(['CNY']);
 	});
 
 	it('committed: the code, and on the wide row a sample in it', () => {

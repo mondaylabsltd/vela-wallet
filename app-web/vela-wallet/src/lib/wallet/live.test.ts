@@ -185,11 +185,14 @@ describe('no money figure before the display currency is the person’s', () => 
 		const waiting = withLiveWallet(base, { balance: KNOWN, currency: CNY_ON_ITS_WAY, m });
 		expect(waiting.balance.state).toBe('loading');
 		expect(JSON.stringify([waiting.balance, waiting.assetRows])).not.toMatch(/[$¥]/);
-		const wide = withLiveWalletDesktop(buildDesktopState('d1', m, () => ''), {
-			balance: KNOWN,
-			currency: CNY_ON_ITS_WAY,
-			m
-		});
+		const wide = withLiveWalletDesktop(
+			buildDesktopState('d1', m, () => ''),
+			{
+				balance: KNOWN,
+				currency: CNY_ON_ITS_WAY,
+				m
+			}
+		);
 		expect(wide.balance.state).toBe('loading');
 		expect(JSON.stringify([wide.balance, wide.assetRows])).not.toMatch(/[$¥]/);
 	});

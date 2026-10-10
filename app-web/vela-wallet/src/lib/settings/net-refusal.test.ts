@@ -96,7 +96,9 @@ describe('the hint manifest is the core’s', () => {
 	it('the Chain Setup link the core builds carries the chain', () => {
 		const source = readFileSync('../../rust/crates/vela-core/src/app/network_admin.rs', 'utf8');
 		// `chain_setup_url`: "{CHAIN_SETUP_URL}?chain={chain_id}".
-		expect(source).toContain('pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";');
+		expect(source).toContain(
+			'pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";'
+		);
 		expect(source).toContain('format!("{CHAIN_SETUP_URL}?chain={chain_id}")');
 	});
 

@@ -546,7 +546,10 @@ describe('liveActivityGroups', () => {
 		const today = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
 		const rows: FeedRow[] = [
 			{ type: 'header', id: `day-${today}`, day_start_ms: today, timestamp: today / 1000 },
-			...Array.from({ length: 9 }, (_, i): FeedRow => ({ type: 'item', item: item({ id: `r${i}` }) }))
+			...Array.from({ length: 9 }, (_, i): FeedRow => ({
+				type: 'item',
+				item: item({ id: `r${i}` })
+			}))
 		];
 		const groups = liveActivityGroups(rows, m, false);
 		expect(groups.flatMap((g) => g.rows).map((r) => r.id)).toEqual(

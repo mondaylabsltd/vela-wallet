@@ -154,7 +154,9 @@ test('the create flow keeps its gutters on a phone, and the keys screen has one 
 			rows: [...document.querySelectorAll('button.method')].map(box),
 			captions: [...document.querySelectorAll('button.method .caption')].map((el) => ({
 				clipped: el.scrollWidth > el.clientWidth,
-				lines: Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).fontSize))
+				lines: Math.round(
+					el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).fontSize)
+				)
 			})),
 			cta: box([...document.querySelectorAll('section.screen > *')].at(-1)!)
 		};

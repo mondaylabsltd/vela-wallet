@@ -106,9 +106,7 @@ describe('RecipientCard — the row’s own doors (issue 471)', () => {
 		const withDoors = await drawn(row());
 		const height = (withDoors.root.querySelector('.card') as HTMLElement).getBoundingClientRect()
 			.height;
-		const label = (
-			withDoors.root.querySelector('.ordinal') as HTMLElement
-		).getBoundingClientRect();
+		const label = (withDoors.root.querySelector('.ordinal') as HTMLElement).getBoundingClientRect();
 		const scan = withDoors.button('Scan a QR code')!.getBoundingClientRect();
 		const well = (
 			withDoors.root.querySelector('.address-well') as HTMLElement

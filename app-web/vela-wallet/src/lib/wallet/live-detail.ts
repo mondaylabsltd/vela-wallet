@@ -510,9 +510,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	// These were drawn in full under a masked hero — who got how much of a
 	// split, with the balance hidden — until the unit rule was looked at.
 	const partValue = (transfer: { value: string; symbol: string }) =>
-		hidden
-			? maskedFigure(transfer.symbol)
-			: `${trimBalance(transfer.value)} ${transfer.symbol}`;
+		hidden ? maskedFigure(transfer.symbol) : `${trimBalance(transfer.value)} ${transfer.symbol}`;
 	const parts: BreakdownRowModel[] =
 		batch === null
 			? []
@@ -567,7 +565,8 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		// Hidden: the mask and the coin ("•••• xDAI"). A sweep's hero names no
 		// one coin — it counts them — so its mask stands alone.
-		amount: figure === '' ? '' : hidden ? maskedFigure(item.value !== null ? item.symbol : '') : figure,
+		amount:
+			figure === '' ? '' : hidden ? maskedFigure(item.value !== null ? item.symbol : '') : figure,
 		fiat: dappTx && item.value === null ? '' : fiatText(item, ctx),
 		positive: received,
 		facts,

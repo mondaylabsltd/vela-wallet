@@ -86,7 +86,9 @@ function lineStarts(chars: { char: string; top: number }[]): string[] {
 /** Every width from a narrow column to a wide phone, in tokens of 4 px. */
 const WIDTHS = Array.from({ length: 56 }, (_, i) => 150 + i * 4);
 
-async function sweep(text: string): Promise<{ width: number; chars: { char: string; top: number }[] }[]> {
+async function sweep(
+	text: string
+): Promise<{ width: number; chars: { char: string; top: number }[] }[]> {
 	const screen = render(IntegrityLine, { props: { line: { text, tone: 'ok' } } });
 	const out = [];
 	for (const width of WIDTHS) {

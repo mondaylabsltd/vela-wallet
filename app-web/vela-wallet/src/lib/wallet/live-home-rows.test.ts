@@ -83,7 +83,8 @@ const BALANCE: BalanceView = {
 	switcher: { open: false, loading: false, balances: [], hidden: false }
 };
 
-const ids = (groups: { rows: { id?: string }[] }[]) => groups.flatMap((g) => g.rows.map((r) => r.id));
+const ids = (groups: { rows: { id?: string }[] }[]) =>
+	groups.flatMap((g) => g.rows.map((r) => r.id));
 
 function home(feed: FeedView, chainFilter?: number) {
 	return withLiveWallet(buildMobileState('h1s', m, IDENTICON), {
