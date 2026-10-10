@@ -136,7 +136,7 @@ struct SigningFollowsTrackerTests {
             grantedAddress: fixture.account
         ))
         await Wait.until { controller.fee?.fee?.feeRecipient != nil && controller.fee?.busy == false }
-        controller.approve()
+        try #require(await controller.approveWhenOpen(), "the request was never approved")
         return Run(controller: controller, seen: seen, scripted: scripted, port: port, store: store)
     }
 

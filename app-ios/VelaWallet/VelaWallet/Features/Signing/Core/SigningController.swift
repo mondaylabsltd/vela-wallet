@@ -41,7 +41,7 @@
 //  The clocks under this file are three — the fee machine's timers, that
 //  deadline, and the write-ahead's (`SignExecutor`, `WriteAheadGate`) — and
 //  `timers: .stopped` stops all three: under a scripted relay no time
-//  passes, and what a test sees is what the code did.
+//  passes, and what a test sees is what the code did (`isIdle`).
 //
 //  ## The order the machine is told things
 //
@@ -277,6 +277,10 @@ final class SigningController {
     }
 
     private(set) var simulation: Simulation = .pending
+
+    /// Simulations asked and not yet answered and judged (`simulate`): the
+    /// one thing in flight here that no machine's effect stands for.
+    private var simulationsOut = 0
 
     /// THIS request's checked answer, judged: what the verdict's place draws
     /// once `simulation` is `.answered`. `nil` until the judgment is in — the
@@ -530,8 +534,10 @@ final class SigningController {
             return
         }
         dispatchSign(["type": "sim_started", "id": id])
+        simulationsOut += 1
         Task { [weak self] in
             guard let self else { return }
+            defer { simulationsOut -= 1 }
             let answer: RpcOutcome
             if let simulate = ports.simulate {
                 answer = await simulate(chainId, payload)
@@ -659,6 +665,18 @@ final class SigningController {
 
     /// No fee read is out — only timers a stopped clock holds (tests).
     var feeIdle: Bool { fees.isIdle }
+
+    /// Nothing is out that could still move the sheet: no effect of the
+    /// sign, reading or guard machines, no fee read, no simulation — only
+    /// timers a stopped clock holds. A confirm that is shut now stays shut
+    /// until somebody sends an event, so a test waits on this instead of a
+    /// clock (`CoreDriver.isIdle`) and can say at once that a gate will not
+    /// open.
+    var isIdle: Bool {
+        simulationsOut == 0
+            && signCore.inFlight == signExecutor.heldSimVerdictTimers
+            && clearCore.isIdle && guardCore.isIdle && fees.isIdle
+    }
 
     // MARK: - The speed control (spec 069)
 

@@ -35,6 +35,7 @@
 
 import Foundation
 import Testing
+@testable import VelaWallet
 
 extension Trait where Self == TimeLimitTrait {
     /// The time limit of every test in this target that has one: how long a
@@ -92,4 +93,34 @@ enum Wait {
 final class Flag {
     private(set) var isSet = false
     func set() { isSet = true }
+}
+
+extension SigningController {
+    /// The confirm, tapped as a person can tap it: once the core's gate is
+    /// open (`confirmState`) — the request read, the fee quoted, the
+    /// simulation's verdict on the sheet.
+    ///
+    /// The core does not take an approve sent while the gate is shut — on
+    /// purpose, and without a word (a tap from a stale frame waits too). A
+    /// test that sent one would then wait for a signature that is never
+    /// coming, until its time limit; so a test approves through here, and
+    /// what it waits for is what a person waits for.
+    ///
+    /// A gate that can no longer open — nothing left in flight behind the
+    /// sheet (`isIdle`) and the confirm still shut — is reported at once,
+    /// with the part of the gate that is shut, and nothing is approved.
+    @discardableResult
+    func approveWhenOpen(sourceLocation: SourceLocation = #_sourceLocation) async -> Bool {
+        await Wait.until({ confirmState.enabled }, orIdle: { isIdle })
+        let gate = confirmState
+        guard gate.enabled else {
+            Issue.record(
+                "the confirm never opened (\(gate.block ?? "shut")); nothing was approved",
+                sourceLocation: sourceLocation
+            )
+            return false
+        }
+        approve()
+        return true
+    }
 }
