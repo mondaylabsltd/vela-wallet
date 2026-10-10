@@ -350,6 +350,14 @@ pub const WIZARD_NOT_COMPATIBLE: &str = "addToken.errorNotCompatible";
 /// … the check could not reach a verdict (never worded as a refusal).
 pub const WIZARD_CHECK_FAILED: &str = "settingsModals.addNetwork.unableToVerify";
 
+/// The RPC field's label where naming an endpoint is one way on among
+/// others ([`NetRpcField::Optional`]): "Custom RPC (optional)".
+pub const RPC_FIELD_OPTIONAL: &str = "settingsModals.addNetwork.customRpcTitle";
+/// … and where it is the one thing asked for ([`NetRpcField::Required`]):
+/// "RPC URL". "(optional)" under a sentence that asks for it read as a
+/// contradiction.
+pub const RPC_FIELD_REQUIRED: &str = "settingsModals.network.fieldRpcUrl";
+
 /// `SERVICE_IDENTITY` (SettingsScreen.tsx:340-344) — the `/api/health`
 /// `service` field each endpoint must report. A passkey index pointed at the
 /// wrong service is a LOGIN SAFETY problem, not a latency problem
@@ -1721,6 +1729,28 @@ pub enum NetWizardPhase {
     Error,
 }
 
+/// Whether the wizard's result draws the field where a person names an RPC
+/// endpoint of their own ([`NetWizardView::rpc_field`]) — and with it, always
+/// and only with it, "Re-check with this RPC": a button that reads a field
+/// is drawn where the field is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum NetRpcField {
+    /// No field, no re-check: searching and checking; a network already
+    /// added or not found; and a REFUSAL — no P-256 verifier, or missing
+    /// contracts — which another endpoint would not change.
+    #[default]
+    None,
+    /// The field, labelled [`RPC_FIELD_OPTIONAL`]: the check passed (an own
+    /// endpoint may be preferred), or it could not reach a verdict (another
+    /// endpoint may answer).
+    Optional,
+    /// The field, labelled [`RPC_FIELD_REQUIRED`]: the network lists no
+    /// endpoint, so one typed here is the only way on.
+    Required,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct NetWizardView {
@@ -1745,6 +1775,19 @@ pub struct NetWizardView {
     /// one, else [`WIZARD_NOT_COMPATIBLE`]. `None` with no error.
     #[serde(default)]
     pub error_key: Option<String>,
+    /// The RPC field under the result, and "Re-check with this RPC" with it —
+    /// one rule for every surface that draws this wizard (Settings → Add
+    /// network, the add-token flow's network tab, the phones' scan path).
+    /// The shells each decided it: the web and the desktop offered a re-check
+    /// under a refusal with no field to read, the add-token tab said "Enter
+    /// one, then re-check" with no field at all, and the no-RPC stop asked
+    /// for an endpoint in a field labelled "(optional)".
+    #[serde(default)]
+    pub rpc_field: NetRpcField,
+    /// The corpus key of that field's label: [`RPC_FIELD_OPTIONAL`] or
+    /// [`RPC_FIELD_REQUIRED`]. `None` with no field.
+    #[serde(default)]
+    pub rpc_field_label_key: Option<String>,
     /// The "Add network" button renders only when this is true.
     pub can_add: bool,
 }
@@ -3970,6 +4013,12 @@ fn wizard_view(model: &Model) -> NetWizardView {
     let error_key = error
         .as_ref()
         .map(|kind| wizard_error_key(kind, model.wizard.compat.as_ref()).to_owned());
+    let rpc_field = wizard_rpc_field(phase, error.as_ref(), model.wizard.compat.as_ref());
+    let rpc_field_label_key = match rpc_field {
+        NetRpcField::None => None,
+        NetRpcField::Optional => Some(RPC_FIELD_OPTIONAL.to_owned()),
+        NetRpcField::Required => Some(RPC_FIELD_REQUIRED.to_owned()),
+    };
     NetWizardView {
         phase,
         query: model.wizard.query.clone(),
@@ -3979,7 +4028,32 @@ fn wizard_view(model: &Model) -> NetWizardView {
         compat: model.wizard.compat.clone(),
         error,
         error_key,
+        rpc_field,
+        rpc_field_label_key,
         can_add,
+    }
+}
+
+/// [`NetWizardView::rpc_field`]: is naming another endpoint a way on from
+/// here? Yes when the check passed or could not reach a verdict, required
+/// when the network lists none, and no after a verdict another endpoint
+/// would not change.
+#[must_use]
+pub fn wizard_rpc_field(
+    phase: NetWizardPhase,
+    error: Option<&NetWizardErrorKind>,
+    compat: Option<&NetCompatibility>,
+) -> NetRpcField {
+    match (phase, error) {
+        (NetWizardPhase::Error, Some(NetWizardErrorKind::NoRpcEndpoint)) => NetRpcField::Required,
+        (NetWizardPhase::Error, Some(NetWizardErrorKind::CheckFailed { .. })) => {
+            NetRpcField::Optional
+        }
+        // Compatible, or inconclusive: no blocker was found.
+        (NetWizardPhase::Checked, _) if compat.is_none_or(|c| c.blocker.is_none()) => {
+            NetRpcField::Optional
+        }
+        _ => NetRpcField::None,
     }
 }
 

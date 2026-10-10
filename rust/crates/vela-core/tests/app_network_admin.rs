@@ -2613,3 +2613,81 @@ fn the_privacy_evidence_names_exactly_the_public_rpc_hosts() {
         assert!(!have.contains(dead), "{dead} is listed as contacted");
     }
 }
+
+// ===========================================================================
+// PR 3 final notes F4, F14, F22: one rule for the RPC field and its label
+// ===========================================================================
+
+/// The field where a person names an endpoint of their own — and "Re-check
+/// with this RPC", which is drawn exactly where the field is — follows the
+/// state, not the shell: required (and not called "optional") when the
+/// network lists no endpoint; optional when the check passed or could not
+/// reach a verdict; absent under a refusal another endpoint would not
+/// change, and where there is no chain to check.
+#[test]
+fn the_rpc_field_is_offered_where_another_endpoint_is_a_way_on() {
+    use vela_core::app::network_admin::{NetRpcField, RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED};
+    let field = |sut: &Sut| {
+        let wizard = sut.view().wizard;
+        (wizard.rpc_field, wizard.rpc_field_label_key)
+    };
+
+    // Nothing selected, searching, checking: no field.
+    let mut sut = started();
+    assert_eq!(field(&sut), (NetRpcField::None, None));
+    select_and_resolve(&mut sut, raw_chain());
+    assert_eq!(field(&sut), (NetRpcField::None, None), "still checking");
+
+    // Compatible: an own endpoint may be preferred.
+    let sut = checked_compatible();
+    assert_eq!(
+        field(&sut),
+        (NetRpcField::Optional, Some(RPC_FIELD_OPTIONAL.to_owned()))
+    );
+
+    // No endpoint listed: the field is the one thing asked for.
+    let mut sut = started();
+    let mut bare = raw_chain();
+    bare.rpc.clear();
+    select_and_resolve(&mut sut, bare);
+    assert_eq!(
+        field(&sut),
+        (NetRpcField::Required, Some(RPC_FIELD_REQUIRED.to_owned()))
+    );
+
+    // Could not reach a verdict — in the wizard, and on the scan path.
+    let mut sut = started();
+    select_and_resolve(&mut sut, raw_chain());
+    sut.resolve(probe(RPC_SLOW, None, 0.0));
+    sut.resolve(probe(RPC_FAST, None, 0.0));
+    assert_eq!(field(&sut).0, NetRpcField::Optional, "unable to verify");
+    assert_eq!(field(&scan_unreachable()).0, NetRpcField::Optional);
+
+    // A refusal: no P-256 verifier. Another endpoint would say the same.
+    let mut sut = started();
+    select_and_resolve(&mut sut, raw_chain());
+    resolve_race(&mut sut);
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        sut.resolve(code_ok(RPC_FAST, address));
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some("0x".to_owned()),
+    });
+    sut.resolve(code_result(RPC_FAST, P256_PRECOMPILE, Some("0x")));
+    assert_eq!(field(&sut), (NetRpcField::None, None), "refused");
+
+    // Already added, and not found: no chain to check.
+    let mut sut = started_with(vec![custom_network(999)], vec![]);
+    sut.dispatch(Event::ChainSelected {
+        chain_id: 999,
+        keep_custom_rpc: false,
+    });
+    assert_eq!(field(&sut), (NetRpcField::None, None));
+
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
+}
