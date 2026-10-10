@@ -44,11 +44,13 @@ enum FlowsLive {
         let all = WalletLive.assetRows(balance, display: WalletLive.Display.from(currency),
                                        networks: networks)
         let rows = visibleAssetIndices(balance, selected: selected).map { all[$0] }
-        // Empty only once the core has actually looked — never while the
-        // fetch is still out (FR-008) — or when the chosen chain holds nothing
-        // while others do: a narrowed list with nothing in it is still an
-        // answer, and a blank screen is not one.
-        let settledEmpty = rows.isEmpty && !balance.balanceUnknown && !balance.holdingsLoading
+        // Empty exactly when the core says the list is (`emptyKey`: a read
+        // ended and found nothing held) — it was this file's own "no rows,
+        // not unknown, not loading", which a cached total of 0 satisfies
+        // before the first read has ended — or when the chosen chain holds
+        // nothing while others do: a narrowed list with nothing in it is
+        // still an answer, and a blank screen is not one.
+        let settledEmpty = rows.isEmpty && balance.emptyKey != nil
         let filteredEmpty = rows.isEmpty && !balance.tokens.isEmpty
         return AssetsModel(
             header: FlowHeaderModel(

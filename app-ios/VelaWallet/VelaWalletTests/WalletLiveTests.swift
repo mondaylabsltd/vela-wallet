@@ -43,14 +43,23 @@ struct WalletLiveTests {
     // MARK: - The assets section
 
     /// 087 F03: an account that holds nothing showed 资产 over a blank area —
-    /// the drawn home's `.rows` mode survived the live view. Once the core has
-    /// looked, the section draws its empty state in the corpus's words; while
-    /// it has not (or cannot say), the skeleton; with holdings, the rows.
+    /// the drawn home's `.rows` mode survived the live view. The section
+    /// draws its empty state in the corpus's words exactly when the core
+    /// says the list is empty (`emptyKey`); the skeleton otherwise; with
+    /// holdings, the rows.
     @Test func anEmptyWalletSaysSoUnderAssets() throws {
         let drawn = WalletFixtures.buildMobileState(.h1, loc: loc)
         #expect(drawn.assetsSection.mode == .rows, "the fixture this used to keep")
 
-        let empty = WalletLive.apply(view(total: 0), on: drawn, loc: loc)
+        // No rows and a known total of 0 is what a cached zero looks like
+        // before anything has been read: not this shell's to call empty.
+        let unread = WalletLive.apply(view(total: 0), on: drawn, loc: loc)
+        #expect(unread.assetRows.isEmpty)
+        #expect(unread.assetsSection.mode == .loading, "\"nothing here\" was said without the core's key")
+
+        var found = view(total: 0)
+        found.emptyKey = "assets.emptyTitle"
+        let empty = WalletLive.apply(found, on: drawn, loc: loc)
         #expect(empty.assetRows.isEmpty)
         #expect(empty.assetsSection.mode == .empty)
         let words = try #require(empty.assetsSection.empty)

@@ -210,6 +210,16 @@ struct BalanceViewWire: Decodable, Equatable {
     /// the total and the partial flag, which a cached zero satisfies before
     /// anything has been read.
     var liveKey: String? = nil
+    /// The Assets list's empty state: `assets.emptyTitle`, "Deposit your
+    /// first asset", with its caption and its action. Set only when a read
+    /// of this account has ENDED and found nothing held — never while the
+    /// first read is out (`checkingKey`), while holdings load, or when
+    /// nothing is known or nothing could be read. **The list is empty when
+    /// this key is set and at no other time**: a wallet that held nothing
+    /// last session opens with a cached total of 0, and "no tokens, a known
+    /// total" invited a first deposit under "Checking…". Absent on the wire
+    /// (an older core, a stored fixture) reads as `nil`: not empty.
+    var emptyKey: String? = nil
     let holdingsLoading: Bool
     let cachedTotalUsd: Double?
     let switcher: BalanceSwitcherViewWire

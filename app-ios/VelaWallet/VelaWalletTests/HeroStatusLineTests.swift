@@ -177,10 +177,15 @@ struct HeroStatusLineTests {
     /// assistive client is given, once two reads agree on where the refresh
     /// control is.
     private func tree(_ balance: BalanceModel, width: CGFloat = 390, textScale: CGFloat = 1) async throws -> [Element] {
-        _ = Self.automation
         // The 1.35× board is the drawn home at the largest text size.
         var model = textScale == 1 ? drawn : WalletFixtures.buildMobileState(.h7x, loc: en)
         model.balance = balance
+        return try await tree(home: model, width: width)
+    }
+
+    /// The whole home as `model` has it — the hero and the lists under it.
+    private func tree(home model: WalletHomeModel, width: CGFloat = 390) async throws -> [Element] {
+        _ = Self.automation
         let host = UIHostingController(
             rootView: WalletScreen(model: model, loc: en, onToggleBalance: {}, onStatusTap: {},
                                    onRefreshNow: {})
@@ -240,6 +245,82 @@ struct HeroStatusLineTests {
         #expect(liveAt == at, "\"Live\" moved the control: \(liveAt) vs \(at)")
         #expect(cantReachAt == at, "\"Can't reach\" moved the control: \(cantReachAt) vs \(at)")
         #expect(noneAt == at, "no line moved the control: \(noneAt) vs \(at)")
+    }
+
+    // MARK: - The Assets list under the line (device round, item 2)
+
+    /// A wallet that held nothing last session opens with a cached total of
+    /// 0. This shell took "no rows, a known total" for an empty wallet, so
+    /// the home invited a first deposit under "Checking…" — an answer before
+    /// anything had been read, and one the first round could take back.
+    ///
+    /// The real core's views on the real home: before the first read ends,
+    /// "Checking…" and NO "Deposit your first asset"; after a read that
+    /// found nothing, the empty state — exactly when the core's `emptyKey`
+    /// is there.
+    @Test func aCachedZeroInvitesNoDepositUntilAReadFoundNothing() async throws {
+        let round = try #require(BalanceCoreScene.zeroWallet())
+        #expect(round.checking.emptyKey == nil, "nothing has read this wallet yet")
+        #expect(round.settled.emptyKey == "assets.emptyTitle")
+        let invite = en.t("assets.emptyTitle")
+        #expect(invite == "Deposit your first asset")
+
+        let before = WalletLive.apply(round.checking, on: drawn, loc: en)
+        #expect(before.assetRows.isEmpty)
+        #expect(before.assetsSection.mode == .loading, "a cached zero is not an empty wallet")
+        let after = WalletLive.apply(round.settled, on: drawn, loc: en)
+        #expect(after.assetsSection.mode == .empty)
+        #expect(after.assetsSection.empty?.title == invite)
+        #expect(after.assetsSection.empty?.caption == en.t("assets.emptySubtext"))
+        #expect(WalletLive.apply(round.settled, on: WalletFixtures.buildMobileState(.h1, loc: zh), loc: zh)
+            .assetsSection.empty?.title == zh.t("assets.emptyTitle"))
+
+        // Drawn: what the home says, read from the tree.
+        let checking = try await tree(home: before)
+        #expect(checking.contains { $0.label == "Checking…" })
+        #expect(!checking.contains { $0.label.contains(invite) }, "\"\(invite)\" under \"Checking…\"")
+        let settled = try await tree(home: after)
+        #expect(settled.contains { $0.label.contains(invite) }, "a read found nothing and the list does not say so")
+        #expect(!settled.contains { $0.label == "Checking…" })
+
+        // The key and nothing else: the same settled view without it draws
+        // no empty state, and the unread one with it does.
+        var unkeyed = round.settled
+        unkeyed.emptyKey = nil
+        #expect(WalletLive.apply(unkeyed, on: drawn, loc: en).assetsSection.mode == .loading)
+        var keyed = round.checking
+        keyed.emptyKey = "assets.emptyTitle"
+        #expect(WalletLive.apply(keyed, on: drawn, loc: en).assetsSection.mode == .empty)
+
+        // The Assets page (T1) reads the same key.
+        guard case .assets(let page) = WalletFlowFixtures.build(.t1, loc: en).base else {
+            Issue.record("T1 does not draw the assets list")
+            return
+        }
+        #expect(FlowsLive.assets(round.checking, currency: nil, on: page, loc: en).empty == nil)
+        #expect(FlowsLive.assets(round.settled, currency: nil, on: page, loc: en).empty?.title == invite)
+    }
+
+    /// A view from before the key (an older core, a stored fixture) decodes,
+    /// and is not an empty wallet.
+    @Test func aViewFromBeforeTheEmptyKeyIsNotEmpty() throws {
+        var object: [String: Any] = [
+            "address": BalanceCoreScene.address, "display_total_usd": 0.0,
+            "balance_unknown": false, "balance_partial": false, "unreachable": false,
+            "notice": NSNull(), "hidden": false, "refreshing": false,
+            "last_refreshed_at_ms": NSNull(), "tokens": [[String: Any]](),
+            "unpriced_tokens": [[String: Any]](), "failed_chain_ids": [Int](),
+            "rate_limited_chain_ids": [Int](), "unreachable_networks": [[String: Any]](),
+            "holdings_loading": false, "cached_total_usd": 0.0,
+            "switcher": ["open": false, "loading": false, "balances": [[String: Any]]()],
+        ]
+        let old = try CoreJSON.decode(BalanceViewWire.self, from: object)
+        #expect(old.emptyKey == nil)
+        #expect(WalletLive.apply(old, on: drawn, loc: en).assetsSection.mode == .loading)
+        object["empty_key"] = "assets.emptyTitle"
+        let new = try CoreJSON.decode(BalanceViewWire.self, from: object)
+        #expect(new.emptyKey == "assets.emptyTitle")
+        #expect(WalletLive.apply(new, on: drawn, loc: en).assetsSection.mode == .empty)
     }
 
     // MARK: - F16: one line, always

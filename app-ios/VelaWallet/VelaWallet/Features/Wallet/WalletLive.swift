@@ -187,7 +187,7 @@ enum WalletLive {
                                networks: networks)
         copy.balance.refresh = refresh(view, loc: loc, now: now, spinning: spinning)
         copy.assetRows = assetRows(view, display: display, networks: networks)
-        copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection)
+        copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection, loc: loc)
         if let feed {
             // The feed's own flag, and the balance's while the two machines
             // catch up with one tap: a figure is never shown for a frame.
@@ -235,22 +235,32 @@ enum WalletLive {
     /// The assets section, kept as drawn except for its mode (087 F03).
     ///
     /// The drawn home's mode stayed `.rows` whatever the core said, so an
-    /// account holding nothing showed 资产 over a blank area. The same three
-    /// states as the web's `assetsMode` and the desktop's `assets_strip_empty`:
-    /// rows when there are rows, the skeleton while the first read is out or
-    /// the balance is unknown — "nothing here" is a claim, never made before
-    /// anybody looked — and the drawn empty state (存入您的第一笔资产) once the
-    /// core has looked and found nothing. Nothing could be read at all
-    /// (`unreachable`) is no "nothing here" either: the skeleton stays, under
-    /// the hero's reason (PR 2 integration — "Deposit your first asset" under
-    /// Vela's own error line).
-    static func assetsSection(_ view: BalanceViewWire, rows: [AssetRowModel], fallback: SectionModel) -> SectionModel {
-        SectionModel(
+    /// account holding nothing showed 资产 over a blank area. Three states:
+    /// rows when there are rows; the drawn empty state (存入您的第一笔资产)
+    /// **exactly when the core says the list is empty** (`emptyKey`: a read
+    /// of this account ended and found nothing held); the skeleton otherwise.
+    ///
+    /// "Nothing here" is a claim, and it is the core's to make. This shell
+    /// made it itself — no rows, and holdings neither loading, unknown nor
+    /// unreachable — which a wallet that held nothing last session satisfies
+    /// from its cached total of 0 before anything has been read: "Deposit
+    /// your first asset" under "Checking…", an answer the first round could
+    /// take back.
+    static func assetsSection(
+        _ view: BalanceViewWire, rows: [AssetRowModel], fallback: SectionModel, loc: Loc? = nil
+    ) -> SectionModel {
+        // The title is the core's key through the corpus; the caption is the
+        // drawn one that goes with it.
+        let empty = view.emptyKey.flatMap { key in
+            loc.map {
+                SectionEmptyModel(title: $0.t(key), caption: fallback.empty?.caption ?? $0.t("assets.emptySubtext"))
+            }
+        }
+        return SectionModel(
             title: fallback.title,
             action: fallback.action,
-            mode: !rows.isEmpty ? .rows
-                : (view.holdingsLoading || view.balanceUnknown || view.unreachable == true ? .loading : .empty),
-            empty: fallback.empty
+            mode: !rows.isEmpty ? .rows : (view.emptyKey != nil ? .empty : .loading),
+            empty: empty ?? fallback.empty
         )
     }
 
