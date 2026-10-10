@@ -654,7 +654,10 @@ enum SettingsLive {
         copy.accountsSheet.removeBody = loc.t(I18nKeys.SettingsUi.accountRemoveBody)
         copy.accountsSheet.removeCancel = loc.t("settings.signOut.cancel")
         copy.accountsSheet.summary =
-            loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
+            // A plural family (final note F15): the count chooses the form,
+            // in the core — "1 account · ", "2 accounts · ". Passed as a
+            // plain variable it read "1 accounts · Total".
+            loc.t(k.accountsCount, count: session.accounts.count)
             // No total while the currency is not known: the count alone
             // (Settings' total is one of the withheld surfaces).
             + ((hidden

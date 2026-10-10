@@ -534,7 +534,7 @@ enum SettingsFixtures {
         let k = I18nKeys.SettingsUi.self
         return AccountsSheetModel(
             title: loc.t(k.accountsTitle),
-            summary: loc.t(k.accountsCount, vars: ["count": String(accounts.count)])
+            summary: loc.t(k.accountsCount, count: accounts.count)
                 + loc.t(k.accountsTotal, vars: ["amount": totalBalance]),
             rows: accounts.enumerated().map { index, account in
                 AccountsSheetRowModel(name: account.name,
