@@ -56,20 +56,29 @@ struct BalanceDisplay: View {
     /// control, Receive / Send and every row under them down by the line's
     /// height and the gap above it — 24.7 pt on an iPhone 17 — and each
     /// departure pulled them back. The line's room is always there now: the
-    /// status line stands in it, or a zero wallet's "live" line, or nothing,
-    /// and the page under the hero is where it was in all three.
+    /// first read's "Checking…" stands in it, or the status line, or a zero
+    /// wallet's "live" line, or nothing, and the page under the hero is
+    /// where it was in all four.
     ///
-    /// One line is what is held. The two long reasons a hero can carry
-    /// ("Something went wrong inside Vela. If it keeps happening, reopen the
-    /// app.", "The request never arrived — …") still take their second line:
-    /// cutting a sentence that says what went wrong is the worse trade.
+    /// **One line is what is held, and one line is all it ever is** (final
+    /// note F16). A sentence longer than the line — "No podemos cargar la
+    /// lista de tokens de Tempo por ahora", "Something went wrong inside
+    /// Vela. If it keeps happening, reopen the app." — is set smaller, to
+    /// 85 % and no lower, then cut with an ellipsis. It used to take a
+    /// second line, which grew the room it was promised and pushed the page
+    /// down after all. Nothing is lost: the whole sentence is what VoiceOver
+    /// reads, and it stands in full at the top of the sheet the line opens.
     private var statusSlot: some View {
         ZStack(alignment: .leading) {
             // The room: a status row's own height, whatever stands in it.
             statusRow(BalanceStatusModel(kind: .warning, text: "0"))
                 .hidden()
                 .accessibilityHidden(true)
-            if let status = model.status {
+            // "Checking…" stands alone (final note F19): the first read is
+            // out, so there is no reason to give yet and no "live" to claim.
+            if let checking = model.checkingText {
+                checkingRow(checking)
+            } else if let status = model.status {
                 statusDoor(status)
             } else if let live = model.liveText {
                 liveRow(live)
@@ -137,10 +146,34 @@ struct BalanceDisplay: View {
     private func liveRow(_ text: String) -> some View {
         HStack(spacing: Tokens.Space.s8) {
             PulsingDot(color: theme.successBase)
-            Text(verbatim: text)
-                .typeRole(Typography.rowSub.scaled(textScale))
+            oneLine(text)
                 .foregroundStyle(theme.successBase)
         }
+    }
+
+    /// The line's words, on ONE line: smaller down to 85 %, then "…". The
+    /// whole sentence stays its accessibility label.
+    private func oneLine(_ text: String) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .lineLimit(1)
+            .minimumScaleFactor(WalletGeometry.statusMinScale)
+            .truncationMode(.tail)
+            .accessibilityLabel(Text(verbatim: text))
+    }
+
+    /// "Checking…" — the live line before anything has answered: the same
+    /// dot, not green yet, and quiet ink. No chevron and no tap: there is
+    /// nothing to open about a read that has not come back.
+    private func checkingRow(_ text: String) -> some View {
+        HStack(spacing: Tokens.Space.s8) {
+            PulsingDot(color: theme.fgSubtle)
+            oneLine(text)
+                .foregroundStyle(theme.fgMuted)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: text))
+        .accessibilityIdentifier("balance-checking")
     }
 
     /// The line, as a control where there is somewhere to go.
@@ -154,18 +187,26 @@ struct BalanceDisplay: View {
                 statusRow(status).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // The sentence in full, however much of it the line shows.
+            .accessibilityLabel(Text(verbatim: status.text))
+            .accessibilityIdentifier(Self.statusId)
         } else {
             statusRow(status)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: status.text))
+                .accessibilityIdentifier(Self.statusId)
         }
     }
+
+    /// The status line's test hook.
+    static let statusId = "balance-status"
 
     private func statusRow(_ status: BalanceStatusModel) -> some View {
         let tint = status.kind == .warning ? theme.warningBase : theme.fgMuted
         return HStack(spacing: Tokens.Space.s8) {
             LucideIcon(status.kind == .warning ? .triangleAlert : .refreshCw, size: LucideIconSize.statusIcon)
                 .foregroundStyle(tint)
-            Text(verbatim: status.text)
-                .typeRole(Typography.rowSub.scaled(textScale))
+            oneLine(status.text)
                 .foregroundStyle(tint)
             LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
                 .foregroundStyle(theme.fgSubtle)

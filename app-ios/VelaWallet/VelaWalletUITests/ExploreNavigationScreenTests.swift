@@ -129,6 +129,51 @@ final class ExploreNavigationScreenTests: XCTestCase {
         app.terminate()
     }
 
+    /// A favourites tile answers a tap ANYWHERE on it (PR 3 final note F9),
+    /// as #488 made a site row answer. `contentShape` sat on the tile's
+    /// `Button`, outside the plain style: it widened the tile's
+    /// accessibility frame and nothing a finger could feel. Measured on an
+    /// iPhone 17 (iOS 26.2), where SwiftUI takes a tap up to ~16 pt off what
+    /// is drawn: the strips beside the 56 pt mark answered by that margin
+    /// alone, and the tile's two TOP CORNERS — 21 pt from the round mark —
+    /// took no tap. They are the first two spots here, and they failed
+    /// before the shape moved onto the label.
+    func testATileAnswersATapAnywhereOnIt() throws {
+        let app = gallery("e2", lang: "zh", theme: "light")
+        XCTAssertTrue(app.staticTexts["已打开 4 个标签页"].waitForExistence(timeout: 10),
+                      "the Explore home is missing")
+        let tile = app.buttons.matching(identifier: "explore.tile").element(boundBy: 0)
+        XCTAssertTrue(tile.waitForExistence(timeout: 5), "no favourites tile")
+        let frame = tile.frame
+        // The tile is its column: wider than its mark, with blank on each side.
+        XCTAssertGreaterThan(frame.width, 56 + 12, "the tile is no wider than its mark: \(frame)")
+        attach(app.screenshot(), named: "tile-01-home")
+
+        // Where a thumb can land that is neither the mark nor the words.
+        let spots: [(name: String, at: CGVector)] = [
+            ("the top-left corner", CGVector(dx: 0.01, dy: 0.01)),
+            ("the top-right corner", CGVector(dx: 0.99, dy: 0.01)),
+            ("the left edge", CGVector(dx: 0.01, dy: 0.35)),
+            ("the gap between the mark and the name", CGVector(dx: 0.5, dy: 0.74)),
+            // …and the mark itself, which always answered.
+            ("the mark", CGVector(dx: 0.5, dy: 0.35)),
+        ]
+        for spot in spots {
+            let target = app.buttons.matching(identifier: "explore.tile").element(boundBy: 0)
+            XCTAssertTrue(target.waitForExistence(timeout: 5), "no tile before tapping \(spot.name)")
+            let point = target.coordinate(withNormalizedOffset: spot.at)
+            print("MEASURE tile-tap \(spot.name) tile=\(target.frame) at=\(point.screenPoint)")
+            point.tap()
+            XCTAssertTrue(app.buttons["explore.bar.back"].waitForExistence(timeout: 5),
+                          "a tap on \(spot.name) of a tile opened nothing")
+            // 探索 while browsing is the home again.
+            app.buttons["探索"].firstMatch.tap()
+            XCTAssertTrue(app.staticTexts["已打开 4 个标签页"].waitForExistence(timeout: 5),
+                          "探索 did not return to the home after \(spot.name)")
+        }
+        app.terminate()
+    }
+
     // MARK: - A live dApp, left and come back to
 
     /// The owner's two complaints, on a real page: the wallet is one tap from

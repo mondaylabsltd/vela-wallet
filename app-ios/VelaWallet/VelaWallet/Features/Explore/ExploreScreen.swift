@@ -921,6 +921,7 @@ struct ExploreScreen: View {
                     ) {
                         ForEach(favorites.tiles) { tile in
                             SiteTileView(tile: tile) { id in open(siteId: id) }
+                                .accessibilityIdentifier("explore.tile")
                         }
                     }
                     .padding(.vertical, Tokens.Space.s12)

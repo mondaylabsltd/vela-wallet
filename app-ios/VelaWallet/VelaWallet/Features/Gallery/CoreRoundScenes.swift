@@ -196,9 +196,13 @@ enum BalanceCoreScene {
     /// PR 3 note 4), or its nodes did not answer. Gnosis and Base answered
     /// with holdings — unless `everyChain`: then every chain asked failed the
     /// same way, with nothing cached, and nothing at all is known.
+    ///
+    /// `alsoDown` are further chains whose nodes did not answer, beside
+    /// `failedChain`; `healthy` is the same round with every chain answering.
     @MainActor
     static func view(
-        failedChain: Int = 1, internalFault: Bool, everyChain: Bool = false, tokenListFault: Bool = false
+        failedChain: Int = 1, internalFault: Bool, everyChain: Bool = false, tokenListFault: Bool = false,
+        alsoDown: [Int] = [], healthy: Bool = false
     ) -> BalanceViewWire? {
         let core = BalanceDashboardCore()
         guard let opened = try? CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
@@ -216,20 +220,60 @@ enum BalanceCoreScene {
                 "spam": false,
             ],
         ]
-        let read = [failedChain, 100, 8453]
-        let failed = everyChain ? read : [failedChain]
+        let read = [failedChain, 100, 8453] + alsoDown
+        let named = everyChain ? [failedChain, 100, 8453] : [failedChain]
+        let failed = healthy ? [] : named + alsoDown
         guard let settled = try? CoreJSON.object(core.resolveEffect(effectId: fetchId, resultJson: CoreJSON.string([
             "type": "fetch_settled", "address": address, "pull": false,
             "tokens": everyChain ? [] : tokens,
             "failed_chain_ids": failed,
             "rate_limited_chain_ids": [Int](),
             "read_chain_ids": read,
-            "internal_chain_ids": internalFault ? failed : [Int](),
-            "registry_chain_ids": tokenListFault ? failed : [Int](),
+            "internal_chain_ids": internalFault && !healthy ? named : [Int](),
+            "registry_chain_ids": tokenListFault && !healthy ? named : [Int](),
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ]))), let view = settled["view"] as? [String: Any]
         else { return nil }
         return try? CoreJSON.decode(BalanceViewWire.self, from: view)
+    }
+
+    /// Final note F19 — a wallet that held nothing last session, through its
+    /// first round, as the real core writes it: `checking` is the view once
+    /// the cached total (0) has landed and the read is still out; `settled`
+    /// the view after that round ended — with every chain answering, with
+    /// `missing` out of reach, or (`threw`) with a read that threw.
+    @MainActor
+    static func zeroWallet(
+        missing: [Int] = [], threw: Bool = false
+    ) -> (checking: BalanceViewWire, settled: BalanceViewWire)? {
+        let core = BalanceDashboardCore()
+        guard let opened = try? CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
+            "type": "account_changed", "address": address,
+        ]))), let cacheId = FeeCoreScene.effect("read_balance_cache", in: opened),
+            let fetchId = FeeCoreScene.effect("fetch_tokens", in: opened),
+            let cached = try? CoreJSON.object(core.resolveEffect(effectId: cacheId, resultJson: CoreJSON.string([
+                "type": "cached_total_loaded", "address": address, "usd": 0.0,
+            ]))), let checking = cached["view"] as? [String: Any]
+        else { return nil }
+        let result: [String: Any] = threw
+            ? ["type": "fetch_errored", "address": address, "pull": false, "internal": false]
+            : [
+                "type": "fetch_settled", "address": address, "pull": false,
+                "tokens": [[String: Any]](),
+                "failed_chain_ids": missing,
+                "rate_limited_chain_ids": [Int](),
+                "read_chain_ids": [1, 56, 100, 8453] + missing,
+                "internal_chain_ids": [Int](),
+                "registry_chain_ids": [Int](),
+                "now_ms": Date().timeIntervalSince1970 * 1000,
+            ]
+        guard let ended = try? CoreJSON.object(core.resolveEffect(
+            effectId: fetchId, resultJson: CoreJSON.string(result)
+        )), let settled = ended["view"] as? [String: Any],
+            let first = try? CoreJSON.decode(BalanceViewWire.self, from: checking),
+            let last = try? CoreJSON.decode(BalanceViewWire.self, from: settled)
+        else { return nil }
+        return (first, last)
     }
 }
 

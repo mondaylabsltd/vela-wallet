@@ -82,6 +82,16 @@ final class BatchStore {
         ])
     }
 
+    /// The currency the sheet's amounts are read as became known, or changed
+    /// (final note F8) — the core's own event for it: the rate is fetched
+    /// again for THIS currency and the mirror returns to auto, never the old
+    /// currency's rate relabelled. Dropped while the sheet is not open, and
+    /// when the code is the one it already holds.
+    func setFiatCode(_ code: String) {
+        guard view.opened, view.fiatCode != code else { return }
+        dispatch(["type": "set_fiat_code", "code": code])
+    }
+
     func setUnit(_ unit: BatchUnit) { dispatch(["type": "set_unit", "unit": unit.rawValue]) }
     func setText(_ text: String) { dispatch(["type": "set_raw_text", "text": text]) }
     func pickFile() { dispatch(["type": "pick_file_requested"]) }

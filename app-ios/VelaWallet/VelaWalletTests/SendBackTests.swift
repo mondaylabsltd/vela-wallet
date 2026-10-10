@@ -319,4 +319,34 @@ struct SendBackTests {
         #expect(SendLive.back(try view("lock_resolving")) == .leave)
         #expect(SendLive.back(try view("lock_error")) == .leave)
     }
+
+    // MARK: - Send's "add this network" answers at once (final notes F6/F27)
+
+    /// A code for a chain this wallet does not have. Nothing on this shell
+    /// raises `add_network_tapped` (a known gap: the notice draws no "Add
+    /// this network"), but if the core is ever asked, the answer comes AT
+    /// ONCE — never a ten-second wait — and the form says the core's own
+    /// sentence for an add that did not happen, over the lock it could not
+    /// lift.
+    @Test func anAddNetworkAskIsAnsweredAtOnceInTheCoresSentence() async throws {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let send = try store()
+        await open(send)
+        await scan(send, "ethereum:\(payee)@480")
+        let locked = try #require(send.view)
+        #expect(locked.lockError == .network(chainId: 480), "\(String(describing: locked.lockError))")
+        #expect(SendLive.lockNotice(locked, loc: loc)?.text.hasPrefix("Network not supported") == true)
+
+        let asked = ContinuousClock.now
+        send.dispatch(["type": "add_network_tapped", "chain_id": 480])
+        await Wait.until({ send.view?.addNetworkMsg != nil }, orIdle: { send.isIdle })
+        let took = ContinuousClock.now - asked
+        let answered = try #require(send.view)
+        #expect(answered.addNetworkMsg == .netAddError)
+        #expect(!answered.addingNetwork, "the form is still \"adding\"")
+        #expect(took < .seconds(1), "the add-network ask took \(took)")
+        #expect(SendLive.lockNotice(answered, loc: loc)?.text == "Couldn't add the network. Please try again.")
+        // The lock stands — the person is not sent on to an empty form.
+        #expect(answered.lockError == .network(chainId: 480))
+    }
 }

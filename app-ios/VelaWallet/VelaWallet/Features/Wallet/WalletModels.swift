@@ -74,6 +74,12 @@ struct BalanceModel {
     /// Issue 462: the "↻ Updated 2m" control under the figure; `nil` draws
     /// none (the home before the core has ruled).
     var refresh: BalanceRefreshModel? = nil
+    /// "Checking…" (final note F19) — the core's line while the FIRST read
+    /// of the account is still out (`BalanceView.checkingKey`). It stands
+    /// alone on the status line, quietly, under the skeleton and under a
+    /// cached figure alike: until a round has ended no chain has said the
+    /// wallet is live and none has failed to answer.
+    var checkingText: String? = nil
 }
 
 /// The hero's refresh control (issue 462) — the same control on all four

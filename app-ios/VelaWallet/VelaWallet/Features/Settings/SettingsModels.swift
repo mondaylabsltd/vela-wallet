@@ -286,13 +286,21 @@ struct AddNetworkModel {
     var candidate: SettingsNetworkRowModel?
     var checksTitle: String?
     var checks: [CheckItemModel] = []
+    /// The field where a person names an RPC endpoint of their own — present
+    /// exactly when the core's `NetWizardView.rpcField` is not `none`, under
+    /// the core's label. **Never set without `recheck`, nor `recheck` without
+    /// it**: a button that reads a field is drawn where the field is.
     var customRpc: UrlFieldModel?
     var callout: CalloutModel?
+    /// The callout is the reason the wizard STOPPED (`phase: error`): it is
+    /// drawn above the RPC field, which is then the way on from it.
+    var calloutLeads = false
     var primary: String?
     /// "Open Chain Setup Tool" — and the address it opens: the core's
     /// `setup_url` for THIS chain. Offered only for a gap somebody can fill.
     var secondary: String?
     var secondaryUrl: String?
+    /// "Re-check with this RPC" — with `customRpc`, always and only.
     var recheck: String?
     /// "Retry" — a primary that checks again rather than adds, for a chain
     /// the probes could not reach (never worded "incompatible").
@@ -488,6 +496,10 @@ struct BalanceDetailRowModel: Identifiable {
 
 struct BalanceDetailModel {
     let title: String
+    /// The sentence on the hero's status line that opened this sheet, WHOLE
+    /// (final note F16): the line is one line and may have cut it. `nil`
+    /// when the hero says nothing (a drawn board, a healthy wallet).
+    var reason: CalloutModel? = nil
     let summary: String
     let sectionPending: String
     let pendingNote: String

@@ -341,9 +341,12 @@ enum SettingsFixtures {
                 ),
                 checksTitle: loc.t(k.addCompatibilityCheck),
                 checks: checks,
+                // Compatible: the core's `rpc_field` is `optional` — the
+                // field, and the re-check that reads it.
                 customRpc: UrlFieldModel(id: "custom-rpc", label: loc.t(k.addCustomRpcTitle),
                                          value: "", placeholder: loc.t(k.addCustomRpcPlaceholder)),
-                primary: loc.t(k.addButton)
+                primary: loc.t(k.addButton),
+                recheck: loc.t(k.addRecheckWithRpc)
             )
         }
 
@@ -359,12 +362,14 @@ enum SettingsFixtures {
             checksTitle: loc.t(k.addCompatibilityCheck),
             checks: checks,
             callout: CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint)),
-            // An outline CTA plus a re-check link, not a greyed-out accent one:
-            // an action you cannot take should not be dressed as the action you
-            // came for. The tool opens on THIS chain (the core's `setup_url`).
+            // An outline CTA, not a greyed-out accent one: an action you
+            // cannot take should not be dressed as the action you came for.
+            // The tool opens on THIS chain (the core's `setup_url`). No RPC
+            // field and no re-check: a refusal is `rpc_field: none` — another
+            // endpoint would not change it, and the board drew "Re-check
+            // with this RPC" with no field for it to read.
             secondary: loc.t(k.addChainTool),
-            secondaryUrl: "https://getvela.app/chain-setup?chain=48900",
-            recheck: loc.t(k.addRecheckWithRpc)
+            secondaryUrl: "https://getvela.app/chain-setup?chain=48900"
         )
     }
 
@@ -534,7 +539,7 @@ enum SettingsFixtures {
         let k = I18nKeys.SettingsUi.self
         return AccountsSheetModel(
             title: loc.t(k.accountsTitle),
-            summary: loc.t(k.accountsCount, vars: ["count": String(accounts.count)])
+            summary: loc.t(k.accountsCount, count: accounts.count)
                 + loc.t(k.accountsTotal, vars: ["amount": totalBalance]),
             rows: accounts.enumerated().map { index, account in
                 AccountsSheetRowModel(name: account.name,

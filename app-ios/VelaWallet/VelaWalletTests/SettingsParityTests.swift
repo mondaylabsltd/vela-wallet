@@ -132,6 +132,8 @@ struct SettingsParityTests {
                 "rpc_failure": "all_probes_failed",
             ],
             "error": NSNull(), "can_add": false,
+            // As the core writes an inconclusive check: another endpoint may answer.
+            "rpc_field": "optional", "rpc_field_label_key": "settingsModals.addNetwork.customRpcTitle",
         ])
         let panel = SettingsLive.wizard(wizard, loc: loc, fallback: SettingsFixtures.build(.st10, loc: loc).addNetwork)
 

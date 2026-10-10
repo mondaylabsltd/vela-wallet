@@ -265,15 +265,18 @@ enum SigningLive {
             else { return nil }
             return SigningRow(label: s(loc, "simResultLabel"), value: note ?? s(loc, "simResultNoChange"))
         }()
-        let blocks = refused
+        // What stands above the simulation's verdict, and the verdict: kept
+        // apart so the sheet can hold the verdict's PLACE from the first
+        // frame (final note F2, `verdictPlace` below).
+        let lead = refused
             ? statusBlocks(sign: sign, loc: loc)
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
             : statusBlocks(sign: sign, loc: loc, signerPageOpen: context.signerPageOpen(sign))
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
                 + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
                               dataBytes: dataBytes, context: context)
-                + (quietSim == nil ? balances : [])
-                + guardBlocks(guardView, loc: loc)
+        let verdict = refused || quietSim != nil ? [] : balances
+        let blocks = refused ? lead : lead + verdict + guardBlocks(guardView, loc: loc)
 
         // Spec 102 D4: an account whose venue is a page gets the hand-off card,
         // and its Open is shut until this phone's check admitted the page —
@@ -346,6 +349,15 @@ enum SigningLive {
                 if case .warning = $0 { return true }
                 return false
             }
+        } else if !refused, !own, facts != nil {
+            // Final note F2: a site's transaction keeps the verdict's place
+            // from its first frame. Not a message (nothing is simulated),
+            // not a refusal (nothing will be signed), not the hand-off card
+            // (the page is the preview) — and not the wallet's own request,
+            // whose usual verdict is a folded technical row (issue #314).
+            model.verdictPlace = SigningVerdictPlace(
+                at: lead.count, count: verdict.count, pending: pendingVerdict(loc)
+            )
         }
         model.receipt = refused ? nil : receipt(sign: sign, blocks: blocks, context: context)
         // Spec 099 R7: a shut confirm says which part of the gate is shut —
@@ -868,7 +880,12 @@ enum SigningLive {
         // a block that appears and then changes its mind is worse than one that
         // arrives late.
         guard let sim = context.sim, sim.ready, context.simulation == .answered else { return [] }
-        guard !sim.judgments.isEmpty else {
+        // A zero change is not a change: the core writes none (RJ15), and
+        // the row is not drawn.
+        let rows = sim.judgments.compactMap { balanceRow($0, context: context) }
+        // Nothing moved — no judgment, or every one of them a zero: said out
+        // loud, never a card with a title and nothing under it.
+        guard !rows.isEmpty else {
             return [.balances(
                 title: s(loc, "balanceChangesTitle"),
                 rows: [],
@@ -876,9 +893,6 @@ enum SigningLive {
                 noteTone: .neutral
             )]
         }
-        // A zero change is not a change: the core writes none (RJ15), and
-        // the row is not drawn.
-        let rows = sim.judgments.compactMap { balanceRow($0, context: context) }
         // One warning for the whole block, not one per row: the caution is
         // about the same thing each time, and repeating it is how people stop
         // reading it.
@@ -892,6 +906,19 @@ enum SigningLive {
             note: unverified ? s(loc, "unverifiedWarning") : nil,
             noteTone: unverified ? .caution : .neutral
         )]
+    }
+
+    /// What the verdict's place holds while the simulation is out (final
+    /// note F2): the balance card's own outline and title, with "Checking…"
+    /// where its rows will be — so the card that lands fills in the card
+    /// that was there. Two existing keys, no new string.
+    static func pendingVerdict(_ loc: Loc) -> SigningBlock {
+        .balances(
+            title: s(loc, "balanceChangesTitle"),
+            rows: [],
+            note: loc.t("componentsUi.funding.checking"),
+            noteTone: .neutral
+        )
     }
 
     /// One judgment, as a row — `nil` for a change of zero.

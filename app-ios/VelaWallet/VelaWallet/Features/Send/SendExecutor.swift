@@ -172,7 +172,11 @@ final class SendExecutor {
                     .map { $0 as Any } ?? NSNull(),
             ])
 
-        // The scanner is this operation's ONLY entry, and the scanner is 055.
+        // Send's "Add this network" has no entry on this shell (a known gap,
+        // final notes F6/F27: nothing here raises `add_network_tapped`). If
+        // the core ever asks, it is answered AT ONCE — never a wait — and
+        // the form says the core's own sentence for an add that did not
+        // happen (`send.lock.netAddError`, `SendLive.lockNotice`).
         case "add_network":
             return CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
 

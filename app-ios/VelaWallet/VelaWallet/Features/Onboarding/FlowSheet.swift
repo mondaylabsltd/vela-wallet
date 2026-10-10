@@ -265,8 +265,20 @@ struct SignOutSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.vertical, Tokens.Space.s32)
-        .presentationDetents([.height(pendingUploadWarning ? 460 : 360)])
+        // As tall as what it holds, like `FlowSheet` (PR 3 final note F26).
+        // The height was fixed — 360, or 460 with the warning — whatever the
+        // sheet had to say: a device holding several wallets adds a sentence,
+        // German and Russian run a line or two longer, and bigger text more
+        // again, so the content was centred in a sheet too short for it and
+        // its title went under the grabber; in Chinese the same sheet stood
+        // with empty room under Cancel.
+        .contentSizedSheet(expected: Self.expectedHeight(warning: pendingUploadWarning))
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
     }
+
+    /// What the sheet opens at before its content is measured: about what
+    /// one wallet's sheet comes to in English, so the first frame is near
+    /// the height it settles at.
+    static func expectedHeight(warning: Bool) -> CGFloat { warning ? 460 : 360 }
 }

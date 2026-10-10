@@ -665,6 +665,12 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .finalRound:
+            #if DEBUG
+            FinalRoundGalleryScreen(loc: loc, state: PageOverride.state ?? "hero-checking")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -794,6 +800,9 @@ struct RootView: View {
             // The send machine closed its journey — its back from the picker,
             // or done — and the screens go with it (087 F27).
             .onChange(of: send.closes) { _, _ in sendClosed() }
+            // …and it hears the display currency commit or change while its
+            // journey is open (final note F25).
+            .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
         }
     }
 
@@ -2383,7 +2392,9 @@ struct RootView: View {
             if case .batchImport(let sheet)? = model.sheet {
                 model.sheet = .batchImport(
                     SendLive.batchImport(
-                        batch.view, view: view, on: sheet, loc: loc, replaces: importReplaces
+                        batch.view, view: view, on: sheet, loc: loc, replaces: importReplaces,
+                        // No currency is named before the person's is known.
+                        currencyUnknown: SendLive.batchCurrency(settings.currency) == nil
                     )
                 )
             }
@@ -2633,7 +2644,9 @@ struct RootView: View {
         let record = await accounts.loadAccounts().first {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }
-        let display = WalletLive.Display.live(settings.currency)
+        // The display currency as the machine is told it — the same rule
+        // again at every change while the journey is open (`sendDisplayStands`).
+        let told = SendStore.displayContext(settings.currency)
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
@@ -2642,10 +2655,20 @@ struct RootView: View {
             accountId: record?["id"] as? String ?? "",
             address: session.view.address,
             name: session.view.activeName.isEmpty ? nil : session.view.activeName,
-            displayCode: display.code,
-            displayRate: display.rate,
-            fiatDecimals: 2
+            displayCode: told.code,
+            displayRate: told.rate,
+            fiatDecimals: Self.sendFiatDecimals
         )
+    }
+
+    /// Every currency the wallet lists is entered to two places.
+    private static let sendFiatDecimals = 2
+
+    /// The display currency committed, or changed (final note F25): an open
+    /// Send journey hears it, and re-denominates by its own rule.
+    private func sendDisplayStands() {
+        let told = SendStore.displayContext(settings.currency)
+        send.displayStands(code: told.code, rate: told.rate, fiatDecimals: Self.sendFiatDecimals)
     }
 
     // MARK: - Into and out of Send (087 F27)
@@ -4054,6 +4077,8 @@ enum PageOverride {
         case uiBatch
         /// PR 3's integration round (`IntegrationGalleryScreen`).
         case integration
+        /// PR 3's final round (`FinalRoundGalleryScreen`).
+        case finalRound
     }
 
     static let page: Page? = {
@@ -4080,6 +4105,7 @@ enum PageOverride {
         case "pr2": .correctness
         case "pr3": .uiBatch
         case "pr3b": .integration
+        case "pr3c": .finalRound
         default: nil
         }
     }()

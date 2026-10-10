@@ -537,9 +537,9 @@ private struct KeyRow: View {
 /// Issue #475: Settings metrics. A hairline between rows, 52pt at least, 4pt
 /// between a title and the line under it, and that line ONE line — the rows
 /// were 44pt with nothing between them, and a wrapped line nearly touched the
-/// next row's title, so it was hard to tell whose it was. The line shrinks a
-/// little before it is ever cut (fr / de / it / es run to 52–55 characters on
-/// a 375pt phone); at the accessibility text sizes it wraps instead.
+/// next row's title, so it was hard to tell whose it was. The line is drawn
+/// at its own size (every language's fits a 375pt phone, `OneLineSubtitle`);
+/// at a text size larger than the default it wraps instead.
 struct KeyMethodRows: View {
     /// A Settings row's height (`SettingsRow`).
     static let rowHeight: CGFloat = 52
@@ -593,38 +593,49 @@ struct KeyMethodRows: View {
 }
 
 /// How a row's second line is held to one line (`oneLineSubtitle`).
+///
+/// **No floor.** Issue #475 let the line tighten, to 80 % at most, before it
+/// was ever cut — and for a while a line somewhere needed it on a 375 pt
+/// phone: first de / fr / it / es-MX's "Phone or tablet" (52–55 characters),
+/// then, once the core shortened those, ru and pt-BR (309 and 307 pt of the
+/// 280 the row's column has there). The core shortened those two as well
+/// (PR 3 final note F24), and every line of every language now fits at FULL
+/// size — the three places' lines (the widest: de 279, en 272, ru 271 of
+/// 280 pt), the signing page's (vi 236 of 253) and the security-key hint
+/// (id 294 of 327). `MethodRowFitTests` measures all of them, so a line
+/// that stops fitting is a failed test, not a line quietly drawn smaller
+/// than the ones above and below it.
 enum OneLineSubtitle {
-    /// The most a line may tighten before it is cut (issue #475).
-    ///
-    /// Four languages' "Phone or tablet" line (de, fr, it, es-MX: 52–55
-    /// characters) only fitted a 375 pt phone by shrinking to this, drawn
-    /// visibly smaller than the lines above and below it. The core shortened
-    /// those four and they fit at FULL size now (PR 3 note 23;
-    /// `MethodRowFitTests`: de 279, es-MX 261, fr 259, it 257 pt of the 280
-    /// the row's column has there).
-    ///
-    /// The floor itself stays, because two other lines still need it on that
-    /// phone and would be CUT without it — ru 309 pt, pt-BR 307 pt, drawn 9 %
-    /// tighter. A 5 % floor was tried in this round and cut both ("…на
-    /// устройстве р…"). Shortening those two is the corpus's; until then a
-    /// line that fits is at full size and one that does not is whole.
-    static let minScale: CGFloat = 0.8
+    /// May the line take a second line? Only when the text is LARGER than
+    /// the default — the system's text size, or the person's own in 设置 →
+    /// 字号: somebody who asked for bigger text gets bigger text on two
+    /// lines, not a line cut where it stops fitting (PR 3 note 23). At the
+    /// default size and below it is one line, and it fits.
+    static func wraps(typeSize: DynamicTypeSize, scale: CGFloat) -> Bool {
+        typeSize > .large || scale > 1
+    }
+}
+
+private struct OneLineSubtitleModifier: ViewModifier {
+    @Environment(\.walletTextScale) private var scale
+    let typeSize: DynamicTypeSize
+
+    func body(content: Content) -> some View {
+        if OneLineSubtitle.wraps(typeSize: typeSize, scale: scale) {
+            content.fixedSize(horizontal: false, vertical: true)
+        } else {
+            content.lineLimit(1)
+        }
+    }
 }
 
 extension View {
-    /// A row's second line, held to ONE line (issue #475): at its own size
-    /// where it fits — which is every language but two on the narrowest
-    /// phone (`OneLineSubtitle`) — tightened before it is ever cut. At a text
-    /// size LARGER than the default it wraps instead (PR 3 note 23):
-    /// somebody who asked for bigger text gets bigger text on two lines, not
-    /// a line shrunk back to where it started and then cut. (It wrapped only
-    /// at the accessibility sizes before.)
-    @ViewBuilder func oneLineSubtitle(_ typeSize: DynamicTypeSize) -> some View {
-        if typeSize > .large {
-            fixedSize(horizontal: false, vertical: true)
-        } else {
-            lineLimit(1).minimumScaleFactor(OneLineSubtitle.minScale)
-        }
+    /// A row's second line, held to ONE line (issue #475), at its own size —
+    /// never tightened: every language's line fits a 375 pt phone at full
+    /// size (`OneLineSubtitle`). At a text size LARGER than the default it
+    /// wraps instead.
+    func oneLineSubtitle(_ typeSize: DynamicTypeSize) -> some View {
+        modifier(OneLineSubtitleModifier(typeSize: typeSize))
     }
 }
 

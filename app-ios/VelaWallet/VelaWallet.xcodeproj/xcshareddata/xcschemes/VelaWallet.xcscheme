@@ -182,6 +182,9 @@
                <Test
                   Identifier = "IntegrationRound2ScreenshotTests">
                </Test>
+               <Test
+                  Identifier = "FinalRoundScreenshotTests">
+               </Test>
             </SkippedTests>
          </TestableReference>
       </Testables>

@@ -544,11 +544,107 @@ struct SigningBalances: View {
                     .padding(.top, Tokens.Space.s8)
             }
         }
+        // The card is the column's width whatever it holds. With rows it
+        // always was (a row spans it); with none — "Checking…", "No assets
+        // leave your wallet" — it hugged its words, so the card that landed
+        // over "Checking…" also grew sideways (final note F2).
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Space.s16)
         .padding(.vertical, Tokens.Space.s4)
         .overlay(
             RoundedRectangle(cornerRadius: Tokens.Radius.r16)
                 .stroke(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
         )
+    }
+}
+
+// MARK: - The simulation verdict's place (PR 3 final note F2)
+
+/// The room the signing sheet keeps for the simulation's verdict: ONE height
+/// from the request's first frame, whatever stands in it — "Checking…", a
+/// balance card, the core's notice — so nothing under it moves when the
+/// verdict lands.
+///
+/// **How tall.** A balance card of two rows and half of a third, in the
+/// text's own sizes (so it holds at every text scale). Two rows is what a
+/// send (one) and a swap (two) show, and every notice the core words is
+/// shorter, so the usual verdict lands whole. The half row is deliberate: a
+/// third coin moving is the unusual case that must not be missed on the one
+/// part of the sheet a site cannot author, and a room cut exactly at a row's
+/// edge would show nothing of it.
+///
+/// **Taller than the room** — a third balance row, the note under an
+/// unverified token — the verdict scrolls INSIDE the room rather than growing
+/// the sheet. One that fits is drawn as it is, with no scroll view around it.
+struct SigningVerdictRoom<Content: View>: View {
+    @Environment(\.theme) private var theme
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VerdictRoomLayout {
+            reference(rows: 2)
+            reference(rows: 3)
+            ViewThatFits(in: .vertical) {
+                column
+                ScrollView {
+                    // Room under the last line, so the end of the verdict
+                    // clears the fade once it is scrolled to.
+                    column.padding(.bottom, Tokens.Space.s16)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                // More than fits: say so as it lands — the indicator, and
+                // the fold fading out rather than cutting a line in two.
+                .scrollIndicatorsFlash(onAppear: true)
+                .overlay(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [theme.bgRaised.opacity(0), theme.bgRaised],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: Tokens.Space.s16)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
+        }
+        .clipped()
+    }
+
+    private var column: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A balance card of `rows` rows, measured and never seen or said: the
+    /// room's height is taken from the real card, not from arithmetic that
+    /// would drift from it.
+    private func reference(rows: Int) -> some View {
+        SigningBalances(
+            title: "0",
+            rows: (0..<rows).map { BalanceDeltaRow(symbol: "0\($0)", delta: "0", tone: .neutral) },
+            note: nil
+        )
+        .hidden()
+        .accessibilityHidden(true)
+    }
+}
+
+/// Sizes the room from its two references (the first two subviews: a card of
+/// two rows and one of three) and gives every subview the room.
+private struct VerdictRoomLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count >= 2 else { return .zero }
+        let across = ProposedViewSize(width: proposal.width, height: nil)
+        let two = subviews[0].sizeThatFits(across)
+        let three = subviews[1].sizeThatFits(across)
+        return CGSize(width: proposal.width ?? two.width, height: ((two.height + three.height) / 2).rounded())
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let room = ProposedViewSize(width: bounds.width, height: bounds.height)
+        for subview in subviews {
+            subview.place(at: bounds.origin, anchor: .topLeading, proposal: room)
+        }
     }
 }

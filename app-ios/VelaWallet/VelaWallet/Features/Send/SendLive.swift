@@ -350,6 +350,20 @@ enum SendLive {
     static func lockNotice(
         _ view: SendViewWire, loc: Loc, networks: WalletNetworks = .builtin
     ) -> SendNoticeModel? {
+        // An add-network attempt that FAILED owes its own sentence — the
+        // person asked for something and it did not happen — and it is said
+        // OVER the lock it could not lift (final notes F6/F27). The core
+        // keeps `lock_error` beside `add_network_msg` after a failed add, so
+        // read lock-first the attempt's answer was never drawn: the notice
+        // went on saying "Network not supported", as if nothing had been
+        // tried.
+        if let said = addNetworkSentence(view.addNetworkMsg, loc: loc) {
+            var mark: TokenMarkModel?
+            if case .network(let chainId) = view.lockError {
+                mark = networkMark(chainId, networks: networks)
+            }
+            return SendNoticeModel(mark: mark, text: said)
+        }
         switch view.lockError {
         case .network(let chainId):
             return SendNoticeModel(
@@ -363,18 +377,17 @@ enum SendLive {
                 text: "\(loc.t("send.lock.tokenTitle")) · \(loc.t("send.lock.tokenBody"))"
             )
         case nil:
-            // An add-network attempt that FAILED still owes a sentence — the
-            // person asked for something and it did not happen.
-            switch view.addNetworkMsg {
-            case .netNotFound:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotFound"))
-            case .netNotCompatible:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotCompatible"))
-            case .netAddError:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netAddError"))
-            case nil:
-                return nil
-            }
+            return nil
+        }
+    }
+
+    /// What the last add-network attempt had to say, in the core's sentence.
+    static func addNetworkSentence(_ message: SendAddNetworkMsgWire?, loc: Loc) -> String? {
+        switch message {
+        case .netNotFound: loc.t("send.lock.netNotFound")
+        case .netNotCompatible: loc.t("send.lock.netNotCompatible")
+        case .netAddError: loc.t("send.lock.netAddError")
+        case nil: nil
         }
     }
 
@@ -483,7 +496,14 @@ enum SendLive {
                 // nobody can act on.
                 denomShown: view.denomToggleShown,
                 denomEnabled: view.denomToggleEnabled,
-                denomReason: view.denomToggleReason.map { issue in
+                // Not while the display currency is still on its way (final
+                // note F25): the machine is told "no rate" then, because
+                // there is none to type money against yet — but "can't
+                // convert" is a refusal, and this is a wait of a second or
+                // two: the line would come, go, and move the form under it
+                // both times. Once the pair commits the reason is the core's
+                // again.
+                denomReason: !display.settled ? nil : view.denomToggleReason.map { issue in
                     loc.t("send.warnCannotConvert", vars: [
                         "code": issue.code, "symbol": issue.symbol,
                     ])
@@ -1802,6 +1822,20 @@ enum SendLive {
 
     // MARK: - SD2C, the payroll importer
 
+    /// What stands where the importer's currency code will be while the
+    /// person's currency is not known (`batchImport(currencyUnknown:)`).
+    static let batchCurrencyPending = "…"
+
+    /// The currency the importer's figures are read as, as it is TOLD the
+    /// importer (final note F8): the committed code, else the stored choice
+    /// on its way — and `nil` while neither is known, when the importer keeps
+    /// the placeholder it needs to exist at all and the sheet says no code.
+    static func batchCurrency(_ currency: CurrencyViewWire?) -> String? {
+        guard let currency else { return nil }
+        if currency.committed { return WalletLive.Display.from(currency).code }
+        return currency.pending
+    }
+
     /// The web's `liveBatchImport`, word for word: the core parsed, priced and
     /// gated; this only says so.
     ///
@@ -1812,12 +1846,22 @@ enum SendLive {
     ///
     /// `replaces` is the person's choice, made on this sheet: an import ADDS to
     /// the rows already on the form unless they asked for it to replace them.
+    ///
+    /// `currencyUnknown` is the withhold rule on this surface (final note
+    /// F8): nothing has been read of the person's display currency yet, so
+    /// the code the importer was opened with is the placeholder's "USD" —
+    /// nobody's choice — and it is not SAID anywhere: the unit, the rate, the
+    /// rate's hint and the sheet's sum carry the pending mark where the code
+    /// will be, on the same lines, until `BatchStore.setFiatCode` tells the
+    /// importer the real one.
     static func batchImport(
         _ batch: BatchViewWire, view: SendViewWire, on model: BatchImportModel, loc: Loc,
-        replaces: Bool = false
+        replaces: Bool = false, currencyUnknown: Bool = false
     ) -> BatchImportModel {
         let symbol = view.selectedToken?.symbol ?? ""
         let count = batch.recipientCount
+        // The currency the sheet's figures are in, as it may be said.
+        let code = currencyUnknown ? batchCurrencyPending : batch.fiatCode
         // Whether there is anyone on the form for an import to meet — the
         // core's own count, read back from the room it reports.
         let formHasRows = view.splitImportRoom < BatchStore.maxRecipients
@@ -1828,7 +1872,7 @@ enum SendLive {
                     vars: ["count": String(count)]
                 ),
                 value: "\(trim(batch.totalToken)) \(symbol)",
-                detail: batch.totalFiat.map { "\($0) \(batch.fiatCode)" },
+                detail: batch.totalFiat.map { "\($0) \(code)" },
                 // Adding to people already typed, what is left to give out is
                 // the figure that matters; otherwise the balance itself.
                 balance: formHasRows && !replaces && view.splitRemaining != nil
@@ -1853,7 +1897,7 @@ enum SendLive {
                 ))
             : nil
         let rateValue = switch batch.rateStatus {
-        case .ok: "\(batch.rateInput) \(batch.fiatCode)"
+        case .ok: "\(batch.rateInput) \(code)"
         case .loading: loc.t("send.batchRateLoading")
         // Unknown, and said so — the core has already refused to apply.
         case .failed: loc.t("send.batchRateFailed")
@@ -1891,7 +1935,7 @@ enum SendLive {
         return BatchImportModel(
             title: model.title,
             closeLabel: model.closeLabel,
-            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": batch.fiatCode]),
+            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": code]),
             unitToken: loc.t("send.batchUnitToken", vars: ["sym": symbol]),
             unit: batch.unit,
             pasteValue: batch.rawText,
@@ -1901,7 +1945,7 @@ enum SendLive {
             rateSection: model.rateSection,
             rateLabel: loc.t("send.batchRateLabel", vars: ["sym": symbol]),
             rateValue: rateValue,
-            rateHint: loc.t("send.batchRateHint", vars: ["code": batch.fiatCode, "sym": symbol]),
+            rateHint: loc.t("send.batchRateHint", vars: ["code": code, "sym": symbol]),
             rateReset: loc.t("send.batchRateReset"),
             rateEdited: batch.rateEdited,
             // The core's own flag. In 按 xDAI 数量 the figures in the file ARE

@@ -1315,7 +1315,7 @@ private struct RpcFixSheetBody: View {
     }
 }
 
-private struct BalanceDetailSheetBody: View {
+struct BalanceDetailSheetBody: View {
     @Environment(\.theme) private var theme
     let model: BalanceDetailModel
     /// 立即重试 on an unreachable chain. Absent in the gallery.
@@ -1323,26 +1323,51 @@ private struct BalanceDetailSheetBody: View {
 
     var body: some View {
         SheetTitle(title: model.title)
+        // What the hero's line said, whole — the line is one line and may
+        // have cut it (final note F16).
+        if let reason = model.reason {
+            SettingsCallout(callout: reason)
+                .padding(.bottom, Tokens.Space.s12)
+                .accessibilityIdentifier("balanceDetail.reason")
+        }
         Text(model.summary)
             .typeRole(Typography.flowCaption)
             .foregroundStyle(theme.fgSubtle)
             .padding(.bottom, Tokens.Space.s16)
-        Text(model.sectionPending)
-            .typeRole(Typography.flowCaption)
-            .fontWeight(.semibold)
-            .foregroundStyle(theme.fgBase)
-        Text(model.pendingNote)
-            .typeRole(Typography.label)
-            .foregroundStyle(theme.fgSubtle)
-            .padding(.vertical, Tokens.Space.s8)
-        ForEach(model.pending) { row(model: $0) }
-        Text(model.sectionDone)
-            .typeRole(Typography.flowCaption)
-            .fontWeight(.semibold)
-            .foregroundStyle(theme.fgBase)
-            .padding(.top, Tokens.Space.s16)
-        ForEach(model.done) { row(model: $0) }
+        // A heading is drawn with its rows, and not without them (final
+        // note F20). "Networks still updating — These networks couldn't be
+        // reached, so your cached balance is shown until they recover."
+        // headed an EMPTY list: the sheet opened from "Some tokens couldn't
+        // be priced." told a healthy wallet its balance was cached.
+        if Self.headsPending(model) {
+            Text(model.sectionPending)
+                .typeRole(Typography.flowCaption)
+                .fontWeight(.semibold)
+                .foregroundStyle(theme.fgBase)
+                .accessibilityIdentifier("balanceDetail.pending")
+            Text(model.pendingNote)
+                .typeRole(Typography.label)
+                .foregroundStyle(theme.fgSubtle)
+                .padding(.vertical, Tokens.Space.s8)
+            ForEach(model.pending) { row(model: $0) }
+        }
+        if Self.headsDone(model) {
+            Text(model.sectionDone)
+                .typeRole(Typography.flowCaption)
+                .fontWeight(.semibold)
+                .foregroundStyle(theme.fgBase)
+                // The gap is between two sections; a lone one sits under
+                // the summary's own.
+                .padding(.top, Self.headsPending(model) ? Tokens.Space.s16 : Tokens.Space.s0)
+                .accessibilityIdentifier("balanceDetail.done")
+            ForEach(model.done) { row(model: $0) }
+        }
     }
+
+    /// "Networks still updating" and its note: only over networks still out.
+    static func headsPending(_ model: BalanceDetailModel) -> Bool { !model.pending.isEmpty }
+    /// "Updated": only over networks that answered.
+    static func headsDone(_ model: BalanceDetailModel) -> Bool { !model.done.isEmpty }
 
     @ViewBuilder private func row(model row: BalanceDetailRowModel) -> some View {
         HStack(spacing: Tokens.Space.s12) {
