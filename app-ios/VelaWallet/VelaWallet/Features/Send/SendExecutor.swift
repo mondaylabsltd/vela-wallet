@@ -28,6 +28,18 @@ import VelaCore
 @MainActor
 final class SendExecutor {
 
+    /// This shell's answer to the core's `add_network`: the add did not
+    /// happen (nothing here can add a network from Send yet — final notes
+    /// F6/F27), said at once so the form shows the core's own sentence.
+    ///
+    /// Synchronous on purpose. "At once" is not a time to be measured — a
+    /// wall-clock bound fails on a loaded runner over behaviour that is right
+    /// — it is that nothing on this path CAN wait, and a function that cannot
+    /// suspend cannot wait.
+    static func addNetworkAnswer() -> String {
+        CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
+    }
+
     /// Every operation this executor is required to handle.
     static let operations = [
         "fetch_tokens", "clear_token_cache", "resolve_token_metadata", "add_network",
@@ -178,7 +190,7 @@ final class SendExecutor {
         // the form says the core's own sentence for an add that did not
         // happen (`send.lock.netAddError`, `SendLive.lockNotice`).
         case "add_network":
-            return CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
+            return Self.addNetworkAnswer()
 
         case "estimate_fee":
             return await estimateFee(operation)
@@ -753,7 +765,7 @@ final class SendExecutor {
         case "resolve_token_metadata":
             return CoreJSON.string(["type": "token_metadata", "meta": NSNull()])
         case "add_network":
-            return CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
+            return Self.addNetworkAnswer()
         case "estimate_fee":
             return CoreJSON.string([
                 "type": "fee_estimated", "outcome": ["type": "failed", "kind": "other"],

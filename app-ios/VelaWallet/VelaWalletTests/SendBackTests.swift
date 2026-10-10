@@ -337,20 +337,24 @@ struct SendBackTests {
         #expect(locked.lockError == .network(chainId: 480), "\(String(describing: locked.lockError))")
         #expect(SendLive.lockNotice(locked, loc: loc)?.text.hasPrefix("Network not supported") == true)
 
-        let asked = ContinuousClock.now
         send.dispatch(["type": "add_network_tapped", "chain_id": 480])
         await Wait.until({ send.view?.addNetworkMsg != nil }, orIdle: { send.isIdle })
-        let took = ContinuousClock.now - asked
         let answered = try #require(send.view)
         #expect(answered.addNetworkMsg == .netAddError)
         #expect(!answered.addingNetwork, "the form is still \"adding\"")
-        // "At once" against the ten-second wait this replaces — not a race
-        // with the scheduler: on a loaded machine the same answer took 1.9 s
-        // of wall clock, and a one-second bound failed a test of behaviour
-        // that was right. Half the old wait is still unmistakably not it.
-        #expect(took < .seconds(5), "the add-network ask took \(took)")
+        // "At once" is held by the type, not by a clock (a wall-clock bound
+        // took 12.6 s on CI's runner over an answer that was right):
+        // `theAddNetworkAnswerCannotWait` below.
         #expect(SendLive.lockNotice(answered, loc: loc)?.text == "Couldn't add the network. Please try again.")
         // The lock stands — the person is not sent on to an empty form.
         #expect(answered.lockError == .network(chainId: 480))
+    }
+
+    /// The answer is made by a synchronous function, called here with no
+    /// `await`: there is nowhere on that path for a wait to be.
+    @Test func theAddNetworkAnswerCannotWait() throws {
+        let answer = try CoreJSON.object(SendExecutor.addNetworkAnswer())
+        #expect(answer["type"] as? String == "network_added")
+        #expect((answer["outcome"] as? [String: Any])?["type"] as? String == "error")
     }
 }
