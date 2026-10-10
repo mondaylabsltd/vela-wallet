@@ -317,16 +317,18 @@ class SignerPageChecksTest {
             "componentsUi.signing.integrity.matches", true,
         )
         assertEquals(
-            "Version 0ba8ee8c · matches Vela's published build list · checked 14:32",
+            // Each "·" binds to the word before it (U+00A0).
+            "Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked 14:32",
             SignerPageChecks.words(matches("2026-10-09T14:32:00Z"), strings, now, formats, zone),
         )
         assertEquals(
-            "Version 0ba8ee8c · matches Vela's published build list · checked 10/08/2026, 14:32",
+            // … and the moment is one unbreakable unit: its own space is U+00A0 too.
+            "Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked 10/08/2026,\u00a014:32",
             SignerPageChecks.words(matches("2026-10-08T14:32:00Z"), strings, now, formats, zone),
         )
         val zh = app.getvela.wallet.core.i18n.I18nRuntime { lang -> java.io.File(System.getProperty("vela.repo.root"), "assets/i18n/$lang.json").readBytes() }
             .apply { initialize("zh") }
-        assertEquals("版本 0ba8ee8c · 与 Vela 公布的构建清单一致 · 检查于 14:32", SignerPageChecks.words(matches("2026-10-09T14:32:00Z"), zh, now, formats, zone))
+        assertEquals("版本 0ba8ee8c\u00a0· 与 Vela 公布的构建清单一致\u00a0· 检查于 14:32", SignerPageChecks.words(matches("2026-10-09T14:32:00Z"), zh, now, formats, zone))
         // A line with no time (still checking) fills nothing in.
         assertEquals("Checking the page…", SignerPageChecks.words(SignerPageChecks.CHECKING, strings, now, formats, zone))
     }

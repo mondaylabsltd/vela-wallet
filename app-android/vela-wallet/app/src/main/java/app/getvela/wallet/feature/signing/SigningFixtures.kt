@@ -368,7 +368,7 @@ object SigningFixtures {
             )
             else -> settings.pageLine(page)
         }
-        val card = SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line), this)
+        val card = SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line, SigningLive.savedPage(settings.SIGNING_PAGES_VIEW.pages, page)), this)
         return model(
             state, Dapp.uniswap, Dapp.uniswapTint,
             blocks = emptyList(),
@@ -412,7 +412,11 @@ object SigningFixtures {
         } else {
             settings.pageLine(page)
         }
-        return SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line), strings, fee = boardFee(strings))
+        return SigningLive.handoffModel(
+            SigningLive.Handoff(page, boardKey(), line, SigningLive.savedPage(settings.SIGNING_PAGES_VIEW.pages, page)),
+            strings,
+            fee = boardFee(strings),
+        )
     }
 
     /**

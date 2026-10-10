@@ -112,6 +112,12 @@ enum class SettingsOverlay {
     /** Spec 102: a saved signing page's new name. */
     RenameSigningPage,
 
+    /**
+     * Removing a saved signing page asks first, as iOS does: the page's own
+     * name, "Remove" and Cancel. One tap on the row's "Remove" used to take
+     * it — and its trusted version with it — with nothing in between.
+     */
+    RemoveSigningPage,
 
     /** Spec 072: removing a custom network asks first. */
     RemoveNetwork,
@@ -275,6 +281,8 @@ data class SigningPagesModel(
     val draft: String = "",
     val save: String = "",
     val remove: String = "",
+    /** The remove question's way out (`common.cancel`). */
+    val cancel: String = "",
     /** The askTrust line's answer (the version is the line's). */
     val trust: String = "",
     /** The list has been read; edits are offered only then. */

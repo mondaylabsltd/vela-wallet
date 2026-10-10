@@ -459,7 +459,14 @@ fun SettingsRoute(
         onSigningPageAdd = { url -> actions.onSigningPageAdd(url, "") },
         onSigningPageRenameOpen = { url -> editingPage = url; overlay = SettingsOverlay.RenameSigningPage },
         onSigningPageRename = { name -> editingPage?.let { actions.onSigningPageRename(it, name) } },
-        onSigningPageRemove = actions.onSigningPageRemove,
+        // The row's "Remove" asks first (as iOS does); only the sheet's own
+        // Remove takes the page.
+        onSigningPageRemove = { url -> editingPage = url; overlay = SettingsOverlay.RemoveSigningPage },
+        onConfirmRemoveSigningPage = {
+            editingPage?.let(actions.onSigningPageRemove)
+            editingPage = null
+            overlay = SettingsOverlay.None
+        },
         onSigningPageTrust = actions.onSigningPageTrust,
         onFeedbackOpened = actions.onFeedbackOpened,
         onVersionTap = {
@@ -597,6 +604,7 @@ fun SettingsScreen(
     onSigningPageRenameOpen: (String) -> Unit = {},
     onSigningPageRename: (String) -> Unit = {},
     onSigningPageRemove: (String) -> Unit = {},
+    onConfirmRemoveSigningPage: () -> Unit = {},
     onSigningPageTrust: (String, String) -> Unit = { _, _ -> },
     /** Spec 091: a tap on About's version — the hidden entry. */
     onVersionTap: () -> Unit = {},
@@ -748,6 +756,7 @@ fun SettingsScreen(
                 onRpcFixPrimary = onRpcFixPrimary,
                 editingPage = editingPage,
                 onSigningPageRename = onSigningPageRename,
+                onConfirmRemoveSigningPage = onConfirmRemoveSigningPage,
             )
         }
     }
@@ -1490,6 +1499,7 @@ internal fun SettingsSheet(
     onRpcFixPrimary: () -> Unit = {},
     editingPage: String? = null,
     onSigningPageRename: (String) -> Unit = {},
+    onConfirmRemoveSigningPage: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1563,6 +1573,9 @@ internal fun SettingsSheet(
                 }
                 SettingsOverlay.RenameSigningPage -> editingPage?.let { url ->
                     RenameSigningPageSheetBody(model.signingPages, url = url, onRename = onSigningPageRename, onDone = onDismiss)
+                }
+                SettingsOverlay.RemoveSigningPage -> editingPage?.let { url ->
+                    RemoveSigningPageSheetBody(model.signingPages, url = url, onConfirm = onConfirmRemoveSigningPage, onCancel = onDismiss)
                 }
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
                     onSheetSelect(SettingsOverlay.NumberFormat, it)

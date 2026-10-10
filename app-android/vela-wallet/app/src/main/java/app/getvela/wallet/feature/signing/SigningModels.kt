@@ -332,7 +332,12 @@ data class HandoffModel(
      * `KeyLabel`); `null` when nothing names the key.
      */
     val key: KeyRowModel?,
-    /** The page's address, without its scheme. */
+    /**
+     * The page's NAME, as Settings names it (D6): 「Vela 官方签名页」, the
+     * person's label, or "Self-hosted · domain".
+     */
+    val pageName: String,
+    /** The page's address, without its scheme — drawn under [pageName] unless the name already says it. */
     val page: String,
     val integrity: app.getvela.wallet.feature.settings.components.IntegrityLineModel,
     val open: String,

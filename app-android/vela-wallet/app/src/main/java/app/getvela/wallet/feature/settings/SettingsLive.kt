@@ -94,6 +94,21 @@ object SettingsLive {
     }
 
     /**
+     * How a signing page is NAMED, everywhere it is named (D6) — the lists,
+     * and the hand-off card: Vela's official signing page; the person's own
+     * label; else "Self-hosted · <domain>". Never by its host alone: a host
+     * says where a page is, not whose it is.
+     */
+    fun pageName(name: String, official: Boolean, domain: String, address: String, s: VelaStrings): String {
+        val label = if (official) "" else name.trim()
+        return when {
+            official -> s.t("settings.signing.pageOfficial")
+            label.isNotEmpty() -> label
+            else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { address.substringBefore('/') }))
+        }
+    }
+
+    /**
      * One signing page as every list draws it (spec 102): its name — Vela's
      * official signing page, the person's label, or "Self-hosted · <domain>"
      * (D6: only a page the person deployed is "their own"); the address;
@@ -114,11 +129,7 @@ object SettingsLive {
         val integrity = integrityModel(line, s)
         val label = if (official) "" else name.trim()
         val host = address.substringBefore('/')
-        val title = when {
-            official -> s.t("settings.signing.pageOfficial")
-            label.isNotEmpty() -> label
-            else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { host }))
-        }
+        val title = pageName(name = name, official = official, domain = domain, address = address, s = s)
         return SigningPageItemModel(
             url = url,
             title = title,
@@ -177,6 +188,7 @@ object SettingsLive {
             },
             save = s.t("settings.signing.pageSave"),
             remove = s.t("settings.signing.pageRemove"),
+            cancel = s.t("common.cancel"),
             trust = s.t("settings.signing.pageTrust"),
             loaded = view.loaded,
         )

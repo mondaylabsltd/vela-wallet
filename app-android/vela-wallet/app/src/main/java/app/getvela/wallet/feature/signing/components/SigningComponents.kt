@@ -40,6 +40,7 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaColors
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
+import app.getvela.wallet.core.designsystem.tokens.VelaMonoFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaOpacity
@@ -986,20 +987,39 @@ fun HandoffCard(
                 tint = colors.fgMuted,
                 modifier = Modifier.padding(top = VelaSpacing.xs).size(VelaIconSize.base),
             )
-            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
-                Text(
-                    model.title,
-                    color = colors.fgBase,
-                    fontFamily = VelaFontFamily,
-                    fontWeight = VelaFontWeight.semibold,
-                    fontSize = VelaTextSize.lg,
-                )
-                Text(model.page, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
-            }
+            Text(
+                model.title,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+            )
         }
         model.key?.let { key -> KeyRow(key) }
         model.fee?.let { fee -> HandoffFeeRow(fee) }
-        Column {
+        // The page and what was checked about it, together (as iOS draws
+        // them): its NAME — 「Vela 官方签名页」, the person's label,
+        // "Self-hosted · domain" — its address where the name does not already
+        // say it, and its integrity line. The card used to name the page by
+        // its host alone, under the title.
+        Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+            Text(
+                model.pageName,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.base,
+            )
+            if (!model.pageName.contains(model.page)) {
+                Text(
+                    model.page,
+                    color = colors.fgSubtle,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             app.getvela.wallet.feature.settings.components.IntegrityLine(model.integrity)
             model.trust?.let { label ->
                 app.getvela.wallet.feature.settings.components.TrustAnswer(

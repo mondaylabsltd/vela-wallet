@@ -77,8 +77,23 @@ class SigningReceiptTest {
         assertEquals("Review and sign on a trusted signing page", model.title)
         // A label | value row, like "Signing account | Savings".
         assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "Savings"), model.key)
+        // Named as Settings names it (the official page is known by its
+        // address even with no saved row at hand), the address under it.
+        assertEquals("Vela's official signing page", model.pageName)
         assertEquals("sign.getvela.app", model.page)
-        assertTrue(model.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        // A page the person saved and labelled is called what they called it.
+        val labelled = SigningLive.handoffModel(
+            SigningLive.Handoff(
+                "https://sign.example.com/", key, opens,
+                saved = app.getvela.wallet.feature.settings.core.SigningPageRow(url = "https://sign.example.com/", name = "My page", domain = "sign.example.com"),
+            ),
+            strings,
+        )
+        assertEquals("My page", labelled.pageName)
+        assertEquals("sign.example.com", labelled.page)
+        // One no longer in the list is named from its address: self-hosted, its domain.
+        assertEquals("Self-hosted\u00a0· sign.example.com", SigningLive.handoffModel(SigningLive.Handoff("https://sign.example.com/", key, opens), strings).pageName)
+        assertTrue(model.integrity.text, model.integrity.text.startsWith("Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked "))
         assertEquals(strings.t("componentsUi.signing.openSigner"), model.open)
         assertTrue(card.confirmEnabled)
         // No preview: the decoded request is the page's to show.

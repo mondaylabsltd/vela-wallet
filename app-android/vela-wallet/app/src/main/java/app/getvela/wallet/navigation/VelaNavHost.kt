@@ -778,6 +778,9 @@ fun VelaNavHost(
                 // Spec 071: the Trusted Signer's page, open for whichever signature asked.
                 val trustedSigner = application.container.trustedSigner
                 val trustedSignerState by trustedSigner.state.collectAsStateWithLifecycle()
+                // The pages as Settings keeps them: the hand-off card names its
+                // page as Settings does (the label, 「Vela 官方签名页」).
+                val savedSigningPages by application.container.settings.signingPages.collectAsStateWithLifecycle()
                 val trustedSignerNotice by trustedSigner.notice.collectAsStateWithLifecycle()
                 val trustedSignerWaiting = trustedSignerState is app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel.State.Waiting
                 val trustedSignerUnreachable = (trustedSignerState as? app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel.State.Waiting)?.unreachable == true
@@ -854,6 +857,7 @@ fun VelaNavHost(
                                 page = card.page,
                                 key = card.key,
                                 line = application.container.signerPages.line(card.page),
+                                saved = app.getvela.wallet.feature.signing.SigningLive.savedPage(savedSigningPages.pages, card.page),
                             )
                         },
                     )
@@ -1193,6 +1197,7 @@ fun VelaNavHost(
                                     page = card.page,
                                     key = card.key,
                                     line = application.container.signerPages.line(card.page),
+                                    saved = app.getvela.wallet.feature.signing.SigningLive.savedPage(savedSigningPages.pages, card.page),
                                 ),
                                 strings,
                             ),
@@ -2679,6 +2684,7 @@ fun VelaNavHost(
             val sendView by handoffSend.send.collectAsStateWithLifecycle()
             val handoffNetworks by application.container.settings.networks.collectAsStateWithLifecycle()
             val handoffCurrency by application.container.settings.currency.collectAsStateWithLifecycle()
+            val handoffPages by application.container.settings.signingPages.collectAsStateWithLifecycle()
             val handoffScope = rememberCoroutineScope()
             val handoffFee = remember(sendFeeJson, sendSpeedJson, sendFee, sendView, handoffNetworks, handoffCurrency, csStrings) {
                 SendLive.handoffFee(
@@ -2699,6 +2705,7 @@ fun VelaNavHost(
                         page = handing.page,
                         key = handing.key,
                         line = application.container.signerPages.line(handing.page),
+                        saved = app.getvela.wallet.feature.signing.SigningLive.savedPage(handoffPages.pages, handing.page),
                     ),
                     csStrings,
                     fee = handoffFee,

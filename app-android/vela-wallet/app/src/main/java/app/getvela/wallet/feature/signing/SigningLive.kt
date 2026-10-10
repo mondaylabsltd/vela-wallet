@@ -106,7 +106,23 @@ object SigningLive {
         val page: String,
         val key: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel?,
         val line: uniffi.vela_core_uniffi.SignerIntegrityLine,
+        /**
+         * The page as Settings keeps it — the person's label, whose keys it
+         * reaches, official or not — so the card NAMES it as Settings does.
+         * `null`: a page no longer in the list (removing one changes no
+         * account); it is named from its address alone.
+         */
+        val saved: app.getvela.wallet.feature.settings.core.SigningPageRow? = null,
     )
+
+    /** The saved row for [page], however its trailing slash was typed. */
+    fun savedPage(
+        pages: List<app.getvela.wallet.feature.settings.core.SigningPageRow>,
+        page: String,
+    ): app.getvela.wallet.feature.settings.core.SigningPageRow? {
+        val key = app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.key(page)
+        return pages.firstOrNull { app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.key(it.url) == key }
+    }
 
     /**
      * A key row in the person's words — the core's `KeyLabel`: the label its
@@ -131,10 +147,24 @@ object SigningLive {
      */
     fun handoffModel(handoff: Handoff, strings: VelaStrings, fee: HandoffFeeModel? = null): HandoffModel {
         val integrity = app.getvela.wallet.feature.settings.components.integrityModel(handoff.line, strings)
+        val address = handoff.page.substringAfter("://").trimEnd('/')
+        // The page by its NAME, as Settings and iOS name it (「Vela 官方签名页」,
+        // the person's label, "Self-hosted · domain") — the card said only the
+        // host, and "sign.getvela.app" does not say whose page it is.
+        val checks = app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
+        val pageName = app.getvela.wallet.feature.settings.SettingsLive.pageName(
+            name = handoff.saved?.name.orEmpty(),
+            official = handoff.saved?.official
+                ?: (checks.key(handoff.page) == checks.key(uniffi.vela_core_uniffi.trustedSignerDefaultUrl())),
+            domain = handoff.saved?.domain?.takeIf { it.isNotBlank() } ?: uniffi.vela_core_uniffi.signingPageDomain(handoff.page),
+            address = address,
+            s = strings,
+        )
         return HandoffModel(
             title = strings.s("handoffTitle"),
             key = keyRow(handoff.key, strings),
-            page = handoff.page.substringAfter("://").trimEnd('/'),
+            pageName = pageName,
+            page = address,
             integrity = integrity,
             open = strings.s("openSigner"),
             fee = fee,

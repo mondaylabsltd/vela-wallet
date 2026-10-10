@@ -140,9 +140,16 @@ class SigningFixturesTest {
         // D-17: the founding key carries the wallet's name, so it is named by
         // its place — a label | value row, like "Signing account | name".
         assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "Phone or tablet"), card.key)
+        // The page by its NAME, as Settings names it — never the host alone;
+        // the address is drawn under it, since the name does not say it.
+        assertEquals("Vela's official signing page", card.pageName)
         assertEquals("sign.getvela.app", card.page)
+        assertEquals("Vela 官方签名页", SigningFixtures.build(SigningScreenState.CS37, zhStrings()).handoff!!.pageName)
+        // A page the person deployed is called what they called it.
+        assertEquals("Home", SigningFixtures.build(SigningScreenState.CS42, en).handoff!!.pageName)
         // D-13: a moment, in the person's format — the boards' check ran at 14:32 today.
-        assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        // Each "·" is bound to the word before it (U+00A0), so no line starts with one.
+        assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked "))
         assertFalse(card.integrity.text, card.integrity.text.endsWith("checked "))
         // The dApp sheet's own fee row sits right above the card: the card does not repeat it.
         assertNull(card.fee)
