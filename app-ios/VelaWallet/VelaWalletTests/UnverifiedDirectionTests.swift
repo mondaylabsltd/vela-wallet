@@ -188,12 +188,14 @@ struct UnverifiedDirectionTests {
 
     /// The drawn sheet says "Unverified token" and "+", and no word on it —
     /// the row, the card, anything else — holds a digit of the figure the
-    /// simulation carried. An outflow says "−".
+    /// simulation carried. (One hosted sheet, read once: the outflow's "−"
+    /// is the row's, above.)
     @Test func theDrawnSheetSaysTheLabelAndThePlusAndNoDigitOfTheFigure() async throws {
         let into = try judged([unverified(lure)])
         let probe = SigningSheetProbe(try sheet(into))
         defer { probe.close() }
-        let seen = try await probe.read()
+        let named = label
+        let seen = try await probe.read { $0.said(named) }
         #expect(seen.said(label), "\(seen.words)")
         #expect(seen.said("+"), "the inflow's sign is on the sheet: \(seen.words)")
         #expect(seen.said(warning), "\(seen.words)")
@@ -211,14 +213,5 @@ struct UnverifiedDirectionTests {
         }
         #expect(onItsLine.map(\.label) == ["+"], "\(onItsLine.map(\.label))")
         print("MEASURE unverified-in words=\(seen.words)")
-
-        let out = try await probe.show(try sheet(try judged([unverified("-" + lure)])))
-        #expect(out.said(label) && out.said("\u{2212}") && !out.said("+"), "\(out.words)")
-        for word in out.words {
-            for form in lureForms {
-                #expect(!word.contains(form), "the site's figure is on the sheet: \"\(word)\"")
-            }
-        }
-        print("MEASURE unverified-out words=\(out.words)")
     }
 }

@@ -13,6 +13,10 @@
 //  `SigningVerdictPlaceTests` each keep a reader of their own; this is the
 //  same reader, for the suites of PR 3's last fixes.
 //
+//  A hosted sheet is heavy on the one main actor every suite shares — each
+//  read lays the whole sheet out and draws it — so a suite hosts few of
+//  them, and asks without a sheet whatever can be asked without one.
+//
 
 import Foundation
 import Observation
@@ -93,17 +97,18 @@ final class SigningSheetProbe {
 
     func close() { window.isHidden = true }
 
-    /// Swap the model under the live sheet and read it once it has settled.
-    func show(_ model: SigningModel) async throws -> Seen {
+    /// Swap the model under the live sheet and read it once it has settled
+    /// — and, `ready`, once the tree shows what the model says.
+    func show(_ model: SigningModel, until ready: (Seen) -> Bool = { _ in true }) async throws -> Seen {
         box.model = model
-        return try await read()
+        return try await read(until: ready)
     }
 
-    /// The tree, once two reads 150 ms apart agree on where the confirm and
-    /// the line under it stand (up to ~6 s): beside a thousand other tests
-    /// on one main actor, one read can come before the tree has followed
-    /// the last commit.
-    func read() async throws -> Seen {
+    /// The tree, once `ready` holds of it and two reads in a row agree on
+    /// where the confirm and the line under it stand (40 tries at most):
+    /// beside a thousand other tests on one main actor, one read can come
+    /// before the tree has followed the last commit.
+    func read(until ready: (Seen) -> Bool = { _ in true }) async throws -> Seen {
         var last: [CGRect]?
         var seen = Seen(tree: [])
         for _ in 0..<40 {
@@ -111,10 +116,12 @@ final class SigningSheetProbe {
             var tree: [Element] = []
             collect(host.view as Any, depth: 0, into: &tree)
             seen = Seen(tree: tree)
-            if let confirm = seen.confirm {
+            if let confirm = seen.confirm, ready(seen) {
                 let frames = [confirm.frame, seen.confirmLine?.frame ?? .zero]
                 if frames == last { return seen }
                 last = frames
+            } else {
+                last = nil
             }
             try await Task.sleep(for: .milliseconds(50))
         }

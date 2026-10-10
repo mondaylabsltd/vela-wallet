@@ -28,6 +28,7 @@ import Foundation
 import Observation
 import SwiftUI
 import Testing
+import UIKit
 import VelaCore
 @testable import VelaWallet
 
@@ -622,124 +623,123 @@ struct SimVerdictWaitTests {
 
     // MARK: - The confirm stays at one y
 
-    /// The real sheet through a request's wait: held with the line, the
-    /// verdict landed and the line gone; and held, waited out with the
-    /// caution in the verdict's place, the late verdict. The confirm stands
-    /// at ONE y through all of it, in English and in Chinese, and the line
-    /// under it is one line in every language.
-    @Test func theConfirmStaysAtOneYThroughTheWaitTheDeadlineAndTheVerdict() async throws {
-        for tag in ["en", "zh"] {
-            let loc = Loc(overrideTag: tag, preferredLanguages: [])
-
-            // Held → landed.
-            let landing = rig()
-            landing.controller.open(transaction)
-            await untilOnlyTheVerdictIsMissing(landing.controller)
-            let probe = SigningSheetProbe(try drawn(landing.controller, loc: loc))
-            let held = try await probe.read()
-            landing.simulation.answer(checked())
-            await Wait.until { landing.controller.confirmState.enabled }
-            let landed = try await probe.show(try drawn(landing.controller, loc: loc))
-            probe.close()
-
-            // Held → waited out → the late verdict, on a sheet of its own.
-            let waiting = rig()
-            waiting.controller.open(transaction)
-            await untilOnlyTheVerdictIsMissing(waiting.controller)
-            let second = SigningSheetProbe(try drawn(waiting.controller, loc: loc))
-            let heldAgain = try await second.read()
-            waiting.controller.elapseSimVerdictTimer()
-            await Wait.until { waiting.controller.confirmState.enabled }
-            let waitedOut = try await second.show(try drawn(waiting.controller, loc: loc))
-            waiting.simulation.answer(checked())
-            await Wait.until { waiting.controller.sign.simWaitedOutKey == nil }
-            let late = try await second.show(try drawn(waiting.controller, loc: loc))
-            second.close()
-
-            let steps: [(String, SigningSheetProbe.Seen)] = [
-                ("held", held), ("landed", landed),
-                ("held-2", heldAgain), ("waited-out", waitedOut), ("late-verdict", late),
-            ]
-            var ys: [CGFloat] = []
-            for (name, seen) in steps {
-                let confirm = try #require(seen.confirm, "\(tag) \(name): no confirm in the tree")
-                ys.append(confirm.frame.minY)
-                let line = seen.confirmLine
-                print("MEASURE sim-wait \(tag) \(name) confirm.y=\(confirm.frame.minY) h=\(confirm.frame.height)"
-                      + " enabled=\(confirm.enabled) line=\(line.map { "\"\($0.label)\" y=\($0.frame.minY) h=\($0.frame.height)" } ?? "none")")
-            }
-            #expect(Set(ys).count == 1, "\(tag): the confirm moved: \(ys)")
-
-            // Held: shut, with the core's line under it.
-            for seen in [held, heldAgain] {
-                #expect(seen.confirm?.enabled == false, "\(tag)")
-                #expect(seen.confirmLine?.label == loc.t(Self.checkingKey), "\(tag)")
-                #expect(seen.says(loc.t("componentsUi.funding.checking")), "\(tag): the place says Checking…")
-            }
-            // Open: no line is said, and the verdict's place holds what
-            // the core made of the simulation.
-            for seen in [landed, waitedOut, late] {
-                #expect(seen.confirm?.enabled == true, "\(tag)")
-                #expect(seen.confirmLine == nil, "\(tag): \(seen.confirmLine?.label ?? "")")
-                #expect(!seen.says(loc.t(Self.checkingKey)), "\(tag)")
-            }
-            #expect(waitedOut.says(loc.t(Self.couldNotCheckKey)), "\(tag): \(waitedOut.words)")
-            #expect(!late.says(loc.t(Self.couldNotCheckKey)), "\(tag): the late verdict replaced it")
-            #expect(landed.says("POL") && late.says("POL"), "\(tag)")
-            landing.controller.swipeDismissed()
-            waiting.controller.swipeDismissed()
-        }
+    /// The board's scene (`SimWaitScene`) as the sheet draws it in `loc`.
+    private func board(_ scene: SimWaitScene.Views, _ loc: Loc) -> SigningModel {
+        var context = SigningLive.Context(
+            loc: loc, chainName: "Base", chainDot: .blue, nativeSymbol: "ETH",
+            walletName: "Me", walletAddress: safe
+        )
+        context.chainId = 8_453
+        return SigningLive.model(
+            fallback: SigningFixtures.build(.cs1, loc: loc), request: scene.request, sign: scene.sign,
+            clear: scene.clear, guard: scene.guardView, fee: HandoffFeeFixtures.feeView, context: context,
+            gate: scene.gate
+        )
     }
 
-    /// The two boards' sheets, fresh: held (the line under the confirm) and
-    /// waited out (no line, the caution in the verdict's place), in every
-    /// language, at a phone's width and a narrow one's. The hold line is ONE
-    /// line — the room the footer keeps under the confirm is a line's, so a
-    /// sentence that wrapped would lift the confirm — and the confirm stands
-    /// at the same y with the line present and absent.
-    @Test func theHoldLineIsOneLineAndTheConfirmIsWhereItIsWithoutIt() async throws {
-        let held = try #require(SimWaitScene.views(waitedOut: false))
-        let waitedOut = try #require(SimWaitScene.views(waitedOut: true))
-        func model(_ scene: SimWaitScene.Views, _ loc: Loc) -> SigningModel {
-            var context = SigningLive.Context(
-                loc: loc, chainName: "Base", chainDot: .blue, nativeSymbol: "ETH",
-                walletName: "Me", walletAddress: safe
-            )
-            context.chainId = 8_453
-            return SigningLive.model(
-                fallback: SigningFixtures.build(.cs1, loc: loc), request: scene.request, sign: scene.sign,
-                clear: scene.clear, guard: scene.guardView, fee: HandoffFeeFixtures.feeView, context: context,
-                gate: scene.gate
-            )
-        }
-        for width in [CGFloat(390), 375] {
-            var lines: [String: CGFloat] = [:]
-            for tag in Loc.supported {
-                let loc = Loc(overrideTag: tag, preferredLanguages: [])
-                let heldProbe = SigningSheetProbe(model(held, loc), size: CGSize(width: width, height: 844))
-                let heldSeen = try await heldProbe.read()
-                heldProbe.close()
-                let openProbe = SigningSheetProbe(model(waitedOut, loc), size: CGSize(width: width, height: 844))
-                let openSeen = try await openProbe.read()
-                openProbe.close()
+    /// The real sheet, hosted, through a request's wait — one live sheet,
+    /// the controller's own models: held with the line under the confirm;
+    /// past the deadline, the line gone and the caution in the verdict's
+    /// place; then the late verdict's card there. The confirm stands at ONE
+    /// y through all of it — and at that y on a sheet that never said a
+    /// line at all (the waited-out board, fresh).
+    ///
+    /// Four reads, on purpose: a hosted sheet is heavy on the main actor
+    /// every suite shares (`SigningSheetProbe`). Chinese, both boards on the
+    /// presented sheet, light and dark, are the simulator walk's
+    /// (`FinalRoundScreenshotTests.testTheConfirmWaitsForTheVerdict`).
+    @Test func theConfirmStaysAtOneYThroughTheWaitTheDeadlineAndTheVerdict() async throws {
+        let rig = rig()
+        let controller = rig.controller
+        controller.open(transaction)
+        await untilOnlyTheVerdictIsMissing(controller)
+        let checking = en.t(Self.checkingKey)
+        let couldNotCheck = en.t(Self.couldNotCheckKey)
 
-                let line = try #require(heldSeen.confirmLine, "\(tag): no line under the held confirm")
-                #expect(line.label == loc.t(Self.checkingKey), "\(tag)")
-                #expect(heldSeen.confirm?.enabled == false, "\(tag)")
-                #expect(openSeen.confirm?.enabled == true && openSeen.confirmLine == nil, "\(tag)")
-                #expect(openSeen.says(loc.t(Self.couldNotCheckKey)), "\(tag): \(openSeen.words)")
-                lines[tag] = line.frame.height
-                let with = try #require(heldSeen.confirm).frame.minY
-                let without = try #require(openSeen.confirm).frame.minY
-                print("MEASURE boards width=\(width) \(tag) held confirm.y=\(with) line.h=\(line.frame.height)"
-                      + " | waited-out confirm.y=\(without)")
-                #expect(with == without, "\(tag) at \(width): the confirm is at \(with) with the line, \(without) without")
-            }
-            let one = try #require(lines["en"])
-            for (tag, height) in lines {
-                #expect(height < one * 1.6, "\(tag) at \(width): the hold line wraps (\(height) vs \(one))")
-            }
+        let probe = SigningSheetProbe(try drawn(controller))
+        let held = try await probe.read { $0.confirmLine?.label == checking }
+        controller.elapseSimVerdictTimer()
+        await Wait.until { controller.confirmState.enabled }
+        let waitedOut = try await probe.show(try drawn(controller)) { $0.says(couldNotCheck) }
+        rig.simulation.answer(checked())
+        await Wait.until { controller.sign.simWaitedOutKey == nil }
+        let late = try await probe.show(try drawn(controller)) { !$0.says(couldNotCheck) }
+        probe.close()
+
+        // A sheet of its own that never held: no line was ever said on it.
+        let scene = try #require(SimWaitScene.views(waitedOut: true))
+        let fresh = SigningSheetProbe(board(scene, en))
+        let neverHeld = try await fresh.read { $0.says(couldNotCheck) }
+        fresh.close()
+
+        let steps = [("held", held), ("waited-out", waitedOut), ("late-verdict", late), ("never-held", neverHeld)]
+        var ys: [CGFloat] = []
+        for (name, seen) in steps {
+            let confirm = try #require(seen.confirm, "\(name): no confirm in the tree")
+            ys.append(confirm.frame.minY)
+            let line = seen.confirmLine
+            print("MEASURE sim-wait \(name) confirm.y=\(confirm.frame.minY) h=\(confirm.frame.height)"
+                  + " enabled=\(confirm.enabled) line=\(line.map { "\"\($0.label)\" y=\($0.frame.minY) h=\($0.frame.height)" } ?? "none")")
         }
+        #expect(Set(ys).count == 1, "the confirm moved: \(ys)")
+
+        // Held: shut, the core's line under it, "Checking…" in the place.
+        #expect(held.confirm?.enabled == false)
+        #expect(held.confirmLine?.label == checking)
+        // The line the sheet drew is as tall as `noteHeight` says it is —
+        // what lets the fifteen languages be measured without a sheet each.
+        let drawnLine = try #require(held.confirmLine).frame
+        let footerWidth = try #require(held.confirm).frame.width
+        #expect(abs(drawnLine.height - noteHeight(checking, width: footerWidth)) < 0.5,
+                "the sheet's line (\(drawnLine.height)) is not the line `noteHeight` measures")
+        #expect(held.says(en.t("componentsUi.funding.checking")))
+        // Open: no line is said, and the verdict's place holds what the
+        // core made of the simulation.
+        for (name, seen) in steps.dropFirst() {
+            #expect(seen.confirm?.enabled == true, "\(name)")
+            #expect(seen.confirmLine == nil, "\(name): \(seen.confirmLine?.label ?? "")")
+            #expect(!seen.says(checking), "\(name)")
+        }
+        #expect(waitedOut.says(couldNotCheck), "\(waitedOut.words)")
+        #expect(!late.says(couldNotCheck) && late.says("POL"), "the late verdict replaced it: \(late.words)")
+        #expect(neverHeld.says(couldNotCheck))
+        controller.swipeDismissed()
+    }
+
+    /// The footer's line as `SigningSheet.confirmNote` draws it — its type
+    /// role, its alignment, its wrap — asked for its height at `width` with
+    /// no sheet hosted. `theConfirmStaysAtOneY…` holds this mirror to the
+    /// real thing: the hosted sheet's line is exactly as tall as it says.
+    private func noteHeight(_ text: String, width: CGFloat) -> CGFloat {
+        let note = Text(verbatim: text)
+            .typeRole(Typography.rowSub)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+        return UIHostingController(rootView: note)
+            .sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height
+    }
+
+    /// The hold line is ONE line in every language, on a narrow phone: the
+    /// room the footer keeps under the confirm is a line's — a blank one
+    /// until a line is said — so a sentence that wrapped, or stood taller
+    /// than that blank, would lift the confirm when it appeared.
+    @Test func theHoldLineIsOneLineInEveryLanguage() {
+        // The footer's width on a 375-point phone, inside its padding.
+        let width = 375 - 2 * Tokens.Layout.screenPaddingX
+        let blank = noteHeight(" ", width: width)
+        #expect(blank > 0)
+        var heights: [String: CGFloat] = [:]
+        for tag in Loc.supported {
+            let sentence = Loc(overrideTag: tag, preferredLanguages: []).t(Self.checkingKey)
+            let height = noteHeight(sentence, width: width)
+            heights[tag] = height
+            #expect(abs(height - blank) < 0.5, "\(tag): \"\(sentence)\" is \(height) tall in a room of \(blank)")
+        }
+        // The measure can tell: a sentence twice as long does wrap.
+        let long = en.t(Self.checkingKey) + " " + en.t(Self.checkingKey)
+        #expect(noteHeight(long, width: width) > blank * 1.5, "the measure did not see a wrap")
+        print("MEASURE hold-line width=\(width) blank=\(blank) heights=\(heights.sorted { $0.key < $1.key })")
     }
 
     // MARK: - The boards
