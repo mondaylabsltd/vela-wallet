@@ -14,7 +14,8 @@
  * (core state, on the wallet's side of the boundary).
  */
 import { DEFAULT_NETWORKS, getAllNetworksSync, nativeSymbol } from '$lib/services/networks';
-import { getBuiltinBundlerUrl, PUBLIC_RPCS } from '$lib/services/rpc-pool-endpoints';
+import { loadCore } from '$lib/core/client';
+import { getBuiltinBundlerUrl, publicRpcs } from '$lib/services/rpc-pool-endpoints';
 import { CHAINS_KEY } from '../keys';
 
 /** One chain, as the worker needs it. */
@@ -35,7 +36,12 @@ export interface ExtChainCatalog {
 	updatedAtMs: number;
 }
 
-/** The catalog as it is now — pure, so it can be asserted without storage. */
+/**
+ * The catalog as it is now — pure, so it can be asserted without storage.
+ *
+ * The public nodes behind each default are the core's list (`publicRpcs`), so
+ * the wasm must be loaded first: `publishExtChains` awaits it.
+ */
 export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 	const chains: Record<string, ExtChainEntry> = {};
 	// A built-in chain's bundler is the CONFIGURED relay (Settings › Service
@@ -51,7 +57,7 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 			if (url && !rpc.includes(url)) rpc.push(url);
 		};
 		add(network.rpcURL);
-		for (const url of PUBLIC_RPCS[network.chainId] ?? []) add(url);
+		for (const url of publicRpcs(network.chainId)) add(url);
 		chains[String(network.chainId)] = {
 			chainId: network.chainId,
 			name: network.displayName,
@@ -80,8 +86,10 @@ function area(): StorageAreaLike | null {
 export async function publishExtChains(): Promise<ExtChainCatalog | null> {
 	const store = area();
 	if (!store) return null;
-	const catalog = buildExtChainCatalog();
 	try {
+		// The catalog's public nodes are read from the core.
+		await loadCore();
+		const catalog = buildExtChainCatalog();
 		await store.set({ [CHAINS_KEY]: catalog });
 		return catalog;
 	} catch {
