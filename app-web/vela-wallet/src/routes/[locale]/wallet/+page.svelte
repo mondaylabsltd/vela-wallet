@@ -72,6 +72,7 @@
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
 	import { FlowNav, type FlowEntry } from '$lib/flows/nav.svelte';
+	import type { FlowStateId } from '$lib/flows/model';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { feed } from '$lib/wallet/core/feed.svelte';
 	import { REFRESH_AGE_TICK_MS, RefreshHold } from '$lib/wallet/refresh-hold.svelte';
@@ -2256,66 +2257,8 @@
 		{/if}
 	{:else}
 		<main class="page">
-			{#if shownFlowState !== undefined}
-				<FlowsMobile
-					model={withLiveTxDetailMobile(
-						withLiveFlow(mobileFlowBase(shownFlowState), flowInputs),
-						txDetail
-					)}
-					onback={() => {
-						// Backing out of the scanner is closing the scanner, not stepping
-						// back a stage — the core opened it and the core closes it.
-						if (sendView?.show_scanner) sendSession?.dispatch({ type: 'close_scanner' });
-						else if (sendView?.show_contact_picker)
-							sendSession?.dispatch({ type: 'close_contact_picker' });
-						else if (sendView) sendSession?.dispatch({ type: 'back' });
-						else nav.back();
-					}}
-					onnavigate={(to, index) => {
-						noteTarget(to, index);
-						// The token sheet's two doors leave the assets flow for the
-						// token's own send form / code (RULING 3).
-						if (to === 'send-token') {
-							enter('send', { assetId: selectedAssetId ?? undefined });
-							return;
-						}
-						if (to === 'receive-token') {
-							enter('receive-token');
-							return;
-						}
-						if (to === 'fee-token') feeSheetOpen = true;
-						else if (to === 'batch-import') void openBatch();
-						else if (to === 'scan' && sendSession) sendSession.dispatch({ type: 'open_scanner' });
-						else if (to === 'contact-pick' && sendSession)
-							sendSession.dispatch({ type: 'open_contact_picker', target: null });
-						else if (to === 'add-token') {
-							nav.push(to);
-							void openAddToken();
-						} else nav.push(to);
-					}}
-					onsheetclose={() => {
-						// The sheet was a pushed step (a token, a transaction, a code,
-						// "add by address"); dismissing it pops the step, so the next tap
-						// on a row pushes a fresh one (issue 328).
-						if (nav.mobileTop === 't3') closeAddToken();
-						if (flowState !== undefined) nav.sheetClosed(flowState);
-						if (sendView?.show_contact_picker)
-							sendSession?.dispatch({ type: 'close_contact_picker' });
-						// The fee-coin sheet closed without a pick: it is closed, not
-						// merely hidden until the next re-render raises it again.
-						if (feeSheetOpen) feeSheetOpen = false;
-						// The import sheet likewise: left open, 导入 found it still open
-						// and opened nothing.
-						if (batchView) closeBatch();
-					}}
-					send={sendActions}
-					batch={batchActions}
-					scan={{ feed: scanFeed, notice: scanCopy, tool: scanTool }}
-					addToken={addTokenActions}
-					ondeletetx={deleteSelectedTx}
-					onchains={() => (chainSheetOpen = true)}
-					onincludenetwork={includeNetwork}
-				/>
+			{#if shownFlowState !== undefined && !nav.overHome}
+				{@render phoneFlows(shownFlowState, false)}
 			{:else}
 				<WalletHome
 					model={liveHome}
@@ -2330,6 +2273,13 @@
 					onactivity={(row) => (selectedTxId = row.id ?? null)}
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
 				/>
+				{#if shownFlowState !== undefined}
+					<!-- Note 16: a transaction or a holding tapped on the home opens
+					     its sheet over the home — which stays mounted, where it was
+					     scrolled to — and closing it is back here, not on the list
+					     the flow's stack has under that sheet. -->
+					{@render phoneFlows(shownFlowState, true)}
+				{/if}
 			{/if}
 			{#if chainSheetOpen}
 				<BottomSheet
@@ -2366,6 +2316,70 @@
 {/if}
 
 <SignOutHost copy={data.walletMessages.signOut} />
+
+<!--
+	The phone's flow host — one flow state, with everything a live screen
+	needs. A snippet because it is drawn in two places: as the screen, and —
+	`sheetOnly` — as a sheet over the home it was opened from (note 16).
+-->
+{#snippet phoneFlows(state: FlowStateId, sheetOnly: boolean)}
+	<FlowsMobile
+		model={withLiveTxDetailMobile(withLiveFlow(mobileFlowBase(state), flowInputs), txDetail)}
+		onback={() => {
+			// Backing out of the scanner is closing the scanner, not stepping
+			// back a stage — the core opened it and the core closes it.
+			if (sendView?.show_scanner) sendSession?.dispatch({ type: 'close_scanner' });
+			else if (sendView?.show_contact_picker)
+				sendSession?.dispatch({ type: 'close_contact_picker' });
+			else if (sendView) sendSession?.dispatch({ type: 'back' });
+			else nav.back();
+		}}
+		onnavigate={(to, index) => {
+			noteTarget(to, index);
+			// The token sheet's two doors leave the assets flow for the
+			// token's own send form / code (RULING 3).
+			if (to === 'send-token') {
+				enter('send', { assetId: selectedAssetId ?? undefined });
+				return;
+			}
+			if (to === 'receive-token') {
+				enter('receive-token');
+				return;
+			}
+			if (to === 'fee-token') feeSheetOpen = true;
+			else if (to === 'batch-import') void openBatch();
+			else if (to === 'scan' && sendSession) sendSession.dispatch({ type: 'open_scanner' });
+			else if (to === 'contact-pick' && sendSession)
+				sendSession.dispatch({ type: 'open_contact_picker', target: null });
+			else if (to === 'add-token') {
+				nav.push(to);
+				void openAddToken();
+			} else nav.push(to);
+		}}
+		onsheetclose={() => {
+			// The sheet was a pushed step (a token, a transaction, a code,
+			// "add by address"); dismissing it pops the step, so the next tap
+			// on a row pushes a fresh one (issue 328).
+			if (nav.mobileTop === 't3') closeAddToken();
+			if (flowState !== undefined) nav.sheetClosed(flowState);
+			if (sendView?.show_contact_picker) sendSession?.dispatch({ type: 'close_contact_picker' });
+			// The fee-coin sheet closed without a pick: it is closed, not
+			// merely hidden until the next re-render raises it again.
+			if (feeSheetOpen) feeSheetOpen = false;
+			// The import sheet likewise: left open, 导入 found it still open
+			// and opened nothing.
+			if (batchView) closeBatch();
+		}}
+		send={sendActions}
+		batch={batchActions}
+		scan={{ feed: scanFeed, notice: scanCopy, tool: scanTool }}
+		addToken={addTokenActions}
+		ondeletetx={deleteSelectedTx}
+		onchains={() => (chainSheetOpen = true)}
+		onincludenetwork={includeNetwork}
+		{sheetOnly}
+	/>
+{/snippet}
 
 <!-- The rescue sheets (spec 028 Phase 8): a sheet on the phone, a dialog on the desktop. -->
 {#snippet rescueBody()}

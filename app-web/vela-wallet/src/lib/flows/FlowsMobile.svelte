@@ -174,6 +174,13 @@
 		onchains?: () => void;
 		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
 		onincludenetwork?: (include: boolean) => void;
+		/**
+		 * Draw the state's SHEET alone, over whatever the route already has on
+		 * screen (note 16): a sheet a home row opened stands over the home it
+		 * was opened from, not over the list the drawn state puts under it. The
+		 * host then adds no box of its own — the sheet takes the page's.
+		 */
+		sheetOnly?: boolean;
 	}
 
 	let {
@@ -187,7 +194,8 @@
 		onsheetclose,
 		ondeletetx,
 		onchains,
-		onincludenetwork
+		onincludenetwork,
+		sheetOnly = false
 	}: Props = $props();
 
 	const base = $derived(model.base);
@@ -213,8 +221,14 @@
 	}
 </script>
 
-<div class="host" style:--text-scale={model.textScale === 1 ? undefined : model.textScale}>
-	{#if base.kind === 'scan'}
+<div
+	class="host"
+	class:sheet-only={sheetOnly}
+	style:--text-scale={model.textScale === 1 ? undefined : model.textScale}
+>
+	{#if sheetOnly}
+		<!-- No base: the page this sheet was opened from is already drawn. -->
+	{:else if base.kind === 'scan'}
 		<ScanSurface
 			model={base.model}
 			feed={scan?.feed}
@@ -431,6 +445,12 @@
 		height: 100%;
 		background: var(--color-bg-base);
 		overflow: hidden;
+	}
+
+	/* A sheet over a page that is not this host's: no box, so the sheet and
+	   its scrim take the page's own frame. */
+	.host.sheet-only {
+		display: contents;
 	}
 
 	.card-stage {
