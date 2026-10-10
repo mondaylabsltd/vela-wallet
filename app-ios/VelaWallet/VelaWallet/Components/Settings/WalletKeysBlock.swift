@@ -100,12 +100,18 @@ struct WalletKeysBlock: View {
                 // this is one Ethereum transaction the person confirms and
                 // pays for. It moves no money and brings no passkey back.
                 // ("Only public keys are published" said less than is true.)
-                Text(model.backupExplain)
-                    .typeRole(Typography.flowCaption)
-                    .foregroundStyle(theme.fgSubtle)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, LucideIconSize.action + Tokens.Space.s12)
-                    .padding(.bottom, Tokens.Space.s8)
+                // Drawn only where the core says it applies (PR 3 note 6): a
+                // wallet that can never be copied gets no paragraph and no
+                // empty slot — the row is the block's last line.
+                if let explain = model.backupExplain {
+                    Text(explain)
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.fgSubtle)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, LucideIconSize.action + Tokens.Space.s12)
+                        .padding(.bottom, Tokens.Space.s8)
+                        .accessibilityIdentifier("keys.backupExplain")
+                }
             }
         }
         .padding(.top, Tokens.Space.s16)

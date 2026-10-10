@@ -564,7 +564,10 @@ struct WalletKeysModel {
     /// Under the row: what a copy of the record is (`settingsModals.backup
     /// .explain`) — what is already public, that it is a transaction the
     /// person pays for, and that it moves no money and recovers no passkey.
-    let backupExplain: String
+    /// The CORE says whether it applies (`BackupRow.explain_key`, PR 3 note
+    /// 6): `nil` under a wallet that can never be copied — no paragraph, and
+    /// no empty slot where it was.
+    let backupExplain: String?
     let copyLabel: String
     let copiedLabel: String
     /// Spec 102: "Keys on {{domain}}" for an account on its own domain —

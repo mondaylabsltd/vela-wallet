@@ -537,7 +537,7 @@ enum SettingsLive {
             note: keys?.source == .device ? loc.t(k.keysFromDevice) : nil,
             rows: rows,
             backup: ethereumBackupRow(backup, loc: loc),
-            backupExplain: loc.t(k.backupExplain),
+            backupExplain: backupExplain(backup, loc: loc),
             copyLabel: loc.t(k.keysCopy),
             copiedLabel: loc.t(k.keysCopied)
         )
@@ -547,6 +547,16 @@ enum SettingsLive {
     /// The key as stored, without a `0x` it may or may not have worn.
     private static func body130(_ hex: String) -> String {
         hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
+    }
+
+    /// The paragraph under the backup row (PR 3 note 6). While the walk is
+    /// still running it is the explanation, as before; once it has answered
+    /// it is the row's own `explain_key` — and nothing where the core gives
+    /// none (a wallet that can never be copied: the paragraph told somebody
+    /// how to make a copy the row above had just said cannot be made).
+    static func backupExplain(_ check: RegistryBackup.Check?, loc: Loc) -> String? {
+        guard let check else { return loc.t(I18nKeys.SettingsUi.backupExplain) }
+        return check.row?.explainKey.map { loc.t($0) }
     }
 
     /// "Copy this wallet's record to Ethereum" as a row — the CORE's row
