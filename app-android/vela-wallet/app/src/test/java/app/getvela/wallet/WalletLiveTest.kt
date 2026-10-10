@@ -708,6 +708,16 @@ class WalletLiveTest {
         assertEquals(AssetFiatModel.Masked, hidden.assetRows.single().fiat)
     }
 
+    /** The core's `privacy::masked_amount`, word for word: the mask, then the unit; no unit, the mask alone. */
+    @Test
+    fun `a masked amount keeps its unit and never a trailing space`() {
+        assertEquals("•••• xDAI", WalletLive.masked("xDAI"))
+        assertEquals("${WalletLive.MASK} USDC", WalletLive.masked("USDC"))
+        assertEquals(WalletLive.MASK, WalletLive.masked(""))
+        assertEquals(WalletLive.MASK, WalletLive.masked("  "))
+        assertTrue(WalletLive.masked("ETH").none { it.isDigit() })
+    }
+
     /** The label names the currency in every state — a total still being read does not borrow the board's "USD". */
     @Test
     fun `a total still loading already names the person's currency`() {

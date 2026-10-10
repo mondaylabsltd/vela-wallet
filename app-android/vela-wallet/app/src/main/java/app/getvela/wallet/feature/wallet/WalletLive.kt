@@ -68,13 +68,16 @@ object WalletLive {
     const val BALANCE_MASK = "••••••"
 
     /**
-     * A masked figure that is written WITH its unit: the dots, then the coin
-     * — "•••• xDAI". The unit stays on every surface: it says what kind of
-     * money without saying how much, and a row that draws its unit apart from
-     * the figure has always kept it. A transfer's detail dropped it ("••••")
-     * while iOS kept it; one rule now.
+     * A masked amount that is written WITH its unit: the dots, then the coin
+     * — "•••• xDAI". The core's rule (`privacy::masked_amount`): the unit
+     * stays, because it says what kind of money without saying how much, and
+     * the secret is the number. A row that draws its unit apart from the
+     * figure has always kept it; a transfer's detail dropped it ("••••")
+     * while iOS kept it. A figure with no unit of its own — a holding under
+     * its ticker, a worth in the display currency — is [MASK] alone, never a
+     * trailing space.
      */
-    fun masked(unit: String): String = listOf(MASK, unit).filter { it.isNotBlank() }.joinToString(" ")
+    fun masked(unit: String): String = unit.trim().let { if (it.isEmpty()) MASK else "$MASK $it" }
 
     /**
      * The home screen, from the person's own holdings.
