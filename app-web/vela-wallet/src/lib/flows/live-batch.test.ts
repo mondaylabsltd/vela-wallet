@@ -410,6 +410,42 @@ describe('the words and the shape (spec 038 E6)', () => {
 		expect(live.cta).toBe('Import 1 recipient');
 	});
 
+	// PR 3 final note F8 — the core's withhold rule on this surface. Opened
+	// before the display currency has been read, the importer holds the
+	// placeholder's "USD": nobody's choice, and it is not said anywhere.
+	it('names no currency while the person’s is not known — the unit, the rate, each row, the sum', () => {
+		const opened: Partial<BatchView> = {
+			fiat_code: 'USD',
+			rate_input: '1',
+			preview: [ROW],
+			recipient_count: 1,
+			total_fiat: '5000',
+			can_apply: true
+		};
+		const withheld = build(opened, { symbol: 'XDAI', currencyUnknown: true });
+		expect(withheld.units).toEqual({ fiat: 'In …', token: 'In XDAI' });
+		expect(withheld.rate?.code).toBe('…');
+		expect(withheld.rate?.hint).not.toContain('USD');
+		expect(rowsOf(withheld).every((row) => row.source?.endsWith(' …'))).toBe(true);
+		expect(withheld.total?.detail).toBe('5,000 …');
+		expect(JSON.stringify(withheld)).not.toContain('USD');
+		// The token's own figures are not fiat: they do not wait.
+		expect(withheld.total?.value).toContain('XDAI');
+
+		// Known (the page has told the importer, `set_fiat_code`): said, in the
+		// same places — the same lines, so nothing moves when it lands.
+		const known = build(
+			{ ...opened, fiat_code: 'CNY' },
+			{ symbol: 'XDAI', currencyUnknown: false }
+		);
+		expect(known.units.fiat).toBe('In CNY');
+		expect(known.rate?.code).toBe('CNY');
+		expect(known.total?.detail).toBe('5,000 CNY');
+		const shape = (model: typeof known) =>
+			JSON.stringify(model, (_key, value) => (typeof value === 'string' ? 'text' : value));
+		expect(shape(withheld)).toBe(shape(known));
+	});
+
 	it('overlays the desktop column body, where the importer is not a sheet', () => {
 		const drawn = buildDesktopFlowState('dsd2c', m, identicon);
 		if (drawn.body.kind !== 'batch-import') throw new Error('kind');

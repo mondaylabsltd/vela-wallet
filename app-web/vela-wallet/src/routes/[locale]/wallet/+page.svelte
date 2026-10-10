@@ -348,6 +348,7 @@
 			onView: (view) => (batchView = view),
 			onError: (error) => console.error('[batch_import] core fault:', error)
 		});
+		toldBatchCode = chosenCurrencyCode(currency.view);
 		batchSession.start({
 			type: 'open',
 			token: {
@@ -359,7 +360,7 @@
 			// The person's currency, not the USD/1 placeholder the view carries
 			// before the pair is committed: a sheet's fiat column is priced by
 			// this code.
-			currency_code: chosenCurrencyCode(currency.view),
+			currency_code: toldBatchCode,
 			// The importer's cap is what an import can actually add: the core's cap
 			// less the rows already started (`split_import_room`). Opened at a flat
 			// sixty, its "only the first N will be sent" was a promise the append
@@ -373,7 +374,25 @@
 		batchSession = null;
 		batchView = null;
 		importReplaces = false;
+		toldBatchCode = null;
 	}
+
+	/**
+	 * The currency the open importer was last told its sheet is priced in
+	 * (PR 3 final note F8). It was told once, at `open` — so an importer opened
+	 * before the display currency was read kept the USD placeholder's code for
+	 * as long as it stayed open, and priced a sheet of yuan as dollars. The
+	 * effect says it again whenever the person's currency becomes known or
+	 * changes (`set_fiat_code`, the core's own event for it), as Send is told
+	 * (`display_changed`).
+	 */
+	let toldBatchCode: string | null = null;
+	$effect(() => {
+		const code = chosenCurrencyCode(currency.view);
+		if (batchSession === null || toldBatchCode === null || toldBatchCode === code) return;
+		toldBatchCode = code;
+		batchSession.dispatch({ type: 'set_fiat_code', code });
+	});
 
 	const batchActions = $derived(
 		batchView === null
@@ -429,7 +448,10 @@
 					// core's own count, read back from the room it reports.
 					formHasRows: (sendView.split_import_room ?? 60) < 60,
 					replaces: importReplaces,
-					remaining: sendView.split_remaining
+					remaining: sendView.split_remaining,
+					// Nothing read of the display currency yet: the code the importer
+					// holds is the placeholder's, and is not said (PR 3 final note F8).
+					currencyUnknown: !currency.view.committed && currency.view.pending === null
 				}
 			: undefined
 	);
