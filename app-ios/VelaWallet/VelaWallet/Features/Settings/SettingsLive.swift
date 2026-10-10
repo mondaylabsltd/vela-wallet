@@ -818,6 +818,14 @@ enum SettingsLive {
             // A check that could not run can run again; a refusal cannot.
             switch wizard.error {
             case .checkFailed, .noRpcEndpoint: model.recheck = loc.t(k.addRecheckWithRpc)
+            // A refusal that still carries its check says WHY, and offers
+            // Chain Setup only for a gap somebody can fill (PR 3).
+            case .notCompatible:
+                if let refusal = refusal(wizard.compat, loc: loc) {
+                    model.callout = refusal.callout
+                    model.secondary = refusal.setup?.label
+                    model.secondaryUrl = refusal.setup?.url
+                }
             default: break
             }
             return model
@@ -850,13 +858,13 @@ enum SettingsLive {
         model.checksTitle = loc.t(k.addCompatibilityCheck)
         model.checks = checks(compat, loc: loc)
 
+        let refused = refusal(compat, loc: loc)
         model.callout = errorCallout(wizard.error, loc: loc)
-            ?? (wizard.compat?.compatible == false
-                ? CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
-                // Spec 081 FR-009: compatible, and still not somewhere a wallet
-                // with several passkeys can be created. Both halves are true;
-                // the badge says the first, this says the second.
-                : wizard.compat.map { $0.compatible && !$0.multiKeyReady } == true
+            ?? refused?.callout
+            // Spec 081 FR-009: compatible, and still not somewhere a wallet
+            // with several passkeys can be created. Both halves are true;
+            // the badge says the first, this says the second.
+            ?? (compat.compatible && !compat.multiKeyReady
                 ? CalloutModel(tone: .warning, text: loc.t(k.addSingleKeyOnly))
                 : nil)
 
@@ -865,35 +873,57 @@ enum SettingsLive {
         // should not be dressed as the action you came for.
         if wizard.canAdd {
             model.primary = loc.t(k.addButton)
-        } else if wizard.compat?.compatible == false {
-            model.callout = CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
-            // The drawing's "Open Chain Setup Tool" is not offered: no client
-            // has a page for it to open, and a button that goes nowhere is the
-            // inert control this spec removes (SC-001).
+        } else if let refused {
+            // The refusal says WHY, in the core's words (PR 3), and "Open
+            // Chain Setup Tool" is offered only where the core gives it
+            // somewhere to go — a gap somebody can fill, on the page for
+            // THIS chain. A network with no P-256 verifier gets no button:
+            // there is nothing to deploy, and the old line sent people to a
+            // tool that could not help.
+            model.callout = refused.callout
+            model.secondary = refused.setup?.label
+            model.secondaryUrl = refused.setup?.url
             model.recheck = loc.t(k.addRecheckWithRpc)
         }
         return model
     }
 
-    /// The four drawn rows over the core's eleven contracts.
+    /// The refusal as the core rules it: the line (`hint_key`) and, only for
+    /// missing contracts, Chain Setup's button and its address (`setup_url`).
+    /// `nil` for a chain that was not refused, or was never checked.
     ///
-    /// Not an invented summary: the drawing names three of `REQUIRED_CONTRACTS`
-    /// individually — EntryPoint v0.7, Safe L2, WebAuthn Signer — and counts
-    /// the remaining eight. 3 + 8 = 11, which is why the fixture's row reads
-    /// 其余 8 项合约.
+    /// Neither is decided here from `compatible` or the phase — a chain
+    /// refused for the missing P-256 verifier and one refused for missing
+    /// contracts looked identical, and both were told to "deploy them".
+    static func refusal(
+        _ compat: NetCompatibilityWire?, loc: Loc
+    ) -> (callout: CalloutModel, setup: (label: String, url: String)?)? {
+        let k = I18nKeys.SettingsUi.self
+        guard let compat, !compat.compatible, compat.rpcFailure == nil else { return nil }
+        return (
+            // A core from before the reason keeps the contracts line.
+            CalloutModel(tone: .warning, text: loc.t(compat.hintKey ?? k.addIncompatibleHint)),
+            compat.setupUrl.map { (loc.t(k.addChainTool), $0) }
+        )
+    }
+
+    /// The four drawn rows over the core's check: EntryPoint v0.7, Safe L2,
+    /// the P-256 precompile, and the count of every other contract.
     ///
-    /// **Known gap, recorded rather than papered over**: the P256 precompile
-    /// participates in the core's verdict and has no drawn row and no corpus
-    /// key. A chain rejected *only* for a missing precompile therefore shows
-    /// four ticks under a 不兼容 badge — the exact illegibility this list was
-    /// drawn to avoid. Folding it into 其余 8 项合约 would be worse: it would
-    /// name eight contracts as the failure when the failure is the precompile.
+    /// **The third row is the precompile, read from `p256_available`** — as
+    /// its words ("P-256 precompile") say, and as Android, the web and the
+    /// desktop draw it. It used to tick on the WebAuthn Signer CONTRACT's
+    /// deployment under that label, so a chain with no P-256 verifier showed
+    /// "P-256 precompile ✓" under 不兼容 — and, since PR 3, beside a line
+    /// saying the network has no P-256 verifier. Never probed (`nil`) is not
+    /// "absent": the row is left out rather than drawn as a failure. The
+    /// signer contract is counted with the rest.
     static func checks(_ compat: NetCompatibilityWire, loc: Loc) -> [CheckItemModel] {
         let k = I18nKeys.SettingsUi.self
         func deployed(_ name: String) -> Bool {
             compat.contracts.first { $0.name == name }?.deployed ?? false
         }
-        let named = ["EntryPoint v0.7", "Safe L2", "WebAuthn Signer"]
+        let named = ["EntryPoint v0.7", "Safe L2"]
         // The multi-key pair is spoken by its own callout, not folded into
         // 其余 N 项合约: a chain missing only those is whole for a one-key
         // wallet, and a red count row would say the opposite.
@@ -901,7 +931,7 @@ enum SettingsLive {
         return [
             CheckItemModel(label: "EntryPoint v0.7", ok: deployed("EntryPoint v0.7")),
             CheckItemModel(label: loc.t(k.addCheckSafe), ok: deployed("Safe L2")),
-            CheckItemModel(label: loc.t(k.addCheckSigner), ok: deployed("WebAuthn Signer")),
+        ] + (compat.p256Available.map { [CheckItemModel(label: loc.t(k.addCheckSigner), ok: $0)] } ?? []) + [
             CheckItemModel(
                 label: loc.t(k.addCheckRemaining, vars: ["count": String(rest.count)]),
                 ok: !rest.isEmpty && rest.allSatisfy(\.deployed)

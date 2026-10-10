@@ -289,7 +289,10 @@ struct AddNetworkModel {
     var customRpc: UrlFieldModel?
     var callout: CalloutModel?
     var primary: String?
+    /// "Open Chain Setup Tool" — and the address it opens: the core's
+    /// `setup_url` for THIS chain. Offered only for a gap somebody can fill.
     var secondary: String?
+    var secondaryUrl: String?
     var recheck: String?
     /// "Retry" — a primary that checks again rather than adds, for a chain
     /// the probes could not reach (never worded "incompatible").

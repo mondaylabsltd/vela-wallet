@@ -18,6 +18,10 @@
 //    `backup-could-not-check` / `backup-cannot-copy` — Settings' Keys block
 //    with the "Copy this wallet's record to Ethereum" row in each state the
 //    core words (`BackupState::row`): its line, its tone and what a tap does.
+//  - `p256-settings-none` / `p256-settings-missing` — Settings → Add network
+//    refusing a chain: no P-256 verifier (said plainly, no button) vs missing
+//    contracts (Chain Setup, for that chain). `p256-dapp-none` /
+//    `p256-dapp-missing` — the same two on a dApp's add-network sheet.
 //
 //  Fixture data only: nothing here is scanned, signed or sent.
 //
@@ -35,6 +39,15 @@ struct UIBatchGalleryScreen: View {
 
     var body: some View {
         switch state {
+        case "p256-settings-none", "p256-settings-missing":
+            SettingsScreen(model: refusedSettings(noP256: state.hasSuffix("none")), loc: loc)
+        case "p256-dapp-none", "p256-dapp-missing":
+            ScrollView {
+                AddNetworkPanelView(model: ExploreLive.addNetwork(
+                    refusedDappAdd(noP256: state.hasSuffix("none")), loc: loc
+                ))
+            }
+            .background(theme.bgRaised.ignoresSafeArea())
         case let board where board.hasPrefix("backup-"):
             backupBoard(String(board.dropFirst("backup-".count)))
         case "insert-key":
@@ -46,6 +59,60 @@ struct UIBatchGalleryScreen: View {
         default:
             cableBoard(chooser: .create)
         }
+    }
+
+    // MARK: - A refused network: no P-256 verifier, or missing contracts
+
+    private static let refusedChain = 48_900
+
+    /// A finished check the core refused, with its ruling written out
+    /// (`net_blocker`): no P-256 wins and carries no setup address; missing
+    /// contracts carries Chain Setup's, for this chain.
+    private static func refusedCompat(noP256: Bool) -> NetCompatibilityWire {
+        let names = [
+            "Deterministic Deployment Proxy", "Safe Singleton Factory", "Multicall3",
+            "EntryPoint v0.7", "Safe L2", "Safe Proxy Factory", "Safe 4337 Module",
+            "Safe Module Setup", "WebAuthn Signer", "MultiSend",
+        ]
+        // Without the precompile every contract may well be there; with it,
+        // these three are what this chain lacks.
+        let missing: Set<String> = noP256 ? [] : ["Safe L2", "Safe 4337 Module", "Safe Module Setup"]
+        return NetCompatibilityWire(
+            chainId: refusedChain, compatible: false, multiKeyReady: false,
+            contracts: names.map {
+                NetContractStatusWire(name: $0, address: "0x", deployed: !missing.contains($0), multiKeyOnly: false)
+            },
+            p256Available: !noP256, bestRpcUrl: "https://rpc.example", bestRpcLatencyMs: 182, rpcFailure: nil,
+            blocker: noP256 ? "no_p256" : "missing_contracts",
+            hintKey: "settingsModals.addNetwork." + (noP256 ? "noP256Hint" : "incompatibleHint"),
+            setupUrl: noP256 ? nil : "https://getvela.app/chain-setup?chain=\(refusedChain)"
+        )
+    }
+
+    private func refusedSettings(noP256: Bool) -> SettingsScreenModel {
+        let base = SettingsFixtures.build(.st10c, loc: loc)
+        let wizard = NetWizardViewWire(
+            phase: .checked, query: "", customRpc: "", suggestions: [],
+            chainInfo: NetChainInfoWire(
+                chainId: Self.refusedChain, name: "Zircuit", shortName: "zircuit", nativeName: "Ether",
+                nativeSymbol: "ETH", nativeDecimals: 18, rpcUrl: "https://rpc.example", rpcUrls: [],
+                explorerUrl: "https://explorer.example", logoUrl: "", isTestnet: false
+            ),
+            compat: Self.refusedCompat(noP256: noP256), error: nil, canAdd: false
+        )
+        var model = base
+        model.addNetwork = SettingsLive.wizard(wizard, loc: loc, fallback: base.addNetwork)
+        return model
+    }
+
+    private func refusedDappAdd(noP256: Bool) -> NetDappAddViewWire {
+        NetDappAddViewWire(
+            tab: "t1", id: "a1", origin: "https://app.example", host: "app.example",
+            chainId: Self.refusedChain, name: "Zircuit", nativeSymbol: "ETH",
+            rpcHost: "rpc.example", explorerHost: "explorer.example", fromSite: false,
+            phase: .notCompatible, reportedChainId: nil,
+            compat: Self.refusedCompat(noP256: noP256), canAdd: false
+        )
     }
 
     // MARK: - "Copy this wallet's record to Ethereum"

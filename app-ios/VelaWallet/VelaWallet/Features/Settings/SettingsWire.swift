@@ -180,6 +180,16 @@ struct NetCompatibilityWire: Decodable, Equatable {
     let bestRpcUrl: String?
     let bestRpcLatencyMs: Double?
     let rpcFailure: NetRpcFailureKindWire?
+    /// WHY the network was refused (PR 3): `no_p256` — the chain has no P-256
+    /// verifier, which nobody can deploy — or `missing_contracts`. Set
+    /// exactly when the check answered and `compatible` is false. A plain
+    /// string on purpose: a reason a later core adds must not fail the decode.
+    var blocker: String? = nil
+    /// The corpus key of the line under the refusal, chosen by the core.
+    var hintKey: String? = nil
+    /// Where "Open Chain Setup Tool" goes, with `?chain=<id>` — only for
+    /// missing contracts. `nil` is "no such button".
+    var setupUrl: String? = nil
 }
 
 /// Why the wizard cannot proceed. Tagged, with a chain id on four of five.

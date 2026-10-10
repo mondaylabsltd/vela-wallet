@@ -877,15 +877,16 @@ private struct AddNetworkBody: View {
                     VelaButton(title: retry, kind: .primary) { actions.onRecheck(customRpc) }
                 }
                 if let secondary = panel.secondary {
-                    // "Open chain setup tool" — the one thing the wallet just
-                    // told an incompatible chain's owner to do, and it did
-                    // nothing at all. Desktop has always opened this URL;
-                    // iOS had no such constant anywhere.
+                    // "Open Chain Setup Tool" — on the page for THIS chain:
+                    // the core's `setup_url` carries `?chain=<id>`, so the
+                    // tool opens on what is missing here. A gallery board has
+                    // no address and its button is a picture.
                     VelaButton(title: secondary, kind: .secondary) {
-                        if let url = URL(string: ExternalLinks.chainSetup) {
+                        if let url = panel.secondaryUrl.flatMap(URL.init(string:)) {
                             UIApplication.shared.open(url)
                         }
                     }
+                    .accessibilityIdentifier("addNetwork.chainSetup")
                 }
                 if let recheck = panel.recheck {
                     // Checks the chain AGAIN, through the RPC typed above. It
@@ -1292,15 +1293,4 @@ private struct IndexDownScreen: View {
         }
         .background(theme.bgBase.ignoresSafeArea())
     }
-}
-
-/// The places outside the app that settings points at.
-///
-/// One list, because the same URL said twice in two files drifts: the desktop
-/// keeps its own `CHAIN_SETUP_URL` beside its self-hosting link for exactly
-/// this reason (`app-desktop/vela-wallet/src/onboarding_flow.rs`).
-enum ExternalLinks {
-    /// The page that walks somebody through deploying the missing contracts on
-    /// a chain the wallet found incompatible.
-    static let chainSetup = "https://getvela.app/chain-setup"
 }

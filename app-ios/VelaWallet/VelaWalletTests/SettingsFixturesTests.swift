@@ -87,7 +87,10 @@ struct SettingsFixturesTests {
         let okMarks = ok.checks.map(\.ok)
         let badMarks = bad.checks.map(\.ok)
         #expect(okMarks == [true, true, true, true])
-        #expect(badMarks == [true, false, false, false])
+        // Missing contracts — the P-256 precompile's row ticks: a chain
+        // without it is a different refusal, with no Chain Setup (PR 3).
+        #expect(badMarks == [true, false, true, false])
+        #expect(bad.secondaryUrl == "https://getvela.app/chain-setup?chain=48900")
         // The failing state offers a way forward, not a greyed-out CTA.
         #expect(ok.primary != nil)
         #expect(bad.primary == nil)

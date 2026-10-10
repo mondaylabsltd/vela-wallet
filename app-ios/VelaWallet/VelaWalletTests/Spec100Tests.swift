@@ -30,7 +30,9 @@ struct Spec100Tests {
         /// Every RPC the sheet's check asked.
         let probes: Box<[String]>
 
-        init(deployed: Bool) {
+        /// `p256: false` is a chain with no P-256 verifier: the known-good
+        /// signature does not verify at `0x100`, and nothing lives there.
+        init(deployed: Bool, p256: Bool = true) {
             harness = BrowserHarness()
             let defaults = UserDefaults(suiteName: "vela.tests.spec100.\(UUID().uuidString)")!
             shelf = VelaStore(defaults: defaults)
@@ -54,14 +56,17 @@ struct Spec100Tests {
                     case "probe_rpc":
                         probes.value.append(url)
                     case "rpc_get_code":
+                        let address = operation["address"] as? String ?? ""
+                        let precompile = address.lowercased().hasSuffix("0100")
+                            && address.dropFirst(2).dropLast(4).allSatisfy { $0 == "0" }
                         return CoreJSON.string([
-                            "type": "code", "url": url, "address": operation["address"] ?? "",
-                            "code": deployed ? "0x6080604052" : "0x",
+                            "type": "code", "url": url, "address": address,
+                            "code": deployed && (p256 || !precompile) ? "0x6080604052" : "0x",
                         ])
                     case "rpc_call_p256":
                         return CoreJSON.string([
                             "type": "p256_call", "url": url,
-                            "result": "0x" + String(repeating: "0", count: 63) + "1",
+                            "result": p256 ? "0x" + String(repeating: "0", count: 63) + "1" : "0x",
                         ])
                     default: break
                     }
@@ -147,12 +152,55 @@ struct Spec100Tests {
         let model = ExploreLive.addNetwork(sheet, loc: Loc(overrideTag: "en", preferredLanguages: []))
         #expect(model.add == nil, "no Add for a chain this wallet refuses")
         #expect(model.dismiss == "Done")
+        // PR 3 — missing contracts: the line speaks of contracts, and Chain
+        // Setup opens on THIS chain (the core's `setup_url`).
+        #expect(sheet.compat?.blocker == "missing_contracts")
+        #expect(model.note == "Some contracts Vela needs aren't on this network yet. "
+                + "Chain Setup shows which ones and who can deploy them.")
         #expect(model.setupTool == "Open Chain Setup Tool")
+        #expect(model.setupUrl == "https://getvela.app/chain-setup?chain=11155111")
+        #expect(model.checks.last?.ok == true, "the P-256 row is the precompile's, and it answered")
 
         rig.settings.dappAddDeclined()
         let answer = try #require(await rig.answer("a1"))
         #expect(answer.errorCode == 4902)
         #expect(rig.shelf.readList(VelaStore.Key.customNetworks).isEmpty)
+    }
+
+    /// PR 3 — a chain with no P-256 verifier, on the REAL core: the refusal
+    /// says so plainly (Vela wallets cannot work there; money sent would be
+    /// stuck) and offers NO Chain Setup — a precompile is the chain's own to
+    /// add, there is nothing to deploy. Every contract can be there and the
+    /// answer is the same; and it wins over missing contracts.
+    @Test func aChainWithNoP256VerifierIsRefusedPlainlyWithNoSetupTool() async throws {
+        for deployed in [true, false] {
+            let rig = Rig(deployed: deployed, p256: false)
+            await rig.boot()
+            await rig.addSepolia(id: "a1")
+            let sheet = try #require(await rig.sheet(.notCompatible))
+            #expect(sheet.compat?.blocker == "no_p256", "contracts deployed: \(deployed)")
+            #expect(sheet.compat?.setupUrl == nil)
+
+            let model = ExploreLive.addNetwork(sheet, loc: Loc(overrideTag: "en", preferredLanguages: []))
+            #expect(model.note?.hasPrefix("This network can't check passkey signatures") == true)
+            #expect(model.note?.contains("Don't send money to your Vela address on this network") == true)
+            #expect(model.setupTool == nil, "a button to a tool that cannot help")
+            #expect(model.setupUrl == nil)
+            #expect(model.add == nil)
+            #expect(model.checks.last?.label == "P-256 precompile")
+            #expect(model.checks.last?.ok == false)
+
+            // The same check, as Settings draws it.
+            let compat = try #require(sheet.compat)
+            let rows = SettingsLive.checks(compat, loc: Loc(overrideTag: "en", preferredLanguages: []))
+            #expect(rows.first { $0.label == "P-256 precompile" }?.ok == false)
+            let refusal = try #require(SettingsLive.refusal(compat, loc: Loc(overrideTag: "zh", preferredLanguages: [])))
+            #expect(refusal.callout.text.hasPrefix("这个网络无法验证通行密钥签名"))
+            #expect(refusal.setup == nil)
+
+            rig.settings.dappAddDeclined()
+            #expect(try #require(await rig.answer("a1")).errorCode == 4902)
+        }
     }
 
     @Test func aSecondAddWhileTheSheetIsOpenIs32002() async throws {

@@ -19,6 +19,9 @@
 //  - `testCopyTheRecordToEthereum`: the Keys block's row in each state the
 //    core words, and the sheet it opens.
 //
+//  - `testTheTwoRefusals`: a network refused for no P-256 verifier vs for
+//    missing contracts, in Settings and on a dApp's sheet.
+//
 //  Simulator only; skipped in the scheme (a copy of the .xctestrun with the
 //  skip removed runs it).
 //
@@ -247,6 +250,39 @@ final class UIBatchScreenshotTests: XCTestCase {
             settle(0.8)
             attach(app, "backup-sheet-\(look.lang)-\(look.theme)")
             app.terminate()
+        }
+    }
+
+    // MARK: - A refused network: no P-256 verifier vs missing contracts
+
+    /// The two refusals, in Settings → Add network and on a dApp's sheet:
+    /// no P-256 says so plainly and offers no Chain Setup; missing contracts
+    /// keeps the button.
+    func testTheTwoRefusals() {
+        for look in Self.looks {
+            let zh = look.lang == "zh"
+            let tool = zh ? "打开链配置工具" : "Open Chain Setup Tool"
+            for surface in ["settings", "dapp"] {
+                for kind in ["none", "missing"] {
+                    let tag = "\(surface)-\(kind)-\(look.lang)-\(look.theme)"
+                    let app = launch(env: ["VELA_PAGE": "pr3", "VELA_STATE": "p256-\(surface)-\(kind)"],
+                                     lang: look.lang, theme: look.theme)
+                    let badge = app.staticTexts[zh ? "不兼容" : "Incompatible"].firstMatch
+                    XCTAssertTrue(badge.waitForExistence(timeout: 20), "no refusal (\(tag))")
+                    let line = NSPredicate(format: "label BEGINSWITH %@", kind == "none"
+                        ? (zh ? "这个网络无法验证通行密钥签名" : "This network can't check passkey signatures")
+                        : (zh ? "这个网络上还缺少 Vela 需要的部分合约" : "Some contracts Vela needs aren't on this network yet"))
+                    XCTAssertTrue(app.staticTexts.matching(line).firstMatch.exists, "the refusal does not say why (\(tag))")
+                    XCTAssertEqual(app.buttons[tool].exists, kind == "missing",
+                                   kind == "none" ? "a button to a tool that cannot help (\(tag))" : "no Chain Setup (\(tag))")
+                    settle(0.8)
+                    attach(app, "p256-\(tag)")
+                    app.swipeUp()
+                    settle(0.8)
+                    attach(app, "p256-\(tag)-scrolled")
+                    app.terminate()
+                }
+            }
         }
     }
 
