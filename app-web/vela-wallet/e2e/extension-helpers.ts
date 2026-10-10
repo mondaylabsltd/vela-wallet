@@ -98,15 +98,47 @@ export async function loadExtension(
 /** Is this the tab a fresh install opens (the doorway, then the welcome)? */
 const isWelcomeTab = (page: Page): boolean => /^chrome-extension:\/\/[a-p]{32}\//.test(page.url());
 
+/** The doorway every extension tab opens through; `open.js` replaces it with its target at once. */
+const isDoorway = (url: URL): boolean => url.pathname.endsWith('/open.html');
+
 /**
  * Every browser here is a fresh install, so each one opens the wallet's
- * welcome in a tab (spec 094 S3, `runtime.onInstalled`). It is closed as soon
- * as it shows, so a suite counts only the pages it opens itself; a suite about
+ * welcome in a tab (spec 094 S3, `runtime.onInstalled`). It is closed once it
+ * has LANDED, so a suite counts only the pages it opens itself; a suite about
  * the welcome passes `keepWelcome` and finds it with `welcomeTab`.
+ *
+ * Landed, not "as soon as it shows": the tab opens on the doorway
+ * (`open.html`), which replaces itself with the welcome in its first script.
+ * A close that reaches Chrome while that navigation is committing is dropped
+ * — the tab stays, and `page.close()` waits for a close that never comes.
+ * The test then sat until its own timeout with no failing step: one or two
+ * tests in sixty, a different one each run, at every commit back to the one
+ * that added the welcome tab (measured: 3 runs each at three commits, on a
+ * quiet machine). So the doorway is let through first, the close is never
+ * waited on for longer than a tab takes to go, and a tab that is still there
+ * is closed by the extension itself, which no renderer can drop.
  */
 async function closeWelcome(context: BrowserContext): Promise<void> {
 	const tab = await welcomeTab(context).catch(() => null);
-	await tab?.close().catch(() => {});
+	if (!tab) return;
+	await tab.waitForURL((url) => !isDoorway(url), { timeout: 10_000 }).catch(() => {});
+	const gone = tab.isClosed() ? Promise.resolve() : tab.waitForEvent('close', { timeout: 10_000 });
+	gone.catch(() => {});
+	const closing = tab.close().catch(() => {});
+	await Promise.race([closing, new Promise((r) => setTimeout(r, 3_000))]);
+	if (!tab.isClosed()) {
+		// Dropped after all: `chrome.tabs.remove` is the browser's own close.
+		await tab
+			.evaluate(async () => {
+				type Tabs = { getCurrent(): Promise<{ id: number }>; remove(id: number): Promise<void> };
+				const tabs = (window as unknown as { chrome: { tabs: Tabs } }).chrome.tabs;
+				await tabs.remove((await tabs.getCurrent()).id);
+			})
+			.catch(() => {});
+	}
+	await gone.catch(() => {
+		throw new Error('the welcome tab a fresh install opens would not close');
+	});
 }
 
 /** The tab a fresh install opened, once it shows (spec 094 S3). */
