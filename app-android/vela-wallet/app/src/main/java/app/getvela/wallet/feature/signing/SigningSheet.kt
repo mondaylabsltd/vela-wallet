@@ -77,7 +77,10 @@ const val VERDICT_PLACE_TAG = "signing-verdict-place"
 /** The verdict as it stands in its place, at its own height: a UI test measures it against the place. */
 const val VERDICT_SHOWN_TAG = "signing-verdict-shown"
 
-/** The sheet's body — everything above the confirm's footer, and the one thing in the sheet that scrolls. */
+/** The header over the body: who is asking, on which network, and the ✕ — outside the scroll. */
+const val HEADER_TAG = "signing-header"
+
+/** The sheet's body — everything between the header and the confirm's footer, and the one thing in the sheet that scrolls. */
 const val BODY_TAG = "signing-body"
 
 /** The footer under the body: the confirm and the line under a shut one, outside the scroll. */
@@ -92,9 +95,9 @@ const val OPEN_SIGNER_TAG = "signing-open-signer"
  * asked for the signature, so the site you are dealing with never leaves the
  * screen.
  *
- * Two parts (the device round, item 1): a BODY that scrolls when the sheet
- * is taller than the screen, and under it the confirm with its one line,
- * pinned — see [SigningSheetContent].
+ * Three parts (the device round, item 1): the header pinned at the top, a
+ * BODY that scrolls when the sheet is taller than the screen, and under it
+ * the confirm with its one line, pinned — see [SigningSheetContent].
  *
  * The header's ✕ is the one way to refuse (spec 079, owner ruling: "除非用户
  * 明确关掉，不应该很容易误操作，比如下滑就关掉了" — a stray swipe used to throw
@@ -168,22 +171,30 @@ fun SigningSheet(
 /**
  * The sheet's content, hostable anywhere (the preview gallery mounts it bare).
  *
- * **A body that scrolls, over a footer that does not** (the device round,
- * item 1 — security). The simulation's verdict is the one part of the sheet
- * a site cannot write, so nothing of it may be under a fold: its place is a
- * MINIMUM height and grows to a taller verdict ([VerdictPlace]). What gives
- * when the sheet no longer fits the screen is the body — it scrolls — and
- * never the confirm: the confirm and the line the core says under a shut one
- * sit in a footer OUTSIDE the scroll, at the bottom of the sheet, always
- * whole and never moved by what the body holds. The whole sheet used to be
- * one scroll with the confirm at its end; a taller verdict could only push
- * the confirm down, which is why the place was a fixed height with a scroll
- * of its own — a third balance row, or the warning under an unverified
- * token, behind a fold.
+ * **A body that scrolls, between a header and a footer that do not** (the
+ * device round, item 1 — security). The simulation's verdict is the one part
+ * of the sheet a site cannot write, so nothing of it may be under a fold:
+ * its place is a MINIMUM height and grows to a taller verdict
+ * ([VerdictPlace]). What gives when the sheet no longer fits the screen is
+ * the body — it scrolls — and never the confirm: the confirm and the line
+ * the core says under a shut one sit in a footer OUTSIDE the scroll, at the
+ * bottom of the sheet, always whole and never moved by what the body holds.
+ * The whole sheet used to be one scroll with the confirm at its end; a
+ * taller verdict could only push the confirm down, which is why the place
+ * was a fixed height with a scroll of its own — a third balance row, or the
+ * warning under an unverified token, behind a fold.
  *
- * A sheet that fits is drawn exactly as before: the footer follows the body
- * at the form's own gap. The host bounds the height (the modal sheet's cap,
- * the gallery's frame).
+ * **And the header does not scroll either**: who is asking, on which
+ * network, and the ✕. The ✕ is the ONE way to refuse — no swipe, no scrim
+ * tap, no Back — and the body brings a tall verdict into view by itself: on
+ * a short screen that left the confirm in sight and the refusal scrolled out
+ * of it, the wrong way round. So every form of the sheet keeps its header at
+ * the top: the request, the receipt (whose close is the same control), a
+ * refusal, the hand-off and the wait on the signing page.
+ *
+ * A sheet that fits is drawn exactly as before: the body follows the header
+ * and the footer the body, at the form's own gap. The host bounds the height
+ * (the modal sheet's cap, the gallery's frame).
  */
 @Composable
 fun SigningSheetContent(
@@ -266,10 +277,28 @@ fun SigningSheetContent(
     val bodyScroll = key(model.requestKey) { rememberScrollState() }
 
     Column(modifier = modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(HEADER_TAG)
+                // While the body is scrolled under the header, a hairline
+                // says where the body starts: drawn, so it moves nothing.
+                // (Nothing shows through: the body is cut at its own frame.)
+                .drawBehind {
+                    if (bodyScroll.canScrollBackward) {
+                        val line = VelaBorder.hairline.toPx()
+                        drawRect(colors.borderBase, topLeft = Offset(0f, size.height - line), size = Size(size.width, line))
+                    }
+                }
+                .padding(horizontal = VelaSizing.screenPaddingX)
+                // The form's own gap under the header: where it always was.
+                .padding(bottom = VelaSpacing.xl),
+        ) { SigningSheetHeader(model, onClose) }
+
         Column(
             modifier = Modifier
-                // What the footer leaves, and no more: a sheet that fits
-                // stays as tall as its content.
+                // What the header and the footer leave, and no more: a sheet
+                // that fits stays as tall as its content.
                 .weight(1f, fill = false)
                 .fillMaxWidth()
                 .onGloballyPositioned { bodyFrame.at = it }
@@ -281,8 +310,6 @@ fun SigningSheetContent(
                 .then(if (pinned == null) Modifier.padding(bottom = VelaSpacing.xl3) else Modifier),
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
         ) {
-            SigningSheetHeader(model, onClose)
-
             if (receipt != null) {
                 SendReceiptBody(
                     model = receipt,
@@ -471,7 +498,8 @@ private class Laid {
  * - **It brings itself into view.** When the verdict lands, or grows, and
  *   part of it is outside the body's frame — a sheet taller than the screen
  *   — the body scrolls to it: all of it when it fits the frame, else from
- *   its top.
+ *   its top. The frame is the body's own, between the pinned header and the
+ *   footer: "in view" is never "under the header".
  */
 @Composable
 private fun VerdictPlace(

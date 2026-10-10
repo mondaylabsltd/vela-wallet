@@ -29,6 +29,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.TextLayoutResult
@@ -48,6 +49,7 @@ import app.getvela.wallet.feature.signing.CONFIRM_TAG
 import app.getvela.wallet.feature.flows.FeeSpeedModel
 import app.getvela.wallet.feature.signing.FOOTER_TAG
 import app.getvela.wallet.feature.signing.FeeModel
+import app.getvela.wallet.feature.signing.HEADER_TAG
 import app.getvela.wallet.feature.signing.OPEN_SIGNER_TAG
 import app.getvela.wallet.feature.signing.SigningBlock
 import app.getvela.wallet.feature.signing.SigningFixtures
@@ -80,7 +82,10 @@ import org.junit.runner.RunWith
  *    confirm stays in a footer outside the scroll — fully on screen, at the
  *    same place with no verdict, a one-row verdict and a tall one;
  * 4. when the verdict lands, or grows, the body brings it into view — all of
- *    it when it fits the body's frame, else from its top.
+ *    it when it fits the body's frame, else from its top;
+ * 5. and the header stays at the top, outside the scroll: the ✕ is the one
+ *    way to refuse, and a body that scrolls by itself to a tall verdict must
+ *    not leave the confirm in sight and the refusal out of it.
  *
  * Measured on the real layout: [SigningSheetContent] hosted as the live sheet
  * hosts it (bottom-anchored, as tall as its content up to a cap — the modal
@@ -174,15 +179,51 @@ class SigningVerdictWholeTest {
 
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
 
+    /** The ✕'s words, as the live sheet says them (the boards leave them out). */
+    private fun closeWords(words: I18nRuntime) = words.t(I18nKeys.Flow.CLOSE)
+
+    /** A board with the live sheet's ✕: the one control that refuses. */
+    private fun board(state: SigningScreenState, words: I18nRuntime) =
+        SigningFixtures.build(state, words).copy(closeLabel = closeWords(words))
+
+    /**
+     * The header is pinned: the ✕ is displayed, whole, on the [screen] and in
+     * the header — wherever the body is scrolled to — and nothing of the body
+     * shows above the header's lower edge or under the footer's upper one.
+     * Returns the ✕'s box.
+     */
+    private fun closeIsInSight(words: I18nRuntime, at: String): Rect {
+        val close = compose.onNodeWithContentDescription(closeWords(words))
+        close.assertIsDisplayed()
+        val box = close.fetchSemanticsNode()
+        val header = node(HEADER_TAG).laid()
+        assertEquals("the ✕ is cut — $at", box.laid(), box.boundsInRoot)
+        assertTrue("the ✕ is off the screen: ${box.laid()} in ${node(SCREEN).laid()} — $at", node(SCREEN).laid().contains(box.laid()))
+        assertTrue("the ✕ is outside the header: ${box.laid()} in $header — $at", header.contains(box.laid()))
+        assertEquals("the header is not the sheet's first thing — $at", node(SHEET).laid().top, header.top, 0.5f)
+        val body = node(BODY_TAG).laid()
+        assertTrue("the body starts above the header's end: $body under $header — $at", body.top >= header.bottom - 0.5f)
+        // What is SEEN of the body's lines is inside the body's frame.
+        val lines = compose.onAllNodes(
+            hasAnyAncestor(hasTestTag(BODY_TAG)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes()
+        for (line in lines) {
+            val seen = line.boundsInRoot
+            if (seen.height <= 0f || seen.width <= 0f) continue
+            assertTrue("a line of the body shows outside its frame: $seen in $body — $at", seen.top >= body.top - 0.5f && seen.bottom <= body.bottom + 0.5f)
+        }
+        return box.laid()
+    }
+
     /** How far the body can scroll, and how far it has. */
     private fun bodyScroll() = node(BODY_TAG).config[SemanticsProperties.VerticalScrollAxisRange].let { it.value() to it.maxValue() }
 
     private fun whole(screen: Screen, language: String) {
         val words = words(language)
-        fun board(state: SigningScreenState) = SigningFixtures.build(state, words)
-        val waiting = board(SigningScreenState.CS57)
+        val waiting = board(SigningScreenState.CS57, words)
         // The same request: only its verdict arrived.
-        fun landed(state: SigningScreenState) = board(state).copy(state = waiting.state, requestKey = waiting.requestKey)
+        fun landed(state: SigningScreenState) = board(state, words).copy(state = waiting.state, requestKey = waiting.requestKey)
         var current by mutableStateOf(waiting)
         compose.setContent { Hosted(screen, words) { current } }
         compose.waitForIdle()
@@ -192,7 +233,9 @@ class SigningVerdictWholeTest {
         val confirm = node(CONFIRM_TAG).laid()
         val footer = node(FOOTER_TAG).laid()
         val least = node(VERDICT_PLACE_TAG).size.height
-        log.append("\n\"Checking…\": sheet ${node(SHEET).size.height} confirm ${confirm.top}..${confirm.bottom} place $least px body ${node(BODY_TAG).size.height} px scrolls ${bodyScroll()}")
+        val header = node(HEADER_TAG).laid()
+        val close = closeIsInSight(words, "no verdict yet")
+        log.append("\n\"Checking…\": sheet ${node(SHEET).size.height} header ${header.top}..${header.bottom} ✕ $close confirm ${confirm.top}..${confirm.bottom} place $least px body ${node(BODY_TAG).size.height} px scrolls ${bodyScroll()}")
         assertTrue("the confirm is not whole on the screen: $confirm in ${node(SCREEN).laid()}\n$log", node(SCREEN).laid().contains(confirm))
 
         fun check(kind: String, state: SigningScreenState, tall: Boolean) {
@@ -215,6 +258,15 @@ class SigningVerdictWholeTest {
             assertEquals("the confirm is cut\n$log", confirm, node(CONFIRM_TAG).boundsInRoot)
             // …in a footer the body ends above: nothing of the body is under it.
             assertTrue("the body runs under the footer\n$log", body.bottom <= footer.top + 0.5f)
+
+            // 5. The ✕ is in sight, whatever the body scrolled to — and on a
+            // sheet as tall as its screen it has not moved either.
+            val closeNow = closeIsInSight(words, "$kind\n$log")
+            log.append(", ✕ ${closeNow.top}..${closeNow.bottom}")
+            if (screen.cap != null) {
+                assertEquals("the ✕ moved under $kind\n$log", close, closeNow)
+                assertEquals("the header moved under $kind\n$log", header, node(HEADER_TAG).laid())
+            }
 
             // 1 / 2. The place is at least the room kept, and exactly a taller verdict's height.
             if (tall) {
@@ -272,7 +324,9 @@ class SigningVerdictWholeTest {
                     val at = line.fetchSemanticsNode()
                     assertEquals("\"$text\" cannot be brought fully into view\n$log", at.laid(), at.boundsInRoot)
                     assertTrue("\"$text\" is under the footer\n$log", at.laid().bottom <= footer.top + 0.5f)
+                    assertTrue("\"$text\" is under the header\n$log", at.laid().top >= node(HEADER_TAG).laid().bottom - 0.5f)
                     assertEquals("scrolling the body moved the confirm\n$log", confirm, node(CONFIRM_TAG).laid())
+                    assertEquals("scrolling the body moved the ✕\n$log", closeNow, closeIsInSight(words, "\"$text\" brought into view, $kind\n$log"))
                 }
             }
         }
@@ -317,7 +371,7 @@ class SigningVerdictWholeTest {
 
     /** The fee block's late lines, in the order the phone showed them, over one request. */
     private fun feeSteps(words: I18nRuntime): List<Pair<String, SigningScreenModel>> {
-        val base = SigningFixtures.build(SigningScreenState.CS57, words)
+        val base = board(SigningScreenState.CS57, words)
         val landed = base.fee as FeeModel.OnChain
         val measuring = words.t("componentsUi.signing.confirmBlock.feeMeasuring")
         val noCoin = words.t(I18nKeys.Flows.FEE_NO_COIN_PAYS)
@@ -365,6 +419,9 @@ class SigningVerdictWholeTest {
             assertEquals("the confirm moved ($step)\n$log", confirm, node(CONFIRM_TAG).laid())
             assertEquals("the footer moved ($step)\n$log", footer, node(FOOTER_TAG).laid())
             assertEquals("the confirm is cut ($step)\n$log", confirm, node(CONFIRM_TAG).boundsInRoot)
+            // The ✕ rides the sheet's top edge — which may rise — and stays in sight.
+            val close = closeIsInSight(words, "$step\n$log")
+            log.append(", ✕ ${close.top}..${close.bottom}")
             tops += sheet.top
             bodies += held
         }
@@ -392,19 +449,21 @@ class SigningVerdictWholeTest {
 
     private fun everyBoard(screen: Screen) {
         val words = words("zh")
-        var current by mutableStateOf(SigningFixtures.build(SigningScreenState.CS1, words))
+        var current by mutableStateOf(board(SigningScreenState.CS1, words))
         compose.setContent { Hosted(screen, words) { current } }
         var confirms = 0
         var handoffs = 0
         var waits = 0
         for (state in SigningScreenState.entries) {
-            val model = SigningFixtures.build(state, words)
+            val model = board(state, words)
             current = model
             compose.waitForIdle()
             val sheet = node(SHEET).laid()
             val at = "$state on ${screen.name}: sheet $sheet in ${node(SCREEN).laid()}"
             assertTrue("the sheet is not on the screen — $at", node(SCREEN).laid().contains(sheet))
             assertEquals("the sheet is not at the bottom — $at", node(SCREEN).laid().bottom, sheet.bottom, 0.5f)
+            // Every form of the sheet keeps its header, and its ✕ in sight.
+            val close = closeIsInSight(words, at)
             val receipt = model.receipt != null && model.trustedSignerWait == null
             val waiting = model.trustedSignerWait != null
             val handoff = model.handoff != null && model.confirmAction != null
@@ -420,8 +479,8 @@ class SigningVerdictWholeTest {
             } else {
                 compose.onNodeWithTag(CONFIRM_TAG).assertDoesNotExist()
                 compose.onNodeWithTag(FOOTER_TAG).assertDoesNotExist()
-                // Nothing under the body: it is the sheet.
-                assertEquals("the body is not the whole sheet — $at", sheet, node(BODY_TAG).laid())
+                // Nothing under the body: it is the rest of the sheet.
+                assertEquals("the body does not end the sheet — $at", sheet.bottom, node(BODY_TAG).laid().bottom, 0.5f)
             }
             if (waiting) {
                 waits++
@@ -429,18 +488,65 @@ class SigningVerdictWholeTest {
                 cancel.performScrollTo()
                 compose.waitForIdle()
                 assertEquals("the waiting card's Cancel cannot be reached — $at", cancel.fetchSemanticsNode().laid(), cancel.fetchSemanticsNode().boundsInRoot)
+                assertEquals("reaching it moved the ✕ — $at", close, closeIsInSight(words, at))
             } else if (handoff) {
                 handoffs++
                 val open = compose.onNodeWithTag(OPEN_SIGNER_TAG, useUnmergedTree = true)
                 open.performScrollTo()
                 compose.waitForIdle()
                 assertEquals("the hand-off card cannot be reached — $at", open.fetchSemanticsNode().laid(), open.fetchSemanticsNode().boundsInRoot)
+                assertEquals("reaching it moved the ✕ — $at", close, closeIsInSight(words, at))
             }
         }
         android.util.Log.i(TAG, "every board on ${screen.name}: ${SigningScreenState.entries.size} drawn — $confirms with a pinned confirm, $handoffs hand-off cards, $waits waiting cards")
         assertTrue("no board with a confirm was drawn", confirms > 30)
         assertTrue("no hand-off board was drawn", handoffs > 0)
         assertTrue("no waiting board was drawn", waits > 0)
+    }
+
+    /**
+     * "A sheet that fits looks exactly as it did" is a claim about every
+     * pixel, so it is checked against a record, not asserted from memory:
+     * every board's layout written down — each text and each described mark
+     * with its own box, as laid out — into the app's cache. Run it before and
+     * after a change to the sheet's structure and `diff` the two files: a
+     * board whose body is at its top is laid out the same wherever its parts
+     * are hosted, so the files must be identical.
+     *
+     * ```bash
+     * adb -s <emulator> exec-out run-as app.getvela.wallet cat cache/signing-layout-Roomy.txt > before.txt
+     * ```
+     */
+    @Test
+    fun theLayoutOfEveryBoardIsWrittenDownOnARoomyScreen() = writeLayouts(Screen.Roomy)
+
+    @Test
+    fun theLayoutOfEveryBoardIsWrittenDownOnThisScreen() = writeLayouts(Screen.This)
+
+    private fun writeLayouts(screen: Screen) {
+        val words = words("zh")
+        var current by mutableStateOf(SigningFixtures.build(SigningScreenState.CS1, words))
+        compose.setContent { Hosted(screen, words) { current } }
+        val out = StringBuilder()
+        for (state in SigningScreenState.entries) {
+            // Each board its own request, so each opens at its top.
+            current = SigningFixtures.build(state, words).let { it.copy(requestKey = "layout-${state.name}") }
+            compose.waitForIdle()
+            val (scrolled, range) = bodyScroll()
+            out.append("== ${state.name} sheet ${node(SHEET).laid()} body scrolled $scrolled of $range\n")
+            val marks = compose.onAllNodes(
+                SemanticsMatcher.keyIsDefined(SemanticsProperties.Text) or SemanticsMatcher.keyIsDefined(SemanticsProperties.ContentDescription),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes()
+            for (mark in marks) {
+                val said = mark.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+                    ?: mark.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString("")
+                out.append("${mark.laid()} $said\n")
+            }
+            assertTrue("${state.name} drew nothing", marks.isNotEmpty())
+        }
+        java.io.File(context.cacheDir, "signing-layout-${screen.name}.txt").writeText(out.toString())
+        android.util.Log.i(TAG, "layouts on ${screen.name}: ${SigningScreenState.entries.size} boards, ${out.lines().size} lines, hash ${out.toString().hashCode()}")
     }
 
     /**
@@ -468,8 +574,24 @@ class SigningVerdictWholeTest {
         val log = StringBuilder("the modal sheet")
         for (language in listOf("zh", "en")) {
             words = words(language)
-            val waiting = SigningFixtures.build(SigningScreenState.CS57, words)
-            fun landed(state: SigningScreenState) = SigningFixtures.build(state, words).copy(state = waiting.state, requestKey = waiting.requestKey)
+            val waiting = board(SigningScreenState.CS57, words)
+            fun landed(state: SigningScreenState) = board(state, words).copy(state = waiting.state, requestKey = waiting.requestKey)
+            val statusBar = root?.let { ViewCompat.getRootWindowInsets(it) }?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+            /** The ✕ on the modal: displayed, whole, under the status bar and inside the window. */
+            fun closeInTheWindow(step: String): Rect {
+                val close = compose.onNodeWithContentDescription(closeWords(words))
+                close.assertIsDisplayed()
+                val box = close.fetchSemanticsNode()
+                val seen = box.boundsInWindow
+                assertEquals("the ✕ is cut ($step)\n$log", box.size.height.toFloat(), seen.height)
+                assertEquals("the ✕ is cut ($step)\n$log", box.size.width.toFloat(), seen.width)
+                val window = root?.rootView
+                assertTrue(
+                    "the ✕ is outside the window ($step): $seen in ${window?.width}x${window?.height}, status bar $statusBar\n$log",
+                    window == null || (seen.top >= statusBar && seen.left >= 0f && seen.right <= window.width && seen.bottom <= window.height),
+                )
+                return seen
+            }
             current = waiting
             // The sheet slides in; the test clock runs its animation to the end.
             compose.waitUntil(10_000) { runCatching { node(CONFIRM_TAG) }.isSuccess }
@@ -489,6 +611,8 @@ class SigningVerdictWholeTest {
                 assertEquals("the confirm is cut\n$log", node(CONFIRM_TAG).size.height.toFloat(), node(CONFIRM_TAG).boundsInWindow.height)
                 assertTrue("the confirm is under the navigation bar\n$log", window == 0 || confirm.bottom <= window - navigationBar)
                 assertEquals("the place is not the verdict's height\n$log", maxOf(least, shown.size.height), place.size.height)
+                val close = closeInTheWindow(kind)
+                log.append(", ✕ ${close.top}..${close.bottom} (status bar $statusBar)")
                 if (state == SigningScreenState.CS67) {
                     assertTrue(shown.size.height > least)
                     // In view once landed: whole, or from its top.
@@ -517,6 +641,7 @@ class SigningVerdictWholeTest {
                 log.append("\n$language fee — $step: confirm ${node(CONFIRM_TAG).boundsInWindow.top}..${node(CONFIRM_TAG).boundsInWindow.bottom}, body ${node(BODY_TAG).size.height} px scrolls ${bodyScroll()}")
                 assertEquals("the confirm moved in the window ($step)\n$log", under, node(CONFIRM_TAG).boundsInWindow)
                 assertEquals("the confirm is cut ($step)\n$log", node(CONFIRM_TAG).size.height.toFloat(), node(CONFIRM_TAG).boundsInWindow.height)
+                closeInTheWindow(step)
             }
             // (Not compared with the verdict boards above: this walk opens on
             // a shut confirm, whose one line is the footer's own and keeps
