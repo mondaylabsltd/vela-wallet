@@ -665,6 +665,12 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .finalRound:
+            #if DEBUG
+            FinalRoundGalleryScreen(loc: loc, state: PageOverride.state ?? "hero-checking")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -4071,6 +4077,8 @@ enum PageOverride {
         case uiBatch
         /// PR 3's integration round (`IntegrationGalleryScreen`).
         case integration
+        /// PR 3's final round (`FinalRoundGalleryScreen`).
+        case finalRound
     }
 
     static let page: Page? = {
@@ -4097,6 +4105,7 @@ enum PageOverride {
         case "pr2": .correctness
         case "pr3": .uiBatch
         case "pr3b": .integration
+        case "pr3c": .finalRound
         default: nil
         }
     }()

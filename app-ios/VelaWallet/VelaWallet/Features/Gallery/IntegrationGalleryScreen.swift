@@ -291,6 +291,26 @@ struct IntegrationGalleryScreen: View {
                 // The core's rule: another endpoint may answer.
                 rpcField: .optional, rpcFieldLabelKey: k.addCustomRpcTitle, canAdd: false
             )
+        case "compatible", "checked-unverified":
+            // The wizard's own checked phase (final notes F4/F14/F22): a
+            // result an own endpoint may still be preferred for, or one the
+            // check could not reach a verdict on — the field, optional, and
+            // the re-check that reads it.
+            let ok = stop == "compatible"
+            let names = ["EntryPoint v0.7", "Safe L2", "Safe Proxy Factory", "Safe 4337 Module", "MultiSend"]
+            view = NetWizardViewWire(
+                phase: .checked, query: "", customRpc: "", suggestions: [], chainInfo: Self.zircuit,
+                compat: NetCompatibilityWire(
+                    chainId: chain, compatible: ok, multiKeyReady: ok,
+                    contracts: ok ? names.map {
+                        NetContractStatusWire(name: $0, address: "0x", deployed: true, multiKeyOnly: false)
+                    } : [],
+                    p256Available: ok ? true : nil, bestRpcUrl: ok ? "https://rpc.example" : nil,
+                    bestRpcLatencyMs: ok ? 182 : nil, rpcFailure: ok ? nil : .allProbesFailed
+                ),
+                error: nil, errorKey: nil,
+                rpcField: .optional, rpcFieldLabelKey: k.addCustomRpcTitle, canAdd: ok
+            )
         case "no-rpc":
             view = NetWizardViewWire(
                 phase: .error, query: "", customRpc: "", suggestions: [], chainInfo: Self.zircuit,

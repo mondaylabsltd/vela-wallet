@@ -196,9 +196,13 @@ enum BalanceCoreScene {
     /// PR 3 note 4), or its nodes did not answer. Gnosis and Base answered
     /// with holdings — unless `everyChain`: then every chain asked failed the
     /// same way, with nothing cached, and nothing at all is known.
+    ///
+    /// `alsoDown` are further chains whose nodes did not answer, beside
+    /// `failedChain`; `healthy` is the same round with every chain answering.
     @MainActor
     static func view(
-        failedChain: Int = 1, internalFault: Bool, everyChain: Bool = false, tokenListFault: Bool = false
+        failedChain: Int = 1, internalFault: Bool, everyChain: Bool = false, tokenListFault: Bool = false,
+        alsoDown: [Int] = [], healthy: Bool = false
     ) -> BalanceViewWire? {
         let core = BalanceDashboardCore()
         guard let opened = try? CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
@@ -216,16 +220,17 @@ enum BalanceCoreScene {
                 "spam": false,
             ],
         ]
-        let read = [failedChain, 100, 8453]
-        let failed = everyChain ? read : [failedChain]
+        let read = [failedChain, 100, 8453] + alsoDown
+        let named = everyChain ? [failedChain, 100, 8453] : [failedChain]
+        let failed = healthy ? [] : named + alsoDown
         guard let settled = try? CoreJSON.object(core.resolveEffect(effectId: fetchId, resultJson: CoreJSON.string([
             "type": "fetch_settled", "address": address, "pull": false,
             "tokens": everyChain ? [] : tokens,
             "failed_chain_ids": failed,
             "rate_limited_chain_ids": [Int](),
             "read_chain_ids": read,
-            "internal_chain_ids": internalFault ? failed : [Int](),
-            "registry_chain_ids": tokenListFault ? failed : [Int](),
+            "internal_chain_ids": internalFault && !healthy ? named : [Int](),
+            "registry_chain_ids": tokenListFault && !healthy ? named : [Int](),
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ]))), let view = settled["view"] as? [String: Any]
         else { return nil }
