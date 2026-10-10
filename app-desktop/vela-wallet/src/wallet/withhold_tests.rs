@@ -165,7 +165,7 @@ fn token_detail(currency: &CurrencyView) -> Vec<String> {
         )
         .unwrap_or_else(|| unreachable!("token {index} has a page"));
         out.push(detail.amount.to_string());
-        out.push(detail.sub.to_string());
+        out.push(detail.sub.text());
         out.extend(detail.facts.iter().map(|(_, value)| value.to_string()));
     }
     out

@@ -6368,11 +6368,13 @@ mod tests {
         // The round ended and found nothing: the core rules it empty.
         let settled = first_read_view(FirstRead::Live);
         assert!(settled.empty_key.is_some());
-        let said = empty(&settled);
+        assert!(empty(&settled).is_some(), "the core ruled: genuinely empty");
+        // Its title is the key's own line.
+        let en = crate::loc::Loc::for_language("en");
         assert_eq!(
-            said.map(|empty| empty.title.to_string()).as_deref(),
-            Some("Deposit your first asset"),
-            "the core ruled: genuinely empty"
+            FlowStrings::resolve(&en).assets_empty_title.as_ref(),
+            en.t(vela_core::app::balance_dashboard::ASSETS_EMPTY)
+                .as_ref()
         );
 
         // The key and nothing else: the same view read from an older core's

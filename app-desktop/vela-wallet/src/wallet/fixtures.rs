@@ -845,7 +845,7 @@ pub struct AssetDetailModel {
     /// `0.8533 BNB`.
     pub amount: SharedString,
     /// `$496.46 · BNB Chain`.
-    pub sub: SharedString,
+    pub sub: AssetSub,
     pub facts: Vec<(SharedString, SharedString)>,
     pub activity: Vec<ActivityRowModel>,
     /// The feed id behind each `activity` row, in drawn order — what a row
@@ -859,6 +859,57 @@ pub struct AssetDetailModel {
     pub contract_copy: Option<SharedString>,
 }
 
+/// The line under a token page's amount: what the holding is worth, then
+/// its network — "¥8,789.64 · Ethereum", the order and the joint the web's
+/// `fiatLine` writes (PR 3 device round, item 4).
+///
+/// Two parts, not one string, because the worth is the part that ARRIVES —
+/// it waits on the display currency — and the network's name stands after
+/// it: drawn as one text, the name slid 70.5 pt to the right when the worth
+/// landed. The worth has a cell of its own, kept while it is out
+/// ([`SubWorth::Waiting`]), and the name starts where the cell ends.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AssetSub {
+    pub worth: SubWorth,
+    pub chain: SharedString,
+}
+
+/// The worth's cell on [`AssetSub`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubWorth {
+    /// "$496.46" — or "No price" for a holding nobody quotes.
+    Said(SharedString),
+    /// Withheld: the display currency is not committed (the core's withhold
+    /// rule), so no figure is drawn — a waiting bar in the figure's place,
+    /// as a holding's row draws ([`Fiat::Pending`]).
+    ///
+    /// `room` is how wide the cell is kept, and it is NEVER drawn: the
+    /// figure as the placeholder pair would write it, laid out invisibly
+    /// under the bar. The figure that lands is not known before its rate
+    /// is, so this is the closest room there is — exactly the figure's when
+    /// the currency that commits is the placeholder's own.
+    Waiting { room: SharedString },
+    /// Hidden: no figure and no room for one — the network alone.
+    Absent,
+}
+
+impl AssetSub {
+    /// Between the worth and the network.
+    pub const JOINT: &'static str = " · ";
+
+    /// Every glyph the line draws, in order — what a test, or a search for
+    /// a figure that should not be there, reads. A withheld worth draws
+    /// none: its bar, then the joint and the network.
+    #[must_use]
+    pub fn text(&self) -> String {
+        match &self.worth {
+            SubWorth::Said(worth) => format!("{worth}{}{}", Self::JOINT, self.chain),
+            SubWorth::Waiting { .. } => format!("{}{}", Self::JOINT, self.chain),
+            SubWorth::Absent => self.chain.to_string(),
+        }
+    }
+}
+
 /// D3 as the mocks draw it.
 #[must_use]
 pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
@@ -867,7 +918,10 @@ pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
         ticker: "BNB".into(),
         badge: chain_bnb(),
         amount: "0.8533 BNB".into(),
-        sub: "BNB Chain · $496.46".into(),
+        sub: AssetSub {
+            worth: SubWorth::Said("$496.46".into()),
+            chain: "BNB Chain".into(),
+        },
         facts: bnb_facts(s),
         activity: bnb_activity(s),
         activity_ids: Vec::new(),

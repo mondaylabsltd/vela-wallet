@@ -176,7 +176,7 @@ fn masked_surfaces(balance: &BalanceView, feed: &FeedView) -> Vec<(&'static str,
             crate::wallet::live::asset_detail(balance, feed, index, &wallet, "en", money)
         {
             token_detail.push(detail.amount.to_string());
-            token_detail.push(detail.sub.to_string());
+            token_detail.push(detail.sub.text());
             token_detail.extend(detail.facts.iter().map(|(_, value)| value.to_string()));
             token_detail.extend(activity_text(&detail.activity));
         }

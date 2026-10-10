@@ -52,10 +52,14 @@ use crate::wallet::fixtures::{
 ///   stays ([`Self::alone`], [`Self::approx`], [`Self::sentence`]);
 /// - a figure said after something that is not fiat ("0.0021 ETH · ≈$5.40")
 ///   leaves that something standing alone ([`Self::after`]): a token amount
-///   is not in the display currency and is drawn as always.
+///   is not in the display currency and is drawn as always;
+/// - a figure that LEADS a line something else stands after (the token
+///   page's "worth · network") waits on a bar as wide as its room
+///   ([`Self::room`]), so what follows it is drawn where it will stay.
 ///
-/// Never a dash, a zero or the placeholder's dollars: each of those is a
-/// figure, and there is none yet.
+/// Never a dash, a zero or the placeholder's dollars on screen: each of
+/// those is a figure, and there is none yet. ([`Self::room`] measures with
+/// the placeholder pair and draws nothing of it.)
 #[derive(Clone, Debug, PartialEq)]
 pub struct Money {
     code: String,
@@ -155,17 +159,33 @@ impl Money {
         if !self.committed {
             return None;
         }
+        Some(self.written(usd, locale))
+    }
+
+    /// How wide a figure's place is kept on a line it SHARES with what
+    /// comes after it (the token page's "worth · network"): the figure as
+    /// this pair writes it — which, while nothing is committed, is the
+    /// core's placeholder pair. **For laying out, never for drawing**: what
+    /// takes it draws it invisibly, under the waiting bar. A figure in a
+    /// place of its own ([`Self::alone`], [`Self::fiat`]) needs no room:
+    /// nothing stands after it.
+    #[must_use]
+    pub fn room(&self, usd: f64, locale: &str) -> String {
+        self.written(usd, locale)
+    }
+
+    fn written(&self, usd: f64, locale: &str) -> String {
         let (code, amount) = match self.rate {
             Some(rate) => (self.code.as_str(), usd * rate),
             None => ("USD", usd),
         };
-        Some(format_fiat(
+        format_fiat(
             amount,
             code,
             crate::settings::live::symbol_for(code),
             locale,
             crate::executor::format_prefs::fiat_options(),
-        ))
+        )
     }
 
     /// A figure in a place of its own — a row's amount, a network's total —
@@ -2286,7 +2306,14 @@ mod tests {
         // The round settled and found nothing: now it is an empty wallet.
         let live = first_read_view(FirstRead::Live);
         assert_eq!(live.empty_key.as_deref(), Some(ASSETS_EMPTY));
-        assert_eq!(s.empty_assets_title.as_ref(), "Deposit your first asset");
+        // The title the strip draws is that key's line (in English here,
+        // whatever language another test has pinned).
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(
+            WalletStrings::resolve(&en).empty_assets_title.as_ref(),
+            en.t(ASSETS_EMPTY).as_ref()
+        );
+        assert_eq!(en.t(ASSETS_EMPTY).as_ref(), "Deposit your first asset");
         assert!(assets_strip_empty(&live, None));
 
         // The key and nothing else: the same settled view without it (what an
@@ -2949,13 +2976,12 @@ mod tests {
                 .unwrap_or_else(|| unreachable!("row 1 exists"));
             assert_eq!(mon.ticker, "MON");
             assert_eq!(mon.amount, "12 MON");
-            // Unpriced: the chain, never "Monad · $0.00".
+            // Unpriced: said so, never "$0.00 · Monad".
+            assert_eq!(mon.sub.text(), format!("{} · Monad", s.no_price));
             assert!(
-                mon.sub.starts_with("Monad"),
-                "the network leads: {}",
-                mon.sub
+                !mon.sub.text().contains('$'),
+                "an unpriced holding is not $0.00"
             );
-            assert!(!mon.sub.contains('$'), "an unpriced holding is not $0.00");
             // An ERC-20 names its contract, and keeps it whole for the copy;
             // the price row says there is none rather than going missing
             // (the web's `liveAssetDetail`, 078 H-06).
@@ -2976,7 +3002,9 @@ mod tests {
             let xdai = asset_detail(&held, &feed, 0, &s, "en-US", &Money::default())
                 .unwrap_or_else(|| unreachable!("row 0 exists"));
             assert_eq!(xdai.ticker, "xDAI");
-            assert_eq!(xdai.sub.as_ref(), "Gnosis · $0.76", "the network leads");
+            // The worth, then the network — the order and the joint the web
+            // writes (`fiatLine`), so the four shells read the same.
+            assert_eq!(xdai.sub.text(), "$0.76 · Gnosis");
             // A native coin has no contract, and says so in words.
             assert!(
                 xdai.facts
@@ -2985,36 +3013,63 @@ mod tests {
             );
             assert_eq!(xdai.activity.len(), 1, "its own transaction");
 
-            // PR 3 final note F23 — the worth is what arrives (it waits on
-            // the display currency), and it arrives AFTER the network's
-            // name: the line before it lands is a prefix of the line after,
-            // so nothing already drawn moves. It used to arrive in front
-            // ("$0.76 · Gnosis") and push the name 80 px to the right.
+            // PR 3 final note F23, and the device round's item 4 — the worth
+            // is what arrives (it waits on the display currency), and it
+            // leads. Drawn as one text it pushed the network's name 70.5 pt
+            // to the right when it landed; round 3 put the name first, which
+            // no other shell does. Now the worth has its own cell, and while
+            // it is out the cell keeps the figure's room: no figure is
+            // drawn, and the name stands where it will stay.
+            use crate::wallet::fixtures::SubWorth;
             let waiting = Money::of(&vela_core::app::display_currency::CurrencyView {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                committed: false,
+                pending: None,
+            });
+            let before = asset_detail(&held, &feed, 0, &s, "en-US", &waiting)
+                .unwrap_or_else(|| unreachable!("row 0 exists"));
+            assert_eq!(
+                before.sub.text(),
+                " · Gnosis",
+                "the line is there, the worth is not"
+            );
+            assert_eq!(before.sub.chain, xdai.sub.chain);
+            // The room is the cell's width while the worth is out. When the
+            // currency that commits is the placeholder's own, it is the very
+            // figure that lands: the same glyphs in the same cell, so the
+            // name's x is the same before and after.
+            let SubWorth::Waiting { room } = &before.sub.worth else {
+                unreachable!("withheld: {:?}", before.sub.worth);
+            };
+            assert_eq!(xdai.sub.worth, SubWorth::Said(room.clone()));
+            // Another currency on its way: its rate is not known, so neither
+            // is its figure — the room is still the placeholder pair's, and
+            // nothing of it is drawn.
+            let cny = Money::of(&vela_core::app::display_currency::CurrencyView {
                 code: "USD".to_owned(),
                 rate: Some(1.0),
                 committed: false,
                 pending: Some("CNY".to_owned()),
             });
-            let before = asset_detail(&held, &feed, 0, &s, "en-US", &waiting)
+            let on_its_way = asset_detail(&held, &feed, 0, &s, "en-US", &cny)
                 .unwrap_or_else(|| unreachable!("row 0 exists"));
-            assert_eq!(
-                before.sub.as_ref(),
-                "Gnosis",
-                "the line is there, the worth is not"
-            );
-            assert!(
-                xdai.sub.starts_with(before.sub.as_ref()),
-                "{:?} then {:?}",
-                before.sub,
-                xdai.sub
-            );
-            // Hidden says the network and no figure, from the same place.
+            assert_eq!(on_its_way.sub, before.sub);
+            assert!(!on_its_way.sub.text().contains(['$', '¥', '0']));
+            // An unpriced holding has nothing to wait for: it says so at once.
+            let unpriced = asset_detail(&held, &feed, 1, &s, "en-US", &waiting)
+                .unwrap_or_else(|| unreachable!("row 1 exists"));
+            assert_eq!(unpriced.sub, mon.sub);
+            // Hidden says the network and no figure — and keeps no room for
+            // one: nothing of the worth, drawn or not, is on the line.
             let mut masked = held.clone();
             masked.hidden = true;
-            let hidden = asset_detail(&masked, &feed, 0, &s, "en-US", &Money::default())
-                .unwrap_or_else(|| unreachable!("row 0 exists"));
-            assert_eq!(hidden.sub.as_ref(), "Gnosis");
+            for money in [Money::default(), waiting.clone()] {
+                let hidden = asset_detail(&masked, &feed, 0, &s, "en-US", &money)
+                    .unwrap_or_else(|| unreachable!("row 0 exists"));
+                assert_eq!(hidden.sub.worth, SubWorth::Absent);
+                assert_eq!(hidden.sub.text(), "Gnosis");
+            }
             // …and the id that row opens, from the same walk.
             assert_eq!(xdai.activity_ids, vec!["a".to_owned()]);
             assert!(mon.activity_ids.is_empty());
@@ -3183,7 +3238,11 @@ mod tests {
                 .unwrap_or_else(|| unreachable!("the token is there"));
             assert_eq!(hidden.amount.as_ref(), "•••• ETH");
             assert!(!hidden.amount.contains("0.5"));
-            assert!(!hidden.sub.contains("1,234"), "{}", hidden.sub);
+            assert!(
+                !hidden.sub.text().contains("1,234"),
+                "{}",
+                hidden.sub.text()
+            );
         });
     }
 
@@ -3786,26 +3845,30 @@ pub fn asset_detail(
                 token.symbol
             ))
         },
-        // The network FIRST, then what the holding is worth (PR 3 final
-        // note F23). The line was "$1,234.50 · Gnosis": the worth is the
-        // part that arrives — it waits on the display currency — and it
-        // arrived in front, so the network's name slid 80 px to the right
-        // when it landed. What is known from the first frame leads; what
-        // lands is added after it, and nothing already drawn moves.
-        sub: if view.hidden {
-            SharedString::from(chain.clone())
-        } else {
-            match token.price_usd {
-                // "Gnosis · $1,234.50" — and the chain alone while the worth
-                // is withheld: the line is there either way.
-                Some(price) => SharedString::from(
-                    money
-                        .figure(amount * price, locale)
-                        .map_or_else(|| chain.clone(), |worth| format!("{chain} · {worth}")),
-                ),
-                // Unpriced: said so, never "Gnosis · $0.00".
-                None => SharedString::from(format!("{chain} · {}", s.no_price)),
-            }
+        // What the holding is worth, then its network — "$1,234.50 · Gnosis",
+        // as the web writes it (PR 3 device round, item 4). The worth is the
+        // part that arrives (it waits on the display currency) and it leads,
+        // so it has a cell of its own whose room is kept while it is out:
+        // the name after it is drawn where it will stay.
+        sub: crate::wallet::fixtures::AssetSub {
+            worth: if view.hidden {
+                // Hidden says the network and no figure.
+                crate::wallet::fixtures::SubWorth::Absent
+            } else {
+                match token.price_usd {
+                    Some(price) => match money.figure(amount * price, locale) {
+                        Some(worth) => {
+                            crate::wallet::fixtures::SubWorth::Said(SharedString::from(worth))
+                        }
+                        None => crate::wallet::fixtures::SubWorth::Waiting {
+                            room: SharedString::from(money.room(amount * price, locale)),
+                        },
+                    },
+                    // Unpriced: said so, never "$0.00 · Gnosis".
+                    None => crate::wallet::fixtures::SubWorth::Said(s.no_price.clone()),
+                }
+            },
+            chain: SharedString::from(chain.clone()),
         },
         facts,
         // This asset's own transactions, from the same feed the home draws.

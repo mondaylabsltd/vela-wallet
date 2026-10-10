@@ -1175,6 +1175,58 @@ pub fn token_icon_logos(
     lead_circle_logos(theme, token_glyph(theme, ticker), badge, logos, true)
 }
 
+/// The token page's line under the amount: what the holding is worth, then
+/// its network — "¥8,789.64 · Ethereum" ([`super::fixtures::AssetSub`]).
+///
+/// The worth is a cell of its own and the network's name starts where the
+/// cell ends, in the same two boxes whether the worth is said or still out —
+/// so with the same room in the cell, the name is drawn at the same x. Out,
+/// the cell holds a waiting bar over its room: the room's figure is laid out
+/// and never painted (`invisible`), exactly as wide as that figure drawn.
+pub fn asset_sub(theme: &Theme, sub: &super::fixtures::AssetSub) -> Div {
+    use super::fixtures::{AssetSub, SubWorth};
+    let line = div()
+        .flex()
+        .items_start()
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_muted);
+    // The joint belongs to the name's box: a worth that lands changes only
+    // what is in its own cell.
+    let after = |joint: &str| {
+        div()
+            .min_w(px(0.))
+            .child(crate::ui::prose(SharedString::from(format!(
+                "{joint}{}",
+                sub.chain
+            ))))
+    };
+    match &sub.worth {
+        SubWorth::Said(worth) => line
+            .child(div().flex_none().child(worth.clone()))
+            .child(after(AssetSub::JOINT)),
+        SubWorth::Waiting { room } => line
+            .child(
+                div()
+                    .relative()
+                    .flex_none()
+                    .child(div().invisible().child(room.clone()))
+                    // The holding row's bar (`Fiat::Pending`), as wide as
+                    // the room, on the middle of the line.
+                    .child(
+                        div().absolute().inset_0().flex().items_center().child(
+                            div()
+                                .w_full()
+                                .h(px(10.))
+                                .rounded(px(4.))
+                                .bg(theme.bg_sunken),
+                        ),
+                    ),
+            )
+            .child(after(AssetSub::JOINT)),
+        SubWorth::Absent => line.child(after("")),
+    }
+}
+
 /// Asset row. Caller chains `.on_click` (opens the detail panel — US2).
 pub fn asset_row(
     id: impl Into<ElementId>,

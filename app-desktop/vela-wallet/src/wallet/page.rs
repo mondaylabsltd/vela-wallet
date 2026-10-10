@@ -121,8 +121,8 @@ use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
 use super::WalletStrings;
 use super::components::{
-    action_pill, activity_row, asset_row, balance_display, chain_row, empty_state, icon_img,
-    identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
+    action_pill, activity_row, asset_row, asset_sub, balance_display, chain_row, empty_state,
+    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
     section_header_row, skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
@@ -4773,7 +4773,10 @@ impl WalletPage {
                 ticker: SharedString::from(""),
                 badge: gpui::rgb(0x8A_8F_98).into(),
                 amount: SharedString::from(""),
-                sub: SharedString::from(""),
+                sub: fixtures::AssetSub {
+                    worth: fixtures::SubWorth::Absent,
+                    chain: SharedString::from(""),
+                },
                 facts: Vec::new(),
                 activity: Vec::new(),
                 activity_ids: Vec::new(),
@@ -8031,12 +8034,7 @@ impl WalletPage {
                             .text_color(theme.fg_base)
                             .child(model.amount.clone()),
                     )
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_muted)
-                            .child(crate::ui::prose(model.sub.clone())),
-                    ),
+                    .child(asset_sub(theme, &model.sub)),
             );
 
         let buttons = div()
@@ -11059,8 +11057,14 @@ impl WalletPage {
                 &vela_core::app::display_currency::CurrencyView {
                     code: code.to_uppercase(),
                     // A board's rate, not a quote: the figures only have to
-                    // be in that money.
-                    rate: Some(7.12),
+                    // be in that money. A dollar is a dollar: `USD:landed`
+                    // is the placeholder's own currency committing — what
+                    // the board of a figure's kept room is measured on.
+                    rate: Some(if code.eq_ignore_ascii_case("USD") {
+                        1.0
+                    } else {
+                        7.12
+                    }),
                     committed: true,
                     pending: None,
                 },
