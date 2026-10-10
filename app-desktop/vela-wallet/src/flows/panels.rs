@@ -1613,7 +1613,9 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
         div()
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_base)
-            .child(notice.body.clone()),
+            // By the CJK line rule, as the detail under it: 「…（链 ID
+            // 424242）」 wrapped its full stop onto a line of its own.
+            .child(crate::ui::prose(notice.body.clone())),
     );
     if let Some(detail) = &notice.detail {
         card = card.child(
