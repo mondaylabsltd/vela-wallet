@@ -1229,7 +1229,6 @@
    "simWillFail": "Giao dịch này dự kiến sẽ thất bại — bạn vẫn phải trả phí gas.",
    "simWillFailReason": "Dự kiến thất bại: {{reason}} — bạn vẫn phải trả phí gas.",
    "balanceChangesTitle": "Thay đổi số dư",
-   "balanceNoAssetsMove": "Không có tài sản nào rời khỏi ví của bạn",
    "balanceUnverifiedToken": "Token chưa xác minh",
    "balanceSelfTransfer": "Đến chính địa chỉ của bạn · số dư không đổi",
    "intentContractCall": "Tương tác hợp đồng",

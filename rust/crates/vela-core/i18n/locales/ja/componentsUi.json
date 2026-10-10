@@ -63,7 +63,6 @@
       "simWillFail": "この取引は失敗する見込みです — それでも Gas 手数料はかかります。",
       "simWillFailReason": "失敗する見込み：{{reason}} — それでも Gas 手数料はかかります。",
       "balanceChangesTitle": "残高の変化",
-      "balanceNoAssetsMove": "ウォレットから資産は出ていきません",
       "balanceUnverifiedToken": "未検証のトークン",
       "balanceSelfTransfer": "自分のアドレスへ送金 · 残高は変わりません",
       "intentContractCall": "コントラクト操作",

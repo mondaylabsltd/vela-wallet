@@ -88,7 +88,6 @@
       "simWillFail": "This transaction is expected to fail — you’d still pay gas.",
       "simWillFailReason": "Expected to fail: {{reason}} — you’d still pay gas.",
       "balanceChangesTitle": "Balance changes",
-      "balanceNoAssetsMove": "No assets leave your wallet",
       "balanceMatchesHero": "Simulated — nothing else leaves your wallet",
       "simResultLabel": "Simulation result",
       "simResultNoChange": "No asset changes",

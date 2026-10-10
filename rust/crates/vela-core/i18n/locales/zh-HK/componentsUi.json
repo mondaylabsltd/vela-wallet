@@ -40,7 +40,6 @@
       "simWillFail": "此筆交易預計會失敗 — 但仍會扣除 gas。",
       "simWillFailReason": "預計會失敗：{{reason}} — 但仍會扣除 gas。",
       "balanceChangesTitle": "餘額變化",
-      "balanceNoAssetsMove": "沒有資產會離開你的錢包",
       "balanceUnverifiedToken": "未驗證代幣",
       "balanceUnderfundedNative": "{{symbol}} 餘額不足以支付此轉帳 — 預計會在鏈上失敗。",
       "tokenToContractWarning": "此操作會將代幣發送至代幣本身的合約 — 代幣將永久損失。",

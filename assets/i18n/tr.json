@@ -1229,7 +1229,6 @@
    "simWillFail": "Bu işlemin başarısız olması bekleniyor — gas ücretini yine de ödersiniz.",
    "simWillFailReason": "Başarısız olması bekleniyor: {{reason}} — gas ücretini yine de ödersiniz.",
    "balanceChangesTitle": "Bakiye değişiklikleri",
-   "balanceNoAssetsMove": "Cüzdanından hiçbir varlık çıkmıyor",
    "balanceUnverifiedToken": "Doğrulanmamış token",
    "balanceSelfTransfer": "Kendi adresinize · bakiye değişmez",
    "intentContractCall": "Sözleşme etkileşimi",

@@ -1234,7 +1234,6 @@
    "simWillFail": "Esta transação deve falhar — você ainda pagaria o gas.",
    "simWillFailReason": "Deve falhar: {{reason}} — você ainda pagaria o gas.",
    "balanceChangesTitle": "Mudanças no saldo",
-   "balanceNoAssetsMove": "Nenhum ativo sai da sua carteira",
    "balanceUnverifiedToken": "Token não verificado",
    "balanceSelfTransfer": "Para seu próprio endereço · o saldo não muda",
    "intentContractCall": "Interação com contrato",

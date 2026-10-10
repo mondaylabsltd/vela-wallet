@@ -63,7 +63,6 @@
       "simWillFail": "Diese Transaktion wird voraussichtlich fehlschlagen — Sie zahlen trotzdem Gas.",
       "simWillFailReason": "Voraussichtlicher Fehlschlag: {{reason}} — Sie zahlen trotzdem Gas.",
       "balanceChangesTitle": "Guthabenänderungen",
-      "balanceNoAssetsMove": "Es verlassen keine Assets Ihre Wallet",
       "balanceUnverifiedToken": "Nicht verifizierter Token",
       "balanceSelfTransfer": "An Ihre eigene Adresse · Guthaben bleibt gleich",
       "intentContractCall": "Contract-Interaktion",

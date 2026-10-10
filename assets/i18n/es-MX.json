@@ -1234,7 +1234,6 @@
    "simWillFail": "Se espera que esta transacción falle — aun así pagarías gas.",
    "simWillFailReason": "Se espera que falle: {{reason}} — aun así pagarías gas.",
    "balanceChangesTitle": "Cambios de saldo",
-   "balanceNoAssetsMove": "Ningún activo sale de tu billetera",
    "balanceUnverifiedToken": "Token no verificado",
    "balanceSelfTransfer": "A tu propia dirección · el saldo no cambia",
    "intentContractCall": "Interacción con contrato",

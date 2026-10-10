@@ -63,7 +63,6 @@
       "simWillFail": "Transaksi ini diperkirakan gagal — Anda tetap membayar gas.",
       "simWillFailReason": "Diperkirakan gagal: {{reason}} — Anda tetap membayar gas.",
       "balanceChangesTitle": "Perubahan saldo",
-      "balanceNoAssetsMove": "Tidak ada aset yang keluar dari dompet Anda",
       "balanceUnverifiedToken": "Token belum diverifikasi",
       "balanceSelfTransfer": "Ke alamat Anda sendiri · saldo tidak berubah",
       "intentContractCall": "Interaksi kontrak",

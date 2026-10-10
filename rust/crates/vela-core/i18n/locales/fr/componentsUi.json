@@ -63,7 +63,6 @@
       "simWillFail": "Cette transaction devrait échouer — vous paieriez quand même les frais de gas.",
       "simWillFailReason": "Échec probable : {{reason}} — vous paieriez quand même les frais de gas.",
       "balanceChangesTitle": "Variations de solde",
-      "balanceNoAssetsMove": "Aucun actif ne quitte votre portefeuille",
       "balanceUnverifiedToken": "Token non vérifié",
       "balanceSelfTransfer": "Vers votre propre adresse · le solde ne change pas",
       "intentContractCall": "Interaction avec le contrat",

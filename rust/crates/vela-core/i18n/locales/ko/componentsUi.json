@@ -63,7 +63,6 @@
       "simWillFail": "이 거래는 실패할 것으로 보입니다 — 그래도 가스는 지불됩니다.",
       "simWillFailReason": "실패할 것으로 보입니다: {{reason}} — 그래도 가스는 지불됩니다.",
       "balanceChangesTitle": "잔액 변동",
-      "balanceNoAssetsMove": "지갑에서 빠져나가는 자산이 없습니다",
       "balanceUnverifiedToken": "검증되지 않은 토큰",
       "balanceSelfTransfer": "내 주소로 전송 · 잔액이 변하지 않습니다",
       "intentContractCall": "컨트랙트 상호작용",

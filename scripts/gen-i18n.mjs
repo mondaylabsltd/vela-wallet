@@ -785,8 +785,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `onboarding.create.methodHybridBody` in ru and pt-BR (309 / 307 pt
 //   against a 280 pt column on a 375 pt phone).
 //   1774 − 1 + 4 + 1 = 1778 leaves, 101 branches.
-if (PATHS.length !== 1879) fail(`expected 1879 paths (1778 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1778) fail(`expected 1778 leaf paths, got ${leafSet.size}`);
+// 1878 (UI batch, device round, 2026-10-10): retired `componentsUi.signing.
+//   balanceNoAssetsMove` ("No assets leave your wallet"). It was iOS's own
+//   sentence for a checked simulation that moves nothing, where the desktop
+//   and Android said `simResultNoChange` ("No asset changes") and the web
+//   said nothing. The line is the core's now — `sim_outcome::no_change_key`,
+//   carried by `TrustSimView.no_change_key` — so there is one sentence.
+//   1778 − 1 = 1777 leaves, 101 branches.
+if (PATHS.length !== 1878) fail(`expected 1878 paths (1777 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1777) fail(`expected 1777 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

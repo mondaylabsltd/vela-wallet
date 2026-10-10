@@ -1239,7 +1239,6 @@
    "simWillFail": "Ожидается, что эта транзакция не пройдёт — газ всё равно спишется.",
    "simWillFailReason": "Ожидается сбой: {{reason}} — газ всё равно спишется.",
    "balanceChangesTitle": "Изменения баланса",
-   "balanceNoAssetsMove": "Активы не покидают ваш кошелёк",
    "balanceUnverifiedToken": "Непроверенный токен",
    "balanceSelfTransfer": "На ваш собственный адрес · баланс не изменится",
    "intentContractCall": "Взаимодействие с контрактом",
