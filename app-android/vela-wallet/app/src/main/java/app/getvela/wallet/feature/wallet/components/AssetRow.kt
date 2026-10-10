@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet.components
 
+import app.getvela.wallet.core.designsystem.components.withheldFigure
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -254,14 +255,20 @@ fun AssetRow(
                     maxLines = 1,
                     textAlign = TextAlign.End,
                 )
-                // A line's worth of placeholder, so the row keeps its height
-                // and nothing moves when the figure lands.
-                AssetFiatModel.Loading -> Box(
-                    modifier = Modifier
-                        .padding(vertical = VelaSpacing.sm)
-                        .width(VelaSpacing.xl5)
-                        .height(VelaSpacing.lg + VelaSpacing.xs)
-                        .background(colors.borderBase, CircleShape),
+                // The figure's own line, empty, with the waiting pill drawn
+                // in it — so the row keeps its height exactly and nothing
+                // moves when the figure lands. It was a box matched by hand
+                // (22 dp for an 18 dp line), and every row under a waiting
+                // one sat a little lower until the currency arrived.
+                AssetFiatModel.Loading -> Text(
+                    text = "",
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.regular,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.withheldFigure(true, colors.borderBase),
                 )
                 AssetFiatModel.None -> Unit
             }

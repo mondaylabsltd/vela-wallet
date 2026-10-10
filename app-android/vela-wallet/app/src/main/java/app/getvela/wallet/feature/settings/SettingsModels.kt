@@ -55,7 +55,17 @@ enum class SettingsScreenState {
      * a page that will not open and an address refused (ST18B).
      */
     ST17, ST17B, ST17C, ST18, ST18B,
-    SR1, SR2, SR2B, SR3, SR4, SR5,
+    SR1, SR2, SR2B, SR3,
+
+    /**
+     * The balance-by-network sheet through the LIVE builder, with the
+     * display currency on its way (SR3B: a cold start with CNY stored — the
+     * total and each network's worth keep their room, nothing drawn in the
+     * placeholder's dollars) and the SAME frame once it commits (SR3C), so
+     * the pair shows that nothing moved.
+     */
+    SR3B, SR3C,
+    SR4, SR5,
     /** Spec 092: every network the wallet cannot reach, in one list. */
     SR6,
 
@@ -680,6 +690,8 @@ data class BalanceDetailRowModel(
     val tone: SettingsTone = SettingsTone.Neutral,
     val action: String? = null,
     val amount: String? = null,
+    /** [amount] is a fiat figure withheld until the display currency is the person's: its room is kept. */
+    val amountWithheld: Boolean = false,
 )
 
 @Immutable
@@ -694,6 +706,8 @@ data class BalanceDetailModel(
     /** The hero's "couldn't be priced" line, answered by name (holdings in `status`). */
     val sectionUnpriced: String = "",
     val unpriced: List<BalanceDetailRowModel> = emptyList(),
+    /** The total in [summary] is withheld until the display currency is the person's: empty, its line kept. */
+    val summaryWithheld: Boolean = false,
 )
 
 /**
@@ -723,6 +737,8 @@ data class UnreachableRowModel(
      * action is drawn.
      */
     val action: String?,
+    /** [line] carries a worth withheld until the display currency is the person's: empty, its line kept. */
+    val lineWithheld: Boolean = false,
 )
 
 /** SR4: fund this chain's bundler treasury. */

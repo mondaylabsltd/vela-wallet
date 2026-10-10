@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -2530,12 +2531,14 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: 
 private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(model.title)
+    // "Total …": withheld until the display currency is the person's — the
+    // line keeps its room, so the sections under it do not move.
     Text(
         text = model.summary,
         color = colors.fgSubtle,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
-        modifier = Modifier.padding(bottom = VelaSpacing.xl),
+        modifier = Modifier.padding(bottom = VelaSpacing.xl).withheldFigure(model.summaryWithheld, colors.borderBase),
     )
     BalanceDetailSection(model.sectionPending)
     Text(
@@ -2589,7 +2592,14 @@ private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) 
             VelaChainMark(row.mark)
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = row.name, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
-                Text(text = row.line, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+                // "Last seen …" waits for the display currency like any fiat figure: its line kept.
+                Text(
+                    text = row.line,
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier.withheldFigure(row.lineWithheld, colors.borderBase),
+                )
             }
             // No "Fix" where there is no RPC to fix (the core's `rpc_fixable`):
             // the row is its name and what was last read there.
@@ -2673,12 +2683,13 @@ private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Un
                 modifier = Modifier.clickable { onRetry(row.id) }.padding(VelaSpacing.sm),
             )
         }
-        if (row.amount != null) {
+        if (row.amount != null || row.amountWithheld) {
             Text(
-                text = row.amount,
+                text = row.amount.orEmpty(),
                 color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.lg,
+                modifier = Modifier.withheldFigure(row.amountWithheld, colors.borderBase),
             )
         }
     }

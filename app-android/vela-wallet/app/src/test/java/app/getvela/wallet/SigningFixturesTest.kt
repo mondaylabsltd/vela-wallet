@@ -108,8 +108,9 @@ class SigningFixturesTest {
         // spec 102's hand-off card (CS40/CS41: the card a send raises on its
         // own), CS43/CS44, a key ceremony waiting on its page, CS45–CS56,
         // the correctness batch's boards (drawn through the live builders),
-        // and CS57/CS58: the simulation's verdict's place, kept and taken.
-        assertEquals(56, SigningScreenState.entries.size)
+        // CS57/CS58: the simulation's verdict's place, kept and taken, and
+        // CS59/CS60: the fee's worth waiting for the display currency, and landed.
+        assertEquals(58, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)

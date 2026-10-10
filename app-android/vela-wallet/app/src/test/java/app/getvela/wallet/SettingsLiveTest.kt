@@ -453,7 +453,7 @@ class SettingsLiveTest {
         assertEquals(WalletLive.Money.of(usd).fiat(2000.0), detail.done[0].amount)
         assertEquals(WalletLive.Money.of(usd).fiat(1015.0), detail.done[1].amount)
         assertEquals(
-            strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL, mapOf("amount" to WalletLive.Money.of(usd).fiat(3017.5))),
+            strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL, mapOf("amount" to WalletLive.Money.of(usd).fiat(3017.5)!!)),
             detail.summary,
         )
         assertEquals(listOf("ODD"), detail.unpriced.map { it.name })

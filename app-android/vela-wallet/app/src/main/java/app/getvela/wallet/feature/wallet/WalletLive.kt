@@ -415,13 +415,6 @@ object WalletLive {
         // The hero's mask is the wider one (`privacy::BALANCE_MASK`), as the
         // gallery's hidden state always drew it.
         if (view.hidden) return live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null)
-        // The display currency is not the person's yet (the core's rule on
-        // `CurrencyView.committed`): no figure. The total waits as a total
-        // still being read waits, and appears once, in the right money — it
-        // read "$1,234" for a few seconds and then jumped to "¥8,876".
-        if (!money.settled && (live.state == BalanceStateKind.Normal || live.state == BalanceStateKind.ZeroLive)) {
-            return live.copy(state = BalanceStateKind.Loading, integer = null, decimals = null, liveText = null)
-        }
         return live
     }
 
@@ -501,22 +494,28 @@ object WalletLive {
             )
         }
 
-        // The exact binary value rounded HALF UP — `Formats.fixed2`'s rule and
-        // the web's `toFixed(2)`, so the hero and its rows agree with each
-        // other and with the web. It used to CUT: `BigDecimal(12.34)` is
-        // 12.3399…, and cutting that printed $12.33.
-        val rounded = BigDecimal(money.convert(total)).setScale(2, RoundingMode.HALF_UP)
-        val whole = rounded.toBigInteger()
-        val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
+        // The display currency is not the person's yet (the core's rule on
+        // `CurrencyView.committed`): the one helper withholds the figure. The
+        // total waits as a total still being read waits — its status line
+        // kept — and appears once, in the right money: it read "$1,234" for
+        // a few seconds and then jumped to "¥8,876".
+        val figure = money.parts(total)
+            ?: return fallback.copy(
+                state = BalanceStateKind.Loading,
+                integer = null,
+                decimals = null,
+                liveText = null,
+                status = balanceStatus(view, strings, chainNames),
+            )
         // A zero is "live" only once EVERY chain has answered: a zero with a
         // chain unread (partial) or unknown is not a listening wallet, it is an
         // unknown one — and a cached zero is not live at all.
-        val zeroLive = rounded.signum() == 0 && view.display_total_usd != null &&
+        val zeroLive = figure.zero && view.display_total_usd != null &&
             !view.balance_unknown && !view.balance_partial && view.tokens.isEmpty()
         return fallback.copy(
             state = if (zeroLive) BalanceStateKind.ZeroLive else BalanceStateKind.Normal,
-            integer = money.symbol + Formats.current.groupDigits(whole.toString()),
-            decimals = cents.toString().padStart(2, '0'),
+            integer = figure.integer,
+            decimals = figure.decimals,
             decimalMark = Formats.current.decimalMark(),
             // The label beside the figure names the currency it is in.
             currency = money.code,
@@ -627,11 +626,10 @@ object WalletLive {
             fiat = when {
                 hidden -> AssetFiatModel.Masked
                 // A holding's worth is a figure in the display currency: it
-                // waits with the total while that is not the person's yet.
-                !money.settled -> AssetFiatModel.Loading
+                // waits with the total while that is not the person's yet
+                // (the helper answers `null`), its line's room kept.
                 else -> token.price_usd?.let { price ->
-                    val value = money.convert(amountAsDouble(token.balance) * price)
-                    AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
+                    money.fiat(amountAsDouble(token.balance) * price)?.let { AssetFiatModel.Value(it) } ?: AssetFiatModel.Loading
                 } ?: AssetFiatModel.NoPrice("—")
             },
             masked = hidden,
@@ -678,9 +676,11 @@ object WalletLive {
             title = strings.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
             summary = when {
                 hidden -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to MASK))
-                // No total in a currency that is not the person's yet.
-                known && money.settled -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to money.fiat(total)))
-                else -> count.trimEnd(' ', '·')
+                // No total in a currency that is not the person's yet (the
+                // helper withholds it): the count alone, on the same one line.
+                else -> money.fiat(total)?.takeIf { known }
+                    ?.let { count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to it)) }
+                    ?: count.trimEnd(' ', '·')
             },
             rows = accounts.mapIndexed { i, (name, address) ->
                 val short = ExploreLive.shortAddress(address)
@@ -689,7 +689,7 @@ object WalletLive {
                     name = name.ifBlank { short },
                     addressDisplay = short,
                     addressFull = address,
-                    amount = if (hidden) MASK else usd?.takeIf { money.settled }?.let { money.fiat(it) } ?: "",
+                    amount = if (hidden) MASK else usd?.let { money.fiat(it) } ?: "",
                     selected = i == activeIndex,
                 )
             },
@@ -747,16 +747,29 @@ object WalletLive {
      * hero showed for the whole of phases 4 and 5, correctly, before there was
      * a rate to use.
      */
+    /**
+     * **The one place a fiat figure is formatted — and the one place it is
+     * withheld.** The core's rule (`app::display_currency`, its
+     * `FIAT_SURFACES`): until the display currency is the person's
+     * (`CurrencyView.committed`) NO fiat figure is drawn on ANY surface —
+     * not "$1,234" that becomes "¥8,876" a few seconds later, and not a "$"
+     * on one screen while another waits. So [fiat] and [parts] answer `null`
+     * while it is not, and the sign and the rate are private: no caller can
+     * format around them. Each surface decides only what its WITHHELD figure
+     * draws — the figure's room, kept, so nothing moves when it lands. A
+     * token amount ("0.5 ETH") is not in the display currency and never
+     * comes through here.
+     */
     class Money private constructor(
         val code: String,
-        val symbol: String,
+        private val symbol: String,
         private val rate: Double?,
         /**
          * The display currency is the person's (`CurrencyView.committed`).
          * `false`: the core is still on its USD placeholder — and a surface
          * that draws a figure in it draws the WRONG currency for a few
-         * seconds, then jumps. The home's total and its holdings' worth wait
-         * instead (their loading state), and appear once, in the right money.
+         * seconds, then jumps. Every figure waits instead, and appears once,
+         * in the right money.
          */
         val settled: Boolean = true,
         /**
@@ -766,10 +779,43 @@ object WalletLive {
          */
         val label: String = code,
     ) {
-        fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
+        private fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
 
-        /** A fiat figure in this money, drawn with the person's number format (spec 047 D2). */
-        fun fiat(usd: Double): String = symbol + Formats.current.fixed2(convert(usd))
+        /**
+         * A fiat figure in this money, drawn with the person's number format
+         * (spec 047 D2) — or `null`: WITHHELD, the currency is not the
+         * person's yet. A caller draws the figure's room and nothing in it.
+         */
+        fun fiat(usd: Double): String? = if (settled) symbol + Formats.current.fixed2(convert(usd)) else null
+
+        /** The hero's figure in its parts; see [parts]. */
+        class Parts(
+            /** "$1,383" — the sign and the grouped whole part. */
+            val integer: String,
+            /** "28" — the cents, two digits. */
+            val decimals: String,
+            /** The rounded figure is exactly zero. */
+            val zero: Boolean,
+        )
+
+        /**
+         * The hero's figure, in the two parts it is drawn in — or `null`:
+         * WITHHELD, as [fiat]. The exact binary value rounded HALF UP —
+         * `Formats.fixed2`'s rule and the web's `toFixed(2)`, so the hero and
+         * its rows agree with each other and with the web. It used to CUT:
+         * `BigDecimal(12.34)` is 12.3399…, and cutting that printed $12.33.
+         */
+        fun parts(usd: Double): Parts? {
+            if (!settled) return null
+            val rounded = BigDecimal(convert(usd)).setScale(2, RoundingMode.HALF_UP)
+            val whole = rounded.toBigInteger()
+            val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
+            return Parts(
+                integer = symbol + Formats.current.groupDigits(whole.toString()),
+                decimals = cents.toString().padStart(2, '0'),
+                zero = rounded.signum() == 0,
+            )
+        }
 
         companion object {
             /** Dollars, unconverted — the default before a currency is known. */

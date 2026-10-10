@@ -1067,12 +1067,21 @@ object SettingsLive {
         val rows = view.unreachable_networks.map { network ->
             val id = network.chain_id
             val name = chainNames[id] ?: id.toString()
-            val amount = network.last_seen_usd?.takeIf { !view.hidden }?.let(money::fiat) ?: MASK
+            // "Last seen {{amount}}" carries a worth in the display currency:
+            // masked while hidden (the core withholds the figure and this
+            // writes the mask), and WITHHELD while that currency is not the
+            // person's yet — the line is not said then, its room kept, since
+            // the sentence is built around the figure. Every other line
+            // ("Not read yet", "Held nothing when last read") has no figure.
+            val worth = network.last_seen_usd?.takeIf { !view.hidden }
+            val withheld = worth != null && !money.settled
+            val amount = worth?.let { money.fiat(it) } ?: MASK
             UnreachableRowModel(
                 chainId = id,
                 mark = ChainMarkModel(name.take(1).uppercase(), markColour(id.toLong()), Marks.chainLogoUrl(id)),
                 name = name,
-                line = strings.t(network.line_key, mapOf("amount" to amount)),
+                line = if (withheld) "" else strings.t(network.line_key, mapOf("amount" to amount)),
+                lineWithheld = withheld,
                 action = if (network.rpc_fixable) strings.t(I18nKeys.SettingsUi.RPC_FIX) else null,
             )
         }
@@ -1145,16 +1154,28 @@ object SettingsLive {
                     id = id.toString(),
                     mark = mark(id),
                     name = name(id),
+                    // A network's worth is a fiat figure: the mask while
+                    // hidden, and withheld (`null` from the one helper) while
+                    // the display currency is not the person's yet.
                     amount = if (view.hidden) MASK else money.fiat(usd),
+                    amountWithheld = !view.hidden && !money.settled,
                 )
             }
         val total = view.display_total_usd ?: view.cached_total_usd
+        // "Total {{amount}}": the mask while hidden or unknown; while the
+        // currency is on its way the line is not said, its room kept.
+        val totalWithheld = !view.hidden && total != null && !money.settled
         return fallback.copy(
             title = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TITLE),
-            summary = strings.t(
-                I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL,
-                mapOf("amount" to if (view.hidden || total == null) MASK else money.fiat(total)),
-            ),
+            summary = if (totalWithheld) {
+                ""
+            } else {
+                strings.t(
+                    I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL,
+                    mapOf("amount" to (total?.takeIf { !view.hidden }?.let { money.fiat(it) } ?: MASK)),
+                )
+            },
+            summaryWithheld = totalWithheld,
             pending = pending,
             done = done,
             // The hero's "some tokens couldn't be priced" is answered here by name.

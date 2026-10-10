@@ -246,8 +246,12 @@ object FlowLive {
         strings: VelaStrings,
         chainNames: Map<Int, String> = emptyMap(),
         explorers: Map<Int, String> = emptyMap(),
-        /** Spec 049: the display currency; without one the fiat line is dollars, said so. */
-        money: WalletLive.Money? = null,
+        /**
+         * Spec 049: the display currency, as the ONE fiat helper — which
+         * withholds every figure while the currency is not the person's yet.
+         * A caller with no currency to give (a board, a test) draws dollars.
+         */
+        money: WalletLive.Money = WalletLive.Money.dollars(),
         /** Each network's own coin (`native_symbol`), which letters its mark under the logo. */
         nativeSymbols: Map<Int, String> = emptyMap(),
     ): TxDetailModel? {
@@ -379,8 +383,10 @@ object FlowLive {
             fiat = when {
                 !item.priced -> ""
                 hidden -> WalletLive.MASK
-                else -> "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
+                // Withheld (`null`) until the display currency is the person's: the line's room is kept.
+                else -> money.fiat(item.usd_value)?.let { "≈ $it" }.orEmpty()
             },
+            fiatWithheld = item.priced && !hidden && !money.settled,
             facts = facts,
             // The chain keeps the transaction; this is the wallet forgetting
             // it, which is why the sentence is "delete record" (spec 058).
@@ -407,7 +413,7 @@ object FlowLive {
         strings: VelaStrings,
         chainNames: Map<Int, String>,
         explorers: Map<Int, String>,
-        money: WalletLive.Money?,
+        money: WalletLive.Money,
         nativeSymbols: Map<Int, String>,
         /**
          * Balance privacy (`app::privacy`): every figure of a dApp's detail
@@ -455,8 +461,10 @@ object FlowLive {
             fiat = when {
                 !item.priced || leadsWithBack -> ""
                 hidden -> WalletLive.MASK
-                else -> "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
+                // Withheld (`null`) until the display currency is the person's: the line's room is kept.
+                else -> money.fiat(item.usd_value)?.let { "≈ $it" }.orEmpty()
             },
+            fiatWithheld = item.priced && !leadsWithBack && !hidden && !money.settled,
             facts = dapp.facts.mapNotNull { dappFact(it, item, dapp, strings, chainNames, nativeSymbols, hidden) },
             technical = TxTechnicalModel(
                 title = strings.t(I18nKeys.Flows.TECHNICAL),
@@ -768,6 +776,9 @@ object FlowLive {
                 AssetFiatModel.Masked -> WalletLive.MASK
                 else -> ""
             },
+            // The worth waits with the home's while the display currency is
+            // not the person's yet — its line kept, as the row's is.
+            fiatWithheld = row.fiat == AssetFiatModel.Loading,
             // Issue #269: the facts are this token's. They were the fixture's —
             // USDT's price, its Ethereum contract, 6 decimals — under every
             // token's header, POL on Polygon included. The web's
@@ -788,10 +799,13 @@ object FlowLive {
         return listOf(
             FactRowModel(
                 label = strings.t(I18nKeys.Flows.TOKEN_PRICE),
-                // Unpriced is said, never a confident "$0.00".
+                // Unpriced is said, never a confident "$0.00". A price IS a
+                // fiat figure: withheld (`null`) until the display currency
+                // is the person's, the row's value empty and its room kept.
                 value = token.price_usd?.let { price ->
-                    strings.t(I18nKeys.Flows.TOKEN_PRICE_VALUE, mapOf("symbol" to token.symbol, "value" to money.fiat(price)))
+                    money.fiat(price)?.let { strings.t(I18nKeys.Flows.TOKEN_PRICE_VALUE, mapOf("symbol" to token.symbol, "value" to it)) }.orEmpty()
                 } ?: strings.t(I18nKeys.Wallet.NO_PRICE),
+                withheld = token.price_usd != null && !money.settled,
             ),
             FactRowModel(
                 label = strings.t(I18nKeys.Flows.TOKEN_CONTRACT),

@@ -74,9 +74,10 @@ class SettingsFixturesTest {
         // ST10D: Add network refused for no P-256 verifier (ST10C is missing contracts).
         // ST10E–ST10J: the wizard's stops, each from the real machine's view.
         // SR7: the unreachable list when the one network is there for its token list.
-        assertEquals(47, states.size)
+        // SR3B / SR3C: the balance sheet with the currency on its way, and landed.
+        assertEquals(49, states.size)
         assertEquals(35, states.count { it.name.startsWith("ST") })
-        assertEquals(8, states.count { it.name.startsWith("SR") })
+        assertEquals(10, states.count { it.name.startsWith("SR") })
         assertEquals(4, states.count { it.name.startsWith("SK") })
     }
 

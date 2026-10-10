@@ -523,8 +523,9 @@ object SendLive {
             badgeHidden = mark.badgeHidden,
             balance = "${trim(token.balance)} ${token.symbol}",
             fiat = token.price_usd?.let { price ->
-                // As the home's holdings: no worth in a currency that is not the person's yet.
-                if (!ctx.money.settled) AssetFiatModel.Loading else AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
+                // As the home's holdings: no worth in a currency that is not
+                // the person's yet — the one helper withholds it.
+                ctx.money.fiat(amount(token.balance) * price)?.let { AssetFiatModel.Value(it) } ?: AssetFiatModel.Loading
             } ?: AssetFiatModel.NoPrice("—"),
             masked = false,
         )
@@ -538,10 +539,14 @@ object SendLive {
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
         val chain = token?.let { ctx.chainNames[it.chain_id] ?: it.network } ?: ""
-        val fiatLine = token?.price_usd?.let { price ->
-            val typed = view.token_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
-            "≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(typed.toDouble() * price))}"
-        } ?: ""
+        // The "≈" line under the amount is a fiat figure: `null` from the one
+        // helper is WITHHELD (the display currency is not the person's yet),
+        // and the line keeps its room. No price at all is no line, as before.
+        val typedWorth = token?.price_usd?.let { price ->
+            (view.token_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO).toDouble() * price
+        }
+        val fiatLine = typedWorth?.let { ctx.money.fiat(it) }?.let { "≈ $it" }.orEmpty()
+        val fiatWithheld = typedWorth != null && !ctx.money.settled
         return fallback.copy(
             header = fallback.header.copy(title = s.t(I18nKeys.Flows.SEND_TITLE, mapOf("symbol" to symbol))),
             token = token?.let {
@@ -564,7 +569,7 @@ object SendLive {
             mode = if (view.split_mode) SendFormMode.Split else SendFormMode.Single,
             addRecipient = if (view.split_mode) null else s.t(I18nKeys.Flows.ADD_RECIPIENT),
             // Only a real address earns an identicon (the founder's anti-poisoning rule).
-            amount = if (view.split_mode) null else amountModel(view, symbol, fiatLine, ctx),
+            amount = if (view.split_mode) null else amountModel(view, symbol, fiatLine, fiatWithheld, ctx),
             recipient = if (view.split_mode) null else recipientModel(view, ctx),
             recipients = if (view.split_mode) view.recipients.mapIndexed { index, draft -> splitRow(draft, index, symbol, ctx, view) } else emptyList(),
             recipientActions = if (view.split_mode) {
@@ -632,13 +637,17 @@ object SendLive {
         return ctx.strings.t(key, mapOf("n" to first.ordinal.toString()))
     }
 
-    private fun amountModel(view: SendView, symbol: String, fiatLine: String, ctx: Context): AmountFieldModel {
+    private fun amountModel(view: SendView, symbol: String, fiatLine: String, fiatWithheld: Boolean, ctx: Context): AmountFieldModel {
         val (prefix, suffix) = unitAdornment(view.amount_fiat_code, symbol)
+        // Typing in fiat, the line under the figure is the TOKEN amount — not
+        // a fiat figure, so never withheld.
+        val typingFiat = view.amount_fiat_code != null
         return AmountFieldModel(
             value = view.amount.ifEmpty { "0" },
             // The token figure under a typed fiat one is a conversion — up to
             // 18 places — so it is written on the one token-amount ladder.
-            fiat = if (view.amount_fiat_code != null) "${tokenAmountText(view.token_amount.ifEmpty { "0" })} $symbol".trim() else fiatLine,
+            fiat = if (typingFiat) "${tokenAmountText(view.token_amount.ifEmpty { "0" })} $symbol".trim() else fiatLine,
+            fiatWithheld = fiatWithheld && !typingFiat,
             // The unit being TYPED: the figure's own currency, or the token.
             denomLabel = view.amount_fiat_code ?: symbol,
             raw = view.amount,
@@ -650,7 +659,10 @@ object SendLive {
             // Issue 197: ⇄ exists only where the core offers it, and is live
             // only where pressing it would change something.
             denomShown = view.denom_toggle_shown,
-            denomEnabled = view.denom_toggle_enabled,
+            // ⇄ swaps to typing a figure IN the display currency: not while
+            // that currency is not the person's yet (it would be the
+            // placeholder's dollars). The control keeps its place, dimmed.
+            denomEnabled = view.denom_toggle_enabled && ctx.money.settled,
         )
     }
 
@@ -732,9 +744,9 @@ object SendLive {
     internal fun splitSummary(view: SendView, symbol: String, ctx: Context): SummaryLineModel {
         val s = ctx.strings
         val total = view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
-        val fiat = view.selected_token?.price_usd?.let { price ->
-            " · ≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(total.toDouble() * price))}"
-        } ?: ""
+        // The total's worth rides on the same one line; withheld (`null`),
+        // the line is the token total alone until the currency commits.
+        val fiat = view.selected_token?.price_usd?.let { price -> ctx.money.fiat(total.toDouble() * price) }?.let { " · ≈ $it" }.orEmpty()
         return SummaryLineModel(
             label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString()))}",
             value = "${Formats.current.plain(view.confirm_amount)} $symbol".trim() + fiat,
@@ -874,6 +886,9 @@ object SendLive {
             // and nothing said so. Not while a fresh measurement is out, and
             // not over a row with no figure of its own on it.
             staleNote = if (speed != null && fee?.stale == true && !busy && estimate != null) s.t(I18nKeys.Flows.FEE_STALE) else null,
+            // The fee's worth joins this line when the display currency
+            // commits: the row keeps the longer line's room from now.
+            worthRoom = !ctx.money.settled,
         )
     }
 
@@ -916,7 +931,7 @@ object SendLive {
      * by the core; only the words and the fee line are made here.
      */
     internal fun speedModel(speed: SpeedInputs, view: SendView, ctx: Context): FeeSpeedModel =
-        speedModel(speed, ctx.strings) { quote, fee -> feeText(quote, view, fee, ctx).first }
+        speedModel(speed, ctx.strings, worthRoom = !ctx.money.settled) { quote, fee -> feeText(quote, view, fee, ctx).first }
 
     /**
      * The same control for any fee surface — the dApp signing sheet draws it
@@ -927,11 +942,14 @@ object SendLive {
     internal fun speedModel(
         speed: SpeedInputs,
         strings: VelaStrings,
+        /** The display currency is on its way: each option's worth will join its line (see [FeeSpeedModel.worthRoom]). */
+        worthRoom: Boolean = false,
         optionFee: (FeeEstimateView, FeeView?) -> String,
     ): FeeSpeedModel {
         val s = strings
         val core = speed.view
         return FeeSpeedModel(
+            worthRoom = worthRoom,
             label = s.t(I18nKeys.Flows.FEE_SPEED_LABEL),
             // THEIR default (or their pick for this send), never a hardcoded one.
             value = tierName(core.tier, s),
@@ -1026,6 +1044,7 @@ object SendLive {
             label = ctx.strings.t("componentsUi.gas.networkFee"),
             value = feeText(row.fee, view, fee, ctx).first,
             tier = row.tier_key?.let(ctx.strings::t),
+            worthRoom = !ctx.money.settled,
         )
     }
 
@@ -1036,7 +1055,11 @@ object SendLive {
      */
     internal fun feeLine(parts: FeeParts, priceUsd: Double?, money: WalletLive.Money): String {
         val usd = if (parts.units == null || priceUsd == null) null else parts.units * priceUsd
-        return if (usd != null && usd >= FEE_FIAT_MIN_USD) "${parts.coin} · ≈${money.fiat(usd)}" else parts.coin
+        // The fee in the coin it is paid in is not a fiat figure: it is drawn
+        // as always. Its worth beside it is — withheld (`null`) until the
+        // display currency is the person's, on the same one line.
+        val worth = usd?.takeIf { it >= FEE_FIAT_MIN_USD }?.let { money.fiat(it) }
+        return if (worth != null) "${parts.coin} · ≈$worth" else parts.coin
     }
 
     /**
@@ -1137,10 +1160,11 @@ object SendLive {
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
         val chain = token?.let { ctx.chainNames[it.chain_id] ?: it.network } ?: ""
-        val fiat = token?.price_usd?.let { price ->
-            val amount = view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
-            "≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(amount.toDouble() * price))}"
-        } ?: ""
+        // The line under the figure is a fiat figure: withheld (`null` from
+        // the one helper) until the display currency is the person's, its
+        // line kept.
+        val worth = token?.price_usd?.let { price -> (view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO).toDouble() * price }
+        val fiat = worth?.let { ctx.money.fiat(it) }?.let { "≈ $it" }.orEmpty()
         val (feeLine, _) = feeText(view.fee, view, fee, ctx)
         // The fee card's failure, only when it is for this send's chain (PR 2
         // polish): another chain's is not drawn — no figure, no reason, no line.
@@ -1161,13 +1185,18 @@ object SendLive {
             },
             amountUnit = if (split || view.multi_select_mode) null else symbol.ifEmpty { null },
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) }
-                ?: sweep?.let {
-                    s.t(
-                        I18nKeys.Flows.CONFIRM_TOTAL_LINE,
-                        mapOf("fiat" to ctx.money.fiat(it.totalUsd), "network" to (view.multi_chain_id?.let { id -> ctx.chainNames[id] } ?: chain)),
-                    )
+                ?: sweep?.let { parts ->
+                    // "Total ≈ $200.90 · Ethereum": the sentence is built
+                    // around the figure, so withheld it is not said at all.
+                    ctx.money.fiat(parts.totalUsd)?.let { total ->
+                        s.t(
+                            I18nKeys.Flows.CONFIRM_TOTAL_LINE,
+                            mapOf("fiat" to total, "network" to (view.multi_chain_id?.let { id -> ctx.chainNames[id] } ?: chain)),
+                        )
+                    }.orEmpty()
                 }
                 ?: fiat,
+            sublineWithheld = view.confirm_amount_issue == null && !ctx.money.settled && (sweep != null || worth != null),
             // The core's own verdicts: a token's own contract (spec 096 F12)
             // first, else the first time, resolved on this page only (single
             // recipient).
@@ -1311,7 +1340,8 @@ object SendLive {
             BreakdownRowModel(
                 lead = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls),
                 label = token.symbol,
-                value = usd?.let { "$value · ≈${ctx.money.fiat(it)}" } ?: value,
+                // The coin's amount always; its worth beside it once the currency is the person's.
+                value = usd?.let { ctx.money.fiat(it) }?.let { "$value · ≈$it" } ?: value,
             )
         }
         return SweepBreakdown(rows, totalUsd)
@@ -1664,8 +1694,6 @@ object SendLive {
         if (view.split_mode) exact(amount) else tokenAmountText(amount)
 
     private fun amount(human: String): Double = human.toDoubleOrNull() ?: 0.0
-
-    private fun fixed2(value: Double): String = Formats.current.fixed2(value)
 
     fun shortAddress(address: String): String =
         if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address

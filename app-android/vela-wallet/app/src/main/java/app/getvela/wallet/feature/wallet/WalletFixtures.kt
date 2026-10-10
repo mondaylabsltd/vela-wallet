@@ -455,6 +455,7 @@ object WalletFixtures {
             WalletScreenState.H11 -> liveInternalFault(base, strings)
             WalletScreenState.H12 -> liveInternalFault(base, strings, everyChain = true)
             WalletScreenState.H13 -> liveCurrencyOnItsWay(base, strings)
+            WalletScreenState.H13B -> liveCurrencyOnItsWay(base, strings, committed = true)
             WalletScreenState.H14 -> liveTokenListUnreachable(base, strings)
         }
     }
@@ -529,7 +530,7 @@ object WalletFixtures {
      * state — never "$794" for a few seconds, then "¥5,640" — and what is
      * held is shown, since a token amount is not in the display currency.
      */
-    private fun liveCurrencyOnItsWay(base: WalletHomeModel, strings: VelaStrings): WalletHomeModel {
+    private fun liveCurrencyOnItsWay(base: WalletHomeModel, strings: VelaStrings, committed: Boolean = false): WalletHomeModel {
         val now = System.currentTimeMillis()
         val view = app.getvela.wallet.feature.wallet.core.BalanceView(
             address = ADDRESS_FULL,
@@ -544,9 +545,14 @@ object WalletFixtures {
             ),
         )
         val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
-        val waiting = app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
-        return WalletLive.home(base, view, app.getvela.wallet.feature.wallet.core.FeedView(), waiting, strings, chains, now = now)
-            .copy(state = WalletScreenState.H13)
+        // H13B: the same frame once the rate is in — CNY, committed.
+        val currency = if (committed) {
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "CNY", rate = 7.1, committed = true)
+        } else {
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+        }
+        return WalletLive.home(base, view, app.getvela.wallet.feature.wallet.core.FeedView(), currency, strings, chains, now = now)
+            .copy(state = if (committed) WalletScreenState.H13B else WalletScreenState.H13)
     }
 
     /**

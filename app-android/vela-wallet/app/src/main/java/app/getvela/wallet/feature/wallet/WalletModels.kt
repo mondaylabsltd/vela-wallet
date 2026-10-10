@@ -29,12 +29,16 @@ import androidx.compose.ui.graphics.Color
  * figure is drawn in the placeholder's dollars: the total and each holding's
  * worth wait, and the label already names the choice on its way.
  *
+ * H13B: H13's very frame a moment later — the rate in, the currency
+ * committed: the total and each worth in the person's money, and nothing
+ * else moved.
+ *
  * H14 (the integration's note 4): a network whose RPC is fine and whose
  * TOKEN LIST could not be loaded (Tempo — it has no coin of its own to read
  * without one), as the real balance machine says it: "Can't load Tempo's
  * token list right now", never "Can't reach Tempo".
  */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H14 }
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H13B, H14 }
 
 @Immutable
 data class WalletHeaderModel(

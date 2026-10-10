@@ -957,6 +957,32 @@ object SettingsFixtures {
         ),
     )
 
+    /**
+     * SR3B / SR3C: the balance by network through [SettingsLive.balanceDetail]
+     * — two networks read (Ethereum, Gnosis), one busy, one holding — with the
+     * currency on its way and then committed.
+     */
+    private fun liveBalanceDetail(s: VelaStrings, committed: Boolean): BalanceDetailModel {
+        val view = BalanceView(
+            display_total_usd = 794.79,
+            tokens = listOf(
+                app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                app.getvela.wallet.feature.wallet.core.BalanceToken(
+                    chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54", decimals = 6,
+                    token_address = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", price_usd = 1.0,
+                ),
+            ),
+            failed_chain_ids = listOf(137),
+            rate_limited_chain_ids = listOf(137),
+        )
+        val currency = if (committed) {
+            CurrencyView(code = "CNY", rate = 7.1, committed = true)
+        } else {
+            CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+        }
+        return SettingsLive.balanceDetail(balanceDetail(s), view, currency, mapOf(1 to "Ethereum", 100 to "Gnosis", 137 to "Polygon"), s)
+    }
+
     private fun relayer(s: VelaStrings) = RelayerModel(
         title = s.t(I18nKeys.SettingsUi.RELAYER_TITLE),
         lead = s.t(I18nKeys.SettingsUi.RELAYER_LEAD),
@@ -1028,7 +1054,7 @@ object SettingsFixtures {
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR2, SettingsScreenState.SR2B ->
             Shape(SettingsPage.Home, SettingsOverlay.RpcFix, rescue = true, backdrop = "wallet")
-        SettingsScreenState.SR3 ->
+        SettingsScreenState.SR3, SettingsScreenState.SR3B, SettingsScreenState.SR3C ->
             Shape(SettingsPage.Home, SettingsOverlay.BalanceDetail, rescue = true, backdrop = "wallet")
         SettingsScreenState.SR4 ->
             Shape(SettingsPage.Home, SettingsOverlay.Relayer, rescue = true, backdrop = "send")
@@ -1338,7 +1364,11 @@ object SettingsFixtures {
             feedback = feedback(s),
             rpcBanner = if (state == SettingsScreenState.SR1) rpcBanner(s) else null,
             rpcFix = rpcFix(s, restored = state == SettingsScreenState.SR2B),
-            balanceDetail = balanceDetail(s),
+            balanceDetail = when (state) {
+                SettingsScreenState.SR3B -> liveBalanceDetail(s, committed = false)
+                SettingsScreenState.SR3C -> liveBalanceDetail(s, committed = true)
+                else -> balanceDetail(s)
+            },
             // SR6 is drawn through the live builder, from a view shaped like
             // the core's: what the gallery shows is what a session would.
             unreachable = if (state == SettingsScreenState.SR7) {

@@ -99,7 +99,8 @@ object ExploreLive {
         names: Map<Int, String>,
         siteChain: Int,
         balances: app.getvela.wallet.feature.wallet.core.BalanceView,
-        fiat: (Double) -> String,
+        /** The one fiat helper (`WalletLive.Money.fiat`): `null` is a figure WITHHELD until the display currency is the person's — the row says nothing. */
+        fiat: (Double) -> String?,
     ): List<app.getvela.wallet.feature.explore.components.PickerOption> {
         val held = heldUsdByChain(balances)
         return networks.map { n ->

@@ -75,6 +75,18 @@ enum class FlowState {
      * flow stack.
      */
     A2S, A2SH,
+
+    /**
+     * "The currency on its way" (the core's withhold rule: no fiat figure
+     * before `CurrencyView.committed`, on any surface), each with the SAME
+     * frame once the currency commits, so the pair shows that nothing moved:
+     * the send form — the "≈" line under the amount and the fee's worth —
+     * waiting (SD2N) and landed (SD2O); the confirm, its worth line and its
+     * fee (SD3J, SD3K); the token page, its worth and its price (T2W, T2C).
+     * A cold start with CNY stored; through the live builders, never on the
+     * live flow stack.
+     */
+    SD2N, SD2O, SD3J, SD3K, T2W, T2C,
 }
 
 /* ------------------------------------------------------------------ chrome */
@@ -156,6 +168,11 @@ data class FactRowModel(
      * for a tap the page cannot take.
      */
     val tap: Boolean = false,
+    /**
+     * The value is a fiat figure withheld until the display currency is the
+     * person's (a token's price): [value] is empty and its room is kept.
+     */
+    val withheld: Boolean = false,
 )
 
 enum class StatusTone { Success, Warning, Error, Info }
@@ -318,6 +335,8 @@ data class TxDetailModel(
     val received: String? = null,
     /** Spec 093: a dApp record's collapsed "Technical details"; `null` for everything else. */
     val technical: TxTechnicalModel? = null,
+    /** The worth is withheld until the display currency is the person's: [fiat] is empty, its line kept. */
+    val fiatWithheld: Boolean = false,
 )
 
 /** Spec 093: the collapsed "Technical details" of a dApp record, in the core's order. */
@@ -379,6 +398,8 @@ data class TokenDetailModel(
     val viewOnExplorer: String,
     /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
     val explorerUrl: String? = null,
+    /** The worth is withheld until the display currency is the person's: [fiat] is empty, its line kept. */
+    val fiatWithheld: Boolean = false,
 )
 
 /* -------------------------------------------------------------- add token  */
@@ -561,6 +582,13 @@ data class FeeRowModel(
      * tap target and no chevron promising one.
      */
     val opens: Boolean = true,
+    /**
+     * The display currency is on its way (the core's `CurrencyView.committed`
+     * is false): the fee is its coin amount alone, and its worth will join
+     * the line when the currency commits. The row keeps the room that longer
+     * line needs from now, so nothing under it moves when it lands.
+     */
+    val worthRoom: Boolean = false,
 )
 
 /** One option of the speed control (spec 068). */
@@ -599,6 +627,13 @@ data class FeeSpeedModel(
     /** Whether the options carry a gas-bid line at all. */
     val gasPriceLine: Boolean,
     val options: List<FeeSpeedOptionModel>,
+    /**
+     * The display currency is on its way (the core's `CurrencyView.committed`
+     * is false): each speed's fee is its coin amount alone, and its worth will
+     * join the line when the currency commits. Each row keeps the room that longer
+     * line needs from now, so nothing under it moves when it lands.
+     */
+    val worthRoom: Boolean = false,
 )
 
 @Immutable
@@ -614,6 +649,12 @@ data class AmountFieldModel(
     /** Issue 197: the ⇄ row exists only where the core offers it, and is live only where it would change something. */
     val denomShown: Boolean = true,
     val denomEnabled: Boolean = true,
+    /**
+     * The "≈" line is a fiat figure the display currency is not ready for
+     * (the core's `CurrencyView.committed` is false): [fiat] is empty and
+     * the line keeps its room, so the figure lands in place.
+     */
+    val fiatWithheld: Boolean = false,
 )
 
 @Immutable
@@ -865,6 +906,8 @@ data class SendConfirmModel(
     val noticeAction: String? = null,
     /** Spec 045 US4: the notice's second exit — "not now" beside the treasury retry, the facts kept. */
     val noticeSecondary: String? = null,
+    /** [subline] is a fiat figure withheld until the display currency is the person's: empty, its line kept. */
+    val sublineWithheld: Boolean = false,
 )
 
 /**

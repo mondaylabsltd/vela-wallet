@@ -1382,8 +1382,11 @@ object SigningLive {
             chevronRoom = choosable,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->
-                SendLive.speedModel(inputs, ctx.strings) { quote, view -> feeLine(quote, view ?: fee, ctx) }
+                SendLive.speedModel(inputs, ctx.strings, worthRoom = !ctx.money.settled) { quote, view -> feeLine(quote, view ?: fee, ctx) }
             },
+            // The fee's worth joins the line when the display currency
+            // commits: the row keeps the longer line's room from now.
+            worthRoom = !ctx.money.settled,
         )
     }
 

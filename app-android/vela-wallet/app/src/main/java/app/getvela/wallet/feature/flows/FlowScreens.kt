@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -494,7 +495,7 @@ fun TxDetailBody(
         // A request that moved and granted nothing (a sign-in) has no figure,
         // and an empty hero would only be a gap.
         if (model.amount.isNotBlank() || model.fiat.isNotBlank()) {
-            AmountHero(amount = model.amount, fiat = model.fiat, positive = model.positive, danger = model.amountDanger, received = model.received)
+            AmountHero(amount = model.amount, fiat = model.fiat, positive = model.positive, danger = model.amountDanger, received = model.received, fiatWithheld = model.fiatWithheld)
         } else {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
@@ -792,11 +793,15 @@ fun TokenDetailBody(
             lineHeight = VelaLeading.amountHero * VelaTextSize.xl4,
             maxLines = 1,
         )
+        // The worth under the balance: withheld until the display currency
+        // is the person's, its line kept — Receive and Send do not move
+        // when it lands.
         Text(
             text = model.fiat,
             color = colors.fgSubtle,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
+            modifier = Modifier.withheldFigure(model.fiatWithheld, colors.borderBase),
         )
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
         // Receive and Send sit under the balance because they are the two
@@ -1846,6 +1851,9 @@ fun SendConfirmBody(
                 color = colors.fgSubtle,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
+                // The worth under the figure, withheld until the display
+                // currency is the person's: its line kept.
+                modifier = Modifier.withheldFigure(model.sublineWithheld, colors.borderBase),
             )
         }
         Column(

@@ -330,6 +330,52 @@ object SigningFixtures {
         return base.copy(blocks = base.blocks + SigningBlock.Held(room = landed, shown = landed.takeIf { state == SigningScreenState.CS58 }))
     }
 
+    /**
+     * CS59 / CS60: CS1's transfer, its fee row built by the live
+     * [SigningLive.feeModel] from a settled fee in the chain's coin and the
+     * price the relay published for it — with the display currency on its
+     * way (a cold start with CNY stored), and committed.
+     */
+    private fun VelaStrings.currencyFee(state: SigningScreenState): SigningScreenModel {
+        val committed = state == SigningScreenState.CS60
+        val currency = if (committed) {
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "CNY", rate = 7.1, committed = true)
+        } else {
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+        }
+        val ctx = SigningLive.Context(
+            this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1,
+            money = app.getvela.wallet.feature.wallet.WalletLive.Money.of(currency),
+        )
+        val fee = app.getvela.wallet.feature.send.core.FeeView(
+            fee = app.getvela.wallet.feature.send.core.FeeEstimateView(
+                chain_id = 1, total_wei = "123000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+                relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+                deployed = true, tier = app.getvela.wallet.feature.send.core.FeeTier.Standard, quoted = true,
+                fee_asset = app.getvela.wallet.feature.send.core.FeeAssetView.Native, fee_recipient = RELAY,
+            ),
+            options = listOf(
+                app.getvela.wallet.feature.send.core.FeeOptionView(
+                    symbol = "ETH", decimals = 18, balance = "1200000000000000000", recipient = RELAY, usd_balance = "3072.00", usd_price = "2560",
+                    amount = "123000000000000", selected = true,
+                ),
+            ),
+            confirm_fee_ready = true,
+        )
+        val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
+        // The landed board is the waiting one a moment later: the row took
+        // the room its worth needs and keeps it (`KeptRoom`, remembered by
+        // the row) — a board, a fresh composition, says so itself.
+        val row = SigningLive.feeModel(ClearSigningView(), fee, ctx) as FeeModel.OnChain
+        return base.copy(
+            // The drawn canon puts "≈ $1,000.00" under CS1's amount; the live
+            // sheet draws no worth there (its only fiat figure is the fee's),
+            // so this board — which is about fiat — does not either.
+            blocks = base.blocks.map { block -> if (block is SigningBlock.Amount) block.copy(line = block.line.copy(fiat = null)) else block },
+            fee = row.copy(worthRoom = true),
+        )
+    }
+
     /** A fee view the real fee machine wrote for a board's failure (`FeeBoards`), on the boards' chain and account. */
     private fun feeBoard(case: app.getvela.wallet.feature.send.core.FeeBoards.Case) =
         app.getvela.wallet.feature.send.core.FeeBoards.view(case, chainId = 1, account = WalletFixtures.ADDRESS_FULL)
@@ -1254,6 +1300,8 @@ object SigningFixtures {
             SigningScreenState.CS54, SigningScreenState.CS55, SigningScreenState.CS56 -> correctness(state)
 
             SigningScreenState.CS57, SigningScreenState.CS58 -> heldVerdict(state)
+
+            SigningScreenState.CS59, SigningScreenState.CS60 -> currencyFee(state)
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,

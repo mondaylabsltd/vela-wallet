@@ -93,6 +93,15 @@ enum class SigningScreenState {
      * (CS58). The two are the same height, and the confirm is where it was.
      */
     CS57, CS58,
+
+    /**
+     * The fee's worth waits for the display currency like every fiat figure
+     * (the core's withhold rule): CS1's transfer with a settled fee while the
+     * currency is on its way — the fee in its coin, no "≈ $" beside it (CS59)
+     * — and the SAME sheet once it commits, the worth in the person's money
+     * on the same one line (CS60). Through the live [SigningLive.feeModel].
+     */
+    CS59, CS60,
 }
 
 /**
@@ -337,6 +346,13 @@ sealed interface FeeModel {
          * is kept, unmarked, so the figure does not move when it comes back.
          */
         val chevronRoom: Boolean = false,
+        /**
+         * The display currency is on its way: the fee is its coin amount
+         * alone, and its worth will join the line when the currency commits.
+         * The row keeps the room that longer line needs from now, so the
+         * confirm under it does not move when it lands.
+         */
+        val worthRoom: Boolean = false,
     ) : FeeModel
 
     /** Off-chain signature: the ✓ line, in place of a fee row. */
@@ -391,7 +407,13 @@ data class HandoffModel(
 
 /** The hand-off card's fee row: "Network fee  ~0.00012 ETH · ≈$0.31", and the speed's name. */
 @Immutable
-data class HandoffFeeModel(val label: String, val value: String, val tier: String?)
+data class HandoffFeeModel(
+    val label: String,
+    val value: String,
+    val tier: String?,
+    /** The fee's worth is withheld until the display currency commits: the row keeps the room the longer line needs. */
+    val worthRoom: Boolean = false,
+)
 
 /**
  * Spec 102: a key row — "Confirm with | Phone or tablet", "New key on | This
