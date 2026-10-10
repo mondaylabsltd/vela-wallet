@@ -250,7 +250,9 @@ final class FeeStore {
     /// reported as a failure the code never had (`Waits.swift`). The core's
     /// own timers are the other clock under it (`timers`).
     private let deadline: Duration?
-    private let timers: Timers
+    /// Read by the send journey's executor too: one clock for the fee's
+    /// timers and the pre-check's bound (`SendExecutor`, `start_timer`).
+    let timers: Timers
 
     init(
         relay: RelayClient,

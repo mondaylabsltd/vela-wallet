@@ -31,9 +31,11 @@ final class SendStore {
     private var core: CoreStore<SendViewWire>!
     private let executor: SendExecutor
 
-    /// No effect in flight: nothing but a new event can change `view` —
-    /// `CoreDriver.isIdle`. What a test waits on instead of a clock.
-    var isIdle: Bool { core.isIdle }
+    /// No effect in flight — but a bound a stopped clock holds
+    /// (`SendExecutor.heldTimerCount`), which nothing but time could answer:
+    /// only a new event can change `view` — `CoreDriver.isIdle`. What a test
+    /// waits on instead of a clock.
+    var isIdle: Bool { core.inFlight == executor.heldTimerCount }
     /// Whether `Open` has been sent for the journey currently on screen.
     private var entered = false
     /// The display currency the open journey's machine was last told —

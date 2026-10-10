@@ -122,7 +122,11 @@ struct SigningFollowsTrackerTests {
                 },
                 trackWithdrawn: { hash, ids in seen.withdrawn.append((hash, ids)) },
                 knownChains: { [100] }
-            )
+            ),
+            // A scripted world: no time passes in it. The fee's timers, the
+            // simulation's deadline and the write-ahead's five seconds are
+            // held, so a run that waited for the main actor is the same run.
+            timers: .stopped
         )
         seen.controller = controller
         controller.open(SigningController.Incoming(

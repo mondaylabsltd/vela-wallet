@@ -146,13 +146,15 @@ final class SignExecutor {
     /// The core's clearance for each POST (RJ1).
     private let gate = WriteAheadGate()
     /// How long a signed op waits for its clearance — the core's
-    /// `userOpWriteAheadWaitMs`. A test seam, and nothing else.
-    private let clearanceWaitMs: Double
+    /// `userOpWriteAheadWaitMs`. A test seam, and nothing else; `nil` under
+    /// a stopped clock, where the wait has no deadline (`WriteAheadGate`).
+    private let clearanceWaitMs: Double?
 
-    /// How the one timer this machine asks for runs out
-    /// (`sim_verdict_timer`): on the wall clock after its `ms`, or — a
-    /// test's — held until the test moves the clock (`elapseSimVerdictTimer`).
-    /// The fee machine's own seam (`FeeStore.Timers`).
+    /// How this executor's two clocks run: the one timer the machine asks
+    /// for (`sim_verdict_timer`) and the write-ahead's deadline. On the wall
+    /// clock, each after its `ms`; or — a test's — stopped: the timer is held
+    /// until the test moves the clock (`elapseSimVerdictTimer`), and the
+    /// deadline never passes. The fee machine's own seam (`FeeStore.Timers`).
     private let timers: FeeStore.Timers
     private let heldTimers = FeeStore.HeldTimers()
     private static let simVerdictTimer = "sim_verdict_timer"
@@ -171,7 +173,7 @@ final class SignExecutor {
         ports: Ports = Ports(),
         receiptWaitMs: @escaping (_ elapsedMs: Double) -> Double = { dappReceiptWaitMs(elapsedMs: $0) },
         receiptPollMs: Double = 3_000,
-        clearanceWaitMs: Double = Double(userOpWriteAheadWaitMs()),
+        clearanceWaitMs: Double? = Double(userOpWriteAheadWaitMs()),
         timers: FeeStore.Timers = .wallClock
     ) {
         self.spine = spine
@@ -180,7 +182,7 @@ final class SignExecutor {
         self.ports = ports
         self.receiptWaitMs = receiptWaitMs
         self.receiptPollMs = receiptPollMs
-        self.clearanceWaitMs = clearanceWaitMs
+        self.clearanceWaitMs = timers == .stopped ? nil : clearanceWaitMs
         self.timers = timers
     }
 

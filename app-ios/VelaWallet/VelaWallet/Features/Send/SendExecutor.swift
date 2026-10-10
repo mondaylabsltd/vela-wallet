@@ -118,6 +118,19 @@ final class SendExecutor {
     /// `userOpWriteAheadWaitMs`. A test seam.
     private let clearanceWaitMs: Double
 
+    /// The pre-check's bound under a test's stopped clock (`start_timer`,
+    /// `estimate_timeout`): held until the machine abandons it or the test
+    /// runs it out, and counted so `SendStore.isIdle` tells it from a read.
+    private let heldTimers = FeeStore.HeldTimers()
+    private static let estimateTimeout = "estimate_timeout"
+
+    /// How many pre-check bounds a stopped clock holds.
+    var heldTimerCount: Int { heldTimers.count }
+
+    /// A test's clock moving, under a stopped clock (`FeeStore.Timers`):
+    /// every pre-check bound it holds runs out now.
+    func elapseEstimateTimeout() { heldTimers.elapse(Self.estimateTimeout) }
+
     init(
         store: VelaStore,
         relay: RelayClient,
@@ -285,9 +298,21 @@ final class SendExecutor {
         case "simulate_calls":
             return CoreJSON.string(["type": "sim_resolved", "sim_json": NSNull()])
 
+        // Three timers, and one of them is a verdict: `estimate_timeout`
+        // bounds the pre-check (the core's 15 s), and running out fails
+        // Continue with "couldn't estimate". The other two only say when to
+        // ask (`form_estimate`, `treasury_watch`). Under a test's stopped
+        // clock — the fee store's, one clock for the journey — the bound
+        // does not run out: a scripted relay answers every call, and on a
+        // main actor the run had filled the answers took longer than 15 s,
+        // so the form reported a failure the code never had (`Waits.swift`).
         case "start_timer":
-            let ms = (operation["ms"] as? NSNumber)?.doubleValue ?? 0
-            try? await Task.sleep(nanoseconds: UInt64(max(0, ms) * 1_000_000))
+            if fees.timers == .stopped, operation["tag"] as? String == Self.estimateTimeout {
+                await heldTimers.hold(Self.estimateTimeout)
+            } else {
+                let ms = (operation["ms"] as? NSNumber)?.doubleValue ?? 0
+                try? await Task.sleep(nanoseconds: UInt64(max(0, ms) * 1_000_000))
+            }
             return CoreJSON.string([
                 "type": "timer_elapsed",
                 "tag": operation["tag"] ?? NSNull(),

@@ -38,6 +38,11 @@
 //  the core's too, run by `SignExecutor`'s timer. Nothing here shuts the
 //  confirm, and nothing here keeps a clock.
 //
+//  The clocks under this file are three — the fee machine's timers, that
+//  deadline, and the write-ahead's (`SignExecutor`, `WriteAheadGate`) — and
+//  `timers: .stopped` stops all three: under a scripted relay no time
+//  passes, and what a test sees is what the code did.
+//
 //  ## The order the machine is told things
 //
 //  `networks_changed` and `accounts_changed` BEFORE `request_arrived`. A
