@@ -55,6 +55,68 @@ function drawn(options: { allowed?: KeyMethod[]; chooser?: 'create' | 'sign_in' 
 	};
 }
 
+/**
+ * Issue 475: every row's caption is ONE line. Three rows that each wrap to
+ * two read as six lines of caption and stop lining up; the corpus was
+ * shortened so none has to. Measured here in all fifteen languages, in the
+ * width a 390 px phone leaves the list (its two 24 px gutters off), for both
+ * choosers — so a translation that grows past the line fails here, not on
+ * somebody's phone.
+ */
+const CATALOGS = import.meta.glob('../../../../../../../assets/i18n/*.json', {
+	import: 'default',
+	eager: true
+}) as Record<string, unknown>;
+
+const stringsOf =
+	(catalog: unknown) =>
+	(key: string): string => {
+		const value = key
+			.split('.')
+			.reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], catalog);
+		if (typeof value !== 'string') throw new Error(`no corpus value for "${key}"`);
+		return value;
+	};
+
+describe('every caption fits one line on a 390 px phone (issue 475)', () => {
+	const locales = Object.entries(CATALOGS).map(
+		([path, catalog]) => [/\/([^/]+)\.json$/.exec(path)![1], catalog] as const
+	);
+
+	it('covers all fifteen languages', () => {
+		expect(locales).toHaveLength(15);
+	});
+
+	for (const chooser of ['create', 'sign_in'] as const) {
+		it.each(locales)(`%s — ${chooser}`, async (locale, catalog) => {
+			const screen = render(AddMethodPicker, {
+				props: { open: true, strings: stringsOf(catalog), onPick: () => {}, chooser }
+			});
+			screen.container.style.width = '342px';
+			await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+			const rows = [...screen.container.querySelectorAll<HTMLElement>('button.method')];
+			expect(rows).toHaveLength(3);
+			for (const row of rows) {
+				const caption = row.querySelector('.caption') as HTMLElement;
+				const name = row.querySelector('.name') as HTMLElement;
+				const text = `${locale}: ${caption.textContent}`;
+				// One line, and all of it: nothing is cut to an ellipsis.
+				expect(caption.scrollWidth, text).toBeLessThanOrEqual(caption.clientWidth);
+				expect(caption.getBoundingClientRect().height, text).toBeLessThan(
+					parseFloat(getComputedStyle(caption).fontSize) * 2
+				);
+				// The name above it too.
+				expect(name.getBoundingClientRect().height, `${locale}: ${name.textContent}`).toBeLessThan(
+					parseFloat(getComputedStyle(name).fontSize) * 2
+				);
+				// Settings' row metrics: at least a control tall.
+				expect(row.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+			}
+			await screen.unmount();
+		});
+	}
+});
+
 describe('the key-place chooser', () => {
 	it('offers the three places a key can live — and no fourth', () => {
 		const view = drawn();

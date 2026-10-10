@@ -97,10 +97,21 @@
 {/if}
 
 <style>
+	/* The phone's gutters (issue 475): the screen's text and its rows ran to
+	   both edges of a 390 px screen — the page's padding had been commented
+	   out to let the desktop rail reach the window's edges. The welcome page's
+	   answer, which this copies: the gutters below the desktop breakpoint,
+	   none at and above it, where the rail brings its own. */
 	.page {
 		display: flex;
 		flex-direction: column;
 		min-height: 100dvh;
-		/* padding: var(--space-4xl) var(--layout-screenPaddingX) var(--space-4xl); */
+		padding: var(--space-4xl) var(--layout-screenPaddingX) var(--space-4xl);
+	}
+
+	@media (min-width: 1280px) {
+		.page {
+			padding: 0;
+		}
 	}
 </style>
