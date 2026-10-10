@@ -129,6 +129,18 @@ struct CoreWireDriftTests {
         }
     }
 
+    /// `CreateView` carries the keys screen's heading and its pinned flag
+    /// (issue #475) under these names — the mirror defaults both, so a rename
+    /// would decode quietly and the screen would fall back to the old label.
+    @Test func createViewCarriesTheKeysScreenHeading() throws {
+        let json = try CoreJSON.object(CreateWalletCore().view())
+        #expect(json["add_heading_key"] as? String == "onboarding.create.addKeyBtn")
+        #expect(json["methods_pinned"] is Bool)
+        let view = try CoreJSON.decode(CreateView.self, from: json)
+        #expect(view.addHeadingKey == "onboarding.create.addKeyBtn")
+        #expect(view.keys.isEmpty)
+    }
+
     /// `FeedView` decodes, including the tagged `FeedRow` union Swift cannot
     /// synthesise — and the feed machine asks for nothing this build cannot do.
     ///
@@ -137,9 +149,13 @@ struct CoreWireDriftTests {
     @Test func activityFeedViewDecodesAndAsksOnlyForHandledOperations() throws {
         let core = ActivityFeedCore()
 
-        let initial = try CoreJSON.decode(FeedViewWire.self, from: try CoreJSON.object(core.view()))
+        let initialJSON = try CoreJSON.object(core.view())
+        let initial = try CoreJSON.decode(FeedViewWire.self, from: initialJSON)
         #expect(initial.rows.isEmpty)
         #expect(initial.toast == nil)
+        // Issue #469: the home's cut rides on the view under this name — a
+        // rename would decode as "no rows" and the home would sit empty.
+        #expect(initialJSON["home_rows"] != nil, "the core no longer sends `home_rows`")
 
         let result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
             "type": "account_switched",

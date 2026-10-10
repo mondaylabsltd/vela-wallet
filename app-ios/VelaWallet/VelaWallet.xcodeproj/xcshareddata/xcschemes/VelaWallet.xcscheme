@@ -176,6 +176,9 @@
                <Test
                   Identifier = "PR2PolishDeviceTests">
                </Test>
+               <Test
+                  Identifier = "UIBatchScreenshotTests">
+               </Test>
             </SkippedTests>
          </TestableReference>
       </Testables>

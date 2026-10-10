@@ -62,9 +62,12 @@ Every upload must be higher than any earlier one for the same app — check step
    Store Connect users. Testable as soon as processing finishes.
 7. [ ] **Try a TestFlight install yourself:** create a wallet, receive, send, open a dApp,
    open a `velawallet://open?url=https://…` link (the sheet must name the host), and the
-   **USB security key** route. The `com.apple.security.smartcard` entitlement is dropped at
-   signing, so if the security key does not work there, drop the security-key line from the
-   App Store text (`docs/store-submission/store-listing-copy.md`, owner check in §1).
+   **USB security key** route. The smart-card entitlement is macOS-only and is not needed on
+   iOS 16+ (it is dropped at signing, and the route works without it). Try a USB-C YubiKey
+   (firmware 5.8+) on a USB-C iPhone: Vela's own PIN sheet, then a touch, with no Apple sheet.
+   On a Lightning iPhone the same choice opens Apple's security-key sheet directly (a Lightning
+   or NFC key); on a USB-C device, "Use Apple's security-key sheet" on the Insert screen does
+   the same for an NFC key or one on older firmware.
 8. [ ] **Before external testing** (Beta App Review):
    - Test Information: Beta App Description, feedback email, review contact (name, email,
      phone), **sign-in required = No**, review notes from

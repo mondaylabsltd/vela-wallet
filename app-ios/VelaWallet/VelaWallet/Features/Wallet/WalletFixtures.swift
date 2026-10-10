@@ -79,6 +79,10 @@ enum WalletFixtures {
                         amount: "+50", unit: "USDC", positive: true, badgeColor: ChainPalette.base),
     ]
 
+    /// What a home draws of `defaultActivity`: the newest three
+    /// (`HOME_ACTIVITY_ITEMS`, issue #469). The fourth lives in History.
+    private static var homeActivity: [ActivityFixture] { Array(defaultActivity.prefix(3)) }
+
     private static let extremeActivity: [ActivityFixture] = [
         ActivityFixture(kind: .sent, direction: .to("Alexandra"), day: .today,
                         amount: "−1234.5678", unit: "POL", positive: false, badgeColor: ChainPalette.polygon),
@@ -293,7 +297,8 @@ enum WalletFixtures {
             balance: balance(.normal, loc: loc, integer: "$1,383", decimals: "28"),
             actions: actions,
             activitySection: activitySection(loc: loc, mode: .rows),
-            // H1 first screen shows 今天 rows 1–2 (data-model.md); H1s shows all.
+            // H1 first screen shows 今天 rows 1–2 (data-model.md); H1s shows the
+            // newest three — the core's `home_rows` (issue #469).
             activityGroups: groupByDay(Array(defaultActivity.prefix(2)), loc: loc),
             assetsSection: assetsSection(loc: loc, mode: .rows),
             assetRows: defaultAssets.map { assetRow($0, loc: loc) },
@@ -306,7 +311,7 @@ enum WalletFixtures {
         case .h1:
             return model
         case .h1s:
-            model = replacing(model, activityGroups: groupByDay(defaultActivity, loc: loc))
+            model = replacing(model, activityGroups: groupByDay(homeActivity, loc: loc))
             return model
         case .h2:
             return WalletHomeModel(
@@ -348,7 +353,7 @@ enum WalletFixtures {
                 balance: balance(.hidden, loc: loc),
                 actions: actions,
                 activitySection: activitySection(loc: loc, mode: .rows),
-                activityGroups: groupByDay(defaultActivity, loc: loc, masked: true),
+                activityGroups: groupByDay(homeActivity, loc: loc, masked: true),
                 assetsSection: assetsSection(loc: loc, mode: .rows),
                 assetRows: defaultAssets.map { assetRow($0, loc: loc, masked: true) },
                 tabs: tabs, sheet: nil, textScale: 1
@@ -392,7 +397,7 @@ enum WalletFixtures {
                 tabs: tabs, sheet: nil, textScale: state == .h7x ? 1.35 : 1
             )
         case .h8:
-            model = replacing(model, activityGroups: groupByDay(defaultActivity, loc: loc))
+            model = replacing(model, activityGroups: groupByDay(homeActivity, loc: loc))
             return WalletHomeModel(
                 state: state, header: model.header, pill: pill,
                 balance: model.balance, actions: actions,

@@ -213,9 +213,7 @@ enum ContactsLive {
             chips: row.groups,
             addChip: loc.t("contacts.sectionGroups"),
             actions: ContactActionsModel(
-                send: loc.t("componentsUi.dock.send"),
-                receive: loc.t("componentsUi.dock.receive"),
-                qr: loc.t("contacts.actionQr")
+                send: loc.t("componentsUi.dock.send")
             ),
             addressLabel: loc.t("contacts.addressLabel"),
             addressLines: AddressText.lines(contact.address),

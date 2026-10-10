@@ -210,7 +210,10 @@ struct AddNetworkSheetModel {
     /// "Add Network" — only where the core says it can act.
     let add: String?
     let retry: String?
+    /// "Open Chain Setup Tool" and where it goes — the core's `setup_url`
+    /// for this chain, so both are present or neither is.
     let setupTool: String?
+    var setupUrl: String? = nil
     /// Cancel while a decision is open, Done after a verdict — either way
     /// `dapp_add_declined`.
     let dismiss: String

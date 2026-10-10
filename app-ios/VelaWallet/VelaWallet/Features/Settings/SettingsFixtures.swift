@@ -317,11 +317,16 @@ enum SettingsFixtures {
         let checks = [
             CheckItemModel(label: "EntryPoint v0.7", ok: true),
             CheckItemModel(label: loc.t(k.addCheckSafe), ok: ok),
-            CheckItemModel(label: loc.t(k.addCheckSigner), ok: ok),
-            // Seven, not eight: spec 081 FR-009 dropped the fallback handler
-            // the wallet never uses and gave the two passkey-signer contracts
-            // their own sentence instead of this count.
-            CheckItemModel(label: loc.t(k.addCheckRemaining, vars: ["count": "7"]), ok: ok),
+            // The P-256 precompile ANSWERS on this board: the refusal drawn
+            // is the one for missing contracts (its line, and Chain Setup).
+            // A chain without the precompile is a different refusal, with no
+            // button — `VELA_PAGE=pr3`'s `p256-*` boards draw both.
+            CheckItemModel(label: loc.t(k.addCheckSigner), ok: true),
+            // Eight: the ten a one-key wallet needs, less the two named
+            // above. Spec 081 FR-009 dropped the fallback handler the wallet
+            // never uses and gave the two passkey-signer contracts their own
+            // sentence instead of this count.
+            CheckItemModel(label: loc.t(k.addCheckRemaining, vars: ["count": "8"]), ok: ok),
         ]
 
         if ok {
@@ -356,8 +361,9 @@ enum SettingsFixtures {
             callout: CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint)),
             // An outline CTA plus a re-check link, not a greyed-out accent one:
             // an action you cannot take should not be dressed as the action you
-            // came for.
+            // came for. The tool opens on THIS chain (the core's `setup_url`).
             secondary: loc.t(k.addChainTool),
+            secondaryUrl: "https://getvela.app/chain-setup?chain=48900",
             recheck: loc.t(k.addRecheckWithRpc)
         )
     }

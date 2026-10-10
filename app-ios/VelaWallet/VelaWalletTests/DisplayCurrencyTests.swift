@@ -11,6 +11,7 @@
 
 import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -148,6 +149,31 @@ struct DisplayCurrencyTests {
     @Test func anUncommittedChoiceShowsThePlaceholder() {
         let seeded = CurrencyViewWire(code: "CNY", rate: 7.1, committed: false)
         #expect(SettingsLive.currencyRowValue(seeded).hasPrefix("USD"))
+    }
+
+    /// PR 3: the person's own stored choice, while its rate is on its way,
+    /// is named alone — never "USD · $…" first, which said the choice had
+    /// not taken.
+    @Test func aStoredChoiceOnItsWayIsNamedAlone() {
+        let pending = CurrencyViewWire(code: "USD", rate: 1, committed: false, pending: "CNY")
+        #expect(SettingsLive.currencyRowValue(pending) == "CNY")
+    }
+
+    /// `pending` rides on the view under that name; a view without it (a
+    /// core from before PR 3) still decodes.
+    @Test func thePendingChoiceDecodesAndAnAbsentOneIsTolerated() throws {
+        let with = try CoreJSON.decode(CurrencyViewWire.self, from: [
+            "code": "USD", "rate": 1, "committed": false, "pending": "CNY",
+        ])
+        #expect(with.pending == "CNY" && !with.committed)
+        let without = try CoreJSON.decode(CurrencyViewWire.self, from: [
+            "code": "USD", "rate": 1, "committed": false,
+        ])
+        #expect(without.pending == nil)
+        // The real core's own first view carries the key.
+        let initial = try CoreJSON.object(DisplayCurrencyCore().view())
+        #expect(initial.keys.contains("pending"), "the core no longer sends `pending`")
+        #expect(initial["committed"] as? Bool == false)
     }
 
     /// The picker marks the core's code, and offers the catalog the fixture

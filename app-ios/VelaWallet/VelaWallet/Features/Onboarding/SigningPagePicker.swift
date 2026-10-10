@@ -361,6 +361,7 @@ struct ChosenSigningPageCard: View {
 /// line, set apart from the three places it is not one of.
 struct SigningPageEntry: View {
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     let loc: Loc
     let onTap: () -> Void
 
@@ -371,21 +372,25 @@ struct SigningPageEntry: View {
                 LucideIcon(.globe, size: LucideIconSize.rowGlyph)
                     .foregroundStyle(theme.fgMuted)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                VStack(alignment: .leading, spacing: Tokens.Space.s4) {
                     Text(words.map { loc.t($0.titleKey) } ?? "")
                         .typeRole(Typography.bodyStrong)
                         .foregroundStyle(theme.fgBase)
+                    // One line, as the three places' lines are (issue #475):
+                    // the core's line is 33 characters now, it was 60 and
+                    // wrapped under the title.
                     Text(words?.lineKey.map { loc.t($0) } ?? "")
                         .typeRole(Typography.flowCaption)
                         .foregroundStyle(theme.fgMuted)
                         .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .oneLineSubtitle(typeSize)
                 }
-                Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(theme.fgSubtle)
+                Spacer(minLength: Tokens.Space.s8)
+                LucideIcon(.chevronRight, size: LucideIconSize.rowGlyph)
+                    .foregroundStyle(theme.fgSubtle)
             }
-            .frame(minHeight: Tokens.Layout.hitTarget)
-            .padding(.vertical, Tokens.Space.s8)
+            .frame(minHeight: KeyMethodRows.rowHeight)
+            .padding(.vertical, Tokens.Space.s4)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

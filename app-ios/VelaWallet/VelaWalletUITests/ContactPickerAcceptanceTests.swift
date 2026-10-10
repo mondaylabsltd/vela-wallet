@@ -103,14 +103,20 @@ final class ContactPickerAcceptanceTests: XCTestCase {
         XCTAssertEqual((recipient.value as? String)?.lowercased(), probes[0].address)
         attach(app.screenshot(), named: "467-picked-again")
 
-        // 6. The picker's scan row opens the scanner — which stays open.
-        tap(icon, "the person icon, for the scan row")
+        // 6. Issue #471: the picker is contacts only — a code is scanned from
+        // the recipient row's own scan icon, beside the person icon, and that
+        // opens the scanner, which stays open.
+        tap(icon, "the person icon, to look for a scan row")
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        tap(app.staticTexts["扫码填写地址"], "the scan row")
+        XCTAssertFalse(app.staticTexts["扫码填写地址"].exists, "the picker still offers a scan row (#471)")
+        tap(app.buttons["关闭"].firstMatch, "the picker's ✕")
+        XCTAssertTrue(title.waitForNonExistence(timeout: 10))
+        settle(1)
+        tap(app.buttons["扫描二维码"].firstMatch, "the recipient row's scan icon")
         settle(2)
-        attach(app.screenshot(), named: "467-scan-row")
+        attach(app.screenshot(), named: "471-row-scan")
         // The scanner is a whole screen: neither the picker nor the form.
-        XCTAssertFalse(title.exists, "the scan row left the picker up")
+        XCTAssertFalse(title.exists, "the scan icon raised the picker")
         XCTAssertFalse(recipient.exists, "the scanner closed as it opened — back on the form")
 
         // Clean up: the probes leave the book.

@@ -147,14 +147,75 @@ struct WalletLiveTests {
         #expect(model.integer == "$1,000")
     }
 
-    /// An uncommitted choice is the USD placeholder — the person has not chosen
-    /// yet, whatever code the model is carrying.
+    /// An uncommitted choice never converts — whatever code and rate the
+    /// model is carrying, the digits stay dollars — and it is not SETTLED:
+    /// nothing draws a figure from it (PR 3).
     @Test func anUncommittedChoiceStaysInUsd() {
         let display = WalletLive.Display.from(
             CurrencyViewWire(code: "JPY", rate: 150, committed: false)
         )
         #expect(display.code == "USD")
         #expect(display.rate == 1)
+        #expect(!display.settled)
+    }
+
+    /// PR 3, the 102 device run: an iPhone with CNY stored drew "USD $1,383"
+    /// for a few seconds, then jumped to "CNY ¥9,819". While the currency is
+    /// not committed NO figure is drawn — the hero waits, named by the stored
+    /// choice on its way — and the figure appears once, in the right money.
+    @Test func theHeroWaitsForTheCurrencyAndNeverShowsDollarsFirst() {
+        let balance = view(total: 1_383.28, tokens: [token("xDAI", balance: "100", price: 1)])
+
+        // The stored choice's rate is on its way (`pending`).
+        let pending = WalletLive.Display.from(
+            CurrencyViewWire(code: "USD", rate: 1, committed: false, pending: "CNY")
+        )
+        let waiting = WalletLive.balance(balance, display: pending, fallback: base)
+        #expect(waiting.state == .loading)
+        #expect(waiting.integer == nil && waiting.decimals == nil, "a figure was drawn before the currency was known")
+        #expect(waiting.currency == "CNY", "the label names the stored choice, never USD first")
+
+        // The holdings' worth waits too, at its own line.
+        let rows = WalletLive.assetRows(balance, display: pending)
+        guard case .pending = rows[0].fiat else {
+            Issue.record("the row's worth was drawn in dollars first: \(rows[0].fiat)")
+            return
+        }
+        #expect(rows[0].balance == "100", "the token amount is not money in a currency: it stays")
+        #expect(WalletLive.networkHoldings(balance, display: pending).isEmpty)
+
+        // Nothing stored (a first launch): no code to name, and still no figure.
+        let first = WalletLive.balance(
+            balance, display: .from(CurrencyViewWire(code: "USD", rate: 1, committed: false)), fallback: base
+        )
+        #expect(first.state == .loading && first.currency.isEmpty)
+        // Before the machine has answered at all, the live app waits as well.
+        #expect(!WalletLive.Display.live(nil).settled)
+        #expect(WalletLive.balance(balance, display: .live(nil), fallback: base).integer == nil)
+        // A wallet that holds nothing is not "$0" in the meantime either.
+        #expect(WalletLive.balance(view(total: 0), display: pending, fallback: base).state == .loading)
+
+        // Committed: the figure, once, in the person's money.
+        let committed = WalletLive.balance(
+            balance,
+            display: .from(CurrencyViewWire(code: "CNY", rate: 7.1, committed: true)),
+            fallback: base
+        )
+        #expect(committed.state == .normal)
+        #expect(committed.currency == "CNY")
+        #expect(committed.integer == "¥9,821")
+
+        // Hidden stays hidden: the mask is not a figure, and nothing moves.
+        let hidden = view(total: nil, tokens: balance.tokens, hidden: true)
+        #expect(WalletLive.balance(hidden, display: pending, fallback: base).state == .hidden)
+    }
+
+    /// A surface with no currency machine behind it — a drawing, a test — is
+    /// dollars, settled, as before.
+    @Test func noCurrencyMachineIsSettledDollars() {
+        #expect(WalletLive.Display.from(nil).settled)
+        #expect(WalletLive.Display.usd.settled)
+        #expect(WalletLive.balance(view(total: 1_000), fallback: base).integer == "$1,000")
     }
 
     /// A zero or non-finite rate is not a rate. Converting through one would
@@ -273,7 +334,7 @@ struct ActivityRowTests {
             .item(item(id: "b", direction: .out, dayStartMs: dayStart, timestamp: today)),
             .header(id: "day-\(yesterday)", dayStartMs: yesterday, timestamp: today - 86_400),
             .item(item(id: "c", dayStartMs: yesterday, timestamp: today - 86_400)),
-        ]), loc: loc, hidden: false)
+        ]).rows, loc: loc, hidden: false)
 
         #expect(groups.count == 2)
         #expect(groups[0].label == loc.t("componentsUi.dayGroup.today"))
@@ -288,7 +349,7 @@ struct ActivityRowTests {
         let dayStart = TxRecords.dayStartMs(Date().timeIntervalSince1970)
         let groups = WalletLive.activityGroups(feed([
             .header(id: "day-\(dayStart)", dayStartMs: dayStart, timestamp: 0),
-        ]), loc: loc, hidden: false)
+        ]).rows, loc: loc, hidden: false)
         #expect(groups.isEmpty)
     }
 

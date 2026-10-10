@@ -46,17 +46,25 @@ struct SettingsLiveTests {
         return core + multiKey
     }
 
+    /// A finished check, with the core's own ruling on a refusal
+    /// (`net_blocker`): no P-256 wins over missing contracts, and only
+    /// missing contracts carries Chain Setup's address.
     private func compat(
         compatible: Bool,
         missing: Set<String> = [],
-        latency: Double? = 182
+        latency: Double? = 182,
+        p256: Bool? = true
     ) -> NetCompatibilityWire {
-        NetCompatibilityWire(
+        let noP256 = !compatible && p256 == false
+        return NetCompatibilityWire(
             chainId: 7_777_777, compatible: compatible,
             multiKeyReady: compatible && missing.isEmpty,
             contracts: contracts(missing: missing),
-            p256Available: compatible, bestRpcUrl: "https://rpc.test",
-            bestRpcLatencyMs: latency, rpcFailure: nil
+            p256Available: p256, bestRpcUrl: "https://rpc.test",
+            bestRpcLatencyMs: latency, rpcFailure: nil,
+            blocker: compatible ? nil : (noP256 ? "no_p256" : "missing_contracts"),
+            hintKey: compatible ? nil : "settingsModals.addNetwork." + (noP256 ? "noP256Hint" : "incompatibleHint"),
+            setupUrl: compatible || noP256 ? nil : "https://getvela.app/chain-setup?chain=7777777"
         )
     }
 
@@ -109,33 +117,98 @@ struct SettingsLiveTests {
         #expect(open.primary != nil)
     }
 
-    /// An incompatible chain gets the re-check, never a greyed accent CTA: an
-    /// action you cannot take should not be dressed as the action you came
-    /// for. And no "Open Chain Setup Tool" — no client has a page for it to
-    /// open, and a button that goes nowhere is an inert control (072 SC-001).
-    @Test func anIncompatibleChainOffersTheOutlinePairInstead() {
+    /// A chain missing contracts gets the re-check, never a greyed accent
+    /// CTA: an action you cannot take should not be dressed as the action you
+    /// came for. And "Open Chain Setup Tool" — on the page for THIS chain,
+    /// the core's `setup_url` (PR 3; live Settings never offered it, and the
+    /// drawing's button went to the tool's front page).
+    @Test func aChainMissingContractsOffersChainSetupForThatChain() {
         let model = SettingsLive.wizard(
-            wizardView(chainInfo: zora, compat: compat(compatible: false), canAdd: false),
+            wizardView(chainInfo: zora, compat: compat(compatible: false, missing: ["Multicall3"]), canAdd: false),
             loc: loc, fallback: fallback()
         )
         #expect(model.primary == nil)
-        #expect(model.secondary == nil)
+        #expect(model.secondary == loc.t("settingsModals.addNetwork.openChainSetupTool"))
+        #expect(model.secondaryUrl == "https://getvela.app/chain-setup?chain=7777777")
         #expect(model.recheck != nil)
-        #expect(model.callout != nil)
+        #expect(model.callout?.text == loc.t("settingsModals.addNetwork.incompatibleHint"))
+    }
+
+    /// A chain with no P-256 verifier is told so plainly — Vela wallets
+    /// cannot work there, and money sent would be stuck — with NO Chain
+    /// Setup button: a precompile is the chain's own to add, and the old
+    /// line sent people to a tool that could not help. Its row says ✗ while
+    /// every contract ticks.
+    @Test func aChainWithNoP256VerifierSaysSoAndOffersNoSetupTool() {
+        let refused = compat(compatible: false, p256: false)
+        let model = SettingsLive.wizard(
+            wizardView(chainInfo: zora, compat: refused, canAdd: false),
+            loc: loc, fallback: fallback()
+        )
+        #expect(model.primary == nil)
+        #expect(model.secondary == nil, "a button to a tool that cannot help")
+        #expect(model.secondaryUrl == nil)
+        #expect(model.recheck != nil, "another RPC may answer differently")
+        #expect(model.callout?.text == loc.t("settingsModals.addNetwork.noP256Hint"))
+        #expect(model.callout?.text != loc.t("settingsModals.addNetwork.incompatibleHint"))
+        #expect(model.candidate?.badge?.tone == .error)
+
+        let rows = SettingsLive.checks(refused, loc: loc)
+        #expect(rows.map(\.ok) == [true, true, false, true], "only the precompile's row fails: \(rows)")
+        #expect(rows[2].label == loc.t("settingsModals.addNetwork.checkSigner"))
+    }
+
+    /// The reason rides on the wire under these names; an absent one (a core
+    /// from before PR 3) still decodes, and keeps the contracts line.
+    @Test func theRefusalsReasonDecodesAndAnAbsentOneIsTolerated() throws {
+        func decode(_ extra: [String: Any]) throws -> NetCompatibilityWire {
+            var json: [String: Any] = [
+                "chain_id": 5, "compatible": false, "multi_key_ready": false, "contracts": [],
+                "p256_available": false, "best_rpc_url": NSNull(), "best_rpc_latency_ms": NSNull(),
+                "rpc_failure": NSNull(),
+            ]
+            json.merge(extra) { _, new in new }
+            return try CoreJSON.decode(NetCompatibilityWire.self, from: json)
+        }
+        let noP256 = try decode([
+            "blocker": "no_p256", "hint_key": "settingsModals.addNetwork.noP256Hint", "setup_url": NSNull(),
+        ])
+        #expect(noP256.blocker == "no_p256")
+        #expect(noP256.hintKey == "settingsModals.addNetwork.noP256Hint")
+        #expect(noP256.setupUrl == nil)
+        let missing = try decode([
+            "blocker": "missing_contracts", "hint_key": "settingsModals.addNetwork.incompatibleHint",
+            "setup_url": "https://getvela.app/chain-setup?chain=5",
+        ])
+        #expect(SettingsLive.refusal(missing, loc: loc)?.setup?.url == "https://getvela.app/chain-setup?chain=5")
+        // A reason this build has never heard of is still a refusal with a line.
+        #expect(try decode(["blocker": "something_new"]).blocker == "something_new")
+        let old = try decode([:])
+        #expect(old.blocker == nil && old.hintKey == nil && old.setupUrl == nil)
+        #expect(SettingsLive.refusal(old, loc: loc)?.callout.text == loc.t("settingsModals.addNetwork.incompatibleHint"))
+        #expect(SettingsLive.refusal(old, loc: loc)?.setup == nil)
     }
 
     // MARK: - The four drawn rows over the core's contracts
 
-    /// Everything deployed → four ticks, and the fourth counts the other
-    /// seven. Seven, not eight: spec 081 dropped the fallback handler the
-    /// wallet never uses, and moved the two passkey-signer contracts out of
-    /// this count into their own sentence.
+    /// Everything deployed → four ticks: EntryPoint, Safe L2, the P-256
+    /// precompile, and the count of the other eight. Eight: the ten a
+    /// one-key wallet needs less the two named (the WebAuthn Signer contract
+    /// is counted here now — the third row is the precompile, as its words
+    /// say); spec 081 moved the two passkey-signer contracts out of this
+    /// count into their own sentence.
     @Test func theChecksSummariseTheContractsIntoTheDrawnFour() {
         let rows = SettingsLive.checks(compat(compatible: true), loc: loc)
         #expect(rows.count == 4)
         #expect(rows.allSatisfy { $0.ok })
         #expect(rows[0].label == "EntryPoint v0.7")
-        #expect(rows[3].label.contains("7"), "the remaining row must count 7, got \(rows[3].label)")
+        #expect(rows[2].label == loc.t("settingsModals.addNetwork.checkSigner"))
+        #expect(rows[3].label.contains("8"), "the remaining row must count 8, got \(rows[3].label)")
+
+        // Never probed is not "absent": the row is left out, not failed.
+        let unprobed = SettingsLive.checks(compat(compatible: true, p256: nil), loc: loc)
+        #expect(unprobed.count == 3)
+        #expect(!unprobed.contains { $0.label == loc.t("settingsModals.addNetwork.checkSigner") })
     }
 
     /// Spec 081 FR-009. A chain with everything but Safe's passkey signer
@@ -166,17 +239,19 @@ struct SettingsLiveTests {
     /// "Incompatible" is only legible as an answer if it shows WHICH
     /// requirement failed.
     @Test func aMissingContractFailsExactlyTheRowThatNamesIt() {
+        let safe = SettingsLive.checks(compat(compatible: false, missing: ["Safe L2"]), loc: loc)
+        #expect(safe.map(\.ok) == [true, false, true, true], "the Safe row must fail, alone")
+
+        // The signer CONTRACT is one of the counted; the precompile's row is
+        // not its row, and stays ticked while the precompile answers.
         let signer = SettingsLive.checks(compat(compatible: false, missing: ["WebAuthn Signer"]),
                                          loc: loc)
-        #expect(signer[0].ok)
-        #expect(signer[1].ok)
-        #expect(!signer[2].ok, "the signer row must fail")
-        #expect(signer[3].ok)
+        #expect(signer.map(\.ok) == [true, true, true, false])
 
         let counted = SettingsLive.checks(compat(compatible: false, missing: ["Multicall3"]),
                                           loc: loc)
         #expect(counted[0].ok && counted[1].ok && counted[2].ok)
-        #expect(!counted[3].ok, "a missing contract inside the counted seven must fail that row")
+        #expect(!counted[3].ok, "a missing contract inside the counted eight must fail that row")
     }
 
     // MARK: - Rows and badges

@@ -54,7 +54,7 @@ struct SettingsRow: View {
                         if let subtitle = row.subtitle {
                             Text(subtitle)
                                 .typeRole(Typography.flowCaption)
-                                .foregroundStyle(theme.fgSubtle)
+                                .foregroundStyle(row.subtitleTone == .positive ? theme.successBase : theme.fgSubtle)
                                 .lineLimit(2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -72,6 +72,9 @@ struct SettingsRow: View {
                         .foregroundStyle(theme.fgSubtle)
                 case .external:
                     LucideIcon(.externalLink, size: LucideIconSize.rowGlyph)
+                        .foregroundStyle(theme.fgSubtle)
+                case .retry:
+                    LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
                         .foregroundStyle(theme.fgSubtle)
                 case .none:
                     EmptyView()

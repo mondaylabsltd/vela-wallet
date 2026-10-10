@@ -364,7 +364,9 @@ struct TrustedSignerChooserTests {
     @Test func theVenueHasItsOwnWords() throws {
         let entry = try #require(venueWords(row: "signing_page"))
         #expect(loc.t(entry.titleKey) == "使用可信签名页")
-        #expect(entry.lineKey.map { loc.t($0) } == "高级：Vela 官方签名页，或你自己部署的签名页")
+        // One line under the title (issue #475): 13 characters; it was 23
+        // and wrapped (60 in English).
+        #expect(entry.lineKey.map { loc.t($0) } == "高级：Vela 官方页或自建页")
         let inVela = try #require(venueWords(row: "in_vela"))
         let onAPage = try #require(venueWords(row: "page"))
         #expect(loc.t(inVela.titleKey) == "在 Vela 里预览并签名")

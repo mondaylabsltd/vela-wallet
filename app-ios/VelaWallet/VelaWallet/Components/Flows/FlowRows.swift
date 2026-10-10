@@ -323,12 +323,23 @@ struct StatusChipView: View {
 /// The ordinal ("Recipient 2") is a label above the name rather than a number
 /// beside it, because in a split the ROW is the person and the number is only
 /// there to keep three otherwise-similar cards apart.
+///
+/// Issue #471: every row fills its OWN address the two ways the single field
+/// does — the address book and a code — so the row carries the same pair of
+/// icons, beside the ✕. Three 44pt targets and a 108pt amount well left the
+/// address 34pt on a 390pt phone, so the amount moved to a second line, under
+/// the icons, where it reads as this row's figure.
 struct RecipientCardView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
 
     let recipient: RecipientCardModel
     var onRemove: () -> Void = {}
+    /// This row's own address book (`open_contact_picker` with the row's id).
+    var onPick: () -> Void = {}
+    /// This row's own scanner (`open_scanner` with the row's id): the code
+    /// lands in this row, address only.
+    var onScan: () -> Void = {}
     /// The live fields. `nil` renders exactly as drawn — the gallery and the
     /// screenshot sweep stay pixel-identical (the mode-not-a-type shape
     /// `AmountInputView` and `RecipientFieldView` already use).
@@ -361,42 +372,43 @@ struct RecipientCardView: View {
                             .truncationMode(.middle)
                     }
                 }
-                Spacer(minLength: Tokens.Space.s8)
+                Spacer(minLength: Tokens.Space.s4)
+                HStack(spacing: Tokens.Space.s0) {
+                    FlowIconButton(glyph: .userRound, label: recipient.pickLabel, action: onPick)
+                        .accessibilityIdentifier("send.row.pick.\(recipient.id)")
+                    FlowIconButton(glyph: .qrCode, label: recipient.scanLabel, action: onScan)
+                        .accessibilityIdentifier("send.row.scan.\(recipient.id)")
+                    removeButton
+                }
+            }
+            HStack(spacing: Tokens.Space.s0) {
+                Spacer(minLength: WalletGeometry.rowIcon + Tokens.Space.s12)
                 if let amount {
                     // Issue #331: the amount is a WELL a full control tall (the
-                    // web's `.amount-well`) — it was a bare one-line figure with
-                    // the ✕ 12pt to its right, and SwiftUI answers a touch NEAR
-                    // a button (its touch radius, ~20pt here), so a tap just
-                    // past the "0" dropped the recipient. The field now runs on
-                    // to the ✕'s own 44pt target: the gap between the well and
-                    // the ✕ is still field, so no point short of the ✕ is left
-                    // for the ✕ to claim. The well is seen while it is wanted:
-                    // empty, or in hand.
+                    // web's `.amount-well`) — a bare one-line figure invited a
+                    // tap that SwiftUI handed to the ✕ beside it. The well is
+                    // seen while it is wanted: empty, or in hand.
                     let well = amount.wrappedValue.isEmpty || amountInHand
-                    HStack(spacing: Tokens.Space.s0) {
-                        AmountTextField(
-                            text: amount,
-                            placeholder: "0",
-                            font: Typography.rowValue.scaled(textScale).uiFont,
-                            color: theme.fgBase,
-                            alignment: .right,
-                            minHeight: Tokens.Layout.hitTarget,
-                            room: (Tokens.Space.s8, Tokens.Space.s8 + Tokens.Space.s12),
-                            onEditing: { amountInHand = $0 }
-                        )
-                        .background(
-                            RoundedRectangle(cornerRadius: Tokens.Radius.r8)
-                                .fill(well ? theme.bgBase : .clear)
-                                .padding(.trailing, Tokens.Space.s12)
-                        )
-                        .frame(width: WalletGeometry.splitAmountWidth + Tokens.Space.s12)
-                        removeButton
-                    }
+                    AmountTextField(
+                        text: amount,
+                        placeholder: "0",
+                        font: Typography.rowValue.scaled(textScale).uiFont,
+                        color: theme.fgBase,
+                        alignment: .right,
+                        minHeight: Tokens.Layout.hitTarget,
+                        room: (Tokens.Space.s8, Tokens.Space.s8),
+                        onEditing: { amountInHand = $0 }
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: Tokens.Radius.r8)
+                            .fill(well ? theme.bgBase : .clear)
+                    )
+                    .frame(width: WalletGeometry.splitAmountWidth + Tokens.Space.s12)
                 } else {
                     Text(verbatim: recipient.amount)
                         .typeRole(Typography.rowValue.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    removeButton
+                        .padding(.horizontal, Tokens.Space.s8)
                 }
             }
             // The core's verdict on THIS row. A list of six with one sentence

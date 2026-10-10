@@ -297,7 +297,20 @@ final class SendStore {
     /// The viewfinder opens because the CORE says so — the flag is
     /// `show_scanner`, and a shell that pushed its own screen would show a
     /// scanner the machine does not know is open.
-    func openScanner() { dispatch(["type": "open_scanner"]) }
+    ///
+    /// `target` is a split row's id (issue #471): the code lands in THAT row,
+    /// address only. Absent — the single field, the home's 扫码 — the key is
+    /// not sent at all, which the core reads as the targetless scan.
+    func openScanner(target: String? = nil) {
+        // Two literals, so the payload gate reads both shapes.
+        if let target {
+            dispatch(["type": "open_scanner", "target": target])
+        } else {
+            dispatch(["type": "open_scanner"])
+        }
+    }
+    /// The viewfinder went away without a code. The core drops the row it was
+    /// aimed at, so a later scan from elsewhere is not steered into it.
     func closeScanner() { dispatch(["type": "close_scanner"]) }
 
     /// A decoded code. The shell tokenises (it owns the grammar — Hermes has no

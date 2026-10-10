@@ -172,7 +172,12 @@ final class IssueFixesDeviceTests: XCTestCase {
             if exit == "cancel" {
                 cancel.tap()
             } else {
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12))
+                // From the sheet's own title: since issue #480 the sheet is
+                // as tall as its content, so a point near the top of the
+                // screen is the page behind it (a tap there, not a swipe on
+                // the sheet) — and a drag that starts low on a short sheet
+                // has too little room left to carry it away.
+                element(labelled: "手机或平板", in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
                     .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
             }
             XCTAssertTrue(cancel.waitForNonExistence(timeout: 5), "the code stayed up after \(exit)")

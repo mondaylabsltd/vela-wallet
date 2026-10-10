@@ -1115,7 +1115,7 @@ struct ExploreScreen: View {
                             onAddNetworkDismiss()
                         },
                         onSetupTool: {
-                            if let url = URL(string: ExternalLinks.chainSetup) {
+                            if let url = addNetwork.setupUrl.flatMap(URL.init(string:)) {
                                 UIApplication.shared.open(url)
                             }
                         }

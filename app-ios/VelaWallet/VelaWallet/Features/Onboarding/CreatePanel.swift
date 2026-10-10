@@ -238,6 +238,82 @@ struct KeysScreen: View {
 
     private var full: Bool { view.keys.count >= maxKeys }
 
+    /// The heading over the three places, chosen by the core from the count
+    /// (issue #475): "Add a passkey" with none, "Add another" after the
+    /// first, "Limit of 7 reached" when full. An absent key (a core from
+    /// before #475) keeps the old label.
+    private var addHeading: String {
+        loc.t(view.addHeadingKey.isEmpty ? I18nKeys.Create.addMethodLabel : view.addHeadingKey)
+    }
+
+    /// The three places are on screen: pinned open by the core while there is
+    /// no key yet (the list is the only way forward), else unfolded by hand.
+    private var methodsShown: Bool {
+        view.methodsPinned || (pickerOpen && view.canAddKey)
+    }
+
+    /// The add section in its three states.
+    ///
+    /// - **Pinned** (no key yet): a plain heading over the open list.
+    /// - **Foldable** (a key or more, room for another): the heading IS the
+    ///   disclosure row; a tap unfolds the list under it.
+    /// - **Closed** (the set is full, or a ceremony is running): the heading
+    ///   alone, dimmed — nothing to tap, and it says why.
+    @ViewBuilder private var addSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if view.methodsPinned {
+                Text(addHeading)
+                    .typeRole(Typography.label)
+                    .foregroundStyle(theme.fgMuted)
+                    .padding(.vertical, Tokens.Space.s8)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("create.addHeading")
+            } else {
+                Button {
+                    pickerOpen.toggle()
+                } label: {
+                    HStack(spacing: Tokens.Space.s12) {
+                        if view.canAddKey {
+                            LucideIcon(.plus, size: LucideIconSize.ghostPlus)
+                        }
+                        Text(addHeading)
+                            .typeRole(Typography.body)
+                        Spacer(minLength: Tokens.Space.s8)
+                        if view.canAddKey {
+                            LucideIcon(.chevronDown, size: LucideIconSize.rowGlyph)
+                                .rotationEffect(.degrees(pickerOpen ? 180 : 0))
+                                .foregroundStyle(theme.fgSubtle)
+                        }
+                    }
+                    .foregroundStyle(view.canAddKey ? theme.accentBase : theme.fgMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(minHeight: KeyMethodRows.rowHeight)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!view.canAddKey)
+                .opacity(view.canAddKey ? 1 : Tokens.Opacity.disabled)
+                .accessibilityIdentifier("create.addHeading")
+                if methodsShown { SettingsDivider() }
+            }
+
+            if methodsShown {
+                KeyMethodRows(loc: loc, chooser: .create, allowed: view.addMethods) { method in
+                    pickerOpen = false
+                    onAddKey(method)
+                }
+                // Not a fourth place: where this wallet reviews and signs.
+                // Offered before the first key only — the first key commits
+                // the set to one domain — and set apart from the three
+                // places by a section gap and a hairline.
+                if offersSigningPage {
+                    SettingsDivider().padding(.top, Tokens.Space.s16)
+                    SigningPageEntry(loc: loc) { pagePickerOpen = true }
+                }
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
@@ -274,79 +350,52 @@ struct KeysScreen: View {
                         .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
                     }
 
-                    HStack {
-                        Text(loc.t(I18nKeys.Create.keysLabel))
-                            .typeRole(Typography.label)
+                    // "Added 0 / 7" over an empty list said nothing the title
+                    // had not (issue #475: the screen was wordy); the count and
+                    // its list appear with the first key.
+                    if !view.keys.isEmpty {
+                        HStack {
+                            Text(loc.t(I18nKeys.Create.keysLabel))
+                                .typeRole(Typography.label)
+                                .foregroundStyle(theme.fgMuted)
+                            Spacer()
+                            // Mono: it is a count, and a count that jitters in width
+                            // as it changes reads as the layout moving rather than
+                            // the number.
+                            Text(loc.t(
+                                I18nKeys.Create.keyCount,
+                                vars: ["current": "\(view.keys.count)", "max": "\(maxKeys)"]
+                            ))
+                            .typeRole(Typography.monoSmall)
                             .foregroundStyle(theme.fgMuted)
-                        Spacer()
-                        // Mono: it is a count, and a count that jitters in width
-                        // as it changes reads as the layout moving rather than
-                        // the number.
-                        Text(loc.t(
-                            I18nKeys.Create.keyCount,
-                            vars: ["current": "\(view.keys.count)", "max": "\(maxKeys)"]
-                        ))
-                        .typeRole(Typography.monoSmall)
-                        .foregroundStyle(theme.fgMuted)
-                    }
-                    .padding(.top, Tokens.Space.s8)
+                        }
+                        .padding(.top, Tokens.Space.s8)
 
-                    VStack(spacing: 0) {
-                        ForEach(Array(view.keys.enumerated()), id: \.offset) { index, key in
-                            if index > 0 {
-                                Divider().overlay(theme.borderBase)
+                        VStack(spacing: 0) {
+                            ForEach(Array(view.keys.enumerated()), id: \.offset) { index, key in
+                                if index > 0 {
+                                    Divider().overlay(theme.borderBase)
+                                }
+                                KeyRow(
+                                    loc: loc,
+                                    key: key,
+                                    busy: view.busy,
+                                    // Row 0 is the pinned key: not removable, and
+                                    // its name IS the wallet name. Removing it is
+                                    // `start over`, not a row action.
+                                    removable: index > 0,
+                                    onConfirm: { onConfirmKey(index) },
+                                    onRemove: { onRemoveKey(index) }
+                                )
                             }
-                            KeyRow(
-                                loc: loc,
-                                key: key,
-                                busy: view.busy,
-                                // Row 0 is the pinned key: not removable, and
-                                // its name IS the wallet name. Removing it is
-                                // `start over`, not a row action.
-                                removable: index > 0,
-                                onConfirm: { onConfirmKey(index) },
-                                onRemove: { onRemoveKey(index) }
-                            )
+                            Divider().overlay(theme.borderBase)
                         }
-                        Divider().overlay(theme.borderBase)
                     }
 
-                    Button {
-                        pickerOpen.toggle()
-                    } label: {
-                        HStack(spacing: Tokens.Space.s12) {
-                            Text("+").typeRole(Typography.title)
-                            Text(loc.t(full
-                                ? I18nKeys.Create.keyLimitReached
-                                : I18nKeys.Create.addKeyBtn))
-                                .typeRole(Typography.body)
-                        }
-                        .foregroundStyle(full ? theme.fgMuted : theme.accentBase)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(minHeight: Tokens.Layout.hitTarget)
-                    }
-                    .disabled(!view.canAddKey)
-                    .opacity(view.canAddKey ? 1 : Tokens.Opacity.disabled)
-
-                    // An EMPTY list keeps the three methods expanded: the
-                    // first key's method is the person's choice too, and an
-                    // empty list with a collapsed "+" is a puzzle, not a step.
-                    if (pickerOpen || view.keys.isEmpty) && view.canAddKey {
-                        AddMethodPicker(
-                            loc: loc,
-                            allowed: view.addMethods
-                        ) { method in
-                            pickerOpen = false
-                            onAddKey(method)
-                        }
-                        // Not a fourth place: where this wallet reviews and
-                        // signs. Offered before the first key only — the
-                        // first key commits the set to one domain.
-                        if offersSigningPage {
-                            Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s8)
-                            SigningPageEntry(loc: loc) { pagePickerOpen = true }
-                        }
-                    }
+                    // Issue #475: ONE way to add — the three places under the
+                    // core's heading. The separate "+ Add a passkey" row said
+                    // the same thing twice.
+                    addSection
 
                     Text(loc.t(I18nKeys.Create.keysHint))
                         .typeRole(Typography.flowCaption)
@@ -472,48 +521,80 @@ private struct KeyRow: View {
     }
 }
 
-/// The three places a founding key can live — this device, a phone or tablet
-/// by scan, a USB security key (spec 102: three, no fourth).
+/// The three places a key can live — this device, a phone or tablet by scan,
+/// a USB security key (spec 102: three, no fourth) — as the create screen and
+/// the sign-in sheet both list them.
 ///
 /// Unlike the browser, this client OWNS the picker, so the person's selection
 /// here is honoured at the ceremony rather than merely recorded.
-private struct AddMethodPicker: View {
+///
+/// Issue #475: Settings metrics. A hairline between rows, 52pt at least, 4pt
+/// between a title and the line under it, and that line ONE line — the rows
+/// were 44pt with nothing between them, and a wrapped line nearly touched the
+/// next row's title, so it was hard to tell whose it was. The line shrinks a
+/// little before it is ever cut (fr / de / it / es run to 52–55 characters on
+/// a 375pt phone); at the accessibility text sizes it wraps instead.
+struct KeyMethodRows: View {
+    /// A Settings row's height (`SettingsRow`).
+    static let rowHeight: CGFloat = 52
+
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     let loc: Loc
-    let allowed: [KeyMethod]
+    let chooser: KeyChooser
+    /// The places a key may be picked from; the rest draw dimmed.
+    var allowed: [KeyMethod] = KeyMethod.allCases
     let onPick: (KeyMethod) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(loc.t(I18nKeys.Create.addMethodLabel))
-                .typeRole(Typography.label)
-                .foregroundStyle(theme.fgMuted)
-                .padding(.vertical, Tokens.Space.s8)
-
-            ForEach(KeyMethod.allCases, id: \.self) { method in
+            ForEach(Array(KeyMethod.allCases.enumerated()), id: \.element) { index, method in
                 let available = allowed.contains(method)
-                let copy = methodCopy(method, chooser: .create, loc: loc)
+                let copy = methodCopy(method, chooser: chooser, loc: loc)
+                if index > 0 { SettingsDivider() }
                 Button { onPick(method) } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    HStack(spacing: Tokens.Space.s12) {
+                        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
                             Text(copy.title)
                                 .typeRole(Typography.rowTitle)
                                 .foregroundStyle(theme.fgBase)
-                            Text(copy.body)
-                                .typeRole(Typography.flowCaption)
-                                .foregroundStyle(theme.fgMuted)
+                                .lineLimit(2)
                                 .multilineTextAlignment(.leading)
+                            if !copy.body.isEmpty {
+                                Text(copy.body)
+                                    .typeRole(Typography.flowCaption)
+                                    .foregroundStyle(theme.fgMuted)
+                                    .multilineTextAlignment(.leading)
+                                    .oneLineSubtitle(typeSize)
+                            }
                         }
-                        Spacer()
+                        Spacer(minLength: Tokens.Space.s8)
                         if available {
-                            Image(systemName: "chevron.right").foregroundStyle(theme.fgSubtle)
+                            LucideIcon(.chevronRight, size: LucideIconSize.rowGlyph)
+                                .foregroundStyle(theme.fgSubtle)
                         }
                     }
-                    .frame(minHeight: Tokens.Layout.hitTarget)
+                    .frame(minHeight: Self.rowHeight)
+                    .padding(.vertical, Tokens.Space.s4)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .disabled(!available)
                 .opacity(available ? 1 : Tokens.Opacity.disabled)
             }
+        }
+    }
+}
+
+extension View {
+    /// A row's second line, held to ONE line (issue #475): it shrinks to 80%
+    /// before it is cut, and at the accessibility text sizes — where one line
+    /// of a sentence is a few words — it wraps instead.
+    @ViewBuilder func oneLineSubtitle(_ typeSize: DynamicTypeSize) -> some View {
+        if typeSize.isAccessibilitySize {
+            fixedSize(horizontal: false, vertical: true)
+        } else {
+            lineLimit(1).minimumScaleFactor(0.8)
         }
     }
 }

@@ -53,6 +53,7 @@ struct FlowFixturesTests {
             "name · filled": .name,
             "name · too long": .name,
             "name · draft waiting": .name,
+            "keys · none": .keys,
             "keys · one, needs a second": .keys,
             "keys · two, ready": .keys,
             "keys · signing page offered": .keys,
@@ -69,6 +70,30 @@ struct FlowFixturesTests {
         for (code, view) in flows {
             #expect(screenFor(view) == expected[code], "fixture `\(code)` renders the wrong screen")
         }
+    }
+
+    /// Issue #475: the heading over the three places follows the count, and
+    /// the list is pinned open only while there is no key — the core's rule
+    /// (`CreateView.add_heading_key` / `methods_pinned`), as the boards draw
+    /// it. Every key is in the corpus, in the reader's words.
+    @Test func theKeysScreenHeadingFollowsTheCount() throws {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let en = Loc(overrideTag: "en", preferredLanguages: [])
+        func view(_ code: String) throws -> CreateView {
+            try #require(flows.first { $0.0 == code }?.1, "no fixture `\(code)`")
+        }
+        let none = try view("keys · none")
+        #expect(none.methodsPinned)
+        #expect(en.t(none.addHeadingKey) == "Add a passkey")
+        #expect(zh.t(none.addHeadingKey) == "添加通行密钥")
+
+        let one = try view("keys · one, needs a second")
+        #expect(!one.methodsPinned, "with a key the three places fold")
+        #expect(en.t(one.addHeadingKey) == "Add another")
+
+        let full = try view("keys · at the cap")
+        #expect(!full.methodsPinned && !full.canAddKey)
+        #expect(en.t(full.addHeadingKey) == "Limit of 7 reached")
     }
 
     @Test func fixtureCodesAreUnique() {

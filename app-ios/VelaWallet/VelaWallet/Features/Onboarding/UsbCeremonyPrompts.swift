@@ -268,10 +268,24 @@ struct UsbTouchSheet: View {
 /// #450). A missing key is a waitable state, not an error: the sheet closes
 /// ITSELF the moment the key answers, so plugging it in is the whole gesture.
 /// Close is a cancel.
+///
+/// And the way out for a key this route can never see: "Use Apple's
+/// security-key sheet", for an NFC key, a Lightning key or one on older
+/// firmware. The app's own USB route reaches a USB-C key that offers FIDO over
+/// its smart-card interface and nothing else, and before this option a person
+/// holding any other key waited here for ever. It is offered, never timed:
+/// a key not plugged in yet is not a key that cannot answer.
 struct UsbInsertKeySheet: View {
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     let loc: Loc
+    /// Hand this ceremony to Apple's security-key sheet instead.
+    var onUseSystemSheet: () -> Void = {}
     let onCancel: () -> Void
+
+    /// What the content comes to at a default text size: the height the
+    /// sheet opens at (`contentSizedSheet`).
+    static let expectedHeight: CGFloat = 440
 
     var body: some View {
         VStack(spacing: Tokens.Space.s16) {
@@ -291,13 +305,30 @@ struct UsbInsertKeySheet: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
+            VStack(spacing: Tokens.Space.s8) {
+                VelaButton(title: loc.t(I18nKeys.Flow.insertKeyAppleSheet), kind: .secondary) {
+                    onUseSystemSheet()
+                }
+                .accessibilityIdentifier("insertKey.appleSheet")
+                // Which keys that is for — the reason to press it.
+                Text(loc.t(I18nKeys.Flow.insertKeyAppleSheetHint))
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.fgSubtle)
+                    .multilineTextAlignment(.center)
+                    .oneLineSubtitle(typeSize)
+            }
+            .padding(.top, Tokens.Space.s8)
+
+            // Close stays the last thing, at the bottom, as on every
+            // ceremony sheet.
             VelaButton(title: loc.t(I18nKeys.Flow.close), kind: .secondary) { onCancel() }
-                .padding(.top, Tokens.Space.s8)
+                .accessibilityIdentifier("insertKey.close")
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
-        .padding(.vertical, Tokens.Space.s32)
-        .presentationDetents([.medium])
+        .padding(.top, Tokens.Space.s32)
+        .padding(.bottom, Tokens.Space.s16)
+        .contentSizedSheet(expected: Self.expectedHeight)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
     }

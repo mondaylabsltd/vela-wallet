@@ -31,19 +31,29 @@
 
 	  CryptoTokenKit's `TKSmartCard` is the ONLY way a third-party iOS app can
 	  talk to an external security key over USB — iOS exposes no USB-HID host
-	  API. Without this entitlement `TKSmartCardSlotManager.default` is nil and
-	  the app-owned USB-C security-key route does not exist. Unlike the
-	  associated-domain above, this path consults NO domain association: it is
-	  the escape hatch a lapsed or down assetlinks server cannot padlock
-	  (FR-009c). Needs a YubiKey with firmware 5.8+ (FIDO over CCID).
+	  API. That path consults NO domain association: it is the escape hatch a
+	  lapsed or down association cannot padlock (FR-009c).
 
-	  Spec 088 (2026-10-01): this key never reaches a SIGNED binary. Xcode drops
-	  it when signing for iOS — it is absent from the archive's .xcent and from
-	  the App Store export's entitlements, and no provisioning profile for this
-	  App ID grants it — so it does not break archiving or export, and every
-	  signed build (Debug on a device, TestFlight, App Store) runs without it.
-	  Whatever the USB security-key route does on a device today is what it
-	  does in TestFlight. Kept, because it costs nothing and documents intent.
+	  THIS KEY IS NOT WHAT MAKES IT WORK. `com.apple.security.smartcard` is a
+	  macOS entitlement. On iOS 16 and later `TKSmartCardSlotManager.default`
+	  is always available — the iOS SDK's `TKSmartCard.h` says so in words
+	  ("iOS: The defaultManager instance is always accessible"; Apple DTS,
+	  developer forums 119030 and 735215) — no iOS provisioning profile can
+	  carry the key, and Xcode drops it at signing: it is absent from the
+	  archive's .xcent and from the App Store export's entitlements (spec 088,
+	  2026-10-01). Measured 2026-10-09 on an iPhone 11 (iOS 26.5.2): a
+	  development-signed build with no such key has a non-nil slot manager;
+	  and the route was device-verified end to end on 2026-08-28 (iPhone 15
+	  Pro, YubiKey 5C, firmware 5.8) in a build that lacked it too. So every
+	  signed build — Debug on a device, TestFlight, App Store — runs the USB
+	  route exactly as this file's presence or absence leaves it: unchanged.
+
+	  What the route does need is physical: a USB-C port and a key that offers
+	  FIDO over its smart-card (CCID) interface — a YubiKey on firmware 5.8 or
+	  later. A Lightning key, an NFC key and an older key go through Apple's
+	  own security-key sheet (`SmartCardCtapCeremony.SystemSheetFallback`).
+
+	  Kept only as a harmless marker of intent; deleting it changes nothing.
 	-->
 	<key>com.apple.security.smartcard</key>
 	<true/>

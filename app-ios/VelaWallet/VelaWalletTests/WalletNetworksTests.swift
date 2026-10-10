@@ -171,8 +171,10 @@ struct WalletNetworksTests {
                 "the catalogue alone named it by its id")
         var own = item(id: "a", chainId: Self.customChainId)
         own.subtitle = lines
-        let view = FeedViewWire(rows: [.header(id: "today", dayStartMs: own.dayStartMs, timestamp: own.timestamp),
-                                       .item(own)],
+        // One item: the home's cut (`home_rows`, issue #469) is the whole feed.
+        let rows: [FeedRowWire] = [.header(id: "today", dayStartMs: own.dayStartMs, timestamp: own.timestamp),
+                                   .item(own)]
+        let view = FeedViewWire(rows: rows, homeRows: rows,
                                 transactions: [], newItemId: nil, toast: nil)
         let home = WalletLive.apply(balance([]), feed: view,
                                     on: WalletFixtures.buildMobileState(.h1, loc: loc),

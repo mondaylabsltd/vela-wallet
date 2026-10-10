@@ -13,6 +13,13 @@
 //  desktop's card always has. It used to hold them for the 90 s scan and then
 //  blame the link.
 //
+//  Issue #480: the sheet is as tall as what it holds. It was `.large` — a
+//  near-full-screen sheet with a title, a code and a button floating in the
+//  middle of it (on an iPad, the iPhone layout scaled up, most of a screen of
+//  nothing). The content is measured and the detent is that height; Cancel is
+//  the last thing in it, at the bottom, as on every ceremony sheet. Not
+//  `.medium`: on a 4.7" phone that crops the code (#447).
+//
 
 import SwiftUI
 import VelaCore
@@ -26,6 +33,10 @@ struct CableQrSheet: View {
     let chooser: KeyChooser
     /// Cancel, a swipe or a tap outside: the ceremony ends as a cancel.
     var onCancel: () -> Void = {}
+
+    /// What the content comes to at a default text size (title, line, a
+    /// 260pt code, Cancel and the padding): the height the sheet opens at.
+    static let expectedHeight: CGFloat = 480
 
     var body: some View {
         let copy = methodCopy(.hybrid, chooser: chooser, loc: loc)
@@ -58,8 +69,9 @@ struct CableQrSheet: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
-        .padding(.vertical, Tokens.Space.s32)
-        .presentationDetents([.large])
+        .padding(.top, Tokens.Space.s32)
+        .padding(.bottom, Tokens.Space.s16)
+        .contentSizedSheet(expected: Self.expectedHeight)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
         // A swipe or a tap outside is a cancel too: the shared sheet's

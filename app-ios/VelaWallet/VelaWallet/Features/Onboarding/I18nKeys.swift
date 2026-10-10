@@ -180,6 +180,10 @@ enum I18nKeys {
         /// Issue #450: no key plugged in yet — the ceremony waits for one.
         static let insertKeyTitle = "onboarding.common.insertKeyTitle"
         static let insertKeyBody = "onboarding.common.insertKeyBody"
+        /// iOS only: the way out of "insert your key" for a key the app's own
+        /// USB route cannot reach — and what kind of key that is.
+        static let insertKeyAppleSheet = "onboarding.common.insertKeyAppleSheet"
+        static let insertKeyAppleSheetHint = "onboarding.common.insertKeyAppleSheetHint"
         /// Issue #450: a security-key route this device could not use (the
         /// core's `security_key` on a not-supported prompt).
         static let keyUnavailableTitle = "onboarding.common.keyUnavailableTitle"
@@ -295,7 +299,8 @@ enum I18nKeys {
         Flow.back, Flow.retry, Flow.close, Flow.copyAddress, Flow.copied,
         Flow.confirmInPrompt, Flow.editIndexEndpoint,
         Flow.notDiscoverableTitle, Flow.notDiscoverableBody, Flow.phoneLinkFailed,
-        Flow.insertKeyTitle, Flow.insertKeyBody, Flow.keyUnavailableTitle, Flow.keyUnavailableBody,
+        Flow.insertKeyTitle, Flow.insertKeyBody, Flow.insertKeyAppleSheet, Flow.insertKeyAppleSheetHint,
+        Flow.keyUnavailableTitle, Flow.keyUnavailableBody,
         Settings.sectionPasskeyIndex, Settings.endpointUrlLabel, Settings.passkeyHint,
         Settings.resetToDefault, Settings.warningText,
     ] + CoreRound.all

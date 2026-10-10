@@ -99,6 +99,16 @@ final class OnboardingModel {
     /// swaps content instead of dismissing and re-presenting.
     private(set) var signInConnecting = false
 
+    /// "Use Apple's security-key sheet" was chosen on the insert sheet: the
+    /// shared sheet stays up (as the connecting hold) under Apple's own until
+    /// that ceremony ends, so whatever it ends in — a key, or a prompt saying
+    /// why not — swaps this sheet's content instead of being presented into
+    /// its dismissal.
+    private(set) var systemSheetHold = false
+
+    /// The pending release of the holds (`releaseHolds`).
+    private var holdRelease: Task<Void, Never>?
+
     /// The ceremony has actually started spinning (login reported `busy`) since
     /// `signInConnecting` was raised. Without it, the login machine's initial
     /// idle view — which arrives before `sign_in` is dispatched — would clear the
@@ -109,7 +119,7 @@ final class OnboardingModel {
     /// single `.sheet(isPresented:)`; the content is chosen by priority.
     var onboardingSheetPresented: Bool {
         pendingPin != nil || pendingWalletPick != nil || usbTouch != nil || pendingInsertKey != nil
-            || cableQr != nil || pending != nil || signInConnecting || showSignInMethods
+            || cableQr != nil || pending != nil || signInConnecting || systemSheetHold || showSignInMethods
     }
 
     /// A swipe-to-dismiss on the shared sheet. Cancels whatever the active
@@ -128,7 +138,7 @@ final class OnboardingModel {
         } else if let touch = usbTouch {
             if touch.remote { cancelCable() }
         } else if pendingInsertKey != nil {
-            answerInsertKey(false)
+            answerInsertKey(.cancelled)
         } else if cableQr != nil {
             cancelCable()
         } else if pending != nil {
@@ -157,6 +167,7 @@ final class OnboardingModel {
     /// no hold. Every app-owned method keeps the shared sheet up via
     /// `signInConnecting` while the ceremony spins up.
     func pickSignInMethod(_ method: KeyMethod) {
+        passkey.methodPickedAfresh()
         showSignInMethods = false
         signInMethod = method
         let page = signInPage
@@ -198,7 +209,7 @@ final class OnboardingModel {
     }
 
     struct PendingInsertKey: Identifiable {
-        let answer: (Bool) -> Void
+        let answer: (SmartCardCtapCeremony.KeyInsertion) -> Void
         let id = UUID()
     }
 
@@ -214,30 +225,37 @@ final class OnboardingModel {
         prompt?.answer(index)
     }
 
-    /// The key arrived (`true`), or the person closed the sheet (`false`).
-    func answerInsertKey(_ inserted: Bool) {
+    /// The key arrived, the person closed the sheet, or they asked for
+    /// Apple's security-key sheet instead.
+    func answerInsertKey(_ outcome: SmartCardCtapCeremony.KeyInsertion) {
         let prompt = pendingInsertKey
+        // Before the insert sheet goes, so the shared sheet is never
+        // presented by nothing in between.
+        if outcome == .useSystemSheet, prompt != nil { systemSheetHold = true }
         pendingInsertKey = nil
-        prompt?.answer(inserted)
+        prompt?.answer(outcome)
     }
 
     /// Hold "insert your security key" up, polling `probe`, until a key
-    /// answers or the sheet is closed. Plugging the key in IS the confirm;
-    /// there is nothing to tap.
-    fileprivate func awaitKeyInsertion(probe: @escaping () async -> Bool) async -> Bool {
+    /// answers, the sheet is closed, or the person takes Apple's sheet.
+    /// Plugging the key in IS the confirm; there is nothing to tap. It never
+    /// times out: a key not plugged in YET is not a key that cannot answer.
+    func awaitKeyInsertion(
+        probe: @escaping @MainActor () async -> Bool
+    ) async -> SmartCardCtapCeremony.KeyInsertion {
         await withCheckedContinuation { continuation in
             let prompt = PendingInsertKey { continuation.resume(returning: $0) }
             pendingInsertKey = prompt
             Task { [weak self] in
                 while self?.pendingInsertKey?.id == prompt.id {
                     if await probe() {
-                        if self?.pendingInsertKey?.id == prompt.id { self?.answerInsertKey(true) }
+                        if self?.pendingInsertKey?.id == prompt.id { self?.answerInsertKey(.inserted) }
                         return
                     }
                     // Not `try?`: a sleep that throws is a cancelled poll,
                     // and a cancelled poll that kept looping would spin.
                     do { try await Task.sleep(nanoseconds: 800_000_000) } catch {
-                        if self?.pendingInsertKey?.id == prompt.id { self?.answerInsertKey(false) }
+                        if self?.pendingInsertKey?.id == prompt.id { self?.answerInsertKey(.cancelled) }
                         return
                     }
                 }
@@ -334,6 +352,9 @@ final class OnboardingModel {
                 // The core is the authority on the name — a `StartOver` clears
                 // it, and the field has to follow.
                 if decoded.name != self.name { self.name = decoded.name }
+                if !decoded.busy, self.systemSheetHold {
+                    self.releaseHolds(of: self.create) { [weak self] in self?.createView?.busy ?? false }
+                }
                 self.endTrustedSignerFlow(ifIdle: decoded.busy)
             },
             onFault: { [weak self] error in self?.fault = error.localizedDescription }
@@ -354,6 +375,7 @@ final class OnboardingModel {
     func toggleAck(_ index: Int) { create?.dispatch(Self.event("ack_toggled", ["index": index])) }
     func submit() { create?.dispatch(Self.event("submit")) }
     func addKey(_ method: KeyMethod) {
+        passkey.methodPickedAfresh()
         create?.dispatch(Self.event("add_key", ["name": "", "method": method.rawValue]))
     }
     func confirmKey(_ index: Int) { create?.dispatch(Self.event("confirm_key", ["index": index])) }
@@ -412,8 +434,8 @@ final class OnboardingModel {
                     // up on its own; a success finishes onboarding.
                     if decoded.busy {
                         self.sawBusySinceConnect = true
-                    } else if self.sawBusySinceConnect {
-                        self.signInConnecting = false
+                    } else if self.sawBusySinceConnect || self.systemSheetHold {
+                        self.releaseHolds(of: self.login) { [weak self] in self?.loginView.busy ?? false }
                     }
                     self.endTrustedSignerFlow(ifIdle: decoded.busy)
                 },
@@ -424,6 +446,45 @@ final class OnboardingModel {
         }
         login?.dispatch(Self.event("sign_in", ["method": method.rawValue, "page": page ?? NSNull()]))
     }
+
+    /// Drop the holds that keep the shared sheet up through a ceremony — once
+    /// nothing is left in flight that could still put a prompt on it.
+    ///
+    /// The core answers a failed ceremony with ONE update: an idle view and
+    /// the prompt's effect. The view is committed first and the effect starts
+    /// a turn later, so dropping a hold on the view left the sheet presented
+    /// by nothing for that turn: it began to dismiss, and the prompt was then
+    /// presented into the dismissal. On iOS 26.2 (simulator, 2026-10-10) the
+    /// "sign-in failed" sheet came up and went away again by itself within a
+    /// second or so, taking the reason with it. The holds now go when the
+    /// prompt is up (the sheet swaps content), or the machine has nothing in
+    /// flight (a cancel, a success: there is nothing more to show), or a
+    /// third of a second has passed.
+    ///
+    /// `isBusy` reads the machine's own view: a ceremony that started again
+    /// (a recovery's second signature) keeps the hold, and the next idle view
+    /// asks again.
+    private func releaseHolds(of driver: CoreDriver?, isBusy: @escaping @MainActor () -> Bool) {
+        holdRelease?.cancel()
+        holdRelease = Task { @MainActor [weak self] in
+            // The prompt's effect starts in the turn the idle view arrived
+            // in, and reaches `pending` within a few hops. The wait is for
+            // THAT, and bounded: an unrelated effect still in flight (the
+            // index's health probe, say) must not keep a sheet nobody can
+            // dismiss on screen.
+            for _ in 0..<Self.holdReleaseTurns {
+                guard let self, !Task.isCancelled, !isBusy() else { return }
+                if self.pending != nil || driver?.isIdle != false { break }
+                do { try await Task.sleep(nanoseconds: 10_000_000) } catch { return }
+            }
+            guard let self, !Task.isCancelled, !isBusy() else { return }
+            self.signInConnecting = false
+            self.systemSheetHold = false
+        }
+    }
+
+    /// At most 0.3 s of 10 ms turns (see `releaseHolds`).
+    private static let holdReleaseTurns = 30
 
     // MARK: - Prompts
 
@@ -497,6 +558,7 @@ extension OnboardingModel: OnboardingExecutorDeps {
         // so `busy` never falls and the hold sheet sat on top of the wallet
         // the person had just entered (device-found 2026-08-28).
         signInConnecting = false
+        systemSheetHold = false
 
         // A FINISHED machine is not a BUSY one.
         //
@@ -576,8 +638,10 @@ private final class UsbPromptsBridge: SmartCardCtapCeremony.Prompts, @unchecked 
         }
     }
 
-    func awaitKeyInsertion(probe: @escaping () async -> Bool) async -> Bool {
-        guard let model else { return false }
+    func awaitKeyInsertion(
+        probe: @escaping @MainActor () async -> Bool
+    ) async -> SmartCardCtapCeremony.KeyInsertion {
+        guard let model else { return .cancelled }
         return await model.awaitKeyInsertion(probe: probe)
     }
 }

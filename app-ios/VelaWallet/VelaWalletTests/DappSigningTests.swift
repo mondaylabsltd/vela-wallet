@@ -620,9 +620,11 @@ struct SigningLiveTests {
 
     /// The wallet's own backup, on the REAL core: the `register()` bytes the
     /// core's own test reads (`registry-register-unit10.hex`), on Ethereum.
-    /// The rows are Network, Address and Public keys, in the reader's words,
-    /// because the core names each one — the index relabel that called row 0
-    /// "Registered as" is gone — and the confirm reads the intent.
+    /// The rows are Network, Address, Wallet name and Keys included, in the
+    /// reader's words, because the core names each one — the index relabel
+    /// that called row 0 "Registered as" is gone — and the confirm reads the
+    /// intent ("Copy this wallet's record": what it is, not a backup that
+    /// could bring a key back).
     ///
     /// Whose sheet it is comes from the request alone: the same bytes from a
     /// page are a page's sheet, with the same honest rows.
@@ -674,16 +676,19 @@ struct SigningLiveTests {
             #expect(drawn.map(\.label) == [
                 zh.t("componentsUi.signing.labelNetwork"),
                 zh.t("componentsUi.signing.labelAddress"),
+                zh.t("componentsUi.signing.labelWalletName"),
                 zh.t("componentsUi.signing.labelPublicKeys"),
             ], "rows: \(drawn.map(\.label))")
-            #expect(drawn.map(\.label) == ["网络", "地址", "公钥数量"])
+            // PR 3: the wallet's name is a row (it goes onto a second public
+            // chain), and the count sits under "keys included".
+            #expect(drawn.map(\.label) == ["网络", "地址", "钱包名称", "包含的钥匙"])
             #expect(drawn.first?.value == "Ethereum", "the network the backup goes to is a row")
             #expect(drawn.allSatisfy { !$0.label.hasPrefix("settingsModals.") && !$0.label.hasPrefix("componentsUi.") })
-            #expect(model.confirm?.action == "备份公钥", "the confirm reads the intent, not a bare 确认")
+            #expect(model.confirm?.action == "复制钱包记录", "the confirm reads the intent, not a bare 确认")
             // The wallet's own sheet has no requester header: the intent is
             // its title (drawn once, in the header row with the ✕), and the
             // technical details do not name the wallet's own contract to it.
-            #expect(model.headline?.text == (own ? "备份公钥" : nil))
+            #expect(model.headline?.text == (own ? "复制钱包记录" : nil))
             #expect(model.formBlocks.count == model.blocks.count - (own ? 1 : 0))
             #expect(model.tech.summary == (own ? nil : "Vela passkey registry"))
         }

@@ -508,7 +508,14 @@ struct FeedToastWire: Decodable, Equatable {
 }
 
 struct FeedViewWire: Decodable, Equatable {
+    /// Every row, newest first — History, a token's detail and the contact
+    /// page draw these.
     let rows: [FeedRowWire]
+    /// The wallet home's Activity (issue #469): the core's cut of `rows` —
+    /// the newest three items and the day headers over them, nothing else.
+    /// The home draws THESE, never `rows`. Absent (a core from before #469)
+    /// reads empty.
+    var homeRows: [FeedRowWire] = []
     /// The raw account-scoped records, for the detail sheet.
     let transactions: [FeedTxRecordWire]
     /// The row that just landed, still glowing.
@@ -532,7 +539,7 @@ struct FeedViewWire: Decodable, Equatable {
     var hidden = false
 
     private enum CodingKeys: String, CodingKey {
-        case rows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden
+        case rows, homeRows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden
     }
 }
 
@@ -543,6 +550,7 @@ extension FeedViewWire {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             rows: try c.decode([FeedRowWire].self, forKey: .rows),
+            homeRows: try c.decodeIfPresent([FeedRowWire].self, forKey: .homeRows) ?? [],
             transactions: try c.decode([FeedTxRecordWire].self, forKey: .transactions),
             newItemId: try c.decodeIfPresent(String.self, forKey: .newItemId),
             toast: try c.decodeIfPresent(FeedToastWire.self, forKey: .toast),

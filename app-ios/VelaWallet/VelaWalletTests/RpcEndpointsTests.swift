@@ -13,6 +13,7 @@
 
 import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -90,6 +91,35 @@ struct RpcEndpointsTests {
         let rank = ["user": 0, "provider": 1, "default": 2, "public": 3, "builtin": 4, "fallback": 5]
         let ranks = sources.compactMap { rank[$0] }
         #expect(ranks == ranks.sorted(), "tiers came out of order: \(sources)")
+    }
+
+    /// The curated public tier is the CORE's one list (PR 3,
+    /// `publicRpcUrls`), in its order, after the built-in default — not a
+    /// table of this shell's own. The one it kept still named `1rpc.io`,
+    /// which timed out on every call, and had nothing for Celo or Ink.
+    @Test func thePublicTierIsTheCoresList() async {
+        for chainId in [1, 56, 137, 42_161, 10, 8_453, 43_114, 100, 196, 42_220, 57_073] {
+            let core = publicRpcUrls(chainId: UInt32(chainId))
+            #expect(!core.isEmpty, "the core curates nothing for \(chainId)")
+            #expect(ChainCatalog.publicRPCs(chainId) == core)
+            #expect(!core.contains { $0.contains("1rpc.io") }, "a dead endpoint is back for \(chainId)")
+        }
+        // Polygon, whose fallback timed out on every call: collected in the
+        // core's order, after the built-in default. (An entry that is also
+        // the default keeps the higher tier — a URL is collected once.)
+        let (store, accounts, _) = fresh()
+        let polygon = await RpcEndpoints.collect(chainId: 137, store: store, accounts: accounts)
+        let builtin = ChainCatalog.meta(137)?.rpcURL
+        #expect(polygon.filter { $0.source == "public" }.map(\.url)
+                == publicRpcUrls(chainId: 137).filter { $0 != builtin })
+        #expect(polygon.contains { $0.url == "https://polygon.gateway.tenderly.co" })
+        // The curated tiers no longer name it. (The chain INDEX — somebody
+        // else's list, the deep fallback behind these — may still: that tier
+        // is not curated, and the pool's own bans are what answer it.)
+        #expect(!polygon.contains { $0.url.contains("1rpc.io") && ["default", "public"].contains($0.source) })
+        // Nothing curated, nothing invented.
+        #expect(ChainCatalog.publicRPCs(999_999_999).isEmpty)
+        #expect(ChainCatalog.publicRPCs(-1).isEmpty)
     }
 
     /// A URL appears once, in its highest tier.

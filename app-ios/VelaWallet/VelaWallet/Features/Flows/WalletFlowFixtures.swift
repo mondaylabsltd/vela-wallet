@@ -560,17 +560,23 @@ enum WalletFlowFixtures {
                     RecipientCardModel(
                         ordinal: loc.t("send.recipientN", vars: ["n": "1"]),
                         name: aliceDisplay, identiconSeed: aliceFull, amount: "50",
-                        removeLabel: loc.t("send.removeRecipient")
+                        removeLabel: loc.t("send.removeRecipient"),
+                        pickLabel: loc.t("send.recipientPickAria"),
+                        scanLabel: loc.t("send.scanAria")
                     ),
                     RecipientCardModel(
                         ordinal: loc.t("send.recipientN", vars: ["n": "2"]),
                         name: "Alice", identiconSeed: aHaoFull, amount: "30",
-                        removeLabel: loc.t("send.removeRecipient")
+                        removeLabel: loc.t("send.removeRecipient"),
+                        pickLabel: loc.t("send.recipientPickAria"),
+                        scanLabel: loc.t("send.scanAria")
                     ),
                     RecipientCardModel(
                         ordinal: loc.t("send.recipientN", vars: ["n": "3"]),
                         name: "hold on", identiconSeed: holdOnFull, amount: "40",
-                        removeLabel: loc.t("send.removeRecipient")
+                        removeLabel: loc.t("send.removeRecipient"),
+                        pickLabel: loc.t("send.recipientPickAria"),
+                        scanLabel: loc.t("send.scanAria")
                     ),
                 ],
                 recipientActions: [
@@ -616,7 +622,6 @@ enum WalletFlowFixtures {
             title: loc.t("send.pickContactTitle"),
             closeLabel: loc.t("componentsUi.identiconViewer.close"),
             searchPlaceholder: loc.t("send.pickContactSearch"),
-            scanRow: loc.t("send.scanToFill"),
             groupsTitle: loc.t("contacts.sectionGroups"),
             groups: [
                 ContactGroupModel(
