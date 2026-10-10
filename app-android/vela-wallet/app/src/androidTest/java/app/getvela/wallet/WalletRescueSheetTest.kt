@@ -4,6 +4,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -64,7 +65,7 @@ class WalletRescueSheetTest {
     }
 
     private fun openFix() {
-        compose.onAllNodesWithText(model.unreachable.rows[1].action)[1].performClick()
+        compose.onAllNodesWithText(model.unreachable.rows[1].action!!)[1].performClick()
         compose.waitForIdle()
         assertEquals(SettingsOverlay.RpcFix, rescue.overlay)
         assertEquals(model.unreachable.rows[1].chainId.toLong(), rescue.chainId)
@@ -86,6 +87,30 @@ class WalletRescueSheetTest {
         compose.onNodeWithContentDescription(model.closeLabel).performClick()
         compose.waitForIdle()
         assertEquals(SettingsOverlay.None, rescue.overlay)
+    }
+
+    /**
+     * The integration's note 4: a network on the list for its TOKEN LIST
+     * (Tempo — its RPC answers) draws no "Fix", and nothing on its row opens
+     * the RPC editor. The real balance machine's view (SR7).
+     */
+    @Test
+    fun aNetworkDownForItsTokenListOffersNoRpcFix() {
+        val tempo = SettingsFixtures.buildState(SettingsScreenState.SR7, strings)
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    WalletRescueSheet(rescue = rescue, model = tempo, onMove = { rescue = it })
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Can't load Tempo's token list right now").assertExists()
+        compose.onNodeWithText("Tempo").assertExists()
+        compose.onAllNodesWithText(strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.RPC_FIX)).assertCountEquals(0)
+        compose.onNodeWithText("Tempo").performClick()
+        compose.waitForIdle()
+        assertEquals("the row is no door to the RPC editor", SettingsOverlay.Unreachable, rescue.overlay)
     }
 
     @Test
