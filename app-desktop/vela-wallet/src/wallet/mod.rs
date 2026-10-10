@@ -44,6 +44,9 @@ pub struct WalletStrings {
     pub nav_settings: SharedString,
     pub total_balance: SharedString,
     pub live_indicator: SharedString,
+    /// "Checking…" — the hero's line while the first read of the account is
+    /// out (the core's `BalanceView::checking_key`).
+    pub balance_checking: SharedString,
     pub balance_stale: SharedString,
     /// Issue #443: "Updated {{ago}}" beside the hero's refresh control.
     pub last_updated: SharedString,
@@ -85,7 +88,11 @@ pub struct WalletStrings {
     pub detail_networks_label: SharedString,
     pub detail_networks_note: SharedString,
     pub detail_retrying: SharedString,
-    pub detail_failed: SharedString,
+    /// The breakdown's short status for a network the last read could not
+    /// reach, by the corpus key the core names on the row
+    /// (`UnreachableNetwork::status_key`): "RPC unavailable", or "Token list
+    /// unavailable" where the RPC answers (PR 3 final note F21).
+    pub detail_statuses: Vec<(&'static str, SharedString)>,
     pub detail_retry: SharedString,
     pub detail_updated: SharedString,
     pub no_price: SharedString,
@@ -180,6 +187,18 @@ pub struct WalletStrings {
 }
 
 impl WalletStrings {
+    /// The breakdown's short status for an unreachable row: `t(status_key)`,
+    /// the key being the core's (`UnreachableNetwork::status_key`). A key
+    /// this build does not know says nothing rather than something false.
+    #[must_use]
+    pub fn detail_status(&self, status_key: &str) -> SharedString {
+        self.detail_statuses
+            .iter()
+            .find(|(key, _)| *key == status_key)
+            .map(|(_, text)| text.clone())
+            .unwrap_or_default()
+    }
+
     pub fn resolve(loc: &Loc) -> Self {
         let s = |key: &str| loc.t(key);
         let raw = |key: &str| loc.t(key).to_string();
@@ -189,7 +208,8 @@ impl WalletStrings {
             nav_explore: s("componentsUi.mainNav.explore"),
             nav_settings: s("componentsUi.mainNav.settings"),
             total_balance: s("home.totalBalance"),
-            live_indicator: s("home.liveIndicator"),
+            live_indicator: s(vela_core::app::balance_dashboard::LIVE_ZERO),
+            balance_checking: s(vela_core::app::balance_dashboard::CHECKING),
             balance_stale: s("home.balanceStale"),
             last_updated: s("home.lastUpdated"),
             updating: s("home.updating"),
@@ -217,7 +237,15 @@ impl WalletStrings {
             detail_networks_label: s("home.balanceDetailNetworksLabel"),
             detail_networks_note: s("home.balanceDetailNetworksNote"),
             detail_retrying: s("home.balanceDetailStatusRetrying"),
-            detail_failed: s("home.balanceDetailStatusFailed"),
+            detail_statuses: {
+                use vela_core::app::balance_dashboard::{
+                    STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE,
+                };
+                [STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE]
+                    .into_iter()
+                    .map(|key| (key, s(key)))
+                    .collect()
+            },
             detail_retry: s("home.balanceDetailRetry"),
             detail_updated: s("home.balanceDetailUpdatedLabel"),
             no_price: s("home.balanceDetailNoPrice"),
@@ -345,7 +373,15 @@ mod tests {
                 s.detail_retrying.as_ref(),
                 "home.balanceDetailStatusRetrying",
             ),
-            (s.detail_failed.as_ref(), "home.balanceDetailStatusFailed"),
+            (
+                s.detail_status("home.balanceDetailStatusFailed").as_ref(),
+                "home.balanceDetailStatusFailed",
+            ),
+            (
+                s.detail_status("home.balanceDetailStatusTokenList")
+                    .as_ref(),
+                "home.balanceDetailStatusTokenList",
+            ),
             (s.detail_retry.as_ref(), "home.balanceDetailRetry"),
             (s.detail_updated.as_ref(), "home.balanceDetailUpdatedLabel"),
             (s.qr_caption.as_ref(), "componentsUi.qrPlaceholder.caption"),

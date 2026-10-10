@@ -976,6 +976,10 @@ pub struct WalletPage {
     content_scroll: crate::ui::SmoothScroll,
     /// The third column's body, and which subject it last scrolled for.
     panel_scroll: crate::ui::SmoothScroll,
+    /// The simulation verdict's own scroll, inside its reserved place on the
+    /// signing column (PR 3 final note F2): a verdict taller than the place
+    /// scrolls here instead of growing the column.
+    verdict_scroll: crate::ui::SmoothScroll,
     panel_scroll_subject: String,
     /// The sidebar's network list — twenty-odd chains outgrow a short window.
     networks_scroll: crate::ui::SmoothScroll,
@@ -1284,6 +1288,19 @@ impl WalletPage {
             if crate::dev_env::var!("VELA_SECTION").as_deref() == Some("settings") {
                 page.section = Section::Settings;
                 page.unreachable_open = false;
+            }
+            // `VELA_SHEET=closed`: the chip's home WITHOUT the sheet the chip
+            // opens over it — the hero's own line (DSR6 / DSR7 / DSR8), which
+            // the sheet covers, at whatever width the window has.
+            if crate::dev_env::var!("VELA_SHEET").as_deref() == Some("closed") {
+                page.unreachable_open = false;
+                page.balance_detail_open = false;
+                // …and beside a pinned flow panel (`VELA_FLOW`), which is
+                // where the home column is at its narrowest.
+                if let Some(flow) = FlowPanel::from_env() {
+                    page.flows = flow.stack();
+                    page.panel = PanelId::Flow;
+                }
             }
         }
         // `VELA_SIGNING_STATE=cs36`: the third column on one drawn request —
@@ -1639,6 +1656,7 @@ impl WalletPage {
             address_focus: cx.focus_handle(),
             content_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll: crate::ui::SmoothScroll::new(),
+            verdict_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll_subject: String::new(),
             networks_scroll: crate::ui::SmoothScroll::new(),
             settings_scroll: crate::ui::SmoothScroll::new(),
@@ -3443,10 +3461,11 @@ impl WalletPage {
     /// The columns this page builds without the window at hand, stepped once
     /// per frame at the top of `render` (`ui::smooth_scroll`). Dialogs and the
     /// pick list step their own, in `attach`.
-    fn scrolls(&self) -> [&crate::ui::SmoothScroll; 6] {
+    fn scrolls(&self) -> [&crate::ui::SmoothScroll; 7] {
         [
             &self.content_scroll,
             &self.panel_scroll,
+            &self.verdict_scroll,
             &self.networks_scroll,
             &self.settings_scroll,
             &self.contacts_scroll,
@@ -3866,12 +3885,15 @@ impl WalletPage {
         // holds nothing while others do. The empty state rather than a blank
         // strip, which reads as a list that failed to load (the web's
         // `assetsSection.mode === 'empty'`).
+        let strip_view = if self.identity.is_some() {
+            Some(resident::resident::<BalanceDashboard>(cx).read(cx).view())
+        } else {
+            // The first-read board draws the same rule over its own view.
+            Self::pinned_first_read().map(fixtures::first_read_view)
+        };
         if assets.is_empty()
-            && self.identity.is_some()
-            && wallet_live::assets_strip_empty(
-                &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
-                self.chain_filter,
-            )
+            && strip_view
+                .is_some_and(|view| wallet_live::assets_strip_empty(&view, self.chain_filter))
         {
             assets_col = assets_col.child(empty_state(
                 theme,
@@ -4633,6 +4655,18 @@ impl WalletPage {
     /// whole cut exists to fix.
     fn asset_models(&mut self, cx: &mut Context<Self>) -> Vec<fixtures::AssetRowModel> {
         if self.identity.is_none() {
+            // `VELA_FIRST_READ`: the wallet holds nothing — its list is the
+            // core's too (empty), not the board's stock holdings.
+            if let Some(stage) = Self::pinned_first_read() {
+                let money = self.money(cx);
+                return wallet_live::asset_rows(
+                    &fixtures::first_read_view(stage),
+                    &self.strings,
+                    &self.locale,
+                    None,
+                    &money,
+                );
+            }
             // `VELA_CURRENCY_PENDING`: a held wallet through the live
             // builder, its worth waiting on the currency.
             if let Some(money) = Self::pinned_currency() {
@@ -4787,7 +4821,19 @@ impl WalletPage {
             if self.tab == GalleryTab::Dsr3 {
                 let money = self.money(cx);
                 return wallet_live::balance(
-                    &fixtures::breakdown_view(),
+                    &Self::breakdown_fixture(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
+            // `VELA_FIRST_READ`: a wallet that held nothing last session,
+            // at a stage of its first read — "Checking…", then "Live ·
+            // listening" or "Can't reach 2 networks" (PR 3 final note F19).
+            if let Some(stage) = Self::pinned_first_read() {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::first_read_view(stage),
                     &self.strings,
                     &self.locale,
                     &money,
@@ -5962,6 +6008,40 @@ impl WalletPage {
                 })) as panels::Click
             })
             .collect();
+        // The wizard's RPC field and the re-check that reads it (the core's
+        // `rpc_field`; PR 3 final note F14) — the same draft and the same
+        // event Settings' dialog sends. Bound whenever there is a chain to
+        // ask again; whether they are DRAWN is the builder's reading of the
+        // core's rule, not this binding's.
+        actions.add_net_rpc = Some(panels::AddressField {
+            focus: self.endpoint_focus(WIZARD_RPC_FOCUS, cx),
+            value: wizard.custom_rpc.clone(),
+            placeholder: self.flow_strings.rpc_field_placeholder.clone(),
+            on_change: Box::new(
+                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(NetEvent::CustomRpcEdited { value: text }, cx);
+                    });
+                },
+            ),
+        });
+        actions.add_net_recheck = wizard.chain_info.as_ref().map(|info| {
+            let chain_id = info.chain_id;
+            Box::new(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                // A re-check KEEPS the typed RPC: it is the reason to ask
+                // again.
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(
+                        NetEvent::ChainSelected {
+                            chain_id,
+                            keep_custom_rpc: true,
+                        },
+                        cx,
+                    );
+                });
+                cx.notify();
+            })) as panels::Click
+        });
         actions.add_to_wallet = Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
             // Added on the core's word, not the press: `add_confirmed`
             // refuses silently unless the wizard is Checked and
@@ -6209,14 +6289,22 @@ impl WalletPage {
     /// fiat input's precision.
     fn send_display(&self, cx: &mut Context<Self>) -> SendDisplayContext {
         let view = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        SendDisplayContext {
-            fiat_decimals: if matches!(view.code.as_str(), "JPY" | "KRW" | "VND" | "IDR") {
-                0
-            } else {
-                2
-            },
-            rate: view.rate,
-            code: view.code,
+        money::send_display_context(&view)
+    }
+
+    /// Tell the open send journey the display currency when it commits or
+    /// changes under it (PR 3 final note F25; the web's `display_changed`
+    /// effect). Once per frame beside `watch_money`, and cheap: it compares
+    /// one small struct with what the journey was last told, and says
+    /// nothing when they agree. A journey whose column went while its submit
+    /// runs (`send_background`) is past every figure that depends on this.
+    fn watch_send_display(&mut self, cx: &mut Context<Self>) {
+        let Some(host) = self.send_host.clone() else {
+            return;
+        };
+        let display = self.send_display(cx);
+        if host.read(cx).display_is_news(&display) {
+            host.update(cx, |host, cx| host.display_changed(&display, cx));
         }
     }
 
@@ -7098,6 +7186,8 @@ impl WalletPage {
             add_to_wallet: None,
             add_token_tabs: None,
             add_token_picks: Vec::new(),
+            add_net_rpc: None,
+            add_net_recheck: None,
             open_send_rows: Vec::new(),
             send_class_chips: Vec::new(),
             sweep_select_all: None,
@@ -9165,7 +9255,6 @@ impl WalletPage {
         in_dialog: bool,
         cx: &mut Context<Self>,
     ) -> Div {
-        let accounts_count = self.settings.accounts_count.clone();
         let accounts_total = self.settings.accounts_total.clone();
         // Drawing this list IS the switcher opening: the core refreshes every
         // listed account's total while it is up and answers in
@@ -9173,11 +9262,10 @@ impl WalletPage {
         // say how MANY accounts there were — and its sentence ended on a
         // dangling "·" waiting for the half this adds.
         self.sync_switcher(session, cx);
-        let summary_count = crate::wallet::fill(
-            &accounts_count,
-            "count",
-            &session.accounts.len().to_string(),
-        );
+        // The count's own plural form — "1 account", never "1 accounts"
+        // (PR 3 final note F15).
+        let summary_count =
+            crate::settings::switcher_account_count(&self.loc, session.accounts.len());
 
         let switcher = resident::resident::<BalanceDashboard>(cx)
             .read(cx)
@@ -9186,7 +9274,7 @@ impl WalletPage {
         // The display currency the totals are stated in (spec 072) — the
         // web's switcher prints them the way the hero would.
         let currency = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        // "1 accounts · Total $0.75" — and every figure masked while the
+        // "1 account · Total $0.75" — and every figure masked while the
         // balance is hidden: the core sends none then (`switcher.hidden`).
         let addresses: Vec<&str> = session
             .accounts
@@ -9440,7 +9528,7 @@ impl WalletPage {
 
     fn settings_account(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
-        let summary = settings_fixtures::accounts_summary(s);
+        let summary = settings_fixtures::accounts_summary(s, &self.loc);
         let sign_out = s.sign_out_button.clone();
         let sign_out_desc = s.sign_out_desc.clone();
         let erase_title = s.erase_title.clone();
@@ -10939,6 +11027,30 @@ impl WalletPage {
     /// committed, at a fixed rate — the frame to hold beside the waiting
     /// one, to see that nothing but the figures arrived.
     /// The same env-pin family as `VELA_SETTINGS_STATE`.
+    /// `VELA_FIRST_READ=checking|live|cant_reach` (developer builds): the
+    /// home of a wallet that held nothing last session, at that stage of its
+    /// first read (`fixtures::first_read_view`, through the real balance
+    /// core). A session cannot be held in the half second before its first
+    /// round ends, and the three lines have to be looked at side by side.
+    fn pinned_first_read() -> Option<fixtures::FirstRead> {
+        fixtures::FirstRead::named(&crate::dev_env::var!("VELA_FIRST_READ")?)
+    }
+
+    /// DSR3's view: the breakdown board — or, with `VELA_BREAKDOWN=statuses`
+    /// (developer builds), the one where a network carries each short status
+    /// a row can (rate-limited, RPC unavailable, token list unavailable; PR 3
+    /// final note F21), or with `=internal` the wallet whose read failed
+    /// inside Vela.
+    fn breakdown_fixture() -> vela_core::app::balance_dashboard::BalanceView {
+        match crate::dev_env::var!("VELA_BREAKDOWN").as_deref() {
+            Some("statuses") => fixtures::breakdown_statuses_view(),
+            // The sheet as the hero's "something went wrong inside Vela"
+            // line opens it: that sentence, in full, at its top (F16).
+            Some("internal") => fixtures::internal_view(),
+            _ => fixtures::breakdown_view(),
+        }
+    }
+
     fn pinned_currency() -> Option<wallet_live::Money> {
         let want = crate::dev_env::var!("VELA_CURRENCY_PENDING")?;
         let want = want.trim();
@@ -12746,7 +12858,14 @@ impl WalletPage {
         }
 
         let s = &self.settings;
-        let custom_title = s.custom_rpc_title.clone();
+        // The RPC field and "Re-check with this RPC": drawn together or not
+        // at all, by the core's one rule (`rpc_field`; PR 3 final notes F4,
+        // F14, F22), labelled with the core's key — "RPC URL" where an
+        // endpoint is the one thing asked for, "Custom RPC (optional)" where
+        // it is one way on among others. This dialog used to decide both per
+        // verdict: a re-check under a refusal with no field to read, and
+        // "(optional)" under "Enter one, then re-check".
+        let rpc_label = settings_live::wizard_rpc_label_key(&wizard).map(|key| self.loc.t(key));
         let custom_placeholder = s.custom_rpc_placeholder.clone();
         let relay_notice = s.network_relay_notice.clone();
         let checks_title = s.compatibility_check.clone();
@@ -12760,23 +12879,19 @@ impl WalletPage {
             pill: (Tone, SharedString),
             checks: Option<Vec<(SharedString, bool)>>,
             callout: Option<SharedString>,
-            custom_rpc: bool,
             primary: Option<SharedString>,
             /// Where "Open Chain Setup Tool" goes — the core's
             /// `NetCompatibility.setup_url`, only for a chain whose missing
             /// contracts can be deployed. `None` = no such button.
             setup_url: Option<String>,
-            recheck: bool,
         }
         let checking = || Verdict {
             meta: s.wizard_checking.clone(),
             pill: (Tone::Neutral, s.compatibility_check.clone()),
             checks: None,
             callout: None,
-            custom_rpc: false,
             primary: None,
             setup_url: None,
-            recheck: false,
         };
         let verdict = match wizard.phase {
             NetWizardPhase::Checked => match wizard.compat.as_ref() {
@@ -12798,12 +12913,10 @@ impl WalletPage {
                     // Spec 081 FR-009: works, and a wallet with more than one
                     // passkey still cannot be made here — both true.
                     callout: (!compat.multi_key_ready).then(|| s.single_key_only.clone()),
-                    custom_rpc: true,
                     // `can_add` is the core's whole judgement; the button
                     // appears only when it says yes.
                     primary: wizard.can_add.then(|| s.add_network.clone()),
                     setup_url: None,
-                    recheck: false,
                 },
                 // Refused — and WHY is the core's (`blocker`): a network with
                 // no P-256 verifier says plainly that Vela cannot run there
@@ -12816,10 +12929,8 @@ impl WalletPage {
                         pill: (Tone::Error, s.wizard_incompatible.clone()),
                         checks: settings_live::compat_checks(compat, s),
                         callout: refusal.as_ref().map(|refusal| refusal.hint.clone()),
-                        custom_rpc: false,
                         primary: None,
                         setup_url: refusal.and_then(|refusal| refusal.setup_url),
-                        recheck: true,
                     }
                 }
                 // The probes never reached a verdict — "unable to verify",
@@ -12829,10 +12940,8 @@ impl WalletPage {
                     pill: (Tone::Warn, s.wizard_unable_to_verify.clone()),
                     checks: None,
                     callout: None,
-                    custom_rpc: true,
                     primary: Some(s.wizard_retry.clone()),
                     setup_url: None,
-                    recheck: true,
                 },
             },
             // The wizard stopped: why, in the core's own sentence
@@ -12842,7 +12951,8 @@ impl WalletPage {
             // verdict above; a probe that failed is "unable to verify" and
             // gets neither. Where the way on is an RPC of the person's own —
             // a chain that lists none ("Enter one, then re-check"), a check
-            // that could not be made — the field is under the sentence.
+            // that could not be made — the field is under the sentence
+            // (the core's `rpc_field`, read once above).
             NetWizardPhase::Error => {
                 let stop = settings_live::wizard_stop(&wizard, &self.loc);
                 Verdict {
@@ -12850,9 +12960,7 @@ impl WalletPage {
                         || s.wizard_unable_to_verify.clone(),
                         |stop| stop.text.clone(),
                     )),
-                    custom_rpc: settings_live::wizard_stop_wants_rpc(&wizard),
                     setup_url: stop.and_then(|stop| stop.setup_url),
-                    recheck: chain_id.is_some(),
                     ..checking()
                 }
             }
@@ -12916,12 +13024,13 @@ impl WalletPage {
                 text,
             ));
         }
-        if verdict.custom_rpc {
+        let rpc_field = rpc_label.is_some();
+        if let Some(rpc_label) = rpc_label {
             let rpc_focus = self.endpoint_focus(WIZARD_RPC_FOCUS, cx);
             col = col.child(editable_url_field(
                 ElementId::from("wizard-rpc"),
                 theme,
-                Some(custom_title),
+                Some(rpc_label),
                 &wizard.custom_rpc,
                 custom_placeholder,
                 None,
@@ -13023,7 +13132,9 @@ impl WalletPage {
             );
         }
         // The web's re-check: a link in the info colour with its refresh.
-        if verdict.recheck {
+        // Drawn exactly when the field it reads is — never under a refusal,
+        // which another endpoint would not change.
+        if rpc_field {
             col = col.child(
                 div()
                     .id("wizard-recheck-rpc")
@@ -17627,6 +17738,17 @@ impl WalletPage {
         if self.gallery && self.no_signing_host() && Self::pinned_currency().is_some() {
             signing_fixtures::in_display_currency(&mut model, &self.signing, &currency);
         }
+        // `VELA_SIM`: the verdict's place on the drawn request, holding the
+        // answer the pin names — where the live sheet puts it, after what
+        // the request says of itself.
+        if self.gallery
+            && self.no_signing_host()
+            && let Some(pin) = signing_fixtures::sim_pin()
+        {
+            model
+                .blocks
+                .extend(signing_fixtures::sim_pin_block(pin, &self.signing));
+        }
         // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the
         // operation (PR 2 note 9), drawn from the real core's view by the
         // live receipt builder — there is no request on this route.
@@ -17729,7 +17851,12 @@ impl WalletPage {
                 // it would do. Last, because it is the answer to everything
                 // above it — and the one part of this sheet a site cannot
                 // write.
-                model.blocks.extend(signing_live::sim_blocks(
+                // In a place the sheet keeps from its first frame (PR 3
+                // final note F2), so the answer landing — a few hundred
+                // milliseconds after the sheet opens — moves neither the fee
+                // row nor the confirm under a pointer on its way there.
+                model.blocks.extend(signing_live::verdict_block(
+                    host.sim_stage,
                     &host.sim,
                     host.sim_notice.as_ref(),
                     host.chain_id,
@@ -17851,6 +17978,8 @@ impl WalletPage {
                     .is_none_or(|(held, _)| *held != id)
                 {
                     self.signing_held = Some((id, signing_live::HeldLines::default()));
+                    // Another request: its verdict is read from its top.
+                    self.verdict_scroll.set_offset(gpui::point(px(0.), px(0.)));
                 }
                 if let Some((_, held)) = self.signing_held.as_mut() {
                     let measuring =
@@ -18199,6 +18328,21 @@ impl WalletPage {
                     actions,
                     field,
                     window,
+                ));
+            } else if let signing_fixtures::Block::Verdict { inner } = item {
+                // The verdict's place: one height, its own scroll inside
+                // (F2). The wheel over it moves the verdict while there is
+                // more of it, then the column, as any nested column does.
+                let scroller = self
+                    .verdict_scroll
+                    .wire(div().id("signing-verdict"), cx.entity_id());
+                let thumb = crate::ui::vertical_scrollbar(theme, &self.verdict_scroll);
+                column = column.child(signing_components::verdict_room(
+                    theme,
+                    &mut self.icons,
+                    inner,
+                    Some(scroller),
+                    thumb,
                 ));
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
                 (model.first_party, item)
@@ -18958,12 +19102,13 @@ impl WalletPage {
         let view = if self.identity.is_some() {
             resident::resident::<BalanceDashboard>(cx).read(cx).view()
         } else if self.tab == GalleryTab::Dsr3 {
-            fixtures::breakdown_view()
+            Self::breakdown_fixture()
         } else {
             return None;
         };
         let money = self.money(cx);
         let detail = wallet_live::balance_detail(&view, &self.strings, &self.locale, &money);
+        let lead = wallet_live::breakdown_lead(&view, &self.strings, &self.locale, &money);
         let s = &self.strings;
         let section = |text: SharedString| {
             div()
@@ -19088,7 +19233,10 @@ impl WalletPage {
                 theme,
                 window,
                 title,
-                None,
+                // The hero's line is one line and may end in an ellipsis
+                // (F16): the sheet it opens says the sentence in full, at
+                // its top.
+                lead,
                 self.dialog_close_icon(theme),
                 body.pb(px(8.)),
                 &self.dialog_scroll("balance-detail"),
@@ -20653,6 +20801,7 @@ impl Render for WalletPage {
         }
         self.watch_field_blurs(window, cx);
         self.watch_money(cx);
+        self.watch_send_display(cx);
         // An identicon somewhere was pressed (078 H-02): open the viewer on
         // its address. The artwork raised the request; the viewer lives here.
         if let Some(address) = cx

@@ -157,6 +157,80 @@ impl FeeFailedTold {
     }
 }
 
+/// The display currency as this journey last told the send machine — at
+/// `Open`, and after it with `Event::DisplayChanged` (PR 3 final note F25).
+///
+/// The machine was told once, when the journey opened, and never again: a
+/// Send opened before the display currency committed kept what it was
+/// handed for as long as it stayed open, and so did one left open across a
+/// change of currency in Settings — the form drew ¥ (the page reads the
+/// currency itself) over a machine still converting typed money at the
+/// other currency's rate.
+#[derive(Clone, Debug, PartialEq)]
+struct DisplayTold(SendDisplayContext);
+
+impl DisplayTold {
+    /// The context to tell for `display`, or `None` when it is no news.
+    fn news(&mut self, display: &SendDisplayContext) -> Option<SendDisplayContext> {
+        (self.0 != *display).then(|| {
+            self.0 = display.clone();
+            display.clone()
+        })
+    }
+}
+
+/// Does an open batch importer follow the display currency to a new code
+/// (PR 3 final note F8)? Only while nothing has been put in it — no pasted
+/// text, no picked file.
+///
+/// The sheet reads its figures in ONE currency, named on its unit chip. An
+/// empty sheet opened before the currency committed should not go on naming
+/// the placeholder's, so it follows (`SetFiatCode`: the core drops the old
+/// rate and fetches the new one before it will convert a row). A sheet that
+/// already holds rows keeps the currency they were read in: "5000" pasted as
+/// yuan must not turn into 5000 euros because the currency changed under it
+/// — the single-send form empties its field for the same reason, and a
+/// sheet of sixty rows cannot be emptied on a person's behalf.
+#[must_use]
+pub fn batch_follows(view: &BatchView) -> bool {
+    view.raw_text.is_empty() && view.file_name.is_none()
+}
+
+/// The display currency, as the send machine's context: its code, the USD
+/// rate the core committed, and the fiat input's precision.
+///
+/// While the display currency is NOT committed the context is unpriceable
+/// (`rate: None`, never the placeholder's 1) and names the person's own
+/// choice on its way when there is one — the core's view then reads
+/// "USD" at rate 1, which is nobody's currency: a fiat figure typed against
+/// it would be converted at 1 and paid at seven times its worth once the
+/// yuan landed. Token-denominated sending never multiplies by this number,
+/// so Send stays usable meanwhile; the pair landing is told as
+/// `DisplayChanged` and opens the fiat side in the right money. The web's
+/// `sendDisplayContext`, rule for rule.
+#[must_use]
+pub fn send_display_context(
+    view: &vela_core::app::display_currency::CurrencyView,
+) -> SendDisplayContext {
+    let (code, rate) = if view.committed {
+        (view.code.clone(), view.rate)
+    } else {
+        (
+            view.pending.clone().unwrap_or_else(|| view.code.clone()),
+            None,
+        )
+    };
+    SendDisplayContext {
+        fiat_decimals: if matches!(code.as_str(), "JPY" | "KRW" | "VND" | "IDR") {
+            0
+        } else {
+            2
+        },
+        rate,
+        code,
+    }
+}
+
 pub struct SendHost {
     send: CoreHost<Send>,
     /// The account this journey sends from, fixed when it opened.
@@ -191,6 +265,9 @@ pub struct SendHost {
     pub batch_replaces: bool,
     /// The display currency the sheet reads fiat figures in by default.
     display_code: String,
+    /// The display currency as the send machine was last told it
+    /// ([`DisplayTold`]).
+    display_told: DisplayTold,
     ctx: SendContext,
     channel: Arc<CeremonyChannel>,
     window_handle: WindowHandle,
@@ -309,6 +386,7 @@ impl SendHost {
         let send = CoreHost::<Send>::new();
         let view = send.view();
         let display_code = display.code.clone();
+        let display_told = DisplayTold(display.clone());
         let mut host = Self {
             send,
             address: account.address.clone(),
@@ -321,6 +399,7 @@ impl SendHost {
             batch_view: None,
             batch_replaces: false,
             display_code,
+            display_told,
             ctx,
             channel,
             window_handle,
@@ -411,6 +490,35 @@ impl SendHost {
     pub fn dispatch(&mut self, event: SendEvent, cx: &mut Context<Self>) {
         let pending = self.send.dispatch(event);
         self.pump_send(pending, cx);
+    }
+
+    /// Would [`Self::display_changed`] have anything to say for `display`?
+    /// What the page asks each frame before it takes the host mutably.
+    #[must_use]
+    pub fn display_is_news(&self, display: &SendDisplayContext) -> bool {
+        self.display_told.0 != *display
+    }
+
+    /// The display currency committed, or changed, while this journey is
+    /// open (PR 3 final note F25): the send machine is told
+    /// (`Event::DisplayChanged` — it re-denominates by its own rule), and an
+    /// open batch importer with nothing in it yet follows to the new code
+    /// ([`batch_follows`]). No news, nothing said.
+    pub fn display_changed(&mut self, display: &SendDisplayContext, cx: &mut Context<Self>) {
+        let Some(display) = self.display_told.news(display) else {
+            return;
+        };
+        let code_changed = self.display_code != display.code;
+        self.display_code.clone_from(&display.code);
+        self.dispatch(SendEvent::DisplayChanged { display }, cx);
+        if code_changed && self.batch_view.as_ref().is_some_and(batch_follows) {
+            self.batch_dispatch(
+                BatchEvent::SetFiatCode {
+                    code: self.display_code.clone(),
+                },
+                cx,
+            );
+        }
     }
 
     /// An event for the fee session in force (a fee-coin pick, say).
@@ -1436,6 +1544,12 @@ mod tests {
         }
 
         fn open() -> Self {
+            Self::open_in(SendDisplayContext::default())
+        }
+
+        /// A journey opened with `display` — what the page hands it from the
+        /// display currency at that moment.
+        fn open_in(display: SendDisplayContext) -> Self {
             let mut journey = Self(CoreHost::<Send>::new());
             journey.drive(SendEvent::Open {
                 account: Some(SendAccountRef {
@@ -1444,9 +1558,18 @@ mod tests {
                     name: None,
                 }),
                 params: SendOpenParams::default(),
-                display: SendDisplayContext::default(),
+                display,
             });
             journey
+        }
+
+        /// The display bridge, as `SendHost::display_changed` runs it.
+        fn tell_display(&mut self, told: &mut DisplayTold, display: &SendDisplayContext) -> bool {
+            let Some(display) = told.news(display) else {
+                return false;
+            };
+            self.drive(SendEvent::DisplayChanged { display });
+            true
         }
 
         fn drive(&mut self, event: SendEvent) {
@@ -1518,6 +1641,168 @@ mod tests {
             });
             Some(news)
         }
+    }
+
+    /// PR 3 final note F25. The send machine was told the display currency
+    /// once, at `Open`, and never again — so a Send opened before the
+    /// currency committed, or left open across a change in Settings, kept
+    /// the display it was opened with for the whole journey. Now the journey
+    /// is told when it commits and when it changes (`SendHost::
+    /// display_changed`, asked once per frame by the page), once per change.
+    #[test]
+    fn a_send_left_open_hears_the_display_currency_commit_and_change() {
+        use vela_core::app::display_currency::CurrencyView;
+        let currency = |code: &str, rate: Option<f64>, committed: bool, pending: Option<&str>| {
+            send_display_context(&CurrencyView {
+                code: code.to_owned(),
+                rate,
+                committed,
+                pending: pending.map(str::to_owned),
+            })
+        };
+
+        // Not committed: unpriceable, in the person's own choice on its way
+        // — never the placeholder's "USD at 1", which a typed fiat figure
+        // would be converted at.
+        let waiting = currency("USD", Some(1.0), false, Some("CNY"));
+        assert_eq!((waiting.code.as_str(), waiting.rate), ("CNY", None));
+        let unknown = currency("USD", Some(1.0), false, None);
+        assert_eq!((unknown.code.as_str(), unknown.rate), ("USD", None));
+        // Committed: the pair, as it is (a currency nobody can price stays
+        // unpriceable), and the fiat field's precision by the code.
+        let yuan = currency("CNY", Some(7.2), true, None);
+        assert_eq!((yuan.code.as_str(), yuan.rate), ("CNY", Some(7.2)));
+        assert_eq!(yuan.fiat_decimals, 2);
+        assert_eq!(currency("JPY", Some(150.0), true, None).fiat_decimals, 0);
+        assert_eq!(currency("ARS", None, true, None).rate, None);
+
+        // A Send opened while the yuan is on its way.
+        let mut journey = Journey::open_in(waiting.clone());
+        let mut told = DisplayTold(waiting.clone());
+        journey.pick(&Journey::eth());
+        // Nothing to divide by yet: the fiat side stays shut.
+        journey.drive(SendEvent::ToggleFiatInput);
+        assert_eq!(journey.view().amount_fiat_code, None);
+        // The same context again is no news: nothing is said.
+        assert!(!journey.tell_display(&mut told, &waiting));
+
+        // The pair lands: told, once.
+        assert!(journey.tell_display(&mut told, &yuan));
+        assert!(!journey.tell_display(&mut told, &yuan), "once per change");
+        journey.drive(SendEvent::ToggleFiatInput);
+        assert_eq!(
+            journey.view().amount_fiat_code.as_deref(),
+            Some("CNY"),
+            "the fiat side opens in the person's money"
+        );
+
+        // The person types 720 yuan, then changes the currency in Settings
+        // with the Send still open: the machine hears it and the figure —
+        // which was yuan, not euros — does not survive as euros.
+        journey.drive(SendEvent::SetAmount {
+            amount: "720".to_owned(),
+        });
+        assert_eq!(journey.view().amount, "720");
+        let euro = currency("EUR", Some(0.9), true, None);
+        assert!(journey.tell_display(&mut told, &euro));
+        let view = journey.view();
+        assert_eq!(view.amount_fiat_code.as_deref(), Some("EUR"));
+        assert_eq!(view.amount, "", "720 CNY is not 720 EUR");
+
+        // A rate that moves under the same currency is news too (the
+        // machine converts with it), and is told.
+        let euro_later = currency("EUR", Some(0.91), true, None);
+        assert!(journey.tell_display(&mut told, &euro_later));
+    }
+
+    /// PR 3 final note F8, the half a shell can do: the batch importer reads
+    /// fiat figures in the display currency — and it was opened in the code
+    /// of whatever the core's view said, which before the currency commits
+    /// is the placeholder's "USD", and it never heard the real one land. Now
+    /// it opens in the person's own choice on its way
+    /// ([`send_display_context`]) and, while it is still empty, follows the
+    /// currency when it commits or changes (`SendHost::display_changed` →
+    /// `SetFiatCode`), where the core drops the old currency's rate before
+    /// it will convert a row. Rows already in it keep the currency they
+    /// were read in ([`batch_follows`]).
+    #[test]
+    fn the_batch_importer_opens_in_and_follows_the_persons_currency() {
+        use vela_core::app::batch_import::{
+            BatchImport, BatchRateStatus, BatchToken, Event as BatchEvent,
+        };
+        use vela_core::app::display_currency::CurrencyView;
+        let mut batch = CoreHost::<BatchImport>::new();
+        // The rate service, answering for the yuan only once asked to.
+        let pump = |batch: &mut CoreHost<BatchImport>, event: BatchEvent, answers: bool| {
+            let mut pending = batch.dispatch(event);
+            while let Some(effect) = pending.pop() {
+                let result = match effect.operation {
+                    BatchOperation::FetchUsdFiatRate { code } if answers => {
+                        BatchShellResult::RateResolved {
+                            rate: Some(if code == "CNY" { 7.2 } else { 0.9 }),
+                            code,
+                        }
+                    }
+                    _ => continue,
+                };
+                pending.extend(batch.resolve(effect.id, result));
+            }
+        };
+        // Opened while the yuan is on its way: the sheet is in yuan, not in
+        // the placeholder's dollars.
+        let waiting = send_display_context(&CurrencyView {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+            committed: false,
+            pending: Some("CNY".to_owned()),
+        });
+        pump(
+            &mut batch,
+            BatchEvent::Open {
+                token: BatchToken {
+                    symbol: "USDT".to_owned(),
+                    decimals: 6,
+                    balance: "20000".to_owned(),
+                    price_usd: Some(1.0),
+                },
+                currency_code: waiting.code.clone(),
+                max_recipients: 60,
+            },
+            true,
+        );
+        assert_eq!(batch.view().fiat_code, "CNY");
+        assert_eq!(batch.view().rate_status, BatchRateStatus::Ok);
+
+        // The person picks the euro in Settings with the sheet still open
+        // and still empty: it follows — what `display_changed` sends. The
+        // yuan's rate does not price it: the sheet is loading until the
+        // euro's own rate is in.
+        assert!(batch_follows(&batch.view()), "nothing in it yet");
+        pump(
+            &mut batch,
+            BatchEvent::SetFiatCode {
+                code: "EUR".to_owned(),
+            },
+            false,
+        );
+        let view = batch.view();
+        assert_eq!(view.fiat_code, "EUR");
+        assert_eq!(view.rate_status, BatchRateStatus::Loading);
+        assert!(
+            view.rate_input.is_empty(),
+            "no rate carried across: {view:?}"
+        );
+
+        // Rows pasted: the sheet keeps the currency they were read in. 5000
+        // pasted as euros is not 5000 of whatever the currency becomes.
+        pump(
+            &mut batch,
+            BatchEvent::SetRawText {
+                text: "0x031d7D57c99CAF891e1C250554691Fd12D84772b, 5000\n".to_owned(),
+            },
+            true,
+        );
+        assert!(!batch_follows(&batch.view()), "it holds a row now");
     }
 
     /// PR 2 polish: the bridge counts the card's failure only for the chain
