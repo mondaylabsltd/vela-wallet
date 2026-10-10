@@ -77,7 +77,7 @@ struct SigningVerdictPlaceTests {
     private func context(_ verdict: Verdict) throws -> SigningLive.Context {
         let native: [String: Any] = ["type": "native", "delta": "-1500000000000000000"]
         let unknown: [String: Any] = [
-            "type": "erc20_unverified", "token": "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a", "delta": "123456789",
+            "type": "erc20_unverified", "token": "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a", "direction": "in",
         ]
         let weth: [String: Any] = [
             "type": "erc20_trusted", "token": "0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1",

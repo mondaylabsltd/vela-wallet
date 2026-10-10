@@ -147,7 +147,7 @@ struct FinalRoundGalleryScreen: View {
             "delta": "-40000000000000000", "symbol": "WETH", "decimals": 18,
         ]
         let unknown: [String: Any] = [
-            "type": "erc20_unverified", "token": "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a", "delta": "123456789",
+            "type": "erc20_unverified", "token": "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a", "direction": "in",
         ]
         switch verdict {
         case "send": return (judged([native]), .answered)

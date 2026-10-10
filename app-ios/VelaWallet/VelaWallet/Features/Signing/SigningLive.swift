@@ -918,9 +918,10 @@ enum SigningLive {
         }
         // One warning for the whole block, not one per row: the caution is
         // about the same thing each time, and repeating it is how people stop
-        // reading it.
+        // reading it. It stands with an unverified ROW — a move of nothing
+        // draws none.
         let unverified = sim.judgments.contains {
-            if case .erc20Unverified = $0 { return true }
+            if case .erc20Unverified(_, let direction) = $0 { return direction != .still }
             return false
         }
         return [.balances(
@@ -950,30 +951,37 @@ enum SigningLive {
     /// the shell's own formatter rounded a 1000-wei outflow to "0" and kept
     /// its minus — "xDAI −0" (G49).
     ///
-    /// An unverified INFLOW shows its direction and the word "unverified
+    /// An unverified token shows its direction and the words "unverified
     /// token" and **no number**: the amount in a simulated log is whatever the
     /// site being signed for chose to emit, and printing it lends this wallet's
-    /// credibility to a stranger's arithmetic.
+    /// credibility to a stranger's arithmetic. Since PR 3 the judgment does
+    /// not carry one (`TrustSimDirectionWire`): "+" in, "−" out, no row for a
+    /// move of nothing, and the row with its caution and no sign where the
+    /// core could not read a direction.
     private static func balanceRow(
         _ judgment: TrustSimJudgmentWire, context: Context
     ) -> BalanceDeltaRow? {
         let loc = context.loc
-        let incoming = judgment.incoming
-        let tone: SigningTone = incoming ? .success : .neutral
+        // A figure the wallet vouches for states its direction by its sign,
+        // in the core's string: positive means the wallet RECEIVES.
+        func tone(_ delta: String) -> SigningTone { delta.hasPrefix("-") ? .neutral : .success }
         switch judgment {
         case .native(let delta):
             guard let text = SimDeltas.deltaText(delta, decimals: 18) else { return nil }
-            return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone)
+            return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone(delta))
         case .erc20Trusted(_, let delta, let symbol, let decimals, _):
             guard let text = SimDeltas.deltaText(delta, decimals: decimals) else { return nil }
-            return BalanceDeltaRow(symbol: symbol, delta: text, tone: tone)
-        case .erc20Unverified:
-            return BalanceDeltaRow(
-                symbol: s(loc, "balanceUnverifiedToken"),
-                // Direction only. Never the site's own number.
-                delta: incoming ? "+" : "\u{2212}",
-                tone: .caution
-            )
+            return BalanceDeltaRow(symbol: symbol, delta: text, tone: tone(delta))
+        case .erc20Unverified(_, let direction):
+            // Direction only. Never the site's own number.
+            let sign: String
+            switch direction {
+            case .in: sign = "+"
+            case .out: sign = "\u{2212}"
+            case .unreadable: sign = ""
+            case .still: return nil
+            }
+            return BalanceDeltaRow(symbol: s(loc, "balanceUnverifiedToken"), delta: sign, tone: .caution)
         }
     }
 
