@@ -5,12 +5,19 @@
 	interface Props {
 		tone: 'caution' | 'danger';
 		text: string;
+		/** The line that lands after the sheet has opened (the relay's verdict): named, so the sheet can keep it in sight. */
+		verdict?: boolean;
 	}
 
-	let { tone, text }: Props = $props();
+	let { tone, text, verdict = false }: Props = $props();
 </script>
 
-<div class="banner" data-tone={tone} role={tone === 'danger' ? 'alert' : undefined}>
+<div
+	class="banner"
+	data-tone={tone}
+	data-verdict={verdict ? '' : undefined}
+	role={tone === 'danger' ? 'alert' : undefined}
+>
 	<Icon icon={UTILITY_ICONS['triangle-alert']} size="base" />
 	<p>{text}</p>
 </div>

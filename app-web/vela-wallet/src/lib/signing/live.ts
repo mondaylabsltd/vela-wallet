@@ -1221,7 +1221,7 @@ function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[
 		: m.warnWillFail;
 	const at = blocks.findIndex((block) => block.kind === 'intent');
 	const next = [...blocks];
-	next.splice(at + 1, 0, { kind: 'warning', tone: 'danger', text });
+	next.splice(at + 1, 0, { kind: 'warning', tone: 'danger', text, verdict: true });
 	return next;
 }
 

@@ -2039,7 +2039,10 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 			expect(model.blocks[1]).toEqual({
 				kind: 'warning',
 				tone: 'danger',
-				text: fill(m.warnWillFailReason, { reason: 'ERC20: transfer amount exceeds balance' })
+				text: fill(m.warnWillFailReason, { reason: 'ERC20: transfer amount exceeds balance' }),
+				// Marked as the line that lands after the sheet has opened (F2):
+				// the sheet keeps its confirm where it was across it.
+				verdict: true
 			});
 			// A warning informs, never blocks (L-D5).
 			expect(model.confirm.enabled).toBe(true);

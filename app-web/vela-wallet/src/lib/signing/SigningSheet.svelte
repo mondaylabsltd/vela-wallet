@@ -75,7 +75,53 @@
 		sheet?.close();
 	}
 
-	let sheet = $state<{ close: () => void }>();
+	let sheet = $state<{
+		close: () => void;
+		placeOf: (selector: string) => number | null;
+		keepAt: (selector: string, top: number, keep?: { show?: string; under?: string }) => void;
+		recentre: () => void;
+	}>();
+
+	/**
+	 * PR 3 final note F2 — the confirm stays where it is when a verdict lands.
+	 *
+	 * This sheet runs no simulation and keeps no room for one (spec 082 RG6).
+	 * The one verdict it can say arrives after it has opened: the relay's own
+	 * estimate answering that the operation will revert (RJ19), a danger line
+	 * under the intent — at the moment the fee lands and the confirm opens.
+	 * Measured before this: on the phone sheet at its full height the confirm
+	 * went DOWN 69 px (at 320 × 700, out of the window), and on the centred
+	 * card 39 px, as the tap it had just become ready for was on its way.
+	 *
+	 * The confirm's place is read before the line is drawn (or taken away, or
+	 * reworded) and given back after: the sheet grows upward, as the phone
+	 * sheet below its full height always did. The line itself is never
+	 * scrolled out of sight for it — and neither is the header: who is
+	 * asking, and the ✕ that refuses, stay at the top of a sheet that scrolls.
+	 */
+	const CONFIRM = '[data-testid="signing-confirm"]';
+	const VERDICT = '[data-verdict]';
+	const HEADER = '[data-signing-top]';
+	const verdict = $derived(
+		model.blocks.find((block) => block.kind === 'warning' && block.verdict === true)
+	);
+	const verdictText = $derived(verdict?.kind === 'warning' ? verdict.text : undefined);
+	let confirmAt: number | null = null;
+	$effect.pre(() => {
+		void verdictText;
+		confirmAt = sheet?.placeOf(CONFIRM) ?? null;
+	});
+	$effect(() => {
+		void verdictText;
+		if (confirmAt !== null) sheet?.keepAt(CONFIRM, confirmAt, { show: VERDICT, under: HEADER });
+	});
+	// The form gives way to the status (or comes back): another sheet's worth
+	// of content, in the middle again.
+	const showsStatus = $derived(model.status !== undefined && model.status !== null);
+	$effect(() => {
+		void showsStatus;
+		sheet?.recentre();
+	});
 </script>
 
 <BottomSheet
@@ -88,14 +134,18 @@
 >
 	<!-- A refused request (spec 081) already offers its one way out, the
 	     labelled Close under the refusal; a second ✕ would be two doors. -->
-	<SigningHeader
-		dapp={model.dapp}
-		network={model.network}
-		headline={model.headline}
-		closeLabel={model.closeLabel}
-		closeDisabled={!dismissible}
-		onclose={onclose && !model.dismissOnly ? closeNow : undefined}
-	/>
+	<!-- Kept at the top of a sheet that scrolls: the site that is asking and
+	     the ✕ never leave the screen, whatever is read under them. -->
+	<div class="top" data-signing-top>
+		<SigningHeader
+			dapp={model.dapp}
+			network={model.network}
+			headline={model.headline}
+			closeLabel={model.closeLabel}
+			closeDisabled={!dismissible}
+			onclose={onclose && !model.dismissOnly ? closeNow : undefined}
+		/>
+	</div>
 	<!-- Spec 102 (D4): a hand-off is drawn by the body, under the sheet's own
 	     fee row and signing account (`SigningBody`). -->
 	{#if model.status && model.handoff === undefined}
@@ -138,6 +188,19 @@
 </BottomSheet>
 
 <style>
+	/* The sheet's own surface, so what scrolls under the header is not seen
+	   through it. */
+	.top {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		background: var(--color-bg-raised);
+		/* A little of the surface under it, so what scrolls beneath does not
+		   touch its words — and none of it in the layout at rest. */
+		padding-bottom: var(--space-md);
+		margin-bottom: calc(-1 * var(--space-md));
+	}
+
 	/* The receipt's centrepiece, with the room the form's body had. */
 	.status {
 		display: flex;

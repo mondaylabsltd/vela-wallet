@@ -145,7 +145,18 @@ export type Block =
 	  }
 	| { kind: 'party'; label: string; name: string; address?: string; badge?: PartyBadge }
 	| { kind: 'rows'; rows: KeyValueRow[] }
-	| { kind: 'warning'; tone: 'caution' | 'danger'; text: string }
+	| {
+			kind: 'warning';
+			tone: 'caution' | 'danger';
+			text: string;
+			/**
+			 * This line LANDS after the sheet has opened: the relay's own
+			 * estimate saying the operation will revert (spec 082 RJ19). The
+			 * sheet keeps its confirm where it was across the landing (PR 3
+			 * final note F2).
+			 */
+			verdict?: true;
+	  }
 	| { kind: 'positive'; text: string }
 	/** Message, hex, typed-data JSON or calldata — always monospace. */
 	| { kind: 'code'; lines: string[]; note?: string }
