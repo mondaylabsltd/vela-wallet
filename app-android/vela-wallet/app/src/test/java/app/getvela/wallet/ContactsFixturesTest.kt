@@ -158,14 +158,9 @@ class ContactsFixturesTest {
         assertEquals("0x9F3c…21aE", detail.contact.addressDisplay)
         assertEquals(listOf("家人"), detail.chips.groups)
         assertEquals("分组", detail.chips.addLabel)
-        assertEquals(
-            listOf("转账", "收款", "二维码"),
-            detail.actions.map { it.label },
-        )
-        assertEquals(
-            listOf(ContactsIcon.Send, ContactsIcon.Receive, ContactsIcon.Qr),
-            detail.actions.map { it.icon },
-        )
+        // Issue #479: Send, and only Send — no 收款, no 二维码.
+        assertEquals(listOf("转账"), detail.actions.map { it.label })
+        assertEquals(listOf(ContactsIcon.Send), detail.actions.map { it.icon })
 
         assertEquals("地址", detail.address.label)
         assertEquals(

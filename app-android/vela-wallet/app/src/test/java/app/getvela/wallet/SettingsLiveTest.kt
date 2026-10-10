@@ -440,6 +440,20 @@ class SettingsLiveTest {
         assertEquals("JPY · ¥", row.value)
     }
 
+    /**
+     * While the stored choice is still being priced the core is on its USD
+     * placeholder (`committed == false`) and names the choice as `pending`:
+     * the row and the sheet say the person's own currency, never "USD" for
+     * someone who chose yen.
+     */
+    @Test
+    fun theCurrencyRowNamesTheChoiceOnItsWayNotThePlaceholder() {
+        val model = SettingsLive.withCurrency(base(), CurrencyView("USD", null, false, pending = "JPY"))
+        val row = model.sections.flatMap { it.rows }.single { it.id == "currency" }
+        assertEquals("JPY · ¥", row.value)
+        assertEquals("JPY", model.currencySheet.rows.single { it.selected }.id)
+    }
+
     // -- the add-network wizard (spec 041 phase 8) ---------------------------
 
     private fun indexEntry(chainId: Long, name: String, symbol: String) = NetChainIndexEntry(
@@ -645,10 +659,16 @@ class SettingsLiveTest {
             NetWizardView(
                 phase = NetWizardPhase.Checked,
                 chain_info = chainInfo(1234, "Nowhere"),
+                // As the core sends a chain that has the verifier and lacks
+                // contracts: the reason, its line and Chain Setup on this chain.
                 compat = NetCompatibility(
                     chain_id = 1234,
                     compatible = false,
                     contracts = listOf(NetContractStatus("EntryPoint", "0xaa", deployed = false)),
+                    p256_available = true,
+                    blocker = "missing_contracts",
+                    hint_key = "settingsModals.addNetwork.incompatibleHint",
+                    setup_url = "https://getvela.app/chain-setup?chain=1234",
                 ),
                 can_add = false,
             ),
@@ -660,9 +680,46 @@ class SettingsLiveTest {
         assertEquals(false, add.checks.first { it.label == "EntryPoint" }.ok)
         assertNull("a chain whose contracts are missing cannot be added", add.primary)
         // Spec 072: it says why, offers the setup tool and a re-check.
-        assertTrue(add.callout!!.text.isNotBlank())
+        assertEquals(strings.t("settingsModals.addNetwork.incompatibleHint"), add.callout!!.text)
         assertTrue(add.secondary!!.isNotBlank())
+        assertEquals("the link is the core's, opened on this chain", "https://getvela.app/chain-setup?chain=1234", add.secondaryUrl)
         assertTrue(add.recheck!!.isNotBlank())
+    }
+
+    /**
+     * The other refusal: no P-256 verifier at 0x100. Nothing can be deployed
+     * to add one, so the line says Vela wallets cannot work on this network
+     * and that money sent there would be stuck — and there is NO Chain Setup
+     * button. It used to share the missing-contracts sentence and its button.
+     */
+    @Test
+    fun aChainWithNoP256VerifierSaysSoAndOffersNothingToDeploy() {
+        val view = wizardView(
+            NetWizardView(
+                phase = NetWizardPhase.Checked,
+                chain_info = chainInfo(1234, "Nowhere"),
+                compat = NetCompatibility(
+                    chain_id = 1234,
+                    compatible = false,
+                    contracts = listOf(NetContractStatus("EntryPoint", "0xaa", deployed = true)),
+                    p256_available = false,
+                    blocker = "no_p256",
+                    hint_key = "settingsModals.addNetwork.noP256Hint",
+                ),
+                can_add = false,
+            ),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals(SettingsTone.Error, add.candidate!!.badge!!.tone)
+        assertEquals(false, add.checks.last().ok)
+        assertNull(add.primary)
+        assertEquals(strings.t("settingsModals.addNetwork.noP256Hint"), add.callout!!.text)
+        assertTrue(add.callout!!.text, add.callout!!.text.contains("P-256"))
+        assertNull("nothing to deploy: no Chain Setup button", add.secondary)
+        assertNull(add.secondaryUrl)
+        assertTrue("a different RPC may still be tried", add.recheck!!.isNotBlank())
     }
 
     /**
@@ -812,7 +869,8 @@ class SettingsLiveTest {
         val rows = model.signingPages.rows
         // D6: the official page is a trusted page by its own name; only a page
         // the person deployed is "self-hosted", and a label they gave wins.
-        assertEquals(listOf("Vela's official signing page", "My page", "Self-hosted · signer.example.org"), rows.map { it.title })
+        // The "·" is bound to the word before it (U+00A0): no line starts with it.
+        assertEquals(listOf("Vela's official signing page", "My page", "Self-hosted\u00a0· signer.example.org"), rows.map { it.title })
         assertEquals(listOf("", "My page", ""), rows.map { it.label })
         // A row named by its domain does not say its address a second time.
         assertEquals(listOf(true, true, false), rows.map { it.showAddress })
@@ -823,8 +881,10 @@ class SettingsLiveTest {
         // official page keeps its keys on getvela.app, "My page" on
         // example.com; a page whose keys are its own host's says nothing more.
         assertEquals(listOf("Keys on getvela.app", "Keys on example.com", ""), rows.map { it.domain })
-        assertTrue(rows[0].integrity.text, rows[0].integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        assertTrue(rows[0].integrity.text, rows[0].integrity.text.startsWith("Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked "))
         assertTrue(rows[0].integrity.opens)
+        // The remove question's two answers (Android asks first, as iOS does).
+        assertEquals("Cancel", model.signingPages.cancel)
         assertTrue(rows[1].integrity.asksToTrust)
         assertEquals("Checking the page…", rows[2].integrity.text)
         // The page's own words, not other screens' borrowed ones (core round 10).

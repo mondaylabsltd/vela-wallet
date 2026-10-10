@@ -589,7 +589,10 @@ class SendController(
     /** 导入表格: the sheet opens on the send's flag and the batch machine opens on the token. */
     // -- Scanner (spec 046 US3): the core's flag opens the surface; a decode
     // becomes ScanResolved and the core decides what it means.
-    fun openScanner() = dispatch(SendEvent.OpenScanner)
+    fun openScanner() = dispatch(SendEvent.OpenScanner())
+
+    /** Issue #471: the scanner for ONE split row: the scanned address lands in that row. */
+    fun openRowScanner(id: String) = dispatch(SendEvent.OpenScanner(id))
 
     fun closeScanner() = dispatch(SendEvent.CloseScanner)
 

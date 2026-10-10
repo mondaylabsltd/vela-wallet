@@ -84,6 +84,23 @@ enum class SigningScreenState {
      * (CS56), and the dash, no control, when no other coin is left (CS55).
      */
     CS45, CS46, CS47, CS48, CS49, CS50, CS51, CS52, CS53, CS54, CS55, CS56,
+
+    /**
+     * Nothing jumps when the simulation's verdict lands (the 102 device run):
+     * CS1's transfer while its simulation is out — the verdict's place kept,
+     * nothing in it (CS57) — and the same sheet once a node that cannot
+     * simulate has answered: 「Vela 未能检查这笔交易的结果」 in that place
+     * (CS58). The two are the same height, and the confirm is where it was.
+     */
+    CS57, CS58,
+}
+
+/**
+ * What a list of blocks SAYS: a held place counts as the block that took it,
+ * and as nothing while it is still only room.
+ */
+fun List<SigningBlock>.said(): List<SigningBlock> = flatMap { block ->
+    if (block is SigningBlock.Held) listOfNotNull(block.shown) else listOf(block)
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
@@ -193,6 +210,19 @@ sealed interface SigningBlock {
         val note: String? = null,
         val noteTone: SigningTone = SigningTone.Neutral,
     ) : SigningBlock
+
+    /**
+     * A place kept for a block that arrives late — the simulation's verdict.
+     *
+     * The sheet is bottom-anchored and as tall as its content, so a card
+     * that appears a second after the sheet opened pushed everything above
+     * it up (the 102 device run: 「Vela 未能检查这笔交易的结果」 on every
+     * Gnosis request). The place is there from the first frame, [room]'s
+     * size — drawn unseen and unsaid — and [shown] takes it when it lands.
+     * Nothing moves for a [shown] no taller than [room]; a taller one grows
+     * the sheet by the difference only.
+     */
+    data class Held(val room: SigningBlock, val shown: SigningBlock?) : SigningBlock
 }
 
 @Immutable
@@ -332,7 +362,12 @@ data class HandoffModel(
      * `KeyLabel`); `null` when nothing names the key.
      */
     val key: KeyRowModel?,
-    /** The page's address, without its scheme. */
+    /**
+     * The page's NAME, as Settings names it (D6): 「Vela 官方签名页」, the
+     * person's label, or "Self-hosted · domain".
+     */
+    val pageName: String,
+    /** The page's address, without its scheme — drawn under [pageName] unless the name already says it. */
     val page: String,
     val integrity: app.getvela.wallet.feature.settings.components.IntegrityLineModel,
     val open: String,
@@ -399,7 +434,7 @@ data class SigningScreenModel(
      */
     val dappOwn: Boolean = false,
     /**
-     * The wallet's own request: what it does ("备份公钥"), drawn as the
+     * The wallet's own request: what it does ("复制钱包记录"), drawn as the
      * header's title beside the ✕. The intent block it comes from is not
      * repeated below. `null` for a site's request, whose header names the site.
      */
@@ -424,7 +459,7 @@ data class SigningScreenModel(
     val signerName: String,
     val signerSeed: String,
     /**
-     * The confirm's words — the action alone ("确认兑换", "签名", "备份公钥"),
+     * The confirm's words — the action alone ("确认兑换", "签名", "复制钱包记录"),
      * on a tap button (issue #461: the Send screen's Confirm, not a slide).
      * There is no reject BUTTON anywhere in this vocabulary; the header's ✕ is
      * the explicit refusal, and since spec 079 nothing else closes the sheet

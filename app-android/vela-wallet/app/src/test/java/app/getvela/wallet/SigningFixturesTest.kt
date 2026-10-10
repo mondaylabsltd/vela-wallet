@@ -48,7 +48,7 @@ class SigningFixturesTest {
             model.signerLabel, model.signerName,
             model.panelTitle, model.tech.title,
         )
-        model.blocks.forEach { block ->
+        fun said(block: SigningBlock) {
             when (block) {
                 is SigningBlock.Intent -> out += block.text
                 is SigningBlock.Amount -> out += listOfNotNull(
@@ -81,8 +81,11 @@ class SigningFixturesTest {
                     out += block.title
                     block.note?.let { out += it }
                 }
+                // A held place says only what took it; its room is unsaid.
+                is SigningBlock.Held -> block.shown?.let(::said)
             }
         }
+        model.blocks.forEach(::said)
         when (val fee = model.fee) {
             is FeeModel.OnChain -> {
                 out += listOf(fee.label, fee.value)
@@ -103,9 +106,10 @@ class SigningFixturesTest {
     fun everyScenarioBuilds() {
         // The 33 of the canon, CS36 — the wallet's own backup — CS37–CS42,
         // spec 102's hand-off card (CS40/CS41: the card a send raises on its
-        // own), CS43/CS44, a key ceremony waiting on its page, and CS45–CS56,
-        // the correctness batch's boards (drawn through the live builders).
-        assertEquals(54, SigningScreenState.entries.size)
+        // own), CS43/CS44, a key ceremony waiting on its page, CS45–CS56,
+        // the correctness batch's boards (drawn through the live builders),
+        // and CS57/CS58: the simulation's verdict's place, kept and taken.
+        assertEquals(56, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
@@ -140,9 +144,16 @@ class SigningFixturesTest {
         // D-17: the founding key carries the wallet's name, so it is named by
         // its place — a label | value row, like "Signing account | name".
         assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "Phone or tablet"), card.key)
+        // The page by its NAME, as Settings names it — never the host alone;
+        // the address is drawn under it, since the name does not say it.
+        assertEquals("Vela's official signing page", card.pageName)
         assertEquals("sign.getvela.app", card.page)
+        assertEquals("Vela 官方签名页", SigningFixtures.build(SigningScreenState.CS37, zhStrings()).handoff!!.pageName)
+        // A page the person deployed is called what they called it.
+        assertEquals("Home", SigningFixtures.build(SigningScreenState.CS42, en).handoff!!.pageName)
         // D-13: a moment, in the person's format — the boards' check ran at 14:32 today.
-        assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        // Each "·" is bound to the word before it (U+00A0), so no line starts with one.
+        assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked "))
         assertFalse(card.integrity.text, card.integrity.text.endsWith("checked "))
         // The dApp sheet's own fee row sits right above the card: the card does not repeat it.
         assertNull(card.fee)
@@ -216,9 +227,10 @@ class SigningFixturesTest {
         assertEquals(model.headline, model.confirmAction)
         val rows = (model.blocks.single() as SigningBlock.Rows).rows.map { it.label }
         assertEquals(
-            listOf("labelNetwork", "labelAddress", "labelPublicKeys").map { zh.t("componentsUi.signing.$it") },
+            listOf("labelNetwork", "labelAddress", "labelWalletName", "labelPublicKeys").map { zh.t("componentsUi.signing.$it") },
             rows,
         )
+        assertEquals("复制钱包记录", model.headline)
         assertEquals(null, model.tech.summary)
         val speed = (model.fee as FeeModel.OnChain).speed!!
         assertTrue(speed.open && speed.gasPriceLine)

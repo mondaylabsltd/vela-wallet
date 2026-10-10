@@ -197,10 +197,11 @@ object FlowLive {
     /**
      * A1 — the whole history, not the first few.
      *
-     * The home screen's Activity section shows a handful and offers "全部".
-     * That link opened a fixture: a person tapped past their own payments into
-     * somebody else's. Same rows, same grouping, same core ordering as the home
-     * feed — this only removes the cut-off.
+     * The home screen's Activity section shows the core's newest three
+     * (`FeedView.home_rows`, issue #469) and offers "全部". That link opened a
+     * fixture: a person tapped past their own payments into somebody else's.
+     * Same grouping, same core ordering as the home feed — but every row
+     * (`FeedView.rows`).
      */
     fun history(
         fallback: HistoryModel,
@@ -323,7 +324,8 @@ object FlowLive {
             // A dApp's call that moved no coin of ours has no amount (RG2).
             amount = when {
                 amount.isBlank() -> ""
-                hidden -> WalletLive.MASK
+                // Hidden: how much is masked, what it is stays ("•••• xDAI").
+                hidden -> WalletLive.masked(item.symbol)
                 else -> "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim()
             },
             positive = received,
@@ -375,17 +377,18 @@ object FlowLive {
         val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
         val allowance = dapp.allowance?.takeIf { item.value == null }
         val back = dapp.received?.let { change ->
-            listOf(if (hidden) WalletLive.MASK else WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
+            if (hidden) WalletLive.masked(change.symbol) else listOf(WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
         }
         // Spec 097 N5: nothing left and something came back (a borrow) — what
         // came back is the figure.
         val leadsWithBack = allowance == null && item.value == null && back != null
         val amount = when {
-            allowance != null && hidden && !allowance.unlimited && allowance.value != null -> WalletLive.MASK
+            // A masked figure keeps its unit (`WalletLive.masked`).
+            allowance != null && hidden && !allowance.unlimited && allowance.value != null -> WalletLive.masked(allowance.symbol)
             allowance != null -> listOf(WalletLive.allowanceFigure(allowance, strings), allowance.symbol).filter { it.isNotBlank() }.joinToString(" ")
             leadsWithBack -> back.orEmpty()
             item.value == null -> ""
-            hidden -> WalletLive.MASK
+            hidden -> WalletLive.masked(item.symbol)
             else -> {
                 val digits = Formats.current.plain(item.value.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString() ?: item.value)
                 // 083 F1: the simulation's figure says so.
@@ -465,7 +468,7 @@ object FlowLive {
             label = strings.t(I18nKeys.Flows.SPENDING_CAP),
             // A capped allowance is money (masked while hidden); "Unlimited" is a risk to see.
             value = if (hidden && !fact.allowance.unlimited && fact.allowance.value != null) {
-                WalletLive.MASK
+                WalletLive.masked(fact.allowance.symbol)
             } else {
                 listOf(WalletLive.allowanceFigure(fact.allowance, strings), fact.allowance.symbol).filter { it.isNotBlank() }.joinToString(" ")
             },

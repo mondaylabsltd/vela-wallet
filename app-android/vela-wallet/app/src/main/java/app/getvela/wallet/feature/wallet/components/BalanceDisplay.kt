@@ -50,7 +50,11 @@ fun BalanceDisplay(
     val colors = VelaTheme.colors
     Column(modifier = modifier) {
         Text(
-            text = "${model.label} · ${model.currency}",
+            // The currency is named once it is known — the stored choice
+            // while its rate is on the way, the committed one after; before
+            // either, the label stands alone rather than say "USD" for a
+            // person who never chose it.
+            text = if (model.currency.isBlank()) model.label else "${model.label} · ${model.currency}",
             color = colors.fgSubtle,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.medium,

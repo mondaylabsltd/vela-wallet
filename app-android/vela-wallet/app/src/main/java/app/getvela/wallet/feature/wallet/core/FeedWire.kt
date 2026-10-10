@@ -634,6 +634,12 @@ sealed class FeedEvent {
 @Serializable
 data class FeedView(
     val rows: List<FeedRow> = emptyList(),
+    /**
+     * Issue #469: the home's Activity — the newest three items of [rows], in
+     * the same order, with only the day headers over them. The core makes the
+     * cut; History, a token's detail and a contact's page keep [rows].
+     */
+    val home_rows: List<FeedRow> = emptyList(),
     /** Account-scoped records for the detail sheet — not tombstone-filtered. */
     val transactions: List<FeedTxRecord> = emptyList(),
     /** The row that just landed and should glow. */

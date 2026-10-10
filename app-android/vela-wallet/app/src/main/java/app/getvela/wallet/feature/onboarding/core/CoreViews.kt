@@ -154,6 +154,18 @@ data class CreateView(
     val signingPage: String? = null,
     /** Spec 102: may a page still be chosen? Only before the first key. */
     val canChoosePage: Boolean = false,
+    /**
+     * Issue #475: the corpus key of the heading over the three places —
+     * "Add a passkey" with no key yet, "Add another" with room for one more,
+     * "Limit of 7 reached" at the cap. The core picks it; the screen says it.
+     */
+    val addHeadingKey: String = ADD_HEADING_ANOTHER,
+    /**
+     * Issue #475: the three places are drawn open, with no fold to tap — no
+     * key yet and one may be added. The core's word; only whether the fold
+     * is open is the screen's.
+     */
+    val methodsPinned: Boolean = false,
 ) {
     companion object {
         fun from(json: JSONObject): CreateView = CreateView(
@@ -193,7 +205,12 @@ data class CreateView(
             signingDomain = json.optString("signing_domain").ifEmpty { "getvela.app" },
             signingPage = json.nullableString("signing_page"),
             canChoosePage = json.optBoolean("can_choose_page"),
+            addHeadingKey = json.optString("add_heading_key").ifEmpty { ADD_HEADING_ANOTHER },
+            methodsPinned = json.optBoolean("methods_pinned"),
         )
+
+        /** What a core from before issue #475 leaves the heading as: the label the list always had. */
+        const val ADD_HEADING_ANOTHER = "onboarding.create.addMethodLabel"
     }
 }
 

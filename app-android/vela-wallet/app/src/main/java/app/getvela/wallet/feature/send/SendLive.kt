@@ -523,7 +523,8 @@ object SendLive {
             badgeHidden = mark.badgeHidden,
             balance = "${trim(token.balance)} ${token.symbol}",
             fiat = token.price_usd?.let { price ->
-                AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
+                // As the home's holdings: no worth in a currency that is not the person's yet.
+                if (!ctx.money.settled) AssetFiatModel.Loading else AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
             } ?: AssetFiatModel.NoPrice("—"),
             masked = false,
         )
@@ -721,6 +722,9 @@ object SendLive {
             addressNote = if (issue?.address == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS) else null,
             duplicateNote = repeat?.let { s.t(I18nKeys.Flows.RECIPIENT_DUPLICATE, mapOf("n" to it.first_ordinal.toString())) },
             amountNote = if (issue?.amount == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BAD_AMOUNT) else null,
+            // Issue #471: every row has the single field's two doors.
+            pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+            scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
         )
     }
 

@@ -82,7 +82,7 @@ class PrivacyFixtureTest {
     private fun feed(half: String): FeedView =
         Wire.json.decodeFromString(FeedView.serializer(), fixture.getJSONObject(half).getJSONObject("feed").toString())
 
-    private val usd = CurrencyView(code = "USD")
+    private val usd = CurrencyView(code = "USD", committed = true)
     private val chains = mapOf(1 to "Ethereum", 100 to "Gnosis", 56 to "BNB Chain")
     private val other = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     private val bea = "0xdddddddddddddddddddddddddddddddddddddddd"
@@ -97,7 +97,8 @@ class PrivacyFixtureTest {
             is AssetFiatModel.Value -> fiat.text
             is AssetFiatModel.NoPrice -> fiat.text
             AssetFiatModel.Masked -> mask
-            AssetFiatModel.None -> ""
+            // No figure at all: neither a digit nor the mask.
+            AssetFiatModel.Loading, AssetFiatModel.None -> ""
         },
     )
 
@@ -230,11 +231,18 @@ class PrivacyFixtureTest {
             assertEquals(mask, detail.fiat)
         }
         val txFallback = (FlowFixtures.build(FlowState.A2, strings).sheet as FlowSheet.TxDetail).model
+        // Item 12: a masked figure keeps its unit — how much is hidden, what
+        // kind of money is not ("•••• xDAI", as iOS reads). A transfer's
+        // detail used to drop it.
+        val units = feed.rows.filterIsInstance<FeedRow.Item>().associate { it.item.id to it.item.symbol }
         for (id in listOf("received", "sent", "swap")) {
             val detail = FlowLive.txDetail(txFallback, feed, id, strings, chains, money = WalletLive.Money.of(usd))!!
-            assertEquals("$id: the amount", mask, detail.amount)
+            assertTrue("$id has a unit to keep", units.getValue(id).isNotBlank())
+            assertEquals("$id: the amount", "$mask ${units.getValue(id)}", detail.amount)
             assertEquals("$id: the worth", mask, detail.fiat)
         }
+        // A capped allowance is money: its figure masks, its coin stays.
+        assertEquals("$mask USDC", FlowLive.txDetail(txFallback, feed, "permit", strings, chains)!!.amount)
         assertEquals("what came back masks", "$mask xDAI", FlowLive.txDetail(txFallback, feed, "swap", strings, chains)!!.received)
         assertNull("the core withholds the toast", feed.toast)
         assertNotNull("…which it sends while shown", feed("shown").toast)

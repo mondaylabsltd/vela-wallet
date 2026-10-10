@@ -290,6 +290,23 @@ object FlowFixtures {
         )
     }
 
+    /**
+     * A2H: the core privacy fixture's feed, hidden, through the live builders
+     * ([FlowLive.history], [FlowLive.txDetail]) — the received transfer's
+     * detail, its amount the mask with the coin kept.
+     */
+    private fun hiddenDetail(s: VelaStrings): FlowScreenModel {
+        val feed = WalletFixtures.liveHiddenFeed()
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        val detail = FlowLive.txDetail(txDetail(s, received = true), feed, "received", s, chains)
+            ?: txDetail(s, received = true)
+        return FlowScreenModel(
+            state = FlowState.A2H,
+            base = FlowBase.History(FlowLive.history(history(s), feed, s, chainNames = chains)),
+            sheet = FlowSheet.TxDetail(detail),
+        )
+    }
+
     private fun history(s: VelaStrings) = HistoryModel(
         header = FlowHeaderModel(
             title = s.t(I18nKeys.Flows.HISTORY_TITLE),
@@ -674,6 +691,8 @@ object FlowFixtures {
                         ALICE_FULL,
                         "50",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                     RecipientCardModel(
                         s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to "2")),
@@ -681,6 +700,8 @@ object FlowFixtures {
                         A_HAO_FULL,
                         "30",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                     RecipientCardModel(
                         s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to "3")),
@@ -688,6 +709,8 @@ object FlowFixtures {
                         HOLD_ON_FULL,
                         "40",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                 ),
                 recipientActions = listOf(
@@ -731,7 +754,6 @@ object FlowFixtures {
         title = s.t(I18nKeys.Flows.PICK_CONTACT_TITLE),
         closeLabel = s.t(I18nKeys.Flows.CLOSE),
         searchPlaceholder = s.t(I18nKeys.Flows.PICK_CONTACT_SEARCH),
-        scanRow = s.t(I18nKeys.Flows.SCAN_TO_FILL),
         groupsTitle = s.t(I18nKeys.Flows.CONTACTS_GROUPS),
         groups = listOf(
             ContactGroupModel(
@@ -1057,6 +1079,7 @@ object FlowFixtures {
             )
             FlowState.SD4B -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Submitted)))
             FlowState.SD4C -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Confirmed)))
+            FlowState.A2H -> hiddenDetail(s)
             FlowState.SD3D -> screen(FlowBase.SendConfirm(heldConfirm(s)))
             FlowState.SD4D -> screen(FlowBase.SendReceipt(refusedReceipt(s)))
             FlowState.SD2G, FlowState.SD2H -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.ChainDown)))

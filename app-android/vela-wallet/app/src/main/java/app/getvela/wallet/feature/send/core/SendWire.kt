@@ -1162,9 +1162,14 @@ sealed class SendEvent {
     @SerialName("picked_address")
     data class PickedAddress(val address: String) : SendEvent()
 
+    /**
+     * Issue #471: [target] is the split row the code lands in (its id), as
+     * [OpenContactPicker]'s; `null` (omitted on the wire) is the single
+     * field's / the home's scan.
+     */
     @Serializable
     @SerialName("open_scanner")
-    data object OpenScanner : SendEvent()
+    data class OpenScanner(val target: String? = null) : SendEvent()
 
     @Serializable
     @SerialName("close_scanner")

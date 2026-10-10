@@ -23,8 +23,13 @@ import androidx.compose.ui.graphics.Color
  * Ethereum". H12: every chain's read failed inside the app and nothing is
  * cached — the core's `unreachable`: a skeleton and the fault's sentence,
  * never "$0.00" or "Deposit your first asset".
+ *
+ * H13 (the 102 device run): a cold start whose stored currency (CNY) is
+ * still being priced — the core's `CurrencyView.committed` is false. No
+ * figure is drawn in the placeholder's dollars: the total and each holding's
+ * worth wait, and the label already names the choice on its way.
  */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12 }
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13 }
 
 @Immutable
 data class WalletHeaderModel(
@@ -147,6 +152,13 @@ sealed interface AssetFiatModel {
     data class Value(val text: String) : AssetFiatModel
     data class NoPrice(val text: String) : AssetFiatModel
     data object Masked : AssetFiatModel
+
+    /**
+     * The worth exists and is not drawn YET: the display currency is not the
+     * person's until the core commits it (`CurrencyView.committed`), and a
+     * figure in the placeholder's dollars would change under the eye.
+     */
+    data object Loading : AssetFiatModel
 
     /**
      * Spec 021 SD2d: the row has no fiat line at all. Distinct from [Masked],

@@ -15,6 +15,7 @@ import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.signing.FeeModel
 import app.getvela.wallet.feature.signing.SigningBlock
+import app.getvela.wallet.feature.signing.said
 import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningLive
 import app.getvela.wallet.feature.signing.SigningRow
@@ -706,18 +707,69 @@ class SigningLiveTest {
         assertFalse(ownSheet.tech.isEmpty)
 
         val dappSheet = sheet(request(params), nothingMoves)
-        assertTrue("a dApp keeps its balance card", dappSheet.blocks.any { it is SigningBlock.Balances })
+        assertTrue("a dApp keeps its balance card", dappSheet.blocks.said().any { it is SigningBlock.Balances })
+        // … in the place kept for it since the sheet opened (nothing jumps when it lands).
+        assertTrue(dappSheet.blocks.any { it is SigningBlock.Held })
         assertNull(dappSheet.tech.simResult)
         assertNull(dappSheet.headline)
         assertTrue("a site's sheet keeps its intent", dappSheet.blocks.first() is SigningBlock.Intent)
         assertEquals("Vela passkey registry", dappSheet.tech.summary)
 
         val reverts = sheet(own, SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFail"))
-        assertTrue("a revert is never folded away", reverts.blocks.any { it is SigningBlock.Warning && it.tone == SigningTone.Danger })
+        assertTrue("a revert is never folded away", reverts.blocks.said().any { it is SigningBlock.Warning && it.tone == SigningTone.Danger })
         assertNull(reverts.tech.simResult)
         val moves = sheet(own, SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000"))))
-        assertTrue("a balance that would move stays on the sheet", moves.blocks.any { it is SigningBlock.Balances })
+        assertTrue("a balance that would move stays on the sheet", moves.blocks.said().any { it is SigningBlock.Balances })
         assertNull(moves.tech.simResult)
+    }
+
+    /**
+     * Item 12 (the 102 device run): the sheet is bottom-anchored, and the
+     * simulation's verdict lands a second after it opens — on a chain whose
+     * nodes cannot simulate (Gnosis), as 「Vela 未能检查这笔交易的结果」 on
+     * every request — pushing the whole form up. Its place is kept from the
+     * first frame: the room of that very card, empty while the simulation is
+     * out, and the card in it when it lands. Same block, same size.
+     */
+    @Test
+    fun `the simulation's verdict has its place from the first frame`() {
+        val registry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
+        val params = org.json.JSONArray().put(org.json.JSONObject().put("to", registry).put("data", "0xcd438f9b").put("value", "0x0")).toString()
+        fun sign(firstParty: Boolean) = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://app.example", null, 100, null, first_party = firstParty),
+            confirm_gate_open = true,
+        )
+        fun sheet(request: IncomingRequest, sim: SigningController.SimOutcome?, firstParty: Boolean = false) =
+            SigningLive.model(drawn, request, sign(firstParty), ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+        val couldNot = app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck()
+        val card = SigningLive.simBlocks(couldNot, ctx).single()
+        assertEquals(
+            SigningBlock.Warning(SigningTone.Caution, strings.t("componentsUi.signing.simUnavailableWarning")),
+            card,
+        )
+
+        // Out: the place, nothing said in it.
+        val waiting = sheet(request(params), SigningController.SimOutcome.Pending)
+        assertEquals(SigningBlock.Held(room = card, shown = null), waiting.blocks.single { it is SigningBlock.Held })
+        assertTrue("nothing is said before a verdict", waiting.blocks.said().none { it is SigningBlock.Warning || it is SigningBlock.Balances })
+
+        // Landed "could not check": the same card in the same place — nothing moves.
+        val landed = sheet(request(params), couldNot)
+        assertEquals(SigningBlock.Held(room = card, shown = card), landed.blocks.single { it is SigningBlock.Held })
+        assertEquals(waiting.blocks.indexOfFirst { it is SigningBlock.Held }, landed.blocks.indexOfFirst { it is SigningBlock.Held })
+        assertEquals(waiting.blocks.size, landed.blocks.size)
+
+        // A verdict that says something else takes the same place.
+        val moves = sheet(request(params), SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000"))))
+        assertTrue((moves.blocks.single { it is SigningBlock.Held } as SigningBlock.Held).shown is SigningBlock.Balances)
+
+        // Nothing simulated (no simulator, or a message): no place to keep.
+        assertTrue(sheet(request(params), null).blocks.none { it is SigningBlock.Held })
+        // The wallet's own request expects "nothing moves", which folds into
+        // the technical details and takes no room at all.
+        val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
+        assertTrue(sheet(own, SigningController.SimOutcome.Pending, firstParty = true).blocks.none { it is SigningBlock.Held })
     }
 
     /**
@@ -748,13 +800,20 @@ class SigningLiveTest {
         )
         fun term(leaf: String) = zh.t("componentsUi.signing.$leaf")
         val rows = sheet.blocks.filterIsInstance<SigningBlock.Rows>().single().rows
+        // The wallet's NAME is on the sheet: the copy makes it public on
+        // Ethereum too, so the person sees it before confirming.
         assertEquals(
-            listOf(term("labelNetwork") to "Ethereum", term("labelAddress") to "0x88cCA0…266894", term("labelPublicKeys") to "3"),
+            listOf(
+                term("labelNetwork") to "Ethereum", term("labelAddress") to "0x88cCA0…266894",
+                term("labelWalletName") to "Interleave", term("labelPublicKeys") to "3",
+            ),
             rows.map { it.label to it.value },
         )
+        assertEquals(listOf("网络", "地址", "钱包名称", "包含的钥匙"), rows.map { it.label })
+        assertEquals("复制钱包记录", sheet.confirmAction)
         assertEquals(term("intentBackUpPublicKeys"), sheet.confirmAction)
         assertEquals("the header's title is the intent", term("intentBackUpPublicKeys"), sheet.headline)
-        listOf("labelNetwork", "labelAddress", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
+        listOf("labelNetwork", "labelAddress", "labelWalletName", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
             assertFalse("$leaf is said in Chinese", term(leaf).startsWith("componentsUi.") || term(leaf) == strings.t("componentsUi.signing.$leaf"))
         }
     }

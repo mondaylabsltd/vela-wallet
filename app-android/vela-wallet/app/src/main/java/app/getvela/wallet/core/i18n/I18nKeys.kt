@@ -409,7 +409,6 @@ object I18nKeys {
         const val RECENT_ACTIVITY = "contacts.recentActivity"
         const val VIEW_ALL_ACTIVITY = "contacts.viewAllActivity"
         const val DELETE_CONTACT = "contacts.deleteContact"
-        const val ACTION_QR = "contacts.actionQr"
         const val EDIT = "contacts.edit"
         const val MOVE_GROUP = "contacts.moveGroup"
 
@@ -460,7 +459,6 @@ object I18nKeys {
 
         // Reused from the spec-015 map (same keys, no corpus change).
         const val ACTION_SEND = "componentsUi.dock.send"
-        const val ACTION_RECEIVE = "componentsUi.dock.receive"
         const val COPY_ADDRESS = "componentsUi.identiconViewer.copyAddress"
         const val LABEL_SENT = "history.labelSent"
         const val LABEL_RECEIVED = "history.labelReceived"
@@ -688,7 +686,6 @@ object I18nKeys {
         // Send · contact picker.
         const val PICK_CONTACT_TITLE = "send.pickContactTitle"
         const val PICK_CONTACT_SEARCH = "send.pickContactSearch"
-        const val SCAN_TO_FILL = "send.scanToFill"
         const val CONTACTS_GROUPS = "contacts.sectionGroups"
         const val CONTACTS_TITLE = "contacts.title"
         const val GROUP_MEMBERS = "contacts.groupMembers"
@@ -994,10 +991,13 @@ object I18nKeys {
         const val HEALTH_HTTPS_REQUIRED = "settingsModals.health.httpsRequired"
         const val HEALTH_INVALID = "settingsModals.health.invalid"
 
-        /** The Ethereum backup row (spec 062). */
+        /**
+         * The Ethereum copy's row (spec 062). Its states' words are the
+         * core's — the row arrives with its keys (`BackupState::row`) — so
+         * only what is said BEFORE the core answers is named here: the title
+         * and "Checking…", and the transport's own "couldn't check".
+         */
         const val BACKUP_TITLE = "settingsModals.backup.title"
-        const val BACKUP_BACKED_UP = "settingsModals.backup.backedUp"
-        const val BACKUP_NOT_BACKED_UP = "settingsModals.backup.notBackedUp"
         const val BACKUP_COULD_NOT_CHECK = "settingsModals.backup.couldNotCheck"
         const val BACKUP_CHECKING = "componentsUi.funding.checking"
         const val KEYS_TITLE = "settingsModals.keys.title"

@@ -92,11 +92,13 @@ class KeyMethodCopyTest {
         val strings = strings("en")
         val (title, line) = app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(strings)
         assertEquals("Use a trusted signing page", title)
-        assertEquals("Advanced: Vela's official page, or one you deployed yourself", line)
+        // Issue #475: one line under the title, on a phone, in every language.
+        assertEquals("Advanced: Vela's page or your own", line)
         assertEquals("Review and sign in Vela", strings.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
         assertEquals("Review and sign on a trusted signing page", strings.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
         val zh = strings("zh")
         assertEquals("使用可信签名页", app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(zh).first)
+        assertEquals("高级：Vela 官方页或自建页", app.getvela.wallet.feature.onboarding.flow.OwnPageModel.entry(zh).second)
         assertEquals("在 Vela 里预览并签名", zh.t(uniffi.vela_core_uniffi.venueWords("in_vela")!!.titleKey))
         assertEquals("在可信签名页预览并签名", zh.t(uniffi.vela_core_uniffi.venueWords("page")!!.titleKey))
         // "My own signing page" is nowhere (D6).

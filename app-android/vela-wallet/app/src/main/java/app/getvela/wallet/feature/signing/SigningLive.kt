@@ -106,7 +106,23 @@ object SigningLive {
         val page: String,
         val key: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel?,
         val line: uniffi.vela_core_uniffi.SignerIntegrityLine,
+        /**
+         * The page as Settings keeps it — the person's label, whose keys it
+         * reaches, official or not — so the card NAMES it as Settings does.
+         * `null`: a page no longer in the list (removing one changes no
+         * account); it is named from its address alone.
+         */
+        val saved: app.getvela.wallet.feature.settings.core.SigningPageRow? = null,
     )
+
+    /** The saved row for [page], however its trailing slash was typed. */
+    fun savedPage(
+        pages: List<app.getvela.wallet.feature.settings.core.SigningPageRow>,
+        page: String,
+    ): app.getvela.wallet.feature.settings.core.SigningPageRow? {
+        val key = app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.key(page)
+        return pages.firstOrNull { app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.key(it.url) == key }
+    }
 
     /**
      * A key row in the person's words — the core's `KeyLabel`: the label its
@@ -131,10 +147,24 @@ object SigningLive {
      */
     fun handoffModel(handoff: Handoff, strings: VelaStrings, fee: HandoffFeeModel? = null): HandoffModel {
         val integrity = app.getvela.wallet.feature.settings.components.integrityModel(handoff.line, strings)
+        val address = handoff.page.substringAfter("://").trimEnd('/')
+        // The page by its NAME, as Settings and iOS name it (「Vela 官方签名页」,
+        // the person's label, "Self-hosted · domain") — the card said only the
+        // host, and "sign.getvela.app" does not say whose page it is.
+        val checks = app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
+        val pageName = app.getvela.wallet.feature.settings.SettingsLive.pageName(
+            name = handoff.saved?.name.orEmpty(),
+            official = handoff.saved?.official
+                ?: (checks.key(handoff.page) == checks.key(uniffi.vela_core_uniffi.trustedSignerDefaultUrl())),
+            domain = handoff.saved?.domain?.takeIf { it.isNotBlank() } ?: uniffi.vela_core_uniffi.signingPageDomain(handoff.page),
+            address = address,
+            s = strings,
+        )
         return HandoffModel(
             title = strings.s("handoffTitle"),
             key = keyRow(handoff.key, strings),
-            page = handoff.page.substringAfter("://").trimEnd('/'),
+            pageName = pageName,
+            page = address,
             integrity = integrity,
             open = strings.s("openSigner"),
             fee = fee,
@@ -328,6 +358,21 @@ object SigningLive {
         // the outcome. Anything else it has to say (a revert, a node that could
         // not check, a balance that would move) stays on the sheet.
         val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
+        // The verdict's place is kept from the first frame, the size of the
+        // card a node that cannot simulate ends on ("Vela couldn't check what
+        // this transaction does" — every request on a chain whose nodes have
+        // no simulator, Gnosis among them). The sheet is bottom-anchored: a
+        // card landing a second late pushed the whole form up. Not on the
+        // wallet's own request, whose verdict folds into the technical
+        // details and takes no place at all.
+        val simPlace: List<SigningBlock> = when {
+            quietSim != null -> emptyList()
+            own && sims.isEmpty() -> emptyList()
+            sim == null -> emptyList()
+            else -> simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx).singleOrNull()
+                ?.let { room -> listOf(SigningBlock.Held(room, sims.singleOrNull())) }
+                ?: sims
+        }
         // Spec 102 D4: a page venue's sheet does not repeat the preview — the
         // page is the authority. What stays is what only Vela can decide
         // before it hands off: an approval's amount (the guard), and the fee.
@@ -336,7 +381,7 @@ object SigningLive {
             if (refused) statusBlocks(sign, s)
             else if (handoff != null) statusBlocks(sign, s, ctx.trustedSignerWaiting) + guardBlocks(guard, s)
             else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
-                (if (quietSim != null) emptyList() else sims) + guardBlocks(guard, s)
+                simPlace + guardBlocks(guard, s)
         val hidePreview = refused || handoff != null
         // The wallet's own request leads with what it does, as the header's
         // title beside the ✕ — so that intent is not said a second time under it.
@@ -1182,7 +1227,8 @@ object SigningLive {
     fun simBlocks(sim: SigningController.SimOutcome?, ctx: Context): List<SigningBlock> {
         val s = ctx.strings
         return when (sim) {
-            null -> emptyList()
+            // Not a verdict yet: nothing to say ([model] keeps its place).
+            null, SigningController.SimOutcome.Pending -> emptyList()
             // Spec 082 RG6: the core's line in the core's tone — a revert is a
             // danger (with its sanitised reason), a node that could not check
             // is a caution. Never "nothing changes" for either.

@@ -68,6 +68,18 @@ object WalletLive {
     const val BALANCE_MASK = "••••••"
 
     /**
+     * A masked amount that is written WITH its unit: the dots, then the coin
+     * — "•••• xDAI". The core's rule (`privacy::masked_amount`): the unit
+     * stays, because it says what kind of money without saying how much, and
+     * the secret is the number. A row that draws its unit apart from the
+     * figure has always kept it; a transfer's detail dropped it ("••••")
+     * while iOS kept it. A figure with no unit of its own — a holding under
+     * its ticker, a worth in the display currency — is [MASK] alone, never a
+     * trailing space.
+     */
+    fun masked(unit: String): String = unit.trim().let { if (it.isEmpty()) MASK else "$MASK $it" }
+
+    /**
      * The home screen, from the person's own holdings.
      *
      * [fallback] supplies everything that is content rather than data — section
@@ -100,7 +112,10 @@ object WalletLive {
         val money = Money.of(currency)
         val rows = assetRows(view, chainNames, currency)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
-        val groups = activity(feed, strings, now, chainNames)
+        // Issue #469: the home draws the core's short list (`home_rows`, the
+        // newest three); History keeps every row. The cut is the core's — the
+        // shared helper below also builds History, so it never caps.
+        val groups = activity(feed.copy(rows = feed.home_rows), strings, now, chainNames)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(
@@ -254,7 +269,7 @@ object WalletLive {
             // What came back masks whenever the balance is hidden, whatever
             // the row's own figure is (`privacy`).
             received = dapp?.received?.let { change ->
-                listOf(if (hidden) MASK else changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
+                if (hidden) masked(change.symbol) else listOf(changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
             },
         )
     }
@@ -394,14 +409,23 @@ object WalletLive {
         chainNames: Map<Int, String>,
     ): BalanceModel {
         val live = balanceVisible(fallback, view, strings, money, chainNames)
+            // The label names the currency in EVERY state — it used to keep
+            // the drawn board's "USD" while the figure loaded, then change.
+            .copy(currency = money.label)
         // Spec 048 (device-found): hidden used to return the FIXTURE with a hidden
         // state — "$1,383 · USD" under the eye. Hidden is the live label with
         // the figures masked.
-        // The currency is the person's own even while hidden: with the total withheld the
-        // visible builder falls back to the drawn "USD".
         // The hero's mask is the wider one (`privacy::BALANCE_MASK`), as the
         // gallery's hidden state always drew it.
-        return if (view.hidden) live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null, currency = money.code) else live
+        if (view.hidden) return live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null)
+        // The display currency is not the person's yet (the core's rule on
+        // `CurrencyView.committed`): no figure. The total waits as a total
+        // still being read waits, and appears once, in the right money — it
+        // read "$1,234" for a few seconds and then jumped to "¥8,876".
+        if (!money.settled && (live.state == BalanceStateKind.Normal || live.state == BalanceStateKind.ZeroLive)) {
+            return live.copy(state = BalanceStateKind.Loading, integer = null, decimals = null, liveText = null)
+        }
+        return live
     }
 
     private fun balanceVisible(
@@ -603,6 +627,9 @@ object WalletLive {
             balance = if (hidden) MASK else "${tokenAmountText(token.balance)} ${token.symbol}",
             fiat = when {
                 hidden -> AssetFiatModel.Masked
+                // A holding's worth is a figure in the display currency: it
+                // waits with the total while that is not the person's yet.
+                !money.settled -> AssetFiatModel.Loading
                 else -> token.price_usd?.let { price ->
                     val value = money.convert(amountAsDouble(token.balance) * price)
                     AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
@@ -652,7 +679,8 @@ object WalletLive {
             title = strings.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
             summary = when {
                 hidden -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to MASK))
-                known -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to money.fiat(total)))
+                // No total in a currency that is not the person's yet.
+                known && money.settled -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to money.fiat(total)))
                 else -> count.trimEnd(' ', '·')
             },
             rows = accounts.mapIndexed { i, (name, address) ->
@@ -662,7 +690,7 @@ object WalletLive {
                     name = name.ifBlank { short },
                     addressDisplay = short,
                     addressFull = address,
-                    amount = if (hidden) MASK else usd?.let { money.fiat(it) } ?: "",
+                    amount = if (hidden) MASK else usd?.takeIf { money.settled }?.let { money.fiat(it) } ?: "",
                     selected = i == activeIndex,
                 )
             },
@@ -724,6 +752,20 @@ object WalletLive {
         val code: String,
         val symbol: String,
         private val rate: Double?,
+        /**
+         * The display currency is the person's (`CurrencyView.committed`).
+         * `false`: the core is still on its USD placeholder — and a surface
+         * that draws a figure in it draws the WRONG currency for a few
+         * seconds, then jumps. The home's total and its holdings' worth wait
+         * instead (their loading state), and appear once, in the right money.
+         */
+        val settled: Boolean = true,
+        /**
+         * What a label that names its currency apart from the figure says:
+         * the committed code; while waiting, the stored choice on its way
+         * (`CurrencyView.pending`); nothing at all before either is known.
+         */
+        val label: String = code,
     ) {
         fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
 
@@ -735,9 +777,12 @@ object WalletLive {
             fun dollars(): Money = Money("USD", "$", null)
 
             fun of(view: CurrencyView): Money {
+                // No settled choice yet: the placeholder's dollars, marked as
+                // not the person's — figures drawn in the display currency wait.
+                if (!view.committed) return Money("USD", "$", null, settled = false, label = view.pending.orEmpty())
                 val rate = view.rate?.takeIf { it.isFinite() && it > 0.0 }
-                // No rate, or no settled choice, means dollars — and saying so.
-                if (rate == null || !view.committed) return Money("USD", "$", null)
+                // A settled choice nothing could price means dollars — and saying so.
+                if (rate == null) return Money("USD", "$", null)
                 return Money(view.code, symbolFor(view.code), rate)
             }
 

@@ -66,6 +66,7 @@ private enum class GalleryEntry(val label: String) {
     H10("H10"),
     H11("H11"),
     H12("H12"),
+    H13("H13"),
     Components("Components"),
     Identicons("Identicon"),
     ;
@@ -86,6 +87,7 @@ private enum class GalleryEntry(val label: String) {
             H10 -> WalletScreenState.H10
             H11 -> WalletScreenState.H11
             H12 -> WalletScreenState.H12
+            H13 -> WalletScreenState.H13
             Components, Identicons -> null
         }
 }

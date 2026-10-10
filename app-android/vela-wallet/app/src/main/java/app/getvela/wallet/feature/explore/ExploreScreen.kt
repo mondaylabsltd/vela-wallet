@@ -103,7 +103,7 @@ class ExploreCallbacks(
     /** Spec 100: the add-network sheet's answers — the core decides what each means. */
     val onAddNetwork: (AddNetworkAction) -> Unit = {},
     /** Spec 100: the chain-setup tool, for a chain this wallet refuses. */
-    val onChainSetupTool: () -> Unit = {},
+    val onChainSetupTool: (String) -> Unit = {},
     /**
      * Spec 099 navigation: the tab the switcher lights — the core's
      * `browser_lit_tab`: the shown tab when the switcher was opened from its
@@ -446,7 +446,7 @@ fun ExploreScreen(
                 app.getvela.wallet.feature.explore.components.AddNetworkPanel(
                     model = card,
                     onAction = { action -> live?.onAddNetwork?.invoke(action) },
-                    onSetupTool = { live?.onChainSetupTool?.invoke() },
+                    onSetupTool = { url -> live?.onChainSetupTool?.invoke(url) },
                 )
             }
         }

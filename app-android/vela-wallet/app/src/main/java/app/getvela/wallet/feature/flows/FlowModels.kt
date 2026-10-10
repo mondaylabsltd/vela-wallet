@@ -57,6 +57,14 @@ enum class FlowState {
      */
     SD3D, SD4D, SD2G, SD2H, SD2I, SD2J, SD3E,
     SD3F, SD3G, SD3H, SD3I, SD2K, SD2L, SD2M,
+
+    /**
+     * A2 with the balance hidden, through the live builder: a transfer's
+     * detail whose amount is the mask WITH its unit ("•••• USDT") — how much
+     * is hidden, what kind of money is not — over History masked the same
+     * way. Never on the live flow stack.
+     */
+    A2H,
 }
 
 /* ------------------------------------------------------------------ chrome */
@@ -498,6 +506,10 @@ data class RecipientCardModel(
     val duplicateNote: String? = null,
     /** The core says the typed amount cannot be sent. */
     val amountNote: String? = null,
+    /** The row's 通讯录 door's accessible name (`send.recipientPickAria`). */
+    val pickLabel: String = "",
+    /** Issue #471: the row's scan door's accessible name (`send.scanAria`). */
+    val scanLabel: String = "",
 )
 
 /** SD2d's sweep row: one token, its amount, and a Max. */
@@ -692,7 +704,6 @@ data class ContactPickModel(
     val title: String,
     val closeLabel: String,
     val searchPlaceholder: String,
-    val scanRow: String,
     val groupsTitle: String,
     val groups: List<ContactGroupModel>,
     val contactsTitle: String,

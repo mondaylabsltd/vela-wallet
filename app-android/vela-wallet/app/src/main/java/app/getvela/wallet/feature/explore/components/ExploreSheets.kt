@@ -417,7 +417,8 @@ fun ConnectionPanel(
 fun AddNetworkPanel(
     model: app.getvela.wallet.feature.explore.AddNetworkModel,
     onAction: (app.getvela.wallet.feature.explore.AddNetworkAction) -> Unit,
-    onSetupTool: () -> Unit,
+    /** The setup tool's own link — Chain Setup opened on the refused chain. */
+    onSetupTool: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = VelaTheme.colors
@@ -503,8 +504,8 @@ fun AddNetworkPanel(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        model.setupTool?.let {
-            app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(it, onClick = onSetupTool, modifier = Modifier.fillMaxWidth())
+        model.setupTool?.let { tool ->
+            app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(tool.label, onClick = { onSetupTool(tool.url) }, modifier = Modifier.fillMaxWidth())
         }
         app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
             model.dismiss,

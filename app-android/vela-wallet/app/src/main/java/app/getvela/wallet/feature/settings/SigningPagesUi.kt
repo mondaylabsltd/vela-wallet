@@ -25,7 +25,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.designsystem.components.VelaDangerButton
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
+import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
@@ -143,6 +145,30 @@ internal fun RenameSigningPageSheetBody(
         },
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * "Remove this page?" — asked before it happens, as iOS asks: the page's own
+ * name over the two answers, and no body (the keys the two shells share are
+ * `settings.signing.pageRemove` and `common.cancel`). Removing a page changes
+ * no account, but it does drop the version this device trusted for it.
+ */
+@Composable
+internal fun RemoveSigningPageSheetBody(
+    model: SigningPagesModel,
+    url: String,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val row = model.rows.firstOrNull { it.url == url } ?: run {
+        LaunchedEffect(Unit) { onCancel() }
+        return
+    }
+    // A row named by its domain does not say its address a second time.
+    SheetTitle(row.title, row.address.takeIf { row.showAddress })
+    VelaDangerButton(model.remove, onClick = onConfirm, modifier = Modifier.fillMaxWidth())
+    Spacer(modifier = Modifier.height(VelaSpacing.lg))
+    VelaSecondaryButton(model.cancel, onClick = onCancel, modifier = Modifier.fillMaxWidth())
 }
 
 /**

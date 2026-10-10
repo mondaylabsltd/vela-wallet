@@ -1,5 +1,9 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.feature.settings.core.WalletKeys
+import app.getvela.wallet.feature.settings.core.RegistryBackup
+import app.getvela.wallet.feature.onboarding.core.KeyMethod
+import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.core.data.DebugMode
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.core.BalanceView
@@ -380,13 +384,18 @@ object SettingsFixtures {
         }
 
         val ok = mode == "compatible"
-        // Four rows in both verdicts: "incompatible" is only legible as an
-        // answer if it shows WHICH requirement failed, so the list never
-        // shortens. EntryPoint is deployed everywhere and passes in both.
+        // The two refusals are told apart by the signer row (the core's
+        // `NetBlocker`): a chain with no P-256 verifier is refused for that
+        // and nothing else matters; a chain that has it and lacks contracts
+        // can be made ready.
+        val noP256 = mode == "no-p256"
+        // Four rows in every verdict: a refusal is only legible as an answer
+        // if it shows WHICH requirement failed, so the list never shortens.
+        // EntryPoint is deployed everywhere and passes in all three.
         val checks = listOf(
             CheckItemModel("EntryPoint v0.7", true),
             CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SAFE), ok),
-            CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SIGNER), ok),
+            CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SIGNER), !noP256),
             CheckItemModel(
                 s.t(I18nKeys.SettingsUi.ADD_CHECK_REMAINING, mapOf("count" to "8")),
                 ok,
@@ -437,14 +446,17 @@ object SettingsFixtures {
                 ),
                 checksTitle = checksTitle,
                 checks = checks,
+                // The core's line for the reason (`NetCompatibility.hint_key`).
                 callout = CalloutModel(
                     CalloutTone.Warning,
-                    s.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
+                    s.t(if (noP256) "settingsModals.addNetwork.noP256Hint" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
                 ),
                 // An outline CTA plus a re-check link, not a greyed-out accent
                 // one: an action you cannot take should not be dressed as the
-                // action you came for.
-                secondary = s.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL),
+                // action you came for. Chain Setup only where contracts can be
+                // deployed — with the core's link, opened on this chain.
+                secondary = if (noP256) null else s.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL),
+                secondaryUrl = if (noP256) null else "https://getvela.app/chain-setup?chain=48900",
                 recheck = s.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC),
             )
         }
@@ -998,7 +1010,7 @@ object SettingsFixtures {
         SettingsScreenState.ST8 -> Shape(SettingsPage.Home, SettingsOverlay.TimeFormat)
         SettingsScreenState.ST9 -> Shape(SettingsPage.Networks, SettingsOverlay.None)
         SettingsScreenState.ST9B -> Shape(SettingsPage.NetworkDetail, SettingsOverlay.None)
-        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C ->
+        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C, SettingsScreenState.ST10D ->
             Shape(SettingsPage.AddNetwork, SettingsOverlay.None)
         SettingsScreenState.ST11 -> Shape(SettingsPage.RpcProviders, SettingsOverlay.None)
         SettingsScreenState.ST12 -> Shape(SettingsPage.Endpoints, SettingsOverlay.None)
@@ -1020,6 +1032,56 @@ object SettingsFixtures {
         SettingsScreenState.SR5 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR6 ->
             Shape(SettingsPage.Home, SettingsOverlay.Unreachable, rescue = true, backdrop = "wallet")
+        SettingsScreenState.SK1, SettingsScreenState.SK2, SettingsScreenState.SK3, SettingsScreenState.SK4 ->
+            Shape(SettingsPage.Home, SettingsOverlay.None)
+    }
+
+    // -- the Keys block and its copy-to-Ethereum row ---------------------------
+
+    /**
+     * What the core's backup walk ends on for each SK board: the state and the
+     * row that rides with it (`BackupState::row` — its words, tone and tap).
+     * Written out here because a board has no chain to ask; the live screen
+     * reads the row off the step and maps nothing.
+     */
+    fun backupCheck(state: SettingsScreenState): RegistryBackup.Check? {
+        fun row(subtitle: String, tone: RegistryBackup.Tone, action: RegistryBackup.Action) =
+            RegistryBackup.Row("settingsModals.backup.title", "settingsModals.backup.$subtitle", tone, action)
+        return when (state) {
+            SettingsScreenState.SK1 -> RegistryBackup.Check(
+                RegistryBackup.State.NotBackedUp,
+                RegistryBackup.Call(1, "0x0000000000000000000000000000000000000000", "0x"),
+                row("notBackedUp", RegistryBackup.Tone.Neutral, RegistryBackup.Action.Copy),
+            )
+            SettingsScreenState.SK2 -> RegistryBackup.Check(
+                RegistryBackup.State.BackedUp, null,
+                row("backedUp", RegistryBackup.Tone.Positive, RegistryBackup.Action.None),
+            )
+            SettingsScreenState.SK3 -> RegistryBackup.COULD_NOT
+            SettingsScreenState.SK4 -> RegistryBackup.Check(
+                RegistryBackup.State.NotCopyable, null,
+                row("cannotCopy", RegistryBackup.Tone.Neutral, RegistryBackup.Action.None),
+            )
+            else -> null
+        }
+    }
+
+    /** The SK boards' keys: one synced in a vault the catalog names, one bound to a security key. */
+    private fun withKeys(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+        val check = backupCheck(state) ?: return model
+        fun key(name: String, provider: String, method: KeyMethod, synced: Boolean, body: String) = WalletKeys.Row(
+            key = CreateKeyRow(name, "platform", "internal", true, synced, "", provider, method),
+            synced = synced,
+            publicKeyHex = "04" + body.repeat(64),
+        )
+        val keys = WalletKeys.Result(
+            WalletKeys.Source.Registry,
+            listOf(
+                key(ACCOUNT_NAME, "Google Password Manager", KeyMethod.Platform, true, "3a"),
+                key("", "", KeyMethod.SecurityKey, false, "c5"),
+            ),
+        )
+        return SettingsLive.withWalletKeys(model, keys, check, s)
     }
 
     // -- spec 102: where you review and sign, and the signing pages ----------
@@ -1125,13 +1187,14 @@ object SettingsFixtures {
     }
 
     fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel =
-        withSigning(baseState(state, s), state, s)
+        withKeys(withSigning(baseState(state, s), state, s), state, s)
 
     private fun baseState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
         val shape = shape(state)
         val addMode = when (state) {
             SettingsScreenState.ST10B -> "compatible"
             SettingsScreenState.ST10C -> "incompatible"
+            SettingsScreenState.ST10D -> "no-p256"
             else -> "search"
         }
         val backdropTitle = when (shape.backdrop) {

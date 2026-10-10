@@ -180,9 +180,11 @@ object SigningFixtures {
     )
 
     /**
-     * CS36: the wallet's own key backup, as the live sheet draws it — no
-     * requester to name, so the header is the intent and the ✕; the core's
-     * rows (network first); "Technical details" with no contract name; the
+     * CS36: "Copy this wallet's record" — the wallet's own copy of its
+     * registry record to Ethereum, as the live sheet draws it. No requester
+     * to name, so the header is the intent and the ✕; the core's rows
+     * (network first, and the wallet's NAME — it becomes public there, so the
+     * sheet says it); "Technical details" with no contract name; the
      * fee's speed control open, the slow tier still measuring, its gas-bid
      * line held so nothing moves when it lands; the confirm says the intent.
      */
@@ -195,6 +197,7 @@ object SigningFixtures {
                     listOf(
                         SigningRow(sg("labelNetwork"), NETWORK),
                         SigningRow(sg("labelAddress"), WalletFixtures.ADDRESS_DISPLAY, mono = true),
+                        SigningRow(sg("labelWalletName"), WalletFixtures.NAME),
                         SigningRow(sg("labelPublicKeys"), "3"),
                     ),
                 ),
@@ -313,6 +316,20 @@ object SigningFixtures {
         )
     }
 
+    /**
+     * CS57 / CS58: CS1's transfer with the simulation's place as the live
+     * builder keeps it ([SigningLive.model]) — the room of the core's "could
+     * not check" card ([SimDeltas.couldNotCheck], through the live
+     * [SigningLive.simBlocks]), empty while the simulation is out (CS57) and
+     * holding that card once it lands (CS58).
+     */
+    private fun VelaStrings.heldVerdict(state: SigningScreenState): SigningScreenModel {
+        val ctx = SigningLive.Context(this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1)
+        val landed = SigningLive.simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx).single()
+        val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
+        return base.copy(blocks = base.blocks + SigningBlock.Held(room = landed, shown = landed.takeIf { state == SigningScreenState.CS58 }))
+    }
+
     /** A fee view the real fee machine wrote for a board's failure (`FeeBoards`), on the boards' chain and account. */
     private fun feeBoard(case: app.getvela.wallet.feature.send.core.FeeBoards.Case) =
         app.getvela.wallet.feature.send.core.FeeBoards.view(case, chainId = 1, account = WalletFixtures.ADDRESS_FULL)
@@ -365,7 +382,7 @@ object SigningFixtures {
             )
             else -> settings.pageLine(page)
         }
-        val card = SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line), this)
+        val card = SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line, SigningLive.savedPage(settings.SIGNING_PAGES_VIEW.pages, page)), this)
         return model(
             state, Dapp.uniswap, Dapp.uniswapTint,
             blocks = emptyList(),
@@ -409,7 +426,11 @@ object SigningFixtures {
         } else {
             settings.pageLine(page)
         }
-        return SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line), strings, fee = boardFee(strings))
+        return SigningLive.handoffModel(
+            SigningLive.Handoff(page, boardKey(), line, SigningLive.savedPage(settings.SIGNING_PAGES_VIEW.pages, page)),
+            strings,
+            fee = boardFee(strings),
+        )
     }
 
     /**
@@ -1231,6 +1252,8 @@ object SigningFixtures {
             SigningScreenState.CS48, SigningScreenState.CS49, SigningScreenState.CS50,
             SigningScreenState.CS51, SigningScreenState.CS52, SigningScreenState.CS53,
             SigningScreenState.CS54, SigningScreenState.CS55, SigningScreenState.CS56 -> correctness(state)
+
+            SigningScreenState.CS57, SigningScreenState.CS58 -> heldVerdict(state)
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,

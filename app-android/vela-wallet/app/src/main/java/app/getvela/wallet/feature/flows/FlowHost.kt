@@ -245,7 +245,10 @@ private fun FlowHostContent(
                     onRemoveRecipient = { index -> send?.onRemoveRecipient?.invoke(index) },
                     onRecipientAmount = send?.let { it.onRecipientAmount },
                     onRecipientAddress = send?.let { it.onRecipientAddress },
-                    onRecipientPick = send?.onRecipientPick,
+                    // The gallery's split board draws each row's two doors (issue
+                    // #471) as the live form does; there they open the boards.
+                    onRecipientPick = if (send == null) { _ -> onNavigate(FlowStep.ContactPick) } else send.onRecipientPick,
+                    onRecipientScan = if (send == null) { _ -> onNavigate(FlowStep.Scan) } else send.onRecipientScan,
                     onFillEmpty = send?.onFillEmpty,
                     onContinue = { send?.onContinue?.invoke() ?: onNavigate(FlowStep.SendConfirm) },
                     // The index is the ROW the chip sits on, and the live form
@@ -364,7 +367,6 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                 )
                 is FlowSheet.ContactPick -> ContactPickBody(
                     model = sheet.model,
-                    onScan = { if (send == null) onNavigate(FlowStep.Scan) else send.onScanOpen?.invoke() },
                     onGroup = { index -> send?.onGroup?.invoke(index) },
                     onSelect = { address -> send?.onContactSelect?.invoke(address) },
                 )
@@ -520,6 +522,8 @@ class SendCallbacks(
     val onGroup: (Int) -> Unit = {},
     /** Spec 048: a split row's own 通讯录 pick. */
     val onRecipientPick: ((Int) -> Unit)? = null,
+    /** Issue #471: a split row's own scan — the code lands in that row. */
+    val onRecipientScan: ((Int) -> Unit)? = null,
     val scan: ScanCallbacks? = null,
     // Spec 045 US2 — the sweep pick: select-all and the pick's own button.
     val onSelectAll: () -> Unit = {},

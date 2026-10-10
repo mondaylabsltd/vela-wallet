@@ -311,10 +311,11 @@ object ContactsFixtures {
             groups = listOf(GROUPS[0].name),
             addLabel = strings.t(I18nKeys.Contacts.SECTION_GROUPS),
         ),
+        // Issue #479: a contact's page offers Send, and only Send. "Receive"
+        // opened the wallet's OWN receive screen — nothing to do with this
+        // person — and "QR code" sat beside it as a third card.
         actions = listOf(
             ContactActionModel(ContactsIcon.Send, strings.t(I18nKeys.Contacts.ACTION_SEND)),
-            ContactActionModel(ContactsIcon.Receive, strings.t(I18nKeys.Contacts.ACTION_RECEIVE)),
-            ContactActionModel(ContactsIcon.Qr, strings.t(I18nKeys.Contacts.ACTION_QR)),
         ),
         address = AddressBlockModel(
             label = strings.t(I18nKeys.Contacts.ADDRESS_LABEL),

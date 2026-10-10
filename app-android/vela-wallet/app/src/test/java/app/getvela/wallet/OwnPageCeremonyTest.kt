@@ -82,7 +82,8 @@ class OwnPageCeremonyTest {
             ?: throw AssertionError("never reached: ops=${ops.value.map { it.optString("type") }} view=${view.value}")
     }
 
-    private fun create(page: String?): Run {
+    /** The form filled and submitted: the keys screen, no key yet. */
+    private fun toKeys(page: String?): Run {
         val run = drive(CreateWalletCore().asBridge())
         run.driver.dispatch("""{"type":"start"}""")
         if (page != null) run.send(JSONObject().put("type", "signing_page_chosen").put("url", page))
@@ -92,8 +93,31 @@ class OwnPageCeremonyTest {
         repeat(acks) { index -> run.send(JSONObject().put("type", "ack_toggled").put("index", index)) }
         run.send(JSONObject().put("type", "submit"))
         run.created { it.stage == app.getvela.wallet.feature.onboarding.core.CreateStage.AddKeys }
+        return run
+    }
+
+    private fun create(page: String?): Run {
+        val run = toKeys(page)
         run.send(JSONObject().put("type", "add_key").put("name", "").put("method", "security_key"))
         return run
+    }
+
+    /**
+     * Issue #475: the heading over the three places and whether they are
+     * pinned open are the core's (`add_heading_key`, `methods_pinned`), read
+     * off the real machine — "Add a passkey" and open with no key yet; the
+     * same words, no longer pinned, while the first ceremony is in flight.
+     */
+    @Test
+    fun `the keys screen's heading and its pin are the core's words`() {
+        val run = toKeys(null)
+        val empty = run.created { it.stage == app.getvela.wallet.feature.onboarding.core.CreateStage.AddKeys && it.canAddKey }
+        assertEquals("onboarding.create.addKeyBtn", empty.addHeadingKey)
+        assertTrue("no key yet: the three places are open, nothing to fold", empty.methodsPinned)
+        run.send(JSONObject().put("type", "add_key").put("name", "").put("method", "security_key"))
+        val inFlight = run.created { !it.canAddKey }
+        assertEquals("onboarding.create.addKeyBtn", inFlight.addHeadingKey)
+        assertFalse("not pinned open over a ceremony", inFlight.methodsPinned)
     }
 
     @Test

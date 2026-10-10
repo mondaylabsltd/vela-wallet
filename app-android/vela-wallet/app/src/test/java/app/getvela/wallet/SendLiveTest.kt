@@ -83,7 +83,7 @@ class SendLiveTest {
     private val me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private val recipient = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
 
-    private fun ctx(currency: CurrencyView = CurrencyView(code = "USD"), relaySentAtMs: Double? = null) = SendLive.Context(
+    private fun ctx(currency: CurrencyView = CurrencyView(code = "USD", committed = true), relaySentAtMs: Double? = null) = SendLive.Context(
         strings = strings,
         chainNames = mapOf(100 to "Gnosis", 56 to "BNB Chain"),
         explorers = mapOf(100 to "https://gnosisscan.io"),
@@ -428,7 +428,7 @@ class SendLiveTest {
                 tokens = listOf(app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "ETH", name = "ETH", balance = eth.balance, decimals = 18, price_usd = 1.0)),
             ),
             app.getvela.wallet.feature.wallet.core.FeedView(),
-            CurrencyView(code = "USD"),
+            CurrencyView(code = "USD", committed = true),
             strings,
             mapOf(100 to "Gnosis"),
         )
@@ -697,7 +697,7 @@ class SendLiveTest {
     @Test
     fun `a sweep's receipt lists every coin it sent and names none alone`() {
         val baseEth = SendToken(network = "chain-8453", chain_id = 8453, symbol = "ETH", balance = "0.001", decimals = 18, token_address = null, price_usd = 2400.0)
-        val c = SendLive.Context(strings, mapOf(8453 to "Base"), emptyMap(), WalletLive.Money.of(CurrencyView(code = "USD")), "Me", me)
+        val c = SendLive.Context(strings, mapOf(8453 to "Base"), emptyMap(), WalletLive.Money.of(CurrencyView(code = "USD", committed = true)), "Me", me)
         val wallet = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
         val coins = listOf(
             SendReceiptCoin(amount = "0.000418", symbol = "ETH", token_address = null, usd_value = 1.0),

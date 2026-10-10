@@ -24,7 +24,15 @@ import app.getvela.wallet.feature.wallet.TabsModel
  */
 enum class SettingsScreenState {
     ST1, ST1B, ST2, ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
-    ST9, ST9B, ST10, ST10B, ST10C, ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
+    ST9, ST9B, ST10, ST10B, ST10C,
+    /**
+     * Add network, refused for the OTHER reason: no P-256 verifier. ST10C is
+     * the chain whose contracts are missing (Chain Setup, opened on it); here
+     * nothing can be deployed, so the line says Vela wallets cannot work on
+     * this network — and there is no button.
+     */
+    ST10D,
+    ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
     /**
      * Spec 102, the web's boards: "Where you review and sign" for an account
      * on `getvela.app` reviewing on the official page (ST17) and for one on
@@ -37,6 +45,17 @@ enum class SettingsScreenState {
     SR1, SR2, SR2B, SR3, SR4, SR5,
     /** Spec 092: every network the wallet cannot reach, in one list. */
     SR6,
+
+    /**
+     * The Keys block over the home, with its "Copy this wallet's record to
+     * Ethereum" row in each state the core has a row for — through the LIVE
+     * builder: not copied yet (SK1, the one a tap opens the sheet from),
+     * copied (SK2), couldn't check (SK3, a tap asks again) and an older
+     * wallet that can never be copied (SK4, a calm end). The block was live
+     * only, so none of its states could be looked at without a wallet in
+     * each.
+     */
+    SK1, SK2, SK3, SK4,
 }
 
 /** Which page the settings surface is showing (`Home` plus the pushed pages). */
@@ -93,6 +112,12 @@ enum class SettingsOverlay {
     /** Spec 102: a saved signing page's new name. */
     RenameSigningPage,
 
+    /**
+     * Removing a saved signing page asks first, as iOS does: the page's own
+     * name, "Remove" and Cancel. One tap on the row's "Remove" used to take
+     * it — and its trusted version with it — with nothing in between.
+     */
+    RemoveSigningPage,
 
     /** Spec 072: removing a custom network asks first. */
     RemoveNetwork,
@@ -143,6 +168,11 @@ data class SettingsRowModel(
     val title: String,
     val icon: SettingsIcon? = null,
     val subtitle: String? = null,
+    /**
+     * The second line says something went WELL ("Copied to Ethereum" — the
+     * core's `BackupTone::Positive`) and is drawn in the success colour.
+     */
+    val subtitlePositive: Boolean = false,
     /** Right-aligned current value — "简体中文 · 系统", "12 个网络". */
     val value: String? = null,
     val trailing: RowTrailing = RowTrailing.Chevron,
@@ -251,6 +281,8 @@ data class SigningPagesModel(
     val draft: String = "",
     val save: String = "",
     val remove: String = "",
+    /** The remove question's way out (`common.cancel`). */
+    val cancel: String = "",
     /** The askTrust line's answer (the version is the line's). */
     val trust: String = "",
     /** The list has been read; edits are offered only then. */
@@ -395,7 +427,10 @@ data class AddNetworkModel(
     val customRpc: UrlFieldModel? = null,
     val callout: CalloutModel? = null,
     val primary: String? = null,
+    /** "Open Chain Setup Tool" — drawn only with [secondaryUrl]. */
     val secondary: String? = null,
+    /** Where [secondary] goes: the core's `setup_url`, Chain Setup opened on this chain. */
+    val secondaryUrl: String? = null,
     val recheck: String? = null,
 )
 
@@ -708,7 +743,12 @@ data class WalletKeysModel(
     val backup: SettingsRowModel?,
     /** Spec 102: "Keys on {{domain}}" — only for a wallet on its own signing domain. */
     val domain: String? = null,
-    /** Under the backup: PUBLIC keys only; private keys never leave the device. */
+    /**
+     * Under the copy's row, the core's words: what becomes public (the
+     * address and name, each key's name, public key, credential ID and
+     * authenticator model), that it costs a network fee, and that a copy
+     * moves no money and brings back no lost passkey.
+     */
     val backupExplain: String,
     val copyLabel: String,
     val copiedLabel: String,

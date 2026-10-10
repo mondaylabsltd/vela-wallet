@@ -94,6 +94,21 @@ object SettingsLive {
     }
 
     /**
+     * How a signing page is NAMED, everywhere it is named (D6) — the lists,
+     * and the hand-off card: Vela's official signing page; the person's own
+     * label; else "Self-hosted · <domain>". Never by its host alone: a host
+     * says where a page is, not whose it is.
+     */
+    fun pageName(name: String, official: Boolean, domain: String, address: String, s: VelaStrings): String {
+        val label = if (official) "" else name.trim()
+        return when {
+            official -> s.t("settings.signing.pageOfficial")
+            label.isNotEmpty() -> label
+            else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { address.substringBefore('/') }))
+        }
+    }
+
+    /**
      * One signing page as every list draws it (spec 102): its name — Vela's
      * official signing page, the person's label, or "Self-hosted · <domain>"
      * (D6: only a page the person deployed is "their own"); the address;
@@ -114,11 +129,7 @@ object SettingsLive {
         val integrity = integrityModel(line, s)
         val label = if (official) "" else name.trim()
         val host = address.substringBefore('/')
-        val title = when {
-            official -> s.t("settings.signing.pageOfficial")
-            label.isNotEmpty() -> label
-            else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { host }))
-        }
+        val title = pageName(name = name, official = official, domain = domain, address = address, s = s)
         return SigningPageItemModel(
             url = url,
             title = title,
@@ -177,6 +188,7 @@ object SettingsLive {
             },
             save = s.t("settings.signing.pageSave"),
             remove = s.t("settings.signing.pageRemove"),
+            cancel = s.t("common.cancel"),
             trust = s.t("settings.signing.pageTrust"),
             loaded = view.loaded,
         )
@@ -288,12 +300,14 @@ object SettingsLive {
     const val VENUE_ROW = "signing-venue"
 
     fun withCurrency(model: SettingsScreenModel, view: CurrencyView): SettingsScreenModel {
-        val code = view.code
+        // The person's own choice — on its way (`pending`) or settled — never
+        // the USD placeholder standing in for it.
+        val code = view.pending?.takeIf { !view.committed } ?: view.code
         return model.copy(
             sections = model.sections.map { section ->
                 section.copy(
                     rows = section.rows.map { row ->
-                        if (row.id == "currency") row.copy(value = currencyRowValue(view)) else row
+                        if (row.id == "currency") row.copy(value = currencyRowValue(code)) else row
                     },
                 )
             },
@@ -396,6 +410,11 @@ object SettingsLive {
         val inconclusive = wizard.error is NetWizardErrorKind.CheckFailed
         val unverified = checked && (compat == null || compat.rpc_failure != null)
         val compatible = checked && compat != null && compat.compatible && compat.rpc_failure == null
+        // The check answered and the chain is refused: the core's reason and
+        // — for missing contracts only — its link.
+        val refused = (stopped && !inconclusive) || (checked && !compatible && !unverified)
+        val refusal = compat?.hint_key?.takeIf { refused }
+        val setupUrl = compat?.setup_url?.takeIf { refused }
         return model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
@@ -492,12 +511,18 @@ object SettingsLive {
                 // sentence. Without it the pill says Compatible while two rows
                 // carry a red cross. It cannot collide with the arm above it:
                 // that one needs `!compatible`, this one needs `compatible`.
+                //
+                // A refusal says WHY, in the core's words (`compat.hint_key`):
+                // no P-256 verifier — Vela wallets cannot work here and money
+                // sent here would be stuck — or contracts that are missing and
+                // can be deployed. The two used to share one sentence about
+                // contracts, which is false of the first.
                 callout = when {
-                    stopped -> CalloutModel(
-                        CalloutTone.Warning,
-                        strings.t(if (inconclusive) "settingsModals.addNetwork.unableToVerify" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
-                    )
-                    checked && !compatible && !unverified -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
+                    stopped && inconclusive -> CalloutModel(CalloutTone.Warning, strings.t("settingsModals.addNetwork.unableToVerify"))
+                    refusal != null -> CalloutModel(CalloutTone.Warning, strings.t(refusal))
+                    // A stop with no check to read (the scan path keeps none):
+                    // the general line, and no button — there is no link to give.
+                    stopped -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
                     compat?.let { it.compatible && !it.multi_key_ready } == true -> CalloutModel(
                         tone = CalloutTone.Warning,
                         text = strings.t(I18nKeys.SettingsUi.ADD_SINGLE_KEY_ONLY),
@@ -514,12 +539,12 @@ object SettingsLive {
                     else -> null
                 },
                 // The chain setup tool is for a chain that is really missing
-                // Vela's contracts — never for one that could not be reached.
-                secondary = if ((stopped && !inconclusive) || (checked && !compatible && !unverified)) {
-                    strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL)
-                } else {
-                    null
-                },
+                // Vela's contracts — never for one that could not be reached,
+                // and never for one with no P-256 verifier (nothing can be
+                // deployed to add it). The core says which by sending the
+                // link, opened on this chain (`setup_url`), or not.
+                secondary = setupUrl?.let { strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL) },
+                secondaryUrl = setupUrl,
                 recheck = if (stopped || unverified || (checked && !compatible)) {
                     strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC)
                 } else {
@@ -667,15 +692,12 @@ object SettingsLive {
     }
 
     /**
-     * The row's right-hand value.
-     *
-     * `committed == false` means the core is still showing its USD placeholder
-     * rather than a settled choice — the row says the code it would use and
-     * nothing more, because a sample amount implies a rate and there is not one
-     * yet.
+     * The row's right-hand value: the code and its sign, and nothing more —
+     * a sample amount implies a rate, and while the choice is still on its
+     * way (`pending`) there is not one yet.
      */
-    private fun currencyRowValue(view: CurrencyView): String =
-        "${view.code} · ${CurrencyCatalog.glyph(view.code)}"
+    private fun currencyRowValue(code: String): String =
+        "$code · ${CurrencyCatalog.glyph(code)}"
 
     // -- Spec 047 US1: the rows that read the device, not a fixture -----------------
 
@@ -1154,7 +1176,7 @@ object SettingsLive {
     fun withWalletKeys(
         model: SettingsScreenModel,
         keys: app.getvela.wallet.feature.settings.core.WalletKeys.Result?,
-        backup: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        backup: app.getvela.wallet.feature.settings.core.RegistryBackup.Check?,
         strings: VelaStrings,
         /** Spec 102: the account's signing domain — said only when it is not `getvela.app`. */
         signingDomain: String = "getvela.app",
@@ -1214,38 +1236,40 @@ object SettingsLive {
     }
 
     /**
-     * The backup as a row: one line, four states, and an affordance only where
-     * a tap does something.
+     * The backup as a row — the core's words, tone and tap (`BackupState::row`),
+     * drawn and not re-mapped: every shell used to map the state itself, and
+     * they disagreed.
      *
-     * Two of those states have nothing to offer — the check is still running,
-     * or it came back "backed up" — so the row is inert there: no chevron, and
-     * (dead-controls #8) no ripple either, because it took taps in every state
-     * while only `NotBackedUp` carried an action.
+     * - still asking ([check] `null`): the title and "Checking…", inert;
+     * - "Copied to Ethereum": said in the positive tone, inert;
+     * - "Not copied yet (optional)": a plain state, never a caution — a copy
+     *   is optional and costs a fee — and a tap opens the sheet (the chevron);
+     * - "Couldn't check. Tap to try again.": a tap asks again, with the glyph
+     *   that says so rather than a chevron that would promise a page (the
+     *   founder's ruling, 2026-09-23);
+     * - "This older wallet can't be copied": a calm end, nothing to tap;
+     * - no row from the core (no registry on Ethereum, no record): not drawn.
      *
-     * "Could not check" is the state a person actually taps, and what they
-     * want is another attempt (founder's ruling, 2026-09-23). So it is
-     * actionable, with the glyph that says "ask again" rather than the chevron
-     * that promises a page: the tap re-runs the very check this screen runs
-     * when it opens.
+     * A row with nothing to do takes no taps at all (dead-controls #8): no
+     * chevron and no ripple.
      */
     fun ethereumBackupRow(
-        state: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        check: app.getvela.wallet.feature.settings.core.RegistryBackup.Check?,
         strings: VelaStrings,
     ): SettingsRowModel? {
         val k = I18nKeys.SettingsUi
-        val (subtitle, trailing) = when (state) {
-            null -> strings.t(k.BACKUP_CHECKING) to RowTrailing.None
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.BackedUp -> strings.t(k.BACKUP_BACKED_UP) to RowTrailing.None
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotBackedUp -> strings.t(k.BACKUP_NOT_BACKED_UP) to RowTrailing.Chevron
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.CouldNotCheck -> strings.t(k.BACKUP_COULD_NOT_CHECK) to RowTrailing.Retry
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.Unavailable,
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotRegistered -> return null
+        val row = if (check == null) null else check.row ?: return null
+        val trailing = when (row?.action) {
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.Copy -> RowTrailing.Chevron
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.Retry -> RowTrailing.Retry
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.None, null -> RowTrailing.None
         }
         return SettingsRowModel(
             id = ETHEREUM_BACKUP_ROW,
-            title = strings.t(k.BACKUP_TITLE),
+            title = strings.t(row?.titleKey ?: k.BACKUP_TITLE),
             icon = SettingsIcon.Upload,
-            subtitle = subtitle,
+            subtitle = strings.t(row?.subtitleKey ?: k.BACKUP_CHECKING),
+            subtitlePositive = row?.tone == app.getvela.wallet.feature.settings.core.RegistryBackup.Tone.Positive,
             trailing = trailing,
             actionable = trailing != RowTrailing.None,
         )

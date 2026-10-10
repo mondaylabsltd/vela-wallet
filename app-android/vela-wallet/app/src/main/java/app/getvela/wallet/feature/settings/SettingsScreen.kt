@@ -459,7 +459,14 @@ fun SettingsRoute(
         onSigningPageAdd = { url -> actions.onSigningPageAdd(url, "") },
         onSigningPageRenameOpen = { url -> editingPage = url; overlay = SettingsOverlay.RenameSigningPage },
         onSigningPageRename = { name -> editingPage?.let { actions.onSigningPageRename(it, name) } },
-        onSigningPageRemove = actions.onSigningPageRemove,
+        // The row's "Remove" asks first (as iOS does); only the sheet's own
+        // Remove takes the page.
+        onSigningPageRemove = { url -> editingPage = url; overlay = SettingsOverlay.RemoveSigningPage },
+        onConfirmRemoveSigningPage = {
+            editingPage?.let(actions.onSigningPageRemove)
+            editingPage = null
+            overlay = SettingsOverlay.None
+        },
         onSigningPageTrust = actions.onSigningPageTrust,
         onFeedbackOpened = actions.onFeedbackOpened,
         onVersionTap = {
@@ -597,6 +604,7 @@ fun SettingsScreen(
     onSigningPageRenameOpen: (String) -> Unit = {},
     onSigningPageRename: (String) -> Unit = {},
     onSigningPageRemove: (String) -> Unit = {},
+    onConfirmRemoveSigningPage: () -> Unit = {},
     onSigningPageTrust: (String, String) -> Unit = { _, _ -> },
     /** Spec 091: a tap on About's version — the hidden entry. */
     onVersionTap: () -> Unit = {},
@@ -748,6 +756,7 @@ fun SettingsScreen(
                 onRpcFixPrimary = onRpcFixPrimary,
                 editingPage = editingPage,
                 onSigningPageRename = onSigningPageRename,
+                onConfirmRemoveSigningPage = onConfirmRemoveSigningPage,
             )
         }
     }
@@ -1119,8 +1128,11 @@ private fun SettingsPageBody(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (add.secondary != null) {
-                    VelaSecondaryButton(add.secondary, onClick = {}, modifier = Modifier.fillMaxWidth())
+                // The button was drawn with an empty handler. It opens the
+                // core's link — Chain Setup on this very chain — and is not
+                // drawn where there is none (a network with no P-256 verifier).
+                if (add.secondary != null && add.secondaryUrl != null) {
+                    VelaSecondaryButton(add.secondary, onClick = { onOpenLink(add.secondaryUrl) }, modifier = Modifier.fillMaxWidth())
                 }
                 if (add.recheck != null) {
                     Text(
@@ -1487,6 +1499,7 @@ internal fun SettingsSheet(
     onRpcFixPrimary: () -> Unit = {},
     editingPage: String? = null,
     onSigningPageRename: (String) -> Unit = {},
+    onConfirmRemoveSigningPage: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1512,12 +1525,24 @@ internal fun SettingsSheet(
       // did nothing and the sheet still ended at Português.
       val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
       val sheetScroll = rememberScrollState()
+      // Issue #478: a tap anywhere in the sheet that is not a control leaves
+      // the field — the keyboard goes down and what it covered (the
+      // screenshots, the consent line, Send) is there again. The page has the
+      // same handler, but a sheet is its own window with its own focus: the
+      // page's never saw a tap in here, so in "Report a problem" the only way
+      // out of the box was the keyboard's own hide key.
+      val sheetFocus = LocalFocusManager.current
       CompositionLocalProvider(
           LocalSheetScroll provides sheetScroll,
           LocalSheetClose provides SheetClose(model.closeLabel, onClose),
           LocalSheetBodyMax provides maxSheetHeight - VelaSpacing.xl3,
       ) {
-        Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxSheetHeight)
+                .pointerInput(Unit) { detectTapGestures(onTap = { sheetFocus.clearFocus() }) },
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1548,6 +1573,9 @@ internal fun SettingsSheet(
                 }
                 SettingsOverlay.RenameSigningPage -> editingPage?.let { url ->
                     RenameSigningPageSheetBody(model.signingPages, url = url, onRename = onSigningPageRename, onDone = onDismiss)
+                }
+                SettingsOverlay.RemoveSigningPage -> editingPage?.let { url ->
+                    RemoveSigningPageSheetBody(model.signingPages, url = url, onConfirm = onConfirmRemoveSigningPage, onCancel = onDismiss)
                 }
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
                     onSheetSelect(SettingsOverlay.NumberFormat, it)
