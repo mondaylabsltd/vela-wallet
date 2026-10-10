@@ -109,6 +109,19 @@ checking_key: string | null,
  */
 live_key: string | null, 
 /**
+ * The Assets list's empty state: [`ASSETS_EMPTY`] ("Deposit your first
+ * asset"), with its caption and its action. `Some` only when a read has
+ * ended and found nothing held: never while the first read of the
+ * account is out ([`Self::checking_key`]), never while holdings are
+ * loading or unknown, never when no network could be read. A wallet
+ * that held nothing last session opens with a cached total of 0, and
+ * each shell took "no tokens, a known total" for an empty wallet — so
+ * it invited a first deposit under "Checking…", before anything had
+ * been read. A shell draws the empty state exactly when this is `Some`,
+ * and with no tokens and no key it draws what it draws while loading.
+ */
+empty_key: string | null, 
+/**
  * `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
  */
 holdings_loading: boolean, 

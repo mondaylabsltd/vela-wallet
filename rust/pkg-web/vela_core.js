@@ -5263,6 +5263,36 @@ export function signingVenueChoices(domain, active_json, saved_json, surface) {
 }
 
 /**
+ * What the pool's `eth_simulateV1` answer means for `user` (the signing
+ * account), and every line the sheet draws for it: a `SimVerdict` JSON —
+ * `{kind, deltas, revert_reason, notice_risk, notice_key, no_change_key}`.
+ * `reply_json` is the JSON-RPC envelope as it came (`{"result": …}` or
+ * `{"error": …}`), or `{"unreachable": true}` when the pool gave up;
+ * anything else is an answer nobody can read ("could not check", never
+ * "nothing moves"). `no_change_key` is "No asset changes" for a check under
+ * which nothing of theirs moves. See `vela_core::app::sim_outcome`.
+ * @param {string} user
+ * @param {string} reply_json
+ * @returns {string}
+ */
+export function simOutcome(user, reply_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(user, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(reply_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.simOutcome(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
  * person's numbers.
  * @param {number} bytes

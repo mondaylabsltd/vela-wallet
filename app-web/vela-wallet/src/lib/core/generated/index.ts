@@ -405,6 +405,7 @@ export * from './SigningPagesShellResult';
 export * from './SigningPagesView';
 export * from './SigningPlan';
 export * from './SigningVenue';
+export * from './SimVerdict';
 export * from './StableRef';
 export * from './TierPreviewQuote';
 export * from './TierQuote';

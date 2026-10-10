@@ -1346,6 +1346,18 @@ export function signingVenueBlock(domain: string, venue_json: string): string | 
 export function signingVenueChoices(domain: string, active_json: string, saved_json: string, surface?: string | null): string | undefined;
 
 /**
+ * What the pool's `eth_simulateV1` answer means for `user` (the signing
+ * account), and every line the sheet draws for it: a `SimVerdict` JSON —
+ * `{kind, deltas, revert_reason, notice_risk, notice_key, no_change_key}`.
+ * `reply_json` is the JSON-RPC envelope as it came (`{"result": …}` or
+ * `{"error": …}`), or `{"unreachable": true}` when the pool gave up;
+ * anything else is an answer nobody can read ("could not check", never
+ * "nothing moves"). `no_change_key` is "No asset changes" for a check under
+ * which nothing of theirs moves. See `vela_core::app::sim_outcome`.
+ */
+export function simOutcome(user: string, reply_json: string): string;
+
+/**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
  * person's numbers.
  */
@@ -1845,6 +1857,7 @@ export interface InitOutput {
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
+    readonly simOutcome: (a: number, b: number, c: number, d: number) => [number, number];
     readonly storageBytesDisplay: (a: number) => [number, number];
     readonly storageIsCacheKey: (a: number, b: number) => number;
     readonly storageIsErasableKey: (a: number, b: number) => number;

@@ -5,4 +5,14 @@ export type TrustSimView = { address: string, chain_id: number,
 /**
  * False while metadata for the judgment is still resolving.
  */
-ready: boolean, judgments: Array<TrustSimJudgment>, };
+ready: boolean, judgments: Array<TrustSimJudgment>, 
+/**
+ * The verdict's quiet line when the checked answer moves nothing of the
+ * person's: `componentsUi.signing.simResultNoChange` ("No asset
+ * changes") once [`Self::ready`], with no judgment or every one a zero
+ * ([`super::sim_outcome::no_change_key`]). The sheet draws this line in
+ * the verdict's place exactly when it is `Some`, and never picks the
+ * sentence, or the case, itself. `None` while resolving and whenever
+ * something moves.
+ */
+no_change_key: string | null, };
