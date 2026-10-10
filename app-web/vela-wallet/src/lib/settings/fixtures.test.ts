@@ -29,6 +29,13 @@ describe('settings messages', () => {
 			expect(value, `${key} in ${locale}`).not.toBe(key);
 			expect(value.trim()).not.toBe('');
 		}
+		// The switcher's count is a plural family: no bare value, a form per
+		// category the locale has, each one counting.
+		const forms = resolveSettingsMessages(locale).accounts.countPrefix.forms;
+		expect(Object.keys(forms)).toContain('_other');
+		for (const [suffix, form] of Object.entries(forms)) {
+			expect(form, `home.switcherAccountCount${suffix} in ${locale}`).toContain('{{count}}');
+		}
 	});
 });
 

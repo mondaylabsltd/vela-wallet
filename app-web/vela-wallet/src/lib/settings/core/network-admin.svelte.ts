@@ -37,6 +37,8 @@ const EMPTY_VIEW: NetView = {
 		compat: null,
 		error: null,
 		error_key: null,
+		rpc_field: 'none',
+		rpc_field_label_key: null,
 		can_add: false
 	},
 	endpoints: [],

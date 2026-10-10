@@ -11,6 +11,7 @@
 
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
+import { pluralForm } from '$lib/i18n/plural';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
 import { moneyText, trimBalance, unreachableLine } from '$lib/wallet/live';
@@ -1111,7 +1112,8 @@ function liveAccountRows(input: LiveAccountsInput) {
 function liveAccountsSummary(input: LiveAccountsInput, m: SettingsMessages['accounts']): string {
 	let total = 0;
 	for (const row of input.rows) total += input.balances.get(row.account.address.toLowerCase()) ?? 0;
-	return `${fill(m.countPrefix, { count: input.rows.length })}${fill(m.total, {
+	const count = input.rows.length;
+	return `${fill(pluralForm(m.countPrefix, count), { count })}${fill(m.total, {
 		// Hidden: the total masks with the rows — it IS their sum.
 		amount: input.hidden ? MASK : moneyText(total, input.currency)
 	})}`;

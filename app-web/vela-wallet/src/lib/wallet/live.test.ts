@@ -72,6 +72,8 @@ const PRISTINE: BalanceView = {
 	unreachable_key: null,
 	internal_chain_ids: [],
 	internal_key: null,
+	checking_key: null,
+	live_key: null,
 	holdings_loading: false,
 	cached_total_usd: null,
 	switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -85,7 +87,8 @@ function unreachableRow(chainId: number): UnreachableNetwork {
 		last_seen_usd: null,
 		line_key: 'assets.notReadYet',
 		cause: 'network',
-		rpc_fixable: true
+		rpc_fixable: true,
+		status_key: 'home.balanceDetailStatusFailed'
 	};
 }
 

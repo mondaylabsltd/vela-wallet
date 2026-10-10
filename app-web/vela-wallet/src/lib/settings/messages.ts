@@ -12,6 +12,7 @@
  * describe screens these mocks redraw. Spec 023 minted 45 new keys and reused
  * roughly two hundred.
  */
+import type { PluralCopy } from '$lib/i18n/plural';
 
 export interface SettingsMessages {
 	title: string;
@@ -321,8 +322,11 @@ export interface SettingsMessages {
 		title: string;
 		/** Template with `{{amount}}`. */
 		total: string;
-		/** Template with `{{count}}`. */
-		countPrefix: string;
+		/**
+		 * "{{count}} accounts · " in each plural form this locale has
+		 * (`pluralForm`): one account is "1 account · ", not "1 accounts · ".
+		 */
+		countPrefix: PluralCopy;
 		createNew: string;
 		signInExisting: string;
 		/** Taking ONE wallet off this device (2026-09-23). */
@@ -868,7 +872,6 @@ export const SETTINGS_KEYS = [
 	'about.footer',
 	'settingsModals.account.modalTitle',
 	'settingsModals.account.total',
-	'home.switcherAccountCount',
 	'settingsModals.account.createNew',
 	'settingsModals.account.signInExisting',
 	'settings.signOut.button',

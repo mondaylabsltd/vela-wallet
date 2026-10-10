@@ -13,6 +13,7 @@
  */
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
+import { pluralForm } from '$lib/i18n/plural';
 import type { SettingsMessages } from './messages';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
@@ -826,7 +827,7 @@ function accountsSheet(
 ): AccountsSheetModel {
 	return {
 		title: m.accounts.title,
-		summary: `${fill(m.accounts.countPrefix, { count: ACCOUNTS.length })}${fill(m.accounts.total, { amount: TOTAL_BALANCE })}`,
+		summary: `${fill(pluralForm(m.accounts.countPrefix, ACCOUNTS.length), { count: ACCOUNTS.length })}${fill(m.accounts.total, { amount: TOTAL_BALANCE })}`,
 		rows: ACCOUNTS.map((a, i) => ({
 			name: a.name,
 			addressDisplay: a.display,

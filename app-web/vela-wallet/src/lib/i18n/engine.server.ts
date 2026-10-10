@@ -651,7 +651,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		accounts: {
 			title: k('settingsModals.account.modalTitle'),
 			total: k('settingsModals.account.total'),
-			countPrefix: k('home.switcherAccountCount'),
+			countPrefix: pluralCopy(locale, 'home.switcherAccountCount'),
 			createNew: k('settingsModals.account.createNew'),
 			signInExisting: k('settingsModals.account.signInExisting'),
 			remove: k('settings.account.remove'),
