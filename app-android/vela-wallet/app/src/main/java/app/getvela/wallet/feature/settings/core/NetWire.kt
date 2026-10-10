@@ -279,6 +279,28 @@ enum class NetWizardPhase {
     @SerialName("error") Error,
 }
 
+/**
+ * Whether the wizard's result draws the field where a person names an RPC
+ * endpoint of their own ([NetWizardView.rpc_field]) — and with it, always and
+ * only with it, "Re-check with this RPC": a button that reads a field is drawn
+ * where the field is. The core's table (`network_admin::wizard_rpc_field`).
+ */
+@Serializable
+enum class NetRpcField {
+    /**
+     * No field, no re-check: searching and checking; a network already added
+     * or not found; and a REFUSAL (no P-256 verifier, missing contracts),
+     * which another endpoint would not change.
+     */
+    @SerialName("none") None,
+
+    /** The field, "Custom RPC (optional)": the check passed, or could not reach a verdict. */
+    @SerialName("optional") Optional,
+
+    /** The field, "RPC URL": the network lists no endpoint, so one typed here is the only way on. */
+    @SerialName("required") Required,
+}
+
 @Serializable
 data class NetWizardView(
     val phase: NetWizardPhase = NetWizardPhase.Idle,
@@ -302,6 +324,17 @@ data class NetWizardView(
      * from a core that predates the field.
      */
     val error_key: String? = null,
+    /**
+     * The RPC field under the result, and "Re-check with this RPC" with it —
+     * ONE rule, the core's, for every surface that draws this wizard (PR 3
+     * final notes F4, F14, F22). This shell decides neither.
+     */
+    val rpc_field: NetRpcField = NetRpcField.None,
+    /**
+     * The corpus key of that field's label: "Custom RPC (optional)", or "RPC
+     * URL" where an endpoint is the one thing asked for. `null` with no field.
+     */
+    val rpc_field_label_key: String? = null,
     val can_add: Boolean = false,
 )
 

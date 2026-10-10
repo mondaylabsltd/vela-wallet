@@ -379,6 +379,9 @@ class CoreWireDriftTest {
         assertVariantFieldsExhaustive(BalanceShellResult.serializer(), "BalanceShellResult")
         assertTrue("internal_chain_ids" in serializer<BalanceView>().descriptor.elementNames)
         assertTrue("internal_key" in serializer<BalanceView>().descriptor.elementNames)
+        // The final core round (F19): "Checking…" and "live" are the core's to say.
+        assertTrue("checking_key" in serializer<BalanceView>().descriptor.elementNames)
+        assertTrue("live_key" in serializer<BalanceView>().descriptor.elementNames)
     }
 
     @Test
@@ -752,6 +755,8 @@ class CoreWireDriftTest {
         assertStringUnion<NetProviderId>("NetProviderId")
         assertStringUnion<NetOverrideField>("NetOverrideField")
         assertStringUnion<NetWizardPhase>("NetWizardPhase")
+        // The core's one rule for the wizard's RPC field (F4 / F14 / F22).
+        assertStringUnion<app.getvela.wallet.feature.settings.core.NetRpcField>("NetRpcField")
         assertStringUnion<NetRpcFailureKind>("NetRpcFailureKind")
     }
 
