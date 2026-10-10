@@ -19,7 +19,7 @@ import UniformTypeIdentifiers
 /// `timeLimit`: some waits here are for a task the test itself started to
 /// reach a point (`Waits.swift`); one that never does is a hang, reported here.
 @MainActor
-@Suite(.timeLimit(.minutes(10)))
+@Suite(.timeLimit(.minutes(5)))
 struct FeedbackScreenshotTests {
     private let stubURL = "https://example.test/api/bug-report"
 

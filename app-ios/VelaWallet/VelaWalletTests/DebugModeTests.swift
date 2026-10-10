@@ -104,7 +104,11 @@ struct DebugModeTests {
     }
 
     /// Erasing the device hides the switch again, and debug mode is off.
-    @Test func anEraseHidesTheSwitchAgain() async {
+    ///
+    /// The erase waits for WebKit (see `EraseDeviceTests`): the limit is for
+    /// that, not for the switch.
+    @Test(.timeLimit(.minutes(5)))
+    func anEraseHidesTheSwitchAgain() async {
         let (_, store) = fresh()
         booted(store).setDebugMode(true)
         _ = await DeviceStorage.erase(store)
