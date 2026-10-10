@@ -277,17 +277,37 @@ test('the Welcome page loads no wasm until someone commits to a flow', async ({ 
  * prerendered document must still BE the landing page for crawlers.
  */
 test('a first run never paints Welcome before the intro', async ({ page }) => {
+	// The app's own scripts are HELD until the frame before hydration has been
+	// looked at. The test used to read the attribute, then the opacity, in two
+	// round trips with hydration running beside them: on a quick machine the
+	// page hydrated in between, removed the attribute as it should, and the
+	// second read found Welcome at opacity 1 — four runs in six, about a page
+	// that was doing the right thing. With the scripts held, "before
+	// hydration" is a state the test is in, not a moment it hopes to catch.
+	let hydrate: () => void = () => {};
+	const held = new Promise<void>((resolve) => (hydrate = resolve));
+	await page.route(/\/_app\/immutable\/.*\.js(\?.*)?$/, async (route) => {
+		await held;
+		await route.continue();
+	});
 	// A fresh context has no `vela.intro.seen`; the launch animation is
 	// skipped so it cannot mask the frame under test.
 	await page.goto('/en?skipLaunch', { waitUntil: 'commit' });
-	// Before hydration: the attribute is on <html> and Welcome is hidden.
+	// Before hydration: the attribute is on <html> and Welcome is hidden —
+	// polled, because the stylesheet that hides it may still be arriving
+	// (nothing is painted before it has).
 	await expect(page.locator('html')).toHaveAttribute('data-intro', 'pending');
-	const welcomeOpacity = await page
-		.locator('main[data-intro-page]')
-		.evaluate((el) => getComputedStyle(el).opacity)
-		.catch(() => '0');
-	expect(welcomeOpacity).toBe('0');
+	await expect
+		.poll(() =>
+			page
+				.locator('main[data-intro-page]')
+				.evaluate((el) => getComputedStyle(el).opacity)
+				.catch(() => null)
+		)
+		.toBe('0');
+	await expect(page.locator('html')).toHaveAttribute('data-intro', 'pending');
 	// After hydration: the intro is up and the attribute is gone.
+	hydrate();
 	await expect(page.locator('.intro')).toBeVisible();
 	await expect(page.locator('html')).not.toHaveAttribute('data-intro', 'pending');
 });
