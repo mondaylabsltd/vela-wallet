@@ -358,6 +358,21 @@ object SigningLive {
         // the outcome. Anything else it has to say (a revert, a node that could
         // not check, a balance that would move) stays on the sheet.
         val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
+        // The verdict's place is kept from the first frame, the size of the
+        // card a node that cannot simulate ends on ("Vela couldn't check what
+        // this transaction does" — every request on a chain whose nodes have
+        // no simulator, Gnosis among them). The sheet is bottom-anchored: a
+        // card landing a second late pushed the whole form up. Not on the
+        // wallet's own request, whose verdict folds into the technical
+        // details and takes no place at all.
+        val simPlace: List<SigningBlock> = when {
+            quietSim != null -> emptyList()
+            own && sims.isEmpty() -> emptyList()
+            sim == null -> emptyList()
+            else -> simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx).singleOrNull()
+                ?.let { room -> listOf(SigningBlock.Held(room, sims.singleOrNull())) }
+                ?: sims
+        }
         // Spec 102 D4: a page venue's sheet does not repeat the preview — the
         // page is the authority. What stays is what only Vela can decide
         // before it hands off: an approval's amount (the guard), and the fee.
@@ -366,7 +381,7 @@ object SigningLive {
             if (refused) statusBlocks(sign, s)
             else if (handoff != null) statusBlocks(sign, s, ctx.trustedSignerWaiting) + guardBlocks(guard, s)
             else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
-                (if (quietSim != null) emptyList() else sims) + guardBlocks(guard, s)
+                simPlace + guardBlocks(guard, s)
         val hidePreview = refused || handoff != null
         // The wallet's own request leads with what it does, as the header's
         // title beside the ✕ — so that intent is not said a second time under it.
@@ -1212,7 +1227,8 @@ object SigningLive {
     fun simBlocks(sim: SigningController.SimOutcome?, ctx: Context): List<SigningBlock> {
         val s = ctx.strings
         return when (sim) {
-            null -> emptyList()
+            // Not a verdict yet: nothing to say ([model] keeps its place).
+            null, SigningController.SimOutcome.Pending -> emptyList()
             // Spec 082 RG6: the core's line in the core's tone — a revert is a
             // danger (with its sanitised reason), a node that could not check
             // is a caution. Never "nothing changes" for either.

@@ -189,7 +189,10 @@ fun SigningSheetContent(
         // the ones nobody has drawn yet, come out of one code path. (Issue
         // #314: the wallet's own request leads with its intent — that is the
         // header's title, so it is not among these blocks.)
-        model.blocks.forEach { block ->
+        // One block, drawn. A local function so a held place can draw its two
+        // blocks — the room and what took it — with the same renderer.
+        @Composable
+        fun Draw(block: SigningBlock) {
             when (block) {
                 is SigningBlock.Intent -> SigningIntent(block.text, block.tone)
                 is SigningBlock.Amount ->
@@ -222,8 +225,18 @@ fun SigningSheetContent(
                 is SigningBlock.Card -> SigningCard(block.title, block.rows, block.tone)
                 is SigningBlock.Balances ->
                     SigningBalances(block.title, block.rows, block.note, block.noteTone)
+
+                // A place kept for a verdict that lands late: the room is
+                // drawn unseen and unsaid, so the sheet is this tall from its
+                // first frame and the card arriving moves nothing above it.
+                is SigningBlock.Held -> Box(modifier = Modifier.fillMaxWidth()) {
+                    Box(modifier = Modifier.alpha(0f).clearAndSetSemantics {}) { Draw(block.room) }
+                    block.shown?.let { shown -> Draw(shown) }
+                }
             }
+
         }
+        model.blocks.forEach { block -> Draw(block) }
 
         Box(
             Modifier

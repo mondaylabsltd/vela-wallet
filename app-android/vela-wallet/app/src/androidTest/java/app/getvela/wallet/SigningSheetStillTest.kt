@@ -21,6 +21,7 @@ import app.getvela.wallet.feature.signing.SigningScreenModel
 import app.getvela.wallet.feature.signing.SigningScreenState
 import app.getvela.wallet.feature.signing.SigningSheetContent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -152,6 +153,45 @@ class SigningSheetStillTest {
         current = shut(requote)
         compose.waitForIdle()
         compose.onNodeWithText(noCoin, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    /**
+     * Item 12 (the 102 device run): the simulation's verdict lands a second
+     * after the sheet opens — on a chain whose nodes cannot simulate, as
+     * 「Vela 未能检查这笔交易的结果」 on every request — and the sheet grew
+     * upward under the eye. Its place is kept from the first frame (CS57), so
+     * the card arriving (CS58) changes neither the sheet's height nor where
+     * the confirm is; and it is not said to TalkBack before it is there.
+     */
+    @Test
+    fun theSimulationsVerdictLandingMovesNothing() {
+        val waiting = SigningFixtures.build(SigningScreenState.CS57, strings)
+        val landed = SigningFixtures.build(SigningScreenState.CS58, strings)
+        val couldNotCheck = strings.t("componentsUi.signing.simUnavailableWarning")
+        var current by mutableStateOf(waiting)
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    SigningSheetContent(model = current, onConfirm = {}, modifier = Modifier.testTag(SHEET))
+                }
+            }
+        }
+        fun frame() = Frame(
+            sheetHeight = compose.onNodeWithTag(SHEET).fetchSemanticsNode().boundsInRoot.height,
+            confirmTop = compose.onNodeWithTag(CONFIRM_TAG).fetchSemanticsNode().boundsInRoot.top,
+        )
+        compose.waitForIdle()
+        val before = frame()
+        // The room is unseen and unsaid.
+        compose.onNodeWithText(couldNotCheck).assertDoesNotExist()
+        current = landed
+        compose.waitForIdle()
+        compose.onNodeWithText(couldNotCheck).assertExists()
+        assertEquals("the card arriving moved the sheet", before, frame())
+        // And the sheet with no place kept is shorter: the room is real.
+        current = waiting.copy(blocks = waiting.blocks.filterNot { it is app.getvela.wallet.feature.signing.SigningBlock.Held })
+        compose.waitForIdle()
+        assertTrue("no room was being held", frame().sheetHeight < before.sheetHeight)
     }
 
     private companion object {

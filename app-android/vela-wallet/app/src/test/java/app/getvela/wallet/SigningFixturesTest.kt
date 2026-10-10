@@ -48,7 +48,7 @@ class SigningFixturesTest {
             model.signerLabel, model.signerName,
             model.panelTitle, model.tech.title,
         )
-        model.blocks.forEach { block ->
+        fun said(block: SigningBlock) {
             when (block) {
                 is SigningBlock.Intent -> out += block.text
                 is SigningBlock.Amount -> out += listOfNotNull(
@@ -81,8 +81,11 @@ class SigningFixturesTest {
                     out += block.title
                     block.note?.let { out += it }
                 }
+                // A held place says only what took it; its room is unsaid.
+                is SigningBlock.Held -> block.shown?.let(::said)
             }
         }
+        model.blocks.forEach(::said)
         when (val fee = model.fee) {
             is FeeModel.OnChain -> {
                 out += listOf(fee.label, fee.value)
@@ -103,9 +106,10 @@ class SigningFixturesTest {
     fun everyScenarioBuilds() {
         // The 33 of the canon, CS36 — the wallet's own backup — CS37–CS42,
         // spec 102's hand-off card (CS40/CS41: the card a send raises on its
-        // own), CS43/CS44, a key ceremony waiting on its page, and CS45–CS56,
-        // the correctness batch's boards (drawn through the live builders).
-        assertEquals(54, SigningScreenState.entries.size)
+        // own), CS43/CS44, a key ceremony waiting on its page, CS45–CS56,
+        // the correctness batch's boards (drawn through the live builders),
+        // and CS57/CS58: the simulation's verdict's place, kept and taken.
+        assertEquals(56, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)

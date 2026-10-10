@@ -84,6 +84,23 @@ enum class SigningScreenState {
      * (CS56), and the dash, no control, when no other coin is left (CS55).
      */
     CS45, CS46, CS47, CS48, CS49, CS50, CS51, CS52, CS53, CS54, CS55, CS56,
+
+    /**
+     * Nothing jumps when the simulation's verdict lands (the 102 device run):
+     * CS1's transfer while its simulation is out — the verdict's place kept,
+     * nothing in it (CS57) — and the same sheet once a node that cannot
+     * simulate has answered: 「Vela 未能检查这笔交易的结果」 in that place
+     * (CS58). The two are the same height, and the confirm is where it was.
+     */
+    CS57, CS58,
+}
+
+/**
+ * What a list of blocks SAYS: a held place counts as the block that took it,
+ * and as nothing while it is still only room.
+ */
+fun List<SigningBlock>.said(): List<SigningBlock> = flatMap { block ->
+    if (block is SigningBlock.Held) listOfNotNull(block.shown) else listOf(block)
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
@@ -193,6 +210,19 @@ sealed interface SigningBlock {
         val note: String? = null,
         val noteTone: SigningTone = SigningTone.Neutral,
     ) : SigningBlock
+
+    /**
+     * A place kept for a block that arrives late — the simulation's verdict.
+     *
+     * The sheet is bottom-anchored and as tall as its content, so a card
+     * that appears a second after the sheet opened pushed everything above
+     * it up (the 102 device run: 「Vela 未能检查这笔交易的结果」 on every
+     * Gnosis request). The place is there from the first frame, [room]'s
+     * size — drawn unseen and unsaid — and [shown] takes it when it lands.
+     * Nothing moves for a [shown] no taller than [room]; a taller one grows
+     * the sheet by the difference only.
+     */
+    data class Held(val room: SigningBlock, val shown: SigningBlock?) : SigningBlock
 }
 
 @Immutable

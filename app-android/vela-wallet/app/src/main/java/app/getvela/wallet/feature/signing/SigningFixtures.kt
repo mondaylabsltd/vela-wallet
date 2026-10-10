@@ -316,6 +316,20 @@ object SigningFixtures {
         )
     }
 
+    /**
+     * CS57 / CS58: CS1's transfer with the simulation's place as the live
+     * builder keeps it ([SigningLive.model]) — the room of the core's "could
+     * not check" card ([SimDeltas.couldNotCheck], through the live
+     * [SigningLive.simBlocks]), empty while the simulation is out (CS57) and
+     * holding that card once it lands (CS58).
+     */
+    private fun VelaStrings.heldVerdict(state: SigningScreenState): SigningScreenModel {
+        val ctx = SigningLive.Context(this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1)
+        val landed = SigningLive.simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx).single()
+        val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
+        return base.copy(blocks = base.blocks + SigningBlock.Held(room = landed, shown = landed.takeIf { state == SigningScreenState.CS58 }))
+    }
+
     /** A fee view the real fee machine wrote for a board's failure (`FeeBoards`), on the boards' chain and account. */
     private fun feeBoard(case: app.getvela.wallet.feature.send.core.FeeBoards.Case) =
         app.getvela.wallet.feature.send.core.FeeBoards.view(case, chainId = 1, account = WalletFixtures.ADDRESS_FULL)
@@ -1238,6 +1252,8 @@ object SigningFixtures {
             SigningScreenState.CS48, SigningScreenState.CS49, SigningScreenState.CS50,
             SigningScreenState.CS51, SigningScreenState.CS52, SigningScreenState.CS53,
             SigningScreenState.CS54, SigningScreenState.CS55, SigningScreenState.CS56 -> correctness(state)
+
+            SigningScreenState.CS57, SigningScreenState.CS58 -> heldVerdict(state)
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,

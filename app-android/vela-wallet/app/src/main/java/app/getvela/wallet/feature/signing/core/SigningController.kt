@@ -311,6 +311,13 @@ class SigningController(
     sealed class SimOutcome {
         data class Ready(val judgments: List<TrustSimJudgment>) : SimOutcome()
         data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null) : SimOutcome()
+
+        /**
+         * The simulation is out and has not answered: the sheet keeps its
+         * verdict's place, so the card does not push the sheet up when it
+         * lands. Never a verdict — nothing reads it as "nothing moves".
+         */
+        data object Pending : SimOutcome()
     }
 
     private val _sim = MutableStateFlow<SimOutcome?>(null)
@@ -546,8 +553,10 @@ class SigningController(
             speedControl.ask(request.chainId, wallet.address, publicKeyAvailable = true, calls = feeCalls, feeToken = null, autoFeeToken = true)
             // Spec 046 US1: the one block a site cannot author. Read only.
             // Its moves also tell the fee machine which coins can pay (#411).
+            _sim.value = SimOutcome.Pending
             scope.launch {
-                _sim.value = simulated(request.chainId, calls.map { SimDeltas.Call(it.to, it.value, it.data) }, feeCalls) ?: return@launch
+                // No simulator on this host: nothing to wait for, the place is given back.
+                _sim.value = simulated(request.chainId, calls.map { SimDeltas.Call(it.to, it.value, it.data) }, feeCalls)
             }
             // A quote on the sheet is priced again by the fee core itself, once
             // a block (`requote_interval_ms`) and at once when that fails —
