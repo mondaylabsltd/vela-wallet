@@ -120,6 +120,9 @@
 		/** The ERC-20 / native toggle, and a chain picked on the native tab (Phase 10). */
 		tab?(id: string): void;
 		pick?(id: string): void;
+		/** The native tab's RPC field, and its "Re-check with this RPC". */
+		customRpc?(value: string): void;
+		recheck?(): void;
 	}
 
 	/**
@@ -387,6 +390,8 @@
 					onsubmit={addToken ? () => addToken.submit() : undefined}
 					ontab={addToken?.tab ? (id) => addToken.tab?.(id) : undefined}
 					onpick={addToken?.pick ? (id) => addToken.pick?.(id) : undefined}
+					oncustomrpc={addToken?.customRpc ? (value) => addToken.customRpc?.(value) : undefined}
+					onrecheck={addToken?.recheck ? () => addToken.recheck?.() : undefined}
 				/>
 			</BottomSheet>
 		{:else if sheet.kind === 'contact-pick'}

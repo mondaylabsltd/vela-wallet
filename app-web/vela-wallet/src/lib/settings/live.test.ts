@@ -314,8 +314,58 @@ describe('liveAddNetwork', () => {
 		// Nothing to deploy: no button, and nothing that adds the network.
 		expect(model.secondary).toBeUndefined();
 		expect(model.primary).toBeUndefined();
-		// The re-check stays: a different RPC may answer differently.
-		expect(model.recheck).toBe(m.addNetwork.recheckWithRpc);
+		// No re-check under a refusal (PR 3 final note F22): the core gives it
+		// no RPC field, and a button that reads a field is drawn where the
+		// field is. It stood here with nothing to read.
+		expect(model.customRpc).toBeUndefined();
+		expect(model.recheck).toBeUndefined();
+	});
+
+	it('the RPC field and its re-check are the core’s `rpc_field`: both, or neither', () => {
+		const compat: NetCompatibility = {
+			...NO_P256,
+			compatible: true,
+			blocker: null,
+			hint_key: null
+		};
+		const wizard = { ...WIZARD_IDLE, phase: 'checked' as const, chain_info: info, compat };
+		// The core gives none: neither is drawn, whatever the phase.
+		const none = liveAddNetwork(wizard, m);
+		expect(none.customRpc).toBeUndefined();
+		expect(none.recheck).toBeUndefined();
+		// Optional: the field by the label the core names, and the re-check.
+		const optional = liveAddNetwork(
+			{
+				...wizard,
+				custom_rpc: 'https://my.rpc.example',
+				rpc_field: 'optional',
+				rpc_field_label_key: 'settingsModals.addNetwork.customRpcTitle'
+			},
+			m
+		);
+		expect(optional.customRpc).toMatchObject({
+			id: 'custom-rpc',
+			label: 'Custom RPC (optional)',
+			value: 'https://my.rpc.example'
+		});
+		expect(optional.recheck).toBe(m.addNetwork.recheckWithRpc);
+		// Required: "RPC URL" — not "(optional)" where it is the one thing asked for.
+		const required = liveAddNetwork(
+			{
+				...wizard,
+				rpc_field: 'required',
+				rpc_field_label_key: 'settingsModals.network.fieldRpcUrl'
+			},
+			m
+		);
+		expect(required.customRpc?.label).toBe('RPC URL');
+		expect(required.recheck).toBe(m.addNetwork.recheckWithRpc);
+		// A label key this build has no words for: the plain one, never a path.
+		const unknown = liveAddNetwork(
+			{ ...wizard, rpc_field: 'optional', rpc_field_label_key: 'settingsModals.addNetwork.new' },
+			m
+		);
+		expect(unknown.customRpc?.label).toBe('RPC URL');
 	});
 
 	/**

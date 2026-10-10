@@ -421,6 +421,16 @@ export type AddTokenResult =
 			 * that went nowhere, and under every refusal alike.
 			 */
 			setup?: { label: string; href: string };
+			/**
+			 * The RPC field under the card and "Re-check with this RPC" — one
+			 * thing, so neither is ever drawn without the other. Present exactly
+			 * when the core gives the wizard a field
+			 * (`NetWizardView.rpc_field`), labelled by the key it names
+			 * ("Custom RPC (optional)", or "RPC URL" where an endpoint is the
+			 * one thing asked for). This tab's no-RPC stop said "Enter one, then
+			 * re-check" and had neither (PR 3 final note F14).
+			 */
+			rpc?: { label: string; value: string; placeholder: string; recheck: string };
 	  }
 	| { kind: 'not-found'; text: string }
 	/**

@@ -483,13 +483,17 @@ function addNetwork(
 			},
 			checksTitle: m.addNetwork.compatibilityCheck,
 			checks,
+			// The core's rule for the field (`NetWizardView.rpc_field`): a check
+			// that passed offers it, "(optional)", and the re-check that reads it
+			// — the two together, or neither.
 			customRpc: {
 				id: 'custom-rpc',
 				label: m.addNetwork.customRpcTitle,
 				value: '',
 				placeholder: m.addNetwork.customRpcPlaceholder
 			},
-			primary: m.addNetwork.addNetworkBtn
+			primary: m.addNetwork.addNetworkBtn,
+			recheck: m.addNetwork.recheckWithRpc
 		};
 	}
 	if (mode === 'no-p256') {
@@ -510,8 +514,9 @@ function addNetwork(
 			callout: {
 				tone: 'warning',
 				text: m.addNetwork.hints['settingsModals.addNetwork.noP256Hint']
-			},
-			recheck: m.addNetwork.recheckWithRpc
+			}
+			// No field and no re-check under a refusal: another endpoint would
+			// not change it (`rpc_field: none`).
 		};
 	}
 	return {
@@ -535,8 +540,7 @@ function addNetwork(
 		secondary: {
 			label: m.addNetwork.openChainSetupTool,
 			href: 'https://getvela.app/chain-setup?chain=48900'
-		},
-		recheck: m.addNetwork.recheckWithRpc
+		}
 	};
 }
 

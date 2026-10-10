@@ -209,6 +209,12 @@ export interface SettingsMessages {
 		 */
 		stops: Record<NetStopKey, string>;
 		/**
+		 * The RPC field's label BY CORPUS KEY — the one the core names for the
+		 * wizard's state (`NetWizardView.rpc_field_label_key`,
+		 * {@link NET_RPC_FIELD_KEYS}).
+		 */
+		rpcFieldLabels: Record<NetRpcFieldKey, string>;
+		/**
 		 * Spec 081 FR-009: the chain works, and a wallet with more than one
 		 * passkey still cannot be created on it. Said beside a green
 		 * "Compatible", which without this reads as a contradiction of the two
@@ -629,6 +635,20 @@ export const NET_STOP_KEYS = [
 ] as const;
 
 export type NetStopKey = (typeof NET_STOP_KEYS)[number];
+
+/**
+ * The labels the wizard's RPC field can wear — every key `network_admin`
+ * names for `NetWizardView.rpc_field_label_key` (`RPC_FIELD_OPTIONAL`:
+ * "Custom RPC (optional)"; `RPC_FIELD_REQUIRED`: "RPC URL", where an endpoint
+ * is the one thing asked for). `net-rpc-field.test.ts` holds the list to the
+ * core's source.
+ */
+export const NET_RPC_FIELD_KEYS = [
+	'settingsModals.addNetwork.customRpcTitle',
+	'settingsModals.network.fieldRpcUrl'
+] as const;
+
+export type NetRpcFieldKey = (typeof NET_RPC_FIELD_KEYS)[number];
 
 /**
  * Every corpus key the core's backup row can name

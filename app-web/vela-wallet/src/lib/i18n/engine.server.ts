@@ -34,12 +34,14 @@ import {
 	BACKUP_ROW_KEYS,
 	BALANCE_STATUS_KEYS,
 	NET_HINT_KEYS,
+	NET_RPC_FIELD_KEYS,
 	NET_STOP_KEYS,
 	UNREACHABLE_LINE_KEYS,
 	VENUE_BLOCK_KEYS,
 	type BackupExplainKey,
 	type BackupRowKey,
 	type NetHintKey,
+	type NetRpcFieldKey,
 	type NetStopKey,
 	type SettingsMessages,
 	type VenueBlockKey
@@ -558,6 +560,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			// …and which sentence a stopped wizard says (`error_key`).
 			stops: Object.fromEntries(NET_STOP_KEYS.map((key) => [key, k(key)])) as Record<
 				NetStopKey,
+				string
+			>,
+			rpcFieldLabels: Object.fromEntries(NET_RPC_FIELD_KEYS.map((key) => [key, k(key)])) as Record<
+				NetRpcFieldKey,
 				string
 			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),

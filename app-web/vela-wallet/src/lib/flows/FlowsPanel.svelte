@@ -133,6 +133,9 @@
 			submit(): void;
 			tab?(id: string): void;
 			pick?(id: string): void;
+			/** The native tab's RPC field, and its "Re-check with this RPC". */
+			customRpc?(value: string): void;
+			recheck?(): void;
 		};
 		send?: SendActions;
 		batch?: BatchActions;
@@ -188,6 +191,8 @@
 			onsubmit={addToken ? () => addToken.submit() : undefined}
 			ontab={addToken?.tab ? (id) => addToken.tab?.(id) : undefined}
 			onpick={addToken?.pick ? (id) => addToken.pick?.(id) : undefined}
+			oncustomrpc={addToken?.customRpc ? (value) => addToken.customRpc?.(value) : undefined}
+			onrecheck={addToken?.recheck ? () => addToken.recheck?.() : undefined}
 		/>
 	{:else if body.kind === 'send-pick'}
 		<SendPick

@@ -11,7 +11,12 @@
  * happen where the fixture knows the value, through spec 015's `fill`.
  */
 
-import { NET_HINT_KEYS, NET_STOP_KEYS, VENUE_BLOCK_KEYS } from '$lib/settings/messages';
+import {
+	NET_HINT_KEYS,
+	NET_RPC_FIELD_KEYS,
+	NET_STOP_KEYS,
+	VENUE_BLOCK_KEYS
+} from '$lib/settings/messages';
 
 /**
  * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082
@@ -191,6 +196,13 @@ export const WALLET_FLOW_KEYS = [
 	...NET_HINT_KEYS,
 	...NET_STOP_KEYS,
 	'settingsModals.addNetwork.openChainSetupTool',
+	// The RPC field under the wizard's result and "Re-check with this RPC" —
+	// drawn when the core gives the field (`NetWizardView.rpc_field`), labelled
+	// by the key it names. The tab's no-RPC stop said "Enter one, then
+	// re-check" and had neither.
+	...NET_RPC_FIELD_KEYS,
+	'settingsModals.addNetwork.customRpcPlaceholder',
+	'settingsModals.addNetwork.recheckWithRpc',
 
 	// ------------------------------------------------------------------ send
 	'send.selectTokenTitle',

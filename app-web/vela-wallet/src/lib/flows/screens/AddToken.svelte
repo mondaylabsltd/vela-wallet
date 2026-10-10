@@ -26,9 +26,14 @@
 		onsubmit?: () => void;
 		/** T3b live: one of the index's matches was chosen. */
 		onpick?: (id: string) => void;
+		/** T3b live: the RPC field under the network's card was typed in. */
+		oncustomrpc?: (value: string) => void;
+		/** T3b live: "Re-check with this RPC". */
+		onrecheck?: () => void;
 	}
 
-	let { model, ontab, onnetwork, oninput, onsubmit, onpick }: Props = $props();
+	let { model, ontab, onnetwork, oninput, onsubmit, onpick, oncustomrpc, onrecheck }: Props =
+		$props();
 </script>
 
 <div class="add">
@@ -131,6 +136,25 @@
 				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			{/if}
 		</div>
+		<!--
+			The RPC field and "Re-check with this RPC", where the core gives the
+			wizard one (`NetWizardView.rpc_field`) — the two together, under the
+			card whose sentence points at them. "No RPC endpoint is listed for
+			this network. Enter one, then re-check." stood here over nothing to
+			enter it in and nothing to re-check with.
+		-->
+		{#if model.result.rpc !== undefined}
+			<MonoField
+				label={model.result.rpc.label}
+				value={model.result.rpc.value}
+				placeholder={model.result.rpc.placeholder}
+				oninput={oncustomrpc}
+			/>
+			<button type="button" class="recheck" onclick={onrecheck}>
+				<Icon icon={UTILITY_ICONS['refresh-cw']} size="sm" />
+				<span>{model.result.rpc.recheck}</span>
+			</button>
+		{/if}
 	{/if}
 
 	<div class="cta">
@@ -266,6 +290,22 @@
 		font-family: var(--font-ui);
 		color: var(--color-fg-subtle);
 		text-align: start;
+		cursor: pointer;
+	}
+
+	/* Settings' own re-check, as it is drawn under that wizard's field. */
+	.recheck {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-md);
+		min-height: var(--size-control-md);
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-info-base);
 		cursor: pointer;
 	}
 

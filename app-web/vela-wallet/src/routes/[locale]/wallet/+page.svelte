@@ -551,6 +551,21 @@
 							chain_id: chainId,
 							keep_custom_rpc: false
 						});
+					},
+					// The native tab's RPC field and its re-check (PR 3 final note
+					// F14) — what Settings' wizard sends: the typed endpoint to the
+					// core, and the same chain checked again with it kept.
+					customRpc: (value: string) => {
+						networkAdmin.dispatch({ type: 'custom_rpc_edited', value });
+					},
+					recheck: () => {
+						const chainId = networkAdmin.view.wizard.chain_info?.chain_id;
+						if (chainId === undefined) return;
+						networkAdmin.dispatch({
+							type: 'chain_selected',
+							chain_id: chainId,
+							keep_custom_rpc: true
+						});
 					}
 				}
 	);
