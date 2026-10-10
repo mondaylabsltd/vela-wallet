@@ -285,7 +285,9 @@ test.describe('phone width', () => {
 
 		// "All" opens History, which draws every row.
 		await openHistory(page);
-		await expect(page.getByRole('heading', { name: en('history.navTitle'), level: 1 })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: en('history.navTitle'), level: 1 })
+		).toBeVisible();
 		for (const title of TITLES) {
 			await expect(page.getByRole('button', { name: new RegExp(title) }).first()).toBeVisible({
 				timeout: 20_000
@@ -318,7 +320,9 @@ test.describe('phone width', () => {
 		// Back on the home it is three again, and a row there opens its own
 		// detail — the same one History opens for it.
 		await page.getByRole('button', { name: en('receive.a11yBack') }).click();
-		await expect(page.getByRole('heading', { name: en('history.navTitle'), level: 1 })).toHaveCount(0);
+		await expect(page.getByRole('heading', { name: en('history.navTitle'), level: 1 })).toHaveCount(
+			0
+		);
 		for (const title of HISTORY_ONLY_TITLES) {
 			await expect(page.getByRole('button', { name: new RegExp(title) })).toHaveCount(0);
 		}

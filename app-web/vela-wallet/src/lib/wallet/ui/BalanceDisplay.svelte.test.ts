@@ -176,14 +176,13 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 
 	it('names the currency once it is known, and nothing before', () => {
 		const label = (balance: BalanceModel) =>
-			render(BalanceDisplay, { props: { balance } }).container.querySelector('.label')
+			render(BalanceDisplay, { props: { balance } })
+				.container.querySelector('.label')
 				?.textContent?.trim();
 		expect(label(hero(false))).toBe('Total balance · USD');
 		// Not committed, nothing stored on its way: no currency is named —
 		// never the placeholder's "USD", which then changed its mind.
-		expect(label({ ...hero(false), currency: undefined, state: 'loading' })).toBe(
-			'Total balance'
-		);
+		expect(label({ ...hero(false), currency: undefined, state: 'loading' })).toBe('Total balance');
 		expect(label({ ...hero(false), currency: 'CNY', state: 'loading' })).toBe(
 			'Total balance · CNY'
 		);
