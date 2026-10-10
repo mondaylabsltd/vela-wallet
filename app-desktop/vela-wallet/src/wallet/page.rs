@@ -18955,14 +18955,21 @@ impl WalletPage {
                 .text_color(theme.fg_subtle)
                 .child(crate::ui::prose(detail.summary.clone())),
         );
-        body = body.child(section(s.detail_networks_label.clone())).child(
-            div()
-                .mb(px(8.))
-                .text_size(theme::text_label())
-                .line_height(gpui::relative(1.4))
-                .text_color(theme.fg_subtle)
-                .child(crate::ui::prose(s.detail_networks_note.clone())),
-        );
+        // "Networks still updating — these networks couldn't be reached…"
+        // heads the networks that are still out, when there are any. With
+        // none it headed nothing and still said networks could not be
+        // reached: a sheet opened from "some tokens couldn't be priced" told
+        // a healthy wallet its balance was cached.
+        if !detail.pending.is_empty() {
+            body = body.child(section(s.detail_networks_label.clone())).child(
+                div()
+                    .mb(px(8.))
+                    .text_size(theme::text_label())
+                    .line_height(gpui::relative(1.4))
+                    .text_color(theme.fg_subtle)
+                    .child(crate::ui::prose(s.detail_networks_note.clone())),
+            );
+        }
         for line in &detail.pending {
             let retry = line.retry.then(|| {
                 let chain_id = line.chain_id;
