@@ -2251,6 +2251,63 @@ mod tests {
         );
     }
 
+    /// PR 3 device round, item 2. A wallet that held nothing last session
+    /// opens with a cached total of 0, and this shell took "no tokens, a
+    /// known total" for an empty wallet: "Deposit your first asset" under
+    /// "Checking…". The empty state is the core's word
+    /// (`BalanceView.empty_key`) and nothing else.
+    #[test]
+    fn a_first_deposit_is_invited_only_after_a_read_found_nothing() {
+        use crate::wallet::components::SlotLine;
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        use vela_core::app::balance_dashboard::ASSETS_EMPTY;
+        let s = strings();
+
+        // The cached zero, the first round still out.
+        let checking = first_read_view(FirstRead::Checking);
+        assert!(
+            checking.tokens.is_empty()
+                && checking.display_total_usd == Some(0.0)
+                && !checking.holdings_loading
+                && !checking.balance_unknown
+                && !checking.unreachable,
+            "every flag the old rule read says 'settled, and empty'"
+        );
+        assert_eq!(
+            SlotLine::of(&balance(&checking, &s, "en", &Money::default())),
+            SlotLine::Checking(s.balance_checking.clone())
+        );
+        assert_eq!(checking.empty_key, None);
+        assert!(
+            !assets_strip_empty(&checking, None),
+            "no 'Deposit your first asset' under 'Checking…'"
+        );
+
+        // The round settled and found nothing: now it is an empty wallet.
+        let live = first_read_view(FirstRead::Live);
+        assert_eq!(live.empty_key.as_deref(), Some(ASSETS_EMPTY));
+        assert_eq!(s.empty_assets_title.as_ref(), "Deposit your first asset");
+        assert!(assets_strip_empty(&live, None));
+
+        // The key and nothing else: the same settled view without it (what an
+        // older core's JSON reads as) is not an empty wallet…
+        let mut older = live.clone();
+        older.empty_key = None;
+        assert!(!assets_strip_empty(&older, None));
+        // …and the flags cannot make one.
+        let mut flags = checking.clone();
+        flags.checking_key = None;
+        assert!(!assets_strip_empty(&flags, None));
+
+        // The sidebar's own case stands: a chain that holds nothing while
+        // another does is said, not left blank.
+        let held = crate::wallet::fixtures::held_view();
+        assert_eq!(held.empty_key, None);
+        assert!(!assets_strip_empty(&held, None));
+        assert!(!assets_strip_empty(&held, Some(100)));
+        assert!(assets_strip_empty(&held, Some(56)));
+    }
+
     /// The last-known total paints first — with the refreshing line, so it
     /// never reads as today's figure — and live replaces it (the web's
     /// `liveBalance`). A skeleton only when there is nothing known at all.
@@ -3554,18 +3611,26 @@ pub fn chain_rows(
     rows
 }
 
-/// Whether the home's asset strip says "nothing here" — the web's
-/// `assetsMode(..) === 'empty'`: once the core has actually looked and there
-/// is nothing held, or when the sidebar's chain holds nothing while others do
-/// — never when nothing could be read (`unreachable`).
-/// A blank strip under a pill reads as a list that failed to load; while the
-/// core is still counting it stays blank, because the hero says "counting".
+/// Whether the Assets list says "nothing here" ("Deposit your first asset",
+/// its caption and its action) — the home's strip and the Assets panel both.
+///
+/// An empty WALLET is the core's word and nothing else
+/// (`BalanceView.empty_key`): set only once the first read of the account
+/// has ended and found nothing held, with the holdings neither loading,
+/// unknown nor out of reach. This shell read "no tokens, a known total" as
+/// empty — and a wallet that held nothing last session opens with a cached
+/// total of 0, so it invited a first deposit under "Checking…", before
+/// anything had been read. With no tokens and no key the list draws what it
+/// draws while loading.
+///
+/// The one case that is this shell's own: the sidebar's chain holds nothing
+/// while others do. The core's list is not narrowed (the filter is the
+/// sidebar's), and a blank strip under a pill reads as a list that failed to
+/// load.
 #[must_use]
 pub fn assets_strip_empty(view: &BalanceView, filter: Option<u32>) -> bool {
     if view.tokens.is_empty() {
-        // Nothing read at all is not "nothing held": no "Deposit your first
-        // asset" under a hero that says the read failed.
-        return !view.holdings_loading && !view.balance_unknown && !view.unreachable;
+        return view.empty_key.is_some();
     }
     filter.is_some() && visible_token_indices(view, filter).is_empty()
 }

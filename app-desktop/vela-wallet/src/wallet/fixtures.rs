@@ -226,6 +226,9 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
         // money: neither "checking" nor "live".
         checking_key: None,
         live_key: None,
+        // Last seen holding $4,500 with three chains unread: not an empty
+        // wallet, so no "Deposit your first asset" under the total.
+        empty_key: None,
         holdings_loading: false,
         cached_total_usd: Some(4_500.0),
         switcher: BalanceSwitcherView {

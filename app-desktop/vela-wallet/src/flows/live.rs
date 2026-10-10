@@ -126,11 +126,13 @@ fn asset_row(
 
 /// DT1L, or DT4L when there is nothing to list.
 ///
-/// **The empty state is only shown once the core has ruled.** While the count
-/// is in flight (`holdings_loading`, or a balance the core calls unknown) the
-/// panel shows an empty list and no guided-empty body — telling somebody their
-/// wallet is empty while it is still being read is the assets-panel version of
-/// the fake `$0` the hero refuses.
+/// **The empty state is only shown once the core has ruled**
+/// (`BalanceView.empty_key`, read by
+/// [`crate::wallet::live::assets_strip_empty`]). While the first read is
+/// out, the holdings are loading or the balance is unknown, the panel shows
+/// an empty list and no guided-empty body — telling somebody their wallet is
+/// empty while it is still being read is the assets-panel version of the
+/// fake `$0` the hero refuses.
 #[must_use]
 pub fn assets(
     view: &BalanceView,
@@ -170,12 +172,13 @@ pub fn assets(
         })
         .collect();
 
-    let settled = !view.holdings_loading && !view.balance_unknown;
-    // Empty once the core has actually looked — or when the chosen chain
-    // holds nothing while others do. The web's `liveAssets` shows T4 for both:
-    // a narrowed list with nothing in it must still say something, and a
-    // blank column under a pill reads as a panel that failed to load.
-    let filtered_empty = rows.is_empty() && !view.tokens.is_empty();
+    // Empty when the core says the wallet is (`BalanceView.empty_key`: the
+    // first read ended and found nothing) — or when the chosen chain holds
+    // nothing while others do. The web's `liveAssets` shows T4 for both: a
+    // narrowed list with nothing in it must still say something, and a blank
+    // column under a pill reads as a panel that failed to load. One rule
+    // with the home's strip.
+    let empty = rows.is_empty() && crate::wallet::live::assets_strip_empty(view, filter);
     AssetsPanel {
         // No filter row (078 T067): the web's Assets screen has none, and
         // this one's pill and "Add" answered no click. Which chain the list
@@ -185,7 +188,7 @@ pub fn assets(
         no_match: s.no_matching_tokens.clone(),
         rows: rows.clone(),
         add_by_address: s.add_by_address.clone(),
-        empty: (rows.is_empty() && (settled || filtered_empty)).then(|| AssetsEmpty {
+        empty: empty.then(|| AssetsEmpty {
             title: s.assets_empty_title.clone(),
             caption: s.assets_empty_caption.clone(),
             cta: s.add_token_title.clone(),
@@ -6324,60 +6327,59 @@ mod tests {
         assert_eq!(panel.rows[0].ticker, "xDAI");
     }
 
-    /// An empty wallet and a wallet still being counted are different screens.
+    /// An empty wallet and a wallet still being read are different screens —
+    /// and which one this is is the core's word (`BalanceView.empty_key`),
+    /// never this panel's reading of the flags (PR 3 device round, item 2).
     #[test]
     fn the_guided_empty_waits_until_the_core_has_ruled() {
-        let mut counting = view();
-        counting.tokens = Vec::new();
-        counting.balance_unknown = true;
-        assert!(
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        let empty = |view: &BalanceView| {
             assets(
-                &counting,
+                view,
                 &strings(),
                 &wallet_strings(),
                 "en-US",
                 None,
-                crate::wallet::live::Money::usd()
+                crate::wallet::live::Money::usd(),
             )
             .empty
-            .is_none(),
+        };
+
+        // The first frame of an account: nothing known.
+        let counting = view();
+        assert!(counting.balance_unknown && counting.tokens.is_empty());
+        assert!(
+            empty(&counting).is_none(),
             "still counting: no 'your wallet is empty'"
         );
 
-        let mut loading = view();
-        loading.tokens = Vec::new();
-        loading.balance_unknown = false;
-        loading.holdings_loading = true;
+        // A wallet that held nothing last session: the cached zero is on
+        // screen and the first round is still out ("Checking…"). The flags
+        // this panel used to read all say "settled" — and it invited a first
+        // deposit before anything had been read.
+        let checking = first_read_view(FirstRead::Checking);
+        assert!(checking.checking_key.is_some());
+        assert!(!checking.holdings_loading && !checking.balance_unknown);
         assert!(
-            assets(
-                &loading,
-                &strings(),
-                &wallet_strings(),
-                "en-US",
-                None,
-                crate::wallet::live::Money::usd()
-            )
-            .empty
-            .is_none()
+            empty(&checking).is_none(),
+            "'Deposit your first asset' under 'Checking…'"
         );
 
-        let mut settled = view();
-        settled.tokens = Vec::new();
-        settled.balance_unknown = false;
-        settled.holdings_loading = false;
-        assert!(
-            assets(
-                &settled,
-                &strings(),
-                &wallet_strings(),
-                "en-US",
-                None,
-                crate::wallet::live::Money::usd()
-            )
-            .empty
-            .is_some(),
+        // The round ended and found nothing: the core rules it empty.
+        let settled = first_read_view(FirstRead::Live);
+        assert!(settled.empty_key.is_some());
+        let said = empty(&settled);
+        assert_eq!(
+            said.map(|empty| empty.title.to_string()).as_deref(),
+            Some("Deposit your first asset"),
             "the core ruled: genuinely empty"
         );
+
+        // The key and nothing else: the same view read from an older core's
+        // JSON (no key) is a list still loading, whatever its flags say.
+        let mut older = settled.clone();
+        older.empty_key = None;
+        assert!(empty(&older).is_none());
 
         // Narrowed to a chain that holds nothing while others hold something:
         // the web's `filteredEmpty` — the empty body, never a blank column.
