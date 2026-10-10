@@ -288,6 +288,38 @@ pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Hosts known to be dead, whoever lists them: every endpoint under one
+/// answers nothing (HTTP 502, "usage limit", or a timeout on every call — the
+/// measurements above). Vela's own lists no longer name them, but the chain
+/// index is a third party's list and still may; an endpoint there costs every
+/// sweep that reaches it a full timeout. The pool drops them from every tier
+/// it fills itself ([`is_dead_rpc_host`]) — never from a person's own
+/// endpoint, which is theirs to choose (a paid plan on the same host
+/// answers), and never when nothing else is left for the chain.
+pub const DEAD_RPC_HOSTS: &[&str] = &["1rpc.io"];
+
+/// Is `url` on a host in [`DEAD_RPC_HOSTS`] (the host itself, or a subdomain
+/// of it)? The host is compared, never a substring of the URL: a path or a
+/// query that merely mentions the name is not that host.
+#[must_use]
+pub fn is_dead_rpc_host(url: &str) -> bool {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    let host = host
+        .split_once(':')
+        .map_or(host, |(host, _)| host)
+        .to_ascii_lowercase();
+    DEAD_RPC_HOSTS.iter().any(|dead| {
+        host == *dead
+            || host
+                .strip_suffix(dead)
+                .is_some_and(|sub| sub.ends_with('.'))
+    })
+}
+
 /// Vela's Chain Setup page — which contracts a network lacks, and who can
 /// deploy them. It reads `?chain=<id>` ([`chain_setup_url`]).
 pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";
@@ -2232,7 +2264,12 @@ fn chain_info_fetched(
     // `checkNetworkCompatibility` step 1 (network-checker.ts:49-57): HTTPS
     // filter + Set dedup, then the registry's single URL appended. (The TS
     // re-fetches chain info for that append; folded here — module doc.)
-    let candidates = probe_candidates(rpcs, &info);
+    let own = if model.wizard.auto {
+        ""
+    } else {
+        model.wizard.custom_rpc.trim()
+    };
+    let candidates = probe_candidates(rpcs, &info, own);
 
     model.wizard.chain_info = Some(info);
 
@@ -2273,7 +2310,12 @@ enum Step {
 
 /// `checkNetworkCompatibility` step 1 (network-checker.ts:49-57): HTTPS
 /// filter + Set dedup of `rpcs`, then the registry's single URL appended.
-fn probe_candidates(rpcs: Vec<String>, info: &NetChainInfo) -> Vec<String> {
+///
+/// Minus the hosts known to be dead ([`is_dead_rpc_host`]) that the chain
+/// index listed: probing one buys a timeout and tells a third party which
+/// network this wallet is about to add. `own` — the RPC the person typed —
+/// is theirs and always stays; so does a dead host when it is all there is.
+fn probe_candidates(rpcs: Vec<String>, info: &NetChainInfo, own: &str) -> Vec<String> {
     let mut candidates: Vec<String> = Vec::new();
     for url in rpcs {
         if url.starts_with("https://") && !candidates.contains(&url) {
@@ -2283,6 +2325,11 @@ fn probe_candidates(rpcs: Vec<String>, info: &NetChainInfo) -> Vec<String> {
     if !info.rpc_url.is_empty() && !candidates.contains(&info.rpc_url) {
         candidates.push(info.rpc_url.clone());
     }
+    let dropped = |url: &String| url != own && is_dead_rpc_host(url);
+    if candidates.iter().all(dropped) {
+        return candidates;
+    }
+    candidates.retain(|url| !dropped(url));
     candidates
 }
 
@@ -2830,7 +2877,7 @@ fn dapp_chain_info(
             } else {
                 info.rpc_urls.clone()
             };
-            let candidates = probe_candidates(rpcs, &info);
+            let candidates = probe_candidates(rpcs, &info, "");
             (info, candidates, false)
         }
         None => (

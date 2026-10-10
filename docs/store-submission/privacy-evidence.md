@@ -107,6 +107,34 @@ ships 24 chains with one default endpoint each:
   and Ink gained a fallback (their defaults time out from some networks). No request to any of
   these carries anything the default endpoints do not: the wallet address and the IP.
 
+  The same tier, host by host. This table is not written by hand: it is the core's `PUBLIC_RPCS`,
+  and `cargo test -p vela-core --test app_network_admin` fails when the two differ
+  (`the_privacy_evidence_names_exactly_the_public_rpc_hosts`).
+
+<!-- public-rpcs:begin -->
+| Network | Hosts asked, in order |
+|---|---|
+| Ethereum (1) | `ethereum-rpc.publicnode.com`, `mainnet.gateway.tenderly.co` |
+| BNB Chain (56) | `bsc-rpc.publicnode.com`, `bsc-dataseed1.bnbchain.org` |
+| Polygon (137) | `polygon-bor-rpc.publicnode.com`, `polygon.gateway.tenderly.co` |
+| Arbitrum (42161) | `arbitrum-one-rpc.publicnode.com`, `arbitrum.gateway.tenderly.co` |
+| Optimism (10) | `optimism-rpc.publicnode.com`, `optimism.gateway.tenderly.co` |
+| Base (8453) | `base-rpc.publicnode.com`, `base.gateway.tenderly.co` |
+| Avalanche (43114) | `avalanche-c-chain-rpc.publicnode.com`, `avalanche.gateway.tenderly.co` |
+| Gnosis (100) | `gnosis-rpc.publicnode.com`, `gnosis.gateway.tenderly.co` |
+| X Layer (196) | `rpc.xlayer.tech`, `xlayer.drpc.org` |
+| Celo (42220) | `celo-rpc.publicnode.com` |
+| Ink (57073) | `rpc-qnd.inkonchain.com` |
+<!-- public-rpcs:end -->
+
+- **Hosts the wallet refuses to ask.** The chain index behind the public tier is a third party's
+  list and can still name `1rpc.io`. The core drops every endpoint on a host in
+  `network_admin::DEAD_RPC_HOSTS` (today: `1rpc.io`) from each tier it fills itself — the
+  default, the public tier and both chain-index tiers — before a request is made
+  (`rust/crates/vela-core/src/app/rpc_pool.rs`, `without_dead_hosts`), on all four apps. So
+  `1rpc.io` (Automata) receives nothing from a wallet unless the person typed one of its URLs as
+  their own endpoint.
+
 **All of them are replaceable.** Resolution order is user override → user's keyed provider →
 built-in default → curated public → chain index
 (`app-desktop/vela-wallet/src/executor/pool.rs:57-59, 737-744`), and the override is stored

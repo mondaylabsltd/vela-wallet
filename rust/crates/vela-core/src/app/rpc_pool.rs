@@ -1352,6 +1352,7 @@ fn merge_endpoints(
     existing: Vec<RpcEndpointStats>,
     seeds: Vec<RpcEndpointSeed>,
 ) -> Vec<RpcEndpointStats> {
+    let seeds = without_dead_hosts(seeds);
     let mut by_url: BTreeMap<String, RpcEndpointStats> = existing
         .into_iter()
         .map(|stats| (stats.url.clone(), stats))
@@ -1370,6 +1371,28 @@ fn merge_endpoints(
         }
     }
     merged
+}
+
+/// The collected endpoints minus every one on a host known to be dead
+/// (`network_admin::DEAD_RPC_HOSTS`), in every tier the pool fills itself —
+/// the chain index is a third party's list and may still name one, and each
+/// costs a sweep its full timeout. Two things are never dropped: a person's
+/// own endpoint ([`RpcSource::User`], and a keyed [`RpcSource::Provider`]) —
+/// theirs to choose — and the last endpoints of a chain: when nothing else
+/// was collected the list is kept whole, because a dead endpoint that may
+/// have come back beats no endpoint at all.
+fn without_dead_hosts(seeds: Vec<RpcEndpointSeed>) -> Vec<RpcEndpointSeed> {
+    let dropped = |seed: &RpcEndpointSeed| {
+        !matches!(seed.source, RpcSource::User | RpcSource::Provider)
+            && super::network_admin::is_dead_rpc_host(&seed.url)
+    };
+    if seeds
+        .iter()
+        .all(|seed| seed.url.is_empty() || dropped(seed))
+    {
+        return seeds;
+    }
+    seeds.into_iter().filter(|seed| !dropped(seed)).collect()
 }
 
 fn start_work(model: &mut Model, work: PendingWork, now_ms: f64) -> Command<RpcEffect, Event> {

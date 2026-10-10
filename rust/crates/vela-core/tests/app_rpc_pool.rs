@@ -3130,3 +3130,83 @@ fn only_reads_through_the_rpc_pool_are_hedged() {
     }
     const { assert!(HEDGE_AFTER_MS < RPC_READ_TIMEOUT_MS / 4) };
 }
+
+// ===========================================================================
+// PR 3 note 25: a host known to be dead is never swept, whoever listed it
+// ===========================================================================
+
+/// `1rpc.io` answers nothing, and the chain index — a third party's list —
+/// still names it. The pool drops it from every tier it fills itself, so a
+/// sweep never spends a timeout there: with the one live endpoint failing,
+/// the pass ends without ever posting to the dead host.
+#[test]
+fn a_dead_host_is_never_swept_in_any_tier_the_pool_fills() {
+    const DEAD_INDEX: &str = "https://1rpc.io/bnb";
+    const DEAD_EXTRA: &str = "https://sub.1rpc.io/bnb";
+    let mut sut = Sut::new();
+    sut.dispatch(rpc_call("c0", "eth_call", T0));
+    let mut ops = sut.resolve(config(
+        vec![
+            seed(DEAD_INDEX, RpcSource::Default),
+            seed(PUB1, RpcSource::Public),
+            seed(DEAD_INDEX, RpcSource::Builtin),
+            seed(DEAD_EXTRA, RpcSource::Fallback),
+        ],
+        vec![seed(BRELAY, RpcSource::Builtin)],
+        T0,
+    ));
+    let mut posted: Vec<String> = Vec::new();
+    for _ in 0..40 {
+        let Some(op) = ops.first().cloned() else {
+            break;
+        };
+        ops = match op {
+            Op::JsonRpcPost { url, .. } => {
+                posted.push(url.clone());
+                sut.resolve(outcome("c0", &url, Out::Network, 10.0, T0))
+            }
+            Op::DrawJitter { call_id } => sut.resolve(Res::Jitter {
+                call_id,
+                value: 0.0,
+            }),
+            Op::StartBackoff { call_id, .. } => sut.resolve(Res::BackoffElapsed {
+                call_id,
+                now_ms: T0,
+            }),
+            Op::PersistBans { .. } => sut.resolve(Res::Persisted),
+            Op::Conclude { .. } => sut.resolve(Res::Concluded),
+            other => unreachable!("unexpected op {other:?}"),
+        };
+    }
+    assert!(!posted.is_empty(), "the live endpoint was tried");
+    assert!(
+        posted.iter().all(|url| url == PUB1),
+        "only the live endpoint is ever asked: {posted:?}"
+    );
+}
+
+/// A person's own endpoint is theirs to choose, even on that host (a paid
+/// plan there answers) — and when a dead host is all a chain has, it is
+/// kept: an endpoint that may have come back beats none.
+#[test]
+fn a_persons_own_endpoint_and_a_chains_last_one_are_kept() {
+    const OWN: &str = "https://1rpc.io/my-key/bnb";
+    const DEAD: &str = "https://1rpc.io/bnb";
+    let mut sut = Sut::new();
+    sut.dispatch(rpc_call("c0", "eth_call", T0));
+    let ops = sut.resolve(config(
+        vec![seed(OWN, RpcSource::User), seed(DEAD, RpcSource::Fallback)],
+        vec![seed(BRELAY, RpcSource::Builtin)],
+        T0,
+    ));
+    assert_eq!(ops, vec![rpc_post("c0", OWN, "eth_call")]);
+
+    let mut sut = Sut::new();
+    sut.dispatch(rpc_call("c0", "eth_call", T0));
+    let ops = sut.resolve(config(
+        vec![seed(DEAD, RpcSource::Fallback)],
+        vec![seed(BRELAY, RpcSource::Builtin)],
+        T0,
+    ));
+    assert_eq!(ops, vec![rpc_post("c0", DEAD, "eth_call")]);
+}

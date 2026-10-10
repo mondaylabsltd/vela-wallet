@@ -2517,3 +2517,99 @@ fn every_wizard_stop_has_its_own_sentence_in_the_corpus() {
         assert!(i18n.exists(key, &opts), "{key}");
     }
 }
+
+// ===========================================================================
+// PR 3 notes 20, 25: the public tier, its dead hosts, and what the store is told
+// ===========================================================================
+
+/// The host is compared, never a substring: a path that mentions the name is
+/// not that host, and a subdomain of it is.
+#[test]
+fn a_dead_rpc_host_is_matched_by_host_only() {
+    use vela_core::app::network_admin::{is_dead_rpc_host, DEAD_RPC_HOSTS};
+    assert_eq!(DEAD_RPC_HOSTS, ["1rpc.io"]);
+    for dead in [
+        "https://1rpc.io/matic",
+        "https://1RPC.io/eth",
+        "https://1rpc.io",
+        "https://1rpc.io:443/arb",
+        "https://key@1rpc.io/op",
+        "https://eu.1rpc.io/base",
+        "1rpc.io/gnosis",
+    ] {
+        assert!(is_dead_rpc_host(dead), "{dead}");
+    }
+    for alive in [
+        "https://polygon.gateway.tenderly.co",
+        "https://not1rpc.io/matic",
+        "https://1rpc.io.example.com/eth",
+        "https://example.com/1rpc.io/eth",
+        "https://example.com/?via=1rpc.io",
+        "",
+    ] {
+        assert!(!is_dead_rpc_host(alive), "{alive}");
+    }
+    // Nothing Vela ships names one: not the public tier, not a default.
+    for (_, urls) in PUBLIC_RPCS {
+        for url in *urls {
+            assert!(!is_dead_rpc_host(url), "{url}");
+        }
+    }
+    for chain in BUILTIN_CHAINS {
+        assert!(!is_dead_rpc_host(chain.rpc_url), "{}", chain.rpc_url);
+    }
+}
+
+const PRIVACY_EVIDENCE: &str = "../../../docs/store-submission/privacy-evidence.md";
+const DOC_BEGIN: &str = "<!-- public-rpcs:begin -->";
+const DOC_END: &str = "<!-- public-rpcs:end -->";
+
+/// The table the privacy evidence carries between its two markers: every
+/// host of [`PUBLIC_RPCS`], chain by chain, in the order they are asked.
+fn public_rpc_table() -> String {
+    let mut out = String::from("| Network | Hosts asked, in order |\n|---|---|\n");
+    for (chain_id, urls) in PUBLIC_RPCS {
+        let name = BUILTIN_CHAINS
+            .iter()
+            .find(|chain| chain.chain_id == *chain_id)
+            .map_or("", |chain| chain.display_name);
+        let hosts: Vec<String> = urls
+            .iter()
+            .map(|url| {
+                let host = url.trim_start_matches("https://");
+                format!("`{}`", host.split('/').next().unwrap_or(host))
+            })
+            .collect();
+        out.push_str(&format!("| {name} ({chain_id}) | {} |\n", hosts.join(", ")));
+    }
+    out
+}
+
+/// What the store is told about third parties is what the wallet contacts:
+/// the privacy evidence's list of public RPC hosts IS the core's list, host
+/// for host. It was written by hand, and named `1rpc.io` for weeks after
+/// the wallet had stopped asking it. Regenerate after changing the list:
+/// `VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_network_admin`.
+#[test]
+fn the_privacy_evidence_names_exactly_the_public_rpc_hosts() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(PRIVACY_EVIDENCE);
+    let doc = std::fs::read_to_string(&path).expect("docs/store-submission/privacy-evidence.md");
+    let (head, rest) = doc.split_once(DOC_BEGIN).expect("the begin marker");
+    let (have, tail) = rest.split_once(DOC_END).expect("the end marker");
+    let want = format!("\n{}", public_rpc_table());
+    if have != want && std::env::var_os("VELA_WRITE_FIXTURES").is_some() {
+        let rewritten = format!("{head}{DOC_BEGIN}{want}{DOC_END}{tail}");
+        std::fs::write(&path, rewritten).expect("write the privacy evidence");
+        return;
+    }
+    assert!(
+        have == want,
+        "docs/store-submission/privacy-evidence.md lists other public RPC hosts than \
+         PUBLIC_RPCS — regenerate with VELA_WRITE_FIXTURES=1 cargo test -p vela-core \
+         --features crux --test app_network_admin\n--- doc\n{have}\n--- core\n{want}"
+    );
+    // And no host the pool refuses to ask is named anywhere as contacted.
+    for dead in vela_core::app::network_admin::DEAD_RPC_HOSTS {
+        assert!(!have.contains(dead), "{dead} is listed as contacted");
+    }
+}
