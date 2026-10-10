@@ -17,6 +17,7 @@ import {
 	figureCurrency,
 	liveAssetRow,
 	liveBalance,
+	maskedFigure,
 	MONEY_PENDING,
 	moneyParts,
 	moneyText,
@@ -199,6 +200,20 @@ describe('no money figure before the display currency is the person’s', () => 
 			currency: 'USD',
 			integer: '$1,234'
 		});
+	});
+});
+
+describe('maskedFigure — a hidden amount keeps its unit', () => {
+	it('the mask, then the unit the shown figure carries', () => {
+		expect(maskedFigure('xDAI')).toBe('•••• xDAI');
+		expect(maskedFigure('USDC')).toBe('•••• USDC');
+		// Nothing of the number survives.
+		expect(maskedFigure('ETH')).not.toMatch(/\d/);
+	});
+	it('a figure with no unit is the mask alone — never a trailing space', () => {
+		expect(maskedFigure('')).toBe('••••');
+		expect(maskedFigure('  ')).toBe('••••');
+		expect(maskedFigure(' xDAI ')).toBe('•••• xDAI');
 	});
 });
 

@@ -188,7 +188,9 @@ export function fixedTwo(value: number): [string, string] {
  * it stays the bare mask.
  */
 export function maskedFigure(unit: string): string {
-	return `${MASK} ${unit}`.trim();
+	const kept = unit.trim();
+	// No unit of its own (a sweep's count): the mask alone, never a trailing space.
+	return kept === '' ? MASK : `${MASK} ${kept}`;
 }
 
 /**
