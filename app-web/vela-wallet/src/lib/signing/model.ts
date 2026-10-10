@@ -153,7 +153,7 @@ export type Block =
 			 * This line LANDS after the sheet has opened: the relay's own
 			 * estimate saying the operation will revert (spec 082 RJ19). The
 			 * sheet keeps its confirm where it was across the landing (PR 3
-			 * final note F2).
+			 * final note F2) and brings the line into sight (the device round).
 			 */
 			verdict?: true;
 	  }
@@ -168,6 +168,12 @@ export type Block =
 			rows: BalanceRow[];
 			note?: string;
 			noteTone?: Tone;
+			/**
+			 * This card LANDS after the sheet has opened (the sheet's own
+			 * simulation): drawn whole, at its own height, the confirm kept
+			 * where it was and the card brought into sight (PR 3 device round).
+			 */
+			verdict?: true;
 	  };
 
 export interface TechIdentity {

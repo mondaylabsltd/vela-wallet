@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import SigningHeader from './ui/SigningHeader.svelte';
+	import SigningAction from './ui/SigningAction.svelte';
 	import SigningBody from './ui/SigningBody.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
@@ -18,6 +20,12 @@
 	 * Escape. The ✕ is quiet and is not labelled "Reject", because a wallet with
 	 * a big reject button teaches people to reach for it without reading; before
 	 * the approval it is the refusal (the host answers 4001).
+	 *
+	 * Its confirm, and the line the core says under a shut one, stand in the
+	 * sheet's foot, outside its scroll (PR 3 device round): whatever the body
+	 * holds — a verdict that lands late, a tall one — the confirm is whole, on
+	 * screen, and where it was. The body scrolls under the header and over
+	 * the foot once the sheet is as tall as it may be.
 	 *
 	 * After the approval the sheet is a STATUS (spec 079, F11): the header and
 	 * the send receipt's `StatusHero` — "waiting for biometric", "submitting",
@@ -78,51 +86,79 @@
 	let sheet = $state<{
 		close: () => void;
 		placeOf: (selector: string) => number | null;
-		keepAt: (selector: string, top: number, keep?: { show?: string; under?: string }) => void;
+		keepAt: (selector: string, top: number) => void;
+		reveal: (selector: string, at?: { nth?: number; under?: string }) => void;
 		recentre: () => void;
 	}>();
 
 	/**
-	 * PR 3 final note F2 — the confirm stays where it is when a verdict lands.
+	 * A verdict lands after the sheet has opened — and the confirm is where
+	 * it was, and the verdict is in sight (PR 3 final note F2, then the device
+	 * round's rule: no part of a verdict hidden, the confirm never moved).
 	 *
-	 * This sheet runs no simulation and keeps no room for one (spec 082 RG6).
-	 * The one verdict it can say arrives after it has opened: the relay's own
-	 * estimate answering that the operation will revert (RJ19), a danger line
-	 * under the intent — at the moment the fee lands and the confirm opens.
-	 * Measured before this: on the phone sheet at its full height the confirm
-	 * went DOWN 69 px (at 320 × 700, out of the window), and on the centred
-	 * card 39 px, as the tap it had just become ready for was on its way.
+	 * This sheet keeps no room for a verdict (spec 082 RG6). Two can land
+	 * late: the relay's own estimate answering that the operation will revert
+	 * (RJ19), a danger line under the intent, and the sheet's own simulation
+	 * saying nothing of the person's moves, the "No asset changes" card under
+	 * the request. Each is drawn whole, at its own height: nothing in the
+	 * sheet clips or scrolls a block by itself.
 	 *
-	 * The confirm's place is read before the line is drawn (or taken away, or
-	 * reworded) and given back after: the sheet grows upward, as the phone
-	 * sheet below its full height always did. The line itself is never
-	 * scrolled out of sight for it — and neither is the header: who is
-	 * asking, and the ✕ that refuses, stay at the top of a sheet that scrolls.
+	 * The confirm stands in the sheet's foot, outside the scroll, so on the
+	 * phone sheet nothing the body gains can move it: the sheet grows upward,
+	 * and then its body scrolls. The centred card grows from its middle, so
+	 * its foot is held where it rested across the landing (`keepAt`). Then the
+	 * body is scrolled, if it has to be, so that what landed can be read
+	 * (`reveal`) — under the header, which stays at the top of the scroll:
+	 * who is asking, and the ✕ that refuses.
 	 */
 	const CONFIRM = '[data-testid="signing-confirm"]';
 	const VERDICT = '[data-verdict]';
 	const HEADER = '[data-signing-top]';
-	const verdict = $derived(
-		model.blocks.find((block) => block.kind === 'warning' && block.verdict === true)
+	/** Each verdict on the sheet, as what it says: one that changes has landed again. */
+	const verdicts = $derived(
+		model.blocks
+			.filter(
+				(block) => (block.kind === 'warning' || block.kind === 'balances') && block.verdict === true
+			)
+			.map((block) => JSON.stringify(block))
 	);
-	const verdictText = $derived(verdict?.kind === 'warning' ? verdict.text : undefined);
+	const verdictKey = $derived(verdicts.join('\n'));
 	let confirmAt: number | null = null;
+	let seen: string[] = [];
 	$effect.pre(() => {
-		void verdictText;
+		void verdictKey;
 		confirmAt = sheet?.placeOf(CONFIRM) ?? null;
 	});
 	$effect(() => {
-		void verdictText;
-		if (confirmAt !== null) sheet?.keepAt(CONFIRM, confirmAt, { show: VERDICT, under: HEADER });
+		void verdictKey;
+		if (confirmAt !== null) sheet?.keepAt(CONFIRM, confirmAt);
+		const landed = verdicts.findIndex((said) => !seen.includes(said));
+		seen = verdicts;
+		if (landed === -1) return;
+		// Once the card has been laid out with its foot held.
+		void tick().then(() => sheet?.reveal(VERDICT, { nth: landed, under: HEADER }));
 	});
 	// The form gives way to the status (or comes back): another sheet's worth
 	// of content, in the middle again.
 	const showsStatus = $derived(model.status !== undefined && model.status !== null);
+	/**
+	 * The form, with its one action in the foot. Not the status, and not a
+	 * hand-off (spec 102): its card carries its own Open.
+	 */
+	const showsForm = $derived(model.handoff === undefined && !showsStatus);
 	$effect(() => {
 		void showsStatus;
 		sheet?.recentre();
 	});
 </script>
+
+<!-- Outside the scroll: the confirm (or a refused request's way out) is
+     never under a fold and never moved by what is read above it. -->
+{#snippet foot()}
+	<div class="foot" data-signing-foot>
+		<SigningAction {model} {onconfirm} {onclose} />
+	</div>
+{/snippet}
 
 <BottomSheet
 	bind:this={sheet}
@@ -131,6 +167,7 @@
 	variant="signing"
 	dismissible={dismissible ? 'explicit' : false}
 	{onclose}
+	footer={showsForm ? foot : undefined}
 >
 	<!-- A refused request (spec 081) already offers its one way out, the
 	     labelled Close under the refusal; a second ✕ would be two doors. -->
@@ -173,6 +210,7 @@
 	{:else}
 		<SigningBody
 			{model}
+			pinned={showsForm}
 			{onconfirm}
 			{onclose}
 			{onchip}
@@ -199,6 +237,12 @@
 		   touch its words — and none of it in the layout at rest. */
 		padding-bottom: var(--space-md);
 		margin-bottom: calc(-1 * var(--space-md));
+	}
+
+	/* Under the signing account by the rows' own gap (`SigningBody`'s
+	   footer), as when it was the last of them. */
+	.foot {
+		padding-top: var(--space-lg);
 	}
 
 	/* The receipt's centrepiece, with the room the form's body had. */

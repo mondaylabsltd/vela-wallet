@@ -6,15 +6,19 @@
 		rows: BalanceRow[];
 		note?: string;
 		noteTone?: Tone;
+		/** The card that lands after the sheet has opened: named, so the sheet can keep it in sight. */
+		verdict?: boolean;
 	}
 
-	let { title, rows, note, noteTone = 'neutral' }: Props = $props();
+	let { title, rows, note, noteTone = 'neutral', verdict = false }: Props = $props();
 </script>
 
 <!-- The simulation's own account of what moves. It is the ONE part of a
      signing sheet a malicious site cannot author, which is why the deeper
-     degradation rungs promote it from footnote to protagonist. -->
-<section class="balances">
+     degradation rungs promote it from footnote to protagonist. Every row and
+     the note are drawn whole: no height of its own, nothing clipped, nothing
+     scrolled inside it (PR 3 device round) — a long figure wraps. -->
+<section class="balances" data-verdict={verdict ? '' : undefined}>
 	<h3>{title}</h3>
 	{#each rows as row, i (i)}
 		<div class="row">
@@ -51,8 +55,10 @@
 	}
 
 	.symbol {
+		min-width: 0;
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
 	}
 
 	.delta {
@@ -61,6 +67,9 @@
 		font-weight: var(--weight-semibold);
 		font-variant-numeric: tabular-nums;
 		color: var(--color-fg-base);
+		min-width: 0;
+		text-align: end;
+		overflow-wrap: anywhere;
 	}
 
 	.delta[data-tone='success'] {

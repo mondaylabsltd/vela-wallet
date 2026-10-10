@@ -71,6 +71,7 @@
 			rows={block.rows}
 			note={block.note}
 			noteTone={block.noteTone}
+			verdict={block.verdict}
 		/>
 	{/if}
 {/each}

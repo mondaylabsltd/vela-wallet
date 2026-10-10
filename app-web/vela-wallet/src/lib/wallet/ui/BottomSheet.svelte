@@ -95,6 +95,15 @@
 		dismissible?: boolean | 'explicit';
 		/** After the exit plays — however the sheet was dismissed. */
 		onclose?: () => void;
+		/**
+		 * What stays at the foot of the sheet, OUTSIDE its scroll (PR 3 device
+		 * round): the signing sheet's confirm and the line under it. The body
+		 * above scrolls when the sheet is as tall as it may be; this never
+		 * scrolls, is never covered, and is not moved by what the body holds.
+		 * It carries the sheet's gutter and its bottom space (the safe area), so
+		 * a sheet that fits is drawn exactly as if this were its last content.
+		 */
+		footer?: Snippet;
 		children: Snippet;
 	}
 
@@ -107,6 +116,7 @@
 		variant = 'wallet',
 		dismissible = true,
 		onclose,
+		footer,
 		children
 	}: Props = $props();
 
@@ -209,11 +219,13 @@
 	// --- keeping one thing where it is --------------------------------------
 
 	/**
-	 * px the centred card is raised from its own middle (`keepAt`). A card
+	 * The centred card's foot, held (`keepAt`): how far its bottom edge is
+	 * from the window's, and how tall it may be with its foot there. A card
 	 * grows from its middle — both edges move — so what stands at its foot
-	 * goes down by half of whatever was added above it.
+	 * goes down by half of whatever lands above it; held, it grows upward
+	 * only, as the phone sheet does.
 	 */
-	let lift = $state(0);
+	let held = $state<{ bottom: number; most: number } | null>(null);
 
 	/**
 	 * Where the first `selector` in this sheet RESTS on the screen (its top),
@@ -222,63 +234,87 @@
 	 */
 	export function placeOf(selector: string): number | null {
 		const target = panel?.querySelector(selector);
-		if (!panel || !target) return null;
-		// The sheet's laid-out top, then the target's place inside it: the
-		// difference of two boxes under one transform is no transform at all.
-		const inside = target.getBoundingClientRect().top - panel.getBoundingClientRect().top;
-		return panel.offsetTop - lift + inside;
+		const frame = panel?.offsetParent;
+		if (!panel || !target || !frame) return null;
+		// Where it is drawn, less what is moving the sheet at this instant (the
+		// entry animation's transform, or a drag's). Not `offsetTop`: that is
+		// a whole number, and a card centred in a window sits on a half pixel.
+		const moving = getComputedStyle(panel).transform;
+		const shift = moving === 'none' ? 0 : new DOMMatrixReadOnly(moving).m42;
+		return target.getBoundingClientRect().top - shift - frame.getBoundingClientRect().top;
 	}
 
 	/**
-	 * Put the first `selector` back where it rested (`top`, from `placeOf`)
-	 * after the sheet's content changed above it (PR 3 final note F2).
+	 * Keep the first `selector` — something in the sheet's `footer` — where
+	 * it rested (`top`, from `placeOf`) after the body's content changed
+	 * (PR 3 final note F2; the device round's pinned foot).
 	 *
-	 * The phone sheet is bottom-anchored: content added above its foot grows
-	 * it upward and the foot stays — until the sheet is as tall as it may be.
-	 * Then it scrolls, and the foot goes down under what was added: scrolled
-	 * by that much, it is where it was. Past the breakpoint the sheet is a
-	 * centred card that grows from its middle: raised by what scrolling could
-	 * not take, it grows upward only.
-	 *
-	 * `show` is never scrolled out of sight for it — what was added is there
-	 * to be read — nor under `under`, a header the content keeps at its top
-	 * (the foot then moves by the rest).
+	 * The phone sheet is bottom-anchored and its foot is outside the scroll:
+	 * content added to the body grows the sheet upward, then scrolls the
+	 * body, and the foot stays — there is nothing to do. Past the breakpoint
+	 * the sheet is a centred card that grows from its middle: from here on its
+	 * foot is held where it rested, so the card grows upward only, to its own
+	 * margin from the window's edge, and then its body scrolls.
 	 */
-	export function keepAt(
-		selector: string,
-		top: number,
-		keep: { show?: string; under?: string } = {}
-	): void {
+	export function keepAt(selector: string, top: number): void {
+		const target = panel?.querySelector(selector);
 		const now = placeOf(selector);
-		if (!panel || now === null) return;
-		let drift = now - top;
-		if (Math.abs(drift) < 0.5) return;
-		if (scroller) {
-			const from = scroller.scrollTop;
-			scroller.scrollTop = from + drift;
-			const added = keep.show === undefined ? null : panel.querySelector(keep.show);
-			if (added) {
-				const cover = keep.under === undefined ? null : panel.querySelector(keep.under);
-				const edge = Math.max(
-					scroller.getBoundingClientRect().top,
-					cover?.getBoundingClientRect().bottom ?? 0
-				);
-				const hidden = edge - added.getBoundingClientRect().top;
-				if (hidden > 0) scroller.scrollTop = Math.max(from, scroller.scrollTop - hidden);
-			}
-			drift -= scroller.scrollTop - from;
+		if (!panel || !target || now === null) return;
+		// Anything measurable: a card a fraction short of its tallest still
+		// goes down by half of that fraction.
+		if (Math.abs(now - top) < 0.01 || !isCard()) return;
+		const frame = panel.offsetParent;
+		if (!frame) return;
+		// Where the card's bottom edge was when the target rested at `top`.
+		const foot = top + panel.getBoundingClientRect().bottom - target.getBoundingClientRect().top;
+		// No higher than its top stands when it is as tall as it may be: the
+		// stylesheet's `max-height` leaves `--space-3xl` at either edge, and
+		// limits the height INSIDE the card's own padding and border.
+		const style = getComputedStyle(panel);
+		const margin = parseFloat(style.getPropertyValue('--space-3xl')) || 0;
+		const chrome =
+			style.boxSizing === 'border-box'
+				? 0
+				: parseFloat(style.paddingTop) +
+					parseFloat(style.paddingBottom) +
+					parseFloat(style.borderTopWidth) +
+					parseFloat(style.borderBottomWidth);
+		const highest = margin - chrome / 2;
+		held = {
+			bottom: frame.clientHeight - foot,
+			most: Math.max(0, foot - highest - chrome)
+		};
+	}
+
+	/**
+	 * Scroll the body so the `nth` `selector` in it can be read: all of it
+	 * when it fits the body's window, else from its top (PR 3 device round —
+	 * a verdict that lands below the fold, over a live confirm, is the hole).
+	 * `under`: a header the content keeps at the top of the scroll, which
+	 * covers what is behind it. Nothing moves when it is already in sight.
+	 */
+	export function reveal(selector: string, at: { nth?: number; under?: string } = {}): void {
+		const target = panel?.querySelectorAll(selector)[at.nth ?? 0];
+		if (!panel || !scroller || !target || !scroller.contains(target)) return;
+		const view = scroller.getBoundingClientRect();
+		const cover = at.under === undefined ? null : panel.querySelector(at.under);
+		const top = Math.max(view.top, cover?.getBoundingClientRect().bottom ?? view.top);
+		const box = target.getBoundingClientRect();
+		if (box.top >= top - 0.5 && box.bottom <= view.bottom + 0.5) return;
+		const room = view.bottom - top;
+		if (box.top < top || box.height > room) {
+			scroller.scrollTop += box.top - top;
+			return;
 		}
-		if (Math.abs(drift) < 0.5 || !isCard()) return;
-		// Never past the room the card has above or below it: its own margin
-		// from the window's edge (`--space-3xl`, as its max-height keeps).
-		const margin = parseFloat(getComputedStyle(panel).getPropertyValue('--space-3xl')) || 0;
-		const room = Math.max(0, panel.offsetTop - margin);
-		lift = Math.min(room, Math.max(-room, lift + drift));
+		// A little of the body under it, where there is room for that: its
+		// edge is not the foot's.
+		const air = parseFloat(getComputedStyle(panel).getPropertyValue('--space-lg')) || 0;
+		scroller.scrollTop += Math.ceil(box.bottom - view.bottom + Math.min(air, room - box.height));
 	}
 
 	/** Back to its middle: the window changed, or what the sheet holds did. */
 	export function recentre(): void {
-		lift = 0;
+		held = null;
 	}
 
 	function springBack(): void {
@@ -612,8 +648,11 @@
 		tabindex="-1"
 		data-focus-inner
 		bind:this={panel}
+		class:footed={footer !== undefined}
 		style:transform={offset !== 0 || settling !== 'none' ? `translateY(${offset}px)` : undefined}
-		style:translate={lift !== 0 ? `0 ${-lift}px` : undefined}
+		style:top={held ? 'auto' : undefined}
+		style:bottom={held ? `${held.bottom}px` : undefined}
+		style:max-height={held ? `${held.most}px` : undefined}
 		style:transition
 		ontransitionend={onPanelTransitionEnd}
 		onclickcapture={onPanelClickCapture}
@@ -647,6 +686,9 @@
 		<div class="content" bind:this={scroller}>
 			{@render children()}
 		</div>
+		{#if footer}
+			<div class="foot">{@render footer()}</div>
+		{/if}
 	</div>
 </div>
 
@@ -834,6 +876,38 @@
 	.prompt .content {
 		padding-inline: var(--layout-screenPaddingX);
 		padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom, 0%));
+	}
+
+	/* A foot outside the scroll (the signing sheet's confirm): the gutter and
+	   the bottom space are ITS, and the body ends where its content does — so
+	   a sheet that fits is drawn exactly as when the foot was the last thing
+	   in its content. */
+	.foot {
+		flex: none;
+	}
+
+	.menu .foot,
+	.signing .foot,
+	.prompt .foot {
+		padding-inline: var(--layout-screenPaddingX);
+		padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom, 0%));
+	}
+
+	.menu .sheet.footed > .content,
+	.signing .sheet.footed > .content,
+	.prompt .sheet.footed > .content {
+		padding-bottom: 0;
+	}
+
+	/* A hairline where the body goes on under the foot, and none where it
+	   ends: the first layer travels with the content and covers the second,
+	   which stays at the body's bottom edge. No box, so nothing moves. */
+	.signing .sheet.footed > .content {
+		background:
+			linear-gradient(var(--color-bg-raised), var(--color-bg-raised)) local bottom / 100%
+				var(--space-sm) no-repeat,
+			linear-gradient(var(--color-border-base), var(--color-border-base)) scroll bottom / 100%
+				var(--border-hairline) no-repeat;
 	}
 
 	/* prompt: raised, hugging its content. */
