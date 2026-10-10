@@ -1778,18 +1778,7 @@ struct RootView: View {
                             onCancelGroups: { groupPick = nil },
                             // 转账 to this person, with the recipient already
                             // in — the card said so and did nothing until 057.
-                            onSendTo: { sendToContact(contact.address) },
-                            // 收款 and 二维码 are about the WALLET's own
-                            // address, so they go where that lives rather than
-                            // pretending to be about the contact.
-                            onReceive: {
-                                section = .wallet
-                                enterReceive()
-                            },
-                            onShowQr: {
-                                section = .wallet
-                                enterReceive()
-                            }
+                            onSendTo: { sendToContact(contact.address) }
                         )
                         // Opening somebody's page asks the core about their
                         // address: is it a contract, and has this wallet ever

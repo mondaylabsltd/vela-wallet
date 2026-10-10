@@ -199,10 +199,8 @@ struct ContactInspectionModel {
 }
 
 struct ContactActionsModel {
-    /// 转账 / 收款 / 二维码 (mock order).
+    /// 转账 — the page's one action (issue #479).
     let send: String
-    let receive: String
-    let qr: String
 }
 
 struct ContactDetailModel {
