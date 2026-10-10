@@ -52,6 +52,7 @@ import type {
 	StorageModel,
 	IntegrityLineModel,
 	SigningPagesModel,
+	UnreachableModel,
 	VenueModel
 } from './model';
 
@@ -1059,6 +1060,63 @@ function rpcBanner(m: SettingsMessages): RpcBannerModel {
 			{ id: 'polygon', mark: MARKS.polygon, name: 'Polygon', action: m.rescue.rpcFix },
 			{ id: 'gnosis', mark: MARKS.gnosis, name: 'Gnosis', action: m.rescue.rpcFix }
 		]
+	};
+}
+
+/**
+ * The list the home's "can't reach" line opens (spec 092), as a board — two
+ * states of one component, because the difference between them is the point
+ * (PR 3 note 4):
+ *
+ * - `networks`: two networks that did not answer. Each row offers "Fix", the
+ *   network's RPC editor.
+ * - `tokenList`: Tempo, whose RPC is fine and whose token list could not be
+ *   loaded. The title says that, and the row offers nothing to press — there
+ *   is no endpoint to repair.
+ *
+ * Amounts are the fixture wallet's; the live list is `liveUnreachable`.
+ */
+export function unreachableBoards(m: SettingsMessages): {
+	networks: UnreachableModel;
+	tokenList: UnreachableModel;
+} {
+	const lastSeen = (amount: string) => fill(m.rescue.lines['assets.lastSeen'] ?? '', { amount });
+	return {
+		networks: {
+			title: fill(m.rescue.unreachableMany, { n: 2 }),
+			summary: m.rescue.unreachableBody,
+			rows: [
+				{
+					id: '137',
+					chainId: 137,
+					mark: MARKS.polygon,
+					name: 'Polygon',
+					line: lastSeen('$412.80'),
+					action: m.rescue.rpcFix
+				},
+				{
+					id: '100',
+					chainId: 100,
+					mark: MARKS.gnosis,
+					name: 'Gnosis',
+					line: m.rescue.lines['assets.notReadYet'] ?? '',
+					action: m.rescue.rpcFix
+				}
+			]
+		},
+		tokenList: {
+			title: fill(m.rescue.tokenListUnreachable, { name: 'Tempo' }),
+			summary: m.rescue.unreachableBody,
+			rows: [
+				{
+					id: '4217',
+					chainId: 4217,
+					mark: MARKS.tempo,
+					name: 'Tempo',
+					line: lastSeen('$120.00')
+				}
+			]
+		}
 	};
 }
 

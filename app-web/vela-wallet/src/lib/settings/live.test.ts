@@ -72,6 +72,7 @@ const WIZARD_IDLE: NetWizardView = {
 	chain_info: null,
 	compat: null,
 	error: null,
+	error_key: null,
 	can_add: false
 };
 
@@ -176,7 +177,7 @@ describe('liveAddNetwork', () => {
 			m
 		);
 		expect(model.primary).toBe(m.addNetwork.addNetworkBtn);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.compatible);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.compatible);
 		expect(model.checks?.every((c) => c.ok)).toBe(true);
 	});
 
@@ -213,7 +214,7 @@ describe('liveAddNetwork', () => {
 			},
 			m
 		);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.compatible);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.compatible);
 		expect(model.callout).toEqual({ tone: 'warning', text: m.addNetwork.singleKeyOnly });
 		expect(model.primary).toBe(m.addNetwork.addNetworkBtn);
 	});
@@ -242,8 +243,8 @@ describe('liveAddNetwork', () => {
 			},
 			m
 		);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.unableToVerify);
-		expect(model.candidate?.badge.label).not.toBe(m.addNetwork.incompatible);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.unableToVerify);
+		expect(model.candidate?.badge?.label).not.toBe(m.addNetwork.incompatible);
 		expect(model.primary).toBe(m.addNetwork.retry);
 	});
 
@@ -286,7 +287,7 @@ describe('liveAddNetwork', () => {
 
 	it('missing contracts: the full check list, the reason, and Chain Setup on this chain', () => {
 		const model = checked(MISSING_CONTRACTS);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.incompatible);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.incompatible);
 		expect(model.checks?.some((c) => !c.ok)).toBe(true);
 		expect(model.checks?.at(-1)).toEqual({ label: m.addNetwork.checkSigner, ok: true });
 		expect(model.callout).toEqual({
@@ -302,7 +303,7 @@ describe('liveAddNetwork', () => {
 
 	it('no P-256 verifier: says the network cannot run Vela wallets, and offers no deploy button', () => {
 		const model = checked(NO_P256);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.incompatible);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.incompatible);
 		expect(model.checks?.at(-1)).toEqual({ label: m.addNetwork.checkSigner, ok: false });
 		expect(model.callout?.tone).toBe('warning');
 		expect(model.callout?.text).toContain("Vela wallets can't work here");
@@ -315,42 +316,89 @@ describe('liveAddNetwork', () => {
 		expect(model.recheck).toBe(m.addNetwork.recheckWithRpc);
 	});
 
-	it('the scan path’s refusal keeps no check: the verdict is said, and no reason is invented', () => {
+	/**
+	 * The wizard that STOPPED. The sentence is the core's (`error_key`); the
+	 * builder only resolves it — `net-stops.test.ts` drives the real core
+	 * through every stop. Here: what the builder does with each shape of view.
+	 */
+	it('a stop with no check kept says the core’s sentence, and invents no reason', () => {
 		const stopped = liveAddNetwork(
 			{
 				...WIZARD_IDLE,
 				phase: 'error',
 				error: { type: 'not_compatible', chain_id: 7777777 },
+				error_key: 'addToken.errorNotCompatible',
 				compat: null
 			},
 			m
 		);
-		expect(stopped.callout).toEqual({ tone: 'warning', text: m.addNetwork.incompatible });
+		expect(stopped.callout).toEqual({
+			tone: 'warning',
+			text: 'Not compatible with Vela Wallet'
+		});
 		expect(stopped.secondary).toBeUndefined();
-		// With the check in hand, the same stop says why.
+		// With the check in hand, the same stop says why — and is drawn as the
+		// refused check it is.
 		const known = liveAddNetwork(
 			{
 				...WIZARD_IDLE,
 				phase: 'error',
+				chain_info: info,
 				error: { type: 'not_compatible', chain_id: 7777777 },
+				error_key: 'settingsModals.addNetwork.noP256Hint',
 				compat: NO_P256
 			},
 			m
 		);
 		expect(known.callout?.text).toContain("Vela wallets can't work here");
+		expect(known.candidate?.badge?.label).toBe(m.addNetwork.incompatible);
 		expect(known.secondary).toBeUndefined();
-		// Inconclusive is never worded as a refusal (invariant ③), check or no check.
+		const deployable = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				chain_info: info,
+				error: { type: 'not_compatible', chain_id: 7777777 },
+				error_key: 'settingsModals.addNetwork.incompatibleHint',
+				compat: MISSING_CONTRACTS
+			},
+			m
+		);
+		expect(deployable.secondary).toEqual({
+			label: m.addNetwork.openChainSetupTool,
+			href: 'https://getvela.app/chain-setup?chain=7777777'
+		});
+		// Inconclusive is never worded as a refusal (invariant ③), check or no
+		// check — not even with a refusal's check beside it.
 		const failed = liveAddNetwork(
 			{
 				...WIZARD_IDLE,
 				phase: 'error',
+				chain_info: info,
 				error: { type: 'check_failed', chain_id: 7777777 },
+				error_key: 'settingsModals.addNetwork.unableToVerify',
 				compat: MISSING_CONTRACTS
 			},
 			m
 		);
 		expect(failed.callout).toEqual({ tone: 'warning', text: m.addNetwork.unableToVerify });
 		expect(failed.secondary).toBeUndefined();
+		expect(failed.checks).toBeUndefined();
+		expect(failed.candidate?.badge).toBeUndefined();
+	});
+
+	it('a stop words nothing itself: no `error_key`, no sentence', () => {
+		const silent = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				error: { type: 'already_added', chain_id: 1 },
+				error_key: null
+			},
+			m
+		);
+		expect(silent.callout).toBeUndefined();
+		expect(JSON.stringify(silent)).not.toContain(m.addNetwork.incompatible);
 	});
 });
 
@@ -668,7 +716,9 @@ describe('the unreachable-networks list (spec 092)', () => {
 		chain_id,
 		last_known: last_seen_usd === null ? 'not_read' : 'held',
 		last_seen_usd,
-		line_key
+		line_key,
+		cause: 'network',
+		rpc_fixable: true
 	});
 	const view = (
 		networks: UnreachableNetwork[],

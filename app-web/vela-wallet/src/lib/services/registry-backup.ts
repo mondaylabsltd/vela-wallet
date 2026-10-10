@@ -45,10 +45,21 @@ export interface EthereumBackupRow {
 	tone: 'neutral' | 'positive';
 	/** `copy` opens the sheet with `call`; `retry` runs the walk again. */
 	action: 'none' | 'copy' | 'retry';
+	/**
+	 * The paragraph under the Keys block for this state, by corpus key —
+	 * `registry_backup::EXPLAIN_KEY` for every state a copy can still be made
+	 * or checked in. ABSENT for a record that can never be copied
+	 * (`not_copyable`): the paragraph describes making the copy, and telling
+	 * a wallet that cannot be copied how to copy it was PR 3 note 6. Absent ⇒
+	 * no paragraph is drawn.
+	 */
+	explain_key?: string | null;
 }
 
 /** `registry_backup::TITLE_KEY`. */
 const TITLE_KEY = 'settingsModals.backup.title';
+/** `registry_backup::EXPLAIN_KEY`. */
+const EXPLAIN_KEY = 'settingsModals.backup.explain';
 
 /**
  * The row while the walk is still running — before the core has a state to
@@ -59,7 +70,10 @@ export const CHECKING_ROW: EthereumBackupRow = {
 	title_key: TITLE_KEY,
 	subtitle_key: 'componentsUi.funding.checking',
 	tone: 'neutral',
-	action: 'none'
+	action: 'none',
+	// While the walk is still running the explanation is drawn, as it always
+	// was: nothing is known yet that would take it away.
+	explain_key: EXPLAIN_KEY
 };
 
 /**
@@ -72,7 +86,8 @@ const COULD_NOT_ROW: EthereumBackupRow = {
 	title_key: TITLE_KEY,
 	subtitle_key: 'settingsModals.backup.couldNotCheck',
 	tone: 'neutral',
-	action: 'retry'
+	action: 'retry',
+	explain_key: EXPLAIN_KEY
 };
 
 /** `registry_backup::BackupCall` — the one transaction that performs the backup. */

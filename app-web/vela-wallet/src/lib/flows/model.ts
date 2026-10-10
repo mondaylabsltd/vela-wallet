@@ -400,11 +400,27 @@ export type AddTokenResult =
 			kind: 'network';
 			mark: TokenMarkModel;
 			name: string;
-			chip: StatusChipModel;
+			/**
+			 * The verdict, where there is one (compatible, not compatible, could
+			 * not verify, added). Absent on a stop that is not a verdict — the
+			 * note under the head says it, in the core's sentence.
+			 */
+			chip?: StatusChipModel;
 			/** Chain ID / native coin, as label-value rows. */
 			facts: FactRowModel[];
-			/** T5b's "deploy the missing contracts" link, on the incompatible chip. */
-			link?: string;
+			/**
+			 * The sentence under the head: why the network is refused (the
+			 * check's own reason — no P-256 verifier, or missing contracts), or
+			 * why the wizard stopped (`NetWizardView.error_key`).
+			 */
+			note?: string;
+			/**
+			 * "Open Chain Setup Tool", and where it goes (the core's
+			 * `NetCompatibility.setup_url`). Only a refusal with something to
+			 * deploy has one. T5b drew "deploy the missing contracts ↗" as text
+			 * that went nowhere, and under every refusal alike.
+			 */
+			setup?: { label: string; href: string };
 	  }
 	| { kind: 'not-found'; text: string }
 	/**
@@ -562,6 +578,15 @@ export interface FeeRowModel {
 	 * the row broke wherever the text ran out, which was inside "Network fee".
 	 */
 	valueFiat?: string;
+	/**
+	 * `valueFiat` is not a figure yet: the display currency has not committed
+	 * (the core's withhold rule), and "≈ …" stands where the money will be.
+	 * The row then holds the layout its figure may need — the fee on the line
+	 * under the label — and keeps it once the figure lands, so the money
+	 * arriving moves nothing: side by side, a figure as long as "≈ ₫112,500.00"
+	 * dropped the fee to a second line and pushed the form 18 px down.
+	 */
+	valueFiatWithheld?: boolean;
 	openLabel: string;
 	/**
 	 * The refresh affordance's accessible name (spec 068). The fee is the one

@@ -414,7 +414,12 @@ export interface AddNetworkModel {
 		mark: ChainMarkModel;
 		name: string;
 		meta: string;
-		badge: StatusPillModel;
+		/**
+		 * The verdict, as a pill. Absent on a stop that is not a verdict (no
+		 * RPC endpoint listed, a check that could not be made): the callout
+		 * under the header says what happened, in the core's sentence.
+		 */
+		badge?: StatusPillModel;
 	};
 	checksTitle?: string;
 	checks?: CheckItemModel[];
@@ -665,7 +670,12 @@ export interface UnreachableModel {
 		name: string;
 		/** "Last seen $1,234.50", "Not read yet", … */
 		line: string;
-		action: string;
+		/**
+		 * "Fix" — the network's RPC editor. Absent when the core says the RPC is
+		 * not what failed (`UnreachableNetwork.rpc_fixable`, PR 3 note 4: a token
+		 * list that could not be loaded): the row then offers nothing to press.
+		 */
+		action?: string;
 	}[];
 }
 
@@ -976,6 +986,14 @@ export interface EthereumBackupRowModel {
 	 * tap at all.
 	 */
 	action: 'none' | 'copy' | 'retry';
+	/**
+	 * The paragraph under the row: what the copy makes public (the wallet's
+	 * name, each key's name, public key, credential ID and authenticator
+	 * model) and that it costs a network fee. The core names it per state
+	 * (`BackupRow.explain_key`) and names none for a record that can never be
+	 * copied — absent, no paragraph is drawn and no room is kept for one.
+	 */
+	explain?: string;
 }
 
 /**
@@ -998,14 +1016,11 @@ export interface WalletKeysModel {
 	 */
 	domain?: string;
 	rows: WalletKeyRowModel[];
-	/** The wallet record's standing on Ethereum; absent = nothing to draw. */
-	backup?: EthereumBackupRowModel;
 	/**
-	 * Under the row: what the copy makes public (the wallet's name, each key's
-	 * name, public key, credential ID and authenticator model) and that it
-	 * costs a network fee.
+	 * The wallet record's standing on Ethereum, and the paragraph under it;
+	 * absent = nothing to draw.
 	 */
-	backupExplain: string;
+	backup?: EthereumBackupRowModel;
 	copy: { action: string; done: string };
 }
 

@@ -24,6 +24,45 @@
 		if (spinning) return;
 		onrefresh?.();
 	}
+
+	/**
+	 * The figure is ONE line, always — as wide as it is, or scaled to the room.
+	 *
+	 * It used to wrap wherever it ran out (`overflow-wrap: anywhere`), which
+	 * broke a number in the middle of itself — "₫112,500,00 / 0.00" at 320 px —
+	 * and made the hero two lines tall, so the whole page dropped a line when a
+	 * long figure landed where the one-line skeleton had stood (measured:
+	 * 44.8 px, on the first read and again when the display currency
+	 * committed). A figure that does not fit its line is drawn smaller, by a
+	 * transform: the line box is the slot's and does not change, so nothing
+	 * under the hero moves whatever the figure's length.
+	 */
+	// `bind:this` hands back `null` when its element leaves (the skeleton
+	// taking the figure's place), not `undefined`.
+	let slot = $state<HTMLElement | null>(null);
+	let figure = $state<HTMLElement | null>(null);
+	let fit = $state(1);
+	$effect(() => {
+		const room = slot;
+		const drawn = figure;
+		if (!room || !drawn) {
+			fit = 1;
+			return;
+		}
+		const measure = () => {
+			// The figure's own width, whatever the transform on it.
+			const need = drawn.scrollWidth;
+			const have = room.clientWidth;
+			fit = need > have && need > 0 && have > 0 ? have / need : 1;
+		};
+		measure();
+		// The room changes with the window, the figure with its digits and its
+		// face (a web font landing is a resize too).
+		const watch = new ResizeObserver(measure);
+		watch.observe(room);
+		watch.observe(drawn);
+		return () => watch.disconnect();
+	});
 </script>
 
 <div class="balance">
@@ -45,46 +84,40 @@
 				<Icon icon={UTILITY_ICONS['eye-off']} size="lg" />
 			</button>
 		</p>
-	{:else if ontoggle !== undefined}
-		<!-- Live (spec 025): the figure itself is the tap-to-hide target — the
-		     H5 design's gesture, with the hidden state's eye-off as its inverse.
-		     Absent a handler (the gallery), the amount stays a plain figure. -->
-		<button
-			type="button"
-			class="amount amount-toggle"
-			aria-label={balance.a11yHide}
-			onclick={ontoggle}
-		>
-			<span class="integer">{balance.integer}</span><span class="decimals"
-				>{balance.decimalMark ?? '.'}{balance.decimals}</span
-			>
-		</button>
 	{:else}
-		<p class="amount">
-			<span class="integer">{balance.integer}</span><span class="decimals"
-				>{balance.decimalMark ?? '.'}{balance.decimals}</span
-			>
-		</p>
-	{/if}
-
-	{#if balance.state === 'zero-live' && balance.liveText !== undefined}
-		<p class="live">
-			<span class="live-dot" aria-hidden="true"></span>
-			{balance.liveText}
-		</p>
-	{/if}
-
-	{#if balance.status !== undefined}
-		<button type="button" class="status {balance.status.kind}" onclick={onstatus}>
-			<Icon
-				icon={balance.status.kind === 'warning'
-					? UTILITY_ICONS['triangle-alert']
-					: UTILITY_ICONS['refresh-cw']}
-				size="sm"
-			/>
-			<span>{balance.status.text}</span>
-			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-		</button>
+		<!-- The figure's line: the same slot the skeleton stands in, so the
+		     figure landing — and a longer one replacing it — moves nothing. -->
+		<div class="amount-slot" bind:this={slot}>
+			{#if ontoggle !== undefined}
+				<!-- Live (spec 025): the figure itself is the tap-to-hide target — the
+				     H5 design's gesture, with the hidden state's eye-off as its inverse.
+				     Absent a handler (the gallery), the amount stays a plain figure. -->
+				<button
+					type="button"
+					class="amount figure amount-toggle"
+					class:fitted={fit < 1}
+					style:--fit={fit < 1 ? fit : undefined}
+					aria-label={balance.a11yHide}
+					onclick={ontoggle}
+					bind:this={figure}
+				>
+					<span class="integer">{balance.integer}</span><span class="decimals"
+						>{balance.decimalMark ?? '.'}{balance.decimals}</span
+					>
+				</button>
+			{:else}
+				<p
+					class="amount figure"
+					class:fitted={fit < 1}
+					style:--fit={fit < 1 ? fit : undefined}
+					bind:this={figure}
+				>
+					<span class="integer">{balance.integer}</span><span class="decimals"
+						>{balance.decimalMark ?? '.'}{balance.decimals}</span
+					>
+				</p>
+			{/if}
+		</div>
 	{/if}
 
 	{#if balance.refresh !== undefined}
@@ -117,6 +150,37 @@
 			</span>
 		</button>
 	{/if}
+
+	<!--
+		The line a status is said on, kept from the first frame (PR 3 note 26b).
+
+		"Can't reach Gnosis right now", "Some tokens couldn't be priced", the
+		new wallet's "Live · listening for payments": each arrived as a line of
+		its own under the figure, and each arrival pushed the refresh control
+		and the whole page under the hero down a line — and its going pulled
+		them back up. The line is the hero's now, whether or not anything is
+		said on it, and it stands under the refresh control: what a person
+		presses never moves, and a status lands in room that was already there.
+	-->
+	<div class="said">
+		{#if balance.status !== undefined}
+			<button type="button" class="status {balance.status.kind}" onclick={onstatus}>
+				<Icon
+					icon={balance.status.kind === 'warning'
+						? UTILITY_ICONS['triangle-alert']
+						: UTILITY_ICONS['refresh-cw']}
+					size="sm"
+				/>
+				<span>{balance.status.text}</span>
+				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+			</button>
+		{:else if balance.state === 'zero-live' && balance.liveText !== undefined}
+			<p class="live">
+				<span class="live-dot" aria-hidden="true"></span>
+				{balance.liveText}
+			</p>
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -160,6 +224,25 @@
 		overflow-wrap: anywhere;
 	}
 
+	/* One line. A figure that fits is drawn as it is set — no transform at
+	   all, so nothing about its rendering changes. */
+	.figure {
+		flex: none;
+		white-space: nowrap;
+		overflow-wrap: normal;
+	}
+
+	/* One that does not is drawn to fit (`--fit`, under 1): scaled from its
+	   start, so a long figure ends where the column ends. */
+	.figure.fitted {
+		transform: scale(var(--fit));
+		transform-origin: 0 50%;
+	}
+
+	:global([dir='rtl']) .figure.fitted {
+		transform-origin: 100% 50%;
+	}
+
 	.decimals {
 		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
@@ -173,6 +256,22 @@
 		align-items: center;
 		width: 100%;
 		height: calc(var(--text-5xl) * var(--text-scale, 1) * var(--leading-amountHero));
+		/* A figure wider than the slot is LAID OUT that wide and drawn to fit;
+		   its layout box must not give the page a sideways scroll. */
+		overflow-x: clip;
+	}
+
+	/* The status line's room: one line of the status, its own padding
+	   included, there before anything is said in it. */
+	.said {
+		display: flex;
+		align-items: flex-start;
+		width: 100%;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		/* Said out loud rather than left to the face's own metrics, so the
+		   room kept is exactly the room a status takes. */
+		line-height: var(--leading-normal);
+		min-height: calc(1lh + 2 * var(--space-sm));
 	}
 
 	.hidden-row {
@@ -202,7 +301,10 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-md);
+		/* The status line's own block padding: the two stand on one line. */
+		padding-block: var(--space-sm);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 		color: var(--color-fg-muted);
 	}
 
@@ -239,6 +341,7 @@
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 		/* A line that wraps reads from its start, beside its glyph — a button
 		   centres its text by default, and Vela's own-fault sentence (PR 2
 		   note 11) is the first status long enough to wrap. */

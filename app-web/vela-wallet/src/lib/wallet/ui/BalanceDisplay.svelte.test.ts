@@ -174,6 +174,189 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		host.remove();
 	});
 
+	/*
+	 * PR 3 note 26b. "Can't reach Gnosis right now", "Some tokens couldn't be
+	 * priced", the new wallet's "Live · listening for payments": each arrived
+	 * as a line of its own under the figure and pushed the refresh control —
+	 * and the whole page under the hero — down a line; its going pulled them
+	 * back. The line is the hero's from the first frame now, under the
+	 * control, so a status lands in room that was already there.
+	 */
+	it('a status line arriving, changing and going moves nothing: its line is kept from the first frame', async () => {
+		for (const [width, scale] of [
+			['390px', '1'],
+			['320px', '1'],
+			['390px', '1.35']
+		] as const) {
+			const host = document.createElement('div');
+			host.style.width = width;
+			host.style.setProperty('--text-scale', scale);
+			document.body.appendChild(host);
+			const quiet: BalanceModel = { ...hero(false), status: undefined };
+			const screen = render(BalanceDisplay, { target: host, props: { balance: quiet } });
+			const measure = () => ({
+				control: control(screen.container).getBoundingClientRect().top,
+				figure: screen.container.querySelector('.amount')!.getBoundingClientRect().top,
+				hero: host.getBoundingClientRect().height
+			});
+			const at = `${width} × ${scale}`;
+			const before = measure();
+			expect(screen.container.querySelector('.status'), at).toBeNull();
+
+			// The line arrives…
+			const warned: BalanceModel = {
+				...hero(false),
+				status: { kind: 'warning', text: "Can't reach Gnosis right now" }
+			};
+			await screen.rerender({ balance: warned });
+			await tick();
+			const status = screen.container.querySelector('.status') as HTMLElement;
+			expect(status.textContent, at).toContain("Can't reach Gnosis right now");
+			expect(measure(), at).toEqual(before);
+			// …under the control a person presses, which is why that never moves.
+			expect(status.getBoundingClientRect().top, at).toBeGreaterThanOrEqual(
+				control(screen.container).getBoundingClientRect().bottom
+			);
+			// …and inside the hero's own box: it took room that was already there.
+			expect(status.getBoundingClientRect().bottom, at).toBeLessThanOrEqual(
+				host.getBoundingClientRect().bottom + 0.5
+			);
+
+			// …changes…
+			await screen.rerender({
+				balance: { ...hero(false), status: { kind: 'refreshing', text: 'Still updating…' } }
+			});
+			await tick();
+			expect(measure(), at).toEqual(before);
+
+			// …and goes.
+			await screen.rerender({ balance: quiet });
+			await tick();
+			expect(screen.container.querySelector('.status'), at).toBeNull();
+			expect(measure(), at).toEqual(before);
+			screen.unmount();
+			host.remove();
+		}
+	});
+
+	it('the new wallet’s "Live · listening for payments" stands on that same line', async () => {
+		const host = document.createElement('div');
+		host.style.width = '390px';
+		document.body.appendChild(host);
+		const waiting: BalanceModel = {
+			...hero(false, null),
+			state: 'loading',
+			integer: undefined,
+			decimals: undefined,
+			status: undefined
+		};
+		const screen = render(BalanceDisplay, { target: host, props: { balance: waiting } });
+		const measure = () => ({
+			control: control(screen.container).getBoundingClientRect().top,
+			hero: host.getBoundingClientRect().height
+		});
+		const before = measure();
+		// The first read lands: nothing held, and the wallet says it is listening.
+		await screen.rerender({
+			balance: {
+				...hero(false, 'Updated now'),
+				state: 'zero-live',
+				integer: '$0',
+				decimals: '00',
+				status: undefined,
+				liveText: 'Live · listening for payments'
+			}
+		});
+		await tick();
+		const live = screen.container.querySelector('.live') as HTMLElement;
+		expect(live.textContent).toContain('Live · listening for payments');
+		expect(measure()).toEqual(before);
+		// A status said in its place stands where it stood.
+		const liveTop = live.getBoundingClientRect().top;
+		await screen.rerender({
+			balance: {
+				...hero(false, 'Updated now'),
+				status: { kind: 'warning', text: "Can't reach Gnosis right now" }
+			}
+		});
+		await tick();
+		expect(measure()).toEqual(before);
+		const status = screen.container.querySelector('.status') as HTMLElement;
+		expect(status.getBoundingClientRect().top).toBe(liveTop);
+		screen.unmount();
+		host.remove();
+	});
+
+	/*
+	 * The figure is one line, always. It used to wrap wherever it ran out,
+	 * which broke a number inside itself ("₫112,500,00 / 0.00" at 320 px) and
+	 * made the hero two lines tall — so the page dropped a line (44.8 px) when
+	 * a long figure landed where the one-line skeleton had stood. A figure that
+	 * does not fit is drawn smaller in the same line box.
+	 */
+	it('a figure too long for its line is drawn to fit it — one line, nothing under it moves', async () => {
+		for (const live of [false, true]) {
+			const host = document.createElement('div');
+			// Narrower than the figure in any face (the test page has no web font).
+			host.style.width = '240px';
+			host.style.overflow = 'hidden';
+			document.body.appendChild(host);
+			const waiting: BalanceModel = {
+				...hero(false),
+				currency: 'VND',
+				state: 'loading',
+				integer: undefined,
+				decimals: undefined,
+				status: undefined
+			};
+			const props = (balance: BalanceModel) =>
+				live ? { balance, ontoggle: () => {} } : { balance };
+			const screen = render(BalanceDisplay, { target: host, props: props(waiting) });
+			const measure = () => ({
+				control: control(screen.container).getBoundingClientRect().top,
+				hero: host.getBoundingClientRect().height
+			});
+			const before = measure();
+			const long: BalanceModel = {
+				...hero(false),
+				currency: 'VND',
+				integer: '₫112,500,000',
+				decimals: '00',
+				status: undefined
+			};
+			await screen.rerender(props(long));
+			await tick();
+			await new Promise((r) => requestAnimationFrame(() => r(null)));
+			const figure = screen.container.querySelector('.figure') as HTMLElement;
+			const column = host.getBoundingClientRect();
+			const drawn = figure.getBoundingClientRect();
+			const at = live ? 'tappable' : 'plain';
+			// Whole, on one line, inside the column — and smaller than it is set.
+			expect(figure.textContent?.replace(/\s+/g, ''), at).toBe('₫112,500,000.00');
+			expect(getComputedStyle(figure).whiteSpace, at).toBe('nowrap');
+			expect(drawn.right, at).toBeLessThanOrEqual(column.right + 0.5);
+			expect(drawn.left, at).toBeGreaterThanOrEqual(column.left - 0.5);
+			expect(figure.classList.contains('fitted'), at).toBe(true);
+			expect(Number(figure.style.getPropertyValue('--fit')), at).toBeLessThan(1);
+			expect(drawn.width, at).toBeGreaterThan(column.width * 0.9);
+			// The page is not given a sideways scroll by the figure's layout box.
+			expect(host.scrollWidth, at).toBeLessThanOrEqual(host.clientWidth);
+			// The hero is as tall as it was with the skeleton, and the control is where it was.
+			expect(measure(), at).toEqual(before);
+
+			// A figure that fits is drawn as set: no transform at all.
+			await screen.rerender(props({ ...long, integer: '₫1,250' }));
+			await tick();
+			await new Promise((r) => requestAnimationFrame(() => r(null)));
+			const short = screen.container.querySelector('.figure') as HTMLElement;
+			expect(short.classList.contains('fitted'), at).toBe(false);
+			expect(getComputedStyle(short).transform, at).toBe('none');
+			expect(measure(), at).toEqual(before);
+			screen.unmount();
+			host.remove();
+		}
+	});
+
 	it('names the currency once it is known, and nothing before', () => {
 		const label = (balance: BalanceModel) =>
 			render(BalanceDisplay, { props: { balance } })

@@ -26,12 +26,16 @@ import type { ExtensionMessages } from '$lib/extension/messages';
 import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
+	BACKUP_EXPLAIN_KEYS,
 	BACKUP_ROW_KEYS,
 	NET_HINT_KEYS,
+	NET_STOP_KEYS,
 	UNREACHABLE_LINE_KEYS,
 	VENUE_BLOCK_KEYS,
+	type BackupExplainKey,
 	type BackupRowKey,
 	type NetHintKey,
+	type NetStopKey,
 	type SettingsMessages,
 	type VenueBlockKey
 } from '$lib/settings/messages';
@@ -204,6 +208,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyCaption: k('assets.emptySubtext'),
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
+			tokenListUnreachable: k('assets.tokenListUnreachable'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)]))
 		},
 		networkFilter: {
@@ -544,6 +549,11 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 				NetHintKey,
 				string
 			>,
+			// …and which sentence a stopped wizard says (`error_key`).
+			stops: Object.fromEntries(NET_STOP_KEYS.map((key) => [key, k(key)])) as Record<
+				NetStopKey,
+				string
+			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
 			openChainSetupTool: k('settingsModals.addNetwork.openChainSetupTool'),
 			recheckWithRpc: k('settingsModals.addNetwork.recheckWithRpc'),
@@ -709,6 +719,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		rescue: {
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
+			tokenListUnreachable: k('assets.tokenListUnreachable'),
 			unreachableBody: k('assets.unreachableBody'),
 			unreachableNone: k('assets.unreachableNone'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)])),
@@ -738,7 +749,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 				BackupRowKey,
 				string
 			>,
-			explain: k('settingsModals.backup.explain')
+			explains: Object.fromEntries(BACKUP_EXPLAIN_KEYS.map((key) => [key, k(key)])) as Record<
+				BackupExplainKey,
+				string
+			>
 		},
 		keys: {
 			title: k('settingsModals.keys.title'),

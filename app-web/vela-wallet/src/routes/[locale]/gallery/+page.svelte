@@ -43,6 +43,7 @@
 	import FormRow from '$lib/settings/ui/FormRow.svelte';
 	import NetworkRow from '$lib/settings/ui/NetworkRow.svelte';
 	import RpcBanner from '$lib/settings/ui/RpcBanner.svelte';
+	import UnreachableBody from '$lib/settings/ui/UnreachableBody.svelte';
 	import RpcProvidersPanel from '$lib/settings/ui/RpcProvidersPanel.svelte';
 	import SectionLabel from '$lib/settings/ui/SectionLabel.svelte';
 	import SegmentedControl from '$lib/settings/ui/SegmentedControl.svelte';
@@ -614,12 +615,25 @@
 	</section>
 
 	<section id="gallery-section-settings-rescue">
-		<h2>RpcBanner · ConfirmSheet</h2>
+		<h2>RpcBanner · UnreachableBody · ConfirmSheet</h2>
 		{#if st.banner !== undefined}
 			<div class="cell" id="gallery-settings-banner">
 				<RpcBanner banner={st.banner} />
 			</div>
 		{/if}
+		<!--
+			Spec 092's list, twice (PR 3 note 4): networks that did not answer,
+			each with its "Fix"; and a network whose token list could not be
+			loaded — the title says so, and the row offers nothing to press.
+		-->
+		<div class="cell" id="gallery-settings-unreachable-networks">
+			<p class="board-title">{st.unreachable.networks.title}</p>
+			<UnreachableBody panel={st.unreachable.networks} />
+		</div>
+		<div class="cell" id="gallery-settings-unreachable-token-list">
+			<p class="board-title">{st.unreachable.tokenList.title}</p>
+			<UnreachableBody panel={st.unreachable.tokenList} />
+		</div>
 		<div class="cell" id="gallery-settings-confirm-danger">
 			<ConfirmSheet sheet={st.signOutSheet} />
 		</div>
@@ -700,6 +714,14 @@
 		border: var(--border-hairline) solid var(--color-border-base);
 		border-radius: var(--radius-lg);
 		margin-bottom: var(--space-lg);
+	}
+
+	/* A sheet's title, over a body drawn outside its sheet. */
+	.board-title {
+		margin: 0 0 var(--space-lg);
+		font-size: var(--text-xl);
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
 	}
 
 	.cell.row {

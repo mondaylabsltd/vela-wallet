@@ -209,6 +209,134 @@ test.describe('a refused network says why', () => {
 	});
 });
 
+/**
+ * A wizard that STOPS says why (PR 3 notes 5, 10 and 18), in the core's own
+ * sentence (`NetWizardView.error_key`). Three of its stops had no words here:
+ * they read "Incompatible" in the model — and on this page a stop with no
+ * network to show drew nothing at all, so tapping a suggestion emptied the
+ * list and that was the whole answer.
+ */
+test.describe('a wizard that stops says why', () => {
+	/** The search index, with `entries` beside the chain under test. */
+	async function indexAlso(
+		page: Page,
+		entries: { chainId: number; name: string; shortName: string }[]
+	): Promise<void> {
+		await page.route(/\/index\/fuse-chains\.json$/, (route) =>
+			route.fulfill({
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: entries.map((entry) => ({
+						...entry,
+						nativeCurrencySymbol: 'ETH',
+						hasLogo: false
+					}))
+				})
+			})
+		);
+	}
+
+	async function openWizard(page: Page): Promise<void> {
+		await page.goto('/en/settings');
+		await expect(page.getByText('E2E Wallet').first()).toBeVisible();
+		await page.getByText(en('settings.sections.advanced'), { exact: true }).click();
+		await page.getByText(en('settings.advanced.addNetworkTitle'), { exact: true }).click();
+	}
+
+	async function pick(page: Page, query: string, name: string): Promise<void> {
+		await page.getByPlaceholder(en('settingsModals.addNetwork.searchPlaceholder')).fill(query);
+		await page
+			.getByRole('button', { name: new RegExp(name) })
+			.first()
+			.click();
+	}
+
+	const neverIncompatible = async (page: Page) =>
+		expect(
+			page.getByText(en('settingsModals.addNetwork.incompatible'), { exact: true })
+		).toHaveCount(0);
+
+	test('a network the wallet already has: said under the search', async ({ page }, testInfo) => {
+		await stubEverything(page);
+		// Base is built in; the index offers it all the same.
+		await indexAlso(page, [{ chainId: 8453, name: 'Base', shortName: 'base' }]);
+		await openWizard(page);
+		await pick(page, '8453', 'Base');
+		await expect(page.getByText(en('addToken.errorAlreadyAdded'), { exact: true })).toBeVisible();
+		await neverIncompatible(page);
+		// The search is still there to try another name with, saying what was asked…
+		const search = page.getByPlaceholder(en('settingsModals.addNetwork.searchPlaceholder'));
+		await expect(search).toHaveValue('8453');
+		await page.screenshot({ path: testInfo.outputPath('stop-already-added.png') });
+		// …and typing again takes the sentence away.
+		await search.fill('linea');
+		await expect(page.getByText(en('addToken.errorAlreadyAdded'), { exact: true })).toHaveCount(0);
+	});
+
+	test('a chain the registry has no document for: said under the search', async ({
+		page
+	}, testInfo) => {
+		await stubEverything(page);
+		// In the index, and its document answers 404.
+		await indexAlso(page, [{ chainId: 424242, name: 'Ghostnet', shortName: 'ghost' }]);
+		await openWizard(page);
+		await pick(page, '424242', 'Ghostnet');
+		await expect(page.getByText(en('addToken.errorChainNotFound'), { exact: true })).toBeVisible({
+			timeout: 30_000
+		});
+		await neverIncompatible(page);
+		// The sentence answers what was searched, and the field still says it:
+		// it came back from the resolving candidate EMPTY, over a placeholder.
+		await expect(
+			page.getByPlaceholder(en('settingsModals.addNetwork.searchPlaceholder'))
+		).toHaveValue('424242');
+		await page.screenshot({ path: testInfo.outputPath('stop-not-found.png') });
+	});
+
+	test('no RPC endpoint listed: the sentence, a field to enter one, and the re-check that reads it', async ({
+		page
+	}, testInfo) => {
+		await stubEverything(page);
+		// The chain's document, with no RPC in it. Registered last: it wins.
+		await page.route(new RegExp(`/chains/eip155-${CHAIN_ID}\\.json$`), (route) =>
+			route.fulfill({
+				contentType: 'application/json',
+				body: JSON.stringify({
+					chainId: CHAIN_ID,
+					name: NAME,
+					shortName: 'linea',
+					nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+					rpc: [],
+					explorers: []
+				})
+			})
+		);
+		await openWizard(page);
+		await pick(page, String(CHAIN_ID), NAME);
+		await expect(page.getByText(en('settingsModals.addNetwork.noRpcEndpoint'))).toBeVisible({
+			timeout: 30_000
+		});
+		await neverIncompatible(page);
+		await page.screenshot({ path: testInfo.outputPath('stop-no-rpc.png') });
+
+		// "Enter one, then re-check." — into a field that is not called
+		// "(optional)" under the sentence that asks for it.
+		await expect(
+			page.getByRole('textbox', { name: en('settingsModals.addNetwork.customRpcTitle') })
+		).toHaveCount(0);
+		await page
+			.getByRole('textbox', { name: en('settingsModals.network.fieldRpcUrl'), exact: true })
+			.fill(`${STUB}/${CHAIN_ID}`);
+		await page
+			.getByRole('button', { name: en('settingsModals.addNetwork.recheckWithRpc') })
+			.click();
+		await expect(
+			page.getByText(en('settingsModals.addNetwork.compatible'), { exact: true })
+		).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByText(en('settingsModals.addNetwork.noRpcEndpoint'))).toHaveCount(0);
+	});
+});
+
 test('search → verdict → add → listed → survives a reload → removed', async ({ page }) => {
 	await stubEverything(page);
 	await page.goto('/en/settings');

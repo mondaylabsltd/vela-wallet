@@ -3,7 +3,8 @@
  *
  * Two things were seen on a phone: the time split across lines — 「检查于 下午
  * / 10:07」 — and a line that STARTED with "·". Both are fixed where the words
- * are made: the core's `checked_time` binds its own spaces (U+00A0), and the
+ * are made: the core's `checked_time` binds its own spaces (U+00A0) and joins
+ * its own CJK characters (U+2060, so 「下午」 cannot come apart either), and the
  * corpus binds each "·" to the word before it. This draws the real strings —
  * the corpus's line, the core's time — at every width a phone or a narrow
  * column could give them, and looks at where the browser actually broke.
@@ -24,6 +25,16 @@ import IntegrityLine from './IntegrityLine.svelte';
 beforeAll(() => loadCore());
 
 const NBSP = '\u00a0';
+/**
+ * U+2060 WORD JOINER: the core puts one between two neighbours of the time
+ * when either is a Han, kana or Hangul character, so the day period itself
+ * (下午, 午後) cannot come apart. It draws as nothing — which is why the
+ * helpers below, which read what was DRAWN, compare against the time without
+ * it. Product code neither strips nor adds one.
+ */
+const WJ = '\u2060';
+/** A time as it is drawn: the joiners take no room and leave no glyph. */
+const drawnForm = (time: string) => time.replaceAll(WJ, '');
 
 type Catalog = { componentsUi: { signing: { integrity: Record<string, string> } } };
 
@@ -107,8 +118,14 @@ describe('the core’s check time binds its own spaces', () => {
 				expect(time, `${language}: ${time}`).not.toMatch(/[ \\t]/);
 			}
 		}
-		expect(afternoon('zh')).toBe(`下午${NBSP}2:32`);
+		// CJK neighbours are joined too (PR 3 note 14): U+00A0 binds 午 to the
+		// digits, and nothing bound 下 to 午 — a browser may break between any
+		// two ideographs.
+		expect(afternoon('zh')).toBe(`下${WJ}午${NBSP}2:32`);
+		expect(afternoon('ja')).toBe(`午${WJ}後${NBSP}2:32`);
+		// A Latin-script moment is byte for byte what it was.
 		expect(afternoon('en')).toBe(`2:32${NBSP}PM`);
+		expect(afternoon('en')).not.toContain(WJ);
 		expect(yesterday('en')).toContain(NBSP);
 	});
 });
@@ -134,9 +151,10 @@ describe('the integrity line, at every width', () => {
 					// The time's own space never ends a line: what follows it is
 					// on the line it is on.
 					const drawn = chars.map((c) => c.char).join('');
-					const at = drawn.lastIndexOf(time);
+					const shown = drawnForm(time);
+					const at = drawn.lastIndexOf(shown);
 					expect(at, `${language}: the time is drawn`).toBeGreaterThanOrEqual(0);
-					const gap = at + time.indexOf(NBSP);
+					const gap = at + shown.indexOf(NBSP);
 					expect(
 						Math.abs(chars[gap + 1].top - chars[gap - 1].top),
 						`${language} ${state} at ${width}px: 「${time}」 split at its space`
@@ -155,20 +173,90 @@ describe('the integrity line, at every width', () => {
 	});
 
 	/*
-	 * NOT held yet, and not this shell's to fix (a core gap, reported with the
-	 * round): in Chinese and Japanese the time can still come apart, BETWEEN
-	 * the two ideographs of its day period — 「…检查于 下 / 午 2:32」. U+00A0
-	 * binds 午 to the digits; nothing binds 下 to 午, and a browser may break
-	 * between any two ideographs. Measured here: zh 「下午 2:32」 on two lines
-	 * at 162–172 px and 294–304 px of this line's width. `checked_time` would
-	 * need a word joiner (U+2060) inside the period, or the shells a no-wrap
-	 * span around `{{time}}`.
+	 * PR 3 note 14. In Chinese and Japanese the time still came apart, BETWEEN
+	 * the two ideographs of its day period — 「…检查于 下 / 午 2:32」: U+00A0
+	 * binds 午 to the digits, nothing bound 下 to 午, and a browser may break
+	 * between any two ideographs. It was measured here, at 162–172 px and
+	 * 294–304 px of this line's width, and left as a `todo` for the core. The
+	 * core's `checked_time` now joins those neighbours (U+2060 WORD JOINER),
+	 * so the whole time is one unbreakable unit — and this holds it, at every
+	 * width, where the browser actually put each character.
 	 */
-	it.todo('zh / ja: the day period itself (下午, 午後) never splits across lines');
+	for (const [language, catalog, period] of [
+		['zh', zh, '下午'],
+		['ja', ja, '午後']
+	] as const) {
+		for (const state of ['matches', 'trusted'] as const) {
+			it(`${language} · ${state}: the day period (${period}) and its time stay on one line, at every width`, async () => {
+				const time = afternoon(language);
+				const shown = drawnForm(time);
+				expect(shown.startsWith(period)).toBe(true);
+				let wrapped = 0;
+				// The time arriving at the head of a line is where a break inside
+				// it would be taken: it must be seen to move there whole.
+				let headed = 0;
+				for (const { width, chars } of await sweep(line(catalog, state, time))) {
+					if (lineStarts(chars).length > 0) wrapped += 1;
+					const drawn = chars.map((c) => c.char).join('');
+					const at = drawn.lastIndexOf(shown);
+					expect(at, `${language}: the time is drawn`).toBeGreaterThanOrEqual(0);
+					const tops = chars.slice(at, at + shown.length).map((c) => c.top);
+					expect(
+						Math.max(...tops) - Math.min(...tops),
+						`${language} ${state} at ${width}px: 「${shown}」 is on two lines`
+					).toBeLessThanOrEqual(6);
+					if (at > 0 && chars[at].top - chars[at - 1].top > 6) headed += 1;
+				}
+				// A real sweep: the line wrapped at many of these widths, and at
+				// some of them the break fell right before the time.
+				expect(wrapped).toBeGreaterThan(10);
+				expect(headed).toBeGreaterThan(0);
+			});
+		}
+	}
+
+	it('zh: the same line WITHOUT the joiner does split 下 from 午 — the joiner is what holds it', async () => {
+		const time = afternoon('zh');
+		const loose = line(zh, 'matches', drawnForm(time));
+		const shown = drawnForm(time);
+		const split = (await sweep(loose)).filter(({ chars }) => {
+			const drawn = chars.map((c) => c.char).join('');
+			const at = drawn.lastIndexOf(shown);
+			return at >= 0 && chars[at + 1].top - chars[at].top > 6;
+		});
+		expect(split.length).toBeGreaterThan(0);
+	});
+
+	it('the joiner draws as nothing: no box, no gap — 「下午」 is as wide with it as without', async () => {
+		const measure = async (text: string) => {
+			const screen = render(IntegrityLine, { props: { line: { text, tone: 'ok' } } });
+			// Wide enough for one line: the width measured is the text's own.
+			screen.container.style.width = '600px';
+			await tick();
+			const node = screen.container.querySelector('.text') as HTMLElement;
+			const range = document.createRange();
+			range.selectNodeContents(node);
+			const { width } = range.getBoundingClientRect();
+			// Every character the browser gave room to — a missing-glyph box
+			// for U+2060 would be one more of them.
+			const drawn = drawnLines(screen.container).map((c) => c.char);
+			await screen.unmount();
+			return { width, drawn };
+		};
+		for (const language of ['zh', 'ja']) {
+			const time = afternoon(language);
+			const joined = await measure(time);
+			const plain = await measure(drawnForm(time));
+			expect(time).toContain(WJ);
+			expect(joined.drawn.join(''), language).toBe(drawnForm(time));
+			expect(joined.drawn, language).not.toContain(WJ);
+			expect(joined.width, language).toBeCloseTo(plain.width, 1);
+		}
+	});
 
 	it('…and a time with a plain space does split at it', async () => {
-		const loose = line(zh, 'matches', afternoon('zh').replaceAll(NBSP, ' '));
-		const time = afternoon('zh').replaceAll(NBSP, ' ');
+		const time = drawnForm(afternoon('zh')).replaceAll(NBSP, ' ');
+		const loose = line(zh, 'matches', time);
 		let split = 0;
 		for (const { chars } of await sweep(loose)) {
 			const drawn = chars.map((c) => c.char).join('');

@@ -133,7 +133,7 @@ const FLOW_KEYS_SCREEN_KEYS = [
 	'onboarding.create.providerGeneric',
 	'onboarding.create.providerSecurityKey',
 	'onboarding.create.needSecondKeyHint',
-	'onboarding.create.addKeyBtn',
+	'onboarding.create.keyPlaceHeading',
 	'onboarding.create.addSecondKeyBtn',
 	'onboarding.create.addMethodLabel',
 	'onboarding.create.confirmKeyBtn',

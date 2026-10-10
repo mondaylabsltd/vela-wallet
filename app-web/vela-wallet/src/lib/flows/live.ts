@@ -10,12 +10,16 @@
  * second builder for four strings.
  */
 
+import { maskedAmount } from '$lib/core/client';
 import { feedPositionOf } from '$lib/wallet/live-detail';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { MtokView } from '$lib/core/generated/MtokView';
+import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
 import type { NetWizardView } from '$lib/core/generated/NetWizardView';
+import { NET_HINT_KEYS, NET_STOP_KEYS } from '$lib/settings/messages';
+import { netRefusal, netStopLine, stopIsRefusal } from '$lib/settings/net-refusal';
 import type { WalletFlowMessages } from './messages';
 import {
 	chainName,
@@ -52,7 +56,6 @@ import {
 	liveActivityGroups,
 	liveActivityRow,
 	liveAssetRow,
-	maskedFigure,
 	moneyText,
 	narrowedFeed,
 	tokenAmountText,
@@ -416,7 +419,7 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		symbol: token.symbol,
 		chain: chainName(token.chain_id),
 		balance: hidden
-			? maskedFigure(token.symbol)
+			? maskedAmount(token.symbol)
 			: `${tokenAmountText(token.balance)} ${token.symbol}`,
 		fiat,
 		facts,
@@ -521,9 +524,14 @@ function liveAddNetworkTab(
 		kind: 'not-found',
 		text: fill(m['addToken.netPickerEmpty'], { query })
 	});
+	// The sentences the core can name here, by corpus key — these and no
+	// others: the flow bundle is one flat map, and a key outside the two lists
+	// is not a reason.
+	const hints = Object.fromEntries(NET_HINT_KEYS.map((key) => [key, m[key]]));
+	const stops = Object.fromEntries(NET_STOP_KEYS.map((key) => [key, m[key]]));
 	const card = (
-		chip: StatusChipModel,
-		link?: string,
+		chip: StatusChipModel | undefined,
+		more: { note?: string; setup?: { label: string; href: string } } = {},
 		chainId = info?.chain_id,
 		name = info?.name,
 		symbol = info?.native_symbol
@@ -534,10 +542,34 @@ function liveAddNetworkTab(
 				? { ticker: symbol ?? '', badgeColor: chainColor(0), badgeHidden: true }
 				: wizardMark(chainId, symbol ?? nativeSymbol(chainId), true),
 		name: name ?? query,
-		chip,
-		link,
+		...(chip === undefined ? {} : { chip }),
+		...more,
 		facts: chainId === undefined ? [] : facts(chainId, symbol ?? nativeSymbol(chainId))
 	});
+	/**
+	 * A refused network: the verdict, WHY in the check's own words (no P-256
+	 * verifier — the network cannot run Vela wallets; or contracts that are
+	 * missing), and Chain Setup only where the core gave it somewhere to go.
+	 * The card said "Deploy missing contracts ↗" under both, as plain text —
+	 * over a network with no verifier that sends a person to deploy nothing.
+	 */
+	const refusedCard = (compat: NetCompatibility): AddTokenModel['result'] => {
+		const refusal = netRefusal(compat, hints);
+		return card(
+			{ text: m['addToken.notCompatible'], tone: 'error' },
+			{
+				note: refusal.hint ?? m['addToken.errorNotCompatible'],
+				...(refusal.setupUrl === undefined
+					? {}
+					: {
+							setup: {
+								label: m['settingsModals.addNetwork.openChainSetupTool'],
+								href: refusal.setupUrl
+							}
+						})
+			}
+		);
+	};
 
 	let result: AddTokenModel['result'];
 	let canAdd = false;
@@ -545,7 +577,7 @@ function liveAddNetworkTab(
 		// The network is in the registry now: its own name and coin.
 		result = card(
 			{ text: m['addToken.networkAdded'], tone: 'success' },
-			undefined,
+			{},
 			addedChainId,
 			chainName(addedChainId),
 			nativeSymbol(addedChainId)
@@ -570,21 +602,36 @@ function liveAddNetworkTab(
 	} else if (wizard.phase === 'resolving' || wizard.phase === 'checking') {
 		result = card({ text: m['addToken.searchingNetworks'], tone: 'info' });
 	} else if (wizard.phase === 'error') {
+		// The wizard stopped, and the core says why in a sentence of its own
+		// (`error_key`, PR 3 notes 5, 10 and 18) — nothing here maps
+		// `error.type` to words any more. It had words for two stops; a check
+		// that could not be made and a network with no RPC listed both read
+		// "Not compatible · Deploy missing contracts".
+		const line = netStopLine(wizard.error_key, { stops, hints });
 		const error = wizard.error;
-		if (error === null || error.type === 'not_found') result = notFound();
-		else if (error.type === 'already_added') {
+		if (stopIsRefusal(wizard.error_key, wizard.compat)) {
+			// The check's own refusal, kept beside the stop: drawn as the
+			// verdict it is.
+			result = refusedCard(wizard.compat);
+		} else if (info !== null) {
+			// A network is in hand (no RPC endpoint listed; a check that could
+			// not be made): its card, and the sentence — no verdict chip, since
+			// none was reached.
+			result = card(undefined, line === undefined ? {} : { note: line });
+		} else if (error !== null && error.type === 'already_added') {
+			// Which network it is is data (`chain_id`); that it is already
+			// here is the core's sentence.
 			result = card(
-				{ text: m['addToken.networkAdded'], tone: 'success' },
 				undefined,
+				line === undefined ? {} : { note: line },
 				error.chain_id,
-				info?.name ?? chainName(error.chain_id),
-				info?.native_symbol ?? nativeSymbol(error.chain_id)
+				chainName(error.chain_id),
+				nativeSymbol(error.chain_id)
 			);
 		} else {
-			result = card(
-				{ text: m['addToken.notCompatible'], tone: 'error' },
-				`${m['addToken.errorNotCompatible']} · ${m['addToken.deployContracts']}`
-			);
+			// No network to show (its document was not found): the sentence
+			// where "no network matches" goes.
+			result = line === undefined ? notFound() : { kind: 'not-found', text: line };
 		}
 	} else {
 		// Checked: the verdict.
@@ -595,10 +642,7 @@ function liveAddNetworkTab(
 			result = card({ text: m['addToken.compatible'], tone: 'success' });
 			canAdd = wizard.can_add;
 		} else {
-			result = card(
-				{ text: m['addToken.notCompatible'], tone: 'error' },
-				`${m['addToken.errorNotCompatible']} · ${m['addToken.deployContracts']}`
-			);
+			result = refusedCard(compat);
 		}
 	}
 

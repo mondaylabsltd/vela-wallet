@@ -177,6 +177,19 @@
 		min-width: 0;
 	}
 
+	/* One line each, whatever stands beside them. The balance at the row's end
+	   is whole and takes the room it needs; the name and the address give way
+	   to it with "…". They used to WRAP instead — a long figure ("₫112,500,000.00"
+	   at 320 px) squeezed the column to a word's width, the name broke over two
+	   lines, the address over two more, the wrapped words ran under the figure,
+	   and the row grew 33 px the moment the figure landed. */
+	.name,
+	.address {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	.name {
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
@@ -194,6 +207,8 @@
 	}
 
 	.amount {
+		flex: none;
+		white-space: nowrap;
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		color: var(--color-fg-base);
 		font-variant-numeric: tabular-nums;

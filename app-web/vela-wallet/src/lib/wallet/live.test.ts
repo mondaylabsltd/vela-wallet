@@ -4,6 +4,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { maskedAmount } from '$lib/core/client';
 import { formatRelativeTime } from '$lib/core/kernels';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
@@ -17,7 +18,6 @@ import {
 	figureCurrency,
 	liveAssetRow,
 	liveBalance,
-	maskedFigure,
 	MONEY_PENDING,
 	moneyParts,
 	moneyText,
@@ -83,7 +83,9 @@ function unreachableRow(chainId: number): UnreachableNetwork {
 		chain_id: chainId,
 		last_known: 'not_read',
 		last_seen_usd: null,
-		line_key: 'assets.notReadYet'
+		line_key: 'assets.notReadYet',
+		cause: 'network',
+		rpc_fixable: true
 	};
 }
 
@@ -108,6 +110,16 @@ describe('moneyParts', () => {
 	});
 	it('a null rate shows the USD figure, never a defaulted 1 under a ¥ (024 rule)', () => {
 		expect(moneyParts(4500, UNPRICED_JPY)).toMatchObject({ code: 'USD', integer: '$4,500' });
+	});
+	// The one place a fiat figure is made answers "withheld" first (0.8): no
+	// surface can format money around the rule, because there is nothing else
+	// to format it with.
+	it('answers nothing at all — withheld — before the display currency commits', () => {
+		expect(moneyParts(4500, { code: 'USD', rate: 1, committed: false, pending: null })).toBeNull();
+		expect(moneyParts(4500, { code: 'USD', rate: 1, committed: false, pending: 'CNY' })).toBeNull();
+		expect(moneyText(4500, { code: 'USD', rate: 1, committed: false, pending: 'CNY' })).toBe(
+			MONEY_PENDING
+		);
 	});
 });
 
@@ -206,17 +218,29 @@ describe('no money figure before the display currency is the person’s', () => 
 	});
 });
 
-describe('maskedFigure — a hidden amount keeps its unit', () => {
+describe('maskedAmount — a hidden amount keeps its unit (the core’s rule, not a mirror)', () => {
 	it('the mask, then the unit the shown figure carries', () => {
-		expect(maskedFigure('xDAI')).toBe('•••• xDAI');
-		expect(maskedFigure('USDC')).toBe('•••• USDC');
+		expect(maskedAmount('xDAI')).toBe('•••• xDAI');
+		expect(maskedAmount('USDC')).toBe('•••• USDC');
 		// Nothing of the number survives.
-		expect(maskedFigure('ETH')).not.toMatch(/\d/);
+		expect(maskedAmount('ETH')).not.toMatch(/\d/);
 	});
 	it('a figure with no unit is the mask alone — never a trailing space', () => {
-		expect(maskedFigure('')).toBe('••••');
-		expect(maskedFigure('  ')).toBe('••••');
-		expect(maskedFigure(' xDAI ')).toBe('•••• xDAI');
+		expect(maskedAmount('')).toBe('••••');
+		expect(maskedAmount('  ')).toBe('••••');
+		expect(maskedAmount(' xDAI ')).toBe('•••• xDAI');
+	});
+	it('the web keeps no copy of the rule: every hidden figure with a unit is the core’s', () => {
+		// The mirror (`maskedFigure`) is gone from the builders that used it.
+		for (const file of [
+			'src/lib/wallet/live.ts',
+			'src/lib/wallet/live-detail.ts',
+			'src/lib/flows/live.ts'
+		]) {
+			const source = readFileSync(file, 'utf8');
+			expect(source, file).not.toMatch(/maskedFigure/);
+			expect(source, file).toMatch(/maskedAmount\(/);
+		}
 	});
 });
 

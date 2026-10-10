@@ -87,3 +87,76 @@ describe('FlowNav.sheetClosed', () => {
 		expect(nav.desktop).toEqual(['dt1']);
 	});
 });
+
+/**
+ * Note 16 (the web's phone layout). A transaction tapped in the home's
+ * Activity opened its detail over History — the drawn state's base — and
+ * closing it landed the person in History, a list they never opened. The same
+ * with a holding tapped on the home and the Assets list. A sheet a home row
+ * opens is over the home, and closing it leaves the flow.
+ */
+describe('a sheet a home row opened closes back onto the home', () => {
+	it.each([
+		['tx-detail', 'a2'],
+		['token-detail', 't2']
+	] as const)('%s: every way of closing it leaves the flow', (entry, sheet) => {
+		for (const close of ['sheet', 'back'] as const) {
+			const nav = new FlowNav();
+			nav.enter(entry);
+			expect(nav.mobileTop).toBe(sheet);
+			// The route draws the home under it, not the list in the stack.
+			expect(nav.overHome).toBe(true);
+			if (close === 'sheet') nav.sheetClosed(sheet);
+			else nav.back();
+			expect(nav.mobile, close).toEqual([]);
+			expect(nav.desktop, close).toEqual([]);
+			expect(nav.open, close).toBe(false);
+			expect(nav.overHome, close).toBe(false);
+		}
+	});
+
+	it('the same sheet opened from its LIST still closes onto the list', () => {
+		const nav = new FlowNav();
+		nav.enter('activity');
+		nav.push('tx-detail');
+		expect(nav.mobile).toEqual(['a1', 'a2']);
+		expect(nav.overHome).toBe(false);
+		nav.sheetClosed('a2');
+		expect(nav.mobile).toEqual(['a1']);
+
+		nav.enter('assets');
+		nav.push('token-detail');
+		expect(nav.overHome).toBe(false);
+		nav.back();
+		expect(nav.mobile).toEqual(['t1']);
+	});
+
+	it('a step deeper from the home’s sheet is an ordinary step, and coming back is the home’s sheet again', () => {
+		const nav = new FlowNav();
+		nav.enter('token-detail');
+		// One of the token's own transactions.
+		nav.push('tx-detail');
+		expect(nav.mobile).toEqual(['t1', 't2', 'a2']);
+		expect(nav.overHome).toBe(false);
+		nav.sheetClosed('a2');
+		expect(nav.mobile).toEqual(['t1', 't2']);
+		expect(nav.overHome).toBe(true);
+		nav.sheetClosed('t2');
+		expect(nav.open).toBe(false);
+	});
+
+	it('another way into a flow forgets it: History opened from the home is History', () => {
+		const nav = new FlowNav();
+		nav.enter('tx-detail');
+		nav.enter('activity');
+		expect(nav.overHome).toBe(false);
+		nav.push('tx-detail');
+		nav.sheetClosed('a2');
+		expect(nav.mobile).toEqual(['a1']);
+		// …and adding a token still goes back to the list it was added to.
+		nav.enter('add-token');
+		expect(nav.overHome).toBe(false);
+		nav.sheetClosed('t3');
+		expect(nav.mobile).toEqual(['t1']);
+	});
+});

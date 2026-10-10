@@ -33,21 +33,14 @@ import type {
 	TxTechnicalRow
 } from '$lib/flows/model';
 import { chainMark, tokenMarkFor } from '$lib/flows/marks';
+import { maskedAmount } from '$lib/core/client';
 import { dappRequestDisplay } from '$lib/core/kernels';
 import { formatDate, formatTime } from '$lib/services/locale-format';
 import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { MASK } from './fixtures';
 import { shortenAddress } from './identity';
-import {
-	allowanceFigure,
-	changeFigure,
-	dappTitle,
-	dayLabel,
-	maskedFigure,
-	moneyText,
-	trimBalance
-} from './live';
+import { allowanceFigure, changeFigure, dappTitle, dayLabel, moneyText, trimBalance } from './live';
 import { fill, type WalletMessages } from './messages';
 
 /** The feed item a tap named, by the id the live rows carry. */
@@ -259,7 +252,7 @@ function changeLine(change: FeedDappChange, ctx: TxDetailContext): string {
 		return `${changeFigure(change)} ${ctx.m['componentsUi.signing.balanceUnverifiedToken']}`;
 	}
 	return ctx.hidden
-		? maskedFigure(change.symbol)
+		? maskedAmount(change.symbol)
 		: `${changeFigure(change)} ${change.symbol}`.trim();
 }
 
@@ -289,7 +282,7 @@ function dappFacts(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): FactRo
 						// is money (`figure_maskable` — an unlimited one is not).
 						value:
 							hidden && item.figure_maskable
-								? maskedFigure(figure.unit)
+								? maskedAmount(figure.unit)
 								: `${figure.amount} ${figure.unit}`.trim(),
 						...(figure.danger ? { tone: 'danger' as const } : {})
 					}
@@ -415,16 +408,16 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 	if (item.value !== null) {
 		const about = dapp.estimated ? '≈ ' : '';
 		const sign = item.direction === 'in' ? '+' : '−';
-		// Hidden: the mask, and the coin kept (`maskedFigure`).
+		// Hidden: the mask, and the coin kept (the core's `maskedAmount`).
 		amount = hidden
-			? maskedFigure(item.symbol)
+			? maskedAmount(item.symbol)
 			: `${about}${sign}${trimBalance(item.value)} ${item.symbol}`.trim();
 		fiat = fiatText(item, ctx);
 	} else if (dapp.allowance !== null) {
 		const figure = allowanceFigure(dapp.allowance, wm);
 		amount =
 			hidden && item.figure_maskable
-				? maskedFigure(figure.unit)
+				? maskedAmount(figure.unit)
 				: `${figure.amount} ${figure.unit}`.trim();
 		danger = figure.danger;
 	} else if (back !== null) {
@@ -510,7 +503,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	// These were drawn in full under a masked hero — who got how much of a
 	// split, with the balance hidden — until the unit rule was looked at.
 	const partValue = (transfer: { value: string; symbol: string }) =>
-		hidden ? maskedFigure(transfer.symbol) : `${trimBalance(transfer.value)} ${transfer.symbol}`;
+		hidden ? maskedAmount(transfer.symbol) : `${trimBalance(transfer.value)} ${transfer.symbol}`;
 	const parts: BreakdownRowModel[] =
 		batch === null
 			? []
@@ -566,7 +559,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		// Hidden: the mask and the coin ("•••• xDAI"). A sweep's hero names no
 		// one coin — it counts them — so its mask stands alone.
 		amount:
-			figure === '' ? '' : hidden ? maskedFigure(item.value !== null ? item.symbol : '') : figure,
+			figure === '' ? '' : hidden ? maskedAmount(item.value !== null ? item.symbol : '') : figure,
 		fiat: dappTx && item.value === null ? '' : fiatText(item, ctx),
 		positive: received,
 		facts,

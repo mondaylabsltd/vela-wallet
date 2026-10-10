@@ -53,6 +53,7 @@ import init, {
 	LoginCore,
 	minGasPriceWei,
 	ManageTokensCore,
+	maskedAmount,
 	NetworkAdminCore,
 	passkeyDirectoryEntry,
 	passkeyDirectoryUrl,
@@ -127,6 +128,12 @@ export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
 // the $1 peg for a coin that IS a dollar, and the chain gas floor below which
 // Arc discards a transaction without saying so.
 export { minGasPriceWei, peggedNativeUsd };
+// A hidden amount as balance privacy draws it — the mask, and the unit kept:
+// "•••• xDAI" (`privacy::masked_amount`). One rule for all four apps; the web
+// kept a mirror of it (`maskedFigure`) until the core exported its own.
+// Synchronous, and callable once `loadCore()` has resolved — every caller is
+// a view-model builder over a core view, which cannot exist before that.
+export { maskedAmount };
 export { identiconNormalizeSeed, identiconSvgCircular };
 // Which plural form a count takes in a language (CLDR, issue 409): flow copy
 // ships every form, and the screen asks this rather than `count === 1`.

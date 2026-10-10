@@ -36,6 +36,7 @@ const EMPTY_VIEW: NetView = {
 		chain_info: null,
 		compat: null,
 		error: null,
+		error_key: null,
 		can_add: false
 	},
 	endpoints: [],

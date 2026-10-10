@@ -405,6 +405,9 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		// a measurement waiting to happen rather than an answer of "none".
 		value: line ? line.coin : send.fee_busy || fee.busy || ofAnotherTier ? '…' : '—',
 		valueFiat: line?.fiat ?? undefined,
+		// The money half is withheld (the display currency is not the person's
+		// yet): the row keeps the room the figure may need (`FeeRow`).
+		...(line?.fiat != null && !inputs.currency.committed ? { valueFiatWithheld: true } : {}),
 		openLabel: template.openLabel,
 		refreshLabel: m['send.feeRefresh'],
 		// A MEASUREMENT IS OUT — not "somebody tapped ⟳". It is deliberately the
@@ -950,7 +953,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 				? send.split_over_balance
 					? m['send.alertInsufficientBalanceBody']
 					: undefined
-				: (liveWarning(send, m) ?? denomReason(send, m))),
+				: (liveWarning(send, m) ?? denomReason(send, m, currency))),
 		// In a split the gate closes for two reasons: the pre-check is out
 		// (`estimating_gas` — the button turns busy), or a row is unfinished — and
 		// the core says WHICH row and which field, so the sentence names it.
@@ -1000,7 +1003,18 @@ function fillEmpty(
  * when the row is shown and disabled). The core decides THAT there is no rate
  * to enter this currency against; the corpus says it.
  */
-function denomReason(send: SendView, m: WalletFlowMessages): string | undefined {
+function denomReason(
+	send: SendView,
+	m: WalletFlowMessages,
+	currency: CurrencyView
+): string | undefined {
+	// Not while the display currency is still on its way (the core's withhold
+	// rule). The machine is told "no rate" then, because there is none to
+	// type money against yet — but "No CNY rate right now" is a refusal, and
+	// this is a wait of a second or two: the line came, then went, and moved
+	// the button under it both times. Once the pair commits the reason is the
+	// core's again — a choice that cannot be priced says so here.
+	if (!currency.committed) return undefined;
 	const issue = send.denom_toggle_reason;
 	return issue === null
 		? undefined

@@ -92,6 +92,11 @@ export interface WalletMessages {
 		/** … `{{n}}` for several. */
 		unreachableMany: string;
 		/**
+		 * PR 3 note 4: the one network's RPC is fine — its token list could not
+		 * be loaded (`{{name}}`, as for the one network).
+		 */
+		tokenListUnreachable: string;
+		/**
 		 * PR 2 note 11 (issue 483): the line when the last read failed inside
 		 * Vela itself, by the key the core names (`BalanceView.internal_key`) —
 		 * drawn where the unreachable line goes, never "Can't reach Ethereum".
@@ -218,6 +223,8 @@ export const WALLET_KEYS = [
 	'assets.emptySubtext',
 	'assets.unreachableOne',
 	'assets.unreachableMany',
+	// PR 3 note 4: a token list that can't be loaded is not a network out of reach.
+	'assets.tokenListUnreachable',
 	// PR 2 note 11: a read that failed inside Vela, said as that.
 	...BALANCE_INTERNAL_KEYS,
 	// Spec 038: the home's sentence for a first launch with no network.

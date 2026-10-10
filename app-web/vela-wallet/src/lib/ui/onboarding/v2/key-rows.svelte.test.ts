@@ -99,6 +99,7 @@ const keysScreen = (keys: CreateKeyRow[]) =>
 			maxKeys: 7,
 			// As the core says for a list with keys on it (issue 475).
 			addHeadingKey: 'onboarding.create.addMethodLabel',
+			keyCountShown: true,
 			methodsPinned: false,
 			strings,
 			onAddKey: () => {},

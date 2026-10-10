@@ -130,15 +130,18 @@ test('the create flow keeps its gutters on a phone, and the keys screen has one 
 	await toKeysScreen(page);
 
 	// One heading over the three places, open — and nothing else to tap there.
+	// "Choose where it lives" — not the title's own words a second time.
 	await expect(
-		page.getByRole('heading', { name: en('onboarding.create.addKeyBtn'), level: 2 })
+		page.getByRole('heading', { name: en('onboarding.create.keyPlaceHeading'), level: 2 })
 	).toBeVisible();
+	// No key yet: no "Added 0 / 7" over an empty list (the core's `key_count_shown`).
+	await expect(page.locator('.listhead')).toHaveCount(0);
+	await expect(page.getByText('0 / 7')).toHaveCount(0);
 	await expect(page.locator('button.method')).toHaveCount(3);
 	await expect(page.locator('button.fold')).toHaveCount(0);
 	await expect(page.locator('.plus')).toHaveCount(0);
-	await expect(
-		page.getByRole('button', { name: en('onboarding.create.addKeyBtn'), exact: true })
-	).toHaveCount(0);
+	// Nothing in the add section is a button but the three places themselves.
+	await expect(page.locator('.add button:not(.method)')).toHaveCount(0);
 
 	// The gutters: the welcome page's 24 px, on everything a person reads.
 	const edges = await page.evaluate(() => {

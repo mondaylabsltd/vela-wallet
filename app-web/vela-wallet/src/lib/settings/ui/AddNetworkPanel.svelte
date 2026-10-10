@@ -61,6 +61,15 @@
 				oninput={(event) => onsearch?.(event.currentTarget.value)}
 			/>
 		</label>
+		<!--
+			A wizard that stopped with no network to show (it is already added;
+			its document was not found) says so here, under the search it
+			answers, in the core's sentence. This branch drew nothing for it:
+			a tap on a suggestion emptied the list and that was all.
+		-->
+		{#if panel.callout !== undefined}
+			<Callout callout={panel.callout} />
+		{/if}
 		<div class="results">
 			{#each panel.results as row (row.id)}
 				<NetworkRow {row} {onselect} />
@@ -73,7 +82,9 @@
 				<span class="name">{panel.candidate.name}</span>
 				<span class="meta">{panel.candidate.meta}</span>
 			</span>
-			<StatusPill pill={panel.candidate.badge} />
+			{#if panel.candidate.badge !== undefined}
+				<StatusPill pill={panel.candidate.badge} />
+			{/if}
 		</div>
 
 		{#if panel.checks !== undefined && panel.checksTitle !== undefined}

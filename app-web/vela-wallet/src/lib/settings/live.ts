@@ -29,6 +29,7 @@ import { encodeQr } from '$lib/wallet/qr';
 import { MASK } from '$lib/wallet/fixtures';
 
 import type { NetChainIndexEntry } from '$lib/core/generated/NetChainIndexEntry';
+import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
 import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
 import type { NetProbeHealth } from '$lib/core/generated/NetProbeHealth';
 import type { NetServiceHealth } from '$lib/core/generated/NetServiceHealth';
@@ -86,7 +87,7 @@ import {
 	type EnvironmentLabels
 } from '$lib/services/bug-report';
 import type { EthereumBackupRow } from '$lib/services/registry-backup';
-import { netRefusal, type NetRefusal } from './net-refusal';
+import { netRefusal, netStopLine, stopIsRefusal, type NetRefusal } from './net-refusal';
 import type { EthereumBackupRowModel, WalletKeysModel } from './model';
 import type { WalletKeys } from '$lib/services/wallet-keys';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
@@ -224,9 +225,15 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		searchPlaceholder: m.addNetwork.searchPlaceholder
 	};
 
-	// Search phases: the list is the whole surface.
+	// Search phases: the list is the whole surface. The field shows the
+	// core's query — the model always had a place for it and nothing filled
+	// it, so the field kept its text only for as long as it stayed mounted.
 	if (wizard.phase === 'idle' || wizard.phase === 'searching' || wizard.phase === 'suggested') {
-		return { ...base, results: wizard.suggestions.map((s) => suggestionRow(s, m)) };
+		return {
+			...base,
+			query: wizard.query,
+			results: wizard.suggestions.map((s) => suggestionRow(s, m))
+		};
 	}
 
 	const info = wizard.chain_info;
@@ -249,27 +256,66 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		};
 	}
 
+	// What the check found, row by row — the checked verdict's list, and a
+	// refusal's wherever it is drawn.
+	const checksOf = (compat: NetCompatibility): CheckItemModel[] => [
+		...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
+		{ label: m.addNetwork.checkSigner, ok: compat.p256_available === true }
+	];
+	const customRpc: UrlFieldModel = {
+		id: 'custom-rpc',
+		label: m.addNetwork.customRpcTitle,
+		value: wizard.custom_rpc,
+		placeholder: m.addNetwork.customRpcPlaceholder,
+		hint: m.networks.relayNotice
+	};
+
 	if (wizard.phase === 'error') {
-		// The wizard stopped. The core says why as data; the words are ours —
-		// and inconclusive is NEVER worded as incompatible (invariant ③). The
-		// scan path now keeps the two apart too (spec 038 #E1): a probe that
-		// failed is "unable to verify", with the re-check, and no setup tool.
-		const inconclusive = wizard.error?.type === 'check_failed';
-		// WHY it is refused, and whether anything can be deployed, is the
-		// check's (`compat.hint_key` / `.setup_url`). The scan path stops here
-		// without keeping its check, so when there is none the verdict is said
-		// and no reason is invented: "contracts are missing" over a network
-		// with no P-256 verifier would send a person to deploy nothing.
-		const refusal = inconclusive ? {} : netRefusal(wizard.compat, m.addNetwork.hints);
+		// The wizard stopped, and the core says why in a sentence of its own
+		// (`error_key`, PR 3 notes 5, 10 and 18). This used to map `error.type`
+		// to words here, and had words for two of five: "already added", "chain
+		// not found" and "no RPC endpoint listed" all read "Incompatible".
+		const text = netStopLine(wizard.error_key, m.addNetwork);
+		// A refusal the check itself raised keeps its check now (the path that
+		// saves without a confirm step used to drop it): drawn as the wizard
+		// draws a refused check — the same rows, the same reason, and Chain
+		// Setup only where there is something to deploy. An inconclusive check
+		// is never that, whatever the check beside it holds (invariant ③).
+		const refused = stopIsRefusal(wizard.error_key, wizard.compat);
+		const refusal = refused ? netRefusal(wizard.compat, m.addNetwork.hints) : {};
+		const callout = text === undefined ? {} : { callout: { tone: 'warning' as const, text } };
+		if (info === null) {
+			// No chain to show (already added; its document not found): the
+			// sentence, under the search it answers. Typing again clears it.
+			// The search still says what was asked for: a stop that came back
+			// from the "resolving" candidate re-drew the field EMPTY, and
+			// "Chain info not found" stood under a placeholder.
+			return { ...base, query: wizard.query, results: [], ...callout };
+		}
 		return {
 			...base,
+			subtitle: `${name} · ${meta}`,
 			results: [],
-			callout: {
-				tone: 'warning',
-				text: inconclusive
-					? m.addNetwork.unableToVerify
-					: (refusal.hint ?? m.addNetwork.incompatible)
+			candidate: {
+				mark,
+				name,
+				meta: m.addNetwork.compatibilityCheck,
+				...(refused
+					? { badge: { tone: 'error' as const, label: m.addNetwork.incompatible, dot: true } }
+					: {})
 			},
+			...(refused && wizard.compat !== null
+				? { checksTitle: m.addNetwork.compatibilityCheck, checks: checksOf(wizard.compat) }
+				: {}),
+			...callout,
+			// "Enter one, then re-check": the field the sentence points at, and
+			// the re-check that reads it. Where no endpoint is listed the field
+			// is the only way on, so it is not labelled "(optional)" under a
+			// sentence that asks for it.
+			customRpc:
+				wizard.error_key === 'settingsModals.addNetwork.noRpcEndpoint'
+					? { ...customRpc, label: m.networks.rpcUrl }
+					: customRpc,
 			secondary: setupLink(refusal, m),
 			recheck: m.addNetwork.recheckWithRpc
 		};
@@ -280,13 +326,7 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 	const unverified = compat === null || compat.rpc_failure !== null;
 	const compatible = compat !== null && compat.compatible && compat.rpc_failure === null;
 
-	const checks: CheckItemModel[] =
-		compat === null
-			? []
-			: [
-					...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
-					{ label: m.addNetwork.checkSigner, ok: compat.p256_available === true }
-				];
+	const checks: CheckItemModel[] = compat === null ? [] : checksOf(compat);
 
 	if (compatible) {
 		return {
@@ -311,13 +351,7 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 			callout: compat.multi_key_ready
 				? undefined
 				: { tone: 'warning', text: m.addNetwork.singleKeyOnly },
-			customRpc: {
-				id: 'custom-rpc',
-				label: m.addNetwork.customRpcTitle,
-				value: wizard.custom_rpc,
-				placeholder: m.addNetwork.customRpcPlaceholder,
-				hint: m.networks.relayNotice
-			},
+			customRpc,
 			primary: m.addNetwork.addNetworkBtn
 		};
 	}
@@ -333,13 +367,7 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 				meta: m.addNetwork.compatibilityCheck,
 				badge: { tone: 'warn', label: m.addNetwork.unableToVerify, dot: true }
 			},
-			customRpc: {
-				id: 'custom-rpc',
-				label: m.addNetwork.customRpcTitle,
-				value: wizard.custom_rpc,
-				placeholder: m.addNetwork.customRpcPlaceholder,
-				hint: m.networks.relayNotice
-			},
+			customRpc,
 			primary: m.addNetwork.retry,
 			recheck: m.addNetwork.recheckWithRpc
 		};
@@ -1389,7 +1417,11 @@ export function liveUnreachable(
 				amount:
 					view.hidden || row.last_seen_usd === null ? MASK : moneyText(row.last_seen_usd, currency)
 			}),
-			action: m.rescue.rpcFix
+			// The core's rule, not the shell's (PR 3 note 4): only a network that
+			// itself did not answer is offered its RPC editor. One whose token
+			// list could not be loaded has an endpoint that works — "Fix" there
+			// sent a person to repair what was not broken.
+			...(row.rpc_fixable ? { action: m.rescue.rpcFix } : {})
 		}))
 	};
 }
@@ -1413,13 +1445,18 @@ export function liveBalanceDetail(
 		status: m.balanceDetail.statusRetrying,
 		tone: 'neutral'
 	}));
-	for (const { chain_id: id } of view.unreachable_networks) {
+	for (const { chain_id: id, rpc_fixable: rpcFailed } of view.unreachable_networks) {
 		if (pending.some((row) => row.id === String(id))) continue;
 		pending.push({
 			id: String(id),
 			mark: rescueMark(id),
 			name: chainName(id),
-			status: m.balanceDetail.statusFailed,
+			// "RPC unavailable" is only true of a network that did not answer.
+			// One whose token list could not be loaded (PR 3 note 4) says that,
+			// in the core's own sentence; reading again is still the way out.
+			status: rpcFailed
+				? m.balanceDetail.statusFailed
+				: fill(m.rescue.tokenListUnreachable, { name: chainName(id) }),
 			tone: 'error',
 			action: m.balanceDetail.retry
 		});
@@ -1563,9 +1600,9 @@ export function liveRelayReport(m: RescueMessages, facts: DeviceFacts): Feedback
  * or `undefined` when it says to draw nothing: no registry on Ethereum (the
  * feature is dark) or no record to copy.
  *
- * Nothing here maps a state. Which words a state says, in which tone, and
- * what a tap does are the core's, the same on all four apps; this looks the
- * two corpus keys up. A key the manifest does not carry draws no row rather
+ * Nothing here maps a state. Which words a state says, in which tone, what a
+ * tap does and whether a paragraph stands under it are the core's, the same
+ * on all four apps; this looks the corpus keys up. A key the manifest does not carry draws no row rather
  * than a dotted path — `ethereum-backup-row.test.ts` holds the manifest to
  * every key the core can name.
  */
@@ -1578,7 +1615,21 @@ export function ethereumBackupRow(
 	const title = words[row.title_key];
 	const subtitle = words[row.subtitle_key];
 	if (title === undefined || subtitle === undefined) return undefined;
-	return { title, subtitle, tone: row.tone, action: row.action };
+	// The paragraph under the row is the core's too (`explain_key`, PR 3 note
+	// 6): present while a copy can still be made or checked, absent for a
+	// record that can never be copied — which used to be told how to copy it.
+	const explains = m.backup.explains as Record<string, string | undefined>;
+	const explain =
+		row.explain_key && Object.hasOwn(explains, row.explain_key)
+			? explains[row.explain_key]
+			: undefined;
+	return {
+		title,
+		subtitle,
+		tone: row.tone,
+		action: row.action,
+		...(explain === undefined ? {} : { explain })
+	};
 }
 
 /**
@@ -1692,7 +1743,6 @@ export function walletKeysModel(
 			customDomain === undefined ? undefined : fill(m.signing.keysOn, { domain: customDomain }),
 		rows,
 		backup: ethereumBackupRow(backup, m),
-		backupExplain: m.backup.explain,
 		copy: { action: m.keys.copy, done: m.keys.copied }
 	};
 }
