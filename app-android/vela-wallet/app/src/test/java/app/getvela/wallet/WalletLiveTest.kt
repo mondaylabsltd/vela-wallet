@@ -11,6 +11,8 @@ import app.getvela.wallet.feature.wallet.WalletFixtures
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.WalletScreenState
 import app.getvela.wallet.feature.wallet.core.BalanceToken
+import app.getvela.wallet.feature.wallet.core.BalanceBoards
+import app.getvela.wallet.feature.wallet.core.BalanceBoards.FirstRead
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedDirection
 import app.getvela.wallet.feature.wallet.core.FeedItem
@@ -190,11 +192,14 @@ class WalletLiveTest {
     /** A zero that IS zero keeps its figure — the states must stay distinct. */
     @Test
     fun `a genuinely empty wallet shows zero`() {
-        val model = home(BalanceView(display_total_usd = 0.0))
+        val model = home(firstRead(FirstRead.Answered))
 
         assertEquals(BalanceStateKind.ZeroLive, model.balance.state)
         assertEquals("$0", model.balance.integer)
     }
+
+    /** An empty wallet around its first read, as the real `balance_dashboard` says it. */
+    private fun firstRead(stage: FirstRead) = BalanceBoards.firstRead("0x" + "ab".repeat(20), 1.7e12, stage)
 
     /**
      * A first launch that could read nothing, with nothing cached. The core's
@@ -329,17 +334,58 @@ class WalletLiveTest {
     }
 
     /**
-     * A zero is "live" only when every chain answered. A partial zero, an
-     * unknown zero and a cached zero are all a wallet nobody has finished
-     * reading — no green dot.
+     * PR 3 final note F19 — "live" and "Checking…" are the core's to say.
+     *
+     * A wallet that held nothing last session opens with a cached total of 0.
+     * This file used to call that "live" (a zero total, not partial, no
+     * tokens): the home drew "Live · listening for payments" over a wallet
+     * nothing had read, then swapped it for "Can't reach 24 networks". The
+     * real machine, through its first read: out, answered, some missing.
      */
     @Test
-    fun `a zero is live only when every chain answered`() {
-        val live = home(BalanceView(display_total_usd = 0.0))
-        assertEquals(BalanceStateKind.ZeroLive, live.balance.state)
-        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.LIVE_INDICATOR), live.balance.liveText)
+    fun `a cached zero says Checking until a round has ended, and live only when the core does`() {
+        val checking = strings.t("componentsUi.funding.checking")
+        val listening = strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.LIVE_INDICATOR)
+        assertEquals("Checking…", checking)
 
+        // The first read is out over last session's zero.
+        val out = home(firstRead(FirstRead.Out)).balance
+        assertEquals(checking, out.checkingText)
+        assertNull("nothing has been read: not live", out.liveText)
+        assertEquals(BalanceStateKind.Normal, out.state)
+        assertEquals("the cached figure stands under it", "$0", out.integer)
+        assertNull("…and it is not \"still updating\": nothing has been read at all", out.status)
+
+        // It settled, and every network answered: live.
+        val answered = home(firstRead(FirstRead.Answered)).balance
+        assertNull("a round has ended: no longer checking", answered.checkingText)
+        assertEquals(listening, answered.liveText)
+        assertEquals(BalanceStateKind.ZeroLive, answered.state)
+        assertNull(answered.status)
+
+        // It settled with three networks missing: the line says so — never live.
+        val missing = WalletLive.home(base(), firstRead(FirstRead.Missing), FeedView(), CurrencyView(code = "USD", committed = true), strings, BalanceBoards.FIRST_READ_CHAINS).balance
+        assertNull(missing.checkingText)
+        assertNull("three networks did not answer: not a listening wallet", missing.liveText)
+        assertEquals(BalanceStateKind.Normal, missing.state)
+        assertEquals(BalanceStatusKind.Warning, missing.status?.kind)
+        assertEquals("Can't reach 3 networks right now", missing.status?.text)
+
+        // One line at a time, whichever the core says.
+        for (balance in listOf(out, answered, missing)) {
+            assertEquals(balance.toString(), 1, listOfNotNull(balance.checkingText, balance.liveText, balance.status).size)
+        }
+    }
+
+    /**
+     * And this shell derives neither: a zero total with every flag clear is
+     * NOT live unless the core says so (it is what a cached zero looks like),
+     * and whatever the flags say, `live_key` is.
+     */
+    @Test
+    fun `zero, live is the core's key and nothing else`() {
         for (view in listOf(
+            BalanceView(display_total_usd = 0.0),
             BalanceView(display_total_usd = 0.0, balance_partial = true),
             BalanceView(display_total_usd = 0.0, balance_unknown = true),
             BalanceView(display_total_usd = null, cached_total_usd = 0.0),
@@ -347,8 +393,48 @@ class WalletLiveTest {
             val model = home(view)
             assertEquals(view.toString(), BalanceStateKind.Normal, model.balance.state)
             assertEquals("$0", model.balance.integer)
-            assertNull(model.balance.liveText)
+            assertNull(view.toString(), model.balance.liveText)
+            assertNull(model.balance.checkingText)
         }
+        val said = home(BalanceView(display_total_usd = 0.0, live_key = app.getvela.wallet.core.i18n.I18nKeys.Wallet.LIVE_INDICATOR)).balance
+        assertEquals(BalanceStateKind.ZeroLive, said.state)
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.LIVE_INDICATOR), said.liveText)
+    }
+
+    /**
+     * "Checking…" stands alone on the line: under a cached figure a first
+     * read is not "still updating" (the line this shell wrote there), and it
+     * is said under the skeleton too — while the display currency is on its
+     * way, and with nothing cached at all.
+     */
+    @Test
+    fun `Checking stands in place of anything else the line could say`() {
+        val key = "componentsUi.funding.checking"
+        val cached = home(BalanceView(display_total_usd = null, cached_total_usd = 12.34, checking_key = key)).balance
+        assertEquals("$12", cached.integer)
+        assertEquals(strings.t(key), cached.checkingText)
+        assertNull("not \"Some balances are still updating.\"", cached.status)
+
+        val nothing = home(BalanceView(checking_key = key)).balance
+        assertEquals(BalanceStateKind.Loading, nothing.state)
+        assertEquals(strings.t(key), nothing.checkingText)
+
+        val waiting = home(
+            BalanceView(display_total_usd = null, cached_total_usd = 12.34, checking_key = key),
+            currency = CurrencyView(code = "USD", committed = false, pending = "CNY"),
+        ).balance
+        assertEquals(BalanceStateKind.Loading, waiting.state)
+        assertEquals(strings.t(key), waiting.checkingText)
+
+        // Hidden: the figure is masked, the line still says what is happening.
+        val hidden = home(BalanceView(hidden = true, checking_key = key)).balance
+        assertEquals(BalanceStateKind.Hidden, hidden.state)
+        assertEquals(strings.t(key), hidden.checkingText)
+
+        // A later refresh is not "checking": the core stops saying it, and the line is this shell's again.
+        val later = home(BalanceView(display_total_usd = null, cached_total_usd = 12.34, refreshing = true)).balance
+        assertNull(later.checkingText)
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.BALANCE_STALE), later.status?.text)
     }
 
     /**

@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import app.getvela.wallet.feature.wallet.components.BALANCE_REFRESH_TEST_TAG
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -109,5 +110,66 @@ class HeroStatusLineStillTest {
         current = plain
         compose.waitForIdle()
         compose.onNodeWithText(unreachable.balance.status!!.text).assertDoesNotExist()
+    }
+
+    /**
+     * PR 3 final note F19: an empty wallet around its first read, as the REAL
+     * balance machine says it (H15 / H16 / H17). "Checking…" while the read
+     * is out over last session's cached zero, "Live · listening for payments"
+     * once every network answered, "Can't reach 3 networks right now" when
+     * three did not — one place, three lines, and nothing under it moves. A
+     * cached zero drew "Live" over a wallet nothing had read, then swapped it
+     * for "Can't reach".
+     */
+    @Test
+    fun checkingLiveAndCantReachStandInTheOnePlaceAndMoveNothing() {
+        val checking = board(WalletScreenState.H15)
+        val live = board(WalletScreenState.H16)
+        val missing = board(WalletScreenState.H17)
+        val saysChecking = strings.t("componentsUi.funding.checking")
+        val saysLive = strings.t("home.liveIndicator")
+        val saysMissing = "Can't reach 3 networks right now"
+        assertEquals(saysChecking, checking.balance.checkingText)
+        assertEquals(null, checking.balance.liveText)
+        assertEquals(saysLive, live.balance.liveText)
+        assertEquals(saysMissing, missing.balance.status?.text)
+        assertEquals(null, missing.balance.liveText)
+
+        fun top(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.let { it.top to it.bottom }
+        fun actions() = listOf(checking.actions.receive, checking.actions.send).map { text ->
+            compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot.let { it.top to it.bottom }
+        }
+        fun measure() = Triple(top(BALANCE_STATUS_PLACE_TAG), top(BALANCE_REFRESH_TEST_TAG), actions())
+
+        var current by mutableStateOf<WalletHomeModel>(checking)
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) { WalletScreen(model = current) }
+            }
+        }
+        compose.waitForIdle()
+        val before = measure()
+        val measured = StringBuilder("checking: $before")
+        compose.onNodeWithText(saysChecking).assertExists()
+        compose.onNodeWithText(saysLive).assertDoesNotExist()
+        for ((name, next, said) in listOf(
+            Triple("live", live, saysLive),
+            Triple("can't reach", missing, saysMissing),
+            Triple("checking again", checking, saysChecking),
+            Triple("can't reach, straight from checking", missing, saysMissing),
+            Triple("live, last", live, saysLive),
+        )) {
+            current = next
+            compose.waitForIdle()
+            val after = measure()
+            measured.append("\n$name: $after")
+            assertEquals("the hero's line ($name) moved the page or changed its place\n$measured", before, after)
+            // Exactly one of the three is said at a time.
+            for (line in listOf(saysChecking, saysLive, saysMissing)) {
+                val nodes = compose.onAllNodesWithText(line, useUnmergedTree = true).fetchSemanticsNodes()
+                assertEquals("\"$line\" while the line says \"$said\"", if (line == said) 1 else 0, nodes.size)
+            }
+        }
+        android.util.Log.i("HeroStatusLineStill", measured.toString())
     }
 }

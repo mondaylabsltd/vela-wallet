@@ -457,7 +457,33 @@ object WalletFixtures {
             WalletScreenState.H13 -> liveCurrencyOnItsWay(base, strings)
             WalletScreenState.H13B -> liveCurrencyOnItsWay(base, strings, committed = true)
             WalletScreenState.H14 -> liveTokenListUnreachable(base, strings)
+            WalletScreenState.H15 -> liveFirstRead(base, strings, state)
+            WalletScreenState.H16 -> liveFirstRead(base, strings, state)
+            WalletScreenState.H17 -> liveFirstRead(base, strings, state)
         }
+    }
+
+    /**
+     * H15 / H16 / H17 — an empty wallet around its first read (PR 3 final
+     * note F19): the real balance machine's view (`BalanceBoards.firstRead`)
+     * through [WalletLive.home]. "Checking…" while the read is out over a
+     * cached zero, "Live · listening for payments" once every network has
+     * answered, "Can't reach 3 networks right now" when three did not — each
+     * the core's word, in the one place under the total.
+     */
+    private fun liveFirstRead(base: WalletHomeModel, strings: VelaStrings, state: WalletScreenState): WalletHomeModel {
+        val now = System.currentTimeMillis()
+        val stage = when (state) {
+            WalletScreenState.H15 -> app.getvela.wallet.feature.wallet.core.BalanceBoards.FirstRead.Out
+            WalletScreenState.H16 -> app.getvela.wallet.feature.wallet.core.BalanceBoards.FirstRead.Answered
+            else -> app.getvela.wallet.feature.wallet.core.BalanceBoards.FirstRead.Missing
+        }
+        val view = app.getvela.wallet.feature.wallet.core.BalanceBoards.firstRead(ADDRESS_FULL, now - 120_000.0, stage)
+        return WalletLive.home(
+            base, view, app.getvela.wallet.feature.wallet.core.FeedView(),
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true),
+            strings, app.getvela.wallet.feature.wallet.core.BalanceBoards.FIRST_READ_CHAINS, now = now,
+        ).copy(state = state)
     }
 
     /** The names H14 and Settings' SR7 call their networks by. */

@@ -57,6 +57,59 @@ object BalanceBoards {
         return Wire.json.decodeFromString(BalanceView.serializer(), script.viewJson())
     }
 
+    /** Where the FIRST read of an empty wallet stands ([firstRead]). */
+    enum class FirstRead {
+        /** Still out: only last session's cached zero is known. */
+        Out,
+
+        /** It settled and every network answered: the wallet holds nothing. */
+        Answered,
+
+        /** It settled and some networks did not answer. */
+        Missing,
+    }
+
+    /** The networks [firstRead] asks. */
+    val FIRST_READ_CHAINS = mapOf(1 to "Ethereum", 100 to "Gnosis", 137 to "Polygon", 42161 to "Arbitrum")
+
+    /**
+     * An EMPTY wallet around its first read (PR 3 final note F19), as the
+     * real machine says it. The account opens with last session's total — a
+     * cached zero — and its first read is out ([FirstRead.Out]: the core's
+     * `checking_key`, and no `live_key` — nothing has been read), then
+     * settles with every network answering ([FirstRead.Answered]:
+     * `live_key`) or with three that did not ([FirstRead.Missing]: the
+     * unreachable line, never "live").
+     */
+    fun firstRead(address: String, nowMs: Double, stage: FirstRead): BalanceView {
+        val asked = FIRST_READ_CHAINS.keys.toList()
+        val script = CoreScript(BalanceDashboardCore().asBridge()) { operation ->
+            val result: BalanceShellResult? = when (operation.optString("type")) {
+                "fetch_tokens" -> when (stage) {
+                    // The read is still out: nothing answers it.
+                    FirstRead.Out -> null
+                    FirstRead.Answered -> BalanceShellResult.FetchSettled(
+                        address = address, pull = false, read_chain_ids = asked, now_ms = nowMs,
+                    )
+                    FirstRead.Missing -> BalanceShellResult.FetchSettled(
+                        address = address, pull = false, failed_chain_ids = asked.drop(1), read_chain_ids = asked, now_ms = nowMs,
+                    )
+                }
+                "read_balance_cache" -> BalanceShellResult.CachedTotalLoaded(address, 0.0)
+                "read_balance_cache_many" -> BalanceShellResult.CachedBalancesLoaded(emptyList())
+                "write_balance_cache" -> BalanceShellResult.BalanceCacheWritten
+                "fetch_account_assets" -> BalanceShellResult.AccountAssetsFetched(address, null)
+                "write_privacy" -> BalanceShellResult.PrivacyWritten
+                // A retry timer stays out: the board is the round on screen.
+                else -> null
+            }
+            result?.let { Wire.json.encodeToString(BalanceShellResult.serializer(), it) }
+        }
+        script.dispatch(Wire.json.encodeToString(BalanceEvent.serializer(), BalanceEvent.PrivacyHydrated(false)))
+        script.dispatch(Wire.json.encodeToString(BalanceEvent.serializer(), BalanceEvent.AccountChanged(address)))
+        return Wire.json.decodeFromString(BalanceView.serializer(), script.viewJson())
+    }
+
     /** Tempo: a chain with no coin of its own — its money is all in its token list's stablecoins. */
     const val TEMPO = 4217
 
