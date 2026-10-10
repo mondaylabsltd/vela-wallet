@@ -539,7 +539,7 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		expect(note.dataset.tone).toBe('caution');
 		const probe = document.createElement('span');
 		probe.style.color = 'var(--color-warning-base)';
-		dialog()!.append(probe);
+		dialog()!.appendChild(probe);
 		expect(getComputedStyle(note).color).toBe(getComputedStyle(probe).color);
 		probe.style.color = 'var(--color-fg-subtle)';
 		expect(getComputedStyle(note).color).not.toBe(getComputedStyle(probe).color);

@@ -200,8 +200,13 @@ test('a request that moves nothing says "No asset changes" — and its landing m
 	expect(line).toBe('No asset changes');
 
 	// The node was asked once, and has not answered: nothing is said yet.
+	// (PR 3: four seconds on, the core's deadline puts the caution that
+	// nothing could be checked in the card's place — the one card that may be
+	// there before the answer; `fee-speed.e2e.ts` walks that.)
 	await expect.poll(() => asked, { timeout: 20_000 }).toBe(1);
-	await expect(card).toHaveCount(0);
+	await expect(
+		card.filter({ hasNotText: en('componentsUi.signing.simUnavailableWarning') })
+	).toHaveCount(0);
 	await expect(page.getByText(line)).toHaveCount(0);
 	// The sheet has opened and its fee has had its say: where the confirm rests.
 	const restingY = async () => {

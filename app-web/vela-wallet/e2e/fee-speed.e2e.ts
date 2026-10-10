@@ -1067,3 +1067,186 @@ test('a dApp send closed after approving is still answered, and no landing comes
 	).toBe(false);
 	await expect(page.getByTestId('dapp-receipt')).toHaveCount(0);
 });
+
+/**
+ * PR 3 — the confirm waits for the simulation's verdict, four seconds at most.
+ *
+ * The confirm gate looked at the request, the reading, the approval guard and
+ * the fee, and not at the sheet's own simulation: a person could confirm
+ * before the one part of the sheet a site cannot write was on screen. Here,
+ * on the real machines, with a node that is asked to simulate and holds its
+ * answer: the confirm is shut with the core's line under it; at the core's
+ * deadline it opens beside the caution that nothing could be checked, in the
+ * verdict's place; the answer that lands after takes the caution's place;
+ * and through all of it the confirm, in the sheet's foot, does not move.
+ * Lives here for this file's chain and relay stubs: the fee has to be READY
+ * for the simulation to be the one thing holding the confirm.
+ */
+
+/**
+ * What stands in the sheet's foot and in its verdict's place right now: can
+ * the confirm be pressed, the line shown under it, and what the
+ * balance-changes card says.
+ */
+async function verdictPlace(page: Page) {
+	return page.evaluate(() => {
+		const sheet = document.querySelector('[role="dialog"]');
+		const confirm = sheet?.querySelector<HTMLButtonElement>('[data-testid="signing-confirm"]');
+		const line = sheet?.querySelector<HTMLElement>('.confirm-note');
+		return {
+			disabled: confirm ? confirm.disabled : true,
+			line:
+				line && getComputedStyle(line).visibility !== 'hidden'
+					? (line.textContent?.trim() ?? '')
+					: null,
+			said: sheet?.querySelector('section.balances .note')?.textContent?.trim() ?? null
+		};
+	});
+}
+
+/**
+ * The sheet is waiting for its simulation: held with the core's line, or —
+ * past the deadline — open beside the caution. Every look on the way there
+ * is checked: a confirm that can be pressed over an empty verdict's place is
+ * the hole this closes. Answers which of the two it came to rest in.
+ */
+async function waitsForTheVerdict(page: Page): Promise<'held' | 'cautioned'> {
+	const checking = en('componentsUi.signing.confirmBlock.simChecking');
+	const couldNot = en('componentsUi.signing.simUnavailableWarning');
+	expect(checking).toBe('Checking what this transaction does…');
+	let rested: 'held' | 'cautioned' | null = null;
+	const looks: string[] = [];
+	await expect
+		.poll(
+			async () => {
+				const now = await verdictPlace(page);
+				looks.push(JSON.stringify(now));
+				if (now.disabled && now.line === checking && now.said === null) rested = 'held';
+				else if (!now.disabled && now.said === couldNot) rested = 'cautioned';
+				return rested;
+			},
+			{ timeout: 25_000, intervals: [100] }
+		)
+		.not.toBeNull();
+	// Open, and nothing in the verdict's place: never, in any look.
+	const open = looks.filter((look) => {
+		const now = JSON.parse(look) as { disabled: boolean; said: string | null };
+		return !now.disabled && now.said !== couldNot;
+	});
+	expect(open, looks.join('\n')).toEqual([]);
+	return rested!;
+}
+
+for (const [name, width, height] of [
+	['the phone sheet', 390, 844],
+	['the centred card', 1400, 900]
+] as const) {
+	test(`the confirm waits for a node that does not answer in time (${name}): held, then open beside the caution, and never moved`, async ({
+		page
+	}, testInfo) => {
+		await page.setViewportSize({ width, height });
+		await page.addInitScript(() => localStorage.setItem('vela.dev.console', '1'));
+		await stubChain(page);
+		await stubRelay(
+			page,
+			RELAY,
+			tieredRelay(() => 'pending')
+		);
+		// Registered after `stubChain`, so it runs first: the node is asked to
+		// simulate, and holds its answer until the test lets it go.
+		let asked = 0;
+		let answer: () => void = () => {};
+		const held = new Promise<void>((resolve) => (answer = resolve));
+		await page.route(/stub-rpc\.test\/rpc\/1$/, async (route) => {
+			const body = route.request().postDataJSON() as { method?: string; id?: number } | null;
+			if (body?.method !== 'eth_simulateV1') return route.fallback();
+			asked += 1;
+			await held;
+			return route.fulfill({
+				contentType: 'application/json',
+				body: JSON.stringify({
+					jsonrpc: '2.0',
+					id: body.id ?? 1,
+					// It ran, and nothing of the account's moves.
+					result: [{ calls: [{ status: '0x1', logs: [] }] }]
+				})
+			});
+		});
+		await enterWallet(page);
+		await page.waitForFunction(
+			() => (window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,
+			null,
+			{ timeout: 20_000 }
+		);
+		// A page asks for a call that carries no value: nothing to move.
+		await page.evaluate((to) => {
+			const accounts = JSON.parse(localStorage.getItem('vela.accounts') ?? '[]') as {
+				address: string;
+			}[];
+			const from = accounts[Number(localStorage.getItem('vela.activeAccountIndex') ?? 0)].address;
+			const vela = window as unknown as {
+				vela: { requester: { fire(method: string, params: unknown[]): Promise<unknown> } };
+			};
+			void vela.vela.requester
+				.fire('eth_sendTransaction', [{ from, to, value: '0x0' }])
+				.catch(() => undefined);
+		}, RECIPIENT);
+
+		const confirm = page.getByTestId('signing-confirm');
+		await expect(confirm).toBeVisible({ timeout: 25_000 });
+		await expect.poll(() => asked, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+		const couldNot = en('componentsUi.signing.simUnavailableWarning');
+		const card = page.locator('[role="dialog"] section.balances');
+		/** Where the confirm rests: the same place twice running. */
+		const restingY = async () => {
+			let last = -1;
+			await expect
+				.poll(
+					async () => {
+						const now = (await confirm.boundingBox())?.y ?? -1;
+						const still = now === last;
+						last = now;
+						return still;
+					},
+					{ timeout: 20_000, intervals: [200] }
+				)
+				.toBe(true);
+			return last;
+		};
+
+		// Held, with the line under it — unless this machine was slow enough for
+		// the deadline to pass first, which is the next state and is checked below.
+		const first = await waitsForTheVerdict(page);
+		const linePresent = first === 'held' ? await restingY() : null;
+		if (first === 'held') await page.screenshot({ path: testInfo.outputPath('held.png') });
+
+		// The deadline: the caution lands, the confirm opens, the line is gone.
+		await expect(card).toContainText(couldNot, { timeout: 20_000 });
+		await expect(card.locator('.note')).toHaveAttribute('data-tone', 'caution');
+		await expect(card).toHaveAttribute('data-verdict', '');
+		await expect(confirm).toBeEnabled();
+		expect((await verdictPlace(page)).line).toBeNull();
+		const lineAbsent = await restingY();
+		await expect(confirm).toBeInViewport({ ratio: 1 });
+		await expect(card).toBeInViewport({ ratio: 1 });
+		await page.screenshot({ path: testInfo.outputPath('cautioned.png') });
+
+		// The node answers after all: its verdict takes the caution's place.
+		answer();
+		await expect(card).toContainText(en('componentsUi.signing.simResultNoChange'), {
+			timeout: 20_000
+		});
+		await expect(page.getByText(couldNot)).toHaveCount(0);
+		await expect(confirm).toBeEnabled();
+		const answered = await restingY();
+		expect((await verdictPlace(page)).line).toBeNull();
+		await page.screenshot({ path: testInfo.outputPath('answered.png') });
+
+		testInfo.annotations.push({
+			type: 'confirm-top',
+			description: `${width}x${height}: line present ${linePresent}, line absent ${lineAbsent}, late verdict ${answered}`
+		});
+		if (linePresent !== null) expect(lineAbsent).toBe(linePresent);
+		expect(answered).toBe(lineAbsent);
+	});
+}
