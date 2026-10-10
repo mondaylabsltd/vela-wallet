@@ -225,9 +225,15 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		searchPlaceholder: m.addNetwork.searchPlaceholder
 	};
 
-	// Search phases: the list is the whole surface.
+	// Search phases: the list is the whole surface. The field shows the
+	// core's query — the model always had a place for it and nothing filled
+	// it, so the field kept its text only for as long as it stayed mounted.
 	if (wizard.phase === 'idle' || wizard.phase === 'searching' || wizard.phase === 'suggested') {
-		return { ...base, results: wizard.suggestions.map((s) => suggestionRow(s, m)) };
+		return {
+			...base,
+			query: wizard.query,
+			results: wizard.suggestions.map((s) => suggestionRow(s, m))
+		};
 	}
 
 	const info = wizard.chain_info;
@@ -281,7 +287,10 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		if (info === null) {
 			// No chain to show (already added; its document not found): the
 			// sentence, under the search it answers. Typing again clears it.
-			return { ...base, results: [], ...callout };
+			// The search still says what was asked for: a stop that came back
+			// from the "resolving" candidate re-drew the field EMPTY, and
+			// "Chain info not found" stood under a placeholder.
+			return { ...base, query: wizard.query, results: [], ...callout };
 		}
 		return {
 			...base,
@@ -300,8 +309,13 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 				: {}),
 			...callout,
 			// "Enter one, then re-check": the field the sentence points at, and
-			// the re-check that reads it.
-			customRpc,
+			// the re-check that reads it. Where no endpoint is listed the field
+			// is the only way on, so it is not labelled "(optional)" under a
+			// sentence that asks for it.
+			customRpc:
+				wizard.error_key === 'settingsModals.addNetwork.noRpcEndpoint'
+					? { ...customRpc, label: m.networks.rpcUrl }
+					: customRpc,
 			secondary: setupLink(refusal, m),
 			recheck: m.addNetwork.recheckWithRpc
 		};

@@ -131,8 +131,11 @@ function answer(operation: NetOperation, chain: Chain): NetShellResult | undefin
 	}
 }
 
-/** Boot the machine, raise `event`, answer everything, and hand back the wizard. */
-function wizardAfter(event: NetEvent, chain: Chain = HEALTHY): NetWizardView {
+/**
+ * Boot the machine, raise `event`, answer everything, and hand back the
+ * wizard. `typed`: what the person put in the search before the event.
+ */
+function wizardAfter(event: NetEvent, chain: Chain = HEALTHY, typed?: string): NetWizardView {
 	const core = new NetworkAdminCore();
 	let view: NetView | undefined;
 	const settle = (first: Out) => {
@@ -148,6 +151,10 @@ function wizardAfter(event: NetEvent, chain: Chain = HEALTHY): NetWizardView {
 		}
 	};
 	settle(JSON.parse(core.dispatch(JSON.stringify({ type: 'started' }))) as Out);
+	if (typed !== undefined) {
+		const search: NetEvent = { type: 'search_input', query: typed };
+		settle(JSON.parse(core.dispatch(JSON.stringify(search))) as Out);
+	}
 	settle(JSON.parse(core.dispatch(JSON.stringify(event))) as Out);
 	core.free();
 	if (view === undefined) throw new Error('the core committed no view');
@@ -236,6 +243,21 @@ describe('the three stops that had no words (PR 3 note 18)', () => {
 		expect(tab(wizard)).toEqual({ kind: 'not-found', text: 'Chain info not found' });
 	});
 
+	it('a stop under the search leaves what was searched in the field', () => {
+		// "Chain info not found" comes back from the resolving candidate, where
+		// the field is not drawn: re-drawn, it was EMPTY, and the sentence
+		// answered a placeholder. The core kept the query all along.
+		const lost = liveAddNetwork(wizardAfter(pick(CHAIN), { ...HEALTHY, doc: null }, '424242'), m);
+		expect(lost.candidate).toBeUndefined();
+		expect(lost.query).toBe('424242');
+		expect(lost.callout?.text).toBe('Chain info not found');
+
+		const held = liveAddNetwork(wizardAfter(pick(1), HEALTHY, 'ethereum'), m);
+		expect(held.candidate).toBeUndefined();
+		expect(held.query).toBe('ethereum');
+		expect(held.callout?.text).toBe('This network is already added');
+	});
+
 	it('no RPC endpoint listed: the sentence, the field it points at, and the re-check', () => {
 		const wizard = wizardAfter(pick(CHAIN), { ...HEALTHY, doc: { ...DOC, rpc: [] } });
 		expect(wizard).toMatchObject({
@@ -253,7 +275,9 @@ describe('the three stops that had no words (PR 3 note 18)', () => {
 		// "Enter one, then re-check": both are there to do it with.
 		expect(page.candidate).toMatchObject({ name: 'Sample' });
 		expect(page.candidate?.badge).toBeUndefined();
-		expect(page.customRpc).toMatchObject({ id: 'custom-rpc', label: m.addNetwork.customRpcTitle });
+		// …and the field is not called optional under a sentence that asks for it.
+		expect(page.customRpc).toMatchObject({ id: 'custom-rpc', label: 'RPC URL' });
+		expect(m.addNetwork.customRpcTitle).toContain('optional');
 		expect(page.recheck).toBe(m.addNetwork.recheckWithRpc);
 		// Not a verdict: no check list, nothing to deploy, nothing to add.
 		expect(page.checks).toBeUndefined();

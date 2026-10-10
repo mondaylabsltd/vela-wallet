@@ -264,9 +264,9 @@ test.describe('a wizard that stops says why', () => {
 		await pick(page, '8453', 'Base');
 		await expect(page.getByText(en('addToken.errorAlreadyAdded'), { exact: true })).toBeVisible();
 		await neverIncompatible(page);
-		// The search is still there to try another name with…
+		// The search is still there to try another name with, saying what was asked…
 		const search = page.getByPlaceholder(en('settingsModals.addNetwork.searchPlaceholder'));
-		await expect(search).toBeVisible();
+		await expect(search).toHaveValue('8453');
 		await page.screenshot({ path: testInfo.outputPath('stop-already-added.png') });
 		// …and typing again takes the sentence away.
 		await search.fill('linea');
@@ -285,6 +285,11 @@ test.describe('a wizard that stops says why', () => {
 			timeout: 30_000
 		});
 		await neverIncompatible(page);
+		// The sentence answers what was searched, and the field still says it:
+		// it came back from the resolving candidate EMPTY, over a placeholder.
+		await expect(
+			page.getByPlaceholder(en('settingsModals.addNetwork.searchPlaceholder'))
+		).toHaveValue('424242');
 		await page.screenshot({ path: testInfo.outputPath('stop-not-found.png') });
 	});
 
@@ -314,9 +319,13 @@ test.describe('a wizard that stops says why', () => {
 		await neverIncompatible(page);
 		await page.screenshot({ path: testInfo.outputPath('stop-no-rpc.png') });
 
-		// "Enter one, then re-check."
+		// "Enter one, then re-check." — into a field that is not called
+		// "(optional)" under the sentence that asks for it.
+		await expect(
+			page.getByRole('textbox', { name: en('settingsModals.addNetwork.customRpcTitle') })
+		).toHaveCount(0);
 		await page
-			.getByRole('textbox', { name: en('settingsModals.addNetwork.customRpcTitle') })
+			.getByRole('textbox', { name: en('settingsModals.network.fieldRpcUrl'), exact: true })
 			.fill(`${STUB}/${CHAIN_ID}`);
 		await page
 			.getByRole('button', { name: en('settingsModals.addNetwork.recheckWithRpc') })
