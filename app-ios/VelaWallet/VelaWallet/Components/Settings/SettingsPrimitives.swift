@@ -66,7 +66,10 @@ struct SettingsCallout: View {
                 // Optical alignment with the first line, not the box.
                 .padding(.top, Tokens.Space.s2)
             Text(callout.text)
-                .typeRole(Typography.body)
+                // Drawn as written: a callout can carry an address — "the
+                // P-256 verifier … at 0x100" read "0×100", the face's
+                // contextual rule turning the x after a digit into ×.
+                .typeRole(Typography.body.literal)
                 .foregroundStyle(style.fg)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

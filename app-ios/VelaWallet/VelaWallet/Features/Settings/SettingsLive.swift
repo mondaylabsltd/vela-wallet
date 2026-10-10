@@ -851,6 +851,10 @@ enum SettingsLive {
                     model.secondary = setup.label
                     model.secondaryUrl = setup.url
                 }
+                // And the re-check, as there: the RPC field is on this page,
+                // and another endpoint may answer differently — a field with
+                // nothing to send it would be a dead end.
+                model.recheck = loc.t(k.addRecheckWithRpc)
             default: break
             }
             return model

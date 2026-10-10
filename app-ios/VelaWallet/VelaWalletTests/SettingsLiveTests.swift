@@ -366,10 +366,13 @@ struct SettingsLiveTests {
         #expect(missing.secondary == loc.t(k.addChainTool))
         #expect(missing.secondaryUrl == "https://getvela.app/chain-setup?chain=7777777")
         #expect(missing.checks.isEmpty && missing.candidate?.badge == nil && missing.primary == nil)
+        // The RPC field is on the page: there is a way to send what is typed.
+        #expect(missing.customRpc != nil && missing.recheck == loc.t(k.addRecheckWithRpc))
 
         let noP256 = page(.notCompatible(chainId: 7_777_777), k.addNoP256Hint, compat(compatible: false, p256: false))
         #expect(noP256.callout?.text == loc.t(k.addNoP256Hint))
         #expect(noP256.secondary == nil && noP256.secondaryUrl == nil)
+        #expect(noP256.recheck != nil, "another RPC may answer differently")
 
         // The check could not run: whatever it kept, no reason and no link.
         var unverified = compat(compatible: false, missing: ["Multicall3"])

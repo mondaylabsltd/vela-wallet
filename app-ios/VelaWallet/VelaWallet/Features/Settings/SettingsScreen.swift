@@ -915,6 +915,15 @@ private struct AddNetworkBody: View {
                 // go straight to it — a shell-side timer here would be a second
                 // one, racing the first.
                 .onChange(of: query) { _, value in actions.onSearch(value) }
+                // A stop with no candidate to show it on — "This network is
+                // already added", "Chain info not found" — is said HERE, under
+                // the field. The builder set it and this page never drew it,
+                // so a tap on a result that could not be added answered with
+                // nothing at all (PR 3 notes 5/10/18: every stop says why).
+                if let callout = panel.callout {
+                    SettingsCallout(callout: callout)
+                        .accessibilityIdentifier("addNetwork.stop")
+                }
                 ForEach(panel.results) { row in
                     // Through the row's OWN `onTap`, not an outer gesture.
                     // `SettingsNetworkRow` carries a `.contentShape` plus an
