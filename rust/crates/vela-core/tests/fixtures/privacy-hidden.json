@@ -31,6 +31,7 @@
       "balance_partial": true,
       "balance_unknown": false,
       "cached_total_usd": null,
+      "checking_key": null,
       "display_total_usd": null,
       "failed_chain_ids": [
         56
@@ -40,6 +41,7 @@
       "internal_chain_ids": [],
       "internal_key": null,
       "last_refreshed_at_ms": 1700000001000.0,
+      "live_key": null,
       "notice": null,
       "rate_limited_chain_ids": [],
       "refreshing": false,
@@ -81,7 +83,8 @@
           "last_known": "held",
           "last_seen_usd": null,
           "line_key": "assets.lastSeen",
-          "rpc_fixable": true
+          "rpc_fixable": true,
+          "status_key": "home.balanceDetailStatusFailed"
         }
       ]
     },
@@ -982,6 +985,7 @@
       "balance_partial": true,
       "balance_unknown": false,
       "cached_total_usd": 951.79321,
+      "checking_key": null,
       "display_total_usd": 951.79321,
       "failed_chain_ids": [
         56
@@ -991,6 +995,7 @@
       "internal_chain_ids": [],
       "internal_key": null,
       "last_refreshed_at_ms": 1700000001000.0,
+      "live_key": null,
       "notice": null,
       "rate_limited_chain_ids": [],
       "refreshing": false,
@@ -1041,7 +1046,8 @@
           "last_known": "held",
           "last_seen_usd": 157.0,
           "line_key": "assets.lastSeen",
-          "rpc_fixable": true
+          "rpc_fixable": true,
+          "status_key": "home.balanceDetailStatusFailed"
         }
       ]
     },

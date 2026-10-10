@@ -2484,3 +2484,189 @@ fn a_round_where_every_chain_failed_is_no_zero() {
     .view();
     assert!(!cached.unreachable);
 }
+
+// ===========================================================================
+// PR 3 final note F19: "live" is a zero every chain answered for — never a
+// cached zero nothing has read yet
+// ===========================================================================
+
+/// A wallet that held nothing last session opens with a cached total of 0.
+/// Before its first round ends nothing has been read: the line under the
+/// total says "Checking…", not "Live · listening for payments" — which the
+/// shells drew there, then swapped for "Can't reach 24 networks" when the
+/// round came back. Live is said only by a round that settled with every
+/// chain answering.
+#[test]
+fn a_cached_zero_is_checking_until_a_round_says_it_is_live() {
+    use vela_core::app::balance_dashboard::{CHECKING, LIVE_ZERO};
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(0.0),
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.display_total_usd,
+        Some(0.0),
+        "the cached zero is shown"
+    );
+    assert_eq!(view.checking_key.as_deref(), Some(CHECKING));
+    assert_eq!(view.live_key, None, "nothing has read this wallet yet");
+
+    // Every chain answered, holding nothing: now it is live.
+    sut.resolve(settled_read(vec![], vec![], vec![1, 56, 100]));
+    let view = sut.view();
+    assert_eq!(view.checking_key, None);
+    assert_eq!(view.live_key.as_deref(), Some(LIVE_ZERO));
+
+    // A later refresh is not "checking" again: what the last round found
+    // stands while the next one is out.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    let view = sut.view();
+    assert_eq!(view.checking_key, None);
+    assert_eq!(view.live_key.as_deref(), Some(LIVE_ZERO));
+
+    // That round misses a chain: a zero with a network out of reach is an
+    // unknown wallet, not a listening one.
+    sut.resolve(settled_read(vec![], vec![56], vec![1, 56, 100]));
+    let view = sut.view();
+    assert_eq!(view.live_key, None);
+    assert!(view.unreachable_key.is_some());
+}
+
+/// The first round came back with networks out of reach: "Checking…" gives
+/// way to "Can't reach", and "live" was never said in between.
+#[test]
+fn checking_gives_way_to_what_the_first_round_found() {
+    use vela_core::app::balance_dashboard::CHECKING;
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(0.0),
+    });
+    assert_eq!(sut.view().checking_key.as_deref(), Some(CHECKING));
+    sut.resolve(settled_read(vec![], vec![1, 56], vec![1, 56, 100]));
+    let view = sut.view();
+    assert_eq!(view.checking_key, None);
+    assert_eq!(view.live_key, None);
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_MANY));
+}
+
+/// A read that threw said nothing: over a cached zero it is neither
+/// "checking" (it ended) nor "live" (no chain answered) — and a zero that
+/// WAS live stops being so when the next read throws.
+#[test]
+fn a_read_that_threw_is_not_live() {
+    let errored = || Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        internal: false,
+    };
+    let sut = booted(ADDR_A, Some(0.0), errored());
+    let view = sut.view();
+    assert_eq!((view.checking_key, view.live_key), (None, None));
+
+    let mut sut = booted(
+        ADDR_A,
+        Some(0.0),
+        settled_read(vec![], vec![], vec![1, 56, 100]),
+    );
+    assert!(sut.view().live_key.is_some());
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(errored());
+    assert_eq!(sut.view().live_key, None);
+}
+
+/// Live is a ZERO: a wallet holding something is never "listening", hidden
+/// it says nothing about itself, and another account starts over.
+#[test]
+fn live_is_only_a_shown_settled_zero() {
+    let holding = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(1, "ETH", "1", Some(2_000.0))],
+            vec![],
+            vec![1, 56],
+        ),
+    );
+    assert_eq!(holding.view().live_key, None);
+
+    let mut sut = booted(ADDR_A, None, settled_read(vec![], vec![], vec![1, 56]));
+    assert!(sut.view().live_key.is_some());
+    sut.dispatch(Event::PrivacyToggled);
+    assert_eq!(
+        sut.view().live_key,
+        None,
+        "hidden: no line about the figure"
+    );
+    sut.dispatch(Event::PrivacyToggled);
+
+    sut.dispatch(Event::AccountChanged {
+        address: ADDR_B.to_owned(),
+    });
+    let view = sut.view();
+    assert_eq!(view.live_key, None);
+    assert!(view.checking_key.is_some(), "the new account is being read");
+}
+
+/// A view written before these facts reads with neither line.
+#[test]
+fn a_view_from_before_the_checking_fact_still_reads() {
+    let sut = booted(ADDR_A, None, settled_read(vec![], vec![], vec![1]));
+    let mut json = serde_json::to_value(sut.view()).unwrap_or_default();
+    if let Some(map) = json.as_object_mut() {
+        map.remove("checking_key");
+        map.remove("live_key");
+    }
+    let old: BalanceView = serde_json::from_value(json).expect("an older view still reads");
+    assert_eq!((old.checking_key, old.live_key), (None, None));
+}
+
+/// PR 3 final note F21: the balance breakdown's short status says what is
+/// unavailable — the RPC, or the token list — from the core's key.
+#[test]
+fn the_breakdown_status_names_what_is_unavailable() {
+    use vela_core::app::balance_dashboard::{
+        STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE,
+    };
+    const TEMPO: u32 = 4_217;
+    let view = booted(
+        ADDR_A,
+        None,
+        Res::FetchSettled {
+            address: ADDR_A.to_owned(),
+            pull: false,
+            tokens: vec![token(1, "ETH", "1", Some(2_000.0))],
+            failed_chain_ids: vec![56, TEMPO],
+            rate_limited_chain_ids: vec![],
+            read_chain_ids: vec![1, 56, TEMPO],
+            internal_chain_ids: vec![],
+            registry_chain_ids: vec![TEMPO],
+            now_ms: NOW,
+        },
+    )
+    .view();
+    let status = |chain: u32| {
+        view.unreachable_networks
+            .iter()
+            .find(|row| row.chain_id == chain)
+            .map(|row| row.status_key.clone())
+    };
+    assert_eq!(status(56).as_deref(), Some(STATUS_RPC_UNAVAILABLE));
+    assert_eq!(
+        status(TEMPO).as_deref(),
+        Some(STATUS_TOKEN_LIST_UNAVAILABLE)
+    );
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
+}
