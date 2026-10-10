@@ -48,7 +48,8 @@ const drawn = async (width: string, fee: typeof FEE = FEE, onrefresh?: () => voi
 		refresh: screen.container.querySelector('button.refresh') as HTMLButtonElement,
 		stale: screen.container.querySelector('.stale') as HTMLElement | null,
 		label: row.querySelector('.label') as HTMLElement,
-		mark: row.querySelector('.amount > *') as HTMLElement,
+		// The coin's mark: the first piece of the coin's own line.
+		mark: row.querySelector('.coin > *') as HTMLElement,
 		amount: row.querySelector('.amount') as HTMLElement,
 		values: [...row.querySelectorAll<HTMLElement>('.value')]
 	};
@@ -158,7 +159,17 @@ describe('FeeRow', () => {
 	 * how long the figure turns out to be — and the row keeps it.
 	 */
 	it('with its money withheld, the figure landing moves nothing — long or short, at any width', async () => {
-		for (const width of ['342px', '272px', '500px']) {
+		// Down to a row too tight for the label and a long figure to share a
+		// line, and at the largest text size: the money's line is its own, so
+		// its length decides nothing (PR 3 final notes F12 and F13).
+		for (const [width, scale] of [
+			['342px', '1'],
+			['272px', '1'],
+			['500px', '1'],
+			['220px', '1'],
+			['272px', '1.35']
+		] as const) {
+			document.documentElement.style.setProperty('--text-scale', scale);
 			const withheld = { ...FEE, value: '0.0015 ETH', valueFiat: '≈ …', valueFiatWithheld: true };
 			const { screen, row } = await drawn(width, withheld as typeof FEE);
 			const box = (selector: string, nth = 0) => {
@@ -166,7 +177,20 @@ describe('FeeRow', () => {
 				return [r.left, r.top, r.width, r.height].map((n) => Math.round(n * 10) / 10);
 			};
 			const card = () => (row.parentElement as HTMLElement).getBoundingClientRect().height;
-			const before = { card: card(), label: box('.label'), coin: box('.value', 0) };
+			// The coin's mark (PR 3 final note F13): it slid 19 px left when the
+			// figure landed, because it stood before a column as wide as its
+			// longer line. It is one piece with the coin now.
+			const mark = () => box('.coin > *');
+			const before = {
+				card: card(),
+				label: box('.label'),
+				coin: box('.value', 0),
+				mark: mark()
+			};
+			// Beside the coin, on the coin's own line: the two share a middle.
+			expect(before.mark[0] + before.mark[2], width).toBeLessThanOrEqual(before.coin[0] + 0.5);
+			const middle = (b: number[]) => b[1] + b[3] / 2;
+			expect(Math.abs(middle(before.mark) - middle(before.coin)), width).toBeLessThanOrEqual(1);
 			// The money stands under the coin, on a line of its own.
 			const moneyTop = box('.value', 1)[1];
 			expect(moneyTop, width).toBeGreaterThanOrEqual(before.coin[1] + before.coin[3] - 0.5);
@@ -177,6 +201,7 @@ describe('FeeRow', () => {
 			expect(card(), `${width}: long figure`).toBe(before.card);
 			expect(box('.label'), `${width}: label`).toEqual(before.label);
 			expect(box('.value', 0), `${width}: the coin`).toEqual(before.coin);
+			expect(mark(), `${width}: the coin's mark`).toEqual(before.mark);
 			expect(box('.value', 1)[1], `${width}: the money's line`).toBe(moneyTop);
 			expect(row.querySelectorAll('.value')[1].textContent).toBe('≈ ₫112,500.00');
 			expect(row.scrollWidth, width).toBeLessThanOrEqual(row.clientWidth);
@@ -187,8 +212,10 @@ describe('FeeRow', () => {
 			expect(card(), `${width}: short figure`).toBe(before.card);
 			expect(box('.label'), `${width}: label`).toEqual(before.label);
 			expect(box('.value', 0), `${width}: the coin`).toEqual(before.coin);
+			expect(mark(), `${width}: the coin's mark, short figure`).toEqual(before.mark);
 			screen.unmount();
 		}
+		document.documentElement.style.removeProperty('--text-scale');
 	});
 
 	it('a row whose money was never withheld is drawn as it always was: side by side while both fit', async () => {
@@ -414,7 +441,7 @@ describe('FeeRow — the tap does what the figure says (PR 2 polish)', () => {
 		const { screen, calls } = await rowWith('retry', 'Tap to retry');
 		const row = screen.container.querySelector('button.open') as HTMLButtonElement;
 		expect(row.getAttribute('aria-label')).toBe('Refresh fee');
-		expect(row.querySelector('.amount > :last-child')?.tagName.toLowerCase()).not.toBe('svg');
+		expect(row.querySelector('.amount > .chevron')).toBeNull();
 		row.click();
 		await tick();
 		expect(calls).toEqual(['refresh']);
@@ -430,7 +457,7 @@ describe('FeeRow — the tap does what the figure says (PR 2 polish)', () => {
 		const row = screen.container.querySelector('button.open') as HTMLButtonElement;
 		expect(row.getAttribute('aria-label')).toBe('Fee token');
 		// The coin's mark, and the chevron after the figure.
-		expect(row.querySelector('.amount > :last-child')?.tagName.toLowerCase()).toBe('svg');
+		expect(row.querySelector('.amount > .chevron:last-child > svg')).not.toBeNull();
 		row.click();
 		await tick();
 		expect(calls).toEqual(['open']);
@@ -441,7 +468,7 @@ describe('FeeRow — the tap does what the figure says (PR 2 polish)', () => {
 		expect(screen.container.querySelector('button.open')).toBeNull();
 		const stated = screen.container.querySelector('[data-testid="fee-row-stated"]') as HTMLElement;
 		expect(stated).not.toBeNull();
-		expect(stated.querySelector('.amount > :last-child')?.tagName.toLowerCase()).not.toBe('svg');
+		expect(stated.querySelector('.amount > .chevron')).toBeNull();
 		expect(getComputedStyle(stated).cursor).toBe('default');
 		stated.click();
 		await tick();
