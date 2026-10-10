@@ -344,7 +344,11 @@ struct SendBackTests {
         let answered = try #require(send.view)
         #expect(answered.addNetworkMsg == .netAddError)
         #expect(!answered.addingNetwork, "the form is still \"adding\"")
-        #expect(took < .seconds(1), "the add-network ask took \(took)")
+        // "At once" against the ten-second wait this replaces — not a race
+        // with the scheduler: on a loaded machine the same answer took 1.9 s
+        // of wall clock, and a one-second bound failed a test of behaviour
+        // that was right. Half the old wait is still unmistakably not it.
+        #expect(took < .seconds(5), "the add-network ask took \(took)")
         #expect(SendLive.lockNotice(answered, loc: loc)?.text == "Couldn't add the network. Please try again.")
         // The lock stands — the person is not sent on to an empty form.
         #expect(answered.lockError == .network(chainId: 480))
