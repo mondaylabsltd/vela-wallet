@@ -111,14 +111,19 @@ live_key: string | null,
 /**
  * The Assets list's empty state: [`ASSETS_EMPTY`] ("Deposit your first
  * asset"), with its caption and its action. `Some` only when a read has
- * ended and found nothing held: never while the first read of the
- * account is out ([`Self::checking_key`]), never while holdings are
- * loading or unknown, never when no network could be read. A wallet
- * that held nothing last session opens with a cached total of 0, and
- * each shell took "no tokens, a known total" for an empty wallet — so
- * it invited a first deposit under "Checking…", before anything had
- * been read. A shell draws the empty state exactly when this is `Some`,
- * and with no tokens and no key it draws what it draws while loading.
+ * ended and a chain that ANSWERED found nothing held: never while the
+ * first read of the account is out ([`Self::checking_key`]), never
+ * while holdings are loading or unknown, and never while no chain has
+ * answered for this account — a first round in which every network
+ * failed, or which threw, has ended and has read nothing. A wallet that
+ * held nothing last session opens with a cached total of 0, and each
+ * shell took "no tokens, a known total" for an empty wallet — so it
+ * invited a first deposit under "Checking…", and again under "Can't
+ * reach 24 networks", before anything had been read. A round that
+ * misses SOME networks still says it for the ones that answered: a new
+ * wallet is not held at a skeleton by one network that is down. A shell
+ * draws the empty state exactly when this is `Some`, and with no tokens
+ * and no key it draws what it draws while loading.
  */
 empty_key: string | null, 
 /**
