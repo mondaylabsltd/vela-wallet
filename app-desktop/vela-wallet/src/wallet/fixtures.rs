@@ -76,6 +76,11 @@ pub enum Fiat {
     Value(SharedString),
     NoPrice(SharedString),
     Masked,
+    /// The worth is known but the display currency is not committed yet
+    /// (the core's withhold rule): a waiting bar in the figure's place —
+    /// never the placeholder's dollars, which would jump to the person's
+    /// own money a moment later.
+    Pending,
 }
 
 #[derive(Clone)]
@@ -254,6 +259,57 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
                 rate_limited_chain_ids: Vec::new(),
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: vec![1],
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// A wallet that holds something and read every chain it asked, through the
+/// real balance core: $4,500 on Gnosis and half an ETH. What the home draws
+/// from it depends only on the display currency — which is what
+/// `VELA_CURRENCY_PENDING` shows (the core's withhold rule: no figure until
+/// the currency is committed).
+#[must_use]
+pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    let token = |chain_id: u32, symbol: &str, balance: &str, price: f64| BalanceToken {
+        chain_id,
+        symbol: symbol.to_owned(),
+        name: symbol.to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(price),
+        spam: false,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![
+                    token(100, "XDAI", "4500", 1.0),
+                    token(1, "ETH", "0.5", 2_469.0),
+                ],
+                failed_chain_ids: Vec::new(),
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 100],
+                internal_chain_ids: Vec::new(),
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.

@@ -122,10 +122,16 @@ pub fn picked_language(index: usize) -> Option<&'static str> {
 /// Converted only when the core priced the currency: `rate: None` is not 1,
 /// so an unpriced choice prints the USD figure the core does have rather than
 /// dressing it in another currency's symbol.
+///
+/// And not at all while the display currency is not committed (the core's
+/// withhold rule, `CurrencyView.committed`): the placeholder is not the
+/// person's currency, so the figure waits as a dash rather than read "$…"
+/// for a moment and then jump to "¥…".
 #[must_use]
 pub fn account_total(usd: f64, currency: Option<&CurrencyView>, locale: &str) -> SharedString {
     let options = crate::executor::format_prefs::fiat_options();
     SharedString::from(match currency {
+        Some(view) if !view.committed => crate::wallet::live::WITHHELD_FIGURE.to_owned(),
         Some(CurrencyView {
             code,
             rate: Some(rate),
@@ -165,11 +171,18 @@ pub fn switcher_figures(
     // The sum is over what is actually KNOWN — an account with no cached
     // figure contributes nothing rather than making the sentence wait for it.
     let known_total: f64 = accounts.iter().filter_map(|address| figure(address)).sum();
+    // The display currency not committed yet: the total is the withheld
+    // dash, and a row has no figure — as for an account nobody has counted.
+    let withheld = currency.is_some_and(|currency| !currency.committed);
     (
         account_total(known_total, currency, locale),
         accounts
             .iter()
-            .map(|address| figure(address).map(|usd| account_total(usd, currency, locale)))
+            .map(|address| {
+                figure(address)
+                    .filter(|_| !withheld)
+                    .map(|usd| account_total(usd, currency, locale))
+            })
             .collect(),
     )
 }
@@ -373,8 +386,16 @@ pub fn symbol_for(code: &str) -> &str {
 ///   figure wearing its symbol, which is the specific lie `rate: None` exists to
 ///   prevent: "a rate of 1 is a claim (1 USD = 1 CNY)". Showing `¥1,234.56` for
 ///   an unpriced JPY would assert an exchange rate nobody obtained.
+///
+/// And before the core has committed anything (`committed: false`): the
+/// person's stored choice on its way, by its code alone — or nothing. Never
+/// the USD/1 placeholder, which would read "USD · $1,234.56" for a moment on
+/// a wallet set to CNY.
 #[must_use]
 pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
+    if !view.committed {
+        return SharedString::from(view.pending.clone().unwrap_or_default());
+    }
     match view.rate {
         Some(rate) => {
             let sample = format_fiat(
@@ -571,6 +592,7 @@ mod tests {
             code: code.to_owned(),
             rate,
             committed: true,
+            pending: None,
         }
     }
 
@@ -596,6 +618,50 @@ mod tests {
             !value.contains("1,234.56"),
             "an unpriced currency must not print a figure it cannot vouch for"
         );
+    }
+
+    /// PR 3 item 10: before the core commits a currency, nothing on this
+    /// page is drawn in the USD/1 placeholder. The row names the stored
+    /// choice on its way (its code alone) or nothing; an account's total is
+    /// the withheld dash, and a row in the switcher has no figure.
+    #[test]
+    fn nothing_is_drawn_in_the_placeholder_before_the_currency_commits() {
+        let waiting = |pending: Option<&str>| CurrencyView {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+            committed: false,
+            pending: pending.map(str::to_owned),
+        };
+        assert_eq!(
+            currency_row_value(&waiting(Some("CNY")), "en").as_ref(),
+            "CNY"
+        );
+        assert_eq!(currency_row_value(&waiting(None), "en").as_ref(), "");
+
+        let total = account_total(1234.5, Some(&waiting(Some("CNY"))), "en");
+        assert_eq!(total.as_ref(), crate::wallet::live::WITHHELD_FIGURE);
+        assert!(!total.contains('$') && !total.contains("1,234"), "{total}");
+
+        let switcher = vela_core::app::balance_dashboard::BalanceSwitcherView {
+            open: false,
+            loading: false,
+            balances: vec![vela_core::app::balance_dashboard::BalanceCacheEntry {
+                address: "0xaaa".to_owned(),
+                usd: 1234.5,
+            }],
+            hidden: false,
+        };
+        let (total, rows) =
+            switcher_figures(&switcher, &["0xaaa"], Some(&waiting(Some("CNY"))), "en");
+        assert_eq!(total.as_ref(), crate::wallet::live::WITHHELD_FIGURE);
+        assert_eq!(rows, vec![None], "no figure in a row either");
+
+        // Committed: the figures appear, in the person's money.
+        let cny = view("CNY", Some(7.2));
+        let (total, rows) = switcher_figures(&switcher, &["0xaaa"], Some(&cny), "en");
+        assert!(total.contains("8,888.40"), "{total}");
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].as_ref().is_some_and(|row| row.contains("8,888.40")));
     }
 
     /// A code with no glyph falls back to itself, and CLDR then separates it
@@ -1897,6 +1963,7 @@ mod parity_tests {
             code: code.to_owned(),
             rate,
             committed: true,
+            pending: None,
         }
     }
 

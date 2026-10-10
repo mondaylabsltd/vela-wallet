@@ -86,6 +86,7 @@ fn fiat_text(fiat: &Fiat) -> String {
     match fiat {
         Fiat::Value(text) | Fiat::NoPrice(text) => text.to_string(),
         Fiat::Masked => crate::wallet::fixtures::MASK.to_owned(),
+        Fiat::Pending => String::new(),
     }
 }
 

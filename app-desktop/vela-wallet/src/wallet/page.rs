@@ -4585,6 +4585,17 @@ impl WalletPage {
     /// whole cut exists to fix.
     fn asset_models(&mut self, cx: &mut Context<Self>) -> Vec<fixtures::AssetRowModel> {
         if self.identity.is_none() {
+            // `VELA_CURRENCY_PENDING`: a held wallet through the live
+            // builder, its worth waiting on the currency.
+            if let Some(money) = Self::pinned_pending_currency() {
+                return wallet_live::asset_rows(
+                    &fixtures::held_view(),
+                    &self.strings,
+                    &self.locale,
+                    None,
+                    &money,
+                );
+            }
             return fixtures::assets_default(&self.strings);
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
@@ -4692,6 +4703,16 @@ impl WalletPage {
                 let money = self.money(cx);
                 return wallet_live::balance(
                     &fixtures::internal_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
+            // `VELA_CURRENCY_PENDING`: the same held wallet, its total
+            // waiting on the currency.
+            if let Some(money) = Self::pinned_pending_currency() {
+                return wallet_live::balance(
+                    &fixtures::held_view(),
                     &self.strings,
                     &self.locale,
                     &money,
@@ -10778,11 +10799,37 @@ impl WalletPage {
     /// Signed out there is no committed pair and nothing to convert, so it is
     /// USD — the same thing every fixture board shows.
     fn money(&self, cx: &mut Context<Self>) -> wallet_live::Money {
+        if let Some(pending) = Self::pinned_pending_currency() {
+            return pending;
+        }
         if self.identity.is_none() {
             return wallet_live::Money::default();
         }
-        let view = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        wallet_live::Money::new(&view.code, view.rate)
+        // Committed or not, as the core has it: while it is not, `Money`
+        // withholds every figure (the hero waits on its skeleton).
+        wallet_live::Money::of(&resident::resident::<DisplayCurrency>(cx).read(cx).view())
+    }
+
+    /// `VELA_CURRENCY_PENDING=<code>|none` (developer builds): the display
+    /// currency as it stands before the core commits one — the USD/1
+    /// placeholder, with that stored choice on its way (`none`: a first
+    /// launch, nothing chosen). On a design surface the home then draws
+    /// `fixtures::held_view` through the live builders, so the waiting hero
+    /// and the holdings' bars can be looked at: the window between launch
+    /// and the first rate is a second or two, and cannot be held open by
+    /// hand. The same env-pin family as `VELA_SETTINGS_STATE`.
+    fn pinned_pending_currency() -> Option<wallet_live::Money> {
+        let want = crate::dev_env::var!("VELA_CURRENCY_PENDING")?;
+        let want = want.trim();
+        Some(wallet_live::Money::of(
+            &vela_core::app::display_currency::CurrencyView {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                committed: false,
+                pending: (!want.is_empty() && !want.eq_ignore_ascii_case("none"))
+                    .then(|| want.to_uppercase()),
+            },
+        ))
     }
 
     fn currency_value(&self, cx: &mut Context<Self>) -> gpui::SharedString {

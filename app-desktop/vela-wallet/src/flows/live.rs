@@ -119,9 +119,7 @@ fn asset_row(
             // about what "no price" is called.
             Fiat::NoPrice(wallet.no_price.clone())
         } else {
-            Fiat::Value(SharedString::from(
-                currency.text(amount * token.price_usd.unwrap_or(0.0), locale),
-            ))
+            currency.fiat(amount * token.price_usd.unwrap_or(0.0), locale)
         },
     }
 }
@@ -1828,7 +1826,7 @@ fn send_token_row(
         balance: SharedString::from(trimmed(amount)),
         fiat: match token.price_usd {
             None => Fiat::NoPrice(wallet.no_price.clone()),
-            Some(price) => Fiat::Value(SharedString::from(currency.text(amount * price, locale))),
+            Some(price) => currency.fiat(amount * price, locale),
         },
     }
 }
@@ -7818,6 +7816,7 @@ mod tests {
                         Fiat::Value(v) => v.to_string(),
                         Fiat::NoPrice(v) => v.to_string(),
                         Fiat::Masked => "•••".to_owned(),
+                        Fiat::Pending => String::new(),
                     }
                 );
             }

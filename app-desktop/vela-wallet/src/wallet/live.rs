@@ -29,10 +29,22 @@ use crate::wallet::fixtures::{
 /// point is the case it refuses: **a code with no rate is drawn as USD, not as
 /// that code at rate 1.** A rate of 1 is a claim — "1 USD = 1 CNY" — and the
 /// core answers `rate: None` rather than 1 for exactly this reason.
+///
+/// And one more refusal, the core's (`CurrencyView.committed`, PR 3 item 10):
+/// **until the display currency is committed, no money figure is drawn.** The
+/// machine starts on a USD/1 placeholder while the person's stored choice is
+/// priced; drawing it put "$1,234" on a home for a moment before it jumped to
+/// "¥8,876". The placeholder is not their currency, so every figure waits —
+/// the hero on its skeleton, a holding's worth on a bar — and appears once,
+/// in the right money. Nothing jumps.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Money {
     code: String,
     rate: Option<f64>,
+    /// The core has committed a currency. `false` = the placeholder.
+    committed: bool,
+    /// The person's own currency on its way (`CurrencyView.pending`).
+    pending: Option<String>,
 }
 
 impl Default for Money {
@@ -41,9 +53,16 @@ impl Default for Money {
         Self {
             code: "USD".to_owned(),
             rate: Some(1.0),
+            committed: true,
+            pending: None,
         }
     }
 }
+
+/// What stands where a figure would while the display currency is not
+/// committed, on a surface with no loading treatment of its own: the dash,
+/// which is no amount — never the placeholder's dollars.
+pub const WITHHELD_FIGURE: &str = "—";
 
 impl Money {
     /// Dollars, borrowable for as long as the process lives.
@@ -57,12 +76,46 @@ impl Money {
         USD.get_or_init(Money::default)
     }
 
-    /// The committed pair, straight from `display_currency`.
+    /// A committed pair: `code`, and the rate the core priced it at.
     #[must_use]
     pub fn new(code: &str, rate: Option<f64>) -> Self {
         Self {
             code: code.to_owned(),
             rate,
+            committed: true,
+            pending: None,
+        }
+    }
+
+    /// The display currency as the core has it right now — committed or not.
+    /// Every live surface builds its `Money` here, so the withhold rule is
+    /// read in one place.
+    #[must_use]
+    pub fn of(view: &vela_core::app::display_currency::CurrencyView) -> Self {
+        Self {
+            code: view.code.clone(),
+            rate: view.rate,
+            committed: view.committed,
+            pending: view.pending.clone(),
+        }
+    }
+
+    /// Whether figures may be drawn: the core has committed a currency.
+    #[must_use]
+    pub fn committed(&self) -> bool {
+        self.committed
+    }
+
+    /// The code a surface that names its currency APART from the figure
+    /// shows (`总余额 · CNY`): the code figures are drawn in once committed;
+    /// before that, the person's own choice on its way, if there is one —
+    /// and nothing rather than the placeholder's "USD".
+    #[must_use]
+    pub fn label_code(&self) -> Option<&str> {
+        if self.committed {
+            Some(self.code())
+        } else {
+            self.pending.as_deref()
         }
     }
 
@@ -79,19 +132,42 @@ impl Money {
     }
 
     /// A USD figure, in this currency — or in USD when it cannot be converted.
+    /// `None` while the currency is not committed: the figure is withheld,
+    /// and the surface draws its loading treatment.
     #[must_use]
-    pub fn text(&self, usd: f64, locale: &str) -> String {
+    pub fn figure(&self, usd: f64, locale: &str) -> Option<String> {
+        if !self.committed {
+            return None;
+        }
         let (code, amount) = match self.rate {
             Some(rate) => (self.code.as_str(), usd * rate),
             None => ("USD", usd),
         };
-        format_fiat(
+        Some(format_fiat(
             amount,
             code,
             crate::settings::live::symbol_for(code),
             locale,
             crate::executor::format_prefs::fiat_options(),
-        )
+        ))
+    }
+
+    /// [`Self::figure`] as text — [`WITHHELD_FIGURE`] while it is withheld,
+    /// for a surface that has no loading treatment of its own.
+    #[must_use]
+    pub fn text(&self, usd: f64, locale: &str) -> String {
+        self.figure(usd, locale)
+            .unwrap_or_else(|| WITHHELD_FIGURE.to_owned())
+    }
+
+    /// A holding's worth as a row draws it: the figure, or the row's waiting
+    /// bar while the currency is not committed.
+    #[must_use]
+    pub fn fiat(&self, usd: f64, locale: &str) -> crate::wallet::fixtures::Fiat {
+        match self.figure(usd, locale) {
+            Some(figure) => crate::wallet::fixtures::Fiat::Value(SharedString::from(figure)),
+            None => crate::wallet::fixtures::Fiat::Pending,
+        }
     }
 }
 
@@ -137,10 +213,14 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
 
     // Hidden says nothing about the figure it is hiding — the web's hidden
     // hero has no status line (078 H-03).
+    // The code beside the label: what figures are drawn in — or, while the
+    // currency is not committed, the person's own choice on its way, and
+    // nothing at all rather than the placeholder's "USD".
+    let currency = SharedString::from(money.label_code().unwrap_or_default().to_owned());
     if view.hidden {
         return BalanceModel {
             label: s.total_balance.clone(),
-            currency: SharedString::from(money.code().to_owned()),
+            currency,
             state: BalanceState::Hidden,
             integer: SharedString::from(BALANCE_MASK),
             decimals: None,
@@ -160,13 +240,18 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     // figure is `None` then too (PR 2 polish); `unreachable` is still read
     // here, so a cached total can never stand in for a round that read
     // nothing.
-    let known = (!view.unreachable)
+    //
+    // And the same skeleton while the display currency is not committed
+    // (the core's withhold rule): the total is known, but not yet in the
+    // person's money — it is drawn once, in the right currency, never in
+    // dollars first.
+    let known = (!view.unreachable && money.committed())
         .then(|| view.display_total_usd.or(view.cached_total_usd))
         .flatten();
     let Some(usd) = known else {
         return BalanceModel {
             label: s.total_balance.clone(),
-            currency: SharedString::from(money.code().to_owned()),
+            currency,
             state: BalanceState::Loading,
             // Not "$0". The core withholds the number until it has one, and the
             // shell must not fill the gap with a figure that reads as an answer.
@@ -213,7 +298,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     let (integer, decimals) = split_fiat(usd, locale, money);
     BalanceModel {
         label: s.total_balance.clone(),
-        currency: SharedString::from(money.code().to_owned()),
+        currency,
         // A zero is "live" only once EVERY chain has answered: a partial zero
         // (some chain unreachable), or a cached one, is an unknown wallet,
         // not a listening one.
@@ -2348,6 +2433,102 @@ mod tests {
         });
     }
 
+    /// PR 3 item 10 — nothing jumps. Before the core commits a display
+    /// currency the machine holds a USD/1 placeholder, and a home that drew
+    /// it said "$1,234" for a moment and then "¥8,876". Until the commit the
+    /// hero is its skeleton with NO figure (the label naming the person's own
+    /// choice on its way, or nothing — never "USD"), a holding's worth is its
+    /// waiting bar, and every other figure is the withheld dash. Once
+    /// committed, each figure appears once, in the right money.
+    #[test]
+    fn no_figure_is_drawn_before_the_display_currency_commits() {
+        crate::executor::storage::tests::with_temp_state("currency-pending", || {
+            use vela_core::app::balance_dashboard::BalanceToken;
+            use vela_core::app::display_currency::CurrencyView;
+            let waiting = |pending: Option<&str>| {
+                Money::of(&CurrencyView {
+                    code: "USD".to_owned(),
+                    rate: Some(1.0),
+                    committed: false,
+                    pending: pending.map(str::to_owned),
+                })
+            };
+            let s = strings();
+            let mut held = view(Some(1234.5));
+            held.tokens = vec![BalanceToken {
+                chain_id: 1,
+                symbol: "ETH".to_owned(),
+                name: "ETH".to_owned(),
+                balance: "0.5".to_owned(),
+                decimals: 18,
+                token_address: None,
+                price_usd: Some(2_469.0),
+                spam: false,
+            }];
+
+            // The stored choice is on its way: the hero waits, and names it.
+            let money = waiting(Some("CNY"));
+            assert!(!money.committed());
+            let hero = balance(&held, &s, "en-US", &money);
+            assert_eq!(
+                hero.state,
+                BalanceState::Loading,
+                "a skeleton, not a figure"
+            );
+            assert_eq!(hero.integer.as_ref(), "");
+            assert_eq!(hero.decimals, None);
+            assert_eq!(hero.currency.as_ref(), "CNY", "the person's own choice");
+            assert_eq!(hero.status, None, "a currency on its way is not a fault");
+            // First launch, nothing chosen yet: no code at all — not "USD".
+            assert_eq!(
+                balance(&held, &s, "en-US", &waiting(None))
+                    .currency
+                    .as_ref(),
+                ""
+            );
+
+            let rows = asset_rows(&held, &s, "en-US", None, &money);
+            assert!(
+                matches!(rows[0].fiat, Fiat::Pending),
+                "the row's waiting bar"
+            );
+            assert_eq!(rows[0].balance.as_ref(), "0.5", "the amount is not money");
+            assert_eq!(money.figure(1.0, "en-US"), None);
+            assert_eq!(money.text(1.0, "en-US"), WITHHELD_FIGURE);
+            let detail = balance_detail(&held, &s, "en-US", &money);
+            assert!(
+                !detail.summary.contains('$') && !detail.summary.contains("1,234"),
+                "{}",
+                detail.summary
+            );
+
+            // A hidden hero is still hidden — and still names no placeholder.
+            let mut hidden = held.clone();
+            hidden.hidden = true;
+            hidden.display_total_usd = None;
+            let masked = balance(&hidden, &s, "en-US", &waiting(None));
+            assert_eq!(masked.state, BalanceState::Hidden);
+            assert_eq!(masked.currency.as_ref(), "");
+
+            // Committed: the figure, once, in the person's money.
+            let cny = Money::of(&CurrencyView {
+                code: "CNY".to_owned(),
+                rate: Some(7.2),
+                committed: true,
+                pending: None,
+            });
+            let hero = balance(&held, &s, "en-US", &cny);
+            assert_eq!(hero.state, BalanceState::Normal);
+            assert_eq!(hero.currency.as_ref(), "CNY");
+            assert!(hero.integer.contains("8,888"), "{}", hero.integer);
+            let rows = asset_rows(&held, &s, "en-US", None, &cny);
+            assert!(
+                matches!(&rows[0].fiat, Fiat::Value(v) if v.contains("8,888.40")),
+                "the worth, in CNY"
+            );
+        });
+    }
+
     /// The home strip lists the core's holdings, in the core's order, and says
     /// nothing about a chain nobody holds anything on.
     #[test]
@@ -2695,9 +2876,9 @@ pub fn asset_rows(
                 } else if unpriced.contains(&key) {
                     Fiat::NoPrice(s.no_price.clone())
                 } else {
-                    Fiat::Value(SharedString::from(
-                        money.text(amount * token.price_usd.unwrap_or(0.0), locale),
-                    ))
+                    // The worth — or the row's waiting bar while the display
+                    // currency is not committed.
+                    money.fiat(amount * token.price_usd.unwrap_or(0.0), locale)
                 },
             }
         })

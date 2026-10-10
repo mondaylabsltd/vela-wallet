@@ -430,32 +430,49 @@ pub fn balance_display(
             .text_color(theme.fg_subtle)
             // The code the figure beneath is DRAWN in, not a constant: the
             // hero said `总余额 · USD` over `ZAR 157.34` until 2026-09-23.
-            .child(SharedString::from(format!(
-                "{} · {}",
-                model.label, model.currency
-            ))),
+            // …and no code at all while the display currency is not
+            // committed and nobody's choice is on its way: the placeholder's
+            // "USD" is not the person's currency.
+            .child(if model.currency.is_empty() {
+                model.label.clone()
+            } else {
+                SharedString::from(format!("{} · {}", model.label, model.currency))
+            }),
     );
 
     root = match model.state {
         // The web's `SkeletonRow variant="block"` (078 H-10): 55 % of the
         // column, one `--text-4xl` tall, radius 8, breathing 1 → .4 → 1.
+        //
+        // In the FIGURE's own line box (the hero size at its 1.12 leading):
+        // the bar is 32 and the figure's line 45, so a bare bar let
+        // everything under the hero drop 13 px the moment the figure landed.
+        // The figure now lands where the bar was, and nothing moves — which
+        // is the whole point of waiting for the display currency (PR 3 item
+        // 10) instead of drawing dollars first.
         BalanceState::Loading => root.child(
             div()
-                .w(gpui::relative(0.55))
-                .h(px(32.))
-                .rounded(px(8.))
-                .bg(theme.bg_sunken)
-                .with_animation(
-                    "balance-skeleton",
-                    gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
-                    |block, delta| {
-                        let t = if delta < 0.5 {
-                            delta * 2.
-                        } else {
-                            2. - delta * 2.
-                        };
-                        block.opacity(1. - 0.6 * t)
-                    },
+                .h(theme::text_balance_hero() * 1.12)
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .w(gpui::relative(0.55))
+                        .h(px(32.))
+                        .rounded(px(8.))
+                        .bg(theme.bg_sunken)
+                        .with_animation(
+                            "balance-skeleton",
+                            gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+                            |block, delta| {
+                                let t = if delta < 0.5 {
+                                    delta * 2.
+                                } else {
+                                    2. - delta * 2.
+                                };
+                                block.opacity(1. - 0.6 * t)
+                            },
+                        ),
                 ),
         ),
         BalanceState::Hidden => root.child(pressable(
@@ -1050,6 +1067,23 @@ pub fn asset_row(
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_subtle)
             .child(super::fixtures::MASK),
+        // The figure's own line box, holding a skeleton bar: the row is
+        // exactly as tall with the bar as with the figure, so nothing moves
+        // when the figure lands.
+        Fiat::Pending => div()
+            .text_size(theme::text_row_sub())
+            .flex()
+            .items_center()
+            .justify_end()
+            .child(
+                div()
+                    .w(px(56.))
+                    .h(px(10.))
+                    .rounded(px(4.))
+                    .bg(theme.bg_sunken),
+            )
+            // An invisible glyph gives the box the text line's height.
+            .child(div().invisible().child("\u{200b}")),
     };
     // The web's row (078 H-09): flush with the column, no hover wash, no
     // radius — a list of holdings, not a stack of cards. Padded 12 on the
