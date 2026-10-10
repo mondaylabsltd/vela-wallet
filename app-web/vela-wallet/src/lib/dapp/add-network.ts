@@ -9,10 +9,8 @@
 
 import type { NetDappAddView } from '$lib/core/generated/NetDappAddView';
 import type { CheckItemModel, StatusPillModel } from '$lib/settings/model';
+import { netRefusal } from '$lib/settings/net-refusal';
 import type { AddNetworkMessages } from './messages';
-
-/** Where a chain this wallet refuses can be made ready (Settings links the same page). */
-export const CHAIN_SETUP_URL = 'https://getvela.app/chain-setup';
 
 export interface AddNetworkCard {
 	title: string;
@@ -29,7 +27,13 @@ export interface AddNetworkCard {
 	/** "Add Network" — only where the core says it can act. */
 	add: string | null;
 	retry: string | null;
-	setupTool: string | null;
+	/**
+	 * "Open Chain Setup Tool" and where it goes — the core's
+	 * `NetCompatibility.setup_url` (`…/chain-setup?chain=<id>`). Only a
+	 * refusal with something to deploy has one: a network with no P-256
+	 * verifier gets no button.
+	 */
+	setupTool: { label: string; url: string } | null;
 	/** Cancel while a decision is open, Done after a verdict — either way `dapp_add_declined`. */
 	dismiss: string;
 }
@@ -59,6 +63,7 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 			]
 		: [];
 
+	const refusal = view.phase === 'not_compatible' ? netRefusal(view.compat, m.hints) : {};
 	let pill: StatusPillModel | null = null;
 	let note: string | null = null;
 	switch (view.phase) {
@@ -71,7 +76,10 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 			break;
 		case 'not_compatible':
 			pill = { tone: 'error', label: m.incompatible, dot: true };
-			note = m.incompatibleHint;
+			// WHY, in the core's words (`compat.hint_key`): no P-256 verifier
+			// — Vela wallets cannot work here and money sent would be stuck —
+			// or contracts that are missing and can be deployed.
+			note = refusal.hint ?? null;
 			break;
 		case 'check_failed':
 			pill = { tone: 'warn', label: m.unableToVerify, dot: true };
@@ -99,7 +107,8 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 		note,
 		add: view.can_add ? m.add : null,
 		retry: view.phase === 'check_failed' ? m.retry : null,
-		setupTool: view.phase === 'not_compatible' ? m.setupTool : null,
+		setupTool:
+			refusal.setupUrl === undefined ? null : { label: m.setupTool, url: refusal.setupUrl },
 		dismiss: decided ? m.done : m.cancel
 	};
 }

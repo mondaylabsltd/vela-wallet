@@ -27,9 +27,11 @@ import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
 	BACKUP_ROW_KEYS,
+	NET_HINT_KEYS,
 	UNREACHABLE_LINE_KEYS,
 	VENUE_BLOCK_KEYS,
 	type BackupRowKey,
+	type NetHintKey,
 	type SettingsMessages,
 	type VenueBlockKey
 } from '$lib/settings/messages';
@@ -537,7 +539,11 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			checkingCompatibility: k('settingsModals.addNetwork.checkingCompatibility'),
 			unableToVerify: k('settingsModals.addNetwork.unableToVerify'),
 			retry: k('settingsModals.addNetwork.retry'),
-			incompatibleHint: k('settingsModals.addNetwork.incompatibleHint'),
+			// By corpus key: the core names which line a refusal says.
+			hints: Object.fromEntries(NET_HINT_KEYS.map((key) => [key, k(key)])) as Record<
+				NetHintKey,
+				string
+			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
 			openChainSetupTool: k('settingsModals.addNetwork.openChainSetupTool'),
 			recheckWithRpc: k('settingsModals.addNetwork.recheckWithRpc'),
@@ -871,7 +877,10 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 			checking: k('settingsModals.addNetwork.checkingCompatibility'),
 			compatible: k('settingsModals.addNetwork.compatible'),
 			incompatible: k('settingsModals.addNetwork.incompatible'),
-			incompatibleHint: k('settingsModals.addNetwork.incompatibleHint'),
+			hints: Object.fromEntries(NET_HINT_KEYS.map((key) => [key, k(key)])) as Record<
+				NetHintKey,
+				string
+			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
 			unableToVerify: k('settingsModals.addNetwork.unableToVerify'),
 			wrongRpc: k('assets.rpcFixWrongChain'),

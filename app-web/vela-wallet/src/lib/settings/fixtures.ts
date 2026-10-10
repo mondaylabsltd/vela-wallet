@@ -103,7 +103,10 @@ export const MARKS: Record<string, ChainMarkModel> = {
 	tempo: { letter: 'T', color: '#8C8C8C' },
 	xlayer: { letter: 'X', color: '#8C8C8C' },
 	zora: { letter: 'Z', color: '#8C8C8C' },
-	zircuit: { letter: 'Z', color: '#2E9E7E' }
+	zircuit: { letter: 'Z', color: '#2E9E7E' },
+	// ST10d's candidate: an invented network. The board says "cannot run Vela
+	// wallets" of it, which is not a thing to draw over a real project's name.
+	sample: { letter: 'S', color: '#8C8C8C' }
 };
 
 /** The twelve networks, in the order ST9 lists them. */
@@ -416,10 +419,21 @@ function networkDetail(m: SettingsMessages, mismatch: boolean): NetworkDetailMod
 	};
 }
 
-/** ST10 search, ST10b compatible, ST10c incompatible — one builder, three modes. */
+/**
+ * ST10 search, ST10b compatible, and the two refusals — one builder, four
+ * modes. The refusals are the core's two blockers (`NetBlocker`), which have
+ * opposite next steps:
+ *
+ * - ST10c `incompatible`: the P-256 verifier is there and contracts are
+ *   missing. Something can be deployed, so Chain Setup is offered, opened on
+ *   the chain that was checked.
+ * - ST10d `no-p256`: the contracts could all be there and the network still
+ *   cannot check a passkey signature. Nothing to deploy — no button, and the
+ *   line says not to send money there.
+ */
 function addNetwork(
 	m: SettingsMessages,
-	mode: 'search' | 'compatible' | 'incompatible'
+	mode: 'search' | 'compatible' | 'incompatible' | 'no-p256'
 ): AddNetworkModel {
 	const base = {
 		title: m.advanced.addNetworkTitle,
@@ -442,14 +456,17 @@ function addNetwork(
 			]
 		};
 	}
-	// Four rows in both modes: "incompatible" is only legible as an answer if
-	// it shows WHICH requirement failed, so the list never shortens.
-	const ok = mode === 'compatible';
+	// Four rows in every mode: a refusal is only legible as an answer if it
+	// shows WHICH requirement failed, so the list never shortens. Missing
+	// contracts cross the contract rows and leave the verifier ticked; no
+	// verifier crosses that one row, whatever else is deployed.
+	const contracts = mode !== 'incompatible';
+	const verifier = mode !== 'no-p256';
 	const checks: CheckItemModel[] = [
 		{ label: m.addNetwork.checkEntryPoint, ok: true },
-		{ label: m.addNetwork.checkSafe, ok },
-		{ label: m.addNetwork.checkSigner, ok },
-		{ label: fill(m.addNetwork.checkRemaining, { count: 8 }), ok }
+		{ label: m.addNetwork.checkSafe, ok: contracts },
+		{ label: m.addNetwork.checkSigner, ok: verifier },
+		{ label: fill(m.addNetwork.checkRemaining, { count: 8 }), ok: contracts }
 	];
 	if (mode === 'compatible') {
 		return {
@@ -473,6 +490,28 @@ function addNetwork(
 			primary: m.addNetwork.addNetworkBtn
 		};
 	}
+	if (mode === 'no-p256') {
+		return {
+			...base,
+			subtitle: `Sample L2 · ${chainMeta(m, 64800)}`,
+			results: [],
+			candidate: {
+				mark: MARKS.sample,
+				name: 'Sample L2',
+				meta: m.addNetwork.compatibilityCheck,
+				badge: { tone: 'error', label: m.addNetwork.incompatible, dot: true }
+			},
+			checksTitle: m.addNetwork.compatibilityCheck,
+			checks,
+			// The core's `NO_P256_HINT`, and no setup link: `setup_url` is
+			// absent for this blocker.
+			callout: {
+				tone: 'warning',
+				text: m.addNetwork.hints['settingsModals.addNetwork.noP256Hint']
+			},
+			recheck: m.addNetwork.recheckWithRpc
+		};
+	}
 	return {
 		...base,
 		subtitle: `Zircuit · ${chainMeta(m, 48900)}`,
@@ -485,8 +524,16 @@ function addNetwork(
 		},
 		checksTitle: m.addNetwork.compatibilityCheck,
 		checks,
-		callout: { tone: 'warning', text: m.addNetwork.incompatibleHint },
-		secondary: m.addNetwork.openChainSetupTool,
+		// The core's `MISSING_CONTRACTS_HINT`, and its `setup_url`: Chain Setup
+		// opened on the chain that was checked.
+		callout: {
+			tone: 'warning',
+			text: m.addNetwork.hints['settingsModals.addNetwork.incompatibleHint']
+		},
+		secondary: {
+			label: m.addNetwork.openChainSetupTool,
+			href: 'https://getvela.app/chain-setup?chain=48900'
+		},
 		recheck: m.addNetwork.recheckWithRpc
 	};
 }
@@ -1411,6 +1458,7 @@ const MOBILE_SHAPE: Record<
 	st10: { page: 'add-network', overlay: 'none' },
 	st10b: { page: 'add-network', overlay: 'none' },
 	st10c: { page: 'add-network', overlay: 'none' },
+	st10d: { page: 'add-network', overlay: 'none' },
 	st11: { page: 'rpc-providers', overlay: 'none' },
 	st12: { page: 'endpoints', overlay: 'none' },
 	st13: { page: 'storage', overlay: 'none' },
@@ -1436,7 +1484,14 @@ export function buildMobileState(
 	identicon: (seed: string) => string
 ): SettingsHomeModel {
 	const shape = MOBILE_SHAPE[state];
-	const addMode = state === 'st10b' ? 'compatible' : state === 'st10c' ? 'incompatible' : 'search';
+	const addMode =
+		state === 'st10b'
+			? 'compatible'
+			: state === 'st10c'
+				? 'incompatible'
+				: state === 'st10d'
+					? 'no-p256'
+					: 'search';
 	const backdropTitle =
 		shape.backdrop === 'wallet'
 			? m.walletTitle

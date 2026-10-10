@@ -190,7 +190,14 @@ export interface SettingsMessages {
 		/** Invariant ③: an unanswered probe is "unable to verify", never "incompatible". */
 		unableToVerify: string;
 		retry: string;
-		incompatibleHint: string;
+		/**
+		 * The line under a refused network's check, BY CORPUS KEY. The core
+		 * says which one (`NetCompatibility.hint_key`): no P-256 verifier —
+		 * the network cannot run Vela wallets and money sent there would be
+		 * stuck — or contracts that are missing and can be deployed. The two
+		 * have opposite next steps, so the shell never picks between them.
+		 */
+		hints: Record<NetHintKey, string>;
 		/**
 		 * Spec 081 FR-009: the chain works, and a wallet with more than one
 		 * passkey still cannot be created on it. Said beside a green
@@ -553,6 +560,20 @@ export const VENUE_BLOCK_KEYS = [
 export type VenueBlockKey = (typeof VENUE_BLOCK_KEYS)[number];
 
 /**
+ * The lines a refused network's check can say — every `hint_key` the core's
+ * `NetCompatibility` names (`network_admin`: `NO_P256_HINT`,
+ * `MISSING_CONTRACTS_HINT`). Settings' wizard and a dApp's add-network sheet
+ * both resolve these; `net-refusal.test.ts` holds the list to the core's
+ * source.
+ */
+export const NET_HINT_KEYS = [
+	'settingsModals.addNetwork.noP256Hint',
+	'settingsModals.addNetwork.incompatibleHint'
+] as const;
+
+export type NetHintKey = (typeof NET_HINT_KEYS)[number];
+
+/**
  * Every corpus key the core's backup row can name
  * (`vela_core::registry_backup`: `TITLE_KEY`, `CHECKING_KEY` and each
  * `BackupState::row()` second line). `ethereum-backup-row.test.ts` reads the
@@ -713,6 +734,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.addNetwork.customRpcPlaceholder',
 	'settingsModals.addNetwork.addNetworkBtn',
 	'settingsModals.addNetwork.incompatibleHint',
+	'settingsModals.addNetwork.noP256Hint',
 	'settingsModals.addNetwork.singleKeyOnly',
 	'settingsModals.addNetwork.openChainSetupTool',
 	'settingsModals.addNetwork.recheckWithRpc',

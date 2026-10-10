@@ -38,6 +38,7 @@ export type MobileSettingsStateId =
 	| 'st10'
 	| 'st10b'
 	| 'st10c'
+	| 'st10d'
 	| 'st11'
 	| 'st12'
 	| 'st13'
@@ -80,6 +81,7 @@ export const MOBILE_SETTINGS_STATES: MobileSettingsStateId[] = [
 	'st10',
 	'st10b',
 	'st10c',
+	'st10d',
 	'st11',
 	'st12',
 	'st13',
@@ -420,7 +422,13 @@ export interface AddNetworkModel {
 	callout?: CalloutModel;
 	/** Accent CTA (compatible) or outline CTA + recheck link (incompatible). */
 	primary?: string;
-	secondary?: string;
+	/**
+	 * "Open Chain Setup Tool", and where it goes — the core's
+	 * `NetCompatibility.setup_url` (`…/chain-setup?chain=<id>`). Present only
+	 * for a refusal that has something to deploy: a network with no P-256
+	 * verifier gets no such button.
+	 */
+	secondary?: { label: string; href: string };
 	recheck?: string;
 }
 

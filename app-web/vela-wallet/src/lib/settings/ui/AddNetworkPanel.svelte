@@ -32,19 +32,21 @@
 
 	let { panel, onselect, onprimary, onrecheck, onsearch, oncustomrpc }: Props = $props();
 
-	/**
-	 * Where a chain this wallet refuses can be made ready: the page deploys
-	 * everything anyone can deploy and says who has to do the rest. The same
-	 * URL the desktop opens (`onboarding_flow.rs`, `CHAIN_SETUP_URL`) and iOS
-	 * (`SettingsScreen.swift`, `ExternalLinks.chainSetup`).
+	/*
+	 * "Open Chain Setup Tool" (`panel.secondary`) is a link, and where it goes
+	 * is the core's: `NetCompatibility.setup_url`, Vela's Chain Setup page
+	 * opened on the chain that was checked (`?chain=<id>`). The page deploys
+	 * everything anyone can deploy and says who has to do the rest.
 	 *
-	 * Spec 081, dead-controls #12: `panel.secondary` is only ever this one
-	 * label, and it took an `onsecondary` no caller ever passed — so the one
-	 * thing the wallet had just told the person to do was a button that did
-	 * nothing. The panel owns the link, exactly as `EndpointsPanel` owns the
-	 * self-hosting guide's.
+	 * It is drawn only for a refusal that has something to deploy. A network
+	 * with no P-256 verifier cannot run Vela wallets whatever is deployed, so
+	 * its refusal carries no link and this draws no button.
+	 *
+	 * Spec 081, dead-controls #12: it once took an `onsecondary` no caller
+	 * passed — the one thing the wallet had just told the person to do was a
+	 * button that did nothing. The panel owns the link's drawing; the model
+	 * carries its address.
 	 */
-	const CHAIN_SETUP_URL = 'https://getvela.app/chain-setup';
 </script>
 
 <div class="add-network">
@@ -96,8 +98,8 @@
 			<Button variant="primary" shape="rounded" onclick={onprimary}>{panel.primary}</Button>
 		{/if}
 		{#if panel.secondary !== undefined}
-			<Button variant="secondary" shape="rounded" href={CHAIN_SETUP_URL} external>
-				{panel.secondary}
+			<Button variant="secondary" shape="rounded" href={panel.secondary.href} external>
+				{panel.secondary.label}
 			</Button>
 		{/if}
 		{#if panel.recheck !== undefined}

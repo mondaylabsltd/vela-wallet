@@ -52,7 +52,7 @@
 		type ExtensionRequest
 	} from '$lib/dapp/transport';
 	import AddNetworkCard from '$lib/dapp/AddNetworkCard.svelte';
-	import { addNetworkCard, CHAIN_SETUP_URL } from '$lib/dapp/add-network';
+	import { addNetworkCard } from '$lib/dapp/add-network';
 	import { dappAddChainAsk, dappAddOutcomeError } from '$lib/core/kernels';
 	import { networkAdmin, onDappAddSettled } from '$lib/settings/core/network-admin.svelte';
 	import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
@@ -423,8 +423,9 @@
 		networkAdmin.dispatch({ type: 'dapp_add_retried' });
 	}
 
-	function openChainSetup(): void {
-		window.open(CHAIN_SETUP_URL, '_blank', 'noopener');
+	/** Chain Setup, on the chain that was checked — the core's `setup_url`. */
+	function openChainSetup(url: string): void {
+		window.open(url, '_blank', 'noopener');
 	}
 
 	/** The add-network sheet for the request in hand, in words. */

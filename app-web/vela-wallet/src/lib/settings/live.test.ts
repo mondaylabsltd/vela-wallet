@@ -3,6 +3,7 @@
  * against hand-written core-view fixtures. Sibling of fixtures.test.ts.
  */
 import { describe, expect, it } from 'vitest';
+import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
 import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
 import type { NetView } from '$lib/core/generated/NetView';
 import type { NetWizardView } from '$lib/core/generated/NetWizardView';
@@ -165,7 +166,10 @@ describe('liveAddNetwork', () => {
 					p256_available: true,
 					best_rpc_url: 'https://rpc.zora.energy',
 					best_rpc_latency_ms: 182,
-					rpc_failure: null
+					rpc_failure: null,
+					blocker: null,
+					hint_key: null,
+					setup_url: null
 				},
 				can_add: true
 			},
@@ -200,7 +204,10 @@ describe('liveAddNetwork', () => {
 					p256_available: true,
 					best_rpc_url: 'https://rpc.zora.energy',
 					best_rpc_latency_ms: 182,
-					rpc_failure: null
+					rpc_failure: null,
+					blocker: null,
+					hint_key: null,
+					setup_url: null
 				},
 				can_add: true
 			},
@@ -225,7 +232,11 @@ describe('liveAddNetwork', () => {
 					p256_available: null,
 					best_rpc_url: null,
 					best_rpc_latency_ms: null,
-					rpc_failure: 'all_probes_failed'
+					rpc_failure: 'all_probes_failed',
+					// Inconclusive: the check did not answer, so nothing is refused.
+					blocker: null,
+					hint_key: null,
+					setup_url: null
 				},
 				can_add: false
 			},
@@ -236,29 +247,110 @@ describe('liveAddNetwork', () => {
 		expect(model.primary).toBe(m.addNetwork.retry);
 	});
 
-	it('a true incompatibility keeps the full check list and the setup-tool exit', () => {
-		const model = liveAddNetwork(
+	/**
+	 * The two refusals as the core's check carries them (`net_blocker`,
+	 * `NO_P256_HINT` / `MISSING_CONTRACTS_HINT`, `chain_setup_url`). What can
+	 * be done about them is opposite, so the wizard reads the line and the
+	 * link from the check — never from "incompatible" alone.
+	 */
+	const REFUSED = {
+		chain_id: 7777777,
+		compatible: false,
+		multi_key_ready: false,
+		contracts: [{ name: 'Safe L2', address: '0x2', deployed: false, multi_key_only: false }],
+		best_rpc_url: 'https://rpc.zora.energy',
+		best_rpc_latency_ms: 90,
+		rpc_failure: null
+	} as const;
+	const MISSING_CONTRACTS: NetCompatibility = {
+		...REFUSED,
+		contracts: [...REFUSED.contracts],
+		p256_available: true,
+		blocker: 'missing_contracts',
+		hint_key: 'settingsModals.addNetwork.incompatibleHint',
+		setup_url: 'https://getvela.app/chain-setup?chain=7777777'
+	};
+	const NO_P256: NetCompatibility = {
+		...REFUSED,
+		contracts: [...REFUSED.contracts],
+		p256_available: false,
+		blocker: 'no_p256',
+		hint_key: 'settingsModals.addNetwork.noP256Hint',
+		setup_url: null
+	};
+	const checked = (compat: NetCompatibility) =>
+		liveAddNetwork(
+			{ ...WIZARD_IDLE, phase: 'checked', chain_info: info, compat, can_add: false },
+			m
+		);
+
+	it('missing contracts: the full check list, the reason, and Chain Setup on this chain', () => {
+		const model = checked(MISSING_CONTRACTS);
+		expect(model.candidate?.badge.label).toBe(m.addNetwork.incompatible);
+		expect(model.checks?.some((c) => !c.ok)).toBe(true);
+		expect(model.checks?.at(-1)).toEqual({ label: m.addNetwork.checkSigner, ok: true });
+		expect(model.callout).toEqual({
+			tone: 'warning',
+			text: "Some contracts Vela needs aren't on this network yet. Chain Setup shows which ones and who can deploy them."
+		});
+		expect(model.secondary).toEqual({
+			label: m.addNetwork.openChainSetupTool,
+			href: 'https://getvela.app/chain-setup?chain=7777777'
+		});
+		expect(model.primary).toBeUndefined();
+	});
+
+	it('no P-256 verifier: says the network cannot run Vela wallets, and offers no deploy button', () => {
+		const model = checked(NO_P256);
+		expect(model.candidate?.badge.label).toBe(m.addNetwork.incompatible);
+		expect(model.checks?.at(-1)).toEqual({ label: m.addNetwork.checkSigner, ok: false });
+		expect(model.callout?.tone).toBe('warning');
+		expect(model.callout?.text).toContain("Vela wallets can't work here");
+		expect(model.callout?.text).toContain("Don't send money to your Vela address on this network");
+		expect(model.callout?.text).not.toContain('Chain Setup');
+		// Nothing to deploy: no button, and nothing that adds the network.
+		expect(model.secondary).toBeUndefined();
+		expect(model.primary).toBeUndefined();
+		// The re-check stays: a different RPC may answer differently.
+		expect(model.recheck).toBe(m.addNetwork.recheckWithRpc);
+	});
+
+	it('the scan path’s refusal keeps no check: the verdict is said, and no reason is invented', () => {
+		const stopped = liveAddNetwork(
 			{
 				...WIZARD_IDLE,
-				phase: 'checked',
-				chain_info: info,
-				compat: {
-					chain_id: 7777777,
-					compatible: false,
-					multi_key_ready: false,
-					contracts: [{ name: 'Safe L2', address: '0x2', deployed: false, multi_key_only: false }],
-					p256_available: true,
-					best_rpc_url: 'https://rpc.zora.energy',
-					best_rpc_latency_ms: 90,
-					rpc_failure: null
-				},
-				can_add: false
+				phase: 'error',
+				error: { type: 'not_compatible', chain_id: 7777777 },
+				compat: null
 			},
 			m
 		);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.incompatible);
-		expect(model.checks?.some((c) => !c.ok)).toBe(true);
-		expect(model.secondary).toBe(m.addNetwork.openChainSetupTool);
+		expect(stopped.callout).toEqual({ tone: 'warning', text: m.addNetwork.incompatible });
+		expect(stopped.secondary).toBeUndefined();
+		// With the check in hand, the same stop says why.
+		const known = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				error: { type: 'not_compatible', chain_id: 7777777 },
+				compat: NO_P256
+			},
+			m
+		);
+		expect(known.callout?.text).toContain("Vela wallets can't work here");
+		expect(known.secondary).toBeUndefined();
+		// Inconclusive is never worded as a refusal (invariant ③), check or no check.
+		const failed = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				error: { type: 'check_failed', chain_id: 7777777 },
+				compat: MISSING_CONTRACTS
+			},
+			m
+		);
+		expect(failed.callout).toEqual({ tone: 'warning', text: m.addNetwork.unableToVerify });
+		expect(failed.secondary).toBeUndefined();
 	});
 });
 

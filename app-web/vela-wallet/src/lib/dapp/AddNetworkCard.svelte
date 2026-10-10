@@ -22,7 +22,8 @@
 		onadd: () => void;
 		onretry: () => void;
 		ondismiss: () => void;
-		onsetup: () => void;
+		/** "Open Chain Setup Tool": the core's address for it, on the chain checked. */
+		onsetup: (url: string) => void;
 	}
 
 	let { card, busy = false, heading = false, onadd, onretry, ondismiss, onsetup }: Props = $props();
@@ -58,7 +59,10 @@
 			<Button variant="primary" shape="rounded" onclick={onretry}>{card.retry}</Button>
 		{/if}
 		{#if card.setupTool}
-			<Button variant="secondary" shape="rounded" onclick={onsetup}>{card.setupTool}</Button>
+			{@const setup = card.setupTool}
+			<Button variant="secondary" shape="rounded" onclick={() => onsetup(setup.url)}>
+				{setup.label}
+			</Button>
 		{/if}
 		<Button variant="secondary" shape="rounded" disabled={busy} onclick={ondismiss}>
 			{card.dismiss}

@@ -86,6 +86,7 @@ import {
 	type EnvironmentLabels
 } from '$lib/services/bug-report';
 import type { EthereumBackupRow } from '$lib/services/registry-backup';
+import { netRefusal, type NetRefusal } from './net-refusal';
 import type { EthereumBackupRowModel, WalletKeysModel } from './model';
 import type { WalletKeys } from '$lib/services/wallet-keys';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
@@ -254,14 +255,22 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		// scan path now keeps the two apart too (spec 038 #E1): a probe that
 		// failed is "unable to verify", with the re-check, and no setup tool.
 		const inconclusive = wizard.error?.type === 'check_failed';
+		// WHY it is refused, and whether anything can be deployed, is the
+		// check's (`compat.hint_key` / `.setup_url`). The scan path stops here
+		// without keeping its check, so when there is none the verdict is said
+		// and no reason is invented: "contracts are missing" over a network
+		// with no P-256 verifier would send a person to deploy nothing.
+		const refusal = inconclusive ? {} : netRefusal(wizard.compat, m.addNetwork.hints);
 		return {
 			...base,
 			results: [],
 			callout: {
 				tone: 'warning',
-				text: inconclusive ? m.addNetwork.unableToVerify : m.addNetwork.incompatibleHint
+				text: inconclusive
+					? m.addNetwork.unableToVerify
+					: (refusal.hint ?? m.addNetwork.incompatible)
 			},
-			secondary: inconclusive ? undefined : m.addNetwork.openChainSetupTool,
+			secondary: setupLink(refusal, m),
 			recheck: m.addNetwork.recheckWithRpc
 		};
 	}
@@ -336,6 +345,7 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		};
 	}
 
+	const refusal = netRefusal(compat, m.addNetwork.hints);
 	return {
 		...base,
 		subtitle: `${name} · ${meta}`,
@@ -348,10 +358,20 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		},
 		checksTitle: m.addNetwork.compatibilityCheck,
 		checks,
-		callout: { tone: 'warning', text: m.addNetwork.incompatibleHint },
-		secondary: m.addNetwork.openChainSetupTool,
+		// The refusal says WHY, in the core's words: no P-256 verifier (the
+		// network cannot run Vela wallets; nothing to deploy, so no button), or
+		// missing contracts (Chain Setup, opened on this chain).
+		callout: refusal.hint === undefined ? undefined : { tone: 'warning', text: refusal.hint },
+		secondary: setupLink(refusal, m),
 		recheck: m.addNetwork.recheckWithRpc
 	};
+}
+
+/** "Open Chain Setup Tool", only where the core gave it somewhere to go. */
+function setupLink(refusal: NetRefusal, m: SettingsMessages): AddNetworkModel['secondary'] {
+	return refusal.setupUrl === undefined
+		? undefined
+		: { label: m.addNetwork.openChainSetupTool, href: refusal.setupUrl };
 }
 
 // ---------------------------------------------------------------------------
