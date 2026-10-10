@@ -10,7 +10,6 @@ import app.getvela.wallet.feature.send.core.SendOpenParams
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.diagnostics.CrashReport
 import app.getvela.wallet.core.data.Preferences
-import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.signing.SigningAftercare
 import android.app.Application
@@ -503,11 +502,11 @@ class AppContainer(private val app: Application) {
             currencyCode = { settings.currency.value.let { SendLive.batchCurrency(it) ?: it.code } },
             fiatRate = { code -> settings.fiatRate(code) },
             documents = { documents },
-            addNetwork = { chainId ->
-                settings.addNetworkByChainId(chainId)
-                kotlinx.coroutines.withTimeoutOrNull(10_000L) { settings.networks.first { it.last_added_chain_id == chainId } }
-                    ?.let { SendAddNetworkOutcome.Added } ?: SendAddNetworkOutcome.NotFound
-            },
+            // F6 / F27: answered by the network machine's own verdict the moment
+            // it has one — added, not found, or why it stopped in the core's
+            // sentence. It was a ten-second wait that only "added" ended early,
+            // and every other ending was then reported as "not found".
+            addNetwork = { chainId -> settings.addNetworkSettled(chainId) { key -> i18nRuntime.t(key) } },
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
             trustedSigner = { trustedSigner },

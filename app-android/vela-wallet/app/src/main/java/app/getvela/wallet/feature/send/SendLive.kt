@@ -56,7 +56,9 @@ import app.getvela.wallet.feature.flows.SendPickModel
 import app.getvela.wallet.feature.flows.SendReceiptModel
 import app.getvela.wallet.feature.flows.SendTokenCardModel
 import app.getvela.wallet.feature.flows.TokenMarkModel
+import app.getvela.wallet.feature.send.core.SendAddNetworkMsg
 import app.getvela.wallet.feature.send.core.SendAlertKind
+import app.getvela.wallet.feature.send.core.SendLockError
 import app.getvela.wallet.feature.send.core.SendAmountWarning
 import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.feature.send.core.FeeAssetView
@@ -209,12 +211,37 @@ object SendLive {
                 text = s.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to (ctx.chainNames[chainId] ?: "chain-$chainId"))),
             )
         }
+        // F6 / F27: a payment request that cannot be fulfilled SAYS so. The
+        // core stops on `lock_error` and this picker stood there with no word
+        // of it — a request for a network the wallet lacks looked like an
+        // ordinary, empty Send. The lock's own sentence, or — once adding the
+        // network has been tried — that attempt's (`add_network_msg`, in the
+        // core's words when it carries them), under the network's mark.
+        val lockNotice = view.lock_error?.let { lock ->
+            val attempt = when (val msg = view.add_network_msg) {
+                null -> null
+                SendAddNetworkMsg.NetNotFound -> s.t(I18nKeys.Flows.LOCK_NET_NOT_FOUND)
+                is SendAddNetworkMsg.NetNotCompatible -> msg.detail?.takeIf { it.isNotBlank() } ?: s.t(I18nKeys.Flows.LOCK_NET_NOT_COMPATIBLE)
+                SendAddNetworkMsg.NetAddError -> s.t(I18nKeys.Flows.LOCK_NET_ADD_ERROR)
+            }
+            when (lock) {
+                is SendLockError.Network -> SendNoticeModel(
+                    mark = WalletLive.chainMark(lock.chain_id, nativeSymbol(lock.chain_id, ctx)),
+                    text = attempt ?: "${s.t(I18nKeys.Flows.LOCK_NET_TITLE)} — ${s.t(I18nKeys.Flows.LOCK_NET_BODY, mapOf("chainId" to lock.chain_id.toString()))}",
+                )
+                SendLockError.Token -> SendNoticeModel(
+                    mark = (view.request_chain_id ?: chainFilter)?.let { WalletLive.chainMark(it, nativeSymbol(it, ctx)) }
+                        ?: WalletLive.chainMark(1, "ETH"),
+                    text = "${s.t(I18nKeys.Flows.LOCK_TOKEN_TITLE)} — ${s.t(I18nKeys.Flows.LOCK_TOKEN_BODY)}",
+                )
+            }
+        }
         if (!sweepPicking) {
             return fallback.copy(
                 header = fallback.header.copy(pill = pill),
                 recipient = recipient,
                 filters = filters,
-                notice = requestNotice,
+                notice = lockNotice ?: requestNotice,
                 selection = null,
                 rows = rows,
                 cta = SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false),
@@ -231,7 +258,7 @@ object SendLive {
             recipient = recipient,
             filters = filters,
             empty = empty,
-            notice = requestNotice ?: chain?.let {
+            notice = lockNotice ?: requestNotice ?: chain?.let {
                 SendNoticeModel(
                     mark = WalletLive.chainMark(it, nativeSymbol(it, ctx)),
                     text = s.t(I18nKeys.Flows.MULTI_SEND_NOTICE, mapOf("network" to chainName)),

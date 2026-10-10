@@ -703,6 +703,14 @@ object I18nKeys {
 
         // Send · batch import.
         const val BATCH_TITLE = "send.batchTitle"
+        // A locked payment request the wallet cannot fulfil (`SendView.lock_error`).
+        const val LOCK_NET_TITLE = "send.lock.netTitle"
+        const val LOCK_NET_BODY = "send.lock.netBody"
+        const val LOCK_TOKEN_TITLE = "send.lock.tokenTitle"
+        const val LOCK_TOKEN_BODY = "send.lock.tokenBody"
+        const val LOCK_NET_NOT_FOUND = "send.lock.netNotFound"
+        const val LOCK_NET_NOT_COMPATIBLE = "send.lock.netNotCompatible"
+        const val LOCK_NET_ADD_ERROR = "send.lock.netAddError"
         const val BATCH_UNIT_FIAT = "send.batchUnitFiat"
         const val BATCH_UNIT_TOKEN = "send.batchUnitToken"
         const val BATCH_PASTE_PLACEHOLDER = "send.batchPastePlaceholder"

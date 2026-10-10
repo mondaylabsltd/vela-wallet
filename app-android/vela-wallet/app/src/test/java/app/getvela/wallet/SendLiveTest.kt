@@ -1633,6 +1633,37 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), empty.scanLabel)
     }
 
+    /**
+     * PR 3 final notes F6 / F27: a payment request the wallet cannot fulfil
+     * SAYS so on the picker. The core stops on `lock_error`, and this shell
+     * drew its ordinary picker with no word of it; nor was the outcome of an
+     * attempt to add the network (`add_network_msg`) ever drawn.
+     */
+    @Test
+    fun `a payment request that cannot be fulfilled says why on the picker`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        val locked = SendView(stage = SendStage.LockError, locked = true, lock_error = app.getvela.wallet.feature.send.core.SendLockError.Network(48900))
+        val notice = SendLive.pick(drawn.model, locked, ctx()).notice!!
+        assertEquals("Network not supported — This payment request is on a network Vela doesn't support yet (chain 48900).", notice.text)
+
+        // An attempt to add it that the network machine refused: its reason, in the core's words.
+        val reason = strings.t("settingsModals.addNetwork.noP256Hint")
+        val refused = SendLive.pick(drawn.model, locked.copy(add_network_msg = app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotCompatible(reason)), ctx()).notice!!
+        assertEquals(reason, refused.text)
+        // …and the three the send machine words itself.
+        fun after(msg: app.getvela.wallet.feature.send.core.SendAddNetworkMsg) = SendLive.pick(drawn.model, locked.copy(add_network_msg = msg), ctx()).notice!!.text
+        assertEquals("We couldn't find that network.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotFound))
+        assertEquals("That network isn't compatible with Vela smart accounts yet.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotCompatible()))
+        assertEquals("Couldn't add the network. Please try again.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetAddError))
+
+        // A token the request names and the wallet cannot recognise.
+        val token = SendLive.pick(drawn.model, locked.copy(lock_error = app.getvela.wallet.feature.send.core.SendLockError.Token), ctx()).notice!!
+        assertEquals("Unknown token — We couldn't recognize the token in this payment request on this network.", token.text)
+
+        // No lock: the notice is whatever it was (none, on an ordinary Send).
+        assertNull(SendLive.pick(drawn.model, SendView(stage = SendStage.SelectToken), ctx()).notice)
+    }
+
     // -- Spec 045 US3: the batch sheet ---------------------------------------
 
     /**
