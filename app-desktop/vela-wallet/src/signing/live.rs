@@ -775,7 +775,8 @@ fn plain_send_blocks(
 /// revert is the danger "expected to fail" (with the sanitised reason when
 /// there is one), a node that could not check is the caution "couldn't check
 /// — review it" — never the look of "this will fail" — and "it ran and
-/// nothing moves" says nothing here.
+/// nothing moves" is no block of THIS builder's: the verdict's place says it
+/// ([`verdict_block`]), in the corpus's words for exactly that.
 #[must_use]
 pub fn sim_blocks(
     judgments: &[vela_core::app::token_trust::TrustSimJudgment],
@@ -845,11 +846,196 @@ pub fn sim_blocks(
     }]
 }
 
+/// Where the simulation of the open request stands — what decides whether
+/// the sheet keeps a place for its verdict, and what stands in that place.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SimStage {
+    /// Nothing was simulated: a message or typed data moves nothing and has
+    /// no verdict to wait for. No place is kept.
+    #[default]
+    NotAsked,
+    /// Asked, and not back yet.
+    Out,
+    /// Back: balances, a notice, or nothing of the wallet's moving.
+    Landed,
+}
+
+/// The simulation verdict's place on the sheet (PR 3 final note F2), or
+/// `None` for a request nothing simulates.
+///
+/// The verdict used to be appended when it landed, a few hundred
+/// milliseconds after the sheet opened: the fee row, the signing account and
+/// the confirm all rode down by its height under a pointer already on its
+/// way to the button (measured on this column: 118 px for a swap's card).
+/// Now the place is there from the request's first frame, one height
+/// ([`crate::signing::components::verdict_room_height`]):
+///
+/// - **out** — the balance card's own outline and title with "Checking…"
+///   where its rows will be, so a card landing fills in the card;
+/// - **landed** — [`sim_blocks`]: the balance card, or the core's notice;
+/// - **landed, and nothing of the wallet's moves** — the same card saying
+///   "No asset changes" (the corpus's words for it, as Android draws it).
+///   The room cannot be given back without moving the confirm, and an empty
+///   room under a request would read as a verdict that never arrived.
+#[must_use]
+pub fn verdict_block(
+    stage: SimStage,
+    judgments: &[vela_core::app::token_trust::TrustSimJudgment],
+    notice: Option<&vela_core::app::sim_outcome::SimNotice>,
+    chain_id: u32,
+    s: &SigningStrings,
+) -> Option<Block> {
+    let quiet = |line: &SharedString| Block::Balances {
+        title: s.balances_title.clone(),
+        rows: Vec::new(),
+        note: Some(line.clone()),
+        note_tone: Tone::Neutral,
+    };
+    let inner = match stage {
+        SimStage::NotAsked => return None,
+        SimStage::Out => vec![quiet(&s.sim_checking)],
+        SimStage::Landed => {
+            let blocks = sim_blocks(judgments, notice, chain_id, s);
+            if blocks.is_empty() {
+                vec![quiet(&s.sim_no_change)]
+            } else {
+                blocks
+            }
+        }
+    };
+    Some(Block::Verdict { inner })
+}
+
 fn delta_tone(delta: &str) -> Tone {
     if delta.starts_with('-') {
         Tone::Neutral
     } else {
         Tone::Success
+    }
+}
+
+#[cfg(test)]
+mod verdict_place_tests {
+    use super::*;
+    use crate::signing::components::{
+        balance_card_height, balance_card_height_at, verdict_room_height,
+    };
+    use crate::signing::fixtures::{SimPin, sim_pin_block};
+
+    fn strings() -> SigningStrings {
+        SigningStrings::resolve(&crate::loc::Loc::for_language("en"))
+    }
+
+    /// PR 3 final note F2. The verdict used to be appended when it landed
+    /// and everything under it rode down (measured on the drawn send: the
+    /// confirm 89 px for a send's card, 118 for a swap's, 147 for three
+    /// coins, 78 and 96 for the two notices). Now every answer — and no
+    /// answer yet — is ONE block, the place, whose height does not depend on
+    /// what stands in it: the column under it has one position.
+    #[test]
+    fn every_verdict_and_none_yet_stand_in_the_one_place() {
+        let s = strings();
+        for (pin, name) in SimPin::ALL {
+            let block = sim_pin_block(pin, &s);
+            let Some(Block::Verdict { inner }) = block else {
+                unreachable!("{name}: a transaction's sheet keeps the place");
+            };
+            assert_eq!(inner.len(), 1, "{name}: one thing is said in it");
+        }
+        // A request nothing simulates — a message, typed data — keeps none.
+        assert!(verdict_block(SimStage::NotAsked, &[], None, 1, &s).is_none());
+        assert_eq!(SimStage::default(), SimStage::NotAsked);
+    }
+
+    /// What stands in the place: while the simulation is out, the balance
+    /// card's own outline and title with "Checking…" where its rows will be
+    /// — never a blank room (F2), and no new string; then the card, the
+    /// core's notice, or "No asset changes".
+    #[test]
+    fn the_place_is_never_blank() {
+        let s = strings();
+        let said = |pin| match sim_pin_block(pin, &s) {
+            Some(Block::Verdict { inner }) => match inner.into_iter().next() {
+                Some(Block::Balances {
+                    title, rows, note, ..
+                }) => (
+                    title.to_string(),
+                    rows.len(),
+                    note.map(|note| note.to_string()),
+                ),
+                Some(Block::Warning { text, .. }) => (String::new(), 0, Some(text.to_string())),
+                _ => unreachable!("a card or a notice"),
+            },
+            _ => unreachable!("a place"),
+        };
+        let card = |rows: usize, note: Option<&str>| {
+            ("Balance changes".to_owned(), rows, note.map(str::to_owned))
+        };
+        assert_eq!(said(SimPin::Out), card(0, Some("Checking…")));
+        assert_eq!(said(SimPin::Send), card(1, None));
+        assert_eq!(said(SimPin::Swap), card(2, None));
+        assert_eq!(said(SimPin::Three), card(3, None));
+        assert_eq!(said(SimPin::Unverified), card(2, None));
+        assert_eq!(said(SimPin::Nothing), card(0, Some("No asset changes")));
+        let (_, _, caution) = said(SimPin::Caution);
+        assert_eq!(caution, Some(s.warn_sim_unavailable.to_string()));
+        let (_, _, danger) = said(SimPin::Danger);
+        assert!(
+            danger.is_some_and(|line| line.starts_with("Expected to fail: ")),
+            "the core's sentence, with its reason"
+        );
+
+        // A verdict whose every row was a zero says nothing moved too — a
+        // room with nothing in it would read as a verdict that never came.
+        let zero = [vela_core::app::token_trust::TrustSimJudgment::Native {
+            delta: "0".to_owned(),
+        }];
+        let Some(Block::Verdict { inner }) = verdict_block(SimStage::Landed, &zero, None, 1, &s)
+        else {
+            unreachable!("a place");
+        };
+        assert!(matches!(
+            inner.first(),
+            Some(Block::Balances { rows, note: Some(note), .. })
+                if rows.is_empty() && *note == s.sim_no_change
+        ));
+
+        // In the reader's language, from the corpus.
+        let zh = SigningStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        assert_eq!(zh.sim_checking.as_ref(), "正在检查…");
+        assert_eq!(zh.sim_no_change.as_ref(), "无资产变动");
+    }
+
+    /// The place's height: a send's card (one row) and a swap's (two) land
+    /// whole, and a third row is CUT, not hidden — half of it shows over the
+    /// fold, with the room's scrollbar, so a third coin moving cannot be
+    /// missed on the one part of the sheet a site cannot author. In the
+    /// text's own sizes, so at every text scale.
+    #[test]
+    fn the_place_fits_the_usual_verdict_and_shows_there_is_more() {
+        // The smallest, the standard and the largest text size (the core's
+        // factors run 0.85 to 1.35), without touching the setting itself.
+        for factor in [0.85_f32, 1., 1.35] {
+            let at = |rows: f32| {
+                balance_card_height_at(rows, gpui::px(13. * factor), gpui::px(15. * factor))
+            };
+            let room = at(2.5);
+            assert!(room > at(2.), "×{factor}: a swap's card fits");
+            let third_row = at(3.) - at(2.);
+            let shown = room - at(2.);
+            let (shown, half): (f32, f32) = (shown.into(), (third_row * 0.5).into());
+            assert!(
+                (shown - half).abs() < 0.01,
+                "×{factor}: half of a third row shows ({shown} of {half})"
+            );
+        }
+        // The room IS that arithmetic, at the size in force.
+        assert_eq!(verdict_room_height(), balance_card_height(2.5));
+        // At the standard size: 116.7 px — what the drawn column measures
+        // (the confirm stands 132.5 px lower than on a sheet with no place:
+        // the room and the column's 16 px gap).
+        let standard: f32 = balance_card_height_at(2.5, gpui::px(13.), gpui::px(15.)).into();
+        assert!((standard - 116.7).abs() < 0.05, "{standard}");
     }
 }
 

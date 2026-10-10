@@ -832,6 +832,69 @@ fn block_inner(
             }
             col
         }
+
+        // The page draws the room with its own scroll (`verdict_room`); with
+        // none at hand it is the same room, clipped.
+        Block::Verdict { inner } => verdict_room(theme, icons, inner, None, None),
+    }
+}
+
+/// The height of the simulation verdict's place (PR 3 final note F2): a
+/// balance card of two rows and half of a third.
+///
+/// Two rows is what a send (one) and a swap (two) show, and every notice the
+/// core words is shorter — so the usual verdict lands whole. The half row is
+/// deliberate: a third coin moving is the unusual case that must not be
+/// missed on a sheet a site cannot author, and a room cut exactly at a row's
+/// edge would show nothing of it. Cut through its middle, the third row is
+/// visibly there, under a scrollbar that says the same.
+///
+/// In the text's own sizes, so it holds at every text scale.
+#[must_use]
+pub fn verdict_room_height() -> gpui::Pixels {
+    balance_card_height(2.5)
+}
+
+/// How tall the balance card ([`Block::Balances`]) draws with `rows` rows:
+/// its border, the 4 px above and below, its title and its rows — the
+/// arithmetic the verdict's place is sized by.
+#[must_use]
+pub fn balance_card_height(rows: f32) -> gpui::Pixels {
+    balance_card_height_at(rows, theme::text_row_sub(), theme::text_row_title())
+}
+
+/// [`balance_card_height`] at given text sizes: the title's (`sub`) and a
+/// row's (`row`).
+#[must_use]
+pub fn balance_card_height_at(rows: f32, sub: gpui::Pixels, row: gpui::Pixels) -> gpui::Pixels {
+    let line = crate::wallet::components::LINE_BODY;
+    let chrome = px(2. + 8.);
+    let title = sub * line + px(16.);
+    let row = row * line + px(8.);
+    chrome + title + row * rows
+}
+
+/// The verdict's place, drawn: [`verdict_room_height`] tall whatever stands
+/// in it, and scrolling INSIDE itself when the verdict is taller — a third
+/// balance row, the note under an unverified token — rather than growing
+/// the column and moving the confirm under it. `scroller` is the room's own
+/// clip-and-scroll element (the page wires its scroll to it; `None` clips
+/// and stays put), `thumb` its scrollbar when there is more than fits.
+pub fn verdict_room(
+    theme: &Theme,
+    icons: &mut IconCache,
+    inner: &[Block],
+    scroller: Option<gpui::Stateful<Div>>,
+    thumb: Option<Div>,
+) -> Div {
+    let mut col = div().flex().flex_col().gap(px(16.));
+    for item in inner {
+        col = col.child(block(theme, icons, item));
+    }
+    let room = div().relative().h(verdict_room_height());
+    match scroller {
+        Some(scroller) => room.child(scroller.size_full().child(col)).children(thumb),
+        None => room.overflow_hidden().child(col),
     }
 }
 

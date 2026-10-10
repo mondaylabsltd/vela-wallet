@@ -23,8 +23,8 @@ use super::components::{
     CopyButton, GhostPill, accent_button, address_card, danger_button, disabled_accent_button,
     fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option,
     fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row,
-    max_chip, mono_field, network_pill, network_row, qr_card, quiet_button, recipient_card,
-    search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
+    max_chip, mono_field, mono_field_ink, network_pill, network_row, qr_card, quiet_button,
+    recipient_card, search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -116,6 +116,11 @@ pub struct PanelActions {
     pub add_token_tabs: Option<(Click, Click)>,
     /// DT3L native, live: one listener per suggested chain, in order.
     pub add_token_picks: Vec<Click>,
+    /// DT3L native, live: the wizard's RPC field (its draft is the core's
+    /// `custom_rpc`) and the re-check that reads it. `None` draws the
+    /// board's read-only field and a link with nothing behind it.
+    pub add_net_rpc: Option<AddressField>,
+    pub add_net_recheck: Option<Click>,
     /// DSD1L, live: one listener per token row. Empty falls back to
     /// `open_send_form`, which the fixture gives to its first row.
     pub open_send_rows: Vec<Click>,
@@ -451,6 +456,8 @@ pub fn render(
                 submit: actions.add_to_wallet,
                 tabs: actions.add_token_tabs,
                 picks: actions.add_token_picks,
+                rpc: actions.add_net_rpc,
+                recheck: actions.add_net_recheck,
             },
         ),
         FlowBody::SendPick(model) => send_pick(
@@ -1275,6 +1282,8 @@ struct AddTokenActions {
     submit: Option<Click>,
     tabs: Option<(Click, Click)>,
     picks: Vec<Click>,
+    rpc: Option<AddressField>,
+    recheck: Option<Click>,
 }
 
 fn add_token(
@@ -1290,6 +1299,8 @@ fn add_token(
         submit: add_to_wallet,
         tabs,
         picks,
+        rpc: rpc_field,
+        recheck,
     } = actions;
     let mut col = column().child(segmented_toggle(
         theme,
@@ -1535,6 +1546,73 @@ fn add_token(
             col.child(card)
         }
     };
+
+    // The wizard's RPC field and the re-check that reads it, under the
+    // result that asks for them (the core's `rpc_field`; PR 3 final notes
+    // F4, F14, F22) — the re-check directly under its field, as the stop's
+    // own sentence orders them: "Enter one, then re-check."
+    if let Some(rpc) = &model.rpc {
+        col = col.child(match rpc_field {
+            Some(field) => {
+                let strings = crate::ui::NameFieldStrings {
+                    label: rpc.label.clone(),
+                    placeholder: rpc.placeholder.clone(),
+                    helper: rpc.notice.clone(),
+                    too_long_hint: SharedString::from(""),
+                };
+                crate::ui::text_field(
+                    "add-token-rpc",
+                    theme,
+                    &strings,
+                    &field.value,
+                    false,
+                    false,
+                    &field.focus,
+                    window,
+                    field.on_change,
+                )
+            }
+            // The board's: the same field, read-only — its placeholder in
+            // the placeholder's ink until something stands in it.
+            None => {
+                let (text, ink) = if rpc.value.is_empty() {
+                    (rpc.placeholder.clone(), theme.fg_subtle)
+                } else {
+                    (rpc.value.clone(), theme.fg_base)
+                };
+                mono_field_ink(theme, Some(rpc.label.clone()), text, ink).child(
+                    div()
+                        .text_size(theme::text_flow_caption())
+                        .line_height(theme::line_height_body())
+                        .text_color(theme.fg_muted)
+                        .child(crate::ui::prose(rpc.notice.clone())),
+                )
+            }
+        });
+        // Settings' re-check, in its own clothes: a link in the info colour
+        // with its refresh.
+        col = col.child(clickable(
+            ElementId::from("add-token-recheck"),
+            recheck,
+            div()
+                .h(px(44.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .gap(px(8.))
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.info_base)
+                .child(icon_img(
+                    icons,
+                    Icon::RefreshCw,
+                    false,
+                    theme.info_base,
+                    14.,
+                ))
+                .child(rpc.recheck.clone()),
+        ));
+    }
 
     // The write that failed, said above the button that failed to do it.
     // `live.rs` has filled this from `MtokView.save_error` since phase 6; the

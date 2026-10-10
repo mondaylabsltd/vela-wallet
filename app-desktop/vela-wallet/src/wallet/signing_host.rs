@@ -260,6 +260,10 @@ pub struct SigningHost {
     /// could not check is a caution — a different sentence from "it ran and
     /// found nothing", which says nothing here.
     pub sim_notice: Option<vela_core::app::sim_outcome::SimNotice>,
+    /// Where that simulation stands (PR 3 final note F2): asked or not, and
+    /// back or not — what the sheet keeps the verdict's place by, from the
+    /// request's first frame, so the answer landing moves nothing.
+    pub sim_stage: crate::signing::live::SimStage,
     /// The submission already handed to the tracker: the records it closes
     /// (the key it is deduped by — spec 082: a may-have-been-sent op is
     /// handed over under its local hash, and the dedupe must not hang on a
@@ -376,6 +380,7 @@ impl SigningHost {
         let mut host = Self {
             sim: Vec::new(),
             sim_notice: None,
+            sim_stage: crate::signing::live::SimStage::NotAsked,
             transport_id: request.transport_id.clone(),
             request_id: request.id.clone(),
             tab: None,
@@ -594,6 +599,9 @@ impl SigningHost {
         calls: Vec<FeeCall>,
         cx: &mut Context<Self>,
     ) {
+        // Out from this frame: the sheet keeps the verdict's place before
+        // the answer is back.
+        self.sim_stage = crate::signing::live::SimStage::Out;
         cx.spawn(async move |host, cx| {
             let fee_calls = calls.clone();
             let sim_wallet = wallet.clone();
@@ -609,6 +617,7 @@ impl SigningHost {
                 host.update(cx, |host, cx| {
                     host.sim = Vec::new();
                     host.sim_notice = notice;
+                    host.sim_stage = crate::signing::live::SimStage::Landed;
                     cx.notify();
                 })
                 .ok();
@@ -634,6 +643,7 @@ impl SigningHost {
             host.update(cx, |host, cx| {
                 host.sim = judgments;
                 host.sim_notice = notice;
+                host.sim_stage = crate::signing::live::SimStage::Landed;
                 cx.notify();
             })
             .ok();

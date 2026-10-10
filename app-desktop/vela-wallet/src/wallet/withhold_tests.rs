@@ -347,7 +347,7 @@ fn settings_total(currency: &CurrencyView) -> Vec<String> {
     let total = crate::settings::live::account_total(1_234.5, Some(currency), "en");
     vec![
         total.to_string(),
-        crate::settings::live::accounts_summary("3 accounts", " · Total {{amount}}", &total)
+        crate::settings::live::accounts_summary("3 accounts · ", "Total {{amount}}", &total)
             .to_string(),
     ]
 }

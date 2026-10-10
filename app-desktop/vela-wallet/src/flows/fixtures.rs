@@ -433,6 +433,24 @@ pub struct NetworkSuggestion {
     pub meta: SharedString,
 }
 
+/// The native tab's RPC field and the re-check that reads it — one thing,
+/// drawn together or not at all (the core's `NetWizardView::rpc_field`, PR 3
+/// final notes F4, F14 and F22).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddTokenRpc {
+    /// `t(rpc_field_label_key)`: "RPC URL" where an endpoint is the one
+    /// thing asked for, "Custom RPC (optional)" where it is one way on.
+    pub label: SharedString,
+    /// What the wizard holds (`custom_rpc`), empty until something is typed.
+    pub value: SharedString,
+    pub placeholder: SharedString,
+    /// Spec 098 §5.1, under the field: the relay is sent this RPC, key and
+    /// all. Said wherever an RPC is typed, not only in Settings.
+    pub notice: SharedString,
+    /// "Re-check with this RPC".
+    pub recheck: SharedString,
+}
+
 #[derive(Clone)]
 pub struct AddToken {
     pub tab_erc20: SharedString,
@@ -446,6 +464,9 @@ pub struct AddToken {
     pub field_placeholder: SharedString,
     pub field_error: Option<SharedString>,
     pub result: AddTokenResult,
+    /// Native tab only: the wizard's RPC field with its re-check, under the
+    /// result. `None` = neither is drawn.
+    pub rpc: Option<AddTokenRpc>,
     /// The CTA cannot act: nothing found, found and already added, or a
     /// network the checks have not passed (the web's `ctaDisabled`).
     pub cta_disabled: bool,
@@ -1331,6 +1352,7 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
         },
         field_placeholder: SharedString::default(),
         field_error: None,
+        rpc: None,
         cta_disabled: false,
         result: if native {
             AddTokenResult::Network {

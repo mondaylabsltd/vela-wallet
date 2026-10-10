@@ -119,6 +119,15 @@ pub enum Block {
         note: Option<SharedString>,
         note_tone: Tone,
     },
+    /// The simulation verdict's PLACE (PR 3 final note F2): a room of one
+    /// height from the request's first frame, holding whatever the
+    /// simulation has to say — the quiet "being worked out" card while it is
+    /// out, then its balance card or its notice. Whichever lands, and
+    /// whenever, nothing under it moves; a verdict taller than the room
+    /// scrolls inside it (`components::verdict_room`).
+    Verdict {
+        inner: Vec<Block>,
+    },
 }
 
 pub struct FeeTokenOption {
@@ -252,6 +261,133 @@ pub const ALL_STATES: [&str; 46] = [
     // then open; with none left the row is no control.
     "cs44", "cs45", "cs46",
 ];
+
+/// One thing the simulation of a request can come back with — or not yet —
+/// as `VELA_SIM` names it ([`sim_pin`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SimPin {
+    /// Still out.
+    Out,
+    /// A send: one coin leaves.
+    Send,
+    /// A swap: one leaves, one arrives.
+    Swap,
+    /// Three coins move — taller than the room.
+    Three,
+    /// A swap whose inflow is a token nobody vouches for.
+    Unverified,
+    /// The node could not check.
+    Caution,
+    /// The chain says it fails, with the longest reason the core prints.
+    Danger,
+    /// It ran, and nothing of the wallet's moves.
+    Nothing,
+}
+
+impl SimPin {
+    pub const ALL: [(Self, &'static str); 8] = [
+        (Self::Out, "out"),
+        (Self::Send, "send"),
+        (Self::Swap, "swap"),
+        (Self::Three, "three"),
+        (Self::Unverified, "unverified"),
+        (Self::Caution, "caution"),
+        (Self::Danger, "danger"),
+        (Self::Nothing, "nothing"),
+    ];
+
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(pin, name)| (name == want.trim()).then_some(pin))
+    }
+}
+
+/// `VELA_SIM=out|send|swap|three|unverified|caution|danger|nothing`
+/// (developer builds), with `VELA_PAGE=gallery` and a drawn request: the
+/// verdict's place on that sheet, holding that answer — built by the LIVE
+/// builder (`live::verdict_block`) from judgments and notices the core's own
+/// types carry. A real simulation answers in a few hundred milliseconds and
+/// only one way per request; the room has to be looked at, and measured,
+/// under each. Same env-pin family as `VELA_SIGNING_STATE`.
+#[must_use]
+pub fn sim_pin() -> Option<SimPin> {
+    SimPin::named(&crate::dev_env::var!("VELA_SIM")?)
+}
+
+/// [`sim_pin`]'s verdict block for `pin`.
+#[must_use]
+pub fn sim_pin_block(pin: SimPin, s: &SigningStrings) -> Option<Block> {
+    use crate::signing::live::{SimStage, verdict_block};
+    use vela_core::app::clear_signing::ClearRisk;
+    use vela_core::app::sim_outcome::{
+        KEY_UNAVAILABLE, KEY_WILL_FAIL_REASON, REVERT_REASON_MAX_CHARS, SimNotice,
+    };
+    use vela_core::app::token_trust::TrustSimJudgment as J;
+    let trusted = |symbol: &str, delta: &str, decimals: u32| J::Erc20Trusted {
+        token: format!("0x{symbol}"),
+        delta: delta.to_owned(),
+        symbol: symbol.to_owned(),
+        decimals,
+        in_trusted_set: true,
+    };
+    let usdc_out = || trusted("USDC", "-1000000000", 6);
+    let eth_in = || J::Native {
+        delta: "405000000000000000".to_owned(),
+    };
+    let (stage, judgments, notice) = match pin {
+        SimPin::Out => (SimStage::Out, Vec::new(), None),
+        SimPin::Send => (SimStage::Landed, vec![usdc_out()], None),
+        SimPin::Swap => (SimStage::Landed, vec![usdc_out(), eth_in()], None),
+        SimPin::Three => (
+            SimStage::Landed,
+            vec![
+                usdc_out(),
+                eth_in(),
+                trusted("DAI", "-250000000000000000000", 18),
+            ],
+            None,
+        ),
+        SimPin::Unverified => (
+            SimStage::Landed,
+            vec![
+                usdc_out(),
+                J::Erc20Unverified {
+                    token: Some("0xdead".to_owned()),
+                    delta: "1000000".to_owned(),
+                },
+            ],
+            None,
+        ),
+        SimPin::Caution => (
+            SimStage::Landed,
+            Vec::new(),
+            Some(SimNotice {
+                key: KEY_UNAVAILABLE,
+                risk: ClearRisk::Caution,
+                reason: None,
+            }),
+        ),
+        SimPin::Danger => (
+            SimStage::Landed,
+            Vec::new(),
+            Some(SimNotice {
+                key: KEY_WILL_FAIL_REASON,
+                risk: ClearRisk::Danger,
+                // The longest reason the core prints.
+                reason: Some(
+                    "ERC20: transfer amount exceeds balance of the sending account ok"
+                        .chars()
+                        .take(REVERT_REASON_MAX_CHARS)
+                        .collect(),
+                ),
+            }),
+        ),
+        SimPin::Nothing => (SimStage::Landed, Vec::new(), None),
+    };
+    verdict_block(stage, &judgments, notice.as_ref(), 1, s)
+}
 
 /// The scenario `VELA_SIGNING_STATE=cs36` names, if it names one — with
 /// `VELA_PAGE=gallery`, the window opens with the signing column on that
