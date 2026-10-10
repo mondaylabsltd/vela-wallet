@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -218,6 +219,9 @@ class TrustedSignerChannelTest {
                 scope.cancel()
             }
         }
+        // Each open runs the page on a thread of its own (`channel`), which
+        // nothing joins: the second is counted once it has run.
+        runBlocking { withTimeout(5_000) { while (probed.get() < 2) delay(10) } }
         assertEquals("the retry opened the same page again", 2, probed.get())
     }
 

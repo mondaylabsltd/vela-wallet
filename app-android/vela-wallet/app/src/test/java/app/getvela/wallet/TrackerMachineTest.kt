@@ -43,9 +43,10 @@ class TrackerMachineTest {
     private val store = FakeStore()
     private val port = FakeRelayPort()
     private var clock = 1_757_000_000_000.0
-    private val patched = ArrayList<String>()
-    private val notified = ArrayList<String>()
-    private val logsSeen = ArrayList<Pair<String, Int>>()
+    // Written by the machine's threads, read by the test's: never a plain list.
+    private val patched = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val notified = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val logsSeen = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Int>>()
     private val moved = java.util.concurrent.CopyOnWriteArrayList<Int>()
 
     @After
@@ -109,7 +110,10 @@ class TrackerMachineTest {
         repeat(6) { tick(host, 3_500.0) }
         val settled = withTimeout(15_000) { host.view.first { it.entries.any { e -> e.status == TrackStatus.Confirmed } } }
         assertEquals("0xtx1", settled.entries.single().tx_hash)
-        withTimeout(5_000) { while (patched.isEmpty() || notified.isEmpty()) delay(50) }
+        // The logs are handed over after the notification, by the same
+        // effect on the machine's thread: all three are waited for, not the
+        // first two and a hope for the third.
+        withTimeout(5_000) { while (patched.isEmpty() || notified.isEmpty() || logsSeen.isEmpty()) delay(50) }
         assertEquals(listOf("1:Confirmed:0xtx1"), patched)
         assertEquals(listOf("0xop1"), notified)
         assertEquals(listOf("0x88cCA0EeDbF2C4426110bbFc998F048689266894" to 1), logsSeen)
