@@ -22,6 +22,16 @@
 //  - `testTheTwoRefusals`: a network refused for no P-256 verifier vs for
 //    missing contracts, in Settings and on a dApp's sheet.
 //
+//  - `testTheBoards`: the home's three activity rows (#469), the recipient
+//    rows' icons and the contacts-only picker (#471), a contact's page
+//    (#479) and Add passkeys with no key, some and seven (#475).
+//
+//  - `testTheLiveHomeDrawsTheNewestThree`, `testAColdStartNeverShowsDollarsFirst`,
+//    `testAHiddenTransferDetailKeepsItsUnit`: the LIVE app over a read-only
+//    account with five seeded transfers — the home's three and History's
+//    five (#469), a cold start with CNY stored (item 10), and a hidden
+//    transfer's detail (item 12). These reach the network.
+//
 //  Simulator only; skipped in the scheme (a copy of the .xctestrun with the
 //  skip removed runs it).
 //
@@ -283,6 +293,223 @@ final class UIBatchScreenshotTests: XCTestCase {
                     app.terminate()
                 }
             }
+        }
+    }
+
+    // MARK: - The boards: home, recipient rows, Add passkeys, a contact's page
+
+    /// The galleries' boards for the issues with nothing to walk: each one
+    /// asserts the thing it shows.
+    func testTheBoards() {
+        for look in Self.looks {
+            let zh = look.lang == "zh"
+            let tag = "\(look.lang)-\(look.theme)"
+            func board(_ env: [String: String], _ name: String, _ check: (XCUIApplication) -> Void) {
+                let app = launch(env: env, lang: look.lang, theme: look.theme)
+                settle(2.5)
+                check(app)
+                attach(app, "\(name)-\(tag)")
+                app.terminate()
+            }
+            let scan = zh ? "扫描二维码" : "Scan a QR code"
+
+            // Issue #469: the home's Activity is three rows, under "All".
+            board(["VELA_PAGE": "gallery", "VELA_STATE": "h1s"], "469-home-three") { app in
+                // A board is a picture: its links are words, not buttons.
+                XCTAssertTrue(app.staticTexts[zh ? "全部" : "All"].firstMatch.waitForExistence(timeout: 20), "no All link (\(tag))")
+                XCTAssertFalse(app.staticTexts["+50"].exists, "the fourth activity row is on the home (\(tag))")
+                XCTAssertTrue(app.staticTexts["+120"].exists, "the newest rows are not on the home (\(tag))")
+            }
+
+            // Issue #471: the recipient row — the address book and a scan
+            // icon, on the single field and on every split row; the picker
+            // is contacts only.
+            board(["VELA_PAGE": "flows-gallery", "VELA_STATE": "sd2"], "471-recipient-single") { app in
+                XCTAssertTrue(app.buttons[scan].firstMatch.waitForExistence(timeout: 20), "no scan icon (\(tag))")
+                XCTAssertEqual(app.buttons.matching(identifier: scan).count, 1)
+            }
+            board(["VELA_PAGE": "flows-gallery", "VELA_STATE": "sd2b"], "471-recipient-split") { app in
+                XCTAssertTrue(app.buttons[scan].firstMatch.waitForExistence(timeout: 20), "no scan icon on a split row (\(tag))")
+                XCTAssertEqual(app.buttons.matching(identifier: scan).count, 3, "one scan icon per row (\(tag))")
+                let picks = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "send.row.pick."))
+                XCTAssertEqual(picks.count, 3, "one address-book icon per row (\(tag))")
+            }
+            board(["VELA_PAGE": "flows-gallery", "VELA_STATE": "sd2e"], "471-picker-contacts-only") { app in
+                XCTAssertTrue(app.staticTexts["Alice"].firstMatch.waitForExistence(timeout: 20), "no picker (\(tag))")
+                XCTAssertFalse(app.staticTexts[zh ? "扫码填写地址" : "Scan to fill the address"].exists,
+                               "the picker still offers a scan row (\(tag))")
+            }
+
+            // Issue #479: a contact's page offers Send, and only Send.
+            board(["VELA_PAGE": "contacts-gallery", "VELA_STATE": "c2"], "479-contact-send-only") { app in
+                XCTAssertTrue(app.staticTexts[zh ? "转账" : "Send"].firstMatch.waitForExistence(timeout: 20), "no Send (\(tag))")
+                for gone in zh ? ["收款", "二维码"] : ["Receive", "QR code"] {
+                    XCTAssertFalse(app.staticTexts[gone].exists || app.buttons[gone].exists, "\(gone) is back (\(tag))")
+                }
+            }
+
+            // Issue #475: Add passkeys with no key, one, two, and at the cap.
+            for (fixture, name) in [
+                ("keys · none", "475-keys-none"),
+                ("keys · signing page offered", "475-keys-none-page-offered"),
+                ("keys · one, needs a second", "475-keys-one"),
+                ("keys · two, ready", "475-keys-two"),
+                ("keys · at the cap", "475-keys-cap"),
+            ] {
+                board(["VELA_GALLERY": "1", "VELA_GALLERY_FIXTURE": fixture], name) { app in
+                    let heading = app.descendants(matching: .any)["create.addHeading"].firstMatch
+                    XCTAssertTrue(heading.waitForExistence(timeout: 20), "no heading over the places (\(fixture), \(tag))")
+                    let place = app.staticTexts[zh ? "手机或平板" : "Phone or tablet"]
+                    switch fixture {
+                    case "keys · none", "keys · signing page offered":
+                        XCTAssertEqual(heading.label, zh ? "添加通行密钥" : "Add a passkey")
+                        XCTAssertTrue(place.exists, "the three places are not open with no key (\(tag))")
+                    case "keys · at the cap":
+                        XCTAssertEqual(heading.label, zh ? "已达上限 7 把" : "Limit of 7 reached")
+                        XCTAssertFalse(place.exists)
+                    default:
+                        XCTAssertEqual(heading.label, zh ? "再添加一把" : "Add another")
+                        XCTAssertFalse(place.exists, "the places are not folded with a key (\(tag))")
+                    }
+                }
+            }
+            // …and "Add another" unfolded.
+            let app = launch(env: ["VELA_GALLERY": "1", "VELA_GALLERY_FIXTURE": "keys · two, ready"],
+                             lang: look.lang, theme: look.theme)
+            let heading = app.descendants(matching: .any)["create.addHeading"].firstMatch
+            XCTAssertTrue(heading.waitForExistence(timeout: 20))
+            heading.tap()
+            XCTAssertTrue(app.staticTexts[zh ? "手机或平板" : "Phone or tablet"].waitForExistence(timeout: 5),
+                          "Add another did not unfold the places (\(tag))")
+            settle(0.8)
+            attach(app, "475-keys-two-unfolded-\(tag)")
+            app.terminate()
+        }
+    }
+
+    // MARK: - The live home: the newest three, the person's currency, a hidden detail
+
+    /// A read-only account over real chains, with five transfers seeded.
+    private static let me = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+
+    private static let seeded = ["11.17", "22.27", "33.37", "44.47", "55.57"]
+
+    private static func history(now: Int) -> [[String: Any]] {
+        func transfer(_ index: Int, _ value: String, _ symbol: String, sent: Bool) -> [String: Any] {
+            let other = "0x" + String(repeating: String(format: "%x", 10 + index), count: 40)
+            return [
+                "id": "pr3-\(index)", "userOpHash": sent ? "0x" + String(repeating: "5\(index)", count: 32) : "",
+                "txHash": "0x" + String(repeating: "a\(index)", count: 32),
+                "from": sent ? me : other, "to": sent ? other : me,
+                "value": value, "symbol": symbol, "decimals": 6, "chainId": 1,
+                "timestamp": now - index * 900, "status": "confirmed",
+                "type": sent ? "send" : "receive", "usd": value,
+            ]
+        }
+        // Newest first: the first three are what the home draws; the last
+        // two are History's alone. Figures no balance on the page repeats.
+        return zip(1..., seeded).map { index, value in
+            transfer(index, value, index % 2 == 1 ? "USDC" : "USDT", sent: index % 2 == 0)
+        }
+    }
+
+    private static func argument(_ records: [[String: Any]]) -> String {
+        let json = String(data: try! JSONSerialization.data(withJSONObject: records), encoding: .utf8)!
+        return "\"" + json.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+
+    private func launchLive(lang: String, theme: String, args: [String] = []) -> XCUIApplication {
+        launch(
+            env: ["VELA_ACCOUNT": Self.me],
+            args: ["-vela.parallelSpace", "0", "-vela.transactionHistory",
+                   Self.argument(Self.history(now: Int(Date().timeIntervalSince1970)))] + args,
+            lang: lang, theme: theme
+        )
+    }
+
+    /// Issue #469, live: five transfers recorded, three on the home under
+    /// "All", and all five in History — the same rows, in the same order.
+    func testTheLiveHomeDrawsTheNewestThree() {
+        for look in Self.looks {
+            let zh = look.lang == "zh"
+            let tag = "\(look.lang)-\(look.theme)"
+            let app = launchLive(lang: look.lang, theme: look.theme)
+            XCTAssertTrue(app.staticTexts[zh ? "资产" : "Assets"].firstMatch.waitForExistence(timeout: 40),
+                          "the home never appeared (\(tag))")
+            // The feed is the store's: it does not wait for the chains.
+            func figure(_ digits: String) -> XCUIElement {
+                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", digits)).firstMatch
+            }
+            XCTAssertTrue(figure(Self.seeded[0]).waitForExistence(timeout: 20), "the newest transfer is not on the home (\(tag))")
+            settle(6)
+            for shown in Self.seeded.prefix(3) { XCTAssertTrue(figure(shown).exists, "\(shown) is not on the home (\(tag))") }
+            for held in Self.seeded.suffix(2) { XCTAssertFalse(figure(held).exists, "\(held) is on the home: more than three (\(tag))") }
+            attach(app, "469-live-home-\(tag)")
+
+            // "All" (Activity's — the upper of the two) opens History, whole.
+            let all = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", zh ? "全部" : "All"))
+                .allElementsBoundByIndex.filter { $0.isHittable }.min { $0.frame.minY < $1.frame.minY }
+            XCTAssertNotNil(all, "no All link over Activity (\(tag))")
+            all?.tap()
+            settle(2)
+            for every in Self.seeded {
+                XCTAssertTrue(figure(every).exists, "\(every) is missing from History (\(tag))")
+            }
+            attach(app, "469-live-history-\(tag)")
+            app.terminate()
+        }
+    }
+
+    /// Item 10, live: a cold start with CNY stored. No frame names the
+    /// dollar or draws a dollar total; the hero waits under "CNY" and the
+    /// figure arrives once, in yuan.
+    func testAColdStartNeverShowsDollarsFirst() {
+        for look in Self.looks {
+            let zh = look.lang == "zh"
+            let tag = "\(look.lang)-\(look.theme)"
+            let app = launchLive(lang: look.lang, theme: look.theme, args: ["-vela.displayCurrency", "CNY"])
+            let label = app.staticTexts.matching(
+                NSPredicate(format: "label BEGINSWITH %@", zh ? "总余额" : "Total balance")
+            ).firstMatch
+            var sawYuan = false
+            for (index, wait) in [0.2, 0.4, 0.6, 1.0, 1.5, 2.5, 4.0, 8.0, 12.0].enumerated() {
+                settle(wait)
+                attach(app, "item10-cold-start-\(index)-\(tag)")
+                guard label.exists else { continue }
+                XCTAssertFalse(label.label.contains("USD"), "frame \(index) names the dollar: \(label.label) (\(tag))")
+                let dollars = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "$")).count
+                XCTAssertEqual(dollars, 0, "frame \(index) draws a dollar figure (\(tag))")
+                if app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "¥")).count > 0 { sawYuan = true }
+            }
+            XCTAssertTrue(label.exists, "the hero never appeared (\(tag))")
+            XCTAssertTrue(label.label.hasSuffix("CNY"), "the hero is not named by the stored choice: \(label.label) (\(tag))")
+            XCTAssertTrue(sawYuan, "no yuan figure arrived in 30 s (\(tag))")
+            app.terminate()
+        }
+    }
+
+    /// Item 12, live: the balance hidden, a transfer opened from History.
+    /// Its figure is the mask AND its unit — "•••• USDC".
+    func testAHiddenTransferDetailKeepsItsUnit() {
+        for look in Self.looks {
+            let zh = look.lang == "zh"
+            let tag = "\(look.lang)-\(look.theme)"
+            let app = launchLive(lang: look.lang, theme: look.theme, args: ["-vela.balanceHidden", "1"])
+            XCTAssertTrue(app.staticTexts[zh ? "资产" : "Assets"].firstMatch.waitForExistence(timeout: 40),
+                          "the home never appeared (\(tag))")
+            settle(6)
+            attach(app, "item12-hidden-home-\(tag)")
+            let row = app.staticTexts[zh ? "已收到" : "Received"].firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 10), "no received row on the home (\(tag))")
+            row.tap()
+            let masked = app.staticTexts.matching(NSPredicate(format: "label == %@", "•••• USDC")).firstMatch
+            XCTAssertTrue(masked.waitForExistence(timeout: 10), "the hidden detail does not read \"•••• USDC\" (\(tag))")
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", Self.seeded[0])).firstMatch.exists,
+                           "the amount is drawn while hidden (\(tag))")
+            settle(1)
+            attach(app, "item12-hidden-transfer-detail-\(tag)")
+            app.terminate()
         }
     }
 
