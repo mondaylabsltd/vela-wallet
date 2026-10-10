@@ -92,9 +92,18 @@ struct ChainDeadlineTests {
     /// took 5.15 s against the old `< 2.5 s`). The main actor is taken and
     /// held — not one yield — from before the read starts until the
     /// deadline's answer has arrived. A deadline that needed the main actor
-    /// could not answer while it is held, so the hold would never end: the
-    /// time limit is the failure, and it lets the hold go, so nothing else in
-    /// the suite hangs behind it.
+    /// could not answer while it is held, so the hold would never end by
+    /// itself.
+    ///
+    /// Every main-actor test in the run waits behind that hold. It used to
+    /// be the time limit that let it go — one minute, when this test had a
+    /// minute of its own. The limit is the run's now (`hangLimit`), and a
+    /// hold as long as that would take the whole run with it; so the hold
+    /// has a bound of its own, counted from the moment it begins
+    /// (`longestHold`). Past it the hold lets go, the deadline — the main
+    /// actor free again — answers, and the test fails on what it is about:
+    /// one failure, and nothing else hangs behind it. A hold that passes is
+    /// the deadline's 150 ms; on the runner, 215 ms.
     @Test(.hangLimit)
     func theDeadlineFiresWhileTheMainActorIsHeld() async {
         struct Hold: Sendable {
@@ -111,15 +120,16 @@ struct ChainDeadlineTests {
             hold.withLock { $0.holding = true }
             while true {
                 let now = hold.withLock { $0 }
-                if now.answered { return (true, Date().timeIntervalSince(began)) }
-                if now.abandoned { return (false, Date().timeIntervalSince(began)) }
+                let held = Date().timeIntervalSince(began)
+                if now.answered { return (true, held) }
+                if now.abandoned || held > Self.longestHold { return (false, held) }
             }
         }
         // The read runs in a detached task. This target's nonisolated async
         // functions run on their caller's executor (approachable
         // concurrency), so a test body the runner happened to start on the
-        // main actor would wait behind the holder's spin for the whole time
-        // limit, and every main-actor test running beside it with it (CI #395).
+        // main actor would wait behind the holder's spin for as long as it
+        // lasts, and every main-actor test running beside it with it (CI #395).
         let reader = Task.detached { () -> TokenReads.ChainResult in
             // The read starts only once the main actor is held.
             while !hold.withLock({ $0.holding }), !Task.isCancelled {
@@ -142,6 +152,11 @@ struct ChainDeadlineTests {
         print("ChainDeadlineTests: the main actor was held \(Int(held.held * 1000)) ms for a 150 ms deadline")
         #expect(held.answered, "the deadline waited for the main actor")
     }
+
+    /// How long the hold above may last before it gives the main actor back
+    /// and fails: hundreds of times what a deadline that fires off the main
+    /// actor takes, and well inside the run's limit.
+    private static let longestHold: TimeInterval = 60
 
     /// The default is the core's number, not one typed into this client.
     @Test func theDefaultDeadlineIsTheCores() {
