@@ -105,19 +105,24 @@ class OwnPageCeremonyTest {
     /**
      * Issue #475: the heading over the three places and whether they are
      * pinned open are the core's (`add_heading_key`, `methods_pinned`), read
-     * off the real machine — "Add a passkey" and open with no key yet; the
-     * same words, no longer pinned, while the first ceremony is in flight.
+     * off the real machine — "Choose where it lives" and open with no key
+     * yet (the heading was "Add a passkey", the screen's own title said
+     * again: the integration's note 17); the same words, no longer pinned,
+     * while the first ceremony is in flight. And the "Added n / 7" counter
+     * is the core's too (`key_count_shown`, note 22): not drawn with no key.
      */
     @Test
     fun `the keys screen's heading and its pin are the core's words`() {
         val run = toKeys(null)
         val empty = run.created { it.stage == app.getvela.wallet.feature.onboarding.core.CreateStage.AddKeys && it.canAddKey }
-        assertEquals("onboarding.create.addKeyBtn", empty.addHeadingKey)
+        assertEquals("onboarding.create.keyPlaceHeading", empty.addHeadingKey)
         assertTrue("no key yet: the three places are open, nothing to fold", empty.methodsPinned)
+        assertFalse("no key, no counter", empty.keyCountShown)
         run.send(JSONObject().put("type", "add_key").put("name", "").put("method", "security_key"))
         val inFlight = run.created { !it.canAddKey }
-        assertEquals("onboarding.create.addKeyBtn", inFlight.addHeadingKey)
+        assertEquals("onboarding.create.keyPlaceHeading", inFlight.addHeadingKey)
         assertFalse("not pinned open over a ceremony", inFlight.methodsPinned)
+        assertFalse("a ceremony in flight is not a key yet", inFlight.keyCountShown)
     }
 
     @Test

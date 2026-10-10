@@ -140,11 +140,13 @@ object FlowFixtures {
      */
     private fun CreateView.withKeysHeading(): CreateView = copy(
         addHeadingKey = when {
-            keys.isEmpty() -> I18nKeys.Create.ADD_KEY_BTN
+            keys.isEmpty() -> I18nKeys.Create.KEY_PLACE_HEADING
             keys.size < MAX_KEYS -> I18nKeys.Create.ADD_METHOD_LABEL
             else -> I18nKeys.Create.KEY_LIMIT_REACHED
         },
         methodsPinned = keys.isEmpty() && canAddKey,
+        // The core's `key_count_shown`: from the first key on.
+        keyCountShown = keys.isNotEmpty(),
     )
 
     val all: List<StateFixture> = buildList {

@@ -166,6 +166,12 @@ data class CreateView(
      * is open is the screen's.
      */
     val methodsPinned: Boolean = false,
+    /**
+     * Is the "Added n / 7" counter drawn? The core's word — from the first
+     * key on. With no key it read "0 / 7" over an empty list: a count of
+     * nothing, beside a subtitle that already says "up to 7".
+     */
+    val keyCountShown: Boolean = false,
 ) {
     companion object {
         fun from(json: JSONObject): CreateView = CreateView(
@@ -207,6 +213,7 @@ data class CreateView(
             canChoosePage = json.optBoolean("can_choose_page"),
             addHeadingKey = json.optString("add_heading_key").ifEmpty { ADD_HEADING_ANOTHER },
             methodsPinned = json.optBoolean("methods_pinned"),
+            keyCountShown = json.optBoolean("key_count_shown"),
         )
 
         /** What a core from before issue #475 leaves the heading as: the label the list always had. */

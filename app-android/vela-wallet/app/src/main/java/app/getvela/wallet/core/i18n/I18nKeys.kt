@@ -119,7 +119,12 @@ object I18nKeys {
         const val KEY_DEVICE_ONLY_BADGE = "onboarding.create.keyDeviceOnlyBadge"
         const val KEY_LIMIT_REACHED = "onboarding.create.keyLimitReached"
         const val NEED_SECOND_KEY_HINT = "onboarding.create.needSecondKeyHint"
-        const val ADD_KEY_BTN = "onboarding.create.addKeyBtn"
+        /**
+         * The heading over the three places with no key yet: "Choose where it
+         * lives". It was "Add a passkey" (`addKeyBtn`, retired) — the screen's
+         * own title said over again.
+         */
+        const val KEY_PLACE_HEADING = "onboarding.create.keyPlaceHeading"
         const val ADD_SECOND_KEY_BTN = "onboarding.create.addSecondKeyBtn"
         const val CONFIRM_KEY_BTN = "onboarding.create.confirmKeyBtn"
         const val REMOVE_KEY_BTN = "onboarding.create.removeKeyBtn"
