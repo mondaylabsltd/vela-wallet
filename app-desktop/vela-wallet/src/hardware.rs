@@ -53,7 +53,7 @@ pub(crate) fn title(theme: &Theme, text: SharedString) -> Div {
         .text_size(theme::text_flow_headline())
         .font_weight(FontWeight::BOLD)
         .text_color(theme.fg_base)
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 pub(crate) fn body(theme: &Theme, text: SharedString) -> Div {
@@ -61,7 +61,9 @@ pub(crate) fn body(theme: &Theme, text: SharedString) -> Div {
         .text_size(theme::text_body())
         .line_height(theme::line_height_body())
         .text_color(theme.fg_muted)
-        .child(text)
+        // A sentence that wraps: by the CJK line rule (`ui::prose`), so a
+        // card never ends on a full stop alone.
+        .child(crate::ui::prose(text))
 }
 
 /// "Your key is blinking — touch it."
@@ -744,7 +746,7 @@ pub fn pick_card(
                             div()
                                 .text_size(theme::text_flow_caption())
                                 .text_color(theme.fg_subtle)
-                                .child(subtitle),
+                                .child(crate::ui::prose(subtitle)),
                         ),
                 ),
         );

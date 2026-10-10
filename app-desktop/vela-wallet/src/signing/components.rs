@@ -199,7 +199,7 @@ pub fn headline(theme: &Theme, text: SharedString, tone: Tone) -> Div {
         } else {
             theme.fg_base
         })
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 /// One block, rendered.
@@ -243,7 +243,7 @@ fn block_inner(
             } else {
                 tone_color(theme, *tone)
             })
-            .child(text.clone()),
+            .child(crate::ui::prose(text.clone())),
 
         Block::Amount {
             line,
@@ -262,7 +262,7 @@ fn block_inner(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(caption),
+                        .child(crate::ui::prose(caption)),
                 );
             }
             let mut value_row = div().flex().items_center().gap(px(8.)).child(
@@ -305,7 +305,7 @@ fn block_inner(
                         } else {
                             theme.fg_subtle
                         })
-                        .child(text),
+                        .child(crate::ui::prose(text)),
                 );
             }
             if *card {
@@ -386,7 +386,7 @@ fn block_inner(
         Block::Sentence { text, tone } => div()
             .text_size(theme::text_row_title())
             .text_color(tone_color(theme, *tone))
-            .child(text.clone()),
+            .child(crate::ui::prose(text.clone())),
 
         Block::Allowance {
             label,
@@ -474,7 +474,7 @@ fn block_inner(
                             div()
                                 .text_size(theme::text_row_sub())
                                 .text_color(tone_color(theme, Tone::Danger))
-                                .child(error.clone()),
+                                .child(crate::ui::prose(error.clone())),
                         );
                     }
                     return col;
@@ -515,7 +515,7 @@ fn block_inner(
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(tone_color(theme, Tone::Danger))
-                            .child(error.clone()),
+                            .child(crate::ui::prose(error.clone())),
                     );
                 }
                 col
@@ -561,7 +561,7 @@ fn block_inner(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(note.clone()),
+                        .child(crate::ui::prose(note.clone())),
                 );
             }
             let mut wrap = div().flex().flex_col().gap(px(12.)).child(card);
@@ -703,7 +703,7 @@ fn block_inner(
                         .min_w(px(0.))
                         .text_size(theme::text_row_sub())
                         .text_color(ink)
-                        .child(text.clone()),
+                        .child(crate::ui::prose(text.clone())),
                 )
         }
 
@@ -719,7 +719,7 @@ fn block_inner(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
-                    .child(text.clone()),
+                    .child(crate::ui::prose(text.clone())),
             ),
 
         Block::Code { lines, note } => {
@@ -827,7 +827,7 @@ fn block_inner(
                         } else {
                             tone_color(theme, *note_tone)
                         })
-                        .child(note.clone()),
+                        .child(crate::ui::prose(note.clone())),
                 );
             }
             col
@@ -896,7 +896,7 @@ pub fn fee(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.success_base)
-                        .child(note.clone()),
+                        .child(crate::ui::prose(note.clone())),
                 ),
         ),
         FeeModel::OnChain {
@@ -922,7 +922,7 @@ pub fn fee(
                     } else {
                         theme.error_base
                     })
-                    .child(text)
+                    .child(crate::ui::prose(text))
             });
             let Some((title, options)) = selector else {
                 let row = div()
@@ -1013,7 +1013,7 @@ pub fn fee(
                         .px(px(16.))
                         .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
-                        .child(note)
+                        .child(crate::ui::prose(note))
                 });
                 return Some(
                     div()
@@ -1118,7 +1118,7 @@ pub fn fee(
                             .pb(px(4.))
                             .text_size(theme::text_row_sub())
                             .text_color(theme.error_base)
-                            .child(reason),
+                            .child(crate::ui::prose(reason)),
                     );
                 }
             }

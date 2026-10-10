@@ -532,7 +532,7 @@ fn receive(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(model.subtitle.clone()),
+                .child(crate::ui::prose(model.subtitle.clone())),
         )
         .child(flow_search(
             theme,
@@ -725,7 +725,7 @@ fn receive_qr(
                 div()
                     .text_size(theme::text_label())
                     .text_color(theme.fg_subtle)
-                    .child(hint)
+                    .child(crate::ui::prose(hint))
             }))
     }))
     .child(
@@ -734,7 +734,7 @@ fn receive_qr(
             .text_size(theme::text_label())
             .text_center()
             .text_color(theme.fg_subtle)
-            .child(model.warning.clone()),
+            .child(crate::ui::prose(model.warning.clone())),
     )
     .child(clickable(
         "receive-save-image",
@@ -814,7 +814,7 @@ fn deposit_section(deposits: &[DepositEntry], theme: &Theme) -> Option<Div> {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.fg_muted)
-                            .child(meta.clone()),
+                            .child(crate::ui::prose(meta.clone())),
                     ),
             );
         }
@@ -846,7 +846,7 @@ fn history(
                 .text_center()
                 .text_size(theme::text_row_title())
                 .text_color(theme.fg_muted)
-                .child(text.clone()),
+                .child(crate::ui::prose(text.clone())),
         );
     }
     let groups = &model.groups;
@@ -914,7 +914,7 @@ fn tx_detail(
                 .pt(px(4.))
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
-                .child(note.clone()),
+                .child(crate::ui::prose(note.clone())),
         );
     }
     // A dApp call that moved no coin has no figure (083 H2 review): no empty
@@ -1086,7 +1086,7 @@ fn technical_section(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(text.clone())
+                        .child(crate::ui::prose(text.clone()))
                 } else {
                     div()
                         .font_family(theme::font_mono())
@@ -1218,14 +1218,14 @@ fn assets(
                             .text_size(theme::text_row_sub())
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_base)
-                            .child(empty.hint_title.clone()),
+                            .child(crate::ui::prose(empty.hint_title.clone())),
                     )
                     .child(
                         div()
                             .text_size(theme::text_label())
                             .line_height(gpui::relative(1.6))
                             .text_color(theme.fg_muted)
-                            .child(empty.hint_body.clone()),
+                            .child(crate::ui::prose(empty.hint_body.clone())),
                     ),
             );
     }
@@ -1386,7 +1386,7 @@ fn add_token(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(detail.clone()),
+                    .child(crate::ui::prose(detail.clone())),
             )
     };
     col = match &model.result {
@@ -1593,7 +1593,7 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(detail.clone()),
+                .child(crate::ui::prose(detail.clone())),
         );
     }
     // Two ways out of the same card: the retry the core offered, and — where
@@ -1817,7 +1817,7 @@ fn send_pick(
                         .text_size(theme::text_label())
                         .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
                         .text_color(theme.fg_muted)
-                        .child(text),
+                        .child(crate::ui::prose(text)),
                 ),
         );
     }
@@ -2030,7 +2030,7 @@ fn send_form_parts(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(sweep.summary.clone()),
+                        .child(crate::ui::prose(sweep.summary.clone())),
                 )
                 .child(rows)
         }
@@ -2282,7 +2282,7 @@ fn send_form_parts(
                         } else {
                             theme.fg_subtle
                         })
-                        .child(note)
+                        .child(crate::ui::prose(note))
                 })),
         );
     } else if let Some((label, lines, seed)) = &model.recipient {
@@ -2523,7 +2523,7 @@ fn send_form_parts(
                                 div()
                                     .text_size(theme::text_label())
                                     .text_color(theme.fg_muted)
-                                    .child(detail),
+                                    .child(crate::ui::prose(detail)),
                             )
                         }),
                 ),
@@ -2626,10 +2626,16 @@ fn alert_line(theme: &Theme, icons: &mut IconCache, notice: &SendNotice) -> Div 
             color,
             14.,
         )))
-        .child(div().flex_1().min_w(px(0.)).child(match &notice.detail {
-            Some(detail) => SharedString::from(format!("{} {detail}", notice.body)),
-            None => notice.body.clone(),
-        }))
+        // The core's sentence, wrapped by the CJK line rule (`ui::prose`).
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.))
+                .child(crate::ui::prose(match &notice.detail {
+                    Some(detail) => SharedString::from(format!("{} {detail}", notice.body)),
+                    None => notice.body.clone(),
+                })),
+        )
 }
 
 /// The speed control under the fee row (spec 068): folded, the word and the
@@ -2875,7 +2881,7 @@ fn fee_token(
         div()
             .text_size(theme::text_label())
             .text_color(theme.fg_muted)
-            .child(model.hint.clone()),
+            .child(crate::ui::prose(model.hint.clone())),
     );
     // One list, the rows flush (the web's `ul`); each padded 12 on a
     // button's line, the chosen one raised (078 F-11).
@@ -2990,7 +2996,7 @@ fn batch_import_parts(
                 div()
                     .text_size(theme::text_label())
                     .text_color(theme.fg_muted)
-                    .child(model.unit_caption.clone()),
+                    .child(crate::ui::prose(model.unit_caption.clone())),
             )
             .child(segmented_toggle(
                 theme,
@@ -3125,7 +3131,7 @@ fn batch_import_parts(
                         .gap(px(4.))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(lead.clone())
+                        .child(crate::ui::prose(lead.clone()))
                         .child(
                             div()
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -3147,7 +3153,7 @@ fn batch_import_parts(
             div()
                 .text_size(theme::text_label())
                 .text_color(theme.fg_muted)
-                .child(model.rate_hint.clone()),
+                .child(crate::ui::prose(model.rate_hint.clone())),
         );
     }
     col = col.child(rate);
@@ -3321,7 +3327,7 @@ fn batch_row(
             .text_right()
             .text_size(theme::text_glyph())
             .text_color(theme.warning_base)
-            .child(note.clone()),
+            .child(crate::ui::prose(note.clone())),
         None => div()
             .flex_none()
             .flex()
@@ -3502,7 +3508,7 @@ fn send_confirm(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(model.subline.clone()),
+                .child(crate::ui::prose(model.subline.clone())),
         ),
     );
 
@@ -3606,7 +3612,7 @@ fn send_confirm(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(held.clone()),
+                .child(crate::ui::prose(held.clone())),
         );
     }
     col
@@ -3898,7 +3904,7 @@ pub fn status_hero(
                 } else {
                     theme.fg_subtle
                 })
-                .child(caption.clone()),
+                .child(crate::ui::prose(caption.clone())),
         );
     }
     hero
@@ -3912,7 +3918,7 @@ fn scan_placeholder(model: &ScanModal, theme: &Theme) -> Div {
         div()
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_muted)
-            .child(model.hint.clone()),
+            .child(crate::ui::prose(model.hint.clone())),
     )
 }
 
@@ -4052,7 +4058,9 @@ pub fn scan_modal(
                 .text_size(theme::text_row_sub())
                 .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_muted)
-                .child(notice.unwrap_or_else(|| model.hint.clone())),
+                .child(crate::ui::prose(
+                    notice.unwrap_or_else(|| model.hint.clone()),
+                )),
         )
         .child(tools)
 }
@@ -4090,7 +4098,7 @@ fn receive_gate(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(gate.counterfactual.clone()),
+                .child(crate::ui::prose(gate.counterfactual.clone())),
         );
     if !gate.loading {
         card = card.child(clickable(

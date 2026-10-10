@@ -203,7 +203,7 @@ pub fn words(theme: &Theme, said: SharedString, tone: Tone, reserve: bool) -> Di
         .text_size(theme::text_row_sub())
         .line_height(gpui::relative(LINE_HEIGHT))
         .text_color(words_ink(theme, tone))
-        .child(said)
+        .child(crate::ui::prose(said))
 }
 
 /// The line as a row: its mark and its sentence, wrapping under itself, in

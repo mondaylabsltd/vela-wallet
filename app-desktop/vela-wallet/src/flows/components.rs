@@ -482,7 +482,7 @@ pub fn fact_row(
                 .pb(px(12.))
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
-                .child(note.clone()),
+                .child(crate::ui::prose(note.clone())),
         ),
     }
 }
@@ -508,7 +508,7 @@ pub fn status_chip(theme: &Theme, chip: &StatusChip) -> Div {
         .text_size(theme::text_glyph())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(fg)
-        .child(chip.text.clone())
+        .child(crate::ui::prose(chip.text.clone()))
 }
 
 /// The filled search field — the web's `flows/ui/SearchField.svelte`: 52 high
@@ -1247,7 +1247,7 @@ pub fn fee_speed_note(theme: &Theme, text: &SharedString) -> Div {
         .pb(px(4.))
         .text_size(theme::text_label())
         .text_color(theme.fg_subtle)
-        .child(text.clone())
+        .child(crate::ui::prose(text.clone()))
 }
 
 /// One option, opened: its name and its own fee; then, where the chain has
@@ -1567,7 +1567,7 @@ pub fn recipient_card(
                 .pl(px(48.))
                 .text_size(theme::text_label())
                 .text_color(theme.warning_base)
-                .child(note.clone()),
+                .child(crate::ui::prose(note.clone())),
         );
     }
     block

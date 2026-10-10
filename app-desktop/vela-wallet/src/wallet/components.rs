@@ -1058,11 +1058,11 @@ pub fn asset_row(
         Fiat::Value(text) => div()
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_subtle)
-            .child(text.clone()),
+            .child(crate::ui::prose(text.clone())),
         Fiat::NoPrice(text) => div()
             .text_size(theme::text_row_sub())
             .text_color(theme.warning)
-            .child(text.clone()),
+            .child(crate::ui::prose(text.clone())),
         Fiat::Masked => div()
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_subtle)
@@ -1143,11 +1143,6 @@ pub fn asset_row(
         )
 }
 
-/// Marks a line may not open with — the CJK closing punctuation 禁则 names,
-/// and their Latin kin. gpui's wrapper breaks between any two CJK glyphs,
-/// so it will happily start a line with 「。」.
-const NO_LINE_START: &str = "。，、；：？！）」』》〉】〕…%.,;:!?)]}";
-
 /// The narrowest width, at most `max`, that still wraps `text` (the UI face
 /// at `size`) into as many lines as `max` does — the web's
 /// `text-wrap: balance`. A centred caption wrapped at its full width leaves a
@@ -1182,20 +1177,17 @@ pub fn balanced_wrap_width(
                 None,
             )
             .ok()?;
-        let mut count = 0;
-        for line in &shaped {
-            for boundary in line.wrap_boundaries() {
-                // A boundary names the first glyph of the new line.
-                let at =
-                    line.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index;
-                let opens = line.text.get(at..).and_then(|rest| rest.chars().next());
-                if opens.is_some_and(|c| NO_LINE_START.contains(c)) {
-                    return None;
-                }
-            }
-            count += line.wrap_boundaries().len() + 1;
+        // The one line rule (`ui::prose`): closing marks, opening marks,
+        // glue.
+        if crate::ui::prose::strands(&shaped) {
+            return None;
         }
-        Some(count)
+        Some(
+            shaped
+                .iter()
+                .map(|line| line.wrap_boundaries().len() + 1)
+                .sum(),
+        )
     };
     let Some(target) = lines(max).filter(|&n| n > 1) else {
         return max;
@@ -1230,35 +1222,10 @@ pub fn kinsoku_width(window: &Window, text: &SharedString, size: Pixels, max: Pi
         underline: None,
         strikethrough: None,
     };
-    let strands = |width: Pixels| -> bool {
-        let Ok(shaped) = window.text_system().shape_text(
-            text.clone(),
-            size,
-            std::slice::from_ref(&run),
-            Some(width),
-            None,
-        ) else {
-            return false;
-        };
-        shaped.iter().any(|line| {
-            line.wrap_boundaries().iter().any(|boundary| {
-                let at =
-                    line.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index;
-                line.text
-                    .get(at..)
-                    .and_then(|rest| rest.chars().next())
-                    .is_some_and(|c| NO_LINE_START.contains(c))
-            })
-        })
-    };
-    let mut width = max;
-    for _ in 0..12 {
-        if !strands(width) {
-            return width;
-        }
-        width -= size;
-    }
-    max
+    // The search and the rule are `ui::prose`'s — the same ones a `prose`
+    // child wraps by, so a box sized here and a sentence drawn there break
+    // at the same places.
+    crate::ui::prose::clean_wrap_width(window, text, size, std::slice::from_ref(&run), max)
 }
 
 /// How many lines `text` takes wrapped at `width`, in the UI face at `size`
@@ -1377,7 +1344,7 @@ pub fn empty_state_wrapped(
                     .when_some(caption_w, |el, w| el.w(w))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(caption),
+                    .child(crate::ui::prose(caption)),
             )
         })
 }
@@ -1492,7 +1459,7 @@ pub fn qr_placeholder(theme: &Theme, caption: SharedString, side: Pixels) -> Div
             div()
                 .text_size(theme::text_label())
                 .text_color(ink.opacity(0.5))
-                .child(caption),
+                .child(crate::ui::prose(caption)),
         )
 }
 
@@ -1547,7 +1514,7 @@ pub fn receipt_toast(theme: &Theme, icons: &mut IconCache, text: SharedString) -
                 .text_size(theme::text_row_title())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_base)
-                .child(text),
+                .child(crate::ui::prose(text)),
         )
 }
 

@@ -188,7 +188,7 @@ pub fn site_row(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.accent)
-                .child(meta),
+                .child(crate::ui::prose(meta)),
         );
     }
     row
@@ -728,7 +728,7 @@ pub fn address_field(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(tint)
-                    .child(notice.clone()),
+                    .child(crate::ui::prose(notice.clone())),
             );
     }
     if bar.browsing {

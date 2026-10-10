@@ -1561,7 +1561,7 @@ impl WalletPage {
                             .text_size(theme::text_label())
                             .text_color(theme.fg_muted)
                             .text_center()
-                            .child(hint),
+                            .child(crate::ui::prose(hint)),
                     ),
             );
         } else {

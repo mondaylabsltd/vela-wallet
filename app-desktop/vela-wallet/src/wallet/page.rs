@@ -2315,7 +2315,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_body())
                     .text_color(theme.fg_muted)
-                    .child(empty),
+                    .child(crate::ui::prose(empty)),
             );
         } else {
             let mut list = self.pick_scroll.attach(
@@ -2898,7 +2898,7 @@ impl WalletPage {
                     .text_size(theme::text_row_sub())
                     .line_height(gpui::relative(1.6))
                     .text_color(theme.fg_muted)
-                    .child(caption),
+                    .child(crate::ui::prose(caption)),
             )
             // The whole address, never shortened: a fingerprint you can only
             // see half of teaches half a habit.
@@ -5140,7 +5140,7 @@ impl WalletPage {
                     .pt(px(12.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(caption),
+                    .child(crate::ui::prose(caption)),
             )
     }
 
@@ -7768,13 +7768,13 @@ impl WalletPage {
                         theme,
                         &mut self.icons,
                     ))
-                    .child(s.warning_title.clone()),
+                    .child(crate::ui::prose(s.warning_title.clone())),
             )
             .child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(s.warning_reminder.clone()),
+                    .child(crate::ui::prose(s.warning_reminder.clone())),
             )
             .child(
                 div()
@@ -7851,7 +7851,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.fg_muted)
-                            .child(model.sub.clone()),
+                            .child(crate::ui::prose(model.sub.clone())),
                     ),
             );
 
@@ -8834,7 +8834,7 @@ impl WalletPage {
                             .max_w(width)
                             .text_size(size)
                             .text_color(theme.fg_muted)
-                            .child(description),
+                            .child(crate::ui::prose(description)),
                     );
                 }
                 titles
@@ -9270,7 +9270,7 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_muted)
-                                .child(remove_body.clone()),
+                                .child(crate::ui::prose(remove_body.clone())),
                         )
                         .child(
                             div()
@@ -9325,7 +9325,7 @@ impl WalletPage {
                     .pb(px(12.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(summary),
+                    .child(crate::ui::prose(summary)),
             )
             .child(list)
             // Onboarding over this wallet (spec 072): the root shows it while
@@ -9433,7 +9433,7 @@ impl WalletPage {
                     .pb(px(12.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(summary),
+                    .child(crate::ui::prose(summary)),
             )
             .child(list)
             .child(self.account_buttons(theme, false, cx))
@@ -9466,7 +9466,7 @@ impl WalletPage {
                     .pb(px(24.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(sign_out_desc),
+                    .child(crate::ui::prose(sign_out_desc)),
             )
             // No handler: this is the board the window draws before anybody has
             // signed in, and there is nothing on it to erase. The LIVE account
@@ -9700,7 +9700,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(colour)
-                            .child(subtitle),
+                            .child(crate::ui::prose(subtitle)),
                     ),
             );
         // What the row's end says it will do: ask again, go on, or — done.
@@ -9883,7 +9883,7 @@ impl WalletPage {
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(in_vela_body),
+                        .child(crate::ui::prose(in_vela_body)),
                 );
             if let Some(block) = &choice.blocked {
                 body = body.child(div().pt(px(6.)).child(reason(self, block)));
@@ -9942,7 +9942,7 @@ impl WalletPage {
                                 div()
                                     .text_size(theme::text_row_sub())
                                     .text_color(theme.fg_muted)
-                                    .child(on_page_body),
+                                    .child(crate::ui::prose(on_page_body)),
                             ),
                     ),
             );
@@ -10063,7 +10063,7 @@ impl WalletPage {
                         .pb(px(12.))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_subtle)
-                        .child(subtitle),
+                        .child(crate::ui::prose(subtitle)),
                 )
                 .child(rows),
         )
@@ -10164,7 +10164,7 @@ impl WalletPage {
                     .pb(px(8.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(subtitle),
+                    .child(crate::ui::prose(subtitle)),
             );
 
         match check {
@@ -10500,7 +10500,7 @@ impl WalletPage {
                     .pb(px(8.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(explain),
+                    .child(crate::ui::prose(explain)),
             ),
             None => block,
         }
@@ -10631,7 +10631,7 @@ impl WalletPage {
                     .pb(px(24.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(sign_out_desc),
+                    .child(crate::ui::prose(sign_out_desc)),
             )
             // The one irreversible control asks first (spec 072 FR-010, and
             // spec 081 FR-017 — it had no handler at all from the day it was
@@ -11246,7 +11246,7 @@ impl WalletPage {
                 .mb(px(-8.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(self.settings.providers_desc.clone()),
+                .child(crate::ui::prose(self.settings.providers_desc.clone())),
         );
 
         // Live since 031. An API key is a CREDENTIAL, and the field it goes in
@@ -11459,7 +11459,7 @@ impl WalletPage {
                 .text_size(theme::text_row_sub())
                 .line_height(px(20.))
                 .text_color(theme.fg_muted)
-                .child(self.settings.endpoints_desc.clone()),
+                .child(crate::ui::prose(self.settings.endpoints_desc.clone())),
         );
 
         // Live since 031. 030 recorded this panel as "unfinished rather than
@@ -11987,7 +11987,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.error_base)
-                    .child(refused),
+                    .child(crate::ui::prose(refused)),
             );
         }
         div()
@@ -12100,7 +12100,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.fg_subtle)
-                            .child(summary),
+                            .child(crate::ui::prose(summary)),
                     ),
             )
             .child(storage_bar(theme, &segments))
@@ -12469,7 +12469,7 @@ impl WalletPage {
                 .text_center()
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
-                .child(self.settings.about_footer.clone()),
+                .child(crate::ui::prose(self.settings.about_footer.clone())),
         )
     }
 
@@ -12770,7 +12770,7 @@ impl WalletPage {
                                 div()
                                     .text_size(theme::text_row_sub())
                                     .text_color(theme.fg_subtle)
-                                    .child(verdict.meta.clone()),
+                                    .child(crate::ui::prose(verdict.meta.clone())),
                             ),
                     )
                     // Its own width, always: a long line beside it shrinks,
@@ -13250,7 +13250,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_label())
                             .text_color(theme.fg_subtle)
-                            .child(providers_hint),
+                            .child(crate::ui::prose(providers_hint)),
                     )
                     .child(chips),
             )
@@ -13379,7 +13379,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_label())
                             .text_color(theme.fg_subtle)
-                            .child(providers_hint),
+                            .child(crate::ui::prose(providers_hint)),
                     )
                     .child(chips),
             )
@@ -13412,7 +13412,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_row_title())
                     .text_color(theme.fg_base)
-                    .child(desc),
+                    .child(crate::ui::prose(desc)),
             )
             .child(
                 div()
@@ -15111,7 +15111,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(reason)
+                    .child(crate::ui::prose(reason))
             }))
             .child(
                 div()
@@ -15240,7 +15240,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(self.explore.page_crashed_body.clone()),
+                    .child(crate::ui::prose(self.explore.page_crashed_body.clone())),
             )
             .child(
                 outline_button(
@@ -16541,7 +16541,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_body())
                     .text_color(theme.fg_muted)
-                    .child(e.start_hint.clone()),
+                    .child(crate::ui::prose(e.start_hint.clone())),
             )
             .child(
                 div()
@@ -16853,7 +16853,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(self.explore.consent_body.clone()),
+                    .child(crate::ui::prose(self.explore.consent_body.clone())),
             )
             // Spec 082 RD11 (G11): WHO would be connected and on WHICH network,
             // before the answer — the account the grant would be made for,
@@ -16969,7 +16969,7 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_row_sub())
                                 .text_color(theme.fg_muted)
-                                .child(sheet.lead.clone()),
+                                .child(crate::ui::prose(sheet.lead.clone())),
                         ),
                 ),
         );
@@ -17220,7 +17220,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(self.explore.connection_explainer.clone()),
+                    .child(crate::ui::prose(self.explore.connection_explainer.clone())),
             )
             .child(disconnect)
             .child(
@@ -17228,7 +17228,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(self.explore.auto_request_hint.clone()),
+                    .child(crate::ui::prose(self.explore.auto_request_hint.clone())),
             )
     }
 
@@ -17925,7 +17925,7 @@ impl WalletPage {
                         } else {
                             gpui::transparent_black()
                         })
-                        .child(note)
+                        .child(crate::ui::prose(note))
                 }));
         }
         // The wallet's own request draws no header — and no gap where it was:
@@ -18289,7 +18289,7 @@ impl WalletPage {
                             } else {
                                 gpui::transparent_black()
                             })
-                            .child(note)
+                            .child(crate::ui::prose(note))
                     }),
             );
         // A refused request's one way out (the web's `dismissOnly`): Close,
@@ -18728,7 +18728,7 @@ impl WalletPage {
                     .text_size(theme::text_row_sub())
                     .line_height(gpui::relative(1.4))
                     .text_color(theme.fg_subtle)
-                    .child(summary),
+                    .child(crate::ui::prose(summary)),
             );
         }
         for row in &list.rows {
@@ -18823,7 +18823,7 @@ impl WalletPage {
                 .text_size(theme::text_row_sub())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_base)
-                .child(text)
+                .child(crate::ui::prose(text))
         };
         let row = |line: &wallet_live::DetailChain, retry: Option<gpui::AnyElement>| {
             let name = crate::executor::custom_tokens::network_name(line.chain_id);
@@ -18880,7 +18880,7 @@ impl WalletPage {
                 .mb(px(16.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(detail.summary.clone()),
+                .child(crate::ui::prose(detail.summary.clone())),
         );
         body = body.child(section(s.detail_networks_label.clone())).child(
             div()
@@ -18888,7 +18888,7 @@ impl WalletPage {
                 .text_size(theme::text_label())
                 .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_subtle)
-                .child(s.detail_networks_note.clone()),
+                .child(crate::ui::prose(s.detail_networks_note.clone())),
         );
         for line in &detail.pending {
             let retry = line.retry.then(|| {
@@ -19970,7 +19970,7 @@ impl WalletPage {
                     .text_size(theme::text_body())
                     .line_height(theme::line_height_body())
                     .text_color(theme.fg_muted)
-                    .child(s.export_body.clone()),
+                    .child(crate::ui::prose(s.export_body.clone())),
             )
             .child(
                 div()

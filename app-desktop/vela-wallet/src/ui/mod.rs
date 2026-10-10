@@ -9,6 +9,7 @@ pub mod editor_model;
 mod launch_animation;
 mod logo;
 mod name_field;
+pub mod prose;
 mod rail;
 mod scrollbar;
 mod smooth_scroll;
@@ -27,6 +28,7 @@ pub use name_field::{
     EditChord, NameFieldStrings, bare_text_field, edit_chord, hero_amount_field, name_field,
     search_input, text_area, text_field,
 };
+pub use prose::prose;
 pub use rail::{RailSlot, onboarding_rail};
 pub use scrollbar::vertical_scrollbar;
 pub use smooth_scroll::SmoothScroll;

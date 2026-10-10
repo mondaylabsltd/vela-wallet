@@ -358,7 +358,7 @@ fn title(theme: &Theme, text: SharedString) -> Div {
         .line_height(theme::line_height_title())
         .font_weight(FontWeight::BOLD)
         .text_color(theme.fg_base)
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 fn subtitle(theme: &Theme, text: SharedString) -> Div {
@@ -366,7 +366,7 @@ fn subtitle(theme: &Theme, text: SharedString) -> Div {
         .text_size(theme::text_flow_sub())
         .line_height(theme::line_height_flow_sub())
         .text_color(theme.fg_muted)
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 /// The tiny uppercase label that heads a field or a list section.
@@ -391,7 +391,7 @@ fn caption(theme: &Theme, text: SharedString) -> Div {
     div()
         .text_size(theme::text_flow_caption())
         .text_color(theme.fg_subtle)
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 /// A flow CTA's three states, out of the core's two flags.
@@ -644,7 +644,9 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
                         .text_size(theme::text_body())
                         .line_height(theme::line_height_flow_sub())
                         .text_color(theme.fg_base)
-                        .child(loc.t("onboarding.create.needSecondKeyHint")),
+                        .child(crate::ui::prose(
+                            loc.t("onboarding.create.needSecondKeyHint"),
+                        )),
                 ),
         );
     }

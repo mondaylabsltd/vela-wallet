@@ -76,7 +76,9 @@ impl Money {
         USD.get_or_init(Money::default)
     }
 
-    /// A committed pair: `code`, and the rate the core priced it at.
+    /// A committed pair: `code`, and the rate the core priced it at — what a
+    /// test states its currency as. A live surface reads [`Self::of`].
+    #[cfg(test)]
     #[must_use]
     pub fn new(code: &str, rate: Option<f64>) -> Self {
         Self {
