@@ -286,9 +286,9 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             integer: SharedString::from(BALANCE_MASK),
             decimals: None,
             live: None,
-            // Hiding the figure is not hiding that the wallet is being
-            // read: the first read says so here too.
-            checking,
+            // No line under a hidden figure, "Checking…" included — the
+            // web's hidden hero, which says nothing at all (078 H-03).
+            checking: None,
             status: None,
             updated: None,
             // The control under a hidden hero still turns: hiding the
@@ -2187,9 +2187,9 @@ mod tests {
         assert_eq!(model.live, Some(s.live_indicator.clone()));
     }
 
-    /// F19: the first read says "Checking…" whatever the hero is drawing —
-    /// the skeleton of a wallet with no cache, a cached figure, the hidden
-    /// mask — and stops saying it when the round ends. A later refresh is
+    /// F19: the first read says "Checking…" whatever figure the hero is
+    /// drawing — the skeleton of a wallet with no cache, a cached figure —
+    /// and stops saying it when the round ends. A later refresh is
     /// not "checking": the core keeps the key `None`, and so does the hero.
     #[test]
     fn checking_is_said_from_the_first_frame_and_only_for_the_first_read() {
@@ -2212,13 +2212,13 @@ mod tests {
         assert_eq!(model.integer, SharedString::from("$42"));
         assert_eq!(SlotLine::of(&model), checking);
 
-        // Hidden: the mask, and still the line — hiding the figure is not
-        // hiding that the wallet is being read.
+        // Hidden: the mask and no line at all, as on the web — the slot
+        // stays, empty.
         let mut hidden = view(None);
         hidden.hidden = true;
         let model = balance(&hidden, &s, "en", &Money::default());
         assert_eq!(model.state, BalanceState::Hidden);
-        assert_eq!(SlotLine::of(&model), checking);
+        assert_eq!(SlotLine::of(&model), SlotLine::Empty);
 
         // The display currency not committed: the figure waits, the line
         // does not.

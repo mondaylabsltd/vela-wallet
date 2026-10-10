@@ -179,6 +179,23 @@ impl DisplayTold {
     }
 }
 
+/// Does an open batch importer follow the display currency to a new code
+/// (PR 3 final note F8)? Only while nothing has been put in it — no pasted
+/// text, no picked file.
+///
+/// The sheet reads its figures in ONE currency, named on its unit chip. An
+/// empty sheet opened before the currency committed should not go on naming
+/// the placeholder's, so it follows (`SetFiatCode`: the core drops the old
+/// rate and fetches the new one before it will convert a row). A sheet that
+/// already holds rows keeps the currency they were read in: "5000" pasted as
+/// yuan must not turn into 5000 euros because the currency changed under it
+/// — the single-send form empties its field for the same reason, and a
+/// sheet of sixty rows cannot be emptied on a person's behalf.
+#[must_use]
+pub fn batch_follows(view: &BatchView) -> bool {
+    view.raw_text.is_empty() && view.file_name.is_none()
+}
+
 /// The display currency, as the send machine's context: its code, the USD
 /// rate the core committed, and the fiat input's precision.
 ///
@@ -485,9 +502,8 @@ impl SendHost {
     /// The display currency committed, or changed, while this journey is
     /// open (PR 3 final note F25): the send machine is told
     /// (`Event::DisplayChanged` — it re-denominates by its own rule), and an
-    /// open batch importer follows to the new code (`SetFiatCode`: the core
-    /// drops the old currency's rate and fetches this one's before it will
-    /// convert a row). No news, nothing said.
+    /// open batch importer with nothing in it yet follows to the new code
+    /// ([`batch_follows`]). No news, nothing said.
     pub fn display_changed(&mut self, display: &SendDisplayContext, cx: &mut Context<Self>) {
         let Some(display) = self.display_told.news(display) else {
             return;
@@ -495,7 +511,7 @@ impl SendHost {
         let code_changed = self.display_code != display.code;
         self.display_code.clone_from(&display.code);
         self.dispatch(SendEvent::DisplayChanged { display }, cx);
-        if code_changed && self.batch.is_some() {
+        if code_changed && self.batch_view.as_ref().is_some_and(batch_follows) {
             self.batch_dispatch(
                 BatchEvent::SetFiatCode {
                     code: self.display_code.clone(),
@@ -1704,9 +1720,11 @@ mod tests {
     /// of whatever the core's view said, which before the currency commits
     /// is the placeholder's "USD", and it never heard the real one land. Now
     /// it opens in the person's own choice on its way
-    /// ([`send_display_context`]) and follows the currency when it commits or
-    /// changes (`SendHost::display_changed` → `SetFiatCode`), where the core
-    /// drops the old currency's rate before it will convert a row.
+    /// ([`send_display_context`]) and, while it is still empty, follows the
+    /// currency when it commits or changes (`SendHost::display_changed` →
+    /// `SetFiatCode`), where the core drops the old currency's rate before
+    /// it will convert a row. Rows already in it keep the currency they
+    /// were read in ([`batch_follows`]).
     #[test]
     fn the_batch_importer_opens_in_and_follows_the_persons_currency() {
         use vela_core::app::batch_import::{
@@ -1755,9 +1773,11 @@ mod tests {
         assert_eq!(batch.view().fiat_code, "CNY");
         assert_eq!(batch.view().rate_status, BatchRateStatus::Ok);
 
-        // The person picks the euro in Settings with the sheet still open:
-        // what `display_changed` sends. The yuan's rate does not price it —
-        // the sheet is loading until the euro's own rate is in.
+        // The person picks the euro in Settings with the sheet still open
+        // and still empty: it follows — what `display_changed` sends. The
+        // yuan's rate does not price it: the sheet is loading until the
+        // euro's own rate is in.
+        assert!(batch_follows(&batch.view()), "nothing in it yet");
         pump(
             &mut batch,
             BatchEvent::SetFiatCode {
@@ -1772,6 +1792,17 @@ mod tests {
             view.rate_input.is_empty(),
             "no rate carried across: {view:?}"
         );
+
+        // Rows pasted: the sheet keeps the currency they were read in. 5000
+        // pasted as euros is not 5000 of whatever the currency becomes.
+        pump(
+            &mut batch,
+            BatchEvent::SetRawText {
+                text: "0x031d7D57c99CAF891e1C250554691Fd12D84772b, 5000\n".to_owned(),
+            },
+            true,
+        );
+        assert!(!batch_follows(&batch.view()), "it holds a row now");
     }
 
     /// PR 2 polish: the bridge counts the card's failure only for the chain

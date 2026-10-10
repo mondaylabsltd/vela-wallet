@@ -564,15 +564,16 @@ pub fn status_slot_height() -> gpui::Pixels {
 /// What stands in the hero's one slot under the figure. Never two of them,
 /// and in this order:
 ///
-/// 1. a WARNING — a network out of reach, a read that failed inside Vela, a
-///    holding nobody prices: something is wrong and the line opens it;
-/// 2. "Checking…" — the first read of the account is still out (PR 3 final
-///    note F19): until a round has ended nothing here was said by a chain,
-///    so neither "still updating" nor "listening" is true yet;
-/// 3. the grey "still updating" of a total being brought up to date;
-/// 4. the "listening" line of a wallet every chain answered zero for — a
+/// 1. "Checking…" — the first read of the account is still out (PR 3 final
+///    note F19). It stands alone, in place of anything else the line could
+///    say: until a round has ended no chain has said the wallet is live and
+///    none has failed to answer, so there is nothing else true to say yet
+///    (the same order on every shell);
+/// 2. the status — a network out of reach, a read that failed inside Vela,
+///    a total still being brought up to date, a holding nobody prices;
+/// 3. the "listening" line of a wallet every chain answered zero for — a
 ///    round with nothing wrong in it;
-/// 5. nothing.
+/// 4. nothing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SlotLine {
     Status(StatusKind, SharedString),
@@ -589,7 +590,6 @@ impl SlotLine {
             model.checking.clone(),
             model.live.clone(),
         ) {
-            (Some((StatusKind::Warning, text)), _, _) => Self::Status(StatusKind::Warning, text),
             (_, Some(checking), _) => Self::Checking(checking),
             (Some((kind, text)), None, _) => Self::Status(kind, text),
             (None, None, Some(live)) => Self::Listening(live),
@@ -1746,9 +1746,8 @@ mod tests {
         );
 
         // PR 3 final note F19 — "Checking…", the first read's line, in the
-        // same slot. It outranks what only a finished round can say (the
-        // grey "still updating", the "listening" of a live zero); a warning
-        // outranks it, because something wrong is the one thing to act on.
+        // same slot, and alone in it: everything else the line could say is
+        // a finished round's to say, and none has finished.
         let checking = SlotLine::Checking("Checking…".into());
         assert_eq!(
             SlotLine::of(&hero_with(None, None, Some("Checking…"))),
@@ -1773,7 +1772,7 @@ mod tests {
                 None,
                 Some("Checking…")
             )),
-            SlotLine::Status(StatusKind::Warning, "Can't reach Tempo right now".into())
+            checking
         );
     }
 }
