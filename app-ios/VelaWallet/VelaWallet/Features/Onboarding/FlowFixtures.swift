@@ -60,11 +60,12 @@ enum FlowFixtures {
         signingPage: String? = nil,
         canChoosePage: Bool = false
     ) -> CreateView {
-        // What the core sends for this many keys (issue #475, `add_heading_key`
-        // and `methods_pinned` in `create_wallet.rs`) — written out, since a
-        // drawing has no machine behind it.
+        // What the core sends for this many keys (issue #475, `add_heading_key`,
+        // `methods_pinned` and — PR 3 note 22 — `key_count_shown` in
+        // `create_wallet.rs`) — written out, since a drawing has no machine
+        // behind it.
         let heading = keys.isEmpty
-            ? "onboarding.create.addKeyBtn"
+            ? I18nKeys.Create.keyPlaceHeading
             : keys.count < maxKeys ? "onboarding.create.addMethodLabel" : "onboarding.create.keyLimitReached"
         return CreateView(
             stage: stage,
@@ -89,7 +90,8 @@ enum FlowFixtures {
             signingPage: signingPage,
             canChoosePage: canChoosePage,
             addHeadingKey: heading,
-            methodsPinned: keys.isEmpty && canAddKey
+            methodsPinned: keys.isEmpty && canAddKey,
+            keyCountShown: !keys.isEmpty
         )
     }
 

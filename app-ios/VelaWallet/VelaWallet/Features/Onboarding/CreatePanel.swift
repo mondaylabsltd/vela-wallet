@@ -239,9 +239,10 @@ struct KeysScreen: View {
     private var full: Bool { view.keys.count >= maxKeys }
 
     /// The heading over the three places, chosen by the core from the count
-    /// (issue #475): "Add a passkey" with none, "Add another" after the
-    /// first, "Limit of 7 reached" when full. An absent key (a core from
-    /// before #475) keeps the old label.
+    /// (issue #475; PR 3 note 17): "Choose where it lives" with none — it
+    /// used to repeat the screen's title — "Add another" after the first,
+    /// "Limit of 7 reached" when full. An absent key (a core from before
+    /// #475) keeps the old label.
     private var addHeading: String {
         loc.t(view.addHeadingKey.isEmpty ? I18nKeys.Create.addMethodLabel : view.addHeadingKey)
     }
@@ -351,9 +352,10 @@ struct KeysScreen: View {
                     }
 
                     // "Added 0 / 7" over an empty list said nothing the title
-                    // had not (issue #475: the screen was wordy); the count and
-                    // its list appear with the first key.
-                    if !view.keys.isEmpty {
+                    // had not (issue #475: the screen was wordy). Whether the
+                    // counter is drawn is the CORE's (`key_count_shown`, PR 3
+                    // note 22 — one rule on four shells): from the first key.
+                    if view.keyCountShown {
                         HStack {
                             Text(loc.t(I18nKeys.Create.keysLabel))
                                 .typeRole(Typography.label)
@@ -370,7 +372,11 @@ struct KeysScreen: View {
                             .foregroundStyle(theme.fgMuted)
                         }
                         .padding(.top, Tokens.Space.s8)
+                        .accessibilityIdentifier("create.keyCount")
+                    }
 
+                    // The keys themselves: drawn whenever there is one.
+                    if !view.keys.isEmpty {
                         VStack(spacing: 0) {
                             ForEach(Array(view.keys.enumerated()), id: \.offset) { index, key in
                                 if index > 0 {

@@ -73,7 +73,11 @@ enum I18nKeys {
         static let keyDeviceOnlyBadge = "onboarding.create.keyDeviceOnlyBadge"
         static let keyLimitReached = "onboarding.create.keyLimitReached"
         static let needSecondKeyHint = "onboarding.create.needSecondKeyHint"
-        static let addKeyBtn = "onboarding.create.addKeyBtn"
+        /// The heading over the three places while there is no key yet
+        /// (PR 3 note 17): "Choose where it lives" — it used to repeat the
+        /// screen's own title ("Add a passkey" under "Add passkeys").
+        /// Replaces the retired `onboarding.create.addKeyBtn`.
+        static let keyPlaceHeading = "onboarding.create.keyPlaceHeading"
         static let addSecondKeyBtn = "onboarding.create.addSecondKeyBtn"
         static let confirmKeyBtn = "onboarding.create.confirmKeyBtn"
         static let removeKeyBtn = "onboarding.create.removeKeyBtn"
@@ -274,7 +278,7 @@ enum I18nKeys {
         Create.keysSubtitleBlocked, Create.keysSubtitleFull, Create.keysLabel,
         Create.keysHint, Create.keyCount, Create.keySyncedBadge,
         Create.keyDeviceOnlyBadge, Create.keyLimitReached, Create.needSecondKeyHint,
-        Create.addKeyBtn, Create.addSecondKeyBtn, Create.confirmKeyBtn,
+        Create.keyPlaceHeading, Create.addSecondKeyBtn, Create.confirmKeyBtn,
         Create.removeKeyBtn, Create.addMethodLabel,
         Create.methodPlatformTitle, Create.methodPlatformBody,
         Create.methodHybridTitle, Create.methodHybridBody, Create.methodHybridUnavailable,
