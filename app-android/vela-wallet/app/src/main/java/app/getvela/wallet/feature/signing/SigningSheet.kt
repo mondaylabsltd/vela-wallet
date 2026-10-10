@@ -251,7 +251,9 @@ fun SigningSheetContent(
     // words invisible and silent while the gate is open. A live sheet
     // opens with one (reading, measuring), so the line is there from the
     // first frame; a board that never shut gains no blank line.
-    val confirmNote = remember(model.requestKey) { HeldLine() }
+    // (A board of a moment after a line was said starts with that line's
+    // room: [SigningScreenModel.confirmBlockRoom].)
+    val confirmNote = remember(model.requestKey) { HeldLine().apply { room(model.confirmBlockRoom) } }
     val note = model.confirmBlockLine?.takeIf { !model.confirmEnabled }
     val noteRoom = if (receipt != null) null else confirmNote.room(note)
     val noteLine: (@Composable () -> Unit)? = noteRoom?.takeIf { waiting == null && action != null }?.let { room ->

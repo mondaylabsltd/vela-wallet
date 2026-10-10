@@ -135,6 +135,24 @@ enum class SigningScreenState {
      * the site being signed for chose. Through the live builders.
      */
     CS68,
+
+    /**
+     * PR 3 — the confirm waits for the simulation's verdict. CS1's transfer
+     * with everything else ready (the reading in, nothing to choose, the fee
+     * priced) and its simulation still out: the confirm shut over the one
+     * line "Checking what this transaction does…", the verdict's place its
+     * skeleton (CS69) — and the same request once the core's deadline has
+     * passed with no verdict: the confirm open, no line under it, and the
+     * verdict's place saying "Vela couldn't check what this transaction
+     * does…" as a caution (CS70). On a real phone a chain's node answers
+     * before either can be looked at.
+     *
+     * Each is a sign view the REAL machine wrote — the request, `sim_started`,
+     * and for CS70 its deadline answered (`SimWaitBoards`) — read by the
+     * core's own gate and drawn by the live builders. CS69 stays held: no
+     * timer runs on a board. The confirm is where it is on CS57.
+     */
+    CS69, CS70,
 }
 
 /**
@@ -554,6 +572,15 @@ data class SigningScreenModel(
      * sheet already says it its own way.
      */
     val confirmBlockLine: String? = null,
+    /**
+     * A line whose room the footer keeps under an OPEN confirm from the first
+     * frame, unseen and unsaid. A live sheet needs none: it keeps the room of
+     * the last line it said by itself ([HeldLine]). A board that stands for a
+     * moment AFTER a line was said — the confirm that waited for the
+     * simulation's verdict, open again (CS70) — names that line here, so its
+     * confirm is where the live sheet's is at that moment.
+     */
+    val confirmBlockRoom: String? = null,
     /** Spec 079: the ✕'s label — the sheet's one explicit close. */
     val closeLabel: String = "",
     /**

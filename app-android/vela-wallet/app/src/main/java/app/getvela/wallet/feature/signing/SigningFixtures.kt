@@ -342,6 +342,54 @@ object SigningFixtures {
     }
 
     /**
+     * CS69 / CS70 (PR 3, fix C): the confirm's wait for the simulation's
+     * verdict. CS1's transfer, as the REAL machines hold it once the sheet's
+     * controller has said its simulation is out — the sign view (and, for
+     * CS70, its deadline passed), the reading and the guard are
+     * `SimWaitBoards`'; the fee is one priced and able to pay, as CS47 states
+     * it. Whether the confirm arms and the line under it are the core's gate
+     * over those four ([SigningLive.confirmState]), and the verdict's place is
+     * the live builder's for a simulation still out under that sign view
+     * ([SigningLive.verdictPlace]) — nothing of either is drawn by hand.
+     */
+    private fun VelaStrings.simWait(state: SigningScreenState): SigningScreenModel {
+        val ctx = SigningLive.Context(this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1)
+        val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
+        val views = app.getvela.wallet.feature.signing.core.SimWaitBoards.views(
+            waitedOut = state == SigningScreenState.CS70,
+            account = WalletFixtures.ADDRESS_FULL,
+            chainId = 1,
+        )
+        val fee = FeeView(
+            fee = FeeEstimateView(
+                chain_id = 1, total_wei = "123000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+                relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+                deployed = true, tier = FeeTier.Standard, quoted = true, fee_asset = FeeAssetView.Native, fee_recipient = RELAY,
+            ),
+            confirm_fee_ready = true,
+        )
+        val feeJson = app.getvela.wallet.core.crux.Wire.json.encodeToString(FeeView.serializer(), fee)
+        val gate = SigningLive.confirmState(views.signJson, views.guardJson, views.clearJson, feeJson, null)
+        // The line this request said while it waited — the gate's own, over
+        // the same request before its deadline. Once the confirm is open the
+        // live sheet keeps that line's room under it (unseen), so the confirm
+        // stays where it was; the waited-out board keeps it too.
+        val saidWhileHeld = if (!gate.enabled) {
+            null
+        } else {
+            val before = app.getvela.wallet.feature.signing.core.SimWaitBoards.views(waitedOut = false, account = WalletFixtures.ADDRESS_FULL, chainId = 1)
+            SigningLive.confirmState(before.signJson, before.guardJson, before.clearJson, feeJson, null).key?.let { t(it) }
+        }
+        return base.copy(
+            // The simulation is still out on both: what the place says is the sign view's.
+            blocks = base.blocks + SigningLive.verdictPlace(app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Pending, views.sign, ctx),
+            confirmEnabled = gate.enabled,
+            confirmBlockLine = gate.key?.takeIf { !gate.enabled }?.let { t(it) },
+            confirmBlockRoom = saidWhileHeld,
+        )
+    }
+
+    /**
      * What the simulation said on each verdict board, as the sheet's
      * controller would hand it over; `null` while it is still out (CS57).
      * The notices are the core's own readings (`SimDeltas`); the balance
@@ -1386,6 +1434,8 @@ object SigningFixtures {
             SigningScreenState.CS68 -> heldVerdict(state)
 
             SigningScreenState.CS59, SigningScreenState.CS60 -> currencyFee(state)
+
+            SigningScreenState.CS69, SigningScreenState.CS70 -> simWait(state)
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,
