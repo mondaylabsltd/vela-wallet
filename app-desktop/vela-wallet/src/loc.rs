@@ -497,7 +497,6 @@ mod tests {
         "onboarding.create.ack2Period",
         "onboarding.create.ack2PrivacyPolicy",
         "onboarding.create.ack2Terms",
-        "onboarding.create.addKeyBtn",
         "onboarding.create.addMethodLabel",
         "onboarding.create.addSecondKeyBtn",
         "onboarding.create.confirmKeyBtn",
@@ -508,6 +507,8 @@ mod tests {
         "onboarding.create.keyCount",
         "onboarding.create.keyDeviceOnlyBadge",
         "onboarding.create.keyLimitReached",
+        // PR 3 note 17: the zero-key heading says what its rows are.
+        "onboarding.create.keyPlaceHeading",
         "onboarding.create.keySyncedBadge",
         "onboarding.create.keysHint",
         "onboarding.create.keysLabel",

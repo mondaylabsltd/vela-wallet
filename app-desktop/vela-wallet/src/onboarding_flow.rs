@@ -651,40 +651,47 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
         );
     }
 
-    #[allow(clippy::cast_precision_loss, clippy::allow_attributes)]
-    let counter = loc.t_vars(
-        "onboarding.create.keyCount",
-        &[
-            ("current", view.keys.len() as f64),
-            ("max", MAX_KEYS as f64),
-        ],
-    );
-    let mut rows = div().w_full().flex().flex_col().gap(px(theme::KEY_ROW_GAP));
-    for (index, key) in view.keys.iter().enumerate() {
-        rows = rows.child(key_row(host, index, key));
+    // "Added n / 7" over the keys — from the first key on, as the core says
+    // (`key_count_shown`). With no key it read "Added 0 / 7" over an empty
+    // list: a count of nothing, beside a subtitle that already says "up to
+    // 7". The block is then not drawn at all — an empty one would still take
+    // the column's gap, and the places below would sit a gap too low.
+    let mut added = div().w_full().flex().flex_col().gap(px(10.));
+    if view.key_count_shown {
+        #[allow(clippy::cast_precision_loss, clippy::allow_attributes)]
+        let counter = loc.t_vars(
+            "onboarding.create.keyCount",
+            &[
+                ("current", view.keys.len() as f64),
+                ("max", MAX_KEYS as f64),
+            ],
+        );
+        added = added.child(
+            div()
+                .w_full()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(section_label(theme, loc.t("onboarding.create.keysLabel")))
+                .child(mono_meta(theme, counter)),
+        );
     }
-    column = column.child(
-        div()
-            .w_full()
-            .flex()
-            .flex_col()
-            .gap(px(10.))
-            .child(
-                div()
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(section_label(theme, loc.t("onboarding.create.keysLabel")))
-                    .child(mono_meta(theme, counter)),
-            )
-            .child(rows),
-    );
+    if !view.keys.is_empty() {
+        let mut rows = div().w_full().flex().flex_col().gap(px(theme::KEY_ROW_GAP));
+        for (index, key) in view.keys.iter().enumerate() {
+            rows = rows.child(key_row(host, index, key));
+        }
+        added = added.child(rows);
+    }
+    if keys_block_drawn(view) {
+        column = column.child(added);
+    }
 
     // The heading over the three places is the screen's ONLY add affordance
-    // (issue 475): the core words it by the count — "Add a passkey" with no
-    // key yet, "Add another" with room for one more, "Limit of 7 reached" at
-    // the cap — and says when the places are pinned open. There is no
+    // (issue 475): the core words it by the count — "Choose where it lives"
+    // with no key yet (it says what the three rows ARE; it used to repeat
+    // the screen's own title), "Add another" with room for one more, "Limit
+    // of 7 reached" at the cap — and says when the places are pinned open. There is no
     // separate "+ Add a passkey" button beside it any more.
     let heading = if view.add_heading_key.is_empty() {
         loc.t(vela_core::app::create_wallet::add_heading_key(
@@ -727,6 +734,13 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
         theme,
         move |_, window, cx| sink_finish(FlowEvent::FinishKeys, window, cx),
     ))
+}
+
+/// Is the block over the places drawn — the "Added n / 7" line and the keys
+/// under it? Whenever the core shows the counter, or there is a key to list.
+/// With neither there is nothing to put in it.
+fn keys_block_drawn(view: &CreateView) -> bool {
+    view.key_count_shown || !view.keys.is_empty()
 }
 
 fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
@@ -1494,6 +1508,61 @@ mod tests {
             methods_pinned: !busy,
             key_count_shown: false,
         }
+    }
+
+    /// PR 3 notes 17 and 22, on the real core: with no key the heading over
+    /// the three places says what they ARE ("Choose where it lives") — it
+    /// repeated the screen's own title — and there is no "Added 0 / 7": the
+    /// core says when the counter shows (`key_count_shown`), and with no key
+    /// and no counter the block over the places is not drawn at all. From
+    /// the first key on, the counter and the keys are.
+    #[test]
+    fn the_first_heading_says_what_the_rows_are_and_nothing_is_counted_yet() {
+        use vela_core::app::create_wallet::{ADD_HEADING_FIRST, CreateWallet};
+        let empty = crate::core_host::CoreHost::<CreateWallet>::new().view();
+        assert!(empty.keys.is_empty());
+        assert_eq!(empty.add_heading_key, ADD_HEADING_FIRST);
+        assert_eq!(empty.add_heading_key, "onboarding.create.keyPlaceHeading");
+        assert!(!empty.key_count_shown, "no key, no counter");
+        assert!(!keys_block_drawn(&empty), "nothing to draw over the places");
+
+        for (language, words) in [("en", "Choose where it lives"), ("zh", "选择存放位置")] {
+            let loc = crate::loc::Loc::for_language(language);
+            let heading = loc.t(&empty.add_heading_key);
+            assert_eq!(heading.as_ref(), words);
+            assert_ne!(
+                heading,
+                loc.t("onboarding.create.keysTitle"),
+                "{language}: the heading is not the screen's title again"
+            );
+        }
+
+        // The first key: the core shows the counter, and the block is drawn.
+        let key = CreateKeyRow {
+            name: "Everyday wallet".to_owned(),
+            authenticator_attachment: "platform".to_owned(),
+            transports: "internal".to_owned(),
+            confirmed: true,
+            synced: true,
+            synced_known: true,
+            aaguid: String::new(),
+            provider_name: String::new(),
+            method: KeyMethod::Platform,
+            kind: KeyMethod::Platform,
+        };
+        let one = CreateView {
+            keys: vec![key.clone()],
+            key_count_shown: true,
+            ..view(CreateStage::AddKeys, false, None)
+        };
+        assert!(keys_block_drawn(&one));
+        // A view from before the field (it reads as false) still lists its
+        // keys — without a counter nobody asked for.
+        let old = CreateView {
+            keys: vec![key],
+            ..view(CreateStage::AddKeys, false, None)
+        };
+        assert!(!old.key_count_shown && keys_block_drawn(&old));
     }
 
     /// The first key is a USB key wearing the core's default method, and the
