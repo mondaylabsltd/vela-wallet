@@ -1,7 +1,8 @@
 {
-  "about": "A real balance and feed, driven through vela-core's balance_dashboard and activity_feed (tests/app_privacy.rs), shown and hidden. Replay both through every surface builder: shown, every `forbidden` run appears; hidden, no masked surface's output contains one and every masked figure is `mask` (`balance_mask` on the home total); the visible surfaces keep their figures; a row's figure masks exactly when `figure_maskable` says so. Regenerate: VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_privacy",
+  "about": "A real balance and feed, driven through vela-core's balance_dashboard and activity_feed (tests/app_privacy.rs), shown and hidden. Replay both through every surface builder: shown, every `forbidden` run appears; hidden, no masked surface's output contains one and every masked figure is `mask` (`balance_mask` on the home total); the visible surfaces keep their figures; a row's figure masks exactly when `figure_maskable` says so. The feed carries a SPLIT (one send to two people, the row whose `batch` is set): its total and each recipient's share are figures too, in the row and in its detail. Regenerate: VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_privacy",
   "balance_mask": "••••••",
   "figure_maskable": {
+    "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef": true,
     "permit": true,
     "permit-unlimited": false,
     "received": true,
@@ -19,7 +20,10 @@
     "163",
     "237",
     "352",
-    "128"
+    "128",
+    "214",
+    "469",
+    "683"
   ],
   "hidden": {
     "balance": {
@@ -72,10 +76,12 @@
       "unreachable_key": "assets.unreachableOne",
       "unreachable_networks": [
         {
+          "cause": "network",
           "chain_id": 56,
           "last_known": "held",
           "last_seen_usd": null,
-          "line_key": "assets.lastSeen"
+          "line_key": "assets.lastSeen",
+          "rpc_fixable": true
         }
       ]
     },
@@ -194,106 +200,68 @@
         {
           "item": {
             "alias": null,
-            "batch": null,
-            "chain_id": 100,
-            "counterparty": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-            "counterparty_role": "contract",
-            "dapp": {
-              "action": "call",
-              "allowance": null,
-              "changes": [
+            "batch": {
+              "chain_id": 1,
+              "count": 2,
+              "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "ids": [
+                "split-a",
+                "split-b"
+              ],
+              "kind": "split",
+              "logo_urls": null,
+              "status": "confirmed",
+              "symbol": "USDC",
+              "timestamp": 1699913300.0,
+              "to": null,
+              "to_name": null,
+              "total_usd": 683.75,
+              "transfers": [
                 {
                   "decimals": 6,
-                  "direction": "out",
+                  "logo_urls": null,
                   "symbol": "USDC",
-                  "value": "237.5",
-                  "verified": true
+                  "to": "0xdddddddddddddddddddddddddddddddddddddddd",
+                  "to_name": "Bea",
+                  "usd_value": 214.5,
+                  "value": "214.5"
                 },
                 {
-                  "decimals": 18,
-                  "direction": "in",
-                  "symbol": "xDAI",
-                  "value": "128.75",
-                  "verified": true
+                  "decimals": 6,
+                  "logo_urls": null,
+                  "symbol": "USDC",
+                  "to": "0xfafafafafafafafafafafafafafafafafafafafa",
+                  "to_name": null,
+                  "usd_value": 469.25,
+                  "value": "469.25"
                 }
               ],
-              "contract_call": true,
-              "estimated": true,
-              "facts": [
-                {
-                  "site": "swap.example",
-                  "type": "site"
-                },
-                {
-                  "chain_id": 100,
-                  "type": "network"
-                },
-                {
-                  "address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-                  "name": null,
-                  "type": "contract"
-                },
-                {
-                  "type": "balance_changes"
-                },
-                {
-                  "timestamp": 1699913000.0,
-                  "type": "date"
-                }
-              ],
-              "intent": null,
-              "intent_term": "intentContractCall",
-              "off_chain": false,
-              "place": "swap.example",
-              "received": {
-                "decimals": 18,
-                "direction": "in",
-                "symbol": "xDAI",
-                "value": "128.75",
-                "verified": true
-              },
-              "site": "swap.example",
-              "technical": [
-                {
-                  "operation": {
-                    "type": "contract_interaction"
-                  },
-                  "type": "operation"
-                },
-                {
-                  "content": "call_data",
-                  "type": "content"
-                },
-                {
-                  "tx_hash": "0xacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
-                  "type": "hash"
-                },
-                {
-                  "hash": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
-                  "type": "user_op_hash"
-                }
-              ]
+              "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+              "user_op_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
             },
+            "chain_id": 1,
+            "counterparty": null,
+            "counterparty_role": "recipient",
             "day_start_ms": 1699833600000.0,
             "decimals": 6,
             "direction": "out",
             "figure_maskable": true,
-            "id": "swap",
-            "kind": "dapp_tx",
+            "id": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "kind": "send",
             "priced": true,
-            "site": "swap.example",
+            "site": null,
             "status": "confirmed",
             "subtitle": [
               {
-                "chain_id": 100,
+                "chain_id": 1,
                 "type": "network"
               }
             ],
             "symbol": "USDC",
-            "timestamp": 1699913000.0,
-            "tx_hash": "0xacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
-            "usd_value": 237.5,
-            "value": "237.5"
+            "timestamp": 1699913300.0,
+            "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+            "usd_value": 683.75,
+            "value": "683.75"
           },
           "type": "item"
         }
@@ -371,6 +339,74 @@
             "tx_hash": "0xabababababababababababababababababababababababababababababababab",
             "usd_value": 163.25,
             "value": "163.25"
+          },
+          "type": "item"
+        },
+        {
+          "item": {
+            "alias": null,
+            "batch": {
+              "chain_id": 1,
+              "count": 2,
+              "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "ids": [
+                "split-a",
+                "split-b"
+              ],
+              "kind": "split",
+              "logo_urls": null,
+              "status": "confirmed",
+              "symbol": "USDC",
+              "timestamp": 1699913300.0,
+              "to": null,
+              "to_name": null,
+              "total_usd": 683.75,
+              "transfers": [
+                {
+                  "decimals": 6,
+                  "logo_urls": null,
+                  "symbol": "USDC",
+                  "to": "0xdddddddddddddddddddddddddddddddddddddddd",
+                  "to_name": "Bea",
+                  "usd_value": 214.5,
+                  "value": "214.5"
+                },
+                {
+                  "decimals": 6,
+                  "logo_urls": null,
+                  "symbol": "USDC",
+                  "to": "0xfafafafafafafafafafafafafafafafafafafafa",
+                  "to_name": null,
+                  "usd_value": 469.25,
+                  "value": "469.25"
+                }
+              ],
+              "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+              "user_op_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+            },
+            "chain_id": 1,
+            "counterparty": null,
+            "counterparty_role": "recipient",
+            "day_start_ms": 1699833600000.0,
+            "decimals": 6,
+            "direction": "out",
+            "figure_maskable": true,
+            "id": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "kind": "send",
+            "priced": true,
+            "site": null,
+            "status": "confirmed",
+            "subtitle": [
+              {
+                "chain_id": 1,
+                "type": "network"
+              }
+            ],
+            "symbol": "USDC",
+            "timestamp": 1699913300.0,
+            "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+            "usd_value": 683.75,
+            "value": "683.75"
           },
           "type": "item"
         },
@@ -773,6 +809,42 @@
           "value": "163.25"
         },
         {
+          "chain_id": 1,
+          "day_start_ms": 1699833600000.0,
+          "decimals": 6,
+          "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": "split-a",
+          "kind": "send",
+          "logo_urls": null,
+          "status": "confirmed",
+          "symbol": "USDC",
+          "timestamp": 1699913300.0,
+          "to": "0xdddddddddddddddddddddddddddddddddddddddd",
+          "to_name": "Bea",
+          "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+          "usd": "214.5",
+          "user_op_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+          "value": "214.5"
+        },
+        {
+          "chain_id": 1,
+          "day_start_ms": 1699833600000.0,
+          "decimals": 6,
+          "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": "split-b",
+          "kind": "send",
+          "logo_urls": null,
+          "status": "confirmed",
+          "symbol": "USDC",
+          "timestamp": 1699913300.0,
+          "to": "0xfafafafafafafafafafafafafafafafafafafafa",
+          "to_name": null,
+          "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+          "usd": "469.25",
+          "user_op_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+          "value": "469.25"
+        },
+        {
           "balance_changes": [
             {
               "decimals": 6,
@@ -964,10 +1036,12 @@
       "unreachable_key": "assets.unreachableOne",
       "unreachable_networks": [
         {
+          "cause": "network",
           "chain_id": 56,
           "last_known": "held",
           "last_seen_usd": 157.0,
-          "line_key": "assets.lastSeen"
+          "line_key": "assets.lastSeen",
+          "rpc_fixable": true
         }
       ]
     },
@@ -1086,106 +1160,68 @@
         {
           "item": {
             "alias": null,
-            "batch": null,
-            "chain_id": 100,
-            "counterparty": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-            "counterparty_role": "contract",
-            "dapp": {
-              "action": "call",
-              "allowance": null,
-              "changes": [
+            "batch": {
+              "chain_id": 1,
+              "count": 2,
+              "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "ids": [
+                "split-a",
+                "split-b"
+              ],
+              "kind": "split",
+              "logo_urls": null,
+              "status": "confirmed",
+              "symbol": "USDC",
+              "timestamp": 1699913300.0,
+              "to": null,
+              "to_name": null,
+              "total_usd": 683.75,
+              "transfers": [
                 {
                   "decimals": 6,
-                  "direction": "out",
+                  "logo_urls": null,
                   "symbol": "USDC",
-                  "value": "237.5",
-                  "verified": true
+                  "to": "0xdddddddddddddddddddddddddddddddddddddddd",
+                  "to_name": "Bea",
+                  "usd_value": 214.5,
+                  "value": "214.5"
                 },
                 {
-                  "decimals": 18,
-                  "direction": "in",
-                  "symbol": "xDAI",
-                  "value": "128.75",
-                  "verified": true
+                  "decimals": 6,
+                  "logo_urls": null,
+                  "symbol": "USDC",
+                  "to": "0xfafafafafafafafafafafafafafafafafafafafa",
+                  "to_name": null,
+                  "usd_value": 469.25,
+                  "value": "469.25"
                 }
               ],
-              "contract_call": true,
-              "estimated": true,
-              "facts": [
-                {
-                  "site": "swap.example",
-                  "type": "site"
-                },
-                {
-                  "chain_id": 100,
-                  "type": "network"
-                },
-                {
-                  "address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-                  "name": null,
-                  "type": "contract"
-                },
-                {
-                  "type": "balance_changes"
-                },
-                {
-                  "timestamp": 1699913000.0,
-                  "type": "date"
-                }
-              ],
-              "intent": null,
-              "intent_term": "intentContractCall",
-              "off_chain": false,
-              "place": "swap.example",
-              "received": {
-                "decimals": 18,
-                "direction": "in",
-                "symbol": "xDAI",
-                "value": "128.75",
-                "verified": true
-              },
-              "site": "swap.example",
-              "technical": [
-                {
-                  "operation": {
-                    "type": "contract_interaction"
-                  },
-                  "type": "operation"
-                },
-                {
-                  "content": "call_data",
-                  "type": "content"
-                },
-                {
-                  "tx_hash": "0xacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
-                  "type": "hash"
-                },
-                {
-                  "hash": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
-                  "type": "user_op_hash"
-                }
-              ]
+              "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+              "user_op_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
             },
+            "chain_id": 1,
+            "counterparty": null,
+            "counterparty_role": "recipient",
             "day_start_ms": 1699833600000.0,
             "decimals": 6,
             "direction": "out",
             "figure_maskable": true,
-            "id": "swap",
-            "kind": "dapp_tx",
+            "id": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "kind": "send",
             "priced": true,
-            "site": "swap.example",
+            "site": null,
             "status": "confirmed",
             "subtitle": [
               {
-                "chain_id": 100,
+                "chain_id": 1,
                 "type": "network"
               }
             ],
             "symbol": "USDC",
-            "timestamp": 1699913000.0,
-            "tx_hash": "0xacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac",
-            "usd_value": 237.5,
-            "value": "237.5"
+            "timestamp": 1699913300.0,
+            "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+            "usd_value": 683.75,
+            "value": "683.75"
           },
           "type": "item"
         }
@@ -1263,6 +1299,74 @@
             "tx_hash": "0xabababababababababababababababababababababababababababababababab",
             "usd_value": 163.25,
             "value": "163.25"
+          },
+          "type": "item"
+        },
+        {
+          "item": {
+            "alias": null,
+            "batch": {
+              "chain_id": 1,
+              "count": 2,
+              "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "ids": [
+                "split-a",
+                "split-b"
+              ],
+              "kind": "split",
+              "logo_urls": null,
+              "status": "confirmed",
+              "symbol": "USDC",
+              "timestamp": 1699913300.0,
+              "to": null,
+              "to_name": null,
+              "total_usd": 683.75,
+              "transfers": [
+                {
+                  "decimals": 6,
+                  "logo_urls": null,
+                  "symbol": "USDC",
+                  "to": "0xdddddddddddddddddddddddddddddddddddddddd",
+                  "to_name": "Bea",
+                  "usd_value": 214.5,
+                  "value": "214.5"
+                },
+                {
+                  "decimals": 6,
+                  "logo_urls": null,
+                  "symbol": "USDC",
+                  "to": "0xfafafafafafafafafafafafafafafafafafafafa",
+                  "to_name": null,
+                  "usd_value": 469.25,
+                  "value": "469.25"
+                }
+              ],
+              "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+              "user_op_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+            },
+            "chain_id": 1,
+            "counterparty": null,
+            "counterparty_role": "recipient",
+            "day_start_ms": 1699833600000.0,
+            "decimals": 6,
+            "direction": "out",
+            "figure_maskable": true,
+            "id": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "kind": "send",
+            "priced": true,
+            "site": null,
+            "status": "confirmed",
+            "subtitle": [
+              {
+                "chain_id": 1,
+                "type": "network"
+              }
+            ],
+            "symbol": "USDC",
+            "timestamp": 1699913300.0,
+            "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+            "usd_value": 683.75,
+            "value": "683.75"
           },
           "type": "item"
         },
@@ -1668,6 +1772,42 @@
           "usd": "163.25",
           "user_op_hash": "",
           "value": "163.25"
+        },
+        {
+          "chain_id": 1,
+          "day_start_ms": 1699833600000.0,
+          "decimals": 6,
+          "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": "split-a",
+          "kind": "send",
+          "logo_urls": null,
+          "status": "confirmed",
+          "symbol": "USDC",
+          "timestamp": 1699913300.0,
+          "to": "0xdddddddddddddddddddddddddddddddddddddddd",
+          "to_name": "Bea",
+          "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+          "usd": "214.5",
+          "user_op_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+          "value": "214.5"
+        },
+        {
+          "chain_id": 1,
+          "day_start_ms": 1699833600000.0,
+          "decimals": 6,
+          "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": "split-b",
+          "kind": "send",
+          "logo_urls": null,
+          "status": "confirmed",
+          "symbol": "USDC",
+          "timestamp": 1699913300.0,
+          "to": "0xfafafafafafafafafafafafafafafafafafafafa",
+          "to_name": null,
+          "tx_hash": "0xafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf",
+          "usd": "469.25",
+          "user_op_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+          "value": "469.25"
         },
         {
           "balance_changes": [

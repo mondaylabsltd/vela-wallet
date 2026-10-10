@@ -42,13 +42,15 @@ const ADDR_B: &str = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const PAYER: &str = "0xcccccccccccccccccccccccccccccccccccccccc";
 const PAYEE: &str = "0xdddddddddddddddddddddddddddddddddddddddd";
 const SPENDER: &str = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+/// The split's second recipient (Bea, `PAYEE`, is its first).
+const SECOND: &str = "0xfafafafafafafafafafafafafafafafafafafafa";
 const USDC_MAINNET: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const NOW: f64 = 1_700_000_000_000.0;
 const T0: f64 = 1_700_000_000_000.0;
 
 /// The digit runs of every figure in the fixture. None of them occurs in an
 /// address, a hash, an id, a chain id or a date of the fixture.
-const FORBIDDEN: [&str; 10] = [
+const FORBIDDEN: [&str; 13] = [
     "376", // USDC held: 376.54321, worth $376.54
     "418", // xDAI held: 418.25, worth $418.25
     "157", // BNB on the unreachable network: last seen worth $157
@@ -59,6 +61,9 @@ const FORBIDDEN: [&str; 10] = [
     "237", // a swap's outflow: 237.5 USDC
     "352", // a capped permit: 352 USDC
     "128", // the swap's expected return: 128.75 xDAI
+    "214", // a split's first share: 214.5 USDC, to Bea
+    "469", // its second share: 469.25 USDC
+    "683", // the split's total: 683.75 USDC
 ];
 
 fn fixture_path() -> std::path::PathBuf {
@@ -169,6 +174,7 @@ fn record(id: &str, kind: FeedTxKind, ts: f64) -> FeedTxRecord {
         "sent" => "ab",
         "swap" => "ac",
         "received" => "ad",
+        "split-a" | "split-b" => "af",
         _ => "ae",
     };
     FeedTxRecord {
@@ -262,7 +268,22 @@ fn records() -> Vec<FeedTxRecord> {
     signature.tx_hash = String::new();
     signature.dapp_url = Some("https://swap.example".to_owned());
 
-    vec![sent, swap, capped, unlimited, signature]
+    // One send to two people (a split): two records sharing an operation
+    // fold into one row. Its total is one figure and each recipient's share
+    // is another — a hidden split that masked the total and still listed who
+    // got how much leaked exactly what the mask was for (the web did).
+    let mut share_a = record("split-a", FeedTxKind::Send, ts - 300.0);
+    share_a.user_op_hash = format!("0x{}", "ef".repeat(32));
+    share_a.value = "214.5".to_owned();
+    share_a.usd = Some("214.5".to_owned());
+    let mut share_b = share_a.clone();
+    share_b.id = "split-b".to_owned();
+    share_b.to = SECOND.to_owned();
+    share_b.to_name = None;
+    share_b.value = "469.25".to_owned();
+    share_b.usd = Some("469.25".to_owned());
+
+    vec![sent, share_a, share_b, swap, capped, unlimited, signature]
 }
 
 fn received() -> FeedTxRecord {
@@ -361,7 +382,7 @@ fn fixture() -> Value {
         .collect();
     json!({
         "suite": "privacy-hidden",
-        "about": "A real balance and feed, driven through vela-core's balance_dashboard and activity_feed (tests/app_privacy.rs), shown and hidden. Replay both through every surface builder: shown, every `forbidden` run appears; hidden, no masked surface's output contains one and every masked figure is `mask` (`balance_mask` on the home total); the visible surfaces keep their figures; a row's figure masks exactly when `figure_maskable` says so. Regenerate: VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_privacy",
+        "about": "A real balance and feed, driven through vela-core's balance_dashboard and activity_feed (tests/app_privacy.rs), shown and hidden. Replay both through every surface builder: shown, every `forbidden` run appears; hidden, no masked surface's output contains one and every masked figure is `mask` (`balance_mask` on the home total); the visible surfaces keep their figures; a row's figure masks exactly when `figure_maskable` says so. The feed carries a SPLIT (one send to two people, the row whose `batch` is set): its total and each recipient's share are figures too, in the row and in its detail. Regenerate: VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_privacy",
         "mask": MASK,
         "balance_mask": BALANCE_MASK,
         "masked_surfaces": surfaces(&MoneySurface::MASKED),
@@ -479,6 +500,74 @@ fn the_fixture_covers_every_kind_of_row_figure() {
     assert_eq!(maskable("permit-unlimited"), Some(false), "a risk to see");
     assert_eq!(maskable("signature"), Some(false), "no figure to hide");
     assert!(!feed.contact_rows.is_empty(), "Bea's page has rows");
+
+    // The split: one row, masked, with each recipient's share inside it —
+    // on the feed and on the home's cut. Every shell's fixture test has to
+    // walk the row AND its detail, where the shares are listed. (A contact's
+    // page lists what has that one counterparty; a split has none.)
+    let split = |rows: &[FeedRow]| {
+        rows.iter().find_map(|row| match row {
+            FeedRow::Item { item } => item.batch.clone().map(|batch| (item.clone(), batch)),
+            FeedRow::Header { .. } => None,
+        })
+    };
+    let (item, batch) = split(&feed.rows).unwrap_or_else(|| unreachable!("a split row"));
+    assert!(item.figure_maskable, "a split's total is money");
+    assert_eq!(item.value.as_deref(), Some("683.75"));
+    assert_eq!(batch.count, 2);
+    let shares: Vec<(&str, &str)> = batch
+        .transfers
+        .iter()
+        .map(|line| (line.to.as_str(), line.value.as_str()))
+        .collect();
+    assert_eq!(shares, [(PAYEE, "214.5"), (SECOND, "469.25")]);
+    assert!(split(&feed.home_rows).is_some(), "the home draws it too");
+}
+
+/// No figure of the fixture hides in something that is not a figure: an
+/// address, a hash, an id, a timestamp. A shell's "hidden: no forbidden run
+/// in the output" would fail on a row that leaked nothing.
+#[test]
+fn no_forbidden_run_hides_outside_a_figure() {
+    fn strip(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                for key in [
+                    "value",
+                    "usd_value",
+                    "balance",
+                    "total_usd",
+                    "display_total_usd",
+                    "cached_total_usd",
+                    "last_seen_usd",
+                    "usd",
+                    "amount",
+                    "price_usd",
+                    "balances",
+                    "toast",
+                    "subtitle",
+                    "dapp",
+                    "transactions",
+                ] {
+                    map.remove(key);
+                }
+                for child in map.values_mut() {
+                    strip(child);
+                }
+            }
+            Value::Array(items) => items.iter_mut().for_each(strip),
+            _ => {}
+        }
+    }
+    let mut rest = json!({ "balance": balance(false), "feed": feed(false) });
+    strip(&mut rest);
+    let rest = rest.to_string();
+    for run in FORBIDDEN {
+        assert!(
+            !rest.contains(run),
+            "{run} also appears outside a figure — pick another number"
+        );
+    }
 }
 
 /// The surface table is total: every surface is either masked or visible.
