@@ -140,6 +140,9 @@ pub const CHECKING: &str = "componentsUi.funding.checking";
 /// The hero's line under a zero every network answered for
 /// ([`BalanceView::live_key`]): "Live · listening for payments".
 pub const LIVE_ZERO: &str = "home.liveIndicator";
+/// The Assets list's empty state ([`BalanceView::empty_key`]): "Deposit your
+/// first asset".
+pub const ASSETS_EMPTY: &str = "assets.emptyTitle";
 /// The balance breakdown's short status for a network none of whose
 /// endpoints answered ([`UnreachableNetwork::status_key`]): "RPC unavailable".
 pub const STATUS_RPC_UNAVAILABLE: &str = "home.balanceDetailStatusFailed";
@@ -1143,6 +1146,18 @@ pub struct BalanceView {
     /// `Some`, and derives it from nothing else.
     #[serde(default)]
     pub live_key: Option<String>,
+    /// The Assets list's empty state: [`ASSETS_EMPTY`] ("Deposit your first
+    /// asset"), with its caption and its action. `Some` only when a read has
+    /// ended and found nothing held: never while the first read of the
+    /// account is out ([`Self::checking_key`]), never while holdings are
+    /// loading or unknown, never when no network could be read. A wallet
+    /// that held nothing last session opens with a cached total of 0, and
+    /// each shell took "no tokens, a known total" for an empty wallet — so
+    /// it invited a first deposit under "Checking…", before anything had
+    /// been read. A shell draws the empty state exactly when this is `Some`,
+    /// and with no tokens and no key it draws what it draws while loading.
+    #[serde(default)]
+    pub empty_key: Option<String>,
     /// `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
     pub holdings_loading: bool,
     /// The last total this account settled on, painted under a skeleton
@@ -1290,6 +1305,9 @@ impl App for BalanceDashboard {
         // Nothing could be read and nothing is known (spec 038 finding 15).
         let unreachable =
             model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none();
+        // The first read of this account is still out ("Checking…").
+        let first_read_ended = !(model.address.is_some() && !model.bootstrapped);
+        let holdings_loading = model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0;
         BalanceView {
             address: model.address.clone(),
             // No figure while nothing is known: the skeleton, privacy — and a
@@ -1317,8 +1335,7 @@ impl App for BalanceDashboard {
             internal_chain_ids: model.internal_chain_ids.clone(),
             internal_key: (model.errored_internally || !model.internal_chain_ids.is_empty())
                 .then(|| super::fee_policy::REASON_INTERNAL_KEY.to_owned()),
-            checking_key: (model.address.is_some() && !model.bootstrapped)
-                .then(|| CHECKING.to_owned()),
+            checking_key: (!first_read_ended).then(|| CHECKING.to_owned()),
             live_key: (model.last_round_answered
                 && !model.hidden
                 && !unknown
@@ -1327,7 +1344,13 @@ impl App for BalanceDashboard {
                 && model.tokens.is_empty()
                 && total == 0.0)
                 .then(|| LIVE_ZERO.to_owned()),
-            holdings_loading: model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0,
+            empty_key: (first_read_ended
+                && model.tokens.is_empty()
+                && !holdings_loading
+                && !unknown
+                && !unreachable)
+                .then(|| ASSETS_EMPTY.to_owned()),
+            holdings_loading,
             cached_total_usd: if model.hidden {
                 None
             } else {

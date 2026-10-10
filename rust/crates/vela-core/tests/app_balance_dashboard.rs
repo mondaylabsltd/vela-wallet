@@ -2629,6 +2629,111 @@ fn a_view_from_before_the_checking_fact_still_reads() {
     assert_eq!((old.checking_key, old.live_key), (None, None));
 }
 
+/// The Assets list invites a first deposit only once a read has ended and
+/// found nothing. A wallet that held nothing last session opens with a
+/// cached total of 0, and every shell drew "Deposit your first asset" under
+/// "Checking…" — an answer before the question had been asked.
+#[test]
+fn the_empty_state_waits_for_the_first_read_to_end() {
+    use vela_core::app::balance_dashboard::{ASSETS_EMPTY, CHECKING};
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(0.0),
+    });
+    let view = sut.view();
+    assert_eq!(view.checking_key.as_deref(), Some(CHECKING));
+    assert!(view.tokens.is_empty() && !view.balance_unknown && !view.holdings_loading);
+    assert_eq!(view.empty_key, None, "nothing has read this wallet yet");
+
+    // The first round ends, holding nothing: now it is empty.
+    sut.resolve(settled_read(vec![], vec![], vec![1, 56, 100]));
+    let view = sut.view();
+    assert_eq!(view.checking_key, None);
+    assert_eq!(view.empty_key.as_deref(), Some(ASSETS_EMPTY));
+
+    // A later refresh is not a first read: the empty state stands.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    assert_eq!(sut.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+
+    // Another account starts over.
+    sut.dispatch(Event::AccountChanged {
+        address: ADDR_B.to_owned(),
+    });
+    let view = sut.view();
+    assert!(view.checking_key.is_some());
+    assert_eq!(view.empty_key, None);
+}
+
+/// Empty is "read, and nothing held": never over holdings, never while they
+/// load under a cached worth, never when nothing is known or nothing could
+/// be read.
+#[test]
+fn the_empty_state_is_only_a_read_wallet_holding_nothing() {
+    use vela_core::app::balance_dashboard::ASSETS_EMPTY;
+    let holding = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(1, "ETH", "1", Some(2_000.0))],
+            vec![],
+            vec![1, 56],
+        ),
+    );
+    assert_eq!(holding.view().empty_key, None);
+
+    // Nothing cached and nothing read yet: unknown, a skeleton.
+    let fresh = boot(ADDR_A);
+    let view = fresh.view();
+    assert!(view.balance_unknown);
+    assert_eq!(view.empty_key, None);
+
+    // A cached worth with the list still out: loading, not empty.
+    let mut loading = boot(ADDR_A);
+    loading.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(12.5),
+    });
+    let view = loading.view();
+    assert!(view.holdings_loading);
+    assert_eq!(view.empty_key, None);
+
+    // The only read threw and nothing is known: unreachable, not empty.
+    let errored = booted(
+        ADDR_A,
+        None,
+        Res::FetchErrored {
+            address: ADDR_A.to_owned(),
+            pull: false,
+            internal: false,
+        },
+    );
+    let view = errored.view();
+    assert!(view.unreachable);
+    assert_eq!(view.empty_key, None);
+
+    // Read, and nothing held — hidden or not (there is no figure to hide).
+    let mut empty = booted(ADDR_A, None, settled_read(vec![], vec![], vec![1, 56]));
+    assert_eq!(empty.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+    empty.dispatch(Event::PrivacyToggled);
+    assert_eq!(empty.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+}
+
+/// A view written before the empty fact reads without it.
+#[test]
+fn a_view_from_before_the_empty_fact_still_reads() {
+    let sut = booted(ADDR_A, None, settled_read(vec![], vec![], vec![1]));
+    let mut json = serde_json::to_value(sut.view()).unwrap_or_default();
+    if let Some(map) = json.as_object_mut() {
+        map.remove("empty_key");
+    }
+    let old: BalanceView = serde_json::from_value(json).expect("an older view still reads");
+    assert_eq!(old.empty_key, None);
+}
+
 /// PR 3 final note F21: the balance breakdown's short status says what is
 /// unavailable — the RPC, or the token list — from the core's key.
 #[test]

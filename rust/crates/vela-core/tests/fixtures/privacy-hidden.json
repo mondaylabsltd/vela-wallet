@@ -33,6 +33,7 @@
       "cached_total_usd": null,
       "checking_key": null,
       "display_total_usd": null,
+      "empty_key": null,
       "failed_chain_ids": [
         56
       ],
@@ -987,6 +988,7 @@
       "cached_total_usd": 951.79321,
       "checking_key": null,
       "display_total_usd": 951.79321,
+      "empty_key": null,
       "failed_chain_ids": [
         56
       ],
