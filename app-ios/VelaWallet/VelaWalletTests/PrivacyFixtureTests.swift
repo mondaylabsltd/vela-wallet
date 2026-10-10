@@ -261,4 +261,43 @@ struct PrivacyFixtureTests {
         let history = FlowsLive.history(feed, on: drawnHistory, loc: loc, hidden: false)
         #expect(history.groups.flatMap(\.rows).count == all.count)
     }
+
+    /// 6. PR 3 (item 12) — a hidden figure keeps its UNIT. "•••• xDAI" says
+    /// what kind of money without saying how much; "••••" alone drops the
+    /// one fact a person hiding the amount still wants. One rule on every
+    /// detail: a transfer's, a token's page, and a dApp row's figure or the
+    /// allowance it granted.
+    @Test func aHiddenFigureKeepsItsUnit() throws {
+        let (balance, feed) = try views("hidden")
+        let mask = Self.fixture.mask
+        let items = FlowsLive.items(feed)
+        func detail(_ item: FeedItemWire) -> TxDetailModel {
+            FlowsLive.txDetail(
+                item, record: feed.transactions.first { $0.id == item.id }, on: drawnTxDetail, loc: loc,
+                hidden: true
+            )
+        }
+
+        let transfers = items.filter { $0.dapp == nil && $0.figureMaskable && !$0.symbol.isEmpty }
+        #expect(!transfers.isEmpty, "the fixture has no plain transfer to check")
+        for item in transfers {
+            #expect(detail(item).amount == "\(mask) \(item.symbol)", "\(item.id) reads \(detail(item).amount)")
+        }
+
+        let dapps = items.filter { $0.dapp != nil && $0.figureMaskable }
+        #expect(!dapps.isEmpty, "the fixture has no dApp row with a figure")
+        for item in dapps {
+            let amount = detail(item).amount
+            #expect(amount.hasPrefix("\(mask) "), "\(item.id) reads \(amount)")
+            #expect(amount.count > mask.count + 1, "\(item.id) lost its unit: \(amount)")
+        }
+
+        for token in balance.tokens {
+            let card = FlowsLive.tokenDetail(token, feed: feed, display: .usd, on: drawnTokenDetail, loc: loc,
+                                             hidden: true)
+            #expect(card.balance == "\(mask) \(token.symbol)")
+        }
+        // The fiat worth is a figure in a currency: masked whole, no unit to keep.
+        #expect(transfers.allSatisfy { [mask, ""].contains(detail($0).fiat) })
+    }
 }
