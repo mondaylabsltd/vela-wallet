@@ -27,7 +27,7 @@ import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
-import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
+import { SIM_SAID_KEYS, type HandoffMessages, type SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
 	BACKUP_EXPLAIN_KEYS,
@@ -1173,6 +1173,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		okSelfTransfer: k('componentsUi.signing.balanceSelfTransfer'),
 		okNoNetworkFee: k('componentsUi.signing.noNetworkFee'),
 		balancesTitle: k('componentsUi.signing.balanceChangesTitle'),
+		// PR 3 device round: the verdict's quiet line, by the key the core names.
+		simSaid: Object.fromEntries(SIM_SAID_KEYS.map((key) => [key, k(key)])),
 		balancesMatchHero: k('componentsUi.signing.balanceMatchesHero'),
 		balancesBlindSimulated: k('componentsUi.signing.blindButSimulated'),
 		balancesBestEffort: k('componentsUi.signing.bestEffortSimulated'),

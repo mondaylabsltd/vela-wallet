@@ -31,6 +31,7 @@ import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
 import type { SignView } from '$lib/core/generated/SignView';
+import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import { feeAmountText, feeLineParts, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
 import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
@@ -83,6 +84,14 @@ export interface SigningLiveInputs {
 	 * so the ✕ stays shut while anything is in flight.
 	 */
 	progress?: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'>;
+	/**
+	 * The sheet's own simulation of THIS request, as the core read it
+	 * (`simOutcome`, PR 3 device round) — the host's one `eth_simulateV1`
+	 * read, which also tells the fee machine what the calls move. Absent
+	 * until the node answers, for a request nobody simulated (a message), and
+	 * for any other request than the one it was measured for.
+	 */
+	sim?: SimVerdict | null;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -889,6 +898,44 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 	});
 }
 
+/**
+ * PR 3 device round, item 3 — "No asset changes" is the core's line, and the
+ * web says it too.
+ *
+ * The sheet's own simulation was a check, and nothing of the person's moves:
+ * the core names the line (`SimVerdict.no_change_key`) and this looks its
+ * words up. Which case this is, and the sentence, are never decided here —
+ * no key, no line. Only for a transaction that may still be signed: a
+ * message moves nothing by nature (and nobody simulates one), and a refused
+ * request says only its refusal.
+ *
+ * That is ALL this sheet draws from the simulation (spec 082 RG6 stands): no
+ * balance rows, and no could-not-check or revert line — the relay's own
+ * estimate stays the one voice that says "will fail" (`withEstimateVerdict`).
+ */
+function noChangeLine({ sign, sim, m }: SigningLiveInputs): string | undefined {
+	const request = sign.request;
+	if (!request || sign.blocked) return undefined;
+	if (request.kind !== 'transaction' && request.kind !== 'batch') return undefined;
+	const key = sim?.no_change_key ?? null;
+	return key === null ? undefined : m.simSaid[key] || undefined;
+}
+
+/**
+ * The line as a site's request draws it: the balance-changes card with no
+ * rows, where the apps put the verdict — after the request's own blocks,
+ * before the footer. It lands after the sheet has opened (`verdict`), so the
+ * sheet keeps its confirm where it was and brings the card into sight.
+ */
+function withNoChangeVerdict(blocks: Block[], inputs: SigningLiveInputs, own: boolean): Block[] {
+	const note = own ? undefined : noChangeLine(inputs);
+	if (note === undefined) return blocks;
+	return [
+		...blocks,
+		{ kind: 'balances', title: inputs.m.balancesTitle, rows: [], note, verdict: true }
+	];
+}
+
 function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 	const { sign, clear, m } = inputs;
 	// A refused request discloses nothing (spec 081). Android and iOS hide this
@@ -897,6 +944,7 @@ function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 	// disclosure — the one shell that stayed lax about it.
 	const request = sign.blocked ? null : sign.request;
 	const result = sign.blocked ? null : clear.result;
+	const simResult = noChangeLine(inputs);
 	return {
 		title: m.advancedToggle,
 		// The contract's name beside the toggle tells a site's request apart;
@@ -914,6 +962,12 @@ function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 					}
 				]
 			: [],
+		// Issue 314: the wallet's own request is plain rows, and a card saying
+		// nothing moves would be the only "simulation" on it — so the line
+		// folds in here, as it does on the phones.
+		...(own && simResult !== undefined
+			? { simResult: { label: m.techSimResult, value: simResult } }
+			: {}),
 		raw: request ? { label: m.techRawData, hex: request.params_json } : undefined,
 		copyLabel: m.copyValue,
 		explorerLabel: m.viewOnExplorer
@@ -1258,7 +1312,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	const enabled = confirmState?.enabled === true;
 	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
 
-	const drawn = withEstimateVerdict(blocksFor(inputs), inputs);
+	const drawn = withNoChangeVerdict(withEstimateVerdict(blocksFor(inputs), inputs), inputs, own);
 	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(drawn), m);
 	// The wallet's own request names no requester: its intent is the header's
 	// headline, beside the ✕, and is not said a second time below it. While

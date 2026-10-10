@@ -42,6 +42,7 @@ import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { MarkView } from '$lib/core/generated/MarkView';
+import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 
 export {
 	PROXY_CREATION_CODE,
@@ -865,6 +866,23 @@ export function signConfirmState(
 		speedTier ?? undefined
 	);
 	return out ? (JSON.parse(out) as ConfirmState) : null;
+}
+
+/**
+ * What the pool's `eth_simulateV1` answer means for `user` (the account
+ * signing), and every line a sheet draws for it — the core's one reading
+ * (`sim_outcome::verdict`), the same on every client. `replyJson` is the
+ * JSON-RPC envelope as it came, or `{"unreachable":true}` when the pool gave
+ * up. Only `kind: 'deltas'` is a check; `no_change_key` is its quiet line
+ * ("No asset changes") when nothing of theirs moves. `null` when the core's
+ * answer does not read: nothing is known, and nothing is said.
+ */
+export function simOutcome(user: string, replyJson: string): SimVerdict | null {
+	try {
+		return JSON.parse(wasm.simOutcome(user, replyJson)) as SimVerdict;
+	} catch {
+		return null;
+	}
 }
 
 /**

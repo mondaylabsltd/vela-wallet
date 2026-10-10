@@ -24,7 +24,10 @@ import { ClearSigningCore, FeeSpeedCore } from '$lib/core/client';
 import { toClearLocale } from './core/clear-types';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
+import { rawResolve, resolveSigningMessages } from '$lib/i18n/engine.server';
+import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { simOutcome } from '$lib/core/kernels';
+import { SIM_SAID_KEYS } from './messages';
 import { CLEAR_TERMS } from './terms';
 import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
@@ -2922,5 +2925,196 @@ describe('no fiat figure before the display currency commits — the signing she
 		expect(selector).toMatchObject({ kind: 'onchain' });
 		expect(selector.kind === 'onchain' && selector.selector?.options).toHaveLength(2);
 		expectWithheld('signing_sheet', open);
+	});
+});
+
+/**
+ * PR 3 device round, item 3 — "No asset changes" is the core's line, and the
+ * web says it. The desktop and Android said it, iOS said another sentence and
+ * this sheet said nothing. The sheet's own simulation (the read the host
+ * already runs for the fee) is read by the core (`simOutcome`); when it was a
+ * check and nothing of the person's moves, the core names the line and the
+ * sheet draws it — a balance-changes card with no rows, after the request's
+ * own blocks. Nothing else is drawn from that simulation (spec 082 RG6).
+ *
+ * The verdicts are the REAL core's, over `eth_simulateV1` envelopes.
+ */
+describe('the sheet says the core’s "No asset changes" (device round, item 3)', () => {
+	const USER = identity.address;
+	const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+	const topic = (address: string) => '0x' + address.slice(2).toLowerCase().padStart(64, '0');
+	const answered = (...calls: object[]) => JSON.stringify({ result: [{ calls }] });
+	const verdictOf = (reply: string) => simOutcome(USER, reply)!;
+	const NOTHING_MOVES = verdictOf(answered({ status: '0x1', logs: [] }));
+	const SOMETHING_MOVES = verdictOf(
+		answered({
+			status: '0x1',
+			logs: [
+				{
+					address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+					topics: [TRANSFER, topic(USER), topic('0x' + '11'.repeat(20))],
+					data: '0x' + 1_000_000n.toString(16).padStart(64, '0')
+				}
+			]
+		})
+	);
+	const REVERTS = verdictOf(answered({ status: '0x0', error: { code: 3, message: 'reverted' } }));
+	const UNREADABLE = verdictOf(answered({ status: '0x2', logs: [] }));
+	const NOT_OFFERED = verdictOf(JSON.stringify({ error: { code: -32603, message: 'crashed' } }));
+	const UNREACHABLE = verdictOf(JSON.stringify({ unreachable: true }));
+	const LINE = 'No asset changes';
+	const cards = (model: { blocks: { kind: string }[] }) =>
+		model.blocks.filter((block) => block.kind === 'balances');
+
+	it('the real core calls it: a check that moves nothing carries the key, and nothing else does', () => {
+		expect(NOTHING_MOVES).toMatchObject({
+			kind: 'deltas',
+			deltas: [],
+			no_change_key: SIM_SAID_KEYS[0]
+		});
+		expect(SOMETHING_MOVES).toMatchObject({ kind: 'deltas', no_change_key: null });
+		expect(SOMETHING_MOVES.deltas).toEqual([
+			{ kind: 'erc20', token: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', delta: '-1000000' }
+		]);
+		expect(REVERTS).toMatchObject({ kind: 'reverts', no_change_key: null });
+		expect(UNREADABLE).toMatchObject({ kind: 'not_offered', no_change_key: null });
+		expect(NOT_OFFERED).toMatchObject({ kind: 'not_offered', no_change_key: null });
+		expect(UNREACHABLE).toMatchObject({ kind: 'unreachable', no_change_key: null });
+	});
+
+	it('a site’s transaction: the card with no rows and the core’s line, after the request’s own blocks', () => {
+		const before = buildSigningModel(inputs())!;
+		expect(cards(before)).toEqual([]);
+		const model = buildSigningModel(inputs({ sim: NOTHING_MOVES }))!;
+		// The request's own blocks, untouched, then the card.
+		expect(model.blocks.slice(0, -1)).toEqual(before.blocks);
+		expect(model.blocks.at(-1)).toEqual({
+			kind: 'balances',
+			title: m.balancesTitle,
+			rows: [],
+			note: LINE,
+			// It lands after the sheet has opened: the confirm is kept where it
+			// was and the card brought into sight (item 1).
+			verdict: true
+		});
+		expect(m.balancesTitle).toBe('Balance changes');
+		// Said once: not in Technical details too.
+		expect(model.tech.simResult).toBeUndefined();
+		// A line informs; the gate is the core's and is not touched by it.
+		expect(model.confirm).toEqual(before.confirm);
+		expect(model.fee).toEqual(before.fee);
+	});
+
+	it('is said in the reader’s language, by the core’s key', () => {
+		const zh = resolveSigningMessages('zh');
+		const model = buildSigningModel(inputs({ m: zh, sim: NOTHING_MOVES }))!;
+		expect(model.blocks.at(-1)).toMatchObject({
+			kind: 'balances',
+			title: '余额变化',
+			rows: [],
+			note: '无资产变动'
+		});
+	});
+
+	it('nothing else is drawn from the simulation: no rows, no revert line, no could-not-check line (RG6)', () => {
+		const before = buildSigningModel(inputs())!;
+		for (const sim of [SOMETHING_MOVES, REVERTS, UNREADABLE, NOT_OFFERED, UNREACHABLE, null]) {
+			const model = buildSigningModel(inputs({ sim }))!;
+			expect(model.blocks, JSON.stringify(sim)).toEqual(before.blocks);
+			expect(model.tech).toEqual(before.tech);
+		}
+	});
+
+	it('the line and the sentence are the core’s: a view without the key says nothing, whatever else it holds', () => {
+		const before = buildSigningModel(inputs())!;
+		// Everything a shell's own rule would read — a check, no moves — with
+		// the core's word taken away.
+		const withoutTheKey = { ...NOTHING_MOVES, no_change_key: null };
+		expect(buildSigningModel(inputs({ sim: withoutTheKey }))!.blocks).toEqual(before.blocks);
+		// A key this build has no words for is never drawn as a dotted path.
+		const unknown = { ...NOTHING_MOVES, no_change_key: 'componentsUi.signing.somethingNew' };
+		expect(buildSigningModel(inputs({ sim: unknown }))!.blocks).toEqual(before.blocks);
+	});
+
+	it('beside the relay’s "will fail": the danger line under the intent, the card after the blocks', () => {
+		recordEstimateReverts(REQUEST.chain_id, identity.address, null);
+		try {
+			const model = buildSigningModel(inputs({ sim: NOTHING_MOVES }))!;
+			expect(model.blocks[1]).toMatchObject({
+				kind: 'warning',
+				text: m.warnWillFail,
+				verdict: true
+			});
+			expect(model.blocks.at(-1)).toMatchObject({ kind: 'balances', note: LINE, verdict: true });
+		} finally {
+			clearEstimateReverts(REQUEST.chain_id, identity.address);
+		}
+	});
+
+	it('the wallet’s own request folds it into Technical details instead (issue 314)', () => {
+		const own: SignView = { ...OPEN_SIGN, request: { ...REQUEST, first_party: true } };
+		const model = buildSigningModel(inputs({ sign: own, sim: NOTHING_MOVES }))!;
+		expect(cards(model)).toEqual([]);
+		expect(model.tech.simResult).toEqual({ label: m.techSimResult, value: LINE });
+		expect(m.techSimResult).toBe('Simulation result');
+		// Nothing to fold while there is no line.
+		expect(buildSigningModel(inputs({ sign: own }))!.tech.simResult).toBeUndefined();
+		expect(buildSigningModel(inputs({ sign: own, sim: REVERTS }))!.tech.simResult).toBeUndefined();
+	});
+
+	it('a batch says it too; a message and a refused request never do', () => {
+		const batch: SignView = {
+			...OPEN_SIGN,
+			request: {
+				...REQUEST,
+				method: 'wallet_sendCalls',
+				kind: 'batch',
+				params_json: JSON.stringify([
+					{ calls: [{ to: '0x' + 'de'.repeat(20), data: '0x', value: '0x0' }] }
+				])
+			}
+		};
+		expect(
+			buildSigningModel(inputs({ sign: batch, sim: NOTHING_MOVES }))!.blocks.at(-1)
+		).toMatchObject({ kind: 'balances', rows: [], note: LINE });
+
+		const message: SignView = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' }
+		};
+		const signed = buildSigningModel(inputs({ sign: message, sim: NOTHING_MOVES }))!;
+		expect(cards(signed)).toEqual([]);
+		expect(signed.tech.simResult).toBeUndefined();
+
+		const refused: SignView = {
+			...OPEN_SIGN,
+			blocked: { function: 'enableModule', selector: '0x610b5925', leg_index: null, nested: false }
+		};
+		for (const first_party of [false, true]) {
+			const model = buildSigningModel(
+				inputs({
+					sign: { ...refused, request: { ...REQUEST, first_party } },
+					sim: NOTHING_MOVES
+				})
+			)!;
+			expect(model.dismissOnly).toBe(m.close);
+			expect(cards(model)).toEqual([]);
+			expect(model.tech.simResult).toBeUndefined();
+		}
+	});
+
+	it('the keys this sheet has words for are the ones the core’s source names', () => {
+		const source = readFileSync('../../rust/crates/vela-core/src/app/sim_outcome.rs', 'utf8');
+		const named = /pub const KEY_NO_CHANGE: &str = "([^"]+)";/.exec(source)?.[1];
+		expect([named]).toEqual([...SIM_SAID_KEYS]);
+	});
+
+	it.each(SUPPORTED_LOCALES)('has words in %s', (locale) => {
+		const said = resolveSigningMessages(locale).simSaid;
+		for (const key of SIM_SAID_KEYS) {
+			expect(said[key], `${key} in ${locale}`).toBe(rawResolve(locale, key));
+			expect(said[key].trim()).not.toBe('');
+			expect(said[key]).not.toBe(key);
+		}
 	});
 });

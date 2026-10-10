@@ -19,6 +19,13 @@ import type { SpeedWords } from '$lib/flows/speed-control';
 import type { SettingsMessages } from '$lib/settings/messages';
 
 /**
+ * Every quiet line the core can name for the verdict's place
+ * (`sim_outcome::KEY_NO_CHANGE` — `SimVerdict.no_change_key`).
+ * `live.test.ts` holds the list to the core's source.
+ */
+export const SIM_SAID_KEYS = ['componentsUi.signing.simResultNoChange'] as const;
+
+/**
  * Spec 102 (D4): the hand-off card's words. Resolved for the GALLERY only —
  * the web opens no signing page, so no live page here draws the card, and
  * these strings stay out of `SigningMessages` (which every page with a
@@ -191,6 +198,14 @@ export interface SigningMessages {
 	okSelfTransfer: string;
 	okNoNetworkFee: string;
 	balancesTitle: string;
+	/**
+	 * The verdict's quiet line by the corpus key the core names for it
+	 * (`SimVerdict.no_change_key` — {@link SIM_SAID_KEYS}): "No asset changes"
+	 * when the sheet's simulation was a check and nothing of the person's
+	 * moves. The shell never picks the sentence, or the case; it only looks
+	 * the core's key up here.
+	 */
+	simSaid: Readonly<Record<string, string>>;
 	balancesMatchHero: string;
 	balancesBlindSimulated: string;
 	balancesBestEffort: string;

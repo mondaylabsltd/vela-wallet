@@ -28,7 +28,8 @@
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import { feeCallsOf } from '$lib/signing/fee-calls';
-	import { tellBalanceChanges } from '$lib/signing/fee-balance-changes';
+	import { checkRequest } from '$lib/signing/fee-balance-changes';
+	import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
 	import {
 		dappReceiptModel,
@@ -404,6 +405,15 @@
 	// request arrived, so the web sheet drew no fee for anything — and the
 	// backup to Ethereum, which costs real dollars, said nothing about it.
 	let quotedFor = '';
+	/**
+	 * What the sheet's own simulation said of a request, as the core read it
+	 * (PR 3 device round, item 3): the one `eth_simulateV1` read that tells
+	 * the fee machine what the calls move also tells the sheet when nothing
+	 * of the person's does ("No asset changes"). It belongs to the request it
+	 * was measured for — the sheet is handed it for that request only, and a
+	 * new request starts with none.
+	 */
+	let checked = $state<{ requestId: string; verdict: SimVerdict } | null>(null);
 	$effect(() => {
 		const request = signView.request;
 		if (!request || signView.surface === 'hidden' || !identity) {
@@ -417,6 +427,7 @@
 				untrack(() => fee.dispose());
 			}
 			quotedFor = '';
+			checked = null;
 			return;
 		}
 		if (quotedFor === request.id) return;
@@ -452,12 +463,16 @@
 		// Told to the fee in force and every speed pricing these calls, for as
 		// long as this request is the one on the sheet; a revert or a node that
 		// could not check tells it nothing.
+		// The same read is the sheet's (item 3): what it means is the core's
+		// (`simOutcome`), kept for this request alone.
 		const requestId = request.id;
-		void tellBalanceChanges(
+		void checkRequest(
 			speedControl,
 			{ from: identity.address, calls, chainId: request.chain_id },
 			() => quotedFor === requestId
-		);
+		).then((verdict) => {
+			if (verdict !== null && quotedFor === requestId) checked = { requestId, verdict };
+		});
 	});
 
 	/**
@@ -500,6 +515,8 @@
 			guard: signingSheet.guard,
 			fee: feeShown,
 			progress: signRequest.progress,
+			// This request's own simulation, and no other's.
+			sim: checked !== null && checked.requestId === signView.request?.id ? checked.verdict : null,
 			feeOpen,
 			speed: {
 				view: speedControl.view,
