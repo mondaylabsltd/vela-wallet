@@ -34,6 +34,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum WalletLive {
 
@@ -627,10 +628,7 @@ extension WalletLive {
             badgeLogoURL: Marks.chainLogoURL(item.chainId),
             itemId: item.id,
             danger: money == nil && allowance?.unlimited == true,
-            received: dapp.received.map { change in
-                [changeFigure(change, hidden: hidden), change.symbol]
-                    .filter { !$0.isEmpty }.joined(separator: " ")
-            },
+            received: dapp.received.map { changeText($0, hidden: hidden) },
             titlePlace: dappTitleParts(dapp, loc: loc)
         )
     }
@@ -692,6 +690,22 @@ extension WalletLive {
         guard change.verified, let value = change.value else { return sign }
         let digits = hidden ? WalletFixtures.mask : compactAmount(value)
         return (change.exact ? "" : "≈ ") + sign + digits
+    }
+
+    /// One of a dApp's balance changes as a line WITH its coin — "≈ +0.03
+    /// ETH", "−100 USDC" — for where the two are one text (a swap's coin
+    /// back). Hidden, the amount and its unit are the core's one spelling
+    /// (`maskedAmount(unit:)`, PR 3 notes 3/11): "≈ +•••• ETH" keeps the
+    /// direction and the coin, never the number. An unverified token keeps
+    /// its direction and never a number, as `changeFigure` says.
+    static func changeText(_ change: FeedDappChangeWire, hidden: Bool) -> String {
+        let sign = change.direction == .in ? "+" : "\u{2212}"
+        guard change.verified, let value = change.value else {
+            return [sign, change.symbol].filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        let lead = (change.exact ? "" : "≈ ") + sign
+        if hidden { return lead + maskedAmount(unit: change.symbol) }
+        return [lead + compactAmount(value), change.symbol].filter { !$0.isEmpty }.joined(separator: " ")
     }
 
     /// An allowance, split into the figure and its unit: 「无限额」 + "USDC"

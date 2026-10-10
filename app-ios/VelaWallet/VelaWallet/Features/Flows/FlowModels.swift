@@ -353,6 +353,12 @@ struct TxDetailModel {
     var received: String? = nil
     /// A dApp record's collapsed "Technical details" (spec 093).
     var technical: TxTechnicalModel? = nil
+    /// What a folded batch row folded (spec 038 #D2, as the web and the
+    /// desktop draw it): a split's people — who got what — or a sweep's
+    /// coins, under the facts where a single send's "To" would have been.
+    /// Each part's figure is money: hidden, it is the core's masked amount.
+    var breakdownTitle: String? = nil
+    var breakdown: [BreakdownRowModel] = []
 }
 
 /// A dApp record's "Technical details" (spec 093), collapsed until tapped.

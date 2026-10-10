@@ -352,6 +352,14 @@ struct TxDetailBody: View {
                     onCopy: { copiedIndex = index }
                 )
             }
+            // A folded batch's parts — a split's people, a sweep's coins —
+            // where a single send's "To" would have been (spec 038 #D2).
+            if !model.breakdown.isEmpty {
+                FlowDivider()
+                ReceiptBreakdownView(title: model.breakdownTitle, rows: model.breakdown)
+                    .padding(.vertical, Tokens.Space.s12)
+                    .accessibilityIdentifier("txDetail.breakdown")
+            }
             if let technical = model.technical {
                 FlowDivider()
                 technicalSection(technical)

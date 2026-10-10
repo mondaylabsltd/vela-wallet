@@ -13,11 +13,18 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum WalletFixtures {
     // MARK: - Canon
 
-    static let mask = "••••"
+    /// The mask a hidden figure reads — the CORE's (`privacy::masked_amount`
+    /// with no unit, PR 3 notes 3/11), so the four shells cannot spell it
+    /// two ways. A hidden amount that carries a unit in the same string is
+    /// built whole by `maskedAmount(unit:)` ("•••• xDAI"), never by gluing
+    /// this to a symbol; this is for a figure whose unit is drawn apart (a
+    /// row's amount beside its coin) or that has none (a fiat worth).
+    static let mask = maskedAmount(unit: "")
     static let balanceMask = "••••••"
     static let networkCount = 8
 
