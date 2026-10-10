@@ -71,6 +71,24 @@ struct SettingsSheet: View {
     static let contributeUrl = "https://github.com/mondaylabsltd/vela-wallet/issues"
 
     var body: some View {
+        Group {
+            if overlay == .feedback {
+                // "Report a problem" carries a Done over its keyboard (issue
+                // #478), and before iOS 26 SwiftUI draws a `.keyboard`
+                // toolbar only under a navigation container: in a bare sheet
+                // on iOS 17.5 the bar never appeared (measured, simulator).
+                // The stack shows no bar of its own.
+                NavigationStack {
+                    host.toolbar(.hidden, for: .navigationBar)
+                }
+            } else {
+                host
+            }
+        }
+        .presentationDragIndicator(.visible)
+    }
+
+    private var host: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
         // SheetTitle, so one overlay pinned top-trailing lands on the title
         // line for all of them — and none of them can forget it. The drag
@@ -185,7 +203,16 @@ struct SettingsSheet: View {
             }
             .padding(.horizontal, Tokens.Space.s24)
             .padding(.vertical, Tokens.Space.s24)
+            // A tap outside a field puts the keyboard away (issue #478). The
+            // recogniser rides on this sheet's own scroll view and lets a
+            // touch inside a text input through, so moving the caret works.
+            .background(KeyboardDismissOnTap())
         }
+        // …and so does a drag of the sheet's page (issue #478). The page's
+        // own `.scrollDismissesKeyboard` sits above the `.sheet` and never
+        // reached in here: the keyboard, once up, covered the lower half of
+        // "Report a problem" with no way down.
+        .scrollDismissesKeyboard(.interactively)
         .background(theme.bgBase)
 
             Button(action: onDismiss) {
@@ -201,7 +228,6 @@ struct SettingsSheet: View {
             .padding(.top, Tokens.Space.s24)
         }
         .background(theme.bgBase)
-        .presentationDragIndicator(.visible)
     }
 }
 
@@ -434,6 +460,11 @@ struct FeedbackSheetBody: View {
     /// took the keyboard BACK when it re-enabled — straight over the fallback
     /// block and its "Open GitHub form" button (device run, 2026-09-27).
     @FocusState private var typing: String?
+    /// The keyboard's Done, in the app's words (`common.done`, set once at
+    /// the root). Issue #478: Return is a newline in a report — a bug is
+    /// described in several lines — so the keys need their own way down.
+    /// `nil` (a preview, a test) draws no bar.
+    @Environment(\.keyboardDone) private var keyboardDone
     /// The screenshot viewer while it is up (spec C), and the picture on
     /// screen — whose tile hides under it, as in Photos, so the picture flies
     /// out of an empty slot and back into it.
@@ -508,6 +539,18 @@ struct FeedbackSheetBody: View {
                     focusSoon(.fallback)
                 default:
                     break
+                }
+            }
+        }
+        .toolbar {
+            // Over the keys, trailing — where iOS puts its own. One tap and
+            // the whole form, Send included, is on screen again.
+            if let keyboardDone {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(keyboardDone) { typing = nil }
+                        .fontWeight(.semibold)
+                        .accessibilityIdentifier("keyboard.done")
                 }
             }
         }
