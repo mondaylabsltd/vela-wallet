@@ -6,4 +6,4 @@ import type { SignSubmitOutcome } from "./SignSubmitOutcome";
 /**
  * What the shell observed. Every clock-bearing variant carries `now_ms`.
  */
-export type SignShellResult = { "type": "pre_check", funding: SignFundingNeeded | null, } | { "type": "sponsorship", outcome: SignSponsorship, } | { "type": "submit", outcome: SignSubmitOutcome, now_ms: number, } | { "type": "responded" } | { "type": "record_persisted" } | { "type": "record_updated" } | { "type": "account_switched" };
+export type SignShellResult = { "type": "pre_check", funding: SignFundingNeeded | null, } | { "type": "sponsorship", outcome: SignSponsorship, } | { "type": "submit", outcome: SignSubmitOutcome, now_ms: number, } | { "type": "responded" } | { "type": "record_persisted" } | { "type": "record_updated" } | { "type": "account_switched" } | { "type": "sim_verdict_timer_fired", id: string, round: number, };

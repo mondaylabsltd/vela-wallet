@@ -5,4 +5,4 @@ export type FeedShellResult = { "type": "store_loaded", records: Array<FeedTxRec
 /**
  * Echoed from the [`FeedOperation::ReadTxStore`] that produced it.
  */
-read_id: number, } | { "type": "sync_completed", new_count: number, } | { "type": "delete_committed", id: string, } | { "type": "delete_failed", id: string, } | { "type": "alias_resolved", addr: string, name: string | null, } | { "type": "toast_expired", generation: number, } | { "type": "haptic_played" };
+read_id: number, } | { "type": "sync_completed", new_count: number, } | { "type": "delete_committed", id: string, } | { "type": "delete_failed", id: string, } | { "type": "alias_resolved", addr: string, name: string | null, } | { "type": "toast_expired", generation: number, } | { "type": "haptic_played" } | { "type": "receive_time_read", id: string, timestamp_sec: number | null, } | { "type": "receive_time_written", id: string, ok: boolean, };

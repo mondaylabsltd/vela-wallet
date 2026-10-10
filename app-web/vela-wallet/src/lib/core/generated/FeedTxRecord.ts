@@ -69,8 +69,10 @@ intent?: string | null,
  * (`SignRecord::balance_changes`, stored by the shell). The one account
  * of a dApp call's money that its page did not write. Absent on every
  * other kind, on older rows and from a shell that does not map it.
- * Read leniently ([`stored_or_none`]): lines this build cannot read are
- * no lines, never a feed that fails to load.
+ * Read leniently ([`stored_judgments`]): lines this build cannot read
+ * are no lines, never a feed that fails to load — and a row stored
+ * before an unverified token's judgment lost its figure (PR 3) reads as
+ * the direction that figure had.
  */
 balance_changes?: Array<TrustSimJudgment> | null, 
 /**
@@ -103,4 +105,15 @@ summary?: DappSummary | null,
  * `None` on records closed before 097, by a shell that does not keep
  * it, and on one this build cannot read ([`stored_or_none`]).
  */
-settlement?: TrackSettlement | null, };
+settlement?: TrackSettlement | null, 
+/**
+ * `receive` only (PR 3): `timestamp` is the time of the transaction's
+ * own block, as a chain gave it — the stored `timeVerified` mark. A
+ * shell sets it on every `receive` it writes from `token_trust`'s feed
+ * (whose times are block times, invariant ⑨) and when it answers
+ * [`FeedOperation::WriteReceiveTime`]. `None` or `false` is a record
+ * written before the mark existed, when a transfer whose block could not
+ * be read was stamped with the clock: this machine re-reads its block's
+ * time in the background and rewrites it (module doc).
+ */
+time_verified?: boolean | null, };

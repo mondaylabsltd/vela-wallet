@@ -437,6 +437,7 @@ export * from './TrustOperation';
 export * from './TrustRawLog';
 export * from './TrustReceiptLog';
 export * from './TrustShellResult';
+export * from './TrustSimDirection';
 export * from './TrustSimJudgment';
 export * from './TrustSimView';
 export * from './TrustTokenMeta';
