@@ -107,12 +107,15 @@ enum class SigningScreenState {
     CS61, CS62, CS63, CS64,
 
     /**
-     * A verdict TALLER than the place (PR 3 final note F2): three balance
-     * rows (CS65), and a received token nothing could verify, with its
-     * warning under the rows (CS66). The place scrolls inside itself — the
-     * sheet is CS57's height and the confirm is where it was.
+     * A verdict TALLER than the place: three balance rows (CS65), a received
+     * token nothing could verify, with its warning under the rows (CS66),
+     * and both at once — four rows and the warning (CS67). The device round,
+     * item 1: the verdict is shown WHOLE — the place grows to it, with no
+     * scroll of its own, and the body brings it into view — and the confirm,
+     * in the sheet's footer, is where it was. (They scrolled inside the
+     * place: a row or the warning under a fold, over a live confirm.)
      */
-    CS65, CS66,
+    CS65, CS66, CS67,
 
     /**
      * The fee's worth waits for the display currency like every fiat figure
@@ -246,23 +249,27 @@ sealed interface SigningBlock {
      * The sheet is bottom-anchored and as tall as its content, so a card
      * that appears a second after the sheet opened pushed everything above
      * it up (the 102 device run: 「Vela 未能检查这笔交易的结果」 on every
-     * Gnosis request). The place is there from the first frame — as tall as
-     * the TALLEST of [rooms], each drawn unseen and unsaid — and [shown]
-     * takes it when it lands, centred in it.
+     * Gnosis request). The place is there from the first frame — at least as
+     * tall as the TALLEST of [rooms], each drawn unseen and unsaid — and
+     * [shown] takes it when it lands, centred in it.
      *
-     * [rooms] are the verdicts a sheet can end on (`SigningLive.verdictRooms`):
-     * "could not check", "expected to fail" at the longest reason the core
-     * prints, "no asset changes", and a balance card of the usual number of
-     * moves. It was the "could not check" card alone, which every other
-     * verdict is taller than: a swap's two balance rows still pushed the
-     * sheet up when they landed.
+     * [rooms] are the verdicts a sheet usually ends on (`SigningLive.
+     * verdictRooms`): "could not check", "expected to fail" at the longest
+     * reason the core prints, "no asset changes", and a balance card of the
+     * usual number of moves. It was the "could not check" card alone, which
+     * every other verdict is taller than: a swap's two balance rows still
+     * pushed the sheet up when they landed.
      *
      * PR 3 final note F2. The place is never BLANK: while the verdict is out
      * a quiet skeleton stands in it, the size of the place, said to a screen
-     * reader as [waiting] ("Checking…"). And nothing grows it: a [shown]
-     * taller than the place (a third balance row, an unverified token's
-     * warning) scrolls INSIDE it, its cut edge faded, instead of pushing the
-     * form and the confirm — it grew the sheet by the difference.
+     * reader as [waiting] ("Checking…").
+     *
+     * The device round, item 1 (security). The rooms are the place's MINIMUM
+     * height: a [shown] taller than them (a third balance row, an unverified
+     * token's warning) is drawn whole and the place is as tall as it is —
+     * it used to scroll INSIDE the place, part of the one block a site
+     * cannot write under a fold. The sheet's body scrolls instead, and the
+     * confirm is pinned under it.
      */
     data class Held(
         val rooms: List<SigningBlock>,

@@ -908,6 +908,49 @@ class SigningLiveTest {
     }
 
     /**
+     * The device round, item 1 (security): a verdict taller than its place is
+     * shown whole, and on a sheet taller than the screen the BODY scrolls to
+     * it — all of it when it fits the body's frame, by the edge that is out;
+     * from its top when it is taller than the frame; and not at all when it
+     * is already in view. (The layout itself is measured on a device:
+     * `SigningVerdictWholeTest`.)
+     */
+    @Test
+    fun `the body moves just far enough to show the verdict, whole when it fits and from its top when it cannot`() {
+        val frame = 600f
+        // In view: nothing moves.
+        assertEquals(0f, app.getvela.wallet.feature.signing.distanceIntoView(top = 0f, height = 600f, frame = frame))
+        assertEquals(0f, app.getvela.wallet.feature.signing.distanceIntoView(top = 120f, height = 330f, frame = frame))
+        // Its end under the fold: up by what is hidden, so all of it shows.
+        assertEquals(180f, app.getvela.wallet.feature.signing.distanceIntoView(top = 450f, height = 330f, frame = frame))
+        // Wholly under the fold.
+        assertEquals(430f, app.getvela.wallet.feature.signing.distanceIntoView(top = 700f, height = 330f, frame = frame))
+        // Its start above the frame (the person had scrolled past it): back down to it.
+        assertEquals(-80f, app.getvela.wallet.feature.signing.distanceIntoView(top = -80f, height = 330f, frame = frame))
+        // Taller than the frame: from its top — never its middle, never its end.
+        assertEquals(450f, app.getvela.wallet.feature.signing.distanceIntoView(top = 450f, height = 700f, frame = frame))
+        assertEquals(-50f, app.getvela.wallet.feature.signing.distanceIntoView(top = -50f, height = 700f, frame = frame))
+        assertEquals(0f, app.getvela.wallet.feature.signing.distanceIntoView(top = 0f, height = 700f, frame = frame))
+        // Brought in, it stands clear of the frame's edge where there is
+        // room for that — and nothing in view is moved for the sake of it.
+        assertEquals(212f, app.getvela.wallet.feature.signing.distanceIntoView(top = 450f, height = 330f, frame = frame, margin = 32f))
+        assertEquals(-112f, app.getvela.wallet.feature.signing.distanceIntoView(top = -80f, height = 330f, frame = frame, margin = 32f))
+        assertEquals("flush with the edge is in view", 0f, app.getvela.wallet.feature.signing.distanceIntoView(top = 270f, height = 330f, frame = frame, margin = 32f))
+        assertEquals("no room for the margin: the whole of it, edge to edge", 10f, app.getvela.wallet.feature.signing.distanceIntoView(top = 40f, height = 570f, frame = frame, margin = 32f))
+        assertEquals("taller than the frame: its top, at the frame's own", 450f, app.getvela.wallet.feature.signing.distanceIntoView(top = 450f, height = 700f, frame = frame, margin = 32f))
+
+        // The board that test photographs: four rows — the last a token
+        // nothing verified — and its warning, through the live builder.
+        val tall = SigningLive.simBlocks(SigningFixtures.verdict(SigningScreenState.CS67), ctx).single() as SigningBlock.Balances
+        assertEquals(listOf("USDC", "XDAI", "DAI", strings.t("componentsUi.signing.balanceUnverifiedToken")), tall.rows.map { it.symbol })
+        assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), tall.note)
+        assertEquals(SigningTone.Caution, tall.noteTone)
+        val held = SigningFixtures.build(SigningScreenState.CS67, strings).blocks.single { it is SigningBlock.Held } as SigningBlock.Held
+        assertEquals(4, (held.shown as SigningBlock.Balances).rows.size)
+        assertEquals("the rooms are the same as every other board's: the place's least height", SigningFixtures.build(SigningScreenState.CS57, strings).blocks.filterIsInstance<SigningBlock.Held>().single().rooms, held.rooms)
+    }
+
+    /**
      * The wallet's own key backup (spec 062) as the REAL core reads the bytes
      * the backup sends: every word on it is a core term, so the sheet says it
      * in the reader's language with no relabel of its own — the network first,

@@ -360,8 +360,9 @@ object SigningLive {
         // nothing" is the core's line being there (`no_change_key`), and the
         // fact folded is that line.
         val quietSim = (sim as? SigningController.SimOutcome.Ready)?.noChangeKey?.takeIf { own }?.let { s.t(it) }
-        // The verdict's place is kept from the first frame, the size of the
-        // tallest verdict a sheet can end on ([verdictRooms]). The sheet is
+        // The verdict's place is kept from the first frame, at least the size
+        // of the tallest verdict a sheet usually ends on ([verdictRooms]; a
+        // taller one is shown whole and the place grows). The sheet is
         // bottom-anchored: a card landing a second late pushed the whole form
         // up — "Vela couldn't check what this transaction does" on every
         // request on a chain whose nodes have no simulator, Gnosis among
@@ -1223,9 +1224,10 @@ object SigningLive {
     }
 
     /**
-     * The verdicts a sheet can end on, as rooms: its place is as tall as the
-     * tallest of them from the first frame ([SigningBlock.Held]), so whichever
-     * lands moves nothing — not the form above it, not the confirm under it.
+     * The verdicts a sheet usually ends on, as rooms: its place is at least
+     * as tall as the tallest of them from the first frame
+     * ([SigningBlock.Held]), so whichever lands moves nothing — not the form
+     * above it, not the confirm under it.
      *
      * - the core's "could not check" line (a node with no simulator);
      * - its "expected to fail" line at the longest reason it prints (the
@@ -1238,7 +1240,8 @@ object SigningLive {
      * Each is built by [simBlocks], the builder that draws the real one, so a
      * room is the card it stands for. What can still be taller is only the
      * unusual: a third balance row, or the warning under an unverified
-     * token.
+     * token — shown whole, the place as tall as they are (the device round,
+     * item 1): the sheet's body scrolls, never the place.
      */
     internal fun verdictRooms(ctx: Context): List<SigningBlock> {
         val s = ctx.strings

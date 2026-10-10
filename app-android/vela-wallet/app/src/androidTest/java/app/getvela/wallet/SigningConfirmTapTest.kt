@@ -15,7 +15,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
@@ -73,7 +73,8 @@ class SigningConfirmTapTest {
         val model = SigningFixtures.build(SigningScreenState.CS11, strings)
         var confirms = 0
         show(model) { confirms++ }
-        val confirm = compose.onNodeWithTag(CONFIRM_TAG).performScrollTo()
+        // In the sheet's footer, outside its scroll: there with no scrolling.
+        val confirm = compose.onNodeWithTag(CONFIRM_TAG).assertIsDisplayed()
         confirm.assertIsEnabled()
         confirm.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
         confirm.assert(hasText(model.confirmAction!!))
@@ -89,7 +90,7 @@ class SigningConfirmTapTest {
             .copy(confirmEnabled = false, confirmBlockLine = reason)
         var confirms = 0
         show(model) { confirms++ }
-        compose.onNodeWithTag(CONFIRM_TAG).performScrollTo().assertIsNotEnabled().performClick()
+        compose.onNodeWithTag(CONFIRM_TAG).assertIsDisplayed().assertIsNotEnabled().performClick()
         compose.waitForIdle()
         assertEquals(0, confirms)
         compose.onNodeWithText(reason).assertExists()

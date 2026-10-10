@@ -6,24 +6,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import app.getvela.wallet.feature.signing.BODY_TAG
 import app.getvela.wallet.feature.signing.CONFIRM_TAG
 import app.getvela.wallet.feature.signing.FeeModel
+import app.getvela.wallet.feature.signing.SigningBlock
 import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningScreenModel
 import app.getvela.wallet.feature.signing.SigningScreenState
 import app.getvela.wallet.feature.signing.SigningSheetContent
+import app.getvela.wallet.feature.signing.VERDICT_PLACE_TAG
+import app.getvela.wallet.feature.signing.VERDICT_SHOWN_TAG
+import app.getvela.wallet.feature.signing.VERDICT_WAITING_TAG
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -167,17 +172,22 @@ class SigningSheetStillTest {
      * the card arriving (CS58) changes neither the sheet's height nor where
      * the confirm is; and it is not said to TalkBack before it is there.
      *
-     * The integration's note 12: and so for EVERY verdict the sheet can end
-     * on, not that card alone — the place is as tall as the tallest. The
+     * The integration's note 12: and so for EVERY verdict the sheet usually
+     * ends on, not that card alone — the place is as tall as the tallest. The
      * sheet's height and the confirm's top, before the verdict and after
-     * each kind: "could not check", "expected to fail" with its reason, "no
-     * asset changes", one balance row (a send), two (a swap). In both
-     * languages: the lines wrap differently.
+     * each kind: "could not check", "expected to fail" with its reason and
+     * at the longest reason the core prints, "no asset changes", one balance
+     * row (a send), two (a swap). In both languages: the lines wrap
+     * differently.
      *
      * PR 3 final note F2: the place is not blank while the verdict is out (a
-     * skeleton, said as "Checking…"), and a verdict TALLER than the place —
-     * a third balance row, an unverified token's warning — scrolls inside it
-     * instead of growing the sheet: the same two measurements, identical.
+     * skeleton, said as "Checking…").
+     *
+     * The device round, item 1: that height is the place's MINIMUM. A verdict
+     * taller than it is shown whole and the place grows — it has no scroll
+     * of its own any more, no fade and no "more" mark, which is asserted
+     * here for the usual verdicts too; the tall ones, and the footer that
+     * keeps the confirm where it is under them, are `SigningVerdictWholeTest`.
      */
     @Test
     fun theSimulationsVerdictLandingMovesNothing() = verdictsLandStill(strings)
@@ -191,6 +201,7 @@ class SigningSheetStillTest {
 
     private fun verdictsLandStill(words: I18nRuntime) {
         val waiting = SigningFixtures.build(SigningScreenState.CS57, words)
+        val held = waiting.blocks.filterIsInstance<SigningBlock.Held>().single()
         val couldNotCheck = words.t("componentsUi.signing.simUnavailableWarning")
         var current by mutableStateOf(waiting)
         compose.setContent {
@@ -204,80 +215,80 @@ class SigningSheetStillTest {
             sheetHeight = compose.onNodeWithTag(SHEET).fetchSemanticsNode().boundsInRoot.height,
             confirmTop = compose.onNodeWithTag(CONFIRM_TAG).fetchSemanticsNode().boundsInRoot.top,
         )
-        fun place() = compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_PLACE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        fun scrollRange() = compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_SCROLL_TAG, useUnmergedTree = true)
-            .fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].maxValue()
+        fun place() = compose.onNodeWithTag(VERDICT_PLACE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        fun placeSize() = compose.onNodeWithTag(VERDICT_PLACE_TAG, useUnmergedTree = true).fetchSemanticsNode().size
+        /** How far the body can scroll: nothing on a screen the sheet fits. */
+        fun bodyRange() = compose.onNodeWithTag(BODY_TAG, useUnmergedTree = true).fetchSemanticsNode()
+            .config[SemanticsProperties.VerticalScrollAxisRange].maxValue()
+        /** The sheet's vertical scrolls: the body, and nothing else. */
+        fun scrolls() = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange), useUnmergedTree = true).fetchSemanticsNodes()
         compose.waitForIdle()
         val before = frame()
         val room = place()
+        val roomSize = placeSize()
+        // The sheet fits this screen (a normal phone's): nothing scrolls, so
+        // the place is also WHERE it was. On a screen too short for the sheet
+        // the body scrolls the landed verdict into view — on purpose — and
+        // only the sizes and the confirm are held to.
+        val holds = bodyRange()
+        val fits = holds == 0f
         // The rooms are unseen and unsaid.
         compose.onNodeWithText(couldNotCheck).assertDoesNotExist()
         compose.onNodeWithText(words.t("componentsUi.signing.balanceChangesTitle")).assertDoesNotExist()
         // PR 3 final note F2: and the place is not BLANK meanwhile — a
         // skeleton fills it, the size of the place, said as "Checking…".
-        val skeleton = compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_WAITING_TAG, useUnmergedTree = true).fetchSemanticsNode()
-        assertEquals("the skeleton is the place", room, skeleton.boundsInRoot)
+        val skeleton = compose.onNodeWithTag(VERDICT_WAITING_TAG, useUnmergedTree = true).fetchSemanticsNode()
+        assertEquals("the skeleton is the place", roomSize, skeleton.size)
+        if (fits) assertEquals("the skeleton is the place", room, skeleton.boundsInRoot)
         compose.onNodeWithContentDescription(words.t("componentsUi.funding.checking")).assertExists()
 
+        // The same request: only its verdict arrived.
+        fun landed(state: SigningScreenState) = SigningFixtures.build(state, words).copy(state = waiting.state, requestKey = waiting.requestKey)
         val kinds = listOf(
-            "could not check" to SigningScreenState.CS58,
-            "expected to fail, with its reason" to SigningScreenState.CS61,
-            "no asset changes" to SigningScreenState.CS62,
-            "one balance row" to SigningScreenState.CS63,
-            "two balance rows" to SigningScreenState.CS64,
-            // F2: taller than the place — they scroll inside it.
-            "THREE balance rows" to SigningScreenState.CS65,
-            "an unverified token and its warning" to SigningScreenState.CS66,
+            "could not check" to landed(SigningScreenState.CS58),
+            "expected to fail, with its reason" to landed(SigningScreenState.CS61),
+            // The room the place keeps for a revert: the core's own cap.
+            "expected to fail, at the longest reason the core prints" to
+                waiting.copy(blocks = waiting.blocks.map { if (it is SigningBlock.Held) it.copy(shown = held.rooms[1]) else it }),
+            "no asset changes" to landed(SigningScreenState.CS62),
+            "one balance row" to landed(SigningScreenState.CS63),
+            "two balance rows" to landed(SigningScreenState.CS64),
         )
-        val tall = setOf(SigningScreenState.CS65, SigningScreenState.CS66)
-        val measured = StringBuilder("before (skeleton): sheet ${before.sheetHeight} confirm ${before.confirmTop} place ${room.top}..${room.bottom} (${room.height} px)")
-        for ((kind, state) in kinds) {
-            // The same request: only its verdict arrived.
-            current = SigningFixtures.build(state, words).copy(state = waiting.state, requestKey = waiting.requestKey)
+        val measured = StringBuilder("before (\"Checking…\"): sheet ${before.sheetHeight} confirm ${before.confirmTop} place ${room.top}..${room.bottom} (${roomSize.height} px)${if (fits) "" else ", the body scrolls by ${bodyRange()} px"}")
+        for ((kind, model) in kinds) {
+            current = model
             compose.waitForIdle()
             val after = frame()
-            val beyond = scrollRange()
-            measured.append("\n$kind: sheet ${after.sheetHeight} confirm ${after.confirmTop}, scrolls inside by $beyond px")
+            val shown = compose.onNodeWithTag(VERDICT_SHOWN_TAG, useUnmergedTree = true).fetchSemanticsNode()
+            measured.append("\n$kind: sheet ${after.sheetHeight} confirm ${after.confirmTop}, verdict ${shown.size.height} px in a place of ${placeSize().height}")
             assertEquals("the verdict arriving ($kind) moved the sheet\n$measured", before, after)
-            assertEquals("…or its own place ($kind)", room, place())
+            assertEquals("…or resized its own place ($kind)\n$measured", roomSize, placeSize())
+            if (fits) assertEquals("…or moved its own place ($kind)\n$measured", room, place())
             // The skeleton is gone the moment a verdict is there.
-            compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_WAITING_TAG, useUnmergedTree = true).assertDoesNotExist()
-            // A verdict the place holds does not scroll; a taller one does —
-            // by exactly what it used to grow the sheet by.
-            val more = compose.onAllNodesWithTag(app.getvela.wallet.feature.signing.VERDICT_MORE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
-            if (state in tall) {
-                assertTrue("$kind is taller than the place and must scroll inside it\n$measured", beyond > 0f)
-                assertEquals("…and says there is more under its fold", 1, more.size)
-            } else {
-                assertEquals("$kind fits the place: nothing to scroll\n$measured", 0f, beyond)
-                assertEquals("…and no \"more\" mark", 0, more.size)
-            }
+            compose.onNodeWithTag(VERDICT_WAITING_TAG, useUnmergedTree = true).assertDoesNotExist()
+            // The usual verdicts are no taller than the place — and whole in it.
+            assertTrue("$kind is taller than the room kept for it\n$measured", shown.size.height <= roomSize.height)
+            assertEquals("$kind is cut by its place", shown.size.height.toFloat(), shown.boundsInRoot.height)
+            // The place has no scroll of its own: the body is the one scroll.
+            assertEquals("a scroll besides the body's ($kind)", listOf(BODY_TAG), scrolls().map { it.config.getOrNull(SemanticsProperties.TestTag) })
         }
         compose.onNodeWithText(words.t("componentsUi.signing.balanceChangesTitle")).assertExists()
-
-        // Nothing of a tall verdict is left out: its last line is reached by
-        // scrolling the place — and the sheet still has not moved.
-        // The "more" mark brings the rest up, then goes.
-        val warning = words.t("componentsUi.signing.unverifiedWarning")
-        compose.onNodeWithText(warning).assertExists()
-        compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_MORE_TAG, useUnmergedTree = true).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_MORE_TAG, useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithText(warning).assertIsDisplayed()
-        val warned = compose.onNodeWithText(warning).fetchSemanticsNode().boundsInRoot
-        assertTrue("the warning is inside the place once scrolled to: $warned in $room", warned.top >= room.top - 1f && warned.bottom <= room.bottom + 1f)
-        assertEquals("scrolling inside the place moved the sheet\n$measured", before, frame())
         android.util.Log.i("SigningSheetStill", measured.toString())
 
         // Back to "could not check": said now.
-        current = SigningFixtures.build(SigningScreenState.CS58, words).copy(state = waiting.state, requestKey = waiting.requestKey)
+        current = landed(SigningScreenState.CS58)
         compose.waitForIdle()
         compose.onNodeWithText(couldNotCheck).assertExists()
         // And the sheet with no place kept is shorter: the room is real, and
         // this test can see a sheet move.
-        current = waiting.copy(blocks = waiting.blocks.filterNot { it is app.getvela.wallet.feature.signing.SigningBlock.Held })
+        current = waiting.copy(blocks = waiting.blocks.filterNot { it is SigningBlock.Held })
         compose.waitForIdle()
-        assertTrue("no room was being held", frame().sheetHeight < before.sheetHeight)
+        if (fits) {
+            assertTrue("no room was being held", frame().sheetHeight < before.sheetHeight)
+        } else {
+            // The sheet is the screen's height either way: its body holds less.
+            assertTrue("no room was being held", bodyRange() < holds)
+        }
     }
 
     private companion object {
