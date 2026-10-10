@@ -17,7 +17,7 @@ import Testing
 /// `timeLimit`: some waits here are for a task the test itself started to
 /// reach a point (`Waits.swift`); one that never does is a hang, reported here.
 @MainActor
-@Suite(.timeLimit(.minutes(10)))
+@Suite(.timeLimit(.minutes(5)))
 struct SettingsFeedbackRowTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])

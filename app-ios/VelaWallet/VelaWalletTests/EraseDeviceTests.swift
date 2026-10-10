@@ -16,7 +16,15 @@ import Foundation
 import Testing
 @testable import VelaWallet
 
+/// `timeLimit`: `DeviceStorage.erase` ends by asking WebKit to delete its
+/// website data, and four tests here wait for that with nothing else to
+/// bound them. It is 0.02 s when these run alone. After the browser suites
+/// have left WebKit their tabs' processes it is whatever WebKit takes: run
+/// one test at a time on the three-core runner (2026-10-10), 18 s to more
+/// than five minutes. With every test started at once the waits overlap and
+/// have stayed inside the run.
 @MainActor
+@Suite(.timeLimit(.minutes(5)))
 struct EraseDeviceTests {
 
     private func fresh() -> (UserDefaults, VelaStore) {
