@@ -32,6 +32,27 @@
 
 	/** What a tap does (PR 2 polish): the core's word for a failed fee, else the coins. */
 	const tap = $derived(fee.tap ?? 'open');
+
+	/**
+	 * The money under the coin, held (0.8 — withholding never moves the
+	 * layout).
+	 *
+	 * The coin and its money share a line while both fit, and with the money
+	 * withheld — "≈ …" until the display currency commits — they always do.
+	 * Then the figure lands: "≈ ₫112,500.00" is too long for that line, the fee
+	 * drops under the label, and everything beneath the row moves down a line
+	 * (measured at 390 px: 18 px). How long the figure will be is exactly what
+	 * is not known yet. So while it is withheld the money takes a line of its
+	 * own under the coin — the one layout whose line count does not depend on
+	 * the figure's length — and KEEPS it for as long as this row stands: a row
+	 * that folded back up for a short figure would be the same jump the other
+	 * way.
+	 */
+	let stackedOnce = $state(false);
+	$effect.pre(() => {
+		if (fee.valueFiatWithheld === true) stackedOnce = true;
+	});
+	const stacked = $derived(stackedOnce || fee.valueFiatWithheld === true);
 </script>
 
 {#snippet face()}
@@ -74,7 +95,7 @@
 			     coin is left to pay with — the dash, stated: no control, no
 			     chevron, no press (spec 081, a control that cannot act is not
 			     drawn as one). The line under the confirm says what happened. -->
-			<div class="open stated" data-testid="fee-row-stated">{@render face()}</div>
+			<div class="open stated" class:stacked data-testid="fee-row-stated">{@render face()}</div>
 		{:else}
 			<!-- A failed fee (PR 2 note 1) the core says a tap asks again: the
 			     refresh's own path, no list promised; while a re-ask is out it is
@@ -84,6 +105,7 @@
 			<button
 				type="button"
 				class="open"
+				class:stacked
 				aria-label={tap === 'retry' ? fee.refreshLabel : fee.openLabel}
 				onclick={tap === 'retry' ? () => fee.refreshing !== true && onrefresh?.() : onopen}
 			>
@@ -161,6 +183,15 @@
 		justify-content: flex-end;
 		gap: var(--space-md);
 		min-width: min-content;
+	}
+
+	/* Held (see `stacked`): the money on a line of its own under the coin,
+	   both at the row's end — so a figure landing in it, long or short, changes
+	   no line count, and the coin above it does not move. */
+	.stacked .values {
+		flex-direction: column;
+		flex-wrap: nowrap;
+		align-items: flex-end;
 	}
 
 	/* Within its line the money still drops under the coin, whole, when even

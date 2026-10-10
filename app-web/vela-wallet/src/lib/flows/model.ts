@@ -578,6 +578,15 @@ export interface FeeRowModel {
 	 * the row broke wherever the text ran out, which was inside "Network fee".
 	 */
 	valueFiat?: string;
+	/**
+	 * `valueFiat` is not a figure yet: the display currency has not committed
+	 * (the core's withhold rule), and "≈ …" stands where the money will be.
+	 * The row then holds the layout its figure may need — the fee on the line
+	 * under the label — and keeps it once the figure lands, so the money
+	 * arriving moves nothing: side by side, a figure as long as "≈ ₫112,500.00"
+	 * dropped the fee to a second line and pushed the form 18 px down.
+	 */
+	valueFiatWithheld?: boolean;
 	openLabel: string;
 	/**
 	 * The refresh affordance's accessible name (spec 068). The fee is the one

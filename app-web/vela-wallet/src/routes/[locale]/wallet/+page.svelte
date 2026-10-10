@@ -97,6 +97,7 @@
 	} from '$lib/flows/live';
 	import { createSendSession, type SendSession } from '$lib/flows/core/send-session';
 	import { toSendToken } from '$lib/flows/core/send-types';
+	import { chosenCurrencyCode, sendDisplayContext } from '$lib/flows/core/send-display';
 	import { answerHoldings, readHoldings, type HoldingsSource } from '$lib/flows/core/send-holdings';
 	import { toApiToken } from '$lib/wallet/core/balance-executor';
 	import type { SendToken } from '$lib/core/generated/SendToken';
@@ -354,7 +355,10 @@
 				balance: token.balance,
 				price_usd: token.price_usd
 			},
-			currency_code: currency.view.code,
+			// The person's currency, not the USD/1 placeholder the view carries
+			// before the pair is committed: a sheet's fiat column is priced by
+			// this code.
+			currency_code: chosenCurrencyCode(currency.view),
 			// The importer's cap is what an import can actually add: the core's cap
 			// less the rows already started (`split_import_room`). Opened at a flat
 			// sixty, its "only the first N will be sent" was a promise the append
@@ -640,6 +644,22 @@
 	/** Stops telling the send machine what is in flight; set while a send is open. */
 	let stopInFlightOps: (() => void) | null = null;
 
+	/**
+	 * The display currency the open send machine was last told
+	 * (`sendDisplayContext`). The machine was told once, at `open`, and never
+	 * again — so a Send opened before the currency committed kept the USD/1
+	 * placeholder for as long as it stayed open. The effect below says it again
+	 * whenever it changes; the machine re-denominates by its own rule.
+	 */
+	let toldSendDisplay: string | null = null;
+	$effect(() => {
+		const display = sendDisplayContext(currency.view);
+		const key = JSON.stringify(display);
+		if (sendSession === null || toldSendDisplay === null || toldSendDisplay === key) return;
+		toldSendDisplay = key;
+		sendSession.dispatch({ type: 'display_changed', display });
+	});
+
 	async function openSend(prefill?: Partial<SendOpenParams>): Promise<void> {
 		if (sendSession || !identity) return;
 		await loadCore();
@@ -737,8 +757,9 @@
 				// these exactly as it reads the deep-link params on the phone.
 				...prefill
 			},
-			display: { code: currency.view.code, rate: currency.view.rate, fiat_decimals: 2 }
+			display: sendDisplayContext(currency.view)
 		});
+		toldSendDisplay = JSON.stringify(sendDisplayContext(currency.view));
 		// The account's operations still holding their nonce, on every tracker
 		// render (correctness batch item 3): while one is in flight on the
 		// form's network, the core holds this send's confirm with one line —
@@ -776,6 +797,7 @@
 		stopInFlightOps = null;
 		sendSession?.dispose();
 		sendSession = null;
+		toldSendDisplay = null;
 		sendView = null;
 		sentHoldingsKey = null;
 		feeSheetOpen = false;

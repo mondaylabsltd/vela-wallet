@@ -148,6 +148,55 @@ describe('FeeRow', () => {
 		expect(dropped).toBe(true);
 	});
 
+	/*
+	 * 0.8 — withholding never moves the layout. Until the display currency
+	 * commits the money half is "≈ …", which fits beside the coin on any
+	 * line. Then the figure lands: "≈ ₫112,500.00" did not fit that line at a
+	 * phone's width, the fee dropped under the label, and the form under the
+	 * row moved down 18 px. While the money is withheld it takes a line of its
+	 * own under the coin — the one layout whose line count does not depend on
+	 * how long the figure turns out to be — and the row keeps it.
+	 */
+	it('with its money withheld, the figure landing moves nothing — long or short, at any width', async () => {
+		for (const width of ['342px', '272px', '500px']) {
+			const withheld = { ...FEE, value: '0.0015 ETH', valueFiat: '≈ …', valueFiatWithheld: true };
+			const { screen, row } = await drawn(width, withheld as typeof FEE);
+			const box = (selector: string, nth = 0) => {
+				const r = row.querySelectorAll<HTMLElement>(selector)[nth].getBoundingClientRect();
+				return [r.left, r.top, r.width, r.height].map((n) => Math.round(n * 10) / 10);
+			};
+			const card = () => (row.parentElement as HTMLElement).getBoundingClientRect().height;
+			const before = { card: card(), label: box('.label'), coin: box('.value', 0) };
+			// The money stands under the coin, on a line of its own.
+			const moneyTop = box('.value', 1)[1];
+			expect(moneyTop, width).toBeGreaterThanOrEqual(before.coin[1] + before.coin[3] - 0.5);
+
+			// A long figure lands…
+			await screen.rerender({ fee: { ...FEE, value: '0.0015 ETH', valueFiat: '≈ ₫112,500.00' } });
+			await tick();
+			expect(card(), `${width}: long figure`).toBe(before.card);
+			expect(box('.label'), `${width}: label`).toEqual(before.label);
+			expect(box('.value', 0), `${width}: the coin`).toEqual(before.coin);
+			expect(box('.value', 1)[1], `${width}: the money's line`).toBe(moneyTop);
+			expect(row.querySelectorAll('.value')[1].textContent).toBe('≈ ₫112,500.00');
+			expect(row.scrollWidth, width).toBeLessThanOrEqual(row.clientWidth);
+
+			// …or a short one: the row does not fold back up under the person.
+			await screen.rerender({ fee: { ...FEE, value: '0.0015 ETH', valueFiat: '≈ $4.50' } });
+			await tick();
+			expect(card(), `${width}: short figure`).toBe(before.card);
+			expect(box('.label'), `${width}: label`).toEqual(before.label);
+			expect(box('.value', 0), `${width}: the coin`).toEqual(before.coin);
+			screen.unmount();
+		}
+	});
+
+	it('a row whose money was never withheld is drawn as it always was: side by side while both fit', async () => {
+		const { values } = await drawn('500px', { ...FEE, value: '0.0015 ETH', valueFiat: '≈ $4.50' });
+		const [coin, money] = values.map((v) => v.getBoundingClientRect());
+		expect(Math.abs(money.top - coin.top)).toBeLessThanOrEqual(0.5);
+	});
+
 	it('is one line when there is room, and draws no separator with no money to follow', async () => {
 		const wide = await drawn('600px');
 		const [coin, money] = wide.values.map((v) => v.getBoundingClientRect());
