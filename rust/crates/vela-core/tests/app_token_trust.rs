@@ -21,7 +21,9 @@ use vela_core::app::token_trust::{
     TrustOperation as Op, TrustRawLog, TrustReceiptLog, TrustShellResult as Res, TrustSimJudgment,
     TrustTokenMeta, DEFAULT_MONITOR_CHAINS, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
 };
-use vela_core::app::token_trust::{merge_safe_received, TrustSimView, SAFE_RECEIVED_TOPIC};
+use vela_core::app::token_trust::{
+    merge_safe_received, TrustSimDirection, TrustSimView, SAFE_RECEIVED_TOPIC,
+};
 
 type Sut = DomainDriver<TokenTrust>;
 
@@ -486,7 +488,7 @@ fn judge_delta_asymmetric_grid_is_exhaustive() {
                         verdict,
                         TrustSimJudgment::Erc20Unverified {
                             token: Some(FRESH.to_owned()),
-                            delta: delta.to_owned(),
+                            direction: TrustSimDirection::of_delta(delta),
                         },
                         "delta={delta} meta={} trusted={trusted}",
                         meta_case.is_some()
@@ -512,7 +514,7 @@ fn judge_delta_edges_fail_toward_unverified() {
         ),
         TrustSimJudgment::Erc20Unverified {
             token: Some(KNOWN_USDC.to_owned()),
-            delta: "50".to_owned(),
+            direction: TrustSimDirection::In,
         }
     );
     // No token address → unverified even with metadata in hand.
@@ -525,7 +527,7 @@ fn judge_delta_edges_fail_toward_unverified() {
         judge_delta(&no_token, Some(&m), true),
         TrustSimJudgment::Erc20Unverified {
             token: None,
-            delta: "50".to_owned()
+            direction: TrustSimDirection::In,
         }
     );
     // A garbled delta (no JS counterpart — bigints can't be malformed) and an
@@ -1165,7 +1167,7 @@ fn sim_sent_is_trusted_received_needs_the_trusted_set() {
             // STILL renders unverified — trust, not just availability.
             TrustSimJudgment::Erc20Unverified {
                 token: Some(FRESH.to_owned()),
-                delta: "50".to_owned(),
+                direction: TrustSimDirection::In,
             },
             TrustSimJudgment::Erc20Trusted {
                 token: HELD.to_owned(),
@@ -1229,7 +1231,7 @@ fn the_registry_vouches_only_on_its_own_chain() {
         vec![
             TrustSimJudgment::Erc20Unverified {
                 token: Some(KNOWN_USDC.to_owned()),
-                delta: "9".to_owned(),
+                direction: TrustSimDirection::In,
             },
             TrustSimJudgment::Erc20Trusted {
                 token: BSC_USDC.to_owned(),
@@ -1296,7 +1298,7 @@ fn sim_unknown_metadata_is_unverified_and_memoised() {
         sim.judgments,
         vec![TrustSimJudgment::Erc20Unverified {
             token: Some(FRESH.to_owned()),
-            delta: "-5".to_owned(),
+            direction: TrustSimDirection::Out,
         }]
     );
 
@@ -1368,6 +1370,70 @@ fn the_judged_view_says_no_asset_changes() {
     }
     let old: TrustSimView = serde_json::from_value(json).expect("an older view still reads");
     assert_eq!(old.no_change_key, None);
+}
+
+/// PR 3, fix B: an unverified token's judgment has no figure to print. The
+/// simulation's number for it is whatever the site being signed for chose to
+/// emit (Android drew 「未验证代币 +5,000,000,000,000,000,000,000.00」 from the
+/// raw delta the judgment used to carry); what a shell is handed now is the
+/// direction, and nothing else of the move.
+#[test]
+fn an_unverified_token_is_a_direction_and_never_a_figure() {
+    const LURE: &str = "5000000000000000000000";
+    let judged = judge_delta(&erc20_delta(FRESH, LURE), Some(&meta("USDC", 18)), false);
+    assert_eq!(
+        judged,
+        TrustSimJudgment::Erc20Unverified {
+            token: Some(FRESH.to_owned()),
+            direction: TrustSimDirection::In,
+        }
+    );
+    // Nothing of the figure crosses to a shell, in any spelling.
+    let wire = serde_json::to_string(&judged).expect("a judgment serialises");
+    assert!(!wire.contains("5000"), "{wire}");
+    assert!(!wire.contains("delta"), "{wire}");
+    assert_eq!(
+        serde_json::to_value(&judged).expect("a judgment serialises"),
+        serde_json::json!({ "type": "erc20_unverified", "token": FRESH, "direction": "in" })
+    );
+
+    // The four things a direction can be.
+    let direction = |delta: &str| judge_delta(&erc20_delta(FRESH, delta), None, true).direction();
+    assert_eq!(direction("-5"), TrustSimDirection::Out);
+    assert_eq!(direction("+5"), TrustSimDirection::In);
+    for zero in ["0", "-0", "+0", "000"] {
+        assert_eq!(direction(zero), TrustSimDirection::Still, "{zero:?}");
+    }
+    for garbage in ["", "abc", "--1", "1.5", "0x10"] {
+        assert_eq!(
+            direction(garbage),
+            TrustSimDirection::Unreadable,
+            "{garbage:?}"
+        );
+    }
+
+    // "No asset changes" reads the direction: a move of nothing is no move,
+    // and a figure nobody could read is never "nothing moves".
+    let mut sut = booted(vec![1]);
+    let judged_view = |sut: &mut Sut, delta: &str| {
+        sut.dispatch(Event::SimDeltasComputed {
+            address: WALLET.to_owned(),
+            chain_id: 1,
+            deltas: vec![TrustAssetDelta {
+                kind: TrustDeltaKind::Erc20,
+                token: None,
+                delta: delta.to_owned(),
+            }],
+        });
+        sut.view().sim.expect("judged at once: no token to name")
+    };
+    let still = judged_view(&mut sut, "0");
+    assert_eq!(
+        still.no_change_key.as_deref(),
+        Some("componentsUi.signing.simResultNoChange")
+    );
+    assert_eq!(judged_view(&mut sut, "abc").no_change_key, None);
+    assert_eq!(judged_view(&mut sut, "7").no_change_key, None);
 }
 
 #[test]

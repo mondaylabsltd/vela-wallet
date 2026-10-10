@@ -22,7 +22,7 @@ use vela_core::app::activity_feed::{
 };
 use vela_core::app::clear_signing::ClearTerm;
 use vela_core::app::dapp_activity::{DappAction, DappSummary};
-use vela_core::app::token_trust::TrustSimJudgment;
+use vela_core::app::token_trust::{TrustSimDirection, TrustSimJudgment};
 use vela_core::app::tx_tracker::ABANDON_AGE_MS;
 
 type Sut = DomainDriver<ActivityFeed>;
@@ -2274,6 +2274,74 @@ fn no_recorded_changes_leaves_the_row_as_it_was() {
     );
 }
 
+/// PR 3, fix B: a row stored before an unverified token's judgment lost its
+/// figure still reads — as the direction its `delta` had. The line stays on
+/// the older row; the site's number is dropped on the way in.
+#[test]
+fn a_row_stored_with_an_unverified_delta_reads_as_its_direction() {
+    let mut stored =
+        serde_json::to_value(swap("d-old", "0x0", None, 100_000.0)).expect("a record serialises");
+    stored["balance_changes"] = serde_json::json!([
+        { "type": "erc20_trusted", "token": USDC_BASE, "delta": "-100000",
+          "symbol": "USDC", "decimals": 6, "in_trusted_set": true },
+        { "type": "erc20_unverified", "token": SITE_TOKEN, "delta": "1000000000000000000000000" },
+        { "type": "erc20_unverified", "token": SITE_TOKEN, "delta": "-5" },
+        { "type": "erc20_unverified", "token": null, "delta": "0" },
+        { "type": "erc20_unverified", "token": null }
+    ]);
+    let record: FeedTxRecord = serde_json::from_value(stored).expect("an older row still reads");
+    let unverified = |token: Option<&str>, direction| TrustSimJudgment::Erc20Unverified {
+        token: token.map(str::to_owned),
+        direction,
+    };
+    assert_eq!(
+        record.balance_changes,
+        Some(vec![
+            usdc("-100000"),
+            unverified(Some(SITE_TOKEN), TrustSimDirection::In),
+            unverified(Some(SITE_TOKEN), TrustSimDirection::Out),
+            unverified(None, TrustSimDirection::Still),
+            unverified(None, TrustSimDirection::Unreadable),
+        ])
+    );
+    // Written back, the figure is nowhere.
+    let rewritten = serde_json::to_string(&record).expect("a record serialises");
+    assert!(
+        !rewritten.contains("1000000000000000000000000"),
+        "{rewritten}"
+    );
+
+    // And the row draws them as before: a direction, no number; a move of
+    // nothing and a figure nobody could read are no line.
+    let sut = boot(vec![record]);
+    let row = items(&sut).remove(0).dapp.expect("a dApp row");
+    let directions: Vec<(FeedDirection, bool)> = row
+        .changes
+        .iter()
+        .map(|change| (change.direction, change.value.is_some()))
+        .collect();
+    assert_eq!(
+        directions,
+        vec![
+            (FeedDirection::Out, true),
+            (FeedDirection::In, false),
+            (FeedDirection::Out, false),
+        ]
+    );
+
+    // A row of this build reads as it was written.
+    let fresh = swap(
+        "d-new",
+        "0x0",
+        Some(vec![unverified(Some(SITE_TOKEN), TrustSimDirection::In)]),
+        1.0,
+    );
+    let round_trip: FeedTxRecord =
+        serde_json::from_value(serde_json::to_value(&fresh).expect("serialises"))
+            .expect("reads back");
+    assert_eq!(round_trip.balance_changes, fresh.balance_changes);
+}
+
 /// A page cannot put a figure on the row. The lines come from the approve
 /// alone (the sign_request tests hold that end); here, the sheet's own
 /// judgment is kept: a token the wallet did not trust arrives as a direction
@@ -2283,11 +2351,11 @@ fn no_recorded_changes_leaves_the_row_as_it_was() {
 fn a_page_cannot_put_a_figure_on_the_row() {
     let unverified_in = TrustSimJudgment::Erc20Unverified {
         token: Some(SITE_TOKEN.to_owned()),
-        delta: "1000000000000000000000000".to_owned(),
+        direction: TrustSimDirection::In,
     };
     let unverified_out = TrustSimJudgment::Erc20Unverified {
         token: Some(SITE_TOKEN.to_owned()),
-        delta: "-5000000".to_owned(),
+        direction: TrustSimDirection::Out,
     };
     let sut = boot(vec![
         // USDC out, the site's token "in": the figure is the USDC.

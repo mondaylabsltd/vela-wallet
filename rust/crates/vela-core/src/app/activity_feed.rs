@@ -103,7 +103,7 @@ use ts_rs::TS;
 
 use super::clear_signing::ClearTerm;
 use super::dapp_activity::{contract_name_of, permit2_owner, protocol_of, DappAction, DappSummary};
-use super::token_trust::TrustSimJudgment;
+use super::token_trust::{TrustSimDirection, TrustSimJudgment};
 use super::tx_tracker::{TrackFailure, TrackMove, TrackSettlement};
 
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
@@ -240,12 +240,14 @@ pub struct FeedTxRecord {
     /// (`SignRecord::balance_changes`, stored by the shell). The one account
     /// of a dApp call's money that its page did not write. Absent on every
     /// other kind, on older rows and from a shell that does not map it.
-    /// Read leniently ([`stored_or_none`]): lines this build cannot read are
-    /// no lines, never a feed that fails to load.
+    /// Read leniently ([`stored_judgments`]): lines this build cannot read
+    /// are no lines, never a feed that fails to load — and a row stored
+    /// before an unverified token's judgment lost its figure (PR 3) reads as
+    /// the direction that figure had.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "stored_or_none"
+        deserialize_with = "stored_judgments"
     )]
     pub balance_changes: Option<Vec<TrustSimJudgment>>,
     /// `dapp_tx` only (083 F3): whether the transaction carried calldata, as
@@ -296,6 +298,41 @@ where
 {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
     Ok(value.and_then(|value| serde_json::from_value(value).ok()))
+}
+
+/// A record's stored judgments ([`FeedTxRecord::balance_changes`]), read as
+/// leniently as [`stored_or_none`] reads — and across the one change their
+/// shape has had: until PR 3 an unverified token's judgment kept the
+/// simulation's raw `delta`; it keeps only a `direction` now
+/// ([`TrustSimJudgment::Erc20Unverified`]). A stored `delta` is read for its
+/// sign and dropped, so an older row keeps its line and its figure is gone
+/// from this build's memory too.
+fn stored_judgments<'de, D>(deserializer: D) -> Result<Option<Vec<TrustSimJudgment>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let Some(mut value) = Option::<serde_json::Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    for judgment in value.as_array_mut().into_iter().flatten() {
+        let Some(fields) = judgment.as_object_mut() else {
+            continue;
+        };
+        let unverified =
+            fields.get("type").and_then(serde_json::Value::as_str) == Some("erc20_unverified");
+        if !unverified || fields.contains_key("direction") {
+            continue;
+        }
+        let direction = fields
+            .remove("delta")
+            .as_ref()
+            .and_then(serde_json::Value::as_str)
+            .map_or(TrustSimDirection::Unreadable, TrustSimDirection::of_delta);
+        if let Ok(direction) = serde_json::to_value(direction) {
+            fields.insert("direction".to_owned(), direction);
+        }
+    }
+    Ok(serde_json::from_value(value).ok())
 }
 
 impl FeedTxRecord {
@@ -2301,8 +2338,10 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
     judgments
         .iter()
         .filter_map(|judgment| {
-            let (delta, verified, known, symbol, decimals) = match judgment {
-                TrustSimJudgment::Native { delta } => (delta, true, true, native.clone(), Some(18)),
+            let ((out, magnitude), verified, known, symbol, decimals) = match judgment {
+                TrustSimJudgment::Native { delta } => {
+                    (signed_delta(delta)?, true, true, native.clone(), Some(18))
+                }
                 TrustSimJudgment::Erc20Trusted {
                     delta,
                     symbol,
@@ -2310,17 +2349,22 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
                     in_trusted_set,
                     ..
                 } => (
-                    delta,
+                    signed_delta(delta)?,
                     true,
                     *in_trusted_set,
                     symbol.trim().to_owned(),
                     Some(*decimals),
                 ),
-                TrustSimJudgment::Erc20Unverified { delta, .. } => {
-                    (delta, false, false, String::new(), None)
+                // No figure was ever kept for it: a direction, or no line.
+                TrustSimJudgment::Erc20Unverified { direction, .. } => {
+                    let out = match direction {
+                        TrustSimDirection::In => false,
+                        TrustSimDirection::Out => true,
+                        TrustSimDirection::Still | TrustSimDirection::Unreadable => return None,
+                    };
+                    ((out, None), false, false, String::new(), None)
                 }
             };
-            let (out, magnitude) = signed_delta(delta)?;
             // A coin arriving that the wallet does not already trust is the
             // one line a site fully controls (its own token, any symbol, any
             // figure): the record draws it as an unverified token whatever

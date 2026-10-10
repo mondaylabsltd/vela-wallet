@@ -751,10 +751,60 @@ pub enum TrustSimJudgment {
     },
     /// Direction + caution, no attacker-controlled amount rendering
     /// (`tx-simulation.ts:243-256`).
+    ///
+    /// It carries NO figure. The simulation's number for a token nobody
+    /// vouches for is whatever the site being signed for chose to emit, so
+    /// the judgment hands a shell only which way it moves
+    /// ([`TrustSimDirection`]): a sheet cannot print an amount it was never
+    /// given. (It carried the raw `delta` until PR 3, "to read the sign
+    /// from", and one client printed it: 「未验证代币
+    /// +5,000,000,000,000,000,000,000.00」.)
     Erc20Unverified {
         token: Option<String>,
-        delta: String,
+        direction: TrustSimDirection,
     },
+}
+
+/// Which way an unverified token moves — all a sheet may say of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum TrustSimDirection {
+    /// The account receives it: the row's sign is "+".
+    In,
+    /// It leaves the account: the row's sign is "−".
+    Out,
+    /// A move of nothing (the simulation's figure was a zero). Never a row,
+    /// and it counts as no change ([`TrustSimJudgment::moves_nothing`]).
+    Still,
+    /// The figure did not read as a signed number, so there is no direction
+    /// to state: the row is drawn with its caution and no sign. Never
+    /// "nothing moves".
+    Unreadable,
+}
+
+impl TrustSimDirection {
+    /// The direction of a signed decimal in the asset's smallest unit, as a
+    /// simulation states a move ([`TrustAssetDelta::delta`]).
+    #[must_use]
+    pub fn of_delta(delta: &str) -> Self {
+        let delta = delta.trim();
+        let (negative, digits) = match delta.strip_prefix('-') {
+            Some(rest) => (true, rest),
+            None => (false, delta.strip_prefix('+').unwrap_or(delta)),
+        };
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Self::Unreadable;
+        }
+        if digits.bytes().all(|b| b == b'0') {
+            return Self::Still;
+        }
+        if negative {
+            Self::Out
+        } else {
+            Self::In
+        }
+    }
 }
 
 /// Asymmetric-trust judgment for one delta (`enrichDeltas`,
@@ -778,7 +828,7 @@ pub fn judge_delta(
     }
     let unverified = TrustSimJudgment::Erc20Unverified {
         token: delta.token.clone(),
-        delta: delta.delta.clone(),
+        direction: TrustSimDirection::of_delta(&delta.delta),
     };
     let Some(token) = delta.token.as_deref() else {
         return unverified;
@@ -969,14 +1019,23 @@ pub struct TrustSimView {
 }
 
 impl TrustSimJudgment {
-    /// The signed move this judgment is about, as the simulation gave it.
+    /// Which way this judgment's asset moves. A figure the wallet vouches
+    /// for states it by its sign; an unverified token carries only this.
     #[must_use]
-    pub fn delta(&self) -> &str {
+    pub fn direction(&self) -> TrustSimDirection {
         match self {
-            TrustSimJudgment::Native { delta }
-            | TrustSimJudgment::Erc20Trusted { delta, .. }
-            | TrustSimJudgment::Erc20Unverified { delta, .. } => delta,
+            TrustSimJudgment::Native { delta } | TrustSimJudgment::Erc20Trusted { delta, .. } => {
+                TrustSimDirection::of_delta(delta)
+            }
+            TrustSimJudgment::Erc20Unverified { direction, .. } => *direction,
         }
+    }
+
+    /// The judgment is about a move of nothing — a zero. A figure nobody can
+    /// read is not one: what cannot be read is never "nothing moves".
+    #[must_use]
+    pub fn moves_nothing(&self) -> bool {
+        self.direction() == TrustSimDirection::Still
     }
 }
 
@@ -1094,8 +1153,7 @@ impl App for TokenTrust {
                 ready: s.judgments.is_some(),
                 judgments: s.judgments.clone().unwrap_or_default(),
                 no_change_key: s.judgments.as_ref().and_then(|judgments| {
-                    super::sim_outcome::no_change_key(judgments.iter().map(TrustSimJudgment::delta))
-                        .map(str::to_owned)
+                    super::sim_outcome::no_change_key_of(judgments).map(str::to_owned)
                 }),
             }),
         }

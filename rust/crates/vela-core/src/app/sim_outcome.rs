@@ -66,7 +66,9 @@ use ts_rs::TS;
 
 use super::clear_signing::ClearRisk;
 use super::name_verify::is_never_in_a_name;
-use super::token_trust::{TrustAssetDelta, TrustDeltaKind, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC};
+use super::token_trust::{
+    TrustAssetDelta, TrustDeltaKind, TrustSimJudgment, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
+};
 
 /// The selector of Solidity's `Error(string)` revert payload.
 pub const ERROR_STRING_SELECTOR: [u8; 4] = [0x08, 0xc3, 0x79, 0xa0];
@@ -286,10 +288,22 @@ impl SimOutcome {
 /// cannot be read is never "nothing moves".
 ///
 /// Only for an answer that was a check. The callers are
-/// [`SimOutcome::no_change_key`] and `token_trust`'s view of its judgments.
+/// [`SimOutcome::no_change_key`] and [`no_change_key_of`].
 #[must_use]
 pub fn no_change_key<'a>(deltas: impl IntoIterator<Item = &'a str>) -> Option<&'static str> {
     deltas.into_iter().all(is_zero).then_some(KEY_NO_CHANGE)
+}
+
+/// [`no_change_key`] over a checked answer's JUDGMENTS — what `token_trust`'s
+/// view and a sheet hold. The same rule, asked of each judgment
+/// ([`TrustSimJudgment::moves_nothing`]): an unverified token carries no
+/// figure to read a zero from, only its direction.
+#[must_use]
+pub fn no_change_key_of(judgments: &[TrustSimJudgment]) -> Option<&'static str> {
+    judgments
+        .iter()
+        .all(TrustSimJudgment::moves_nothing)
+        .then_some(KEY_NO_CHANGE)
 }
 
 /// A signed decimal that is zero: an optional sign, then one or more `0`s.
