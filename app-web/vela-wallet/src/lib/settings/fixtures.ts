@@ -1180,6 +1180,17 @@ function balanceDetail(m: SettingsMessages): BalanceDetailModel {
 				status: m.balanceDetail.statusFailed,
 				tone: 'error',
 				action: m.balanceDetail.retry
+			},
+			// A network whose RPC answers and whose token list could not be
+			// loaded: the core's other short status (`status_key`, PR 3 final
+			// note F21) — "RPC unavailable" would be false of it.
+			{
+				id: 'tempo',
+				mark: MARKS.tempo,
+				name: 'Tempo',
+				status: m.balanceDetail.statuses['home.balanceDetailStatusTokenList'],
+				tone: 'error',
+				action: m.balanceDetail.retry
 			}
 		],
 		sectionDone: m.balanceDetail.updatedLabel,
