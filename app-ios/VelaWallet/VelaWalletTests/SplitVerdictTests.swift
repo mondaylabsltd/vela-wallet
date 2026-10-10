@@ -327,7 +327,7 @@ final class WriteAheadProbePort: RelayPort {
 }
 
 @MainActor
-@Suite(.timeLimit(.minutes(3)))
+@Suite(.hangLimit)
 struct SplitWriteAheadTests {
 
     private let fixture = TrustedSignerFixture()

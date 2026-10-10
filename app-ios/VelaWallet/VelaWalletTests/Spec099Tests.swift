@@ -103,7 +103,7 @@ struct EnginePlanTests {
     /// loads it and says so until the person leaves it.
     ///
     /// Each tab is a real WKWebView (see `DebugModeTests` on why the limit).
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aSuspendedTabWakesReloadedAndABusyOneIsKept() async throws {
         let h = BrowserHarness()
         await h.boot()
@@ -210,7 +210,7 @@ struct ReadDeadlineTests {
     /// Through the real core: the page is answered, and the tab's record
     /// names the network layer and the reason — in the core's own key, which
     /// the shell's mirror of the vocabulary agrees with.
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.hangLimit)
     func theCoreNamesEachReadFailure() async throws {
         for reason in ["timed_out", "rate_limited", "no_endpoint"] {
             let h = BrowserHarness()
@@ -619,7 +619,7 @@ struct SignerKindTests {
     /// used, the core names the signer, the confirm stays shut with its line,
     /// and the sheet says it in the signer's words — tried again only when a
     /// retry can help.
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.hangLimit)
     func theSheetNamesTheSigner() async throws {
         for (kind, expected, retryable) in [
             (FailureKind.notSupported, SignErrorKind.signerUnavailable, false),
@@ -799,7 +799,7 @@ struct TabBatchCloseTests {
     // under one minute timed out on a loaded CI runner.
 
     /// A selection that survives stays.
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.hangLimit)
     func aSurvivingSelectionStays() async throws {
         let h = BrowserHarness()
         let ids = try await fourTabs(h, selected: 1)
@@ -810,7 +810,7 @@ struct TabBatchCloseTests {
     }
 
     /// Closed, nothing on its right survives: the nearest on its left.
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.hangLimit)
     func aClosedSelectionMovesLeftWhenNothingSurvivesOnItsRight() async throws {
         let h = BrowserHarness()
         let ids = try await fourTabs(h, selected: 3)
@@ -821,7 +821,7 @@ struct TabBatchCloseTests {
 
     /// Closed, a survivor on its right: that one — "close other tabs" lands on
     /// the tab kept.
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.hangLimit)
     func closingOthersSelectsTheTabKept() async throws {
         let h = BrowserHarness()
         let ids = try await fourTabs(h, selected: 0)
@@ -832,7 +832,7 @@ struct TabBatchCloseTests {
 
     /// All: nothing selected — the start page — and the write landed: a
     /// browser over the same store reads the empty strip back.
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.hangLimit)
     func closingAllLeavesTheStartPageAndPersists() async throws {
         let h = BrowserHarness()
         _ = try await fourTabs(h, selected: 2)
@@ -855,7 +855,7 @@ struct TabBatchCloseTests {
     /// it is resumed.
     ///
     /// Each tab is a real WKWebView (see `DebugModeTests` on why the limit).
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func theTabsItTakesLoseTheirPages() async throws {
         let h = BrowserHarness()
         await h.boot()

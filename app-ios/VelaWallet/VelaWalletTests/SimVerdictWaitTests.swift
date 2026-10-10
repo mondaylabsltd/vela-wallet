@@ -33,7 +33,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(4)))
+@Suite(.serialized, .hangLimit)
 struct SimVerdictWaitTests {
 
     private let en = Loc(overrideTag: "en", preferredLanguages: [])

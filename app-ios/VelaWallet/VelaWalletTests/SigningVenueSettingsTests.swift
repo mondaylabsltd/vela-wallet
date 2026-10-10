@@ -28,7 +28,7 @@ import VelaCore
 /// bounds (`Waits.swift`). With no limit, one that never came would have
 /// taken the job with it; this reports it.
 @MainActor
-@Suite(.timeLimit(.minutes(5)))
+@Suite(.hangLimit)
 struct SigningVenueSettingsTests {
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])
     private let official = "https://sign.getvela.app/"

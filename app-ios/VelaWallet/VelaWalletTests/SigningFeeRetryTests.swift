@@ -40,7 +40,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct SigningFeeRetryTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])

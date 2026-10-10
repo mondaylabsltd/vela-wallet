@@ -18,7 +18,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(3)))
+@Suite(.hangLimit)
 struct SendReceiptFollowsTrackerTests {
 
     private let fixture = TrustedSignerFixture()

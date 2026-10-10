@@ -24,7 +24,7 @@ import Testing
 /// than five minutes. With every test started at once the waits overlap and
 /// have stayed inside the run.
 @MainActor
-@Suite(.timeLimit(.minutes(5)))
+@Suite(.hangLimit)
 struct EraseDeviceTests {
 
     private func fresh() -> (UserDefaults, VelaStore) {

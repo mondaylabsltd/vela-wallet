@@ -24,7 +24,7 @@ struct ChainDeadlineTests {
     /// chain at the deadline, never a rate-limited one, and nothing it held;
     /// and the read is cancelled, not left running. Without the deadline this
     /// read would not end for an hour, so the time limit is the proof.
-    @Test(.timeLimit(.minutes(1)))
+    @Test(.hangLimit)
     func aReadThatNeverAnswersIsFailedAtTheDeadline() async {
         let cancelled = OSAllocatedUnfairLock(initialState: false)
         let started = Date()
@@ -48,7 +48,7 @@ struct ChainDeadlineTests {
     }
 
     /// A chain that answers in time is that answer, untouched.
-    @Test(.timeLimit(.minutes(1)))
+    @Test(.hangLimit)
     func anAnswerInTimeIsTheAnswer() async {
         // A deadline no loaded runner reaches: this read answers at once.
         let result = await TokenReads.bounded(chainId: 1, deadlineMs: 60_000) {
@@ -61,7 +61,7 @@ struct ChainDeadlineTests {
     /// The round as the executor runs it: one chain never answers, the other
     /// does — the round settles at the deadline with both, and the silent one
     /// failed.
-    @Test(.timeLimit(.minutes(1)))
+    @Test(.hangLimit)
     func aRoundWithAStalledChainStillSettles() async {
         let results = await withTaskGroup(of: TokenReads.ChainResult.self) { group in
             group.addTask {
@@ -95,7 +95,7 @@ struct ChainDeadlineTests {
     /// could not answer while it is held, so the hold would never end: the
     /// time limit is the failure, and it lets the hold go, so nothing else in
     /// the suite hangs behind it.
-    @Test(.timeLimit(.minutes(1)))
+    @Test(.hangLimit)
     func theDeadlineFiresWhileTheMainActorIsHeld() async {
         struct Hold: Sendable {
             var holding = false

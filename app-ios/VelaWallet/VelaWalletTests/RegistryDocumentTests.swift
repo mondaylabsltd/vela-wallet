@@ -18,7 +18,7 @@ import Testing
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct RegistryDocumentTests {
 
     private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"

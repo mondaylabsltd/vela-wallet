@@ -275,7 +275,7 @@ struct BrowserChromeTests {
     /// to 14 s into a 14 s run on a laptop, and the run is one to nearly
     /// three minutes on the runner. A wait for what never comes is the time
     /// limit's to report, in five minutes now and not ten.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aSameDocumentArrivalEndsItsLoad() async throws {
         let engine = BrowserEngine(id: "tab-\(UUID().uuidString)")
         defer { engine.tearDown() }

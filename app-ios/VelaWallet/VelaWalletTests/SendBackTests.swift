@@ -19,7 +19,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(3)))
+@Suite(.hangLimit)
 struct SendBackTests {
 
     private let me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"

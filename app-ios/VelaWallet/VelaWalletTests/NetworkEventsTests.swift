@@ -24,7 +24,7 @@ import Testing
 @testable import VelaWallet
 
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(5)))
+@Suite(.serialized, .hangLimit)
 struct NetworkEventsTests {
 
     /// Which operations the machine asked for, in order, and of which URLs.

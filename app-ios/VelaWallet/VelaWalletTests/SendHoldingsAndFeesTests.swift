@@ -54,7 +54,7 @@ final class StaggeredRelayPort: RelayPort {
 /// `quote_unavailable` and no speed row ever settled (`chain_read`), for
 /// quotes the code never failed.
 @MainActor
-@Suite(.timeLimit(.minutes(5)))
+@Suite(.hangLimit)
 struct SendHoldingsAndFeesTests {
     private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private let usdc = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"

@@ -28,7 +28,7 @@ final class ScriptedPath: NetPathSource {
 }
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct NetWatchTests {
 
     /// Three misses, then an answer: one edge — and one retry of the page in

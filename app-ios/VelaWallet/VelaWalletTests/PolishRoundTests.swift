@@ -26,7 +26,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct PolishRoundTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])

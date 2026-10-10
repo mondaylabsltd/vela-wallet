@@ -30,7 +30,7 @@ import VelaCore
 /// asked, which no machine's idleness bounds (`Waits.swift`). With no limit,
 /// one that never came would have taken the job with it; this reports it.
 @MainActor
-@Suite(.timeLimit(.minutes(5)))
+@Suite(.hangLimit)
 struct SubmitVerdictTests {
 
     private let local = "0x" + String(repeating: "11", count: 32)
