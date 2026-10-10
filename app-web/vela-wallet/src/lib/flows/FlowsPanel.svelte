@@ -90,6 +90,12 @@
 		 */
 		recipientRowChanged?(index: number, patch: { address?: string; amount?: string }): void;
 		pickContactFor?(index: number | null): void;
+		/**
+		 * The scanner, for one split row (issue 471): the code it reads lands
+		 * in THAT row — the core's `open_scanner { target }`, as the book's
+		 * per-row pick is `open_contact_picker { target }`.
+		 */
+		scanFor?(index: number): void;
 		filterClass?(id: string): void;
 		continueDisabled: boolean;
 		/** The core's `estimating_gas`: Continue is out checking, not refused. */
@@ -218,6 +224,7 @@
 				? (i, patch) => send.recipientRowChanged?.(i, patch)
 				: undefined}
 			onpickRecipientRow={send?.pickContactFor ? (i) => send.pickContactFor?.(i) : undefined}
+			onscanRecipientRow={send?.scanFor ? (i) => send.scanFor?.(i) : undefined}
 			onamount={send ? (value) => send.amountChanged(value) : undefined}
 			onrecipient={send ? (value) => send.recipientChanged(value) : undefined}
 			ctaDisabled={send?.continueDisabled ?? false}
@@ -237,7 +244,6 @@
 	{:else if body.kind === 'contact-pick'}
 		<ContactPick
 			model={body.model}
-			onscan={() => (send ? send.openScanner() : go('scan'))}
 			onselect={send?.pickContact ? (address) => send.pickContact?.(address) : undefined}
 			ongroup={send?.pickGroup ? (i) => send.pickGroup?.(i) : undefined}
 		/>

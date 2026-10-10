@@ -32,7 +32,7 @@ import {
 
 const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const IDENTICON = () => '<svg></svg>';
 
 function token(
@@ -85,6 +85,9 @@ const FEED: FeedView = {
 	home_empty_key: 'home.emptyNoActivity',
 	hidden: false,
 	contact_rows: [],
+	// The detail is opened from History's list (`rows`); the home's cut plays
+	// no part in naming a tap.
+	home_rows: [],
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
 		{ type: 'item', item: item('a') },
@@ -329,11 +332,17 @@ describe('liveTxDetail', () => {
 			['ETH', '0.001 ETH'],
 			['USDC', '5 USDC']
 		]);
-		// Privacy hides the count with the money, as the Activity row does.
+		// Privacy hides the count with the money, as the Activity row does. A
+		// sweep's hero names no one coin, so its mask stands alone…
 		const hidden = liveTxDetail(sweep, { ...ctx, hidden: true });
-		expect(hidden.amount).not.toContain('2');
-		expect(hidden.amount).not.toBe('');
-		expect(hidden.amount).not.toBe('−');
+		expect(hidden.amount).toBe('••••');
+		// …and each coin it swept is masked too, keeping its unit. These were
+		// drawn in full under the masked hero.
+		expect(hidden.breakdown?.map((row) => [row.label, row.value])).toEqual([
+			['ETH', '•••• ETH'],
+			['USDC', '•••• USDC']
+		]);
+		expect(hidden.fiat).toBe('••••');
 		// A single send still reads as one figure and its coin.
 		expect(liveTxDetail(item('b', { direction: 'out' }), ctx)).toMatchObject({
 			title: 'Sent ETH',
@@ -341,11 +350,64 @@ describe('liveTxDetail', () => {
 		});
 	}, 30_000);
 
-	it('masks the money while privacy hides it', () => {
+	// PR 3 item 12: a hidden transfer's detail read "•••• xDAI" on iOS and a
+	// bare "••••" on Android and here. One rule now: the amount is masked and
+	// its unit is kept — what kind of money, never how much.
+	it('masks the money while privacy hides it — and keeps the coin', () => {
 		const detail = liveTxDetail(item('a'), { ...ctx, hidden: true });
+		expect(detail.amount).toBe('•••• ETH');
 		expect(detail.amount).not.toContain('1.25');
-		expect(detail.fiat).not.toContain('2');
+		// No sign either: which way it went is the title's to say.
+		expect(detail.amount).not.toMatch(/[+−-]/);
+		// A fiat worth has no unit apart from its figure: the bare mask.
+		expect(detail.fiat).toBe('••••');
+		const sent = liveTxDetail(item('b', { direction: 'out', symbol: 'xDAI' }), {
+			...ctx,
+			hidden: true
+		});
+		expect(sent.amount).toBe('•••• xDAI');
+		// Shown, nothing changes.
+		expect(liveTxDetail(item('a'), ctx).amount).toBe('+1.25 ETH');
 	});
+
+	it('a hidden split masks every recipient’s share, each with its coin', async () => {
+		const BOB = '0x' + 'b0'.repeat(20);
+		const CAROL = '0x' + 'ca'.repeat(20);
+		const part = (n: number, to: string, value: string): LocalTransaction => ({
+			id: `split-${n}`,
+			userOpHash: '0x' + 'cd'.repeat(32),
+			txHash: '0x' + 'e5'.repeat(32),
+			from: ACCOUNT,
+			to,
+			value,
+			symbol: 'USDC',
+			decimals: 6,
+			chainId: 8453,
+			timestamp: NOW_S - 60,
+			status: 'confirmed',
+			type: 'send',
+			usd: `$${value}`
+		});
+		const items = await feedItemsThroughCore(
+			[part(1, BOB, '37.5'), part(2, CAROL, '12.25')],
+			ACCOUNT,
+			NOW_S * 1000
+		);
+		expect(items).toHaveLength(1);
+		const split = items[0];
+		expect(split.batch?.kind).toBe('split');
+
+		const shown = liveTxDetail(split, ctx);
+		expect(shown.breakdown?.map((row) => row.value)).toEqual(['37.5 USDC', '12.25 USDC']);
+
+		const hidden = liveTxDetail(split, { ...ctx, hidden: true });
+		expect(hidden.breakdown?.map((row) => row.value)).toEqual(['•••• USDC', '•••• USDC']);
+		// Who was paid is not money: the recipients are still named.
+		expect(hidden.breakdown?.map((row) => row.address)).toEqual([BOB, CAROL]);
+		// Nothing on the whole detail says how much.
+		const text = JSON.stringify(hidden);
+		for (const figure of ['37.5', '12.25', '49.75']) expect(text).not.toContain(figure);
+	}, 30_000);
 
 	// 083 H2, spec 093: a dApp's call opens to what it did and where — the
 	// core's facts in its order, labelled here — and a call that moved no

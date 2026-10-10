@@ -19,7 +19,7 @@ import { switcherBalances } from '$lib/settings/live';
 import { buildMobileState } from '$lib/wallet/fixtures';
 
 const ADDRESS = '0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c';
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const m = resolveWalletMessages('en');
 
 type Out = { view: BalanceView; effects: { id: number; operation: { type: string } }[] };

@@ -121,9 +121,10 @@ describe('state-id inventory (one id per mock in design/settings/)', () => {
 		expect(MOBILE_STATES).toEqual(MOBILE_SETTINGS_STATES);
 		// 16 ST mocks — ST1b, ST3b, ST9b, ST10b, ST10c and ST13b are their own
 		// states, so the ST count is 22 — plus spec 102's ST17/ST17b (where you
-		// review and sign) and ST18/ST18b (signing pages): 26. Then SR1, SR2,
-		// SR2b, SR3, SR4, SR5.
-		expect(MOBILE_STATES.filter((s) => s.startsWith('st'))).toHaveLength(26);
+		// review and sign) and ST18/ST18b (signing pages): 26 — plus ST10d, the
+		// second refusal (no P-256 verifier; ST10c is missing contracts): 27.
+		// Then SR1, SR2, SR2b, SR3, SR4, SR5.
+		expect(MOBILE_STATES.filter((s) => s.startsWith('st'))).toHaveLength(27);
 		expect(MOBILE_STATES.filter((s) => s.startsWith('sr'))).toHaveLength(6);
 	});
 
@@ -235,16 +236,31 @@ describe('canon numbers (pinned against the PNGs)', () => {
 		expect(st1.networkDetail.callout).toBeUndefined();
 	});
 
-	it('ST10b passes every check and ST10c fails all but EntryPoint', () => {
+	it('ST10b passes every check; ST10c and ST10d are the two refusals, each with its own way on', () => {
 		const ok = buildMobileState('st10b', zh, IDENTICON_STUB).addNetwork;
-		const bad = buildMobileState('st10c', zh, IDENTICON_STUB).addNetwork;
+		const contracts = buildMobileState('st10c', zh, IDENTICON_STUB).addNetwork;
+		const verifier = buildMobileState('st10d', zh, IDENTICON_STUB).addNetwork;
 		expect(ok.checks?.map((c) => c.ok)).toEqual([true, true, true, true]);
-		expect(bad.checks?.map((c) => c.ok)).toEqual([true, false, false, false]);
-		// The failing state offers a way forward, not a greyed-out CTA.
 		expect(ok.primary).toBeDefined();
-		expect(bad.primary).toBeUndefined();
-		expect(bad.secondary).toBeDefined();
-		expect(bad.recheck).toBeDefined();
+		// ST10c — contracts are missing, the P-256 verifier is there: something
+		// can be deployed, so Chain Setup is offered, opened on that chain.
+		expect(contracts.checks?.map((c) => c.ok)).toEqual([true, false, true, false]);
+		expect(contracts.primary).toBeUndefined();
+		expect(contracts.callout?.text).toBe(
+			'这个网络上还缺少 Vela 需要的部分合约。链配置工具会列出缺哪些、谁能部署。'
+		);
+		expect(contracts.secondary).toEqual({
+			label: zh.addNetwork.openChainSetupTool,
+			href: 'https://getvela.app/chain-setup?chain=48900'
+		});
+		expect(contracts.recheck).toBeDefined();
+		// ST10d — no P-256 verifier: nothing to deploy, so no button; the line
+		// says the network cannot run Vela wallets and not to send money there.
+		expect(verifier.checks?.map((c) => c.ok)).toEqual([true, true, false, true]);
+		expect(verifier.primary).toBeUndefined();
+		expect(verifier.secondary).toBeUndefined();
+		expect(verifier.callout?.text).toContain('转进去会被卡住');
+		expect(verifier.recheck).toBeDefined();
 	});
 
 	it('ST13 accounts for 2.4 MB over three groups and 216 records', () => {

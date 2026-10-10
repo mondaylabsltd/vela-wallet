@@ -123,6 +123,71 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		expect(control(screen.container).getAttribute('aria-label')).toBe('Updating…');
 	});
 
+	// The hero's skeleton — the first read still out, or the display currency
+	// not the person's yet (the core's rule) — stands in the figure's own line
+	// box. The bar alone was a third shorter than the figure, so the control,
+	// and the whole home under the hero, dropped when the figure landed.
+	it('the figure arriving moves nothing: the skeleton holds its line', async () => {
+		const host = document.createElement('div');
+		host.style.width = '390px';
+		document.body.appendChild(host);
+		const waiting: BalanceModel = {
+			...hero(false),
+			// CNY stored, its rate on its way: named, and no figure yet.
+			currency: 'CNY',
+			state: 'loading',
+			integer: undefined,
+			decimals: undefined,
+			status: undefined
+		};
+		const landed: BalanceModel = {
+			...hero(false),
+			currency: 'CNY',
+			integer: '¥8,761',
+			decimals: '40',
+			status: undefined
+		};
+		const screen = render(BalanceDisplay, { target: host, props: { balance: waiting } });
+		const measure = () => ({
+			control: control(screen.container).getBoundingClientRect().top,
+			hero: host.getBoundingClientRect().height
+		});
+		expect(screen.container.querySelector('.amount')).toBeNull();
+		const before = measure();
+		await screen.rerender({ balance: landed });
+		await tick();
+		expect(screen.container.querySelector('.amount')?.textContent).toContain('¥8,761');
+		expect(measure()).toEqual(before);
+		// …and the tappable figure (live) is the same height as the plain one.
+		await screen.rerender({ balance: landed, ontoggle: () => {} });
+		await tick();
+		expect(measure()).toEqual(before);
+		// At a larger text size too: the slot scales with the face.
+		host.style.setProperty('--text-scale', '1.35');
+		await screen.rerender({ balance: waiting });
+		await tick();
+		const large = measure();
+		await screen.rerender({ balance: landed });
+		await tick();
+		expect(measure()).toEqual(large);
+		screen.unmount();
+		host.remove();
+	});
+
+	it('names the currency once it is known, and nothing before', () => {
+		const label = (balance: BalanceModel) =>
+			render(BalanceDisplay, { props: { balance } })
+				.container.querySelector('.label')
+				?.textContent?.trim();
+		expect(label(hero(false))).toBe('Total balance · USD');
+		// Not committed, nothing stored on its way: no currency is named —
+		// never the placeholder's "USD", which then changed its mind.
+		expect(label({ ...hero(false), currency: undefined, state: 'loading' })).toBe('Total balance');
+		expect(label({ ...hero(false), currency: 'CNY', state: 'loading' })).toBe(
+			'Total balance · CNY'
+		);
+	});
+
 	it('a board with no control draws none', () => {
 		const screen = render(BalanceDisplay, {
 			props: { balance: { ...hero(false), refresh: undefined } }

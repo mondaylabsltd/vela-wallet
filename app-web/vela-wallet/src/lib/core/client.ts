@@ -62,6 +62,7 @@ import init, {
 	peggedNativeUsd,
 	prefsMigrations,
 	prefsRead,
+	publicRpcUrls,
 	ReceiveWatchCore,
 	registryBackupStep,
 	registryChainKeyPlan,
@@ -133,6 +134,11 @@ export { i18nPluralSuffix };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
 export { registryBackupStep, registryNameStep, walletKeysStep };
+// The curated public RPCs behind each built-in network's default — ONE list
+// for all four apps (`network_admin::PUBLIC_RPCS`), where each shell used to
+// keep its own copy and they drifted (the web's still named endpoints that
+// had been answering HTTP 502 for every call).
+export { publicRpcUrls };
 // How a pending request is settled when the request window goes away: 4900,
 // never 4001 (spec 070 T063). The window asks rather than restating it.
 export { dpermSettleOnClose };

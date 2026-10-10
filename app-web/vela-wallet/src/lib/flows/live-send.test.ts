@@ -38,7 +38,7 @@ const identity: WalletIdentity = {
 	address: '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c',
 	identiconSvg: '<svg/>'
 };
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 
 const USDT: SendToken = {
 	network: 'eth-mainnet',
@@ -518,7 +518,7 @@ describe('the form', () => {
 		it("is the FIGURE's currency, not the display currency that moved under it", () => {
 			// Typed in yuan; the display currency has since become euros. "€"
 			// over these digits would be a relabel — the same number, a new unit.
-			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true });
+			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true, pending: null });
 			expect(figure?.adornment).toEqual({ prefix: '¥' });
 			expect(figure?.denomLabel).toBe('CNY');
 		});
@@ -1009,6 +1009,19 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 					...over
 				})
 			);
+
+		// Issue 471: every split row has the same two doors the single field
+		// has — the book and the scanner — each for THAT row. Scanning into a
+		// split used to be a row inside the contact picker and nowhere else.
+		it('gives every row the book and the scanner, named as the single field names them', () => {
+			const rows = split({}).recipients ?? [];
+			expect(rows.map((row) => row.id)).toEqual(['a', 'b']);
+			for (const row of rows) {
+				expect(row.pickLabel).toBe(m['send.recipientPickAria']);
+				expect(row.scanLabel).toBe(m['send.scanAria']);
+			}
+			expect(liveSendForm(formModel(), inputs({})).recipient?.scanLabel).toBe(m['send.scanAria']);
+		});
 
 		it('counts the people in the total and prices the sum', () => {
 			const form = split({});
@@ -1635,13 +1648,14 @@ describe('the fee row says what the fee costs', () => {
 	it('converts into the display currency, at the committed rate only', () => {
 		const model = liveSendForm(formModel(), {
 			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
-			currency: { code: 'EUR', rate: 2, committed: true }
+			currency: { code: 'EUR', rate: 2, committed: true, pending: null }
 		});
 		expect(model.fee.value).toBe('0.000091 BNB');
 		expect(model.fee.valueFiat).toBe('≈ €0.11');
 		const unpriced = liveSendForm(formModel(), {
 			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
-			currency: { code: 'EUR', rate: null, committed: false }
+			// The core's unpriceable pair: committed, with no rate.
+			currency: { code: 'EUR', rate: null, committed: true, pending: null }
 		});
 		expect(unpriced.fee.value).toBe('0.000091 BNB');
 		expect(unpriced.fee.valueFiat).toBe('≈ $0.05');

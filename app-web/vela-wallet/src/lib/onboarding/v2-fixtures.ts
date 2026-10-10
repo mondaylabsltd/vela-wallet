@@ -55,7 +55,31 @@ function key(over: Partial<CreateKeyRow> = {}): CreateKeyRow {
 			};
 }
 
+/** `vela_core::safe::MAX_MULTI_KEYS`. */
+const MAX_KEYS = 7;
+
+/**
+ * The heading over the three places for a set of `keys` drafted keys — a
+ * mirror of `vela_core::app::create_wallet::add_heading_key` (issue 475), so a
+ * fixture's heading is the one the machine emits for its key count.
+ */
+function addHeadingKey(keys: number): string {
+	if (keys === 0) return 'onboarding.create.addKeyBtn';
+	return keys < MAX_KEYS ? 'onboarding.create.addMethodLabel' : 'onboarding.create.keyLimitReached';
+}
+
 function view(over: Partial<CreateView> = {}): CreateView {
+	const drawn = base(over);
+	return {
+		...drawn,
+		// The core's two rules for the keys screen (`CreateView`), from the
+		// fixture's own keys — unless the fixture pins them itself.
+		add_heading_key: over.add_heading_key ?? addHeadingKey(drawn.keys.length),
+		methods_pinned: over.methods_pinned ?? (drawn.keys.length === 0 && drawn.can_add_key)
+	};
+}
+
+function base(over: Partial<CreateView>): Omit<CreateView, 'add_heading_key' | 'methods_pinned'> {
 	return {
 		stage: 'form',
 		name: '',

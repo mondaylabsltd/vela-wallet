@@ -11,7 +11,7 @@ import { withLiveFlow } from './live';
 const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 
 const LOOKED: BalanceView = {
 	address: '0xabc',

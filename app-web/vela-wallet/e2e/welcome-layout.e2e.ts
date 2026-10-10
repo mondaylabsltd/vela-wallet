@@ -104,6 +104,91 @@ for (const width of [1440, 390]) {
 	});
 }
 
+/**
+ * Issue 475: the create flow's screens ran to both edges of a phone. The
+ * page's padding had been commented out so the desktop rail could reach the
+ * window's edges, and it took the phone's gutters with it. Below the desktop
+ * breakpoint the page has the welcome page's gutters; at and above it, none.
+ *
+ * Walked to the keys screen, because that is the screen the issue is about:
+ * with no key yet it shows ONE heading over the three places, and no "+".
+ */
+async function toKeysScreen(page: import('@playwright/test').Page): Promise<void> {
+	await page.goto('/en/create');
+	await page.getByRole('textbox').first().fill('Everyday wallet');
+	for (const box of await page.getByRole('checkbox').all()) await box.check({ force: true });
+	await page.getByRole('button', { name: en('onboarding.create.nextBtn') }).click();
+	await expect(
+		page.getByRole('heading', { name: en('onboarding.create.keysTitle'), level: 1 })
+	).toBeVisible({ timeout: 20_000 });
+}
+
+test('the create flow keeps its gutters on a phone, and the keys screen has one heading', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await toKeysScreen(page);
+
+	// One heading over the three places, open — and nothing else to tap there.
+	await expect(
+		page.getByRole('heading', { name: en('onboarding.create.addKeyBtn'), level: 2 })
+	).toBeVisible();
+	await expect(page.locator('button.method')).toHaveCount(3);
+	await expect(page.locator('button.fold')).toHaveCount(0);
+	await expect(page.locator('.plus')).toHaveCount(0);
+	await expect(
+		page.getByRole('button', { name: en('onboarding.create.addKeyBtn'), exact: true })
+	).toHaveCount(0);
+
+	// The gutters: the welcome page's 24 px, on everything a person reads.
+	const edges = await page.evaluate(() => {
+		const box = (el: Element) => {
+			const r = el.getBoundingClientRect();
+			return { left: r.left, right: r.right };
+		};
+		return {
+			viewport: window.innerWidth,
+			overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+			back: box(document.querySelector('button.back')!),
+			title: box(document.querySelector('h1')!),
+			rows: [...document.querySelectorAll('button.method')].map(box),
+			captions: [...document.querySelectorAll('button.method .caption')].map((el) => ({
+				clipped: el.scrollWidth > el.clientWidth,
+				lines: Math.round(
+					el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).fontSize)
+				)
+			})),
+			cta: box([...document.querySelectorAll('section.screen > *')].at(-1)!)
+		};
+	});
+	expect(edges.overflow).toBe(0);
+	for (const part of [edges.back, edges.title, ...edges.rows, edges.cta]) {
+		expect(part.left).toBeGreaterThanOrEqual(24);
+		expect(part.right).toBeLessThanOrEqual(edges.viewport - 24);
+	}
+	// Each place's caption is one whole line.
+	expect(edges.captions).toEqual([
+		{ clipped: false, lines: 1 },
+		{ clipped: false, lines: 1 },
+		{ clipped: false, lines: 1 }
+	]);
+});
+
+test('at desktop width the create flow gives its gutters up to the rail', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await toKeysScreen(page);
+	// The page itself is unpadded: the rail brings its own and reaches the edge.
+	const padding = await page
+		.locator('main.page')
+		.evaluate((el) => getComputedStyle(el).paddingInlineStart);
+	expect(padding).toBe('0px');
+	expect(
+		await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		)
+	).toBe(0);
+});
+
 test('sign-in stays on Welcome — it has no steps to show', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/en');

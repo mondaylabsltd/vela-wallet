@@ -27,10 +27,17 @@
 </script>
 
 <div class="balance">
-	<p class="label">{balance.label} · {balance.currency}</p>
+	<!-- The currency is named once it is known (`BalanceModel.currency`): the
+	     label never says the placeholder's "USD" and then changes its mind. -->
+	<p class="label">
+		{balance.currency === undefined ? balance.label : `${balance.label} · ${balance.currency}`}
+	</p>
 
 	{#if balance.state === 'loading'}
-		<SkeletonRow kind="block" />
+		<!-- The skeleton stands in the figure's own line box: when the figure
+		     arrives — the first read landing, or the display currency
+		     committing — nothing under it moves. -->
+		<div class="amount-slot"><SkeletonRow kind="block" /></div>
 	{:else if balance.state === 'hidden'}
 		<p class="amount hidden-row">
 			<span class="mask">{balance.integer}</span>
@@ -156,6 +163,16 @@
 	.decimals {
 		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	/* One line of the amount's face, exactly: the bar inside keeps its own
+	   size and sits on the line's middle. The bar alone was a third shorter
+	   than the figure, so everything under the hero dropped when it landed. */
+	.amount-slot {
+		display: flex;
+		align-items: center;
+		width: 100%;
+		height: calc(var(--text-5xl) * var(--text-scale, 1) * var(--leading-amountHero));
 	}
 
 	.hidden-row {

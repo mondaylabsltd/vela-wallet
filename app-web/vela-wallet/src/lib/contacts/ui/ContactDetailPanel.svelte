@@ -19,8 +19,13 @@
 		 */
 		onedit?: () => void;
 		ondelete?: () => void;
-		/** The three pills, the address copy, the chips' `+`, 查看全部往来 (spec 028 US5). */
-		onaction?: (id: 'send' | 'receive' | 'qr') => void;
+		/**
+		 * Send, the address copy, the chips' `+`, 查看全部往来 (spec 028 US5).
+		 * Send is the page's one action (issue 479): Receive went to the
+		 * WALLET's own code, not this person's, and the contact's address
+		 * stays copyable below.
+		 */
+		onaction?: (id: 'send') => void;
 		oncopy?: () => void;
 		onaddgroup?: () => void;
 		onactivityall?: () => void;
@@ -85,14 +90,6 @@
 		<button type="button" onclick={() => onaction?.('send')}>
 			<Icon icon={UTILITY_ICONS['arrow-up-right']} size="base" />
 			<span>{detail.actions.send}</span>
-		</button>
-		<button type="button" onclick={() => onaction?.('receive')}>
-			<Icon icon={UTILITY_ICONS['arrow-down-left']} size="base" />
-			<span>{detail.actions.receive}</span>
-		</button>
-		<button type="button" onclick={() => onaction?.('qr')}>
-			<Icon icon={UTILITY_ICONS['qr-code']} size="base" />
-			<span>{detail.actions.qr}</span>
 		</button>
 	</div>
 

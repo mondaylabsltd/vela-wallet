@@ -178,18 +178,6 @@
 							icon: UTILITY_ICONS['arrow-up-right'],
 							onclick: () =>
 								onuievent?.({ kind: 'action', id: 'send', address: detail.contact.addressFull })
-						},
-						{
-							label: detail.actions.receive,
-							icon: UTILITY_ICONS['arrow-down-left'],
-							onclick: () =>
-								onuievent?.({ kind: 'action', id: 'receive', address: detail.contact.addressFull })
-						},
-						{
-							label: detail.actions.qr,
-							icon: UTILITY_ICONS['qr-code'],
-							onclick: () =>
-								onuievent?.({ kind: 'action', id: 'qr', address: detail.contact.addressFull })
 						}
 					]}
 				/>

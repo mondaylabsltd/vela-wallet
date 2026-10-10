@@ -11,6 +11,8 @@
  * from — which is the point of keeping copy in one corpus rather than one per
  * surface.
  */
+import type { NetHintKey } from '$lib/settings/messages';
+
 export interface RequestMessages {
 	/** Template — 'Connect to {{host}}'. */
 	title: string;
@@ -57,7 +59,11 @@ export interface AddNetworkMessages {
 	checking: string;
 	compatible: string;
 	incompatible: string;
-	incompatibleHint: string;
+	/**
+	 * The line under a refusal, by corpus key — the core says which
+	 * (`NetCompatibility.hint_key`): no P-256 verifier, or missing contracts.
+	 */
+	hints: Record<NetHintKey, string>;
 	singleKeyOnly: string;
 	unableToVerify: string;
 	/** Template — '… (chain {{actual}}, expected {{expected}}).' */

@@ -237,6 +237,8 @@
 			busy={view.busy}
 			maxKeys={MAX_KEYS}
 			addMethods={view.add_methods}
+			addHeadingKey={view.add_heading_key}
+			methodsPinned={view.methods_pinned}
 			signingDomain={view.signing_domain}
 			signingPage={view.signing_page ?? null}
 			{strings}

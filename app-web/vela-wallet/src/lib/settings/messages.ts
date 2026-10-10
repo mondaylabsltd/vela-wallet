@@ -190,7 +190,14 @@ export interface SettingsMessages {
 		/** Invariant ③: an unanswered probe is "unable to verify", never "incompatible". */
 		unableToVerify: string;
 		retry: string;
-		incompatibleHint: string;
+		/**
+		 * The line under a refused network's check, BY CORPUS KEY. The core
+		 * says which one (`NetCompatibility.hint_key`): no P-256 verifier —
+		 * the network cannot run Vela wallets and money sent there would be
+		 * stuck — or contracts that are missing and can be deployed. The two
+		 * have opposite next steps, so the shell never picks between them.
+		 */
+		hints: Record<NetHintKey, string>;
 		/**
 		 * Spec 081 FR-009: the chain works, and a wallet with more than one
 		 * passkey still cannot be created on it. Said beside a green
@@ -429,12 +436,18 @@ export interface SettingsMessages {
 	};
 	/** The Ethereum backup row (spec 062): the founding record's standing there. */
 	backup: {
-		title: string;
-		backedUp: string;
-		notBackedUp: string;
-		couldNotCheck: string;
-		checking: string;
-		/** What is being published, and what is not: PUBLIC keys only. */
+		/**
+		 * The row's words BY CORPUS KEY. The core names the key for each state
+		 * (`registry_backup::BackupRow`: its title, its second line); the shell
+		 * only looks the key up, so which words a state says is never decided
+		 * here. Every key the core can name is in `BACKUP_ROW_KEYS`.
+		 */
+		words: Record<BackupRowKey, string>;
+		/**
+		 * What the copy makes public — the wallet's name, and each key's name,
+		 * public key, credential ID and authenticator model — and that it costs
+		 * a network fee.
+		 */
 		explain: string;
 	};
 	/** The keys that control this wallet (spec 062). */
@@ -547,6 +560,37 @@ export const VENUE_BLOCK_KEYS = [
 export type VenueBlockKey = (typeof VENUE_BLOCK_KEYS)[number];
 
 /**
+ * The lines a refused network's check can say — every `hint_key` the core's
+ * `NetCompatibility` names (`network_admin`: `NO_P256_HINT`,
+ * `MISSING_CONTRACTS_HINT`). Settings' wizard and a dApp's add-network sheet
+ * both resolve these; `net-refusal.test.ts` holds the list to the core's
+ * source.
+ */
+export const NET_HINT_KEYS = [
+	'settingsModals.addNetwork.noP256Hint',
+	'settingsModals.addNetwork.incompatibleHint'
+] as const;
+
+export type NetHintKey = (typeof NET_HINT_KEYS)[number];
+
+/**
+ * Every corpus key the core's backup row can name
+ * (`vela_core::registry_backup`: `TITLE_KEY`, `CHECKING_KEY` and each
+ * `BackupState::row()` second line). `ethereum-backup-row.test.ts` reads the
+ * core's source and fails if it names one that is not here.
+ */
+export const BACKUP_ROW_KEYS = [
+	'settingsModals.backup.title',
+	'settingsModals.backup.backedUp',
+	'settingsModals.backup.notBackedUp',
+	'settingsModals.backup.couldNotCheck',
+	'settingsModals.backup.cannotCopy',
+	'componentsUi.funding.checking'
+] as const;
+
+export type BackupRowKey = (typeof BACKUP_ROW_KEYS)[number];
+
+/**
  * Every corpus key the settings screens consume, in the order the manifest
  * declares them. The parity test iterates this, so a key that stops resolving
  * fails the build rather than shipping a dotted path onto a screen.
@@ -652,6 +696,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.backup.backedUp',
 	'settingsModals.backup.notBackedUp',
 	'settingsModals.backup.couldNotCheck',
+	'settingsModals.backup.cannotCopy',
 	'componentsUi.funding.checking',
 	'settingsModals.keys.title',
 	'settingsModals.keys.subtitle',
@@ -689,6 +734,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.addNetwork.customRpcPlaceholder',
 	'settingsModals.addNetwork.addNetworkBtn',
 	'settingsModals.addNetwork.incompatibleHint',
+	'settingsModals.addNetwork.noP256Hint',
 	'settingsModals.addNetwork.singleKeyOnly',
 	'settingsModals.addNetwork.openChainSetupTool',
 	'settingsModals.addNetwork.recheckWithRpc',

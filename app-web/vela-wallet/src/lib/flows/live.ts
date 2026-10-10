@@ -34,7 +34,7 @@ import {
 	drawnMark,
 	tokenMarkFor
 } from './marks';
-import { chainColor, MASK } from '$lib/wallet/fixtures';
+import { chainColor } from '$lib/wallet/fixtures';
 import type {
 	AddTokenTab,
 	FactRowModel,
@@ -52,6 +52,7 @@ import {
 	liveActivityGroups,
 	liveActivityRow,
 	liveAssetRow,
+	maskedFigure,
 	moneyText,
 	narrowedFeed,
 	tokenAmountText,
@@ -192,7 +193,8 @@ function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel
 	// list and the page's row index walk one feed.
 	const feed = narrowedFeed(inputs.feed, inputs.chainFilter ?? null);
 	// The feed's own flag (`FeedView.hidden`), as every feed surface reads it.
-	const groups = liveActivityGroups(feed, m, feed.hidden);
+	// Every row (`rows`), never the home's cut of three (`home_rows`).
+	const groups = liveActivityGroups(feed.rows, m, feed.hidden);
 	return {
 		...model,
 		header,
@@ -413,7 +415,9 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		mark: balanceTokenMark(token),
 		symbol: token.symbol,
 		chain: chainName(token.chain_id),
-		balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
+		balance: hidden
+			? maskedFigure(token.symbol)
+			: `${tokenAmountText(token.balance)} ${token.symbol}`,
 		fiat,
 		facts,
 		rows,

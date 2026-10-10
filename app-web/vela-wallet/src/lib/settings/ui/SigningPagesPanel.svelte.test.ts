@@ -26,7 +26,7 @@ const PANEL: SigningPagesModel = {
 			keysOn: 'Keys on getvela.app',
 			official: true,
 			integrity: {
-				text: "Version 0ba8ee8c · matches Vela's published build list · checked 14:32",
+				text: "Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked 14:32",
 				tone: 'ok'
 			}
 		},
@@ -42,7 +42,7 @@ const PANEL: SigningPagesModel = {
 		},
 		{
 			url: 'https://sign.example.org/',
-			name: 'Self-hosted · sign.example.org',
+			name: 'Self-hosted\u00a0· sign.example.org',
 			official: false,
 			integrity: {
 				text: 'Version 9be01d44 is new to this device. Trust it?',

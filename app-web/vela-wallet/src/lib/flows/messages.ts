@@ -297,7 +297,6 @@ export const WALLET_FLOW_KEYS = [
 	// send · contact picker
 	'send.pickContactTitle',
 	'send.pickContactSearch',
-	'send.scanToFill',
 	'contacts.sectionGroups',
 	'contacts.title',
 	'contacts.groupMembers',

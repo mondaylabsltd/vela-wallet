@@ -39,7 +39,15 @@ import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { MASK } from './fixtures';
 import { shortenAddress } from './identity';
-import { allowanceFigure, changeFigure, dappTitle, dayLabel, moneyText, trimBalance } from './live';
+import {
+	allowanceFigure,
+	changeFigure,
+	dappTitle,
+	dayLabel,
+	maskedFigure,
+	moneyText,
+	trimBalance
+} from './live';
 import { fill, type WalletMessages } from './messages';
 
 /** The feed item a tap named, by the id the live rows carry. */
@@ -250,7 +258,9 @@ function changeLine(change: FeedDappChange, ctx: TxDetailContext): string {
 	if (!change.verified || change.value === null) {
 		return `${changeFigure(change)} ${ctx.m['componentsUi.signing.balanceUnverifiedToken']}`;
 	}
-	return `${ctx.hidden ? MASK : changeFigure(change)} ${change.symbol}`.trim();
+	return ctx.hidden
+		? maskedFigure(change.symbol)
+		: `${changeFigure(change)} ${change.symbol}`.trim();
 }
 
 /** The detail's facts (spec 093): the core's, in its order, labelled and formatted here. */
@@ -277,7 +287,10 @@ function dappFacts(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): FactRo
 						label: m['componentsUi.signingApprove.spendingCap'],
 						// The row's own figure is this cap: the core says whether it
 						// is money (`figure_maskable` — an unlimited one is not).
-						value: hidden && item.figure_maskable ? MASK : `${figure.amount} ${figure.unit}`.trim(),
+						value:
+							hidden && item.figure_maskable
+								? maskedFigure(figure.unit)
+								: `${figure.amount} ${figure.unit}`.trim(),
 						...(figure.danger ? { tone: 'danger' as const } : {})
 					}
 				];
@@ -402,11 +415,17 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 	if (item.value !== null) {
 		const about = dapp.estimated ? '≈ ' : '';
 		const sign = item.direction === 'in' ? '+' : '−';
-		amount = hidden ? MASK : `${about}${sign}${trimBalance(item.value)} ${item.symbol}`.trim();
+		// Hidden: the mask, and the coin kept (`maskedFigure`).
+		amount = hidden
+			? maskedFigure(item.symbol)
+			: `${about}${sign}${trimBalance(item.value)} ${item.symbol}`.trim();
 		fiat = fiatText(item, ctx);
 	} else if (dapp.allowance !== null) {
 		const figure = allowanceFigure(dapp.allowance, wm);
-		amount = hidden && item.figure_maskable ? MASK : `${figure.amount} ${figure.unit}`.trim();
+		amount =
+			hidden && item.figure_maskable
+				? maskedFigure(figure.unit)
+				: `${figure.amount} ${figure.unit}`.trim();
 		danger = figure.danger;
 	} else if (back !== null) {
 		// Spec 097 N5: nothing left, something came back (a borrow) — what
@@ -486,6 +505,12 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	// recipients by name and avatar, the sweep's assets by their marks —
 	// under the facts, where the single send's "To" would have been.
 	const batch = item.batch;
+	// Each part's figure is money on a masked surface (the core's
+	// `MoneySurface::TransferDetail`): hidden, it is the mask and its coin.
+	// These were drawn in full under a masked hero — who got how much of a
+	// split, with the balance hidden — until the unit rule was looked at.
+	const partValue = (transfer: { value: string; symbol: string }) =>
+		hidden ? maskedFigure(transfer.symbol) : `${trimBalance(transfer.value)} ${transfer.symbol}`;
 	const parts: BreakdownRowModel[] =
 		batch === null
 			? []
@@ -495,12 +520,12 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 								identiconSvg: ctx.identicon(transfer.to),
 								address: transfer.to,
 								label: transfer.to_name ?? shortenAddress(transfer.to),
-								value: `${trimBalance(transfer.value)} ${transfer.symbol}`
+								value: partValue(transfer)
 							}
 						: {
 								lead: sweptCoinMark(item.chain_id, transfer),
 								label: transfer.symbol,
-								value: `${trimBalance(transfer.value)} ${transfer.symbol}`
+								value: partValue(transfer)
 							}
 				);
 	const breakdownTitle =
@@ -538,7 +563,10 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		// this one stamped "Confirmed" on a send that never left the wallet.
 		status: statusChip(status, m),
 		closeLabel: m['componentsUi.identiconViewer.close'],
-		amount: figure === '' ? '' : hidden ? MASK : figure,
+		// Hidden: the mask and the coin ("•••• xDAI"). A sweep's hero names no
+		// one coin — it counts them — so its mask stands alone.
+		amount:
+			figure === '' ? '' : hidden ? maskedFigure(item.value !== null ? item.symbol : '') : figure,
 		fiat: dappTx && item.value === null ? '' : fiatText(item, ctx),
 		positive: received,
 		facts,

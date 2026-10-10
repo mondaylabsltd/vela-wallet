@@ -181,7 +181,7 @@ function inputs(over: Partial<SigningLiveInputs> = {}): SigningLiveInputs {
 		clear: DECODED,
 		guard: INITIAL_GUARD_VIEW,
 		fee: QUOTED_FEE,
-		currency: { code: 'USD', rate: 1, committed: true },
+		currency: { code: 'USD', rate: 1, committed: true, pending: null },
 		m,
 		identity,
 		identicon,
@@ -1783,10 +1783,21 @@ describe("the wallet's own backup, as the core reads it", () => {
 		expect(rows && 'rows' in rows ? rows.rows.map((r) => [r.label, r.value]) : null).toEqual([
 			[zh.terms.labelNetwork, 'Ethereum'],
 			[zh.terms.labelAddress, '0x88cCA0…266894'],
+			// What the copy makes public beyond the keys: the wallet's own name,
+			// read by the core from the record's bytes.
+			[zh.terms.labelWalletName, 'Interleave'],
 			[zh.terms.labelPublicKeys, '3']
 		]);
 		expect(model.confirm.action).toBe(zh.terms.intentBackUpPublicKeys);
-		expect(zh.terms.intentBackUpPublicKeys).not.toBe('Back up public keys');
+		// The reader's words, and honest ones: it is a copy of the wallet's
+		// record, not "a backup of public keys".
+		expect(zh.terms.intentBackUpPublicKeys).toBe('复制钱包记录');
+		expect(zh.terms.labelWalletName).toBe('钱包名称');
+		expect(zh.terms.labelPublicKeys).toBe('包含的钥匙');
+		const en = resolveSigningMessages('en');
+		expect(en.terms.intentBackUpPublicKeys).toBe("Copy this wallet's record");
+		expect(en.terms.labelWalletName).toBe('Wallet name');
+		expect(en.terms.labelPublicKeys).toBe('Keys included');
 	});
 
 	it('is the wallet’s own only when the request says so — a site sending the same bytes stays a site', () => {
@@ -1999,7 +2010,7 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 		expect(fiat).toContain('1,000,000,000,000,000,000,000,000');
 		// The display currency, converted — not "$" over a euro figure.
 		const eur = buildSigningModel(
-			inputs({ currency: { code: 'EUR', rate: 0.5, committed: true } })
+			inputs({ currency: { code: 'EUR', rate: 0.5, committed: true, pending: null } })
 		)!.blocks.find((b) => b.kind === 'amount');
 		const euros = eur?.kind === 'amount' ? (eur.line.fiat ?? '') : '';
 		expect(euros).not.toContain('$');

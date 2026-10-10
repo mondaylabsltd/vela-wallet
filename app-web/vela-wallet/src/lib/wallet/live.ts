@@ -24,6 +24,7 @@ import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedLine } from '$lib/core/generated/FeedLine';
+import type { FeedRow } from '$lib/core/generated/FeedRow';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { formatRelativeTime } from '$lib/core/kernels';
 import {
@@ -131,18 +132,23 @@ export function liveChainRows(
  * The feed narrowed to one chain — the phone app's `filterFeedRowsByChain`.
  * A day header whose items all fell away goes with them, or the list would
  * show dates with nothing under them.
+ *
+ * Both lists are narrowed the same way: `rows` (History, every one) and
+ * `home_rows` (the home's newest three, issue 469). Which rows are the
+ * home's is the core's cut — this only drops what is not on the chain, it
+ * never counts.
  */
 export function narrowedFeed(feed: FeedView, filter: number | null): FeedView {
 	if (filter === null) return feed;
-	const kept = feed.rows.filter((row) => row.type === 'header' || row.item.chain_id === filter);
-	return {
-		...feed,
-		rows: kept.filter((row, i) => {
+	const narrowed = (rows: FeedRow[]): FeedRow[] => {
+		const kept = rows.filter((row) => row.type === 'header' || row.item.chain_id === filter);
+		return kept.filter((row, i) => {
 			if (row.type !== 'header') return true;
 			const next = kept[i + 1];
 			return next !== undefined && next.type !== 'header';
-		})
+		});
 	};
+	return { ...feed, rows: narrowed(feed.rows), home_rows: narrowed(feed.home_rows) };
 }
 
 // ---------------------------------------------------------------------------
@@ -170,9 +176,58 @@ export function fixedTwo(value: number): [string, string] {
 }
 
 /**
+ * A token figure as balance privacy draws it: the mask where the amount was,
+ * and the UNIT KEPT — "•••• xDAI". The unit says what kind of money without
+ * saying how much, so a hidden row still reads as the transfer it is.
+ *
+ * One rule for every masked token figure on the web, and the same on all four
+ * apps (PR 3 item 12: a hidden transfer's detail read "•••• xDAI" on iOS and a
+ * bare "••••" on Android and here). The activity ROW always kept its unit —
+ * it draws the amount and the unit apart; this is for the surfaces that write
+ * the two as one string. A fiat worth has no unit apart from its figure, so
+ * it stays the bare mask.
+ */
+export function maskedFigure(unit: string): string {
+	const kept = unit.trim();
+	// No unit of its own (a sweep's count): the mask alone, never a trailing space.
+	return kept === '' ? MASK : `${MASK} ${kept}`;
+}
+
+/**
+ * What stands where a money figure WILL be, while the display currency is not
+ * the person's yet.
+ *
+ * The core's rule (`CurrencyView.committed`): while it is false the pair on
+ * the wire is the USD/1 placeholder, and no money figure is drawn in it — a
+ * home that showed "$1,234" for a few seconds and then jumped to "¥8,876" is
+ * what this rule ends (the 102 device run). The hero keeps its skeleton
+ * (`liveBalance`); every other figure is this mark, from `moneyText`, so no
+ * surface has to remember the rule and the line it stands on is already the
+ * height the figure will be. The figure appears once, in the right money.
+ */
+export const MONEY_PENDING = '…';
+
+/**
+ * The currency a figure is — or will be — counted in, for a surface that
+ * names it apart from the figure (the hero's "Total · CNY").
+ *
+ * Committed: the code the figure is really in — the display currency, or USD
+ * when it could not be priced (`moneyParts` degrades the same way). Not yet:
+ * the person's stored choice on its way (`CurrencyView.pending`), and nothing
+ * at all while even that is unknown — never the placeholder's "USD".
+ */
+export function figureCurrency(currency: CurrencyView): string | undefined {
+	if (!currency.committed) return currency.pending ?? undefined;
+	return currency.rate !== null ? currency.code : 'USD';
+}
+
+/**
  * A USD amount in the display currency: converted at the committed rate, or
  * the USD figure itself when the shell could not price the currency —
  * `rate: null` is NOT 1 (024's rule; a defaulted 1 under a ¥ is a lie).
+ *
+ * Pure formatting: whether a figure may be drawn at all (`committed`) is
+ * `moneyText`'s and `liveBalance`'s to rule, before they come here.
  */
 export function moneyParts(
 	usd: number,
@@ -192,6 +247,8 @@ export function moneyParts(
 }
 
 export function moneyText(usd: number, currency: CurrencyView): string {
+	// Not the person's currency yet: no figure, in any money (`MONEY_PENDING`).
+	if (!currency.committed) return MONEY_PENDING;
 	const parts = moneyParts(usd, currency);
 	return `${parts.integer}${numberSeparators().decimal}${parts.decimals}`;
 }
@@ -432,10 +489,19 @@ export function liveBalance(
 	if (view.hidden) {
 		return {
 			...base,
-			currency: currency.rate !== null ? currency.code : 'USD',
+			currency: figureCurrency(currency),
 			state: 'hidden',
 			integer: BALANCE_MASK
 		};
+	}
+
+	// The display currency is not the person's yet (`CurrencyView.committed`):
+	// the skeleton, whatever the balance already knows. The cached total is
+	// ready in milliseconds and the rate takes a round trip, so this is the
+	// frame that drew "$1,234" and then jumped to "¥8,876". The label names
+	// the stored choice on its way (`pending`) or no currency at all.
+	if (!currency.committed) {
+		return { ...base, currency: figureCurrency(currency), state: 'loading' };
 	}
 
 	// The core withholds the display total while the skeleton shows; the
@@ -449,7 +515,7 @@ export function liveBalance(
 	if (total === null || view.unreachable) {
 		return {
 			...base,
-			currency: currency.rate !== null ? currency.code : 'USD',
+			currency: figureCurrency(currency),
 			state: 'loading',
 			// Spec 038 finding 15: a first launch with no network is
 			// "unreachable" over the skeleton, never a settled-looking $0 —
@@ -733,14 +799,21 @@ export function dappTitle(dapp: FeedDapp, m: RowMessages): string {
 	return dapp.place != null ? fill(m.activity.dappRowTitle, { intent, place: dapp.place }) : intent;
 }
 
-/** The core emits headers and items already interleaved (invariant ⑥). */
+/**
+ * The core emits headers and items already interleaved (invariant ⑥).
+ *
+ * `rows` is the list to draw, and WHICH list is the caller's to say: History
+ * hands `FeedView.rows` (every one), the home hands `FeedView.home_rows` (the
+ * core's newest three, issue 469). Nothing here caps — a cap in this helper
+ * would silently cut History short too.
+ */
 export function liveActivityGroups(
-	view: FeedView,
+	rows: FeedRow[],
 	m: WalletMessages,
 	hidden: boolean
 ): ActivityGroupModel[] {
 	const groups: ActivityGroupModel[] = [];
-	for (const row of view.rows) {
+	for (const row of rows) {
 		if (row.type === 'header') {
 			groups.push({ label: dayLabel(row.day_start_ms, m), rows: [] });
 			continue;
@@ -797,7 +870,9 @@ export function liveAssetDetail(
 		token: {
 			ticker: token.symbol,
 			badgeColor: art.badgeColor,
-			balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
+			balance: hidden
+				? maskedFigure(token.symbol)
+				: `${tokenAmountText(token.balance)} ${token.symbol}`,
 			fiatLine: [fiat, chainName(token.chain_id)].filter((part) => part !== undefined).join(' · '),
 			logoUrls: art.logoUrls,
 			badgeLogoUrl: art.badgeLogoUrl,
@@ -872,9 +947,12 @@ function liveSections(inputs: WalletLiveInputs) {
 				: assetsMode(view),
 		assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
 		activityMode: activityMode(view, feed),
+		// The home's Activity is the newest three (issue 469): the core's
+		// `home_rows`, never `rows` — a long history pushed Assets off the
+		// screen. "All" opens History, which draws every row.
 		// The feed masks on its own flag (`FeedView.hidden`), never the
 		// balance machine's threaded through (`app::privacy`).
-		activityGroups: feed ? liveActivityGroups(feed, m, feed.hidden) : [],
+		activityGroups: feed ? liveActivityGroups(feed.home_rows, m, feed.hidden) : [],
 		// Spec 082 RG5: which empty line the home says is the core's
 		// (`FeedView.home_empty_key`) — "no activity" or "none on this network".
 		activityEmpty: {

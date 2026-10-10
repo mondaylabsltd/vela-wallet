@@ -64,8 +64,6 @@ export interface ContactsMessages {
 	addressLabel: string;
 	copyAddress: string;
 	send: string;
-	receive: string;
-	actionQr: string;
 	deleteContact: string;
 	delete: string;
 	deleteTitle: string;
@@ -160,7 +158,6 @@ export const CONTACTS_KEYS = [
 	'contacts.deleteTitle',
 	'contacts.deleteBody',
 	'contacts.cancel',
-	'contacts.actionQr',
 	'contacts.importDoneTitle',
 	'contacts.importDoneBody',
 	'contacts.importDoneInvalid',
@@ -178,7 +175,6 @@ export const CONTACTS_KEYS = [
 	'common.done',
 	'componentsUi.identiconViewer.copyAddress',
 	'componentsUi.dock.send',
-	'componentsUi.dock.receive',
 	'history.labelSent',
 	'history.labelReceived',
 	'history.filterAll',

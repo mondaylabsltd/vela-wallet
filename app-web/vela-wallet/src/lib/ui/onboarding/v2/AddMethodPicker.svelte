@@ -84,11 +84,14 @@
 		list-style: none;
 	}
 
+	/* A row in Settings' metrics (issue 475): at least a control tall, a
+	   hairline under it, the caption a breath below the name. */
 	.method {
 		display: flex;
 		gap: var(--space-lg);
 		align-items: center;
 		width: 100%;
+		min-height: var(--size-control-lg);
 		padding-block: var(--space-lg);
 		border: 0;
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
@@ -109,8 +112,10 @@
 
 	.text {
 		display: flex;
+		flex: 1;
 		flex-direction: column;
-		gap: var(--space-xs);
+		gap: var(--space-sm);
+		min-width: 0;
 	}
 
 	.name {
@@ -119,8 +124,15 @@
 		font-weight: var(--weight-semibold);
 	}
 
+	/* ONE line (issue 475): three rows that each wrap to two read as six
+	   lines of caption, and the rows stop lining up. Every caption in the
+	   corpus fits a 390 px phone (`add-method-picker.svelte.test.ts` measures
+	   all fifteen languages); the ellipsis is for a text size nobody tested. */
 	.caption {
+		overflow: hidden;
 		color: var(--color-fg-muted);
 		font-size: var(--text-sm);
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

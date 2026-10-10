@@ -62,7 +62,7 @@ Settings → the endpoint is persisted per install and read back at
 | Host | Operator | When | What it carries | Evidence |
 |------|----------|------|-----------------|----------|
 | **24 default chain RPC endpoints** — see §1.3 | **Third parties** | Every balance read, every simulation, every `eth_call` | **Wallet address + IP** | `rust/crates/vela-core/src/app/network_admin.rs:206` (`BUILTIN_CHAINS: [NetBuiltinChain; 24]`), mirrored verbatim at `app-ios/VelaWallet/VelaWallet/Core/ChainCatalog.swift:53-136` |
-| **Curated public fallbacks** for 9 chains: `*-rpc.publicnode.com`, `1rpc.io/*`, `bsc.drpc.org`, `xlayer.drpc.org` | **Third parties** | When the default endpoint fails | Same | `app-ios/VelaWallet/VelaWallet/Core/ChainCatalog.swift:170-180`; `app-desktop/vela-wallet/src/executor/pool.rs:60-108` |
+| **Curated public fallbacks** for 11 chains: `*-rpc.publicnode.com` (9 chains), `*.gateway.tenderly.co` (7 chains), `bsc-dataseed1.bnbchain.org`, `xlayer.drpc.org`, `rpc-qnd.inkonchain.com` — one list in the core, read by every app | **Third parties** | When the default endpoint fails | Same | `rust/crates/vela-core/src/app/network_admin.rs:217-277` (`PUBLIC_RPCS`), handed to the apps by `public_rpc_urls` (`:283`; UniFFI `rust/crates/vela-core-uniffi/src/lib.rs:899`, wasm `rust/crates/vela-core-wasm/src/lib.rs:659`). The measurements behind the list: `network_admin.rs:193-216`. |
 | `aaguid-explorer.awesometools.dev` | Founder-operated, **not on the `getvela.app` domain** | Only when the compiled catalog cannot name the authenticator (i.e. hardware keys) | An AAGUID — the **model** of the user's passkey vault or security key. Not user-unique. | Default constant `rust/crates/vela-core/src/passkey.rs:247`; uniffi binding uses the constant with **no settings override** on iOS/Android — `rust/crates/vela-core-uniffi/src/lib.rs:596`; clients `app-ios/.../Onboarding/Core/PasskeyDirectory.swift:75-95`, `app-android/.../core/passkey/PasskeyDirectory.kt:57-70` |
 | `api.openchain.xyz`, then `www.4byte.directory` | Third parties | A transaction the wallet cannot otherwise decode | A 4-byte function selector + IP. **Not** the wallet address. | `app-ios/.../Signing/Core/ClearExecutor.swift:182,193`; `app-android/.../feature/signing/core/ClearExecutor.kt:69,89` — the two store apps ask these two, sequentially. Desktop additionally asks `api.4byte.sourcify.dev` (`app-desktop/vela-wallet/src/executor/clear_signing.rs:156`); that host is **not** in the iOS/Android path. |
 | dApp sites opened in the in-app browser, **and the connected site's own origin at signing time** | Third parties | User navigates there / a signing sheet opens | Normal web browsing; the site learns the wallet address once the user connects. The signing sheet fetches the site's icon **from the site itself** — `{origin}/apple-touch-icon.png` then `{origin}/favicon.ico` — so **the dApp's server sees the user's IP at the moment they are asked to sign**. | `app-ios/.../Features/Signing/SigningLive.swift:70` + `Components/Wallet/RemoteLogoView.swift:31-38`; `app-android/.../feature/signing/SigningLive.kt:70-72` + `core/marks/RemoteLogo.kt:56-69`. No favicon proxy and no Google favicon service is used anywhere. Explore tiles deliberately draw a letter avatar instead of fetching (`app-ios/.../Features/Explore/ExploreLive.swift:17`). Browser history is **on device only** (`rust/crates/vela-core/src/app/browser_history.rs:11-16`). |
@@ -92,8 +92,20 @@ ships 24 chains with one default endpoint each:
   Ankr are reachable **only** after the user enters their own API key
   (`network_admin.rs:544-546`, gated at `:665-683`). `eth.llamarpc.com` appears only in design
   fixtures, never at runtime.
-- The curated second tier (9 chains) adds `*-rpc.publicnode.com`, `1rpc.io/*` (Automata) and two
-  `*.drpc.org` hosts.
+- The curated second tier (11 chains, `network_admin.rs:217-277`) adds, behind the default:
+  - `*-rpc.publicnode.com` (PublicNode) on 9 chains — Ethereum, BNB Chain, Polygon, Arbitrum,
+    Optimism, Base, Avalanche, Gnosis and Celo;
+  - `*.gateway.tenderly.co` (Tenderly) on 7 chains — Ethereum, Polygon, Arbitrum, Optimism, Base,
+    Avalanche and Gnosis;
+  - `bsc-dataseed1.bnbchain.org` — BNB Chain's own endpoint;
+  - `xlayer.drpc.org` (dRPC) for X Layer, beside X Layer's own `rpc.xlayer.tech`;
+  - `rpc-qnd.inkonchain.com` — Ink's own second endpoint.
+
+  **Changed 2026-10-10:** `1rpc.io/*` (Automata, 7 chains) and `bsc.drpc.org` are no longer
+  contacted — every `1rpc.io` endpoint answered HTTP 502 or "usage limit" for every call, and
+  `bsc.drpc.org` rate-limited most. Tenderly and BNB Chain's endpoint took their places, and Celo
+  and Ink gained a fallback (their defaults time out from some networks). No request to any of
+  these carries anything the default endpoints do not: the wallet address and the IP.
 
 **All of them are replaceable.** Resolution order is user override → user's keyed provider →
 built-in default → curated public → chain index
@@ -597,8 +609,9 @@ readings are given with their consequence.
    own foundation/operator endpoint** (§1.3), which is the network itself rather than a vendor;
    and the user can point the app at their own node. The same status as a DNS resolver or an ISP.
    *Reading B (they are partners):* they are chosen by us, shipped as defaults, and the
-   overwhelming majority of users will never change them — and 4 of the 24, plus the whole
-   fallback tier, are commercial aggregators (publicnode, dRPC, 1RPC).
+   overwhelming majority of users will never change them — and 4 of the 24, plus most of the
+   fallback tier, are commercial providers (publicnode, Tenderly, dRPC; the rest of that tier is
+   BNB Chain's, X Layer's and Ink's own endpoints).
    **My reading: A** — replaceability plus the absence of any commercial or contractual
    relationship makes them user-directed infrastructure, and Apple's "partner" concept targets
    integrated third-party code and services, of which there is none. **But this changes nothing

@@ -29,7 +29,6 @@ function book(contacts: ContactPickModel['contacts']): ContactPickModel {
 		title: 'Choose a contact',
 		closeLabel: 'Close',
 		searchPlaceholder: 'Search',
-		scanRow: 'Scan to fill',
 		groupsTitle: 'Groups',
 		groups: [],
 		contactsTitle: 'Contacts',
@@ -44,6 +43,19 @@ function row(container: Element, name: string): HTMLElement {
 	if (found === undefined) throw new Error(`no row for ${name}`);
 	return found;
 }
+
+describe('ContactPick is the book alone (issue 471)', () => {
+	it('draws no scan row: every button in the sheet is a person or a group', () => {
+		const screen = render(ContactPick, {
+			props: { model: book([person('Alice', ALICE), person('Bob', BOB)]) }
+		});
+		const buttons = [...screen.container.querySelectorAll('button')];
+		// What can be tapped is the rows: nothing stands above the list.
+		expect(buttons.length).toBeGreaterThanOrEqual(2);
+		expect(buttons.filter((b) => b.closest('li') === null)).toEqual([]);
+		expect(screen.container.textContent).not.toContain('Scan');
+	});
+});
 
 describe('ContactPick picks by address (issue 467)', () => {
 	it('a tap answers with the address the row was drawn for', () => {

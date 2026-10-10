@@ -67,11 +67,19 @@ describe('the keys walk', () => {
 	});
 });
 
+/** The core's row for a record already on Ethereum (`BackupState::BackedUp.row()`). */
+const COPIED = {
+	title_key: 'settingsModals.backup.title',
+	subtitle_key: 'settingsModals.backup.backedUp',
+	tone: 'positive',
+	action: 'none'
+} as const;
+
 describe('the row model', () => {
 	it('puts the one filled pill first, on that row alone', async () => {
 		const model = walletKeysModel(
 			await readWalletKeys(wallet({ credential_id: 'cc03', method: 'hybrid' })),
-			'backed_up',
+			COPIED,
 			m
 		);
 		const marked = model.rows.filter((row) => row.pills.some((p) => p.tone === 'signs_here'));
@@ -80,7 +88,7 @@ describe('the row model', () => {
 	});
 
 	it('draws no such pill for a legacy record', async () => {
-		const model = walletKeysModel(await readWalletKeys(wallet()), 'backed_up', m);
+		const model = walletKeysModel(await readWalletKeys(wallet()), COPIED, m);
 		const tones = model.rows.flatMap((row) => row.pills.map((p) => p.tone));
 		expect(tones).not.toContain('signs_here');
 	});

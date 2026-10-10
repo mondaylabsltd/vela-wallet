@@ -85,7 +85,8 @@ import {
 	type DeviceFacts,
 	type EnvironmentLabels
 } from '$lib/services/bug-report';
-import type { EthereumBackupState } from '$lib/services/registry-backup';
+import type { EthereumBackupRow } from '$lib/services/registry-backup';
+import { netRefusal, type NetRefusal } from './net-refusal';
 import type { EthereumBackupRowModel, WalletKeysModel } from './model';
 import type { WalletKeys } from '$lib/services/wallet-keys';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
@@ -254,14 +255,22 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		// scan path now keeps the two apart too (spec 038 #E1): a probe that
 		// failed is "unable to verify", with the re-check, and no setup tool.
 		const inconclusive = wizard.error?.type === 'check_failed';
+		// WHY it is refused, and whether anything can be deployed, is the
+		// check's (`compat.hint_key` / `.setup_url`). The scan path stops here
+		// without keeping its check, so when there is none the verdict is said
+		// and no reason is invented: "contracts are missing" over a network
+		// with no P-256 verifier would send a person to deploy nothing.
+		const refusal = inconclusive ? {} : netRefusal(wizard.compat, m.addNetwork.hints);
 		return {
 			...base,
 			results: [],
 			callout: {
 				tone: 'warning',
-				text: inconclusive ? m.addNetwork.unableToVerify : m.addNetwork.incompatibleHint
+				text: inconclusive
+					? m.addNetwork.unableToVerify
+					: (refusal.hint ?? m.addNetwork.incompatible)
 			},
-			secondary: inconclusive ? undefined : m.addNetwork.openChainSetupTool,
+			secondary: setupLink(refusal, m),
 			recheck: m.addNetwork.recheckWithRpc
 		};
 	}
@@ -336,6 +345,7 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		};
 	}
 
+	const refusal = netRefusal(compat, m.addNetwork.hints);
 	return {
 		...base,
 		subtitle: `${name} · ${meta}`,
@@ -348,10 +358,20 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		},
 		checksTitle: m.addNetwork.compatibilityCheck,
 		checks,
-		callout: { tone: 'warning', text: m.addNetwork.incompatibleHint },
-		secondary: m.addNetwork.openChainSetupTool,
+		// The refusal says WHY, in the core's words: no P-256 verifier (the
+		// network cannot run Vela wallets; nothing to deploy, so no button), or
+		// missing contracts (Chain Setup, opened on this chain).
+		callout: refusal.hint === undefined ? undefined : { tone: 'warning', text: refusal.hint },
+		secondary: setupLink(refusal, m),
 		recheck: m.addNetwork.recheckWithRpc
 	};
+}
+
+/** "Open Chain Setup Tool", only where the core gave it somewhere to go. */
+function setupLink(refusal: NetRefusal, m: SettingsMessages): AddNetworkModel['secondary'] {
+	return refusal.setupUrl === undefined
+		? undefined
+		: { label: m.addNetwork.openChainSetupTool, href: refusal.setupUrl };
 }
 
 // ---------------------------------------------------------------------------
@@ -529,7 +549,9 @@ export function withLiveCurrency(
 			...section,
 			// The phone's row says the code alone — the drawn ST1 shape, and the
 			// width a phone row has; the desktop's row carries the sample too.
-			rows: section.rows.map((row) => (row.id === 'currency' ? { ...row, value: view.code } : row))
+			rows: section.rows.map((row) =>
+				row.id === 'currency' ? { ...row, value: chosenCurrency(view) ?? '' } : row
+			)
 		})),
 		currencySheet: {
 			...model.currencySheet,
@@ -597,12 +619,26 @@ export interface LiveCurrencyCatalog {
 }
 
 /**
+ * The currency the person CHOSE, as Settings names it: the committed code, or
+ * — while nothing is committed yet — the stored choice whose rate is on its
+ * way (`CurrencyView.pending`). `null` while even that is unknown: the
+ * uncommitted view's own `code` is the USD placeholder, never the person's,
+ * and a row that read "USD" and then "CNY" is the jump the core's rule ends.
+ */
+export function chosenCurrency(view: CurrencyView): string | null {
+	return view.committed ? view.code : view.pending;
+}
+
+/**
  * "USD · $1,234.56" — the code and a sample in it, once a rate is committed;
  * the code alone while the currency cannot be priced (024's rule: a defaulted
- * 1 under a ¥ is a lie).
+ * 1 under a ¥ is a lie) or while its rate is still on its way; nothing at all
+ * before the choice is known.
  */
 function currencyRowValue(view: CurrencyView): string {
-	return view.rate === null ? view.code : `${view.code} · ${moneyText(1234.56, view)}`;
+	const code = chosenCurrency(view);
+	if (code === null) return '';
+	return !view.committed || view.rate === null ? code : `${code} · ${moneyText(1234.56, view)}`;
 }
 
 function liveCurrencyRows(
@@ -611,7 +647,7 @@ function liveCurrencyRows(
 	catalog?: LiveCurrencyCatalog
 ): SelectRowModel[] {
 	if (catalog === undefined || catalog.codes.length === 0) {
-		return drawn.map((row) => ({ ...row, selected: row.id === view.code }));
+		return drawn.map((row) => ({ ...row, selected: row.id === chosenCurrency(view) }));
 	}
 	return catalog.codes.map((code) => ({
 		id: code,
@@ -619,7 +655,7 @@ function liveCurrencyRows(
 		glyph: currencyGlyph(code),
 		caption:
 			currencyDisplayName(code, catalog.locale) ?? drawn.find((row) => row.id === code)?.caption,
-		selected: code === view.code
+		selected: code === chosenCurrency(view)
 	}));
 }
 
@@ -1522,49 +1558,27 @@ export function liveRelayReport(m: RescueMessages, facts: DeviceFacts): Feedback
 // The Ethereum backup row (spec 062 §5a)
 // ---------------------------------------------------------------------------
 
-/** The row for a state, or `undefined` when there is nothing to draw:
- *  no registry on Ethereum (the feature is dark) or no record to back up. */
+/**
+ * The row the core says to draw (`registry_backup::BackupRow`), in words —
+ * or `undefined` when it says to draw nothing: no registry on Ethereum (the
+ * feature is dark) or no record to copy.
+ *
+ * Nothing here maps a state. Which words a state says, in which tone, and
+ * what a tap does are the core's, the same on all four apps; this looks the
+ * two corpus keys up. A key the manifest does not carry draws no row rather
+ * than a dotted path — `ethereum-backup-row.test.ts` holds the manifest to
+ * every key the core can name.
+ */
 export function ethereumBackupRow(
-	state: EthereumBackupState | 'checking',
+	row: EthereumBackupRow | null,
 	m: SettingsMessages
 ): EthereumBackupRowModel | undefined {
-	switch (state) {
-		case 'checking':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.checking,
-				tone: 'neutral',
-				actionable: false
-			};
-		case 'backed_up':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.backedUp,
-				tone: 'positive',
-				actionable: false
-			};
-		case 'not_backed_up':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.notBackedUp,
-				tone: 'caution',
-				actionable: true
-			};
-		case 'could_not_check':
-			// Tappable, and what it does is ask again — the state a person is
-			// most likely to tap, and the only one where "nothing happened"
-			// was the whole experience.
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.couldNotCheck,
-				tone: 'neutral',
-				actionable: true,
-				retry: true
-			};
-		case 'unavailable':
-		case 'not_registered':
-			return undefined;
-	}
+	if (row === null) return undefined;
+	const words = m.backup.words as Record<string, string | undefined>;
+	const title = words[row.title_key];
+	const subtitle = words[row.subtitle_key];
+	if (title === undefined || subtitle === undefined) return undefined;
+	return { title, subtitle, tone: row.tone, action: row.action };
 }
 
 /**
@@ -1602,7 +1616,8 @@ function keyFingerprint(publicKeyHex: string): string {
 
 export function walletKeysModel(
 	keys: WalletKeys | null,
-	backup: EthereumBackupState | 'checking',
+	/** The core's row for where the record stands — `CHECKING_ROW` while asking. */
+	backup: EthereumBackupRow | null,
 	m: SettingsMessages,
 	/**
 	 * Spec 102 (P2-10): the account's signing domain when it is NOT the apps'

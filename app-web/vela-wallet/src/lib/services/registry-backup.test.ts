@@ -39,6 +39,39 @@ const NOT_MIRRORED =
 /** What each chain says. `null` = the pool reports an error. */
 let ethereum: { version: string | null; mirrored: string | null };
 let silentOnGnosis: string | null;
+/** What Gnosis stores as unit 10's payload — the real bytes unless a test says otherwise. */
+let payloadOnGnosis: string;
+/** ABI `bytes` of length zero: what a unit from before registry V13 stored. */
+const EMPTY_BYTES = '0x' + word(0x20) + word(0);
+
+/** The rows the core says to draw (`registry_backup::BackupState::row`). */
+const TITLE = 'settingsModals.backup.title';
+const ROW = {
+	backedUp: {
+		title_key: TITLE,
+		subtitle_key: 'settingsModals.backup.backedUp',
+		tone: 'positive',
+		action: 'none'
+	},
+	notBackedUp: {
+		title_key: TITLE,
+		subtitle_key: 'settingsModals.backup.notBackedUp',
+		tone: 'neutral',
+		action: 'copy'
+	},
+	couldNotCheck: {
+		title_key: TITLE,
+		subtitle_key: 'settingsModals.backup.couldNotCheck',
+		tone: 'neutral',
+		action: 'retry'
+	},
+	cannotCopy: {
+		title_key: TITLE,
+		subtitle_key: 'settingsModals.backup.cannotCopy',
+		tone: 'neutral',
+		action: 'none'
+	}
+} as const;
 const asked: string[] = [];
 
 vi.mock('$lib/services/rpc-pool', () => ({
@@ -58,7 +91,7 @@ vi.mock('$lib/services/rpc-pool', () => ({
 			}
 			if (chainId === 100 && selector !== silentOnGnosis) {
 				if (selector === SELECTOR.groups) return answer(gnosis.groups);
-				if (selector === SELECTOR.payload) return answer(gnosis.payload10);
+				if (selector === SELECTOR.payload) return answer(payloadOnGnosis);
 				if (selector === SELECTOR.unit)
 					return answer(data.endsWith(word(12)) ? gnosis.unit12 : gnosis.unit10);
 			}
@@ -67,11 +100,12 @@ vi.mock('$lib/services/rpc-pool', () => ({
 	)
 }));
 
-import { checkEthereumBackup } from './registry-backup';
+import { CHECKING_ROW, checkEthereumBackup } from './registry-backup';
 
 beforeEach(() => {
 	ethereum = { version: gnosis.version, mirrored: NOT_MIRRORED };
 	silentOnGnosis = null;
+	payloadOnGnosis = gnosis.payload10;
 	asked.length = 0;
 	fetched.length = 0;
 });
@@ -82,7 +116,9 @@ describe('checkEthereumBackup', () => {
 		expect(await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey)).toEqual({
 			state: 'unavailable',
 			call: null,
-			unitId: null
+			unitId: null,
+			// Nothing to draw: the core sends no row.
+			row: null
 		});
 		expect(asked).toEqual([`1:${SELECTOR.version}`]);
 	});
@@ -98,6 +134,8 @@ describe('checkEthereumBackup', () => {
 			`100:${SELECTOR.payload}`
 		]);
 		expect(check.state).toBe('not_backed_up');
+		// The core's row: "not copied yet" is a state, not a warning, and a tap copies.
+		expect(check.row).toEqual(ROW.notBackedUp);
 		expect(check.unitId).toBe(10);
 		expect(check.call).toMatchObject({ chain_id: 1, to: REGISTRY, value: '0' });
 		// register(...) — 4,324 bytes, exactly what Gnosis holds for this wallet.
@@ -109,7 +147,7 @@ describe('checkEthereumBackup', () => {
 	it('backed up: Ethereum holds the group, and the payload is never fetched', async () => {
 		ethereum.mirrored = gnosis.mirroredTrue;
 		const check = await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
-		expect(check).toEqual({ state: 'backed_up', call: null, unitId: 10 });
+		expect(check).toEqual({ state: 'backed_up', call: null, unitId: 10, row: ROW.backedUp });
 		expect(asked).not.toContain(`100:${SELECTOR.payload}`);
 	});
 
@@ -129,13 +167,51 @@ describe('checkEthereumBackup', () => {
 		for (const selector of [SELECTOR.groups, SELECTOR.unit, SELECTOR.payload]) {
 			silentOnGnosis = selector;
 			const check = await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
-			expect(check, selector).toEqual({ state: 'could_not_check', call: null, unitId: null });
+			expect(check, selector).toEqual({
+				state: 'could_not_check',
+				call: null,
+				unitId: null,
+				// The core's own row for silence: a tap asks again.
+				row: ROW.couldNotCheck
+			});
 		}
 		ethereum.mirrored = null;
 		silentOnGnosis = null;
 		expect((await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey)).state).toBe(
 			'could_not_check'
 		);
+	});
+
+	// A unit registered before registry V13 stored no payload. Gnosis ANSWERS
+	// — with nothing — so asking again gets the same answer: the core calls it
+	// `not_copyable`, a calm end with nothing to tap. It used to fall into
+	// "could not check", and the row offered a retry for ever.
+	it('an older wallet whose record stored no payload can never be copied — and is not asked again', async () => {
+		payloadOnGnosis = EMPTY_BYTES;
+		const check = await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		expect(check).toEqual({ state: 'not_copyable', call: null, unitId: 10, row: ROW.cannotCopy });
+	});
+
+	// The one case the core never answers: the walk itself throws, so there is
+	// no step to read a row from. The shell's own row for it is the core's
+	// could-not-check row, word for word — the silence above is the core's.
+	it('a walk that throws is could-not-check, drawn exactly as the core draws silence', async () => {
+		const thrown = await checkEthereumBackup('not-an-address', 'not-a-key');
+		expect(thrown.state).toBe('could_not_check');
+		ethereum.version = null;
+		const silent = await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		expect(silent.state).toBe('could_not_check');
+		expect(thrown.row).toEqual(silent.row);
+		expect(thrown.row).toEqual(ROW.couldNotCheck);
+	});
+
+	it('while the walk runs the row is the core’s "Checking…": neutral, nothing to tap', () => {
+		expect(CHECKING_ROW).toEqual({
+			title_key: TITLE,
+			subtitle_key: 'componentsUi.funding.checking',
+			tone: 'neutral',
+			action: 'none'
+		});
 	});
 
 	it('server-free: the index service is never contacted', async () => {

@@ -1303,7 +1303,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		confirm: {
 			/*
 			 * The control's whole label is the action, a PHRASE ("Confirm
-			 * send", "Back up public keys"), never a sentence or a template: a
+			 * send", "Copy this wallet's record"), never a sentence or a template: a
 			 * template fallback once put "{{action}}" on screen (spec 027 T340).
 			 * With no intent from the core, the generic word is the honest one.
 			 */

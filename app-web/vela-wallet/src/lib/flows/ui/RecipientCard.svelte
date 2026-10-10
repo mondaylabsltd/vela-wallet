@@ -11,8 +11,14 @@
 	 * are typed: the drawn card assumed every recipient arrived from the book or
 	 * a spreadsheet, and a "+ add recipient" that produced a card nothing could
 	 * fill was a dead promise. `oninput` present ⇒ the address and the amount
-	 * are fields, with the book's door beside the address, exactly as the
-	 * single form's field has one.
+	 * are fields, with the book's door and the scan door for THIS row, exactly
+	 * as the single form's field has them (issue 471: scanning into a split
+	 * used to be a row inside the contact picker, and nowhere else).
+	 *
+	 * The two doors sit on the row's label line, over the end of the address
+	 * field, not inside it: at 390 px the field is about 110 px wide, and two
+	 * icons inside it clipped "0x... address" to "0x... addr…". On the label
+	 * line they cost the field nothing and the card no height.
 	 *
 	 * The card has two faces, and they are the same fields. AT REST a filled row
 	 * reads as the drawn card does — a name over a short address, or the short
@@ -42,9 +48,11 @@
 		oninput?: (patch: { address?: string; amount?: string }) => void;
 		/** The book, for THIS row. */
 		onpick?: () => void;
+		/** The scanner, for THIS row: the code it reads lands here. */
+		onscan?: () => void;
 	}
 
-	let { recipient, symbol, onremove, oninput, onpick }: Props = $props();
+	let { recipient, symbol, onremove, oninput, onpick, onscan }: Props = $props();
 
 	/** Ties the warning to the field it is about, for a screen reader. */
 	const duplicateId = $props.id();
@@ -63,7 +71,23 @@
 		</span>
 	{/if}
 	<span class="text">
-		<span class="ordinal">{recipient.ordinal}</span>
+		<span class="head">
+			<span class="ordinal">{recipient.ordinal}</span>
+			{#if oninput && (onpick || (onscan && recipient.scanLabel !== undefined))}
+				<span class="doors" class:resting={hasAddress}>
+					{#if onpick}
+						<button type="button" class="door" aria-label={recipient.pickLabel} onclick={onpick}>
+							<Icon icon={UTILITY_ICONS['user-round']} size="sm" />
+						</button>
+					{/if}
+					{#if onscan && recipient.scanLabel !== undefined}
+						<button type="button" class="door" aria-label={recipient.scanLabel} onclick={onscan}>
+							<Icon icon={UTILITY_ICONS['qr-code']} size="sm" />
+						</button>
+					{/if}
+				</span>
+			{/if}
+		</span>
 		{#if oninput}
 			<span
 				class="well address-well"
@@ -95,11 +119,6 @@
 							<span class="short">{recipient.addressShort}</span>
 						{/if}
 					</span>
-				{/if}
-				{#if onpick}
-					<button type="button" class="pick" aria-label={recipient.pickLabel} onclick={onpick}>
-						<Icon icon={UTILITY_ICONS['user-round']} size="sm" />
-					</button>
 				{/if}
 			</span>
 		{:else}
@@ -193,9 +212,33 @@
 		gap: var(--space-xs);
 		min-width: 0;
 	}
+	.head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-md);
+		min-width: 0;
+	}
 	.ordinal {
+		min-width: 0;
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	/*
+	 * The row's two doors — the book, the scanner — on the label line. The
+	 * box has no height of its own: each door is a finger wide and tall and
+	 * overhangs the line equally above and below, so the label line stays one
+	 * line of small text and adding the doors moved nothing.
+	 */
+	.doors {
+		display: flex;
+		align-items: center;
+		gap: var(--space-xs);
+		flex-shrink: 0;
+		height: 0;
 	}
 	.name {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
@@ -270,7 +313,7 @@
 	}
 	.address-well {
 		margin-inline-start: calc(var(--space-md) * -1);
-		padding-inline: var(--space-md) var(--space-xs);
+		padding-inline: var(--space-md);
 	}
 	.amount-well {
 		grid-area: amount;
@@ -308,9 +351,7 @@
 	.reading {
 		position: absolute;
 		inset-block: 0;
-		/* At rest the book's door is away, so the reading has the whole field;
-		   under the pointer the door comes back and the reading makes room. */
-		inset-inline: var(--space-md) var(--space-xs);
+		inset-inline: var(--space-md);
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
@@ -323,9 +364,6 @@
 	}
 	.address-well:focus-within .reading {
 		display: none;
-	}
-	.address-well:hover .reading {
-		inset-inline-end: var(--icon-2xl);
 	}
 	/* A named row is two lines tall, in hand or not, so taking it up does not
 	   make the list jump. */
@@ -351,7 +389,7 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
 	}
-	.pick,
+	.door,
 	.remove {
 		display: flex;
 		align-items: center;
@@ -366,26 +404,27 @@
 		cursor: pointer;
 		transition: transform var(--motion-duration-fast) ease-out;
 	}
-	/* The book's door belongs to a field that is asking: a filled row at rest
-	   has its person, and the door comes back with the hand. */
-	.address-well.filled:not(:hover, :focus-within) .pick {
+	/* The doors belong to a row that is asking: a filled row at rest has its
+	   person, and they come back with the hand — in place, the space is
+	   always theirs, so nothing moves when they do. */
+	.card:not(:hover, :focus-within) .doors.resting {
 		opacity: 0;
 		pointer-events: none;
 	}
 
-	.pick:hover,
+	.door:hover,
 	.remove:hover {
 		color: var(--color-fg-base);
 	}
 
-	.pick:active,
+	.door:active,
 	.remove:active {
 		transform: scale(var(--motion-press-fab));
 	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.well,
-		.pick,
+		.door,
 		.remove {
 			transition: none;
 		}

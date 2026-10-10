@@ -32,7 +32,7 @@ const identity: WalletIdentity = {
 	address: '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c',
 	identiconSvg: '<svg/>'
 };
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const IDLE_FEE: FeeView = {
 	busy: false,
 	failed: null,

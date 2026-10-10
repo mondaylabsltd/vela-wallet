@@ -14,9 +14,13 @@ import { fill } from './messages';
 import { buildMobileState } from './fixtures';
 import {
 	agoText,
+	figureCurrency,
 	liveAssetRow,
 	liveBalance,
+	maskedFigure,
+	MONEY_PENDING,
 	moneyParts,
+	moneyText,
 	tokenAmountText,
 	trimBalance,
 	withLiveWallet,
@@ -46,9 +50,9 @@ const RELATIVE_TIME = JSON.parse(
 		expect: { value: string };
 	}[];
 };
-const USD: CurrencyView = { code: 'USD', rate: 1, committed: true };
-const EUR: CurrencyView = { code: 'EUR', rate: 0.5, committed: true };
-const UNPRICED_JPY: CurrencyView = { code: 'JPY', rate: null, committed: true };
+const USD: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+const EUR: CurrencyView = { code: 'EUR', rate: 0.5, committed: true, pending: null };
+const UNPRICED_JPY: CurrencyView = { code: 'JPY', rate: null, committed: true, pending: null };
 
 const PRISTINE: BalanceView = {
 	address: null,
@@ -104,6 +108,115 @@ describe('moneyParts', () => {
 	});
 	it('a null rate shows the USD figure, never a defaulted 1 under a ¥ (024 rule)', () => {
 		expect(moneyParts(4500, UNPRICED_JPY)).toMatchObject({ code: 'USD', integer: '$4,500' });
+	});
+});
+
+/**
+ * The core's rule (`CurrencyView.committed`, the 102 device run): while the
+ * display currency is not the person's yet, the pair on the wire is the USD/1
+ * placeholder and NO money figure is drawn in it. An iPhone home showed
+ * "$1,234" for a few seconds and then jumped to "¥8,876"; here the cached
+ * total painted in dollars the same way. These are the two views the core
+ * emits before it commits (`stored_code_never_surfaces_before_its_rate`,
+ * `only_a_stored_choice_is_named_pending`).
+ */
+describe('no money figure before the display currency is the person’s', () => {
+	/** Before the preference is read, and while a first launch prices its guess. */
+	const UNREAD: CurrencyView = { code: 'USD', rate: 1, committed: false, pending: null };
+	/** A stored CNY whose rate is on its way. */
+	const CNY_ON_ITS_WAY: CurrencyView = { code: 'USD', rate: 1, committed: false, pending: 'CNY' };
+	const CNY: CurrencyView = { code: 'CNY', rate: 7.1, committed: true, pending: null };
+	const KNOWN: BalanceView = {
+		...PRISTINE,
+		balance_unknown: false,
+		display_total_usd: 1234,
+		cached_total_usd: 1234,
+		tokens: [ETH]
+	};
+
+	it('the hero keeps its skeleton, whatever the balance already knows', () => {
+		for (const placeholder of [UNREAD, CNY_ON_ITS_WAY]) {
+			const hero = liveBalance(KNOWN, placeholder, m);
+			expect(hero.state).toBe('loading');
+			expect(hero.integer).toBeUndefined();
+			expect(hero.decimals).toBeUndefined();
+			expect(JSON.stringify(hero)).not.toContain('$');
+			expect(JSON.stringify(hero)).not.toContain('1,234');
+		}
+		// …and the figure appears once, in the right money.
+		expect(liveBalance(KNOWN, CNY, m)).toMatchObject({
+			state: 'normal',
+			currency: 'CNY',
+			integer: '¥8,761',
+			decimals: '40'
+		});
+	});
+
+	it('the label names the stored choice on its way, or no currency — never the placeholder’s USD', () => {
+		expect(liveBalance(KNOWN, UNREAD, m).currency).toBeUndefined();
+		expect(liveBalance(KNOWN, CNY_ON_ITS_WAY, m).currency).toBe('CNY');
+		expect(figureCurrency(UNREAD)).toBeUndefined();
+		expect(figureCurrency(CNY_ON_ITS_WAY)).toBe('CNY');
+		// Committed: the money the figure is really in.
+		expect(figureCurrency(CNY)).toBe('CNY');
+		expect(figureCurrency(UNPRICED_JPY)).toBe('USD');
+		// The hidden hero's label follows the same rule.
+		const hidden = { ...KNOWN, hidden: true, display_total_usd: null, cached_total_usd: null };
+		expect(liveBalance(hidden, UNREAD, m)).toMatchObject({ state: 'hidden', currency: undefined });
+		expect(liveBalance(hidden, CNY_ON_ITS_WAY, m).currency).toBe('CNY');
+	});
+
+	it('every other figure is the pending mark, on the line the figure will stand on', () => {
+		expect(moneyText(1234, UNREAD)).toBe(MONEY_PENDING);
+		expect(moneyText(1234, CNY_ON_ITS_WAY)).toBe(MONEY_PENDING);
+		expect(moneyText(1234, CNY)).toBe('¥8,761.40');
+		// A holding keeps its token amount — that is no currency's — and its
+		// worth waits.
+		const row = liveAssetRow(ETH, CNY_ON_ITS_WAY, m, false);
+		expect(row.balance).toBe('1.5');
+		expect(row.fiat).toEqual({ kind: 'value', text: MONEY_PENDING });
+		expect(liveAssetRow(ETH, CNY, m, false).fiat).toEqual({ kind: 'value', text: '¥31,950.00' });
+		// Hidden is hidden, committed or not.
+		expect(liveAssetRow(ETH, CNY_ON_ITS_WAY, m, true).fiat).toEqual({ kind: 'masked' });
+	});
+
+	it('the home as a whole: nothing on it is in dollars while CNY is on its way', () => {
+		const base = buildMobileState('h1', m, () => '');
+		const waiting = withLiveWallet(base, { balance: KNOWN, currency: CNY_ON_ITS_WAY, m });
+		expect(waiting.balance.state).toBe('loading');
+		expect(JSON.stringify([waiting.balance, waiting.assetRows])).not.toMatch(/[$¥]/);
+		const wide = withLiveWalletDesktop(
+			buildDesktopState('d1', m, () => ''),
+			{
+				balance: KNOWN,
+				currency: CNY_ON_ITS_WAY,
+				m
+			}
+		);
+		expect(wide.balance.state).toBe('loading');
+		expect(JSON.stringify([wide.balance, wide.assetRows])).not.toMatch(/[$¥]/);
+	});
+
+	it('an unpriceable choice is a committed one: the USD figure, said as USD', () => {
+		expect(liveBalance(KNOWN, UNPRICED_JPY, m)).toMatchObject({
+			state: 'normal',
+			currency: 'USD',
+			integer: '$1,234'
+		});
+	});
+});
+
+describe('maskedFigure — a hidden amount keeps its unit', () => {
+	it('the mask, then the unit the shown figure carries', () => {
+		expect(maskedFigure('xDAI')).toBe('•••• xDAI');
+		expect(maskedFigure('USDC')).toBe('•••• USDC');
+		// Nothing of the number survives.
+		expect(maskedFigure('ETH')).not.toMatch(/\d/);
+	});
+	it('a figure with no unit is the mask alone — never a trailing space', () => {
+		expect(maskedFigure('')).toBe('••••');
+		expect(maskedFigure('  ')).toBe('••••');
+		expect(maskedFigure(' xDAI ')).toBe('•••• xDAI');
 	});
 });
 
@@ -464,6 +577,7 @@ describe('empty activity, chosen by the core', () => {
 	const IDENT = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 	const EMPTY_FEED: FeedView = {
 		rows: [],
+		home_rows: [],
 		transactions: [],
 		new_item_id: null,
 		toast: null,

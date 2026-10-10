@@ -1021,6 +1021,16 @@
 					},
 					openBatch: () => void openBatch(),
 					openScanner: () => sendSession?.dispatch({ type: 'open_scanner' }),
+					// The scanner, for one split row (issue 471): the code lands in the
+					// row named, exactly as `pickContactFor` names the book's. A row the
+					// view no longer has opens the plain scanner — the core then puts
+					// the code in the first row with no address yet.
+					scanFor: (index: number) => {
+						const target = sendView?.recipients[index]?.id;
+						sendSession?.dispatch(
+							target === undefined ? { type: 'open_scanner' } : { type: 'open_scanner', target }
+						);
+					},
 					continueDisabled: !sendView.can_continue,
 					continueBusy: sendView.estimating_gas,
 					confirmDisabled: !sendView.can_confirm,

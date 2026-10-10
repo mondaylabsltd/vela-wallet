@@ -27,6 +27,19 @@
 		/** The places a key may be minted in — always the three (spec 102). */
 		addMethods?: KeyMethod[];
 		/**
+		 * The corpus key of the heading over the three places (issue 475) — the
+		 * core's `CreateView.add_heading_key`: "Add a passkey" with no key yet,
+		 * "Add another" with room for one more, "Limit of 7 reached" at the cap.
+		 * It is the screen's ONLY add affordance.
+		 */
+		addHeadingKey: string;
+		/**
+		 * The core's `CreateView.methods_pinned`: no key yet and one may be
+		 * added, so the three places are drawn open under a plain heading, with
+		 * no fold to tap. Otherwise they fold under the heading.
+		 */
+		methodsPinned: boolean;
+		/**
 		 * Spec 102: a signing page the core's view says was chosen, and the
 		 * domain this wallet's keys are minted for — then every key belongs to
 		 * THAT site, said before it is too late to choose otherwise. The web
@@ -50,6 +63,8 @@
 		busy,
 		maxKeys,
 		addMethods,
+		addHeadingKey,
+		methodsPinned,
 		signingDomain = '',
 		signingPage = null,
 		strings,
@@ -63,10 +78,12 @@
 
 	const full = $derived(keys.length >= maxKeys);
 
-	// An EMPTY list keeps the three methods expanded: the first key's method is
-	// the person's choice too (the whole Xiaomi lock-out fix), and a list with
-	// nothing on it plus a collapsed "+" is a puzzle, not a step.
-	const pickerShown = $derived((pickerOpen || keys.length === 0) && canAddKey);
+	// WHEN the three places are held open is the core's (`methods_pinned`,
+	// issue 475): with no key yet the first key's method is the person's choice
+	// too (the whole Xiaomi lock-out fix), and a list with nothing on it plus a
+	// collapsed "+" is a puzzle, not a step. Past that they fold under the
+	// heading, and the fold's open/closed state is this screen's.
+	const pickerShown = $derived(methodsPinned || (pickerOpen && canAddKey));
 
 	const subtitle = $derived(
 		needsSecondKey
@@ -175,21 +192,29 @@
 		</ul>
 	</div>
 
+	<!--
+		ONE add affordance (issue 475): the core's heading over the three
+		places. With no key yet it is a plain heading and the places stand open
+		beneath it — there used to be a "+ Add a passkey" button here too, above
+		the places it could not fold, saying the same thing twice and doing
+		nothing. With a key or more the heading IS the fold ("+ Add another");
+		at the cap it is a statement, and there is nothing under it.
+	-->
 	<div class="add">
-		<button
-			class="addtoggle"
-			type="button"
-			disabled={!canAddKey}
-			aria-expanded={pickerShown}
-			onclick={() => (pickerOpen = !pickerOpen)}
-		>
-			<span class="plus" aria-hidden="true">+</span>
-			<span>
-				{full
-					? strings('onboarding.create.keyLimitReached')
-					: strings('onboarding.create.addKeyBtn')}
-			</span>
-		</button>
+		{#if methodsPinned}
+			<h2 class="label">{strings(addHeadingKey)}</h2>
+		{:else}
+			<button
+				class="fold"
+				type="button"
+				disabled={!canAddKey}
+				aria-expanded={canAddKey ? pickerShown : undefined}
+				onclick={() => (pickerOpen = !pickerOpen)}
+			>
+				{#if canAddKey}<span class="plus" class:open={pickerShown} aria-hidden="true">+</span>{/if}
+				<span>{strings(addHeadingKey)}</span>
+			</button>
+		{/if}
 		<AddMethodPicker open={pickerShown} allowed={addMethods} {strings} onPick={pick} />
 	</div>
 
@@ -292,10 +317,14 @@
 		justify-content: space-between;
 	}
 
+	/* A section's label: "Added" over the keys, and — with no key yet — the
+	   core's heading over the three places. */
 	.label {
+		margin: 0;
 		color: var(--color-fg-muted);
 		font-size: var(--text-sm);
 		font-weight: var(--weight-semibold);
+		line-height: var(--leading-normal);
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 	}
@@ -420,7 +449,8 @@
 		flex-direction: column;
 	}
 
-	.addtoggle {
+	/* The heading as a fold: tap to open the three places, tap to close. */
+	.fold {
 		display: flex;
 		gap: var(--space-md);
 		align-items: center;
@@ -437,11 +467,11 @@
 		transition: border-color var(--motion-duration-fast) ease;
 	}
 
-	.addtoggle:hover:not(:disabled) {
+	.fold:hover:not(:disabled) {
 		border-color: var(--color-accent-base);
 	}
 
-	.addtoggle:disabled {
+	.fold:disabled {
 		opacity: var(--opacity-disabled);
 		cursor: default;
 	}
@@ -449,6 +479,18 @@
 	.plus {
 		font-size: var(--text-xl);
 		line-height: var(--leading-none);
+		transition: transform var(--motion-duration-fast) ease;
+	}
+
+	/* Open, the "+" turns to a "×": the same control closes what it opened. */
+	.plus.open {
+		transform: rotate(45deg);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.plus {
+			transition: none;
+		}
 	}
 
 	.spacer {

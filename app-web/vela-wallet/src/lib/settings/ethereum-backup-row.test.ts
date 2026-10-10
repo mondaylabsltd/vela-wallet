@@ -1,11 +1,19 @@
 /**
- * The Ethereum backup row (spec 062): one line, three states, a button only
- * while there is something to do — and nothing at all when the feature is dark.
+ * The row for the wallet record's copy on Ethereum (spec 062): one line, a
+ * button only while a tap does something — and nothing at all when the
+ * feature is dark.
+ *
+ * The words, the tone and the tap are the CORE's (`registry_backup::BackupRow`,
+ * the same on all four apps). The shell maps no state: it looks up the two
+ * corpus keys the row names. The rows below are the core's own table.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
+import { CHECKING_ROW, type EthereumBackupRow } from '$lib/services/registry-backup';
 import { ethereumBackupRow, walletKeysModel } from './live';
+import { BACKUP_ROW_KEYS } from './messages';
 import { deviceKeys } from '$lib/services/wallet-keys';
 import type { WalletKeyRow, WalletKeys } from '$lib/services/wallet-keys';
 
@@ -27,47 +35,134 @@ const key = (over: Partial<WalletKeyRow>): WalletKeyRow => ({
 	...over
 });
 
+/** `BackupState::row()` for each state that draws one — the core's table. */
+const TITLE_KEY = 'settingsModals.backup.title';
+const CORE_ROW = {
+	backed_up: {
+		title_key: TITLE_KEY,
+		subtitle_key: 'settingsModals.backup.backedUp',
+		tone: 'positive',
+		action: 'none'
+	},
+	not_backed_up: {
+		title_key: TITLE_KEY,
+		subtitle_key: 'settingsModals.backup.notBackedUp',
+		tone: 'neutral',
+		action: 'copy'
+	},
+	could_not_check: {
+		title_key: TITLE_KEY,
+		subtitle_key: 'settingsModals.backup.couldNotCheck',
+		tone: 'neutral',
+		action: 'retry'
+	},
+	not_copyable: {
+		title_key: TITLE_KEY,
+		subtitle_key: 'settingsModals.backup.cannotCopy',
+		tone: 'neutral',
+		action: 'none'
+	}
+} as const satisfies Record<string, EthereumBackupRow>;
+
 describe('ethereumBackupRow', () => {
-	it('says where the record stands, and takes a tap only where one does something', () => {
-		expect(ethereumBackupRow('not_backed_up', m)).toEqual({
-			title: 'Back up public keys to Ethereum',
-			subtitle: 'Not backed up yet',
-			tone: 'caution',
-			actionable: true
+	it('says what it is — a copy of the wallet’s record — and where it stands', () => {
+		expect(ethereumBackupRow(CORE_ROW.not_backed_up, m)).toEqual({
+			title: "Copy this wallet's record to Ethereum",
+			// Optional, and it costs a fee: a state, never a warning.
+			subtitle: 'Not copied yet (optional)',
+			tone: 'neutral',
+			action: 'copy'
 		});
-		expect(ethereumBackupRow('backed_up', m)).toMatchObject({
-			subtitle: 'Backed up on Ethereum',
+		expect(ethereumBackupRow(CORE_ROW.backed_up, m)).toEqual({
+			title: "Copy this wallet's record to Ethereum",
+			subtitle: 'Copied to Ethereum',
 			tone: 'positive',
-			actionable: false
+			action: 'none'
 		});
+		const zh = resolveSettingsMessages('zh');
+		expect(ethereumBackupRow(CORE_ROW.not_backed_up, zh)).toMatchObject({
+			title: '把钱包记录复制到以太坊',
+			subtitle: '尚未复制（可选）'
+		});
+	});
+
+	it('takes a tap only where one does something, and says which', () => {
 		// Silence is never drawn as a verdict — but it IS the one state a
 		// person taps, and what they want is another attempt (founder ruling,
-		// 2026-09-23). It carries `retry` so the row can say "ask again"
-		// rather than "back it up", which is a different offer.
-		expect(ethereumBackupRow('could_not_check', m)).toMatchObject({
-			subtitle: 'Could not check',
-			actionable: true,
-			retry: true
+		// 2026-09-23): the tap asks again, it does not start a copy.
+		expect(ethereumBackupRow(CORE_ROW.could_not_check, m)).toEqual({
+			title: "Copy this wallet's record to Ethereum",
+			subtitle: "Couldn't check. Tap to try again.",
+			tone: 'neutral',
+			action: 'retry'
 		});
-		// Only that one. The other three have nothing to do, so they take no
-		// tap at all — the house rule, and what stops a row rippling under a
-		// finger for nothing.
-		const notBackedUp = ethereumBackupRow('not_backed_up', m);
-		expect(notBackedUp).toBeDefined();
-		expect(notBackedUp?.retry).toBeUndefined();
-		expect(ethereumBackupRow('checking', m)).toMatchObject({ actionable: false });
+		// An older wallet's record can never be copied. Asking again gets the
+		// same answer, so it is a calm end with nothing to tap — it used to
+		// read "could not check" and retry for ever.
+		expect(ethereumBackupRow(CORE_ROW.not_copyable, m)).toEqual({
+			title: "Copy this wallet's record to Ethereum",
+			subtitle: "This older wallet can't be copied",
+			tone: 'neutral',
+			action: 'none'
+		});
+		// Still asking: the core's "Checking…", nothing to tap.
+		expect(ethereumBackupRow(CHECKING_ROW, m)).toEqual({
+			title: "Copy this wallet's record to Ethereum",
+			subtitle: 'Checking…',
+			tone: 'neutral',
+			action: 'none'
+		});
+	});
+
+	it('no state is a caution: the row never wears the warning tone', () => {
+		for (const row of [...Object.values(CORE_ROW), CHECKING_ROW]) {
+			expect(['neutral', 'positive']).toContain(ethereumBackupRow(row, m)?.tone);
+		}
 	});
 
 	it('draws nothing while the feature is dark or the wallet has no record', () => {
-		expect(ethereumBackupRow('unavailable', m)).toBeUndefined();
-		expect(ethereumBackupRow('not_registered', m)).toBeUndefined();
+		// `unavailable` / `not_registered`: the core sends no row.
+		expect(ethereumBackupRow(null, m)).toBeUndefined();
 	});
 
-	it('every locale has words for every state', () => {
+	it('a key the manifest does not carry draws no row — never a dotted path', () => {
+		const unknown = { ...CORE_ROW.backed_up, subtitle_key: 'settingsModals.backup.somethingNew' };
+		expect(ethereumBackupRow(unknown, m)).toBeUndefined();
+	});
+
+	// The manifest is held to the core's SOURCE: every corpus key
+	// `registry_backup.rs` names for the row (its title, its "checking" line
+	// and each state's second line) has words here. A key the core adds later
+	// fails this test instead of drawing no row on a person's screen.
+	it('the manifest has every key the core’s row can name', () => {
+		const source = readFileSync('../../rust/crates/vela-core/src/registry_backup.rs', 'utf8');
+		const named = new Set(
+			[...source.matchAll(/"((?:settingsModals\.backup|componentsUi\.funding)\.[A-Za-z]+)"/g)].map(
+				(match) => match[1]
+			)
+		);
+		// The explanation under the block is a paragraph, not a row line.
+		named.delete('settingsModals.backup.explain');
+		expect(named.size).toBeGreaterThanOrEqual(6);
+		expect([...named].sort()).toEqual([...BACKUP_ROW_KEYS].sort());
+	});
+
+	it('every locale has words for every key, and an explanation', () => {
 		for (const locale of SUPPORTED_LOCALES) {
-			const words = resolveSettingsMessages(locale).backup;
-			for (const value of Object.values(words)) expect(value, locale).not.toBe('');
+			const backup = resolveSettingsMessages(locale).backup;
+			for (const key of BACKUP_ROW_KEYS) expect(backup.words[key], `${locale} ${key}`).toBeTruthy();
+			expect(backup.explain, locale).not.toBe('');
 		}
+	});
+
+	it('the explanation says what becomes public and that it costs a fee — not "only public keys"', () => {
+		const explain = m.backup.explain;
+		for (const said of ['name', 'public key', 'credential ID', 'authenticator model', 'fee']) {
+			expect(explain).toContain(said);
+		}
+		expect(explain).not.toMatch(/only public keys/i);
+		// No fixed dollar figure: it goes stale, and the sheet shows the fee.
+		expect(explain).not.toMatch(/\$\d/);
 	});
 });
 
@@ -90,7 +185,7 @@ describe('walletKeysModel', () => {
 	};
 
 	it('names every key, says who may be holding it, and badges only what it can vouch for', () => {
-		const model = walletKeysModel(registry, 'backed_up', m);
+		const model = walletKeysModel(registry, CORE_ROW.backed_up, m);
 		expect(model.count).toBe('3');
 		expect(model.loading).toBe(false);
 		expect(model.note).toBeUndefined();
@@ -123,19 +218,19 @@ describe('walletKeysModel', () => {
 		// The mark and the caption read one field, and it is the report.
 		expect(model.rows.map((row) => row.key.kind)).toEqual(['platform', 'security_key', 'hybrid']);
 		expect(model.rows.every((row) => row.key.synced_known)).toBe(true);
-		expect(model.backupExplain).toContain('Private keys never leave');
+		expect(model.backupExplain).toBe(m.backup.explain);
 	});
 
 	it('still asking: a title and no guessed count', () => {
-		const model = walletKeysModel(null, 'checking', m);
+		const model = walletKeysModel(null, CHECKING_ROW, m);
 		expect(model).toMatchObject({ loading: true, count: '', rows: [] });
-		expect(model.backup).toMatchObject({ actionable: false });
+		expect(model.backup).toMatchObject({ action: 'none' });
 	});
 
 	it("the registry silent: the device's memory, labelled, with no sync badges", () => {
 		const model = walletKeysModel(
 			{ source: 'device', chainId: null, keys: [key({ name: 'Mine', synced: null })] },
-			'could_not_check',
+			CORE_ROW.could_not_check,
 			m
 		);
 		expect(model.note).toBe(m.keys.fromDevice);
@@ -149,19 +244,24 @@ describe('walletKeysModel', () => {
 		// A registry that answered with nothing was not unreachable: no such note.
 		const unregistered = walletKeysModel(
 			{ source: 'not_registered', chainId: null, keys: [key({ synced: null })] },
-			'unavailable',
+			null,
 			m
 		);
 		expect(unregistered.note).toBeUndefined();
 	});
 
-	it("carries the backup as the block's last row — tappable only where there is something to do", () => {
-		expect(walletKeysModel(registry, 'not_backed_up', m).backup).toMatchObject({
-			actionable: true
+	it("carries the copy's row as the block's last — tappable only where a tap does something", () => {
+		expect(walletKeysModel(registry, CORE_ROW.not_backed_up, m).backup).toMatchObject({
+			action: 'copy'
 		});
-		expect(walletKeysModel(registry, 'backed_up', m).backup).toMatchObject({ actionable: false });
-		// No registry on Ethereum: the keys are still shown, the backup is not offered.
-		expect(walletKeysModel(registry, 'unavailable', m).backup).toBeUndefined();
+		expect(walletKeysModel(registry, CORE_ROW.backed_up, m).backup).toMatchObject({
+			action: 'none'
+		});
+		expect(walletKeysModel(registry, CORE_ROW.not_copyable, m).backup).toMatchObject({
+			action: 'none'
+		});
+		// No registry on Ethereum: the keys are still shown, the copy is not offered.
+		expect(walletKeysModel(registry, null, m).backup).toBeUndefined();
 	});
 
 	it('every locale has words for the block', () => {
@@ -229,7 +329,7 @@ describe('walletKeysModel', () => {
 			});
 			const model = walletKeysModel(
 				{ source: 'registry', chainId: 100, keys: [minted] },
-				'backed_up',
+				CORE_ROW.backed_up,
 				m
 			);
 			const row = model.rows[0];
@@ -241,16 +341,16 @@ describe('walletKeysModel', () => {
 				'AAGUID',
 				'Transport'
 			]);
-			for (const r of walletKeysModel(registry, 'backed_up', m).rows) {
+			for (const r of walletKeysModel(registry, CORE_ROW.backed_up, m).rows) {
 				expect(['platform', 'hybrid', 'security_key']).toContain(r.key.kind);
 				expect(r.holderFallback).not.toMatch(/trusted signer/i);
 			}
 		});
 
 		it('says the domain once for an account on its own — and only then', () => {
-			const own = walletKeysModel(registry, 'backed_up', m, 'sign.example.com');
+			const own = walletKeysModel(registry, CORE_ROW.backed_up, m, 'sign.example.com');
 			expect(own.domain).toBe('Keys on sign.example.com');
-			expect(walletKeysModel(registry, 'backed_up', m).domain).toBeUndefined();
+			expect(walletKeysModel(registry, CORE_ROW.backed_up, m).domain).toBeUndefined();
 		});
 
 		it('every locale has the domain line', () => {

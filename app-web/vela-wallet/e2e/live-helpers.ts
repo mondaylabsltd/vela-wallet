@@ -14,18 +14,28 @@ import type { Page } from '@playwright/test';
 
 const APP_ROOT = join(import.meta.dirname, '..');
 
-/** Dotted-path reader over the generated EN catalog — assertions speak the
- *  corpus, never hardcoded copy. */
-export function en(path: string): string {
+/** Dotted-path reader over one generated catalog. */
+function corpus(locale: string, path: string): string {
 	const raw = JSON.parse(
-		readFileSync(join(APP_ROOT, '..', '..', 'assets', 'i18n', 'en.json'), 'utf8')
+		readFileSync(join(APP_ROOT, '..', '..', 'assets', 'i18n', `${locale}.json`), 'utf8')
 	) as Record<string, unknown>;
 	const value = path.split('.').reduce<unknown>((node, key) => {
 		if (node === null || typeof node !== 'object') return undefined;
 		return (node as Record<string, unknown>)[key];
 	}, raw);
-	if (typeof value !== 'string') throw new Error(`en corpus has no string at ${path}`);
+	if (typeof value !== 'string') throw new Error(`${locale} corpus has no string at ${path}`);
 	return value;
+}
+
+/** Dotted-path reader over the generated EN catalog — assertions speak the
+ *  corpus, never hardcoded copy. */
+export function en(path: string): string {
+	return corpus('en', path);
+}
+
+/** The same over the ZH catalog, for the suites that walk a screen in Chinese. */
+export function zh(path: string): string {
+	return corpus('zh', path);
 }
 
 /** A legacy single-key account record, exactly the stored shape. */

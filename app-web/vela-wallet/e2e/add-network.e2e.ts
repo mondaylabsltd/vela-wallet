@@ -11,7 +11,7 @@
  * and its removal.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { en, seedSignedIn } from './live-helpers';
+import { en, seedSignedIn, zh } from './live-helpers';
 import { denyOffOrigin, stubChainRegistry, stubJsonRpc } from './stub-chain';
 import { aggregate3CallCount, encodeAggregate3Result, abiWord } from './stub-chain';
 import { isAggregate3 } from './stub-multicall';
@@ -26,7 +26,29 @@ const EXPLORER = 'https://explorer.op-stub.test';
 const CHAIN_ID = 59144;
 const NAME = 'Linea';
 
-async function stubEverything(page: Page): Promise<void> {
+/** The P-256 verifier's address (EIP-7951 / RIP-7212): `network_admin::P256_PRECOMPILE`. */
+const P256_PRECOMPILE = '0x0000000000000000000000000000000000000100';
+
+/**
+ * What the chain under test answers the check with. The default is a chain
+ * that passes; the two refusals are one fact each: no contract code, or a
+ * P-256 probe that does not answer `1`.
+ */
+interface ChainFacts {
+	/** Every required contract has code. */
+	contracts: boolean;
+	/**
+	 * The P-256 verifier (EIP-7951 / RIP-7212 at 0x100) is there. The core
+	 * probes twice — a call that must answer `1`, then code at the address —
+	 * and a chain without it fails both.
+	 */
+	p256: boolean;
+}
+
+async function stubEverything(
+	page: Page,
+	facts: ChainFacts = { contracts: true, p256: true }
+): Promise<void> {
 	await seedSignedIn(page);
 	await denyOffOrigin(page);
 	await stubChainRegistry(page, {
@@ -77,8 +99,14 @@ async function stubEverything(page: Page): Promise<void> {
 		if (method === 'eth_chainId') return '0x' + chainId.toString(16);
 		if (method === 'eth_blockNumber') return '0x10';
 		if (method === 'eth_getLogs') return [];
-		// Every required contract is deployed.
-		if (method === 'eth_getCode') return '0x6001';
+		if (method === 'eth_getCode') {
+			// The verifier's second probe: code AT the precompile's address.
+			// A chain with no verifier has none there, whatever else it has.
+			const address = String(params[0] ?? '').toLowerCase();
+			if (address === P256_PRECOMPILE) return facts.p256 ? '0x6001' : '0x';
+			// Every required contract is deployed — unless this chain has none.
+			return facts.contracts ? '0x6001' : '0x';
+		}
 		if (method === 'eth_call') {
 			const call = params[0] as { data?: string } | undefined;
 			// Only a real aggregate3 envelope has a count to read; the P-256 probe
@@ -88,8 +116,9 @@ async function stubEverything(page: Page): Promise<void> {
 				const data = '0x' + abiWord(0) + abiWord(0) + abiWord(0) + abiWord(0) + abiWord(0);
 				return encodeAggregate3Result(Array.from({ length: n }, () => ({ success: true, data })));
 			}
-			// The P-256 probe: a 32-byte word whose value is exactly one.
-			return '0x' + abiWord(1);
+			// The P-256 probe: a 32-byte word whose value is exactly one — or,
+			// on a chain with no verifier at 0x100, nothing at all.
+			return facts.p256 ? '0x' + abiWord(1) : '0x';
 		}
 		return undefined;
 	});
@@ -102,11 +131,86 @@ async function openNetworks(page: Page): Promise<void> {
 	await page.getByText(en('settings.advanced.networksTitle'), { exact: true }).click();
 }
 
-test.beforeEach(async ({ page }) => {
-	await stubEverything(page);
+/** Search for the chain under test and pick it: the wizard runs its ladder. */
+async function checkChain(page: Page, locale = 'en'): Promise<void> {
+	const t = (key: string) => (locale === 'en' ? en(key) : zh(key));
+	await page.goto(`/${locale}/settings`);
+	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
+	await page.getByText(t('settings.sections.advanced'), { exact: true }).click();
+	await page.getByText(t('settings.advanced.addNetworkTitle'), { exact: true }).click();
+	await page
+		.getByPlaceholder(t('settingsModals.addNetwork.searchPlaceholder'))
+		.fill(String(CHAIN_ID));
+	await page
+		.getByRole('button', { name: new RegExp(NAME) })
+		.first()
+		.click();
+	await expect(
+		page.getByText(t('settingsModals.addNetwork.incompatible'), { exact: true })
+	).toBeVisible({ timeout: 30_000 });
+}
+
+/**
+ * A refused network says WHY (the core's `NetCompatibility.blocker`), and the
+ * two reasons have opposite next steps. The wizard used to say "contracts are
+ * missing" and offer the Chain Setup tool for both — which sent a person to
+ * deploy onto a network that can never check a passkey signature, and said
+ * nothing about money getting stuck there.
+ */
+test.describe('a refused network says why', () => {
+	test('missing contracts: Chain Setup is offered, opened on this chain', async ({ page }) => {
+		await stubEverything(page, { contracts: false, p256: true });
+		await checkChain(page);
+		await expect(page.getByText(en('settingsModals.addNetwork.incompatibleHint'))).toBeVisible();
+		await expect(page.getByText(en('settingsModals.addNetwork.noP256Hint'))).toHaveCount(0);
+		const setup = page.getByRole('link', {
+			name: en('settingsModals.addNetwork.openChainSetupTool')
+		});
+		await expect(setup).toBeVisible();
+		// The core's link: the page starts on the chain that was checked.
+		await expect(setup).toHaveAttribute(
+			'href',
+			`https://getvela.app/chain-setup?chain=${CHAIN_ID}`
+		);
+		// No way to add it.
+		await expect(
+			page.getByRole('button', { name: en('settingsModals.addNetwork.addNetworkBtn') })
+		).toHaveCount(0);
+	});
+
+	test('no P-256 verifier: the network cannot run Vela wallets — nothing to deploy, no button', async ({
+		page
+	}) => {
+		// Every contract IS deployed here: the verifier alone is missing, and
+		// that alone refuses the network.
+		await stubEverything(page, { contracts: true, p256: false });
+		await checkChain(page);
+		const line = page.getByText(en('settingsModals.addNetwork.noP256Hint'));
+		await expect(line).toBeVisible();
+		await expect(line).toContainText("Don't send money to your Vela address on this network");
+		await expect(page.getByText(en('settingsModals.addNetwork.incompatibleHint'))).toHaveCount(0);
+		await expect(
+			page.getByRole('link', { name: en('settingsModals.addNetwork.openChainSetupTool') })
+		).toHaveCount(0);
+		await expect(
+			page.getByRole('button', { name: en('settingsModals.addNetwork.addNetworkBtn') })
+		).toHaveCount(0);
+	});
+
+	test('both gone: no verifier wins — deploying the contracts would not make it work', async ({
+		page
+	}) => {
+		await stubEverything(page, { contracts: false, p256: false });
+		await checkChain(page, 'zh');
+		await expect(page.getByText(zh('settingsModals.addNetwork.noP256Hint'))).toBeVisible();
+		await expect(
+			page.getByRole('link', { name: zh('settingsModals.addNetwork.openChainSetupTool') })
+		).toHaveCount(0);
+	});
 });
 
 test('search → verdict → add → listed → survives a reload → removed', async ({ page }) => {
+	await stubEverything(page);
 	await page.goto('/en/settings');
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await page.getByText(en('settings.sections.advanced'), { exact: true }).click();
