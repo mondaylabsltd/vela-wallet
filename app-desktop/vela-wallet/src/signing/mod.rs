@@ -243,6 +243,10 @@ pub struct SigningStrings {
     /// `Transfer` it likes), and what "it ran and nothing moved" reads as.
     pub balance_unverified_token: SharedString,
     pub sim_no_change: SharedString,
+    /// "Checking…" — what the verdict's place says under its title while the
+    /// simulation is out (PR 3 final note F2). The hero's own word for a
+    /// read that has not come back; no new string.
+    pub sim_checking: SharedString,
     pub warn_drain: SharedString,
     pub ok_self_transfer: SharedString,
     pub ok_no_network_fee: SharedString,
@@ -510,6 +514,7 @@ impl SigningStrings {
             warn_sim_unavailable: s("simUnavailableWarning"),
             balance_unverified_token: s("balanceUnverifiedToken"),
             sim_no_change: s("simResultNoChange"),
+            sim_checking: loc.t(vela_core::app::balance_dashboard::CHECKING),
             warn_drain: s("drainWarning"),
             ok_self_transfer: s("balanceSelfTransfer"),
             ok_no_network_fee: s("noNetworkFee"),

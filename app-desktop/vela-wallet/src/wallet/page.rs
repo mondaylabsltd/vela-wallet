@@ -976,6 +976,10 @@ pub struct WalletPage {
     content_scroll: crate::ui::SmoothScroll,
     /// The third column's body, and which subject it last scrolled for.
     panel_scroll: crate::ui::SmoothScroll,
+    /// The simulation verdict's own scroll, inside its reserved place on the
+    /// signing column (PR 3 final note F2): a verdict taller than the place
+    /// scrolls here instead of growing the column.
+    verdict_scroll: crate::ui::SmoothScroll,
     panel_scroll_subject: String,
     /// The sidebar's network list — twenty-odd chains outgrow a short window.
     networks_scroll: crate::ui::SmoothScroll,
@@ -1652,6 +1656,7 @@ impl WalletPage {
             address_focus: cx.focus_handle(),
             content_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll: crate::ui::SmoothScroll::new(),
+            verdict_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll_subject: String::new(),
             networks_scroll: crate::ui::SmoothScroll::new(),
             settings_scroll: crate::ui::SmoothScroll::new(),
@@ -3456,10 +3461,11 @@ impl WalletPage {
     /// The columns this page builds without the window at hand, stepped once
     /// per frame at the top of `render` (`ui::smooth_scroll`). Dialogs and the
     /// pick list step their own, in `attach`.
-    fn scrolls(&self) -> [&crate::ui::SmoothScroll; 6] {
+    fn scrolls(&self) -> [&crate::ui::SmoothScroll; 7] {
         [
             &self.content_scroll,
             &self.panel_scroll,
+            &self.verdict_scroll,
             &self.networks_scroll,
             &self.settings_scroll,
             &self.contacts_scroll,
@@ -17724,6 +17730,17 @@ impl WalletPage {
         if self.gallery && self.no_signing_host() && Self::pinned_currency().is_some() {
             signing_fixtures::in_display_currency(&mut model, &self.signing, &currency);
         }
+        // `VELA_SIM`: the verdict's place on the drawn request, holding the
+        // answer the pin names — where the live sheet puts it, after what
+        // the request says of itself.
+        if self.gallery
+            && self.no_signing_host()
+            && let Some(pin) = signing_fixtures::sim_pin()
+        {
+            model
+                .blocks
+                .extend(signing_fixtures::sim_pin_block(pin, &self.signing));
+        }
         // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the
         // operation (PR 2 note 9), drawn from the real core's view by the
         // live receipt builder — there is no request on this route.
@@ -17826,7 +17843,12 @@ impl WalletPage {
                 // it would do. Last, because it is the answer to everything
                 // above it — and the one part of this sheet a site cannot
                 // write.
-                model.blocks.extend(signing_live::sim_blocks(
+                // In a place the sheet keeps from its first frame (PR 3
+                // final note F2), so the answer landing — a few hundred
+                // milliseconds after the sheet opens — moves neither the fee
+                // row nor the confirm under a pointer on its way there.
+                model.blocks.extend(signing_live::verdict_block(
+                    host.sim_stage,
                     &host.sim,
                     host.sim_notice.as_ref(),
                     host.chain_id,
@@ -17948,6 +17970,8 @@ impl WalletPage {
                     .is_none_or(|(held, _)| *held != id)
                 {
                     self.signing_held = Some((id, signing_live::HeldLines::default()));
+                    // Another request: its verdict is read from its top.
+                    self.verdict_scroll.set_offset(gpui::point(px(0.), px(0.)));
                 }
                 if let Some((_, held)) = self.signing_held.as_mut() {
                     let measuring =
@@ -18296,6 +18320,21 @@ impl WalletPage {
                     actions,
                     field,
                     window,
+                ));
+            } else if let signing_fixtures::Block::Verdict { inner } = item {
+                // The verdict's place: one height, its own scroll inside
+                // (F2). The wheel over it moves the verdict while there is
+                // more of it, then the column, as any nested column does.
+                let scroller = self
+                    .verdict_scroll
+                    .wire(div().id("signing-verdict"), cx.entity_id());
+                let thumb = crate::ui::vertical_scrollbar(theme, &self.verdict_scroll);
+                column = column.child(signing_components::verdict_room(
+                    theme,
+                    &mut self.icons,
+                    inner,
+                    Some(scroller),
+                    thumb,
                 ));
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
                 (model.first_party, item)
