@@ -141,10 +141,6 @@ pub struct SettingsStrings {
     pub keys_attestation: SharedString,
     pub keys_copy: SharedString,
     pub keys_copied: SharedString,
-    /// What copying the record to Ethereum makes public and what it costs
-    /// (`registry_backup::EXPLAIN_KEY`). The backup ROW's own words are the
-    /// core's (`BackupState::row`), resolved where it is drawn.
-    pub backup_explain: SharedString,
     pub sign_out_desc: SharedString,
     pub erase_title: SharedString,
     pub erase_subtitle: SharedString,
@@ -443,7 +439,6 @@ impl SettingsStrings {
             keys_attestation: s("settingsModals.keys.attestation"),
             keys_copy: s("componentsUi.signing.copyValue"),
             keys_copied: s("receive.copied"),
-            backup_explain: s("settingsModals.backup.explain"),
             sign_out_desc: s("settings.signOut.desc"),
             erase_title: s("settings.eraseDevice.title"),
             erase_subtitle: s("settings.eraseDevice.subtitle"),

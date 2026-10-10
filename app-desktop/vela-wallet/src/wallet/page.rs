@@ -1364,9 +1364,16 @@ impl WalletPage {
                 .unwrap_or_default();
             self.signer_page_rename = Some((url, name));
         }
-        // `VELA_SETTINGS_SCROLL=<px>|bottom`: the open panel scrolled that
-        // far down — a screenshot pass cannot turn a wheel, and the Keys
-        // block (with its copy-to-Ethereum row) sits below the first screen.
+        self.pin_settings_scroll();
+    }
+
+    /// `VELA_SETTINGS_SCROLL=<px>|bottom` (developer builds): the open panel
+    /// scrolled that far down — a screenshot pass cannot turn a wheel, and
+    /// the Keys block (with its copy-to-Ethereum row) sits below the first
+    /// screen. Applied when the page opens and again when the Keys block's
+    /// answer lands: an offset is clamped to the height the panel had when
+    /// it was set, and that block arrives later and makes the panel taller.
+    fn pin_settings_scroll(&mut self) {
         match crate::dev_env::var!("VELA_SETTINGS_SCROLL").as_deref() {
             Some("bottom") => self.settings_scroll.scroll_to_bottom(),
             Some(raw) => {
@@ -9607,6 +9614,7 @@ impl WalletPage {
             page.update(cx, |page, cx| {
                 if page.backup_for.as_deref() == Some(asked.as_str()) {
                     page.keys_check = Some(answer);
+                    page.pin_settings_scroll();
                     cx.notify();
                 }
             })
@@ -10165,7 +10173,12 @@ impl WalletPage {
         );
         let copy_label = s.keys_copy.clone();
         let copied_label = s.keys_copied.clone();
-        let explain = s.backup_explain.clone();
+        // The paragraph under the backup row, when the core names one
+        // (`BackupLine::explain_key`): none under a wallet that can never be
+        // copied (PR 3 note 6).
+        let explain = crate::executor::registry::backup_line(self.backup_check.as_ref())
+            .and_then(|line| line.explain_key)
+            .map(|key| self.loc.t(&key));
         let check = self.keys_check.clone();
 
         let mut header = div().flex().items_baseline().gap(px(8.)).child(
@@ -10545,12 +10558,12 @@ impl WalletPage {
                 }
             }
         }
-        match self.backup_row(theme, cx) {
+        match (self.backup_row(theme, cx), explain) {
             // Under the row, what the copy makes public and what it costs
             // (`registry_backup::EXPLAIN_KEY`): the wallet's name, each key's
             // name, public key, credential ID and authenticator model, for
             // one Ethereum transaction and its fee — never "only public keys".
-            Some(backup) => block.child(backup).child(
+            (Some(backup), Some(explain)) => block.child(backup).child(
                 div()
                     .pl(px(theme::KEY_ROW_MARK + 12.))
                     .pb(px(8.))
@@ -10558,7 +10571,10 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(crate::ui::prose(explain)),
             ),
-            None => block,
+            // No paragraph for this state: the row ends the block, and no
+            // empty slot is kept where the paragraph would have been.
+            (Some(backup), None) => block.child(backup),
+            (None, _) => block,
         }
     }
 

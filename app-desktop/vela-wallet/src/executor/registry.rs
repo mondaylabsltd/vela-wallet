@@ -492,6 +492,13 @@ pub struct BackupLine {
     /// is neutral — "not copied yet" is a state, never a warning.
     pub positive: bool,
     pub press: BackupPress,
+    /// The corpus key of the paragraph under the row — what a copy makes
+    /// public, what it costs and how it is made — or `None` for no paragraph:
+    /// the core's `BackupRow::explain_key` once the walk has answered (absent
+    /// for a wallet that can never be copied: the paragraph described what
+    /// the row had just said cannot be done), and the core's own
+    /// `EXPLAIN_KEY` while it is still running.
+    pub explain_key: Option<String>,
 }
 
 /// The row for a check: `None` while nothing is to be drawn (no registry on
@@ -499,13 +506,16 @@ pub struct BackupLine {
 /// is still running — the core's "checking" line, with nothing to press.
 #[must_use]
 pub fn backup_line(check: Option<&BackupAnswer>) -> Option<BackupLine> {
-    use vela_core::registry_backup::{BackupAction, BackupTone, CHECKING_KEY, TITLE_KEY};
+    use vela_core::registry_backup::{
+        BackupAction, BackupTone, CHECKING_KEY, EXPLAIN_KEY, TITLE_KEY,
+    };
     let Some(answer) = check else {
         return Some(BackupLine {
             title_key: TITLE_KEY.to_owned(),
             subtitle_key: CHECKING_KEY.to_owned(),
             positive: false,
             press: BackupPress::Nothing,
+            explain_key: Some(EXPLAIN_KEY.to_owned()),
         });
     };
     let row = answer.row.as_ref()?;
@@ -513,6 +523,7 @@ pub fn backup_line(check: Option<&BackupAnswer>) -> Option<BackupLine> {
         title_key: row.title_key.clone(),
         subtitle_key: row.subtitle_key.clone(),
         positive: row.tone == BackupTone::Positive,
+        explain_key: row.explain_key.clone(),
         press: match (row.action, answer.call.as_ref()) {
             (BackupAction::Copy, Some(call)) => BackupPress::Copy(call.clone()),
             // "Copy" with no call to make would be a button that does
@@ -1636,10 +1647,24 @@ mod tests {
         assert_eq!(line(BackupState::Unavailable, None), None);
         assert_eq!(line(BackupState::NotRegistered, None), None);
 
+        // The paragraph under the row (PR 3 note 6) is the core's too: what a
+        // copy publishes, costs and takes — while the walk runs and for
+        // every state a copy can still be made or checked in, and NOT under
+        // a wallet that can never be copied, where it described what the row
+        // had just said cannot be done.
+        const EXPLAIN: &str = "settingsModals.backup.explain";
+        for row in [&checking, &copied, &not_yet, &unknown] {
+            assert_eq!(row.explain_key.as_deref(), Some(EXPLAIN));
+        }
+        assert_eq!(never.explain_key, None, "no paragraph, and no slot for one");
+
         for lang in ["en", "zh"] {
             let loc = crate::loc::Loc::for_language(lang);
             for row in [&checking, &copied, &not_yet, &unknown, &never] {
-                for key in [&row.title_key, &row.subtitle_key] {
+                for key in [&row.title_key, &row.subtitle_key]
+                    .into_iter()
+                    .chain(row.explain_key.as_ref())
+                {
                     assert_ne!(loc.t(key).as_ref(), key.as_str(), "{lang}: {key} echoed");
                 }
             }
