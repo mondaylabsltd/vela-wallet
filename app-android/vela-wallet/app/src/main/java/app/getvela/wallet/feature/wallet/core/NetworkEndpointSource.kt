@@ -17,11 +17,13 @@ import kotlinx.coroutines.flow.StateFlow
  * not a preference — it is a statement about provenance, and the machine
  * decides what that is worth.
  *
+ * A built-in chain's own endpoint is followed by the core's curated public
+ * ones (`publicRpcUrls`): the list the other three shells seed their `public`
+ * tier from, and the only fallback this shell has.
+ *
  * **What this does not yet collect** (spec 041 phase 2, when the chain index
- * becomes reachable): the index's own RPC list and the provider-key URLs. The
- * pool routes correctly with one candidate per chain; it simply has less to
- * choose from, and every extra tier is a wider net rather than a different
- * behaviour.
+ * becomes reachable): the index's own RPC list and the provider-key URLs.
+ * Every extra tier is a wider net rather than a different behaviour.
  */
 class NetworkEndpointSource(
     /**
@@ -42,6 +44,17 @@ class NetworkEndpointSource(
      * Gnosis was dead for the session — no balance, no send, no receipt.
      */
     private val ready: suspend () -> Unit = {},
+    /**
+     * The curated public endpoints for a built-in chain — ONE list, the
+     * core's (`network_admin::PUBLIC_RPCS`), which every shell seeds its
+     * `public` tier from. This shell had none: each chain had its default and
+     * nothing to fall back on, so a default that would not answer (several
+     * time out from some networks) left the chain dark. Empty for a chain the
+     * list does not know.
+     */
+    private val publicRpcs: (chainId: Int) -> List<String> = { chainId ->
+        uniffi.vela_core_uniffi.publicRpcUrls(chainId.toUInt())
+    },
 ) : RpcEndpointSource {
 
     override suspend fun forChain(chainId: Int): RpcSeeds {
@@ -53,9 +66,10 @@ class NetworkEndpointSource(
         }
         VelaLog.event("rpc.seeds", "chain $chainId", "rpc" to row.rpc_url.takeIf { it.isNotBlank() }?.let { runCatching { java.net.URI(it).host }.getOrNull() }, "bundler" to row.bundler_url.takeIf { it.isNotBlank() })
 
+        val own = row.rpc_url.takeIf { it.isNotBlank() }
         return RpcSeeds(
             rpc = listOfNotNull(
-                row.rpc_url.takeIf { it.isNotBlank() }?.let { url ->
+                own?.let { url ->
                     // A custom network's URL is one the person typed, which is
                     // the highest tier the core knows. A built-in's is the
                     // default we ship.
@@ -64,7 +78,13 @@ class NetworkEndpointSource(
                         source = if (row.is_custom) RpcSource.User else RpcSource.Default,
                     )
                 },
-            ),
+            ) +
+                // After the chain's own endpoint, the core's public tier — the
+                // same place every shell collects it. One already listed above
+                // is not listed twice.
+                publicRpcs(chainId)
+                    .filter { it.trimEnd('/') != own?.trimEnd('/') }
+                    .map { RpcEndpointSeed(url = it, source = RpcSource.Public) },
             bundler = listOfNotNull(
                 row.bundler_url.takeIf { it.isNotBlank() }
                     ?.let { RpcEndpointSeed(url = it, source = RpcSource.Builtin) },
