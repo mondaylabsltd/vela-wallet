@@ -1420,7 +1420,8 @@
     "feeFailed": "Impossibile calcolare la commissione: toccala per riprovare",
     "feeRetrying": "Non è ancora stato possibile calcolare la commissione. Nuovo tentativo automatico…",
     "feeWouldFail": "Così com'è, fallirebbe.",
-    "previousPending": "In attesa della tua transazione precedente su questa rete…"
+    "previousPending": "In attesa della tua transazione precedente su questa rete…",
+    "simChecking": "Verifica di cosa fa questa transazione…"
    }
   },
   "signingApprove": {

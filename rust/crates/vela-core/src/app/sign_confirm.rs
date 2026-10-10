@@ -2,7 +2,8 @@
 //! (spec 099 R7).
 //!
 //! Four machines have a say: the request ([`super::sign_request`], its own
-//! gate and why it is shut), the approval guard, the clear-signing reading and
+//! gate and why it is shut — and, since PR 3, whether its simulation's verdict
+//! is on the sheet yet), the approval guard, the clear-signing reading and
 //! the fee. Every client used to AND them itself, each with rules of its own
 //! on top — a message has no fee to wait for, another speed's figure is not
 //! this speed's (issue 681), a request not yet read is not signable (096 F7) —
@@ -75,11 +76,27 @@ pub enum ConfirmBlock {
     /// force is then provably `insufficient`), so a second copy under the confirm
     /// only repeated it (issue #438).
     FeeShort,
+    /// Everything else is ready and the wallet's own simulation has not
+    /// given its verdict yet (PR 3, [`SignView::sim_checking`]). The balance
+    /// changes are the one part of the sheet the site being signed for
+    /// cannot write, so the confirm waits for them — at most
+    /// [`super::sign_request::SIM_VERDICT_WAIT_MS`], after which the sheet
+    /// says it could not check and the confirm opens. Last in the order: a
+    /// request still being read, an amount to choose or a fee being worked
+    /// out says its own line first, and this one stands only when the
+    /// verdict is all that is missing.
+    SimChecking,
 }
 
 /// The line while the account's previous transaction on this network is
 /// still going through — under a held confirm, the dApp sheet's and Send's.
 pub const PREVIOUS_PENDING_KEY: &str = "componentsUi.signing.confirmBlock.previousPending";
+
+/// The line under a confirm that waits for the simulation's verdict (PR 3,
+/// [`ConfirmBlock::SimChecking`]): "Checking what this transaction does…" —
+/// the present tense of the sentence the verdict's place says when nothing
+/// could be checked (`simUnavailableWarning`).
+pub const SIM_CHECKING_KEY: &str = "componentsUi.signing.confirmBlock.simChecking";
 
 /// The title when the relay would not take an operation because the
 /// account's previous one on this network still holds the nonce, at submit
@@ -140,6 +157,7 @@ impl ConfirmBlock {
             Self::BatchUnsettled => "componentsUi.signing.confirmBlock.batchUnsettled",
             Self::FeeMeasuring => "componentsUi.signing.confirmBlock.feeMeasuring",
             Self::FeeFailed => "componentsUi.signing.confirmBlock.feeFailed",
+            Self::SimChecking => SIM_CHECKING_KEY,
         })
     }
 }
@@ -257,6 +275,12 @@ pub fn confirm_state_of(
             }
             return shut(ConfirmBlock::FeeShort);
         }
+    }
+    // PR 3: the simulation's verdict is still out. Asked last, and of every
+    // request alike — a message never has `sim_checking` set, because no
+    // simulation is ever started for one.
+    if sign.sim_checking {
+        return shut(ConfirmBlock::SimChecking);
     }
     ConfirmState {
         enabled: true,

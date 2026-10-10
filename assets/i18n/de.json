@@ -1415,7 +1415,8 @@
     "feeFailed": "Gebühr nicht berechenbar — zum Wiederholen tippen",
     "feeRetrying": "Gebühr noch nicht berechenbar. Wird automatisch erneut versucht…",
     "feeWouldFail": "So gesendet würde sie fehlschlagen.",
-    "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…"
+    "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…",
+    "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…"
    }
   },
   "signingApprove": {

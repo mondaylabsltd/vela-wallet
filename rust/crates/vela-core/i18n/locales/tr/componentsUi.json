@@ -249,7 +249,8 @@
         "feeFailed": "Ücret hesaplanamadı — tekrar denemek için dokunun",
         "feeRetrying": "Ücret henüz hesaplanamadı. Otomatik olarak yeniden deneniyor…",
         "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
-        "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…"
+        "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…",
+        "simChecking": "Bu işlemin ne yapacağı denetleniyor…"
       }
     },
     "signingApprove": {

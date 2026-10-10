@@ -249,7 +249,8 @@
         "feeFailed": "Frais incalculables — touchez-les pour réessayer",
         "feeRetrying": "Frais pas encore calculés. Nouvelle tentative automatique…",
         "feeWouldFail": "Elle échouerait si elle était envoyée telle quelle.",
-        "previousPending": "En attente de votre transaction précédente sur ce réseau…"
+        "previousPending": "En attente de votre transaction précédente sur ce réseau…",
+        "simChecking": "Vérification de ce que fait cette transaction…"
       }
     },
     "signingApprove": {

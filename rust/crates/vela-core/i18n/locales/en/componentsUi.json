@@ -291,7 +291,8 @@
         "feeFailed": "Couldn't work out the fee. Tap it to retry",
         "feeRetrying": "Couldn't work out the fee yet. Retrying…",
         "feeWouldFail": "This would fail if sent as it is.",
-        "previousPending": "Waiting for your last transaction on this network…"
+        "previousPending": "Waiting for your last transaction on this network…",
+        "simChecking": "Checking what this transaction does…"
       }
     },
     "currency": {

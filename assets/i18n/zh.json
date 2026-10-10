@@ -1425,7 +1425,8 @@
     "feeFailed": "没能算出费用——点费用重试",
     "feeRetrying": "暂时没能算出费用，正在自动重试…",
     "feeWouldFail": "按现在的方式发送会失败。",
-    "previousPending": "正在等待这个网络上的上一笔交易完成…"
+    "previousPending": "正在等待这个网络上的上一笔交易完成…",
+    "simChecking": "正在检查这笔交易的结果…"
    }
   },
   "currency": {

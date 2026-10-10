@@ -1415,7 +1415,8 @@
     "feeFailed": "手数料を計算できません。タップで再試行",
     "feeRetrying": "手数料をまだ計算できません。自動で再試行しています…",
     "feeWouldFail": "このまま送信すると失敗します。",
-    "previousPending": "このネットワークでの前の取引の完了を待っています…"
+    "previousPending": "このネットワークでの前の取引の完了を待っています…",
+    "simChecking": "この取引の結果を確認中…"
    }
   },
   "signingApprove": {

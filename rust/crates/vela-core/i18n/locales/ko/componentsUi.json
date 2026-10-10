@@ -249,7 +249,8 @@
         "feeFailed": "수수료를 계산하지 못했습니다 — 눌러서 다시 시도",
         "feeRetrying": "아직 수수료를 계산하지 못했습니다. 자동으로 다시 시도하는 중…",
         "feeWouldFail": "이대로 보내면 실패합니다.",
-        "previousPending": "이 네트워크의 이전 거래가 끝나기를 기다리는 중…"
+        "previousPending": "이 네트워크의 이전 거래가 끝나기를 기다리는 중…",
+        "simChecking": "이 거래의 결과를 확인 중…"
       }
     },
     "signingApprove": {

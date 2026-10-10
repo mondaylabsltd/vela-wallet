@@ -249,7 +249,8 @@
         "feeFailed": "Không tính được phí — chạm vào phí để thử lại",
         "feeRetrying": "Chưa tính được phí. Đang tự động thử lại…",
         "feeWouldFail": "Nếu gửi như hiện tại, giao dịch sẽ thất bại.",
-        "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…"
+        "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…",
+        "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…"
       }
     },
     "signingApprove": {

@@ -249,7 +249,8 @@
         "feeFailed": "No se pudo calcular la comisión: tócala para reintentar",
         "feeRetrying": "Aún no se pudo calcular la comisión. Reintentando automáticamente…",
         "feeWouldFail": "Fallaría si se envía así.",
-        "previousPending": "Esperando a que termine tu transacción anterior en esta red…"
+        "previousPending": "Esperando a que termine tu transacción anterior en esta red…",
+        "simChecking": "Comprobando qué hace esta transacción…"
       }
     },
     "signingApprove": {

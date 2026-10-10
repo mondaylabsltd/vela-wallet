@@ -249,7 +249,8 @@
         "feeFailed": "計唔到費用——撳費用重試",
         "feeRetrying": "暫時計唔到費用，正在自動重試…",
         "feeWouldFail": "照而家咁發出會失敗。",
-        "previousPending": "正在等這個網絡上的上一筆交易完成…"
+        "previousPending": "正在等這個網絡上的上一筆交易完成…",
+        "simChecking": "正在查呢筆交易會做乜…"
       }
     },
     "currency": {

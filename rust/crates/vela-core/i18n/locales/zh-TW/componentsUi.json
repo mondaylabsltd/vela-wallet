@@ -249,7 +249,8 @@
         "feeFailed": "沒能算出費用——點費用重試",
         "feeRetrying": "暫時沒能算出費用，正在自動重試…",
         "feeWouldFail": "照現在的方式送出會失敗。",
-        "previousPending": "正在等待這個網路上的上一筆交易完成…"
+        "previousPending": "正在等待這個網路上的上一筆交易完成…",
+        "simChecking": "正在檢查這筆交易的結果…"
       }
     },
     "currency": {

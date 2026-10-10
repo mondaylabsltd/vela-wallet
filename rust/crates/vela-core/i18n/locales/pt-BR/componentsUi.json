@@ -249,7 +249,8 @@
         "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo",
         "feeRetrying": "Ainda não foi possível calcular a taxa. Tentando de novo automaticamente…",
         "feeWouldFail": "Falharia se fosse enviada assim.",
-        "previousPending": "Aguardando sua transação anterior nesta rede terminar…"
+        "previousPending": "Aguardando sua transação anterior nesta rede terminar…",
+        "simChecking": "Verificando o que esta transação faz…"
       }
     },
     "signingApprove": {

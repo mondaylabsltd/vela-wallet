@@ -13,7 +13,14 @@
 //! a status neither 0 nor 1 (no error)    ─► NotOffered  ─► Caution  simUnavailableWarning
 //! otherwise, something of theirs moves   ─► Deltas      ─► none (token_trust draws the balances)
 //! otherwise, nothing of theirs moves     ─► Deltas []   ─► quiet    simResultNoChange
+//! no reply inside SIM_VERDICT_WAIT_MS    ─► (none yet)  ─► Caution  simUnavailableWarning, until one lands
 //! ```
+//!
+//! The last row is `sign_request`'s (PR 3): the confirm waits for the verdict
+//! and the wait has an end. When it passes, the request's view names the same
+//! could-not-check line (`SignView::sim_waited_out_key`) and the sheet draws
+//! it in the verdict's place; a reply that still arrives is read by the rows
+//! above and replaces it.
 //!
 //! ## "No asset changes" is said, and it is one line (PR 3)
 //!

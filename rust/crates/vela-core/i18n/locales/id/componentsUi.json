@@ -249,7 +249,8 @@
         "feeFailed": "Biaya tidak bisa dihitung — ketuk untuk mencoba lagi",
         "feeRetrying": "Biaya belum bisa dihitung. Mencoba lagi otomatis…",
         "feeWouldFail": "Transaksi ini akan gagal jika dikirim seperti ini.",
-        "previousPending": "Menunggu transaksi sebelumnya di jaringan ini selesai…"
+        "previousPending": "Menunggu transaksi sebelumnya di jaringan ini selesai…",
+        "simChecking": "Memeriksa hasil transaksi ini…"
       }
     },
     "signingApprove": {
