@@ -26,6 +26,7 @@ import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.FeedTxKind
 import app.getvela.wallet.feature.wallet.core.FeedTxStatus
+import uniffi.vela_core_uniffi.maskedAmount
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DateFormat
@@ -67,17 +68,13 @@ object WalletLive {
     /** The hero's mask, one glyph wider (`privacy::BALANCE_MASK`). */
     const val BALANCE_MASK = "••••••"
 
-    /**
-     * A masked amount that is written WITH its unit: the dots, then the coin
-     * — "•••• xDAI". The core's rule (`privacy::masked_amount`): the unit
-     * stays, because it says what kind of money without saying how much, and
-     * the secret is the number. A row that draws its unit apart from the
-     * figure has always kept it; a transfer's detail dropped it ("••••")
-     * while iOS kept it. A figure with no unit of its own — a holding under
-     * its ticker, a worth in the display currency — is [MASK] alone, never a
-     * trailing space.
-     */
-    fun masked(unit: String): String = unit.trim().let { if (it.isEmpty()) MASK else "$MASK $it" }
+    // A masked amount written WITH its unit ("•••• xDAI") is the core's own
+    // function now — `maskedAmount(unit)`, the export of `privacy::masked_amount`
+    // — called wherever one is drawn (a dApp row's "received" here, a
+    // detail's figures in `FlowLive`). This file used to spell the rule
+    // itself, and before that a transfer's detail dropped the unit while iOS
+    // kept it. A figure with no unit of its own — a holding under its ticker,
+    // a worth in the display currency — is [MASK] alone.
 
     /**
      * The home screen, from the person's own holdings.
@@ -269,7 +266,7 @@ object WalletLive {
             // What came back masks whenever the balance is hidden, whatever
             // the row's own figure is (`privacy`).
             received = dapp?.received?.let { change ->
-                if (hidden) masked(change.symbol) else listOf(changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
+                if (hidden) maskedAmount(change.symbol) else listOf(changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
             },
         )
     }

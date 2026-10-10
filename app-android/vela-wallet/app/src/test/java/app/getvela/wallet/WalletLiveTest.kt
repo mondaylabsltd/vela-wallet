@@ -724,14 +724,28 @@ class WalletLiveTest {
         assertEquals(AssetFiatModel.Masked, hidden.assetRows.single().fiat)
     }
 
-    /** The core's `privacy::masked_amount`, word for word: the mask, then the unit; no unit, the mask alone. */
+    /**
+     * A hidden amount keeps its unit — and the rule is the core's own
+     * function (`maskedAmount`, the export of `privacy::masked_amount`), not
+     * a copy of it here: the mask, then the unit; no unit, the mask alone,
+     * never a trailing space. What this shell draws with it is checked where
+     * it is drawn: a dApp row's "received" below, a detail's figures in
+     * `PrivacyFixtureTest`.
+     */
     @Test
     fun `a masked amount keeps its unit and never a trailing space`() {
-        assertEquals("•••• xDAI", WalletLive.masked("xDAI"))
-        assertEquals("${WalletLive.MASK} USDC", WalletLive.masked("USDC"))
-        assertEquals(WalletLive.MASK, WalletLive.masked(""))
-        assertEquals(WalletLive.MASK, WalletLive.masked("  "))
-        assertTrue(WalletLive.masked("ETH").none { it.isDigit() })
+        fun masked(unit: String): String = uniffi.vela_core_uniffi.maskedAmount(unit)
+        assertEquals("•••• xDAI", masked("xDAI"))
+        assertEquals("${WalletLive.MASK} USDC", masked("USDC"))
+        assertEquals(WalletLive.MASK, masked(""))
+        assertEquals(WalletLive.MASK, masked("  "))
+        assertTrue(masked("ETH").none { it.isDigit() })
+
+        // …and the row that draws one draws the core's: a swap's coin back, hidden.
+        val swap = WalletFixtures.liveHiddenFeed()
+        val row = WalletLive.activity(swap, strings).flatMap { it.rows }.single { it.id == "swap" }
+        assertEquals(masked("xDAI"), row.received)
+        assertEquals("•••• xDAI", row.received)
     }
 
     /** The label names the currency in every state — a total still being read does not borrow the board's "USD". */
