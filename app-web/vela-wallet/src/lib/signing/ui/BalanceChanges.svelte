@@ -91,4 +91,10 @@
 	.note[data-tone='danger'] {
 		color: var(--color-error-base);
 	}
+
+	/* PR 3: nothing could be checked before the deadline — a caution, in the
+	   warning banner's own ink. */
+	.note[data-tone='caution'] {
+		color: var(--color-warning-base);
+	}
 </style>

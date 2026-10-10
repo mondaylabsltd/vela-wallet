@@ -27,7 +27,12 @@ import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
-import { SIM_SAID_KEYS, type HandoffMessages, type SigningMessages } from '$lib/signing/messages';
+import {
+	SIM_SAID_KEYS,
+	SIM_WAITED_OUT_KEY,
+	type HandoffMessages,
+	type SigningMessages
+} from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
 	BACKUP_EXPLAIN_KEYS,
@@ -1040,7 +1045,11 @@ export const CONFIRM_BLOCK_KEYS = [
 	'componentsUi.signing.confirmBlock.feeRetrying',
 	// PR 2 polish: the relay answered that the operation would fail — a fact,
 	// asking for no tap; the row says what a tap does.
-	'componentsUi.signing.confirmBlock.feeWouldFail'
+	'componentsUi.signing.confirmBlock.feeWouldFail',
+	// PR 3: everything else is ready and the sheet's own simulation has not
+	// given its verdict yet (`ConfirmBlock::SimChecking`) — "Checking what
+	// this transaction does…", for four seconds at most.
+	'componentsUi.signing.confirmBlock.simChecking'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
 	// coin, and the confirm's note said it again.
 ] as const;
@@ -1168,7 +1177,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnVerifiedAbi: k('componentsUi.signing.verifiedAbiWarning'),
 		warnDescriptorFetched: k('componentsUi.signing.descriptorFetchedWarning'),
 		warnOrderTerms: k('componentsUi.signing.warnOrderTerms'),
-		warnSimUnavailable: k('componentsUi.signing.simUnavailableWarning'),
+		warnSimUnavailable: k(SIM_WAITED_OUT_KEY),
 		warnDrain: k('componentsUi.signing.drainWarning'),
 		okSelfTransfer: k('componentsUi.signing.balanceSelfTransfer'),
 		okNoNetworkFee: k('componentsUi.signing.noNetworkFee'),

@@ -81,6 +81,9 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	failure_retryable: false,
 	failure_refusal_key: null,
 	failure_not_sent: false,
+	// PR 3: no simulation is out, and none has run past its deadline.
+	sim_checking: false,
+	sim_waited_out_key: null,
 	notice: null,
 	blocked: null,
 	global_chain_id: 1

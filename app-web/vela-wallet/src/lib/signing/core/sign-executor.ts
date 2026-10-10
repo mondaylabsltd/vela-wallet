@@ -10,6 +10,13 @@
  * may not submit", the funding rid pin, the record-then-respond order and the
  * §12.1.6 sequencing all live in Rust.
  *
+ * And one clock (PR 3): `SimVerdictTimer` — wait the `ms` the core names, then
+ * answer with the same request id and round. The confirm waits for the
+ * sheet's own simulation, and this is the deadline of that wait: how long,
+ * for which request, and what its passing means are the core's. This side
+ * does not look at the simulation to answer it, never shortens it, and
+ * answers it even when the request has gone (the core drops a stale one).
+ *
  * What DOES live here, because the core's doc comments put it here:
  *
  * - **The 15 s pre-check race.** `checkBundlerFunding` raced with a timeout that
@@ -148,7 +155,15 @@ export function isRelayRefusal(error: unknown): boolean {
 	);
 }
 
-export function createSignExecutor(ports: SignShellPorts) {
+/**
+ * The executor's clock for the core's timers: resolve after `ms`. A seam so a
+ * test can stop it and fire it by hand — `setTimeout` everywhere else.
+ */
+export type SignTimer = (ms: number) => Promise<void>;
+
+const wallClock: SignTimer = (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+export function createSignExecutor(ports: SignShellPorts, timer: SignTimer = wallClock) {
 	/**
 	 * op hash → chain, for the ops this executor answered BY their op hash, so
 	 * the answer can carry `opHash: {chainId}` (spec 082 RF3). Bounded like the
@@ -563,6 +578,15 @@ export function createSignExecutor(ports: SignShellPorts) {
 				await ports.switchActiveAccount(operation.index);
 				return { type: 'account_switched' };
 			}
+
+			case 'sim_verdict_timer': {
+				// PR 3: the deadline of the confirm's wait for the simulation's
+				// verdict. A timer and nothing else — whether a verdict landed
+				// meanwhile, or the request went, is the core's to tell, by the
+				// id and round echoed back.
+				await timer(operation.ms);
+				return { type: 'sim_verdict_timer_fired', id: operation.id, round: operation.round };
+			}
 		}
 	}
 
@@ -695,6 +719,10 @@ export function createSignExecutor(ports: SignShellPorts) {
 				// A failed switch still has to ack, or the approval surface stays shut
 				// forever (§12.1.6 gates on this).
 				return { type: 'account_switched' };
+			case 'sim_verdict_timer':
+				// A clock that failed has still to answer: the confirm it holds
+				// would otherwise wait for a verdict with no deadline behind it.
+				return { type: 'sim_verdict_timer_fired', id: operation.id, round: operation.round };
 		}
 	}
 

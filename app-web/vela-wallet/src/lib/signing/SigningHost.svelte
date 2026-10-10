@@ -466,13 +466,27 @@
 		// The same read is the sheet's (item 3): what it means is the core's
 		// (`simOutcome`), kept for this request alone.
 		const requestId = request.id;
+		// PR 3: the confirm waits for this read's verdict — the one part of
+		// the sheet the site being signed for cannot write. The core is told
+		// the simulation is out in the step that sends it, and that its
+		// verdict is on the sheet in the step that puts it there; between the
+		// two it holds the confirm (`sim_checking`), for four seconds at most
+		// on a timer of its own. Nothing here holds the confirm or keeps a
+		// clock. A message never reaches this line: it has no calls.
+		signRequest.dispatch({ type: 'sim_started', id: requestId });
+		// However the read ends — a verdict, nothing to say, or a throw — the
+		// verdict's place is no longer "checking". For a request that has gone
+		// nothing is said: its wait went with it.
+		const settled = (verdict: SimVerdict | null) => {
+			if (quotedFor !== requestId) return;
+			if (verdict !== null) checked = { requestId, verdict };
+			signRequest.dispatch({ type: 'sim_settled', id: requestId });
+		};
 		void checkRequest(
 			speedControl,
 			{ from: identity.address, calls, chainId: request.chain_id },
 			() => quotedFor === requestId
-		).then((verdict) => {
-			if (verdict !== null && quotedFor === requestId) checked = { requestId, verdict };
-		});
+		).then(settled, () => settled(null));
 	});
 
 	/**

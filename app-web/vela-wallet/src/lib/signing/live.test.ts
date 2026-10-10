@@ -27,7 +27,7 @@ import type { SignView } from '$lib/core/generated/SignView';
 import { rawResolve, resolveSigningMessages } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { simOutcome } from '$lib/core/kernels';
-import { SIM_SAID_KEYS } from './messages';
+import { SIM_SAID_KEYS, SIM_WAITED_OUT_KEY } from './messages';
 import { CLEAR_TERMS } from './terms';
 import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
@@ -3115,6 +3115,153 @@ describe('the sheet says the core’s "No asset changes" (device round, item 3)'
 			expect(said[key], `${key} in ${locale}`).toBe(rawResolve(locale, key));
 			expect(said[key].trim()).not.toBe('');
 			expect(said[key]).not.toBe(key);
+		}
+	});
+});
+
+/**
+ * PR 3 — the confirm waits for the simulation's verdict, four seconds at
+ * most. The gate is the core's (`signConfirmState`, real here) and so is the
+ * wait (`SignView.sim_checking`, `sim_waited_out_key`); what this builder
+ * does is look two keys up: the line under the held confirm, and — once the
+ * deadline has passed with no verdict — the caution in the verdict's place.
+ */
+describe('the simulation’s verdict: waited for, and said when it could not be had (PR 3)', () => {
+	const CHECKING = 'componentsUi.signing.confirmBlock.simChecking';
+	const NOTHING_MOVES = simOutcome(
+		identity.address,
+		JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] })
+	)!;
+	const REVERTS = simOutcome(
+		identity.address,
+		JSON.stringify({ result: [{ calls: [{ status: '0x0', error: { code: 3, message: 'no' } }] }] })
+	)!;
+	const checking: SignView = { ...OPEN_SIGN, sim_checking: true };
+	const waitedOut: SignView = { ...OPEN_SIGN, sim_waited_out_key: SIM_WAITED_OUT_KEY };
+	const own = (sign: SignView): SignView => ({
+		...sign,
+		request: { ...REQUEST, first_party: true }
+	});
+	const cards = (model: { blocks: { kind: string }[] }) =>
+		model.blocks.filter((block) => block.kind === 'balances');
+	const CAUTION = {
+		kind: 'balances',
+		title: m.balancesTitle,
+		rows: [],
+		note: m.warnSimUnavailable,
+		noteTone: 'caution',
+		// It lands after the sheet has opened: the confirm is kept where it
+		// was and the card brought into sight.
+		verdict: true
+	};
+
+	it('while it is out, the confirm is shut and says the core’s one line', () => {
+		const ready = buildSigningModel(inputs())!;
+		expect(ready.confirm.enabled).toBe(true);
+		expect(ready.confirm.note).toBeUndefined();
+
+		const held = buildSigningModel(inputs({ sign: checking }))!;
+		expect(held.confirm).toEqual({
+			action: ready.confirm.action,
+			enabled: false,
+			note: m.confirmBlock[CHECKING]
+		});
+		expect(m.confirmBlock[CHECKING]).toBe('Checking what this transaction does…');
+		// Nothing is drawn in the verdict's place meanwhile, and nothing else moves.
+		expect(held.blocks).toEqual(ready.blocks);
+		expect(held.fee).toEqual(ready.fee);
+	});
+
+	it('the line is the gate’s LAST word: a fee still being worked out says its own', () => {
+		const measuring = buildSigningModel(
+			inputs({ sign: checking, fee: { ...QUOTED_FEE, busy: true, confirm_fee_ready: false } })
+		)!;
+		expect(measuring.confirm.enabled).toBe(false);
+		expect(measuring.confirm.note).toBe(
+			m.confirmBlock['componentsUi.signing.confirmBlock.feeMeasuring']
+		);
+	});
+
+	it('past the deadline: the confirm is open and the verdict’s place says, as a caution, that nothing was checked', () => {
+		const ready = buildSigningModel(inputs())!;
+		const model = buildSigningModel(inputs({ sign: waitedOut }))!;
+		expect(model.confirm).toEqual(ready.confirm);
+		// The request's own blocks, untouched, then the card.
+		expect(model.blocks.slice(0, -1)).toEqual(ready.blocks);
+		expect(model.blocks.at(-1)).toEqual(CAUTION);
+		expect(m.warnSimUnavailable).toBe(
+			'Vela couldn’t check what this transaction does. Review it before you sign.'
+		);
+		expect(model.tech.simResult).toBeUndefined();
+	});
+
+	it('the wallet’s own request shows it too — on the sheet, never folded into Technical details', () => {
+		const model = buildSigningModel(inputs({ sign: own(waitedOut) }))!;
+		expect(cards(model)).toEqual([CAUTION]);
+		expect(model.tech.simResult).toBeUndefined();
+		// Its "No asset changes" still folds away, as before (issue 314).
+		const quiet = buildSigningModel(inputs({ sign: own(OPEN_SIGN), sim: NOTHING_MOVES }))!;
+		expect(cards(quiet)).toEqual([]);
+		expect(quiet.tech.simResult).toEqual({ label: m.techSimResult, value: 'No asset changes' });
+	});
+
+	it('a verdict that lands after all takes the caution’s place — the same card, the same slot', () => {
+		// The core has heard `sim_settled`: the key is gone, the verdict is in hand.
+		const landed = buildSigningModel(inputs({ sim: NOTHING_MOVES }))!;
+		const waiting = buildSigningModel(inputs({ sign: waitedOut }))!;
+		expect(landed.blocks.length).toBe(waiting.blocks.length);
+		expect(landed.blocks.at(-1)).toEqual({
+			kind: 'balances',
+			title: m.balancesTitle,
+			rows: [],
+			note: 'No asset changes',
+			verdict: true
+		});
+		// While the core still says "no verdict on the sheet", that is what is
+		// drawn — one card, and never both sentences at once.
+		for (const sign of [waitedOut, own(waitedOut)]) {
+			const both = buildSigningModel(inputs({ sign, sim: NOTHING_MOVES }))!;
+			expect(cards(both)).toEqual([CAUTION]);
+			expect(both.tech.simResult).toBeUndefined();
+		}
+	});
+
+	it('a late answer this sheet draws nothing for leaves the place empty again (RG6)', () => {
+		const ready = buildSigningModel(inputs())!;
+		expect(buildSigningModel(inputs({ sim: REVERTS }))!.blocks).toEqual(ready.blocks);
+	});
+
+	it('the sentence is the core’s: no key, or a key this build has no words for, draws nothing', () => {
+		const ready = buildSigningModel(inputs())!;
+		for (const key of [null, 'componentsUi.signing.somethingNew', '']) {
+			const model = buildSigningModel(inputs({ sign: { ...OPEN_SIGN, sim_waited_out_key: key } }))!;
+			expect(model.blocks, String(key)).toEqual(ready.blocks);
+		}
+	});
+
+	it('a refused request says only its refusal', () => {
+		const refused: SignView = {
+			...waitedOut,
+			sim_checking: false,
+			blocked: { function: 'enableModule', selector: '0x610b5925', leg_index: null, nested: false }
+		};
+		for (const sign of [refused, own(refused)]) {
+			const model = buildSigningModel(inputs({ sign }))!;
+			expect(model.dismissOnly).toBe(m.close);
+			expect(cards(model)).toEqual([]);
+		}
+	});
+
+	it('the key this sheet has words for is the one the core’s source names, in every language', () => {
+		const source = readFileSync('../../rust/crates/vela-core/src/app/sim_outcome.rs', 'utf8');
+		expect(/pub const KEY_UNAVAILABLE: &str = "([^"]+)";/.exec(source)?.[1]).toBe(
+			SIM_WAITED_OUT_KEY
+		);
+		for (const locale of SUPPORTED_LOCALES) {
+			const words = resolveSigningMessages(locale).warnSimUnavailable;
+			expect(words, locale).toBe(rawResolve(locale, SIM_WAITED_OUT_KEY));
+			expect(words.trim(), locale).not.toBe('');
+			expect(words, locale).not.toBe(SIM_WAITED_OUT_KEY);
 		}
 	});
 });

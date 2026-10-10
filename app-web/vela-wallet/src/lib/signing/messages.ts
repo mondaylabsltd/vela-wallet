@@ -26,6 +26,15 @@ import type { SettingsMessages } from '$lib/settings/messages';
 export const SIM_SAID_KEYS = ['componentsUi.signing.simResultNoChange'] as const;
 
 /**
+ * The caution the core names for the verdict's place when the simulation's
+ * deadline passed with no verdict (PR 3, `SignView.sim_waited_out_key` —
+ * `sim_outcome::KEY_UNAVAILABLE`): "Vela couldn't check what this transaction
+ * does…". Its words are `SigningMessages.warnSimUnavailable`, resolved from
+ * this key. `live.test.ts` holds it to the core's source.
+ */
+export const SIM_WAITED_OUT_KEY = 'componentsUi.signing.simUnavailableWarning';
+
+/**
  * Spec 102 (D4): the hand-off card's words. Resolved for the GALLERY only —
  * the web opens no signing page, so no live page here draws the card, and
  * these strings stay out of `SigningMessages` (which every page with a
@@ -193,6 +202,11 @@ export interface SigningMessages {
 	 * pre-signature) — the core's `terms_off_chain`.
 	 */
 	warnOrderTerms: string;
+	/**
+	 * The simulation could not check — the sentence of {@link SIM_WAITED_OUT_KEY}.
+	 * Drawn live in one case only (PR 3): the core says the simulation's
+	 * deadline passed with no verdict (`SignView.sim_waited_out_key`).
+	 */
 	warnSimUnavailable: string;
 	warnDrain: string;
 	okSelfTransfer: string;
