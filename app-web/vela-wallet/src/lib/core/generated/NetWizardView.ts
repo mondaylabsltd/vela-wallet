@@ -2,6 +2,7 @@
 import type { NetChainIndexEntry } from "./NetChainIndexEntry";
 import type { NetChainInfo } from "./NetChainInfo";
 import type { NetCompatibility } from "./NetCompatibility";
+import type { NetRpcField } from "./NetRpcField";
 import type { NetWizardErrorKind } from "./NetWizardErrorKind";
 import type { NetWizardPhase } from "./NetWizardPhase";
 
@@ -24,6 +25,21 @@ compat: NetCompatibility | null, error: NetWizardErrorKind | null,
  * one, else [`WIZARD_NOT_COMPATIBLE`]. `None` with no error.
  */
 error_key: string | null, 
+/**
+ * The RPC field under the result, and "Re-check with this RPC" with it —
+ * one rule for every surface that draws this wizard (Settings → Add
+ * network, the add-token flow's network tab, the phones' scan path).
+ * The shells each decided it: the web and the desktop offered a re-check
+ * under a refusal with no field to read, the add-token tab said "Enter
+ * one, then re-check" with no field at all, and the no-RPC stop asked
+ * for an endpoint in a field labelled "(optional)".
+ */
+rpc_field: NetRpcField, 
+/**
+ * The corpus key of that field's label: [`RPC_FIELD_OPTIONAL`] or
+ * [`RPC_FIELD_REQUIRED`]. `None` with no field.
+ */
+rpc_field_label_key: string | null, 
 /**
  * The "Add network" button renders only when this is true.
  */

@@ -268,6 +268,7 @@ export * from './NetProviderTestView';
 export * from './NetProviderView';
 export * from './NetRawChainData';
 export * from './NetRpcFailureKind';
+export * from './NetRpcField';
 export * from './NetServiceEndpoints';
 export * from './NetServiceHealth';
 export * from './NetShellResult';

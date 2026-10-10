@@ -27,4 +27,11 @@ cause: UnreachableCause,
  * itself did not answer: for any other cause the endpoint is fine, and
  * a "Fix RPC" there sends a person to repair what is working.
  */
-rpc_fixable: boolean, };
+rpc_fixable: boolean, 
+/**
+ * The corpus key of the row's short status in the balance breakdown:
+ * [`STATUS_RPC_UNAVAILABLE`] or [`STATUS_TOKEN_LIST_UNAVAILABLE`]. Each
+ * shell wrote "RPC unavailable" for every row, which is false for a
+ * network whose RPC is answering.
+ */
+status_key: string, };

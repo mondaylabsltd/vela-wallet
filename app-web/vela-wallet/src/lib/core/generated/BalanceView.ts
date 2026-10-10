@@ -89,6 +89,26 @@ internal_chain_ids: Array<number>,
  */
 internal_key: string | null, 
 /**
+ * The hero's line while the FIRST read of this account is still out:
+ * [`CHECKING`] ("Checking…"). Until a round has ended nothing here was
+ * said by a chain — a cached total of 0 is last session's — so the line
+ * under the total says the wallet is being read, and neither "live" nor
+ * "can't reach" yet. `None` from the first round's end on (a later
+ * refresh is not "checking": what the last round found stands).
+ */
+checking_key: string | null, 
+/**
+ * The hero's line under a LIVE zero: [`LIVE_ZERO`] ("Live · listening
+ * for payments"). `Some` only when the last round settled, every chain
+ * it asked answered, and the wallet holds nothing — a wallet waiting for
+ * its first deposit. Each shell derived this from the total and the
+ * partial flag alone, so a cached zero drew "Live · listening" over a
+ * wallet nothing had read yet, and then swapped it for "Can't reach 24
+ * networks". A shell draws its "zero, live" state exactly when this is
+ * `Some`, and derives it from nothing else.
+ */
+live_key: string | null, 
+/**
  * `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
  */
 holdings_loading: boolean, 
