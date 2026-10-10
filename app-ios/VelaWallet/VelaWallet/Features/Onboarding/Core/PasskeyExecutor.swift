@@ -73,11 +73,14 @@ final class PasskeyExecutor: NSObject {
     /// the desktop and Android run), for a USB-C security key reached with NO
     /// Apple service and NO domain association.
     ///
-    /// Preferred over the system `ASAuthorizationSecurityKeyProvider` for the
-    /// security-key method when a card is present: it is the escape hatch a
-    /// lapsed or merely-down relying-party association cannot padlock
-    /// (FR-009c), and it uses the KEY's own PIN/fingerprint, never the phone's.
-    /// `nil` on surfaces with no UI to prompt through (previews, the gallery).
+    /// FIRST for the security-key method: it is the escape hatch a lapsed or
+    /// merely-down relying-party association cannot padlock (FR-009c), and it
+    /// uses the KEY's own PIN/fingerprint, never the phone's. When it cannot
+    /// reach the key — a Lightning iPhone, an NFC key, firmware below 5.8, or
+    /// the person asking for it on "Insert your security key" — it says so
+    /// (`SystemSheetFallback`) and the same request goes to the system's
+    /// security-key provider. `nil` on surfaces with no UI to prompt through
+    /// (previews, the gallery).
     var smartCard: SmartCardCtapCeremony?
 
     /// The caBLE "sign in with your phone" path (spec 019), for the scan
@@ -141,15 +144,23 @@ final class PasskeyExecutor: NSObject {
         excludeCredentialIds: [String],
         method: KeyMethod
     ) async throws -> Registration {
-        // The app-owned CCID path IS the security-key route, ALWAYS — never the
-        // system's ASAuthorization security-key provider. The person chose "USB
-        // security key", and our implementation is the whole point of that
-        // choice: the key's own PIN/fingerprint, no Apple service, no domain
-        // association. When no card is plugged in it prompts to plug one in,
-        // rather than handing off to a system sheet that consults the RP's
-        // association (founder direction 2026-08-27).
+        // The app-owned CCID path is the security-key route FIRST. The person
+        // chose "USB security key", and our implementation is the point of
+        // that choice: the key's own PIN/fingerprint, no Apple service, no
+        // domain association (founder direction 2026-08-27). When no card is
+        // plugged in it prompts to plug one in.
+        //
+        // It hands over to the system's security-key provider only where it
+        // cannot work: a Lightning iPhone (that sheet waited for ever), a key
+        // that does not answer FIDO over CCID, or the person's own "Use
+        // Apple's security-key sheet". The request below is then the
+        // security-key one alone — same ES256, resident key, verification.
         if method == .securityKey, let smartCard {
-            return try await smartCard.register(name: name, excludeCredentialIds: excludeCredentialIds)
+            do {
+                return try await smartCard.register(name: name, excludeCredentialIds: excludeCredentialIds)
+            } catch is SmartCardCtapCeremony.SystemSheetFallback {
+                // Fall through to the system sheet.
+            }
         }
         // The scan method mints the key on the OTHER phone over OUR caBLE —
         // BLE-only capable, unlike the QR inside the system sheet.
@@ -294,9 +305,10 @@ final class PasskeyExecutor: NSObject {
         // method reaches the credential on the OTHER phone over OUR caBLE.
         if method == .hybrid { return .hybrid }
         // A person who chose the hardware key, or a credential that is only
-        // ever presented, takes the app-owned CCID path, never the system's
-        // security-key provider (founder direction 2026-08-27); when no card is
-        // present it prompts to plug one in.
+        // ever presented, takes the app-owned CCID path first (founder
+        // direction 2026-08-27); when no card is present it prompts to plug
+        // one in, and that path hands over to the system's security-key
+        // provider where it cannot reach the key (`assert`).
         if method == .securityKey || onlyPresented(transports) { return .securityKey }
         return .system(offersSecurityKey: offersSecurityKey(transports))
     }
@@ -313,6 +325,7 @@ final class PasskeyExecutor: NSObject {
         transports: String = "",
         method: KeyMethod = .platform
     ) async throws -> Assertion {
+        var securityKeyOnly = false
         switch Self.assertionPath(transports: transports, method: method) {
         case .hybrid:
             if let hybrid {
@@ -320,13 +333,22 @@ final class PasskeyExecutor: NSObject {
             }
         case .securityKey:
             if let smartCard {
-                return try await smartCard.assert(challenge: challenge, credentialIdHex: credentialIdHex)
+                do {
+                    return try await smartCard.assert(challenge: challenge, credentialIdHex: credentialIdHex)
+                } catch is SmartCardCtapCeremony.SystemSheetFallback {
+                    // The app-owned path cannot reach this key (a Lightning
+                    // iPhone, NFC, firmware below 5.8, or the person asked):
+                    // Apple's security-key sheet, and only it — the person
+                    // said which object they are holding.
+                    securityKeyOnly = true
+                }
             }
         case .system:
             break
         }
         let requests = try systemRequests(
-            challenge: challenge, credentialIdHex: credentialIdHex, transports: transports
+            challenge: challenge, credentialIdHex: credentialIdHex, transports: transports,
+            securityKeyOnly: securityKeyOnly
         )
         let authorization = try await perform(requests)
 
@@ -359,23 +381,29 @@ final class PasskeyExecutor: NSObject {
     /// it — naming every removable cable the route lists. A wallet whose
     /// founding set mixes a phone passkey and a hardware key has to be able to
     /// sign with whichever is at hand, and the person picks in the sheet.
+    ///
+    /// `securityKeyOnly` is the security-key method handed over from the
+    /// app-owned path: the security-key request alone, whatever the hints say.
     func systemRequests(
-        challenge: Data, credentialIdHex: String?, transports: String
+        challenge: Data, credentialIdHex: String?, transports: String, securityKeyOnly: Bool = false
     ) throws -> [ASAuthorizationRequest] {
-        let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
-            relyingPartyIdentifier: relyingPartyId
-        )
-        let request = provider.createCredentialAssertionRequest(challenge: challenge)
-        request.userVerificationPreference = .required
-        if let credentialIdHex {
-            request.allowedCredentials = [
-                ASAuthorizationPlatformPublicKeyCredentialDescriptor(
-                    credentialID: try fromHex(s: credentialIdHex)
-                )
-            ]
+        var requests: [ASAuthorizationRequest] = []
+        if !securityKeyOnly {
+            let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
+                relyingPartyIdentifier: relyingPartyId
+            )
+            let request = provider.createCredentialAssertionRequest(challenge: challenge)
+            request.userVerificationPreference = .required
+            if let credentialIdHex {
+                request.allowedCredentials = [
+                    ASAuthorizationPlatformPublicKeyCredentialDescriptor(
+                        credentialID: try fromHex(s: credentialIdHex)
+                    )
+                ]
+            }
+            requests.append(request)
+            guard Self.offersSecurityKey(transports) else { return requests }
         }
-        var requests: [ASAuthorizationRequest] = [request]
-        guard Self.offersSecurityKey(transports) else { return requests }
         let securityKeyProvider = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
             relyingPartyIdentifier: relyingPartyId
         )
@@ -387,7 +415,11 @@ final class PasskeyExecutor: NSObject {
             securityKeyRequest.allowedCredentials = [
                 ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor(
                     credentialID: try fromHex(s: credentialIdHex),
-                    transports: Self.securityKeyTransports(transports)
+                    // Handed over because USB did not reach it: every cable
+                    // the system knows, NFC and Lightning among them.
+                    transports: securityKeyOnly
+                        ? ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported
+                        : Self.securityKeyTransports(transports)
                 )
             ]
         }

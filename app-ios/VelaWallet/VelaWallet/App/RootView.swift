@@ -3910,7 +3910,11 @@ struct RootView: View {
             UsbTouchSheet(loc: loc, touch: touch, onCancel: onboarding.cancelCable)
                 .themed(scheme)
         } else if onboarding.pendingInsertKey != nil {
-            UsbInsertKeySheet(loc: loc, onCancel: { onboarding.answerInsertKey(false) })
+            UsbInsertKeySheet(
+                loc: loc,
+                onUseSystemSheet: { onboarding.answerInsertKey(.useSystemSheet) },
+                onCancel: { onboarding.answerInsertKey(.cancelled) }
+            )
                 .themed(scheme)
         } else if let payload = onboarding.cableQr {
             // Below touch on purpose: once the phone connects and the ceremony
@@ -3930,6 +3934,12 @@ struct RootView: View {
             .themed(scheme)
         } else if onboarding.signInConnecting {
             UsbConnectingSheet(loc: loc, method: onboarding.signInMethod)
+                .themed(scheme)
+        } else if onboarding.systemSheetHold {
+            // Under Apple's security-key sheet, after "Use Apple's
+            // security-key sheet": this sheet stays, and takes whatever the
+            // ceremony ends in.
+            UsbConnectingSheet(loc: loc, method: .securityKey)
                 .themed(scheme)
         } else if onboarding.showSignInMethods {
             signInMethodSheet

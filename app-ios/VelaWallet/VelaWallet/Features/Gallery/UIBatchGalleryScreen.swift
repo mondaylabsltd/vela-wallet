@@ -11,6 +11,9 @@
 //    scan a code" sheet over a page, as tall as its content, Cancel at the
 //    bottom. The same one sheet create, add-key, sign-in and the account
 //    switcher's sign-in raise.
+//  - `insert-key` — "Insert your security key" with its way out for a key
+//    the app's own USB route cannot reach: "Use Apple's security-key sheet"
+//    and which keys that is for.
 //
 //  Fixture data only: nothing here is scanned, signed or sent.
 //
@@ -28,6 +31,10 @@ struct UIBatchGalleryScreen: View {
 
     var body: some View {
         switch state {
+        case "insert-key":
+            sheetBoard(title: loc.t(I18nKeys.Create.keysTitle)) {
+                UsbInsertKeySheet(loc: loc, onUseSystemSheet: {}, onCancel: {})
+            }
         case "cable-signin":
             cableBoard(chooser: .signIn)
         default:
@@ -42,10 +49,16 @@ struct UIBatchGalleryScreen: View {
     private static let cablePayload = "FIDO:/" + String(repeating: "0914372806155923481170265394", count: 6)
 
     private func cableBoard(chooser: KeyChooser) -> some View {
-        // The page the sheet rises over: what shows above a content-sized
-        // sheet is the screen the person came from.
+        sheetBoard(title: loc.t(chooser == .create ? I18nKeys.Create.keysTitle : I18nKeys.Login.header)) {
+            CableQrSheet(loc: loc, payload: Self.cablePayload, chooser: chooser)
+        }
+    }
+
+    /// A ceremony sheet over the page it rises from: what shows above a
+    /// content-sized sheet is the screen the person came from.
+    private func sheetBoard(title: String, @ViewBuilder sheet: @escaping () -> some View) -> some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
-            Text(loc.t(chooser == .create ? I18nKeys.Create.keysTitle : I18nKeys.Login.header))
+            Text(title)
                 .typeRole(Typography.display)
                 .foregroundStyle(theme.fgBase)
             Spacer()
@@ -54,8 +67,7 @@ struct UIBatchGalleryScreen: View {
         .padding(Tokens.Layout.screenPaddingX)
         .background(theme.bgBase.ignoresSafeArea())
         .sheet(isPresented: .constant(true)) {
-            CableQrSheet(loc: loc, payload: Self.cablePayload, chooser: chooser)
-                .themed(scheme)
+            sheet().themed(scheme)
         }
     }
 }

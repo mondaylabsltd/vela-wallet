@@ -24,7 +24,9 @@ private final class SilentPrompts: SmartCardCtapCeremony.Prompts, @unchecked Sen
     func askPin(product: String, retries: Int, isRetry: Bool) -> String? { nil }
     func askWhichWallet(_ choices: [CtapCredentialChoice]) -> Int? { nil }
     func touchWaiting(kind: String?, product: String) {}
-    func awaitKeyInsertion(probe: @escaping () async -> Bool) async -> Bool { false }
+    func awaitKeyInsertion(
+        probe: @escaping @MainActor () async -> Bool
+    ) async -> SmartCardCtapCeremony.KeyInsertion { .cancelled }
 }
 
 /// What the QR sheet was told, in order, and — when set — a dismissal the

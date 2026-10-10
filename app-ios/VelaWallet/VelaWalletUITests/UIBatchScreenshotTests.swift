@@ -13,6 +13,9 @@
 //  - `testScanACodeSheet` (issue #480): the "Phone or tablet · scan a code"
 //    sheet, as tall as its content, Cancel at the bottom.
 //
+//  - `testInsertYourSecurityKey`: "Insert your security key" with "Use
+//    Apple's security-key sheet" and its hint.
+//
 //  Simulator only; skipped in the scheme (a copy of the .xctestrun with the
 //  skip removed runs it).
 //
@@ -124,6 +127,82 @@ final class UIBatchScreenshotTests: XCTestCase {
                 app.terminate()
             }
         }
+    }
+
+    // MARK: - The security key's way to Apple's sheet
+
+    /// "Insert your security key" offers Apple's security-key sheet, says
+    /// which keys that is for, and keeps Close at the bottom.
+    func testInsertYourSecurityKey() {
+        for look in Self.looks {
+            let tag = "\(look.lang)-\(look.theme)"
+            let zh = look.lang == "zh"
+            let app = launch(env: ["VELA_PAGE": "pr3", "VELA_STATE": "insert-key"],
+                             lang: look.lang, theme: look.theme)
+            let option = app.buttons["insertKey.appleSheet"]
+            XCTAssertTrue(option.waitForExistence(timeout: 20), "no Apple-sheet option (\(tag))")
+            settle(1.2)
+            XCTAssertEqual(option.label, zh ? "改用 Apple 的安全密钥面板" : "Use Apple's security-key sheet")
+            XCTAssertTrue(option.isHittable, "the option is off the sheet (\(tag))")
+            XCTAssertTrue(app.staticTexts[zh ? "插入安全密钥" : "Insert your security key"].exists)
+            XCTAssertTrue(
+                app.staticTexts[zh ? "适用于 NFC、Lightning 或较旧的密钥" : "For NFC, Lightning or older keys"].exists,
+                "the option does not say which keys it is for (\(tag))"
+            )
+            let close = app.buttons["insertKey.close"]
+            XCTAssertTrue(close.isHittable, "Close is off the sheet (\(tag))")
+            XCTAssertGreaterThan(close.frame.minY, option.frame.maxY, "Close is not the last thing (\(tag))")
+            attach(app, "securitykey-insert-\(tag)")
+            app.terminate()
+        }
+    }
+
+    /// The LIVE sign-in, "USB security key" chosen, with no key anywhere.
+    ///
+    /// - On a phone with a USB-C port the insert sheet comes up and waits;
+    ///   its option hands the ceremony to the system's security-key provider
+    ///   (the insert sheet goes, nothing is left waiting).
+    /// - On a Lightning iPhone (an iPhone SE simulator) the insert sheet never
+    ///   comes up at all: the ceremony goes straight to the system provider.
+    ///
+    /// What the system provider then DRAWS is not asserted: an unsigned
+    /// simulator build carries no `webcredentials` association, so Apple's
+    /// sheet refuses instead of appearing. A key on a real phone is the
+    /// owner's to try.
+    func testTheSecurityKeyRouteLive() {
+        let model = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? ""
+        let numbers = model.dropFirst("iPhone".count).split(separator: ",").compactMap { Int($0) }
+        let lightning = model.hasPrefix("iPhone") && numbers.count == 2
+            && (numbers[0] < 15 || (numbers[0] == 15 && numbers[1] < 4))
+        let app = launch(env: [:], args: ["-vela.parallelSpace", "0"], lang: "zh", theme: "light")
+        let signIn = app.buttons["我已有钱包"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 40), "no Welcome")
+        signIn.tap()
+        let method = app.staticTexts["USB 安全密钥"]
+        XCTAssertTrue(method.waitForExistence(timeout: 10), "no USB security key row")
+        method.tap()
+        let insert = app.staticTexts["插入安全密钥"]
+        if lightning {
+            XCTAssertFalse(insert.waitForExistence(timeout: 6),
+                           "a Lightning iPhone (\(model)) was made to wait for a USB-C key")
+            settle(2)
+            attach(app, "securitykey-live-lightning-\(model)")
+        } else {
+            XCTAssertTrue(insert.waitForExistence(timeout: 15), "no insert sheet on \(model)")
+            settle(1)
+            attach(app, "securitykey-live-insert-\(model)")
+            let option = app.buttons["insertKey.appleSheet"]
+            XCTAssertTrue(option.isHittable, "the option is off the sheet")
+            option.tap()
+            // What follows the tap, frame by frame: the hold between the two
+            // sheets, then whatever the system provider answers.
+            for (index, wait) in [0.4, 0.8, 1.5, 3.0, 4.0].enumerated() {
+                settle(wait)
+                attach(app, "securitykey-live-after-option-\(index)-\(model)")
+            }
+            XCTAssertFalse(insert.exists, "the option left the insert sheet waiting")
+        }
+        app.terminate()
     }
 
     // MARK: - Helpers

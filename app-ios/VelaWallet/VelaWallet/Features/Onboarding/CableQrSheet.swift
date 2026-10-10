@@ -34,57 +34,44 @@ struct CableQrSheet: View {
     /// Cancel, a swipe or a tap outside: the ceremony ends as a cancel.
     var onCancel: () -> Void = {}
 
-    /// What the content measures. It starts at what a default text size
-    /// comes to (title, line, a 260pt code, Cancel and the padding), so the
-    /// sheet opens near its height instead of growing from nothing.
-    @State private var contentHeight: CGFloat = Self.expectedHeight
+    /// What the content comes to at a default text size (title, line, a
+    /// 260pt code, Cancel and the padding): the height the sheet opens at.
     static let expectedHeight: CGFloat = 480
 
     var body: some View {
         let copy = methodCopy(.hybrid, chooser: chooser, loc: loc)
-        // A scroll view only for the sizes the content outgrows the screen at
-        // (the accessibility text sizes): everywhere else it fits and stays.
-        ScrollView {
-            VStack(spacing: Tokens.Space.s16) {
-                // The hybrid row's own words, as the chooser that opened this
-                // card drew them ("Phone or tablet" over the core's line).
-                Text(copy.title)
-                    .typeRole(Typography.title)
-                    .foregroundStyle(theme.fgBase)
-                    .multilineTextAlignment(.center)
+        VStack(spacing: Tokens.Space.s16) {
+            // The hybrid row's own words, as the chooser that opened this
+            // card drew them ("Phone or tablet" over the core's line).
+            Text(copy.title)
+                .typeRole(Typography.title)
+                .foregroundStyle(theme.fgBase)
+                .multilineTextAlignment(.center)
 
-                Text(copy.body)
-                    .typeRole(Typography.body)
-                    .foregroundStyle(theme.fgMuted)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text(copy.body)
+                .typeRole(Typography.body)
+                .foregroundStyle(theme.fgMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
-                if let matrix = cableQrMatrix(text: payload) {
-                    QrView(matrix: matrix)
-                        .aspectRatio(1, contentMode: .fit)
-                        .frame(maxWidth: 260)
-                        .padding(.top, Tokens.Space.s8)
-                }
-
-                // The desktop card's Cancel (`common.cancel`): a lone code with
-                // nothing to press reads as stuck.
-                VelaButton(title: loc.t(I18nKeys.Flow.cancel), kind: .secondary) { onCancel() }
+            if let matrix = cableQrMatrix(text: payload) {
+                QrView(matrix: matrix)
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: 260)
                     .padding(.top, Tokens.Space.s8)
-                    .accessibilityIdentifier("cable.cancel")
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, Tokens.Layout.screenPaddingX)
-            .padding(.top, Tokens.Space.s32)
-            .padding(.bottom, Tokens.Space.s16)
-            .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { height in
-                contentHeight = height
-            }
+
+            // The desktop card's Cancel (`common.cancel`): a lone code with
+            // nothing to press reads as stuck.
+            VelaButton(title: loc.t(I18nKeys.Flow.cancel), kind: .secondary) { onCancel() }
+                .padding(.top, Tokens.Space.s8)
+                .accessibilityIdentifier("cable.cancel")
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .presentationDetents([.height(max(contentHeight, 1))])
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Tokens.Layout.screenPaddingX)
+        .padding(.top, Tokens.Space.s32)
+        .padding(.bottom, Tokens.Space.s16)
+        .contentSizedSheet(expected: Self.expectedHeight)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
         // A swipe or a tap outside is a cancel too: the shared sheet's
