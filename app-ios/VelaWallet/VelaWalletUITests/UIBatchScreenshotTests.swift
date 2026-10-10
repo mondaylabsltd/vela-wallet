@@ -10,6 +10,9 @@
 //    the sheet each put the keyboard away; Return is a newline; Send is
 //    reached with the keyboard still up.
 //
+//  - `testScanACodeSheet` (issue #480): the "Phone or tablet · scan a code"
+//    sheet, as tall as its content, Cancel at the bottom.
+//
 //  Simulator only; skipped in the scheme (a copy of the .xctestrun with the
 //  skip removed runs it).
 //
@@ -93,6 +96,36 @@ final class UIBatchScreenshotTests: XCTestCase {
         }
     }
 
+    // MARK: - Issue #480: the "Phone or tablet · scan a code" sheet
+
+    /// One sheet for create, add-key, sign-in and the switcher's sign-in.
+    /// It is as tall as its content — the page it rose over shows above it —
+    /// with the whole code on screen and Cancel at the bottom.
+    func testScanACodeSheet() {
+        for look in Self.looks {
+            for board in ["cable-create", "cable-signin"] {
+                let tag = "\(board)-\(look.lang)-\(look.theme)"
+                let app = launch(env: ["VELA_PAGE": "pr3", "VELA_STATE": board],
+                                 lang: look.lang, theme: look.theme)
+                let cancel = app.buttons["cable.cancel"]
+                XCTAssertTrue(cancel.waitForExistence(timeout: 20), "no scan-a-code sheet (\(tag))")
+                settle(1.2)
+                let title = app.staticTexts[look.lang == "zh" ? "手机或平板" : "Phone or tablet"].firstMatch
+                XCTAssertTrue(title.exists, "the sheet is not titled (\(tag))")
+                XCTAssertTrue(cancel.isHittable, "Cancel is off the sheet (\(tag))")
+                XCTAssertEqual(cancel.label, look.lang == "zh" ? "取消" : "Cancel")
+                let screen = app.frame.height
+                // Content-sized: its title starts well below the top of the
+                // screen (a `.large` sheet's sat at about 9%)…
+                XCTAssertGreaterThan(title.frame.minY, screen * 0.2, "the sheet is still near-full-height (\(tag))")
+                // …and Cancel is the last thing, at the bottom.
+                XCTAssertGreaterThan(cancel.frame.maxY, screen * 0.86, "Cancel is not at the bottom (\(tag))")
+                attach(app, "480-\(tag)")
+                app.terminate()
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private func launch(
@@ -121,8 +154,10 @@ final class UIBatchScreenshotTests: XCTestCase {
         Thread.sleep(forTimeInterval: seconds)
     }
 
+    /// The whole screen, not the app's frame: on an iPad the iPhone layout
+    /// runs in a window, and the app's own screenshot is a crop of it.
     private func attach(_ app: XCUIApplication, _ name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)

@@ -653,6 +653,12 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .uiBatch:
+            #if DEBUG
+            UIBatchGalleryScreen(loc: loc, state: PageOverride.state ?? "cable-create")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -4008,6 +4014,8 @@ enum PageOverride {
         case handoff
         /// PR 2's boards (`CorrectnessGalleryScreen`).
         case correctness
+        /// PR 3's boards (`UIBatchGalleryScreen`).
+        case uiBatch
     }
 
     static let page: Page? = {
@@ -4032,6 +4040,7 @@ enum PageOverride {
         case "signing": .signing
         case "handoff": .handoff
         case "pr2": .correctness
+        case "pr3": .uiBatch
         default: nil
         }
     }()
