@@ -295,7 +295,21 @@ struct CurrencyViewWire: Decodable, Equatable {
     /// not: a fiat amount multiplied by a defaulted 1 is a real mispayment.
     let rate: Double?
     /// `false` ⇒ the USD placeholder is showing and the person has not chosen.
+    ///
+    /// **While `false`, no money figure is drawn** (the core's rule, PR 3):
+    /// the placeholder is not the person's currency — the home drew "USD
+    /// $1,234" for a few seconds and then jumped to "¥8,876".
     let committed: Bool
+    /// The person's own stored choice on its way: its rate is being fetched
+    /// and nothing is committed yet. A surface that names its currency apart
+    /// from the figure may name this one while the figure waits. `nil` once
+    /// committed, before the preference is read, and on a first launch.
+    var pending: String? = nil
+
+    /// The view before the machine has answered at all: nothing committed,
+    /// nothing known to be on its way. What a live screen reads for the
+    /// frames before the first view — waiting, never the dollar placeholder.
+    static let unread = CurrencyViewWire(code: "USD", rate: nil, committed: false)
 }
 
 // MARK: - The whole view

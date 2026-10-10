@@ -636,7 +636,9 @@ enum SettingsLive {
                 addressFull: address,
                 // Hidden (PR 2, `switcher.hidden`): the mask on every row —
                 // never a figure, never a blank that reads as "unknown".
-                amount: hidden ? WalletFixtures.mask : (usd.map(money) ?? ""),
+                // …and while the display currency is not known yet (PR 3),
+                // the empty cell an unpriced account shows: no dollars first.
+                amount: hidden ? WalletFixtures.mask : (display.settled ? usd.map(money) ?? "" : ""),
                 selected: index == session.activeIndex
             )
         }
@@ -647,11 +649,12 @@ enum SettingsLive {
         copy.accountsSheet.removeCancel = loc.t("settings.signOut.cancel")
         copy.accountsSheet.summary =
             loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
-            + loc.t(k.accountsTotal, vars: [
+            // No total while the currency is not known: the count alone.
+            + (hidden || display.settled ? loc.t(k.accountsTotal, vars: [
                 "amount": hidden
                     ? WalletFixtures.mask
                     : money(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
-            ])
+            ]) : "")
         return copy
     }
 
@@ -727,6 +730,10 @@ enum SettingsLive {
     static func currencyRowValue(_ view: CurrencyViewWire) -> String {
         let sample = 1_234.56
         guard view.committed else {
+            // The person's own choice, on its way (PR 3, `pending`): named
+            // alone — their choice and no figure yet — never "USD · $…" for
+            // the seconds before its rate arrives.
+            if let pending = view.pending, !pending.isEmpty { return pending }
             // Nothing chosen: the USD placeholder is what is in force.
             let usd = CurrencyCatalog.entry("USD")
             return "USD · \(usd?.glyph ?? "$")\(format(sample))"

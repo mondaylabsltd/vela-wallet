@@ -161,6 +161,9 @@ enum AssetFiatModel {
     case value(String)
     /// Orange 无价格 marker (H4).
     case noPrice(String)
+    /// The display currency is not known yet (PR 3): the line waits at its
+    /// own height — a figure is coming, in the right money.
+    case pending
     case masked
     /// Spec 021 SD2d: the row has no fiat line at all. Distinct from `masked`,
     /// which HIDES a figure that exists — a sweep row is an editable amount,

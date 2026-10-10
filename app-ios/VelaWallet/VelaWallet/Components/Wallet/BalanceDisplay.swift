@@ -33,7 +33,9 @@ struct BalanceDisplay: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-            Text(verbatim: "\(model.label) · \(model.currency)")
+            // The currency is named once it is known — the person's stored
+            // choice while its figure is on its way, nothing before that.
+            Text(verbatim: model.currency.isEmpty ? model.label : "\(model.label) · \(model.currency)")
                 .typeRole(Typography.label.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
             amount

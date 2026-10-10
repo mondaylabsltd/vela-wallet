@@ -1129,7 +1129,7 @@ struct RootView: View {
                                        address: session.view.address),
                             chainIds: browser.chainIds,
                             holdings: WalletLive.networkHoldings(
-                                wallet.balance, display: WalletLive.Display.from(settings.currency)
+                                wallet.balance, display: WalletLive.Display.live(settings.currency)
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             networks: walletNetworks,
@@ -2049,7 +2049,7 @@ struct RootView: View {
     private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
-            let display = WalletLive.Display.from(settings.currency)
+            let display = WalletLive.Display.live(settings.currency)
             model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
                                                    networks: walletNetworks)
             model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
@@ -2195,7 +2195,7 @@ struct RootView: View {
             base.balance.refresh = nil
             return base
         }
-        return WalletLive.apply(view, currency: settings.currency, feed: activity.feed,
+        return WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
                                 feedRead: activity.hasRead, on: base, loc: loc,
                                 now: Date(), spinning: wallet.spin.spinning,
                                 networks: walletNetworks)
@@ -2257,7 +2257,7 @@ struct RootView: View {
         }
         if case .assets(let assets) = model.base, let balance = wallet.balance {
             model.base = .assets(FlowsLive.assets(
-                balance, currency: settings.currency, selected: chainFilter,
+                balance, currency: settings.currency ?? .unread, selected: chainFilter,
                 on: assets, loc: loc, networks: walletNetworks
             ))
         }
@@ -2289,7 +2289,7 @@ struct RootView: View {
             model.sheet = .tokenDetail(FlowsLive.tokenDetail(
                 balance.tokens[assetRow],
                 feed: activity.feed,
-                display: WalletLive.Display.from(settings.currency),
+                display: WalletLive.Display.live(settings.currency),
                 on: detail, loc: loc,
                 hidden: balance.hidden || (activity.feed?.hidden ?? false),
                 networks: walletNetworks
@@ -2299,7 +2299,7 @@ struct RootView: View {
         // already found; SD2 and SD3 are the core's figures, its refusals and
         // its gates.
         if let view = send.view {
-            let display = WalletLive.Display.from(settings.currency)
+            let display = WalletLive.Display.live(settings.currency)
             if case .sendPick(let pick) = model.base {
                 model.base = .sendPick(
                     SendLive.pick(
@@ -2619,7 +2619,7 @@ struct RootView: View {
         let record = await accounts.loadAccounts().first {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }
-        let display = WalletLive.Display.from(settings.currency)
+        let display = WalletLive.Display.live(settings.currency)
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
@@ -2787,7 +2787,7 @@ struct RootView: View {
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             chainId: chain,
-            display: WalletLive.Display.from(settings.currency),
+            display: WalletLive.Display.live(settings.currency),
             origin: live?.request?.origin,
             // What the chain said this transaction would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it.
@@ -3512,7 +3512,7 @@ struct RootView: View {
             // PR 2: hidden, the core withholds the figures — every row and
             // the total draw the mask instead of summing nothing to $0.00.
             hidden: wallet.balance?.switcher.hidden ?? false,
-            display: WalletLive.Display.from(settings.currency),
+            display: WalletLive.Display.live(settings.currency),
             on: model,
             loc: loc
         )
