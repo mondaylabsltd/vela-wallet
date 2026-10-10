@@ -30,6 +30,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import app.getvela.wallet.feature.send.core.SendReceiptOutcome
 import app.getvela.wallet.feature.send.core.SendReceiptOutcomes
@@ -128,6 +130,56 @@ class SendControllerTest {
 
         val view = send.awaitView("on the form with POL") { it.stage == SendStage.EnterDetails && it.selected_token?.symbol == "POL" }
         assertEquals(137, view.selected_token?.chain_id)
+    }
+
+    /**
+     * PR 3 final note F25: the Send machine is told the money it shows once,
+     * at open — and `displayChanged` had no caller. A Send opened on a cold
+     * start, before the display currency committed, kept the placeholder
+     * (dollars with no rate: nothing to type a fiat amount against) for as
+     * long as it stayed open. The screen hands over the display on every
+     * change now; this says it to an open Send when it is news, and the real
+     * machine re-denominates by its own rule.
+     */
+    @Test
+    fun `a send opened before the display currency commits follows it when it does`() {
+        val send = controller()
+        val placeholder = SendDisplayContext(code = "USD", rate = null, fiat_decimals = 2)
+        val cny = SendDisplayContext(code = "CNY", rate = 7.1, fiat_decimals = 2)
+
+        // No Send is open: nobody to tell.
+        assertFalse(send.displayChanged(cny))
+
+        send.open(
+            account = me,
+            display = placeholder,
+            params = SendOpenParams(preselected_symbol = "POL", preselected_network = SendExecutor.network(137)),
+        )
+        val before = send.awaitView("on the form, no rate to type fiat against") { it.stage == SendStage.EnterDetails && it.selected_token?.symbol == "POL" }
+        assertFalse("the placeholder has no rate: ⇄ is shut", before.denom_toggle_enabled)
+        // The same display again is not news.
+        assertFalse(send.displayChanged(placeholder))
+
+        // The currency commits while the form is open.
+        assertTrue(send.displayChanged(cny))
+        send.awaitView("⇄ opens once the machine knows the rate") { it.denom_toggle_enabled }
+        send.toggleFiatInput()
+        val fiat = send.awaitView("the amount is typed in the person's currency") { it.amount_fiat_code != null }
+        assertEquals("CNY", fiat.amount_fiat_code)
+        assertFalse("said once", send.displayChanged(cny))
+
+        // The person changes it while the Send is open: the figure does not keep the old unit.
+        send.setAmount("50")
+        send.awaitView("50 CNY typed") { it.amount == "50" }
+        assertTrue(send.displayChanged(SendDisplayContext(code = "EUR", rate = 0.9, fiat_decimals = 2)))
+        val moved = send.awaitView("re-denominated by the core's rule") { it.amount_fiat_code == "EUR" }
+        assertEquals("50 CNY is not 50 EUR: the field empties", "", moved.amount)
+
+        // Left: the journey is over, and the next open carries its own display.
+        send.left()
+        assertFalse(send.displayChanged(cny))
+        send.open(account = me, display = cny)
+        assertFalse("told by its own open", send.displayChanged(cny))
     }
 
     /**

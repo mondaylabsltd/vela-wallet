@@ -691,11 +691,15 @@ fun VelaNavHost(
                 if (rescue.overlay != SettingsOverlay.None) {
                     val rescueBase = remember(strings) { SettingsFixtures.buildState(SettingsScreenState.SR6, strings) }
                     val rescueRow = rescue.chainId?.let { id -> networks.networks.firstOrNull { it.chain_id == id } }
+                    // F16: the home's line is one line, cut with an ellipsis when its
+                    // sentence is longer — so the sheet it opens says the sentence in
+                    // full at its top (the list's title already is its own line).
+                    val heroLine = if (online) WalletLive.heroStatus(balances, strings, chainNames)?.text else strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE)
                     WalletRescueSheet(
                         rescue = rescue,
                         model = rescueBase.copy(
-                            unreachable = SettingsLive.unreachable(balances, currency, chainNames, strings),
-                            balanceDetail = SettingsLive.balanceDetail(rescueBase.balanceDetail, balances, currency, chainNames, strings),
+                            unreachable = SettingsLive.unreachable(balances, currency, chainNames, strings).copy(lead = heroLine),
+                            balanceDetail = SettingsLive.balanceDetail(rescueBase.balanceDetail, balances, currency, chainNames, strings).copy(lead = heroLine),
                             rpcFix = rescueRow?.let { SettingsLive.rpcFix(rescueBase.rpcFix, it, rpcDraft, rpcSaved, strings) }
                                 ?: rescueBase.rpcFix,
                         ),
@@ -1016,6 +1020,25 @@ fun VelaNavHost(
                         }
                     }
                 }
+                // F25: the money the open Send shows follows the display currency —
+                // committed after the Send opened (a cold start: the rate is a round
+                // trip behind the first tap) or changed while it is open. The Send
+                // machine was told once, at open, and kept the placeholder's dollars
+                // for the whole journey. Declared after the open above, so a Send
+                // opening in this very frame is told by its own open; the controller
+                // says it only to an open Send, and only when it is news.
+                val displayNow = sendDisplay()
+                LaunchedEffect(displayNow) { send.displayChanged(displayNow) }
+                // F8: and the open batch importer hears the person's currency the same
+                // way — the moment it is known, or changes — beside Send's own word.
+                // The core asks for THAT currency's rate and holds the import until it
+                // lands. Opened before it was known, the importer kept the
+                // placeholder's "USD" for as long as it stayed open: a sheet of yuan
+                // summed as dollars.
+                val batchCurrency = SendLive.batchCurrency(currency)
+                LaunchedEffect(batchCurrency, batchView.opened) {
+                    if (batchView.opened && batchCurrency != null && batchCurrency != batchView.fiat_code) send.batchFiatCode(batchCurrency)
+                }
                 LaunchedEffect(sendClosed) {
                     if (sendClosed && flows.top in SEND_STATES) flows.close()
                 }
@@ -1147,7 +1170,8 @@ fun VelaNavHost(
                         val sheet = when (val sheet = drawn.sheet) {
                             is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, sendView, ctx))
                             is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
-                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx, importReplaces))
+                            // No currency is named before the person's is known (F8).
+                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx, importReplaces, currencyUnknown = SendLive.batchCurrency(currency) == null))
                             else -> sheet
                         }
                         drawn.copy(base = base, sheet = sheet)

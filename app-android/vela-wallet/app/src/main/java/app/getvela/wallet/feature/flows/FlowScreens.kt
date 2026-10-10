@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.Layout
@@ -1662,7 +1663,7 @@ fun BatchImportBody(
             )
             if (onRate != null && model.rateInput != null) {
                 // The rate is the core's number; edited here it goes back as text.
-                val rateStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, textAlign = TextAlign.End)
+                val rateStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, textAlign = TextAlign.End, fontFeatureSettings = VelaFontFeatures)
                 var typedRate by remember { mutableStateOf(model.rateInput) }
                 val sentRate = remember { ArrayDeque<String>().apply { addLast(model.rateInput) } }
                 LaunchedEffect(model.rateInput) { if (model.rateInput !in sentRate) typedRate = model.rateInput }

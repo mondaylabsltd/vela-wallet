@@ -35,6 +35,7 @@ import app.getvela.wallet.feature.settings.core.NetProbeHealth
 import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetProviderId
+import app.getvela.wallet.feature.settings.core.NetRpcField
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.settings.core.NetWizardErrorKind
 import app.getvela.wallet.feature.settings.core.NetWizardPhase
@@ -422,14 +423,18 @@ object SettingsLive {
         val refusedCheck = checked && !compatible && !unverified
         val refusal = compat?.hint_key?.takeIf { refusedCheck }
         val setupUrl = compat?.setup_url?.takeIf { refusedStop || refusedCheck }
-        // "No RPC endpoint is listed for this network. Enter one, then
-        // re-check." — so the box to enter one in is there. And a check that
-        // could not be completed ("Unable to verify — RPC request failed") is
-        // the one stop another RPC fixes: the link under it reads "Re-check
-        // with this RPC", so there is an RPC box for "this" to mean — as in
-        // the wizard's own could-not-check state, which always had it. (The
-        // re-check runs the wizard's check, which tries a typed RPC first.)
-        val needsRpc = stopped && (wizard.error is NetWizardErrorKind.NoRpcEndpoint || wizard.error is NetWizardErrorKind.CheckFailed)
+        // The RPC field and "Re-check with this RPC" are ONE rule, and it is
+        // the core's (`rpc_field`, PR 3 final notes F4 / F14 / F22): the field
+        // exactly when naming another endpoint is a way on — the check passed
+        // or could not reach a verdict (optional), or the network lists no
+        // endpoint (required: "Enter one, then re-check", so the box to enter
+        // one in is there and is not called "(optional)") — and the re-check
+        // exactly when the field is drawn, never one without the other. Not
+        // under a refusal: another endpoint does not give a network the
+        // P-256 verifier or the contracts it lacks, and a "Re-check with this
+        // RPC" there had no RPC box for "this" to mean. This file used to
+        // decide both, each by its own condition.
+        val rpcField = wizard.rpc_field != NetRpcField.None
         return model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
@@ -499,13 +504,13 @@ object SettingsLive {
                     null
                 },
                 // The person's own RPC for this chain, as the core holds it —
-                // so a keystroke round-trips. Offered where the web offers it:
-                // once checked, unless the chain was ruled incompatible — and
-                // at the two stops an RPC is the way on from (`needsRpc`).
-                customRpc = if (compatible || unverified || needsRpc) {
+                // so a keystroke round-trips. Drawn where the core says
+                // (`rpc_field`), under the core's label: "Custom RPC
+                // (optional)", or "RPC URL" where it is the one thing asked for.
+                customRpc = if (rpcField) {
                     UrlFieldModel(
                         id = "custom-rpc",
-                        label = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
+                        label = strings.t(wizard.rpc_field_label_key ?: I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
                         value = wizard.custom_rpc,
                         placeholder = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_PLACEHOLDER),
                         // Spec 098 §5.1: the relay is sent this RPC, key and all.
@@ -539,7 +544,9 @@ object SettingsLive {
                 // needs aren't on this network yet") — over a network that was
                 // already added, one nobody could find and one with no RPC
                 // listed, none of which is about contracts.
-                calloutAsksForRpc = needsRpc,
+                // Why, then where: a stop the field is the way on from says
+                // so OVER the box.
+                calloutAsksForRpc = stop != null && rpcField,
                 callout = when {
                     stop != null -> CalloutModel(CalloutTone.Warning, strings.t(stop))
                     refusal != null -> CalloutModel(CalloutTone.Warning, strings.t(refusal))
@@ -565,13 +572,9 @@ object SettingsLive {
                 // link, opened on this chain (`setup_url`), or not.
                 secondary = setupUrl?.let { strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL) },
                 secondaryUrl = setupUrl,
-                // A re-check needs a network to check again: a stop that named
-                // none (already added, not found) has only its sentence.
-                recheck = if ((stopped && info != null) || unverified || (checked && !compatible)) {
-                    strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC)
-                } else {
-                    null
-                },
+                // "Re-check with this RPC" reads the field, so it is drawn
+                // exactly where the field is (the core's one rule, above).
+                recheck = strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC).takeIf { rpcField },
             ),
         )
     }
@@ -772,7 +775,9 @@ object SettingsLive {
             Formats(date = it, locale = formats.locale).dateExample()
         }
         val timeSheet = formatSheet(model.timeSheet, TimeFormatKey.entries, { it.wire }, prefs.timeFormat.wire) {
-            Formats(time = it, locale = formats.locale).timeExample()
+            // The example is the CORE's clock in the app's language (F5):
+            // 「下午 1:45」, never this shell's own "1:45 PM" under Chinese.
+            Formats(time = it, locale = formats.locale).timeExample(strings.language)
         }
         return model.copy(
             sections = model.sections.map { section ->
@@ -783,7 +788,7 @@ object SettingsLive {
                             // The row shows the CURRENT rendering (the web's `currentExamples`).
                             "number-format" -> row.copy(value = formats.example())
                             "date-format" -> row.copy(value = formats.dateExample())
-                            "time-format" -> row.copy(value = formats.timeExample())
+                            "time-format" -> row.copy(value = formats.timeExample(strings.language))
                             else -> row
                         }
                     },
@@ -1133,14 +1138,15 @@ object SettingsLive {
                 id = id.toString(),
                 mark = mark(id),
                 name = name(id),
-                // "RPC unavailable" only where the RPC is what failed. A
-                // network whose token list could not be loaded says that, in
-                // the core's own sentence — its RPC is fine.
-                status = if (network.rpc_fixable) {
-                    strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED)
-                } else {
-                    strings.t(I18nKeys.Wallet.TOKEN_LIST_UNREACHABLE, mapOf("name" to name(id)))
-                },
+                // The row's short status is the core's to name (`status_key`,
+                // PR 3 final note F21): "RPC unavailable" only where the RPC
+                // is what failed, "Token list unavailable" where the RPC
+                // answers and the list could not be loaded — a status as
+                // short as its neighbours', where this shell had borrowed the
+                // home line's whole sentence. A key this build has no words
+                // for reads as the one status there was, never a dotted path.
+                status = strings.t(network.status_key).takeIf { it.isNotBlank() && it != network.status_key }
+                    ?: strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
                 tone = SettingsTone.Error,
                 // Reading again is right for both: it asks for the list again too.
                 action = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY),

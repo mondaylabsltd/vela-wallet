@@ -611,12 +611,17 @@ fun SigningBalances(
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.lg,
                 )
+                // The amount takes the rest of the row and keeps to its end:
+                // an unverified token's change is in raw units ("+5,000,000,
+                // 000,000,000,000,000") and ran straight into its label.
                 Text(
                     text = row.delta,
                     color = row.tone.color(colors),
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = VelaSpacing.lg),
                 )
             }
         }
@@ -738,7 +743,7 @@ fun AllowanceEditor(
                             }
                         },
                         singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg, fontFeatureSettings = app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner ->

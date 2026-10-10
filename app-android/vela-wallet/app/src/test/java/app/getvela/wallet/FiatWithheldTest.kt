@@ -159,7 +159,7 @@ class FiatWithheldTest {
     fun account_switcher() {
         val wait = WalletLive.accountSwitcher(listOf("Main" to me), 0, switcher, waiting, strings)
         assertNoFiat("account_switcher", listOf(wait.summary) + wait.rows.map { it.amount }, "794", "5,643")
-        val count = strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to "1")).trimEnd(' ', '·')
+        val count = strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1).trimEnd(' ', '·')
         assertEquals("the count alone, still one line", count, wait.summary)
         val landed = WalletLive.accountSwitcher(listOf("Main" to me), 0, switcher, committed, strings)
         assertEquals("CN¥5,643.01", landed.rows.single().amount)

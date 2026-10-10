@@ -57,6 +57,98 @@ object BalanceBoards {
         return Wire.json.decodeFromString(BalanceView.serializer(), script.viewJson())
     }
 
+    /** Where the FIRST read of an empty wallet stands ([firstRead]). */
+    enum class FirstRead {
+        /** Still out: only last session's cached zero is known. */
+        Out,
+
+        /** It settled and every network answered: the wallet holds nothing. */
+        Answered,
+
+        /** It settled and some networks did not answer. */
+        Missing,
+    }
+
+    /** The networks [firstRead] asks. */
+    val FIRST_READ_CHAINS = mapOf(1 to "Ethereum", 100 to "Gnosis", 137 to "Polygon", 42161 to "Arbitrum")
+
+    /**
+     * An EMPTY wallet around its first read (PR 3 final note F19), as the
+     * real machine says it. The account opens with last session's total — a
+     * cached zero — and its first read is out ([FirstRead.Out]: the core's
+     * `checking_key`, and no `live_key` — nothing has been read), then
+     * settles with every network answering ([FirstRead.Answered]:
+     * `live_key`) or with three that did not ([FirstRead.Missing]: the
+     * unreachable line, never "live").
+     */
+    fun firstRead(address: String, nowMs: Double, stage: FirstRead): BalanceView {
+        val asked = FIRST_READ_CHAINS.keys.toList()
+        val script = CoreScript(BalanceDashboardCore().asBridge()) { operation ->
+            val result: BalanceShellResult? = when (operation.optString("type")) {
+                "fetch_tokens" -> when (stage) {
+                    // The read is still out: nothing answers it.
+                    FirstRead.Out -> null
+                    FirstRead.Answered -> BalanceShellResult.FetchSettled(
+                        address = address, pull = false, read_chain_ids = asked, now_ms = nowMs,
+                    )
+                    FirstRead.Missing -> BalanceShellResult.FetchSettled(
+                        address = address, pull = false, failed_chain_ids = asked.drop(1), read_chain_ids = asked, now_ms = nowMs,
+                    )
+                }
+                "read_balance_cache" -> BalanceShellResult.CachedTotalLoaded(address, 0.0)
+                "read_balance_cache_many" -> BalanceShellResult.CachedBalancesLoaded(emptyList())
+                "write_balance_cache" -> BalanceShellResult.BalanceCacheWritten
+                "fetch_account_assets" -> BalanceShellResult.AccountAssetsFetched(address, null)
+                "write_privacy" -> BalanceShellResult.PrivacyWritten
+                // A retry timer stays out: the board is the round on screen.
+                else -> null
+            }
+            result?.let { Wire.json.encodeToString(BalanceShellResult.serializer(), it) }
+        }
+        script.dispatch(Wire.json.encodeToString(BalanceEvent.serializer(), BalanceEvent.PrivacyHydrated(false)))
+        script.dispatch(Wire.json.encodeToString(BalanceEvent.serializer(), BalanceEvent.AccountChanged(address)))
+        return Wire.json.decodeFromString(BalanceView.serializer(), script.viewJson())
+    }
+
+    /**
+     * A healthy wallet with one token nothing could price (PR 3 final note
+     * F20), as the real machine says it: every network answered, the total
+     * counts what has a price, and the hero's line is "Some tokens couldn't
+     * be priced." — nothing is out of reach and nothing is being retried.
+     */
+    fun unpriced(address: String, nowMs: Double): BalanceView {
+        val settled = BalanceShellResult.FetchSettled(
+            address = address,
+            pull = false,
+            tokens = listOf(
+                BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                BalanceToken(chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54", decimals = 6, token_address = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", price_usd = 1.0),
+                BalanceToken(chain_id = 1, symbol = "ODD", name = "Odd Token", balance = "1250", decimals = 18, token_address = "0x0dd0000000000000000000000000000000000dd0"),
+            ),
+            read_chain_ids = listOf(1, 100),
+            now_ms = nowMs,
+        )
+        val script = CoreScript(BalanceDashboardCore().asBridge()) { operation ->
+            val result: BalanceShellResult? = when (operation.optString("type")) {
+                "fetch_tokens" -> settled
+                "read_balance_cache" -> BalanceShellResult.CachedTotalLoaded(address, null)
+                "read_balance_cache_many" -> BalanceShellResult.CachedBalancesLoaded(emptyList())
+                "write_balance_cache" -> BalanceShellResult.BalanceCacheWritten
+                "fetch_account_assets" -> BalanceShellResult.AccountAssetsFetched(address, null)
+                "write_privacy" -> BalanceShellResult.PrivacyWritten
+                // The core reads again, quietly, before it says a price is
+                // missing (its invariant ③): each of its timers elapses here,
+                // each re-read answers the same, and then the notice is honest.
+                "start_retry_timer" -> BalanceShellResult.RetryElapsed(operation.optInt("timer_id"))
+                else -> null
+            }
+            result?.let { Wire.json.encodeToString(BalanceShellResult.serializer(), it) }
+        }
+        script.dispatch(Wire.json.encodeToString(BalanceEvent.serializer(), BalanceEvent.PrivacyHydrated(false)))
+        script.dispatch(Wire.json.encodeToString(BalanceEvent.serializer(), BalanceEvent.AccountChanged(address)))
+        return Wire.json.decodeFromString(BalanceView.serializer(), script.viewJson())
+    }
+
     /** Tempo: a chain with no coin of its own — its money is all in its token list's stablecoins. */
     const val TEMPO = 4217
 

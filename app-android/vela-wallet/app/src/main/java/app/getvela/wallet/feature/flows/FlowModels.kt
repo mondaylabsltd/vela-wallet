@@ -87,6 +87,17 @@ enum class FlowState {
      * live flow stack.
      */
     SD2N, SD2O, SD3J, SD3K, T2W, T2C,
+
+    /**
+     * The final round, through the live builders, never on the live flow
+     * stack. SD1L: the picker over a payment request for a network the
+     * wallet lacks — the core's `lock_error`, said on the picker's notice
+     * (it was an ordinary, wordless Send). SD2P: the batch importer opened
+     * before anything is known of the person's currency — the unit, the
+     * rate, its hint and the sum name NO currency, the pending mark where
+     * the code will be — and SD2Q: the same sheet once it is told CNY.
+     */
+    SD1L, SD2P, SD2Q,
 }
 
 /* ------------------------------------------------------------------ chrome */

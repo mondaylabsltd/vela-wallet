@@ -19,7 +19,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -78,14 +80,21 @@ fun BalanceDisplay(
         }
         // The status line's place: one line of the row a status draws, kept
         // whether or not there is one. What is said in it is the status —
-        // the most actionable thing — else the empty wallet's live line.
+        // the most actionable thing — else "Checking…" while the first read
+        // of the account is out, else the empty wallet's live line. The last
+        // two are the core's words (PR 3 final note F19): each is drawn when
+        // the core says it, and by nothing this screen works out.
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         Box(modifier = Modifier.testTag(BALANCE_STATUS_PLACE_TAG), contentAlignment = Alignment.CenterStart) {
             BalanceStatusRoom()
             val status = model.status
+            val checking = model.checkingText
+            val live = model.liveText
             when {
                 status != null -> BalanceStatusLine(model = status, onClick = onStatusClick)
-                model.state == BalanceStateKind.ZeroLive -> LiveIndicatorRow(model.liveText.orEmpty())
+                // Quiet: the live line's own row, its dot not yet green.
+                checking != null -> QuietIndicatorRow(checking, colors.fgSubtle)
+                live != null -> QuietIndicatorRow(live, colors.successBase)
             }
         }
         model.refresh?.let { refresh ->
@@ -145,8 +154,14 @@ private fun AmountRow(model: BalanceModel, onToggle: () -> Unit = {}) {
     }
 }
 
+/**
+ * The status place's two quiet lines — "Live · listening for payments" (a
+ * green dot) and "Checking…" (the same dot, not yet green): a pulsing dot and
+ * the core's words. One line, like the status line whose place it stands in
+ * (F16): a sentence longer than the line ends in an ellipsis.
+ */
 @Composable
-private fun LiveIndicatorRow(text: String) {
+private fun QuietIndicatorRow(text: String, dot: Color) {
     val colors = VelaTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -156,7 +171,7 @@ private fun LiveIndicatorRow(text: String) {
             modifier = Modifier
                 .size(WalletMetrics.liveDotSize)
                 .alpha(rememberPulseAlpha())
-                .background(colors.successBase, CircleShape),
+                .background(dot, CircleShape),
         )
         Text(
             text = text,
@@ -164,6 +179,9 @@ private fun LiveIndicatorRow(text: String) {
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.medium,
             fontSize = VelaTextSize.sm,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
         )
     }
 }

@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -258,6 +259,9 @@ private fun PlaceTitle(parts: TitlePlace, title: String) {
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.semibold,
         fontSize = VelaTextSize.lg,
+        // A `style` handed to Text replaces the theme's, and this title names
+        // a place — a host or an ADDRESS: "0x12ab…" was drawn "0×12ab…".
+        fontFeatureSettings = VelaFontFeatures,
     )
     val measurer = rememberTextMeasurer()
     BoxWithConstraints {

@@ -37,8 +37,15 @@ import androidx.compose.ui.graphics.Color
  * TOKEN LIST could not be loaded (Tempo — it has no coin of its own to read
  * without one), as the real balance machine says it: "Can't load Tempo's
  * token list right now", never "Can't reach Tempo".
+ *
+ * H15 / H16 / H17 (PR 3 final note F19): an EMPTY wallet around its first
+ * read, as the real balance machine says it. H15: the read is out over last
+ * session's cached zero — "Checking…", never "Live". H16: it settled and
+ * every network answered — "Live · listening for payments". H17: it settled
+ * and three networks did not answer — "Can't reach 3 networks right now".
+ * One place, three lines: nothing under the hero moves between them.
  */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H13B, H14 }
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H13B, H14, H15, H16, H17 }
 
 @Immutable
 data class WalletHeaderModel(
@@ -76,7 +83,19 @@ data class BalanceModel(
      * separator.
      */
     val decimalMark: String = ".",
+    /**
+     * "Live · listening for payments" — the core's `BalanceView.live_key`,
+     * resolved; `null` whenever the core does not say it. Drawn in the status
+     * line's place.
+     */
     val liveText: String? = null,
+    /**
+     * "Checking…" — the core's `BalanceView.checking_key`, resolved, while
+     * the FIRST read of the account is still out (PR 3 final note F19). It
+     * stands alone in the status line's place, quietly: nothing has been read
+     * yet, so nothing is "live", "still updating" or "out of reach".
+     */
+    val checkingText: String? = null,
     val status: BalanceStatusModel? = null,
     val a11yHide: String,
     val a11yShow: String,

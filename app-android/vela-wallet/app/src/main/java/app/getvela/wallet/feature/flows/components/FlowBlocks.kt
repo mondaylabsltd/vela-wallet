@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.flows.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeaturesTabular
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.components.KeptRoom
 import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.animation.core.LinearEasing
@@ -441,6 +443,7 @@ private fun AmountFigure(
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.bold,
         fontSize = VelaAmountHero.figure(rung),
+        fontFeatureSettings = VelaFontFeatures,
         // The first rung's line on EVERY rung, the glyphs centred in it: the
         // block keeps one height whatever is typed.
         lineHeight = VelaAmountHero.line,
@@ -452,6 +455,7 @@ private fun AmountFigure(
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.medium,
         fontSize = VelaAmountHero.unit(rung),
+        fontFeatureSettings = VelaFontFeatures,
         // Its own tight line, lined up on the digits' baseline.
         lineHeight = VelaAmountHero.unit(rung) * VelaLeading.none,
     )
@@ -1463,7 +1467,7 @@ fun FeeSpeedControl(
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.sm,
                             lineHeight = VelaTextSize.sm * VelaLeading.normal,
-                            style = TextStyle(fontFeatureSettings = "tnum"),
+                            style = TextStyle(fontFeatureSettings = VelaFontFeaturesTabular),
                             maxLines = 1,
                             softWrap = false,
                             modifier = Modifier

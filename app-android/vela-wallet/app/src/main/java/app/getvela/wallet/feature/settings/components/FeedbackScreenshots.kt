@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeaturesTabular
 import android.graphics.Bitmap
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.animation.AnimatedVisibility
@@ -186,7 +187,7 @@ fun FeedbackScreenshotsSection(
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.sm,
                     // Tabular digits: "1 / 5" → "2 / 5" never shifts.
-                    style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                    style = LocalTextStyle.current.copy(fontFeatureSettings = VelaFontFeaturesTabular),
                 )
             },
         )

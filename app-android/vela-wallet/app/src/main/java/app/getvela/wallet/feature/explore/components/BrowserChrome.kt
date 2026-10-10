@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.explore.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeaturesTabular
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -127,7 +129,8 @@ fun AddressBar(
                         if (draft.text.isNotBlank()) onSubmitUrl?.invoke(draft.text)
                     }),
                     cursorBrush = SolidColor(colors.accentBase),
-                    textStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg),
+                    // A URL is literal text: "…/address/0x14fB…" was typed "0×14fB…".
+                    textStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg, fontFeatureSettings = VelaFontFeatures),
                     modifier = Modifier
                         .weight(1f)
                         // The field ends a gutter in from the edge, as ‹'s glyph
@@ -222,7 +225,7 @@ fun AddressBar(
                                 fontFamily = VelaFontFamily,
                                 fontWeight = VelaFontWeight.semibold,
                                 fontSize = VelaTextSize.base,
-                                style = TextStyle(fontFeatureSettings = "tnum"),
+                                style = TextStyle(fontFeatureSettings = VelaFontFeaturesTabular),
                                 maxLines = 1,
                                 softWrap = false,
                             )

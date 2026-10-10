@@ -90,10 +90,22 @@ data class UnreachableNetwork(
      * the network's then.
      */
     val rpc_fixable: Boolean = true,
+    /**
+     * The corpus key of the row's SHORT status in the balance breakdown — the
+     * core's word (PR 3 final note F21): `home.balanceDetailStatusFailed`
+     * ("RPC unavailable") when none of its endpoints answered,
+     * `home.balanceDetailStatusTokenList` ("Token list unavailable") when its
+     * RPC answers and its token list could not be loaded. The default is the
+     * one status there was, for a core that predates the field.
+     */
+    val status_key: String = STATUS_RPC_UNAVAILABLE,
 ) {
     companion object {
         const val CAUSE_NETWORK = "network"
         const val CAUSE_TOKEN_LIST = "token_list"
+
+        /** `balance_dashboard::STATUS_RPC_UNAVAILABLE`. */
+        const val STATUS_RPC_UNAVAILABLE = "home.balanceDetailStatusFailed"
     }
 }
 
@@ -148,6 +160,25 @@ data class BalanceView(
      * goes, in place of any "Can't reach …". `null` otherwise.
      */
     val internal_key: String? = null,
+    /**
+     * The hero's line while the FIRST read of this account is still out (PR 3
+     * final note F19): `componentsUi.funding.checking` ("Checking…"). Until a
+     * round has ended nothing here was said by a chain — a cached total of 0
+     * is last session's — so the line under the total says the wallet is
+     * being read, and neither "live" nor "can't reach" yet. `null` from the
+     * first round's end on: a later refresh is not "checking".
+     */
+    val checking_key: String? = null,
+    /**
+     * The hero's line under a LIVE zero: `home.liveIndicator` ("Live ·
+     * listening for payments"). Set only when the last round settled, every
+     * chain it asked answered and the wallet holds nothing. **The "zero,
+     * live" state is this key being set, and nothing else**: derived here
+     * from the total and the partial flag, a cached zero drew "Live ·
+     * listening" over a wallet nothing had read, then swapped it for "Can't
+     * reach 24 networks".
+     */
+    val live_key: String? = null,
     val holdings_loading: Boolean = false,
     val cached_total_usd: Double? = null,
     val switcher: BalanceSwitcherView = BalanceSwitcherView(),

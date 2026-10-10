@@ -138,7 +138,14 @@ object SettingsFixtures {
         listOf("1,234,567.89", "1,234,567.89", "1.234.567,89", "1 234 567,89", "12,34,567.89")
     private val DATE_SAMPLES =
         listOf("2026/06/13", "2026/06/13", "06/13/2026", "13/06/2026", "13.06.2026", "2026-06-13")
-    private val TIME_SAMPLES = listOf("13:45", "13:45", "1:45 PM")
+    /**
+     * Automatic, 24-hour, 12-hour — each the CORE's clock in the board's
+     * language (F5), as a session's sheet is: 「下午 1:45」 under Chinese. The
+     * board drew "1:45 PM" in every language.
+     */
+    private fun timeSamples(s: VelaStrings): List<String> =
+        listOf(app.getvela.wallet.core.format.TimeFormatKey.H24, app.getvela.wallet.core.format.TimeFormatKey.H24, app.getvela.wallet.core.format.TimeFormatKey.H12)
+            .map { app.getvela.wallet.core.format.Formats(time = it).timeExample(s.language) }
 
     // --- Helpers -------------------------------------------------------------
 
@@ -199,7 +206,7 @@ object SettingsFixtures {
                     id = "time-format",
                     title = s.t(I18nKeys.SettingsUi.TIME_TITLE),
                     icon = SettingsIcon.Clock,
-                    value = TIME_SAMPLES[0],
+                    value = timeSamples(s)[0],
                 ),
             ),
         ),
@@ -429,6 +436,9 @@ object SettingsFixtures {
                     hint = s.t(I18nKeys.SettingsUi.NETWORK_RELAY_NOTICE),
                 ),
                 primary = s.t(I18nKeys.SettingsUi.ADD_BUTTON),
+                // The core's one rule (F4 / F14 / F22): the re-check is drawn
+                // exactly where the RPC field is.
+                recheck = s.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC),
             )
         } else {
             AddNetworkModel(
@@ -452,13 +462,14 @@ object SettingsFixtures {
                     CalloutTone.Warning,
                     s.t(if (noP256) "settingsModals.addNetwork.noP256Hint" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
                 ),
-                // An outline CTA plus a re-check link, not a greyed-out accent
-                // one: an action you cannot take should not be dressed as the
-                // action you came for. Chain Setup only where contracts can be
-                // deployed — with the core's link, opened on this chain.
+                // An outline CTA, not a greyed-out accent one: an action you
+                // cannot take should not be dressed as the action you came
+                // for. Chain Setup only where contracts can be deployed — with
+                // the core's link, opened on this chain. And NO "Re-check with
+                // this RPC" under a refusal (F22): another endpoint changes
+                // neither reason, and there is no RPC box for "this" to mean.
                 secondary = if (noP256) null else s.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL),
                 secondaryUrl = if (noP256) null else "https://getvela.app/chain-setup?chain=48900",
-                recheck = s.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC),
             )
         }
     }
@@ -707,7 +718,7 @@ object SettingsFixtures {
 
     private fun accountsSheet(s: VelaStrings) = AccountsSheetModel(
         title = s.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
-        summary = s.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to ACCOUNTS.size.toString())) +
+        summary = s.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, ACCOUNTS.size) +
             s.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to TOTAL_BALANCE)),
         rows = ACCOUNTS.mapIndexed { i, a ->
             AccountsSheetRowModel(a.name, a.addressDisplay, a.addressFull, a.amount, i == 0)
@@ -983,6 +994,35 @@ object SettingsFixtures {
         return SettingsLive.balanceDetail(balanceDetail(s), view, currency, mapOf(1 to "Ethereum", 100 to "Gnosis", 137 to "Polygon"), s)
     }
 
+    /**
+     * SR3D / SR3E / SR3F: the balance by network in a round the real balance
+     * machine wrote (`BalanceBoards`), through [SettingsLive.balanceDetail],
+     * with the home line's sentence at its top as a session passes it
+     * ([WalletLive.heroStatus]).
+     */
+    private fun roundBalanceDetail(s: VelaStrings, state: SettingsScreenState): BalanceDetailModel {
+        val now = System.currentTimeMillis().toDouble()
+        val boards = app.getvela.wallet.feature.wallet.core.BalanceBoards
+        val (view, names) = when (state) {
+            SettingsScreenState.SR3D -> boards.tokenListUnreachable(ADDRESS_FULL, now) to app.getvela.wallet.feature.wallet.WalletFixtures.TOKEN_LIST_CHAINS
+            SettingsScreenState.SR3E -> boards.unpriced(ADDRESS_FULL, now) to mapOf(1 to "Ethereum", 100 to "Gnosis")
+            else -> boards.internalFault(ADDRESS_FULL, now) to mapOf(1 to "Ethereum", 100 to "Gnosis")
+        }
+        return SettingsLive.balanceDetail(balanceDetail(s), view, CurrencyView(code = "USD", rate = 1.0, committed = true), names, s)
+            .copy(lead = app.getvela.wallet.feature.wallet.WalletLive.heroStatus(view, s, names)?.text)
+    }
+
+    /** ST2B: the switcher's sheet for a wallet with ONE account, through the live builder. */
+    private fun oneAccountSheet(s: VelaStrings) = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(
+        accounts = listOf(ACCOUNTS.first().let { it.name to it.addressFull }),
+        activeIndex = 0,
+        switcher = app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(
+            balances = listOf(app.getvela.wallet.feature.wallet.core.BalanceCacheEntry(ACCOUNTS.first().addressFull, 1383.28)),
+        ),
+        currency = CurrencyView(code = "USD", rate = 1.0, committed = true),
+        strings = s,
+    )
+
     private fun relayer(s: VelaStrings) = RelayerModel(
         title = s.t(I18nKeys.SettingsUi.RELAYER_TITLE),
         lead = s.t(I18nKeys.SettingsUi.RELAYER_LEAD),
@@ -1027,7 +1067,7 @@ object SettingsFixtures {
     private fun shape(state: SettingsScreenState): Shape = when (state) {
         SettingsScreenState.ST1, SettingsScreenState.ST1B ->
             Shape(SettingsPage.Home, SettingsOverlay.None)
-        SettingsScreenState.ST2 -> Shape(SettingsPage.Home, SettingsOverlay.Accounts)
+        SettingsScreenState.ST2, SettingsScreenState.ST2B -> Shape(SettingsPage.Home, SettingsOverlay.Accounts)
         SettingsScreenState.ST3, SettingsScreenState.ST3B ->
             Shape(SettingsPage.Home, SettingsOverlay.SignOut)
         SettingsScreenState.ST4 -> Shape(SettingsPage.Home, SettingsOverlay.Language)
@@ -1054,7 +1094,8 @@ object SettingsFixtures {
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR2, SettingsScreenState.SR2B ->
             Shape(SettingsPage.Home, SettingsOverlay.RpcFix, rescue = true, backdrop = "wallet")
-        SettingsScreenState.SR3, SettingsScreenState.SR3B, SettingsScreenState.SR3C ->
+        SettingsScreenState.SR3, SettingsScreenState.SR3B, SettingsScreenState.SR3C,
+        SettingsScreenState.SR3D, SettingsScreenState.SR3E, SettingsScreenState.SR3F ->
             Shape(SettingsPage.Home, SettingsOverlay.BalanceDetail, rescue = true, backdrop = "wallet")
         SettingsScreenState.SR4 ->
             Shape(SettingsPage.Home, SettingsOverlay.Relayer, rescue = true, backdrop = "send")
@@ -1317,7 +1358,7 @@ object SettingsFixtures {
             endpoints = endpoints(s),
             storage = storage(s),
             about = about(s, state),
-            accountsSheet = accountsSheet(s),
+            accountsSheet = if (state == SettingsScreenState.ST2B) oneAccountSheet(s) else accountsSheet(s),
             signOutSheet = signOutSheet(s, warned = state == SettingsScreenState.ST3B),
             languageSheet = languageSheet(s, "zh"),
             currencySheet = currencySheet(s),
@@ -1339,7 +1380,7 @@ object SettingsFixtures {
                 s,
                 s.t(I18nKeys.SettingsUi.TIME_TITLE),
                 s.t(I18nKeys.SettingsUi.TIME_SUBTITLE),
-                TIME_SAMPLES,
+                timeSamples(s),
                 mapOf(
                     1 to s.t(I18nKeys.SettingsUi.NOTE_H24),
                     2 to s.t(I18nKeys.SettingsUi.NOTE_H12),
@@ -1367,6 +1408,7 @@ object SettingsFixtures {
             balanceDetail = when (state) {
                 SettingsScreenState.SR3B -> liveBalanceDetail(s, committed = false)
                 SettingsScreenState.SR3C -> liveBalanceDetail(s, committed = true)
+                SettingsScreenState.SR3D, SettingsScreenState.SR3E, SettingsScreenState.SR3F -> roundBalanceDetail(s, state)
                 else -> balanceDetail(s)
             },
             // SR6 is drawn through the live builder, from a view shaped like

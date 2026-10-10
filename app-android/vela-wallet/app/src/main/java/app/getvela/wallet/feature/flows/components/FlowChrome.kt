@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -267,6 +268,8 @@ fun FlowSearchField(
                     color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
+                    // A contract address pasted into a search is literal: "0x", never "0×".
+                    fontFeatureSettings = VelaFontFeatures,
                 ),
                 cursorBrush = SolidColor(colors.accentBase),
                 modifier = Modifier.fillMaxWidth(),

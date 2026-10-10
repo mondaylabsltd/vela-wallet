@@ -108,6 +108,25 @@ class SendImportTest {
         return send
     }
 
+    /**
+     * PR 3 final note F8, on the real batch machine: the importer is opened
+     * with the code it is given, and told the person's currency when that
+     * becomes known — it asks for THAT currency's rate, and never keeps the
+     * old rate under a new code.
+     */
+    @Test
+    fun `an open importer hears the person's currency`() {
+        val send = typedThenImporting()
+        assertEquals("opened on what was known then", "USD", send.batch.value.fiat_code)
+        send.batchUnit(BatchUnit.Fiat)
+        send.batchFiatCode("CNY")
+        val told = send.batch.await("the importer is in the person's currency") { it.fiat_code == "CNY" }
+        assertEquals(BatchUnit.Fiat, told.unit)
+        // No rate for CNY in this harness: the import is held, not priced at USD's.
+        val settled = send.batch.await("the rate for CNY was asked, and is not USD's") { it.fiat_code == "CNY" && it.rate_status != app.getvela.wallet.feature.send.core.BatchRateStatus.Ok }
+        assertEquals(false, settled.can_apply)
+    }
+
     @Test
     fun `an import adds to a recipient typed by hand`() {
         val send = typedThenImporting()

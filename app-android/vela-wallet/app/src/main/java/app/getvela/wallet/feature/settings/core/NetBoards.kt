@@ -6,7 +6,7 @@ import app.getvela.wallet.core.crux.asBridge
 import uniffi.vela_core_uniffi.NetworkAdminCore
 
 /**
- * The add-network wizard's stops, each a view the REAL `network_admin`
+ * The add-network wizard's stops and verdicts, each a view the REAL `network_admin`
  * machine wrote — a search typed or a chain handed over, its catalog read and
  * its probes answered as the case says — for the Settings gallery's boards,
  * never a live surface. So a board shows what the core says when the wizard
@@ -36,6 +36,21 @@ object NetBoards {
 
         /** A chain the catalog knows and lists no usable RPC for: one must be typed. */
         NoRpcEndpoint,
+
+        // -- the wizard's own path: a chain picked from the search, checked, and
+        //    left on its verdict for the person to act on (never saved here) --
+
+        /** Picked and checked: the verifier and every contract are there — it can be added. */
+        WizardCompatible,
+
+        /** Picked; its probes did not answer: "unable to verify" — a verdict nobody reached. */
+        WizardUnverified,
+
+        /** Picked and refused: no P-256 verifier. */
+        WizardNoP256,
+
+        /** Picked and refused: the verifier is there, Vela's contracts are not. */
+        WizardMissingContracts,
     }
 
     /** The boards' refused chain, as the ST10C/ST10D drawings name it. */
@@ -66,15 +81,20 @@ object NetBoards {
                 )
                 "probe_rpc" -> NetShellResult.Probed(
                     operation.optString("url"),
-                    reported_chain_id = CHAIN_ID.takeIf { stop != Stop.ScanCheckFailed },
+                    reported_chain_id = CHAIN_ID.takeIf { stop != Stop.ScanCheckFailed && stop != Stop.WizardUnverified },
                     latency_ms = 20,
                 )
                 // The verifier is there and the contracts are not — or
-                // neither is; the core tells the two apart.
-                "rpc_get_code" -> NetShellResult.Code(operation.optString("url"), operation.optString("address"), "0x")
+                // neither is; the core tells the two apart. One board has
+                // them all.
+                "rpc_get_code" -> NetShellResult.Code(
+                    operation.optString("url"),
+                    operation.optString("address"),
+                    if (stop == Stop.WizardCompatible) "0x6080" else "0x",
+                )
                 "rpc_call_p256" -> NetShellResult.P256Call(
                     operation.optString("url"),
-                    if (stop == Stop.ScanNoP256) "0x" else "0x" + "0".repeat(63) + "1",
+                    if (stop == Stop.ScanNoP256 || stop == Stop.WizardNoP256) "0x" else "0x" + "0".repeat(63) + "1",
                 )
                 // Anything else (the built-in networks' health probes, the
                 // endpoints') stays out: the board is the wizard.
@@ -94,7 +114,8 @@ object NetBoards {
                 send(NetEvent.SearchInput(CHAIN_ID.toString()))
                 send(NetEvent.ChainSelected(chain_id = CHAIN_ID, keep_custom_rpc = false))
             }
-            Stop.NoRpcEndpoint -> send(NetEvent.ChainSelected(chain_id = CHAIN_ID, keep_custom_rpc = false))
+            Stop.NoRpcEndpoint, Stop.WizardCompatible, Stop.WizardUnverified, Stop.WizardNoP256, Stop.WizardMissingContracts ->
+                send(NetEvent.ChainSelected(chain_id = CHAIN_ID, keep_custom_rpc = false))
         }
         // Read the way the live host reads it (`CoreHost.commit`): through
         // `JSONObject`, which writes the core's whole `f64`s ("20.0", a

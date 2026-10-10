@@ -776,12 +776,15 @@ class SigningLiveTest {
 
         // Out: the place, nothing said in it.
         val waiting = sheet(request(params), SigningController.SimOutcome.Pending)
-        assertEquals(SigningBlock.Held(rooms = rooms, shown = null), waiting.blocks.single { it is SigningBlock.Held })
+        // F2: the place is not blank meanwhile — a skeleton, said as the corpus's "Checking…".
+        val checking = strings.t("componentsUi.funding.checking")
+        assertEquals("Checking…", checking)
+        assertEquals(SigningBlock.Held(rooms = rooms, shown = null, waiting = checking), waiting.blocks.single { it is SigningBlock.Held })
         assertTrue("nothing is said before a verdict", waiting.blocks.said().none { it is SigningBlock.Warning || it is SigningBlock.Balances })
 
         // Landed "could not check": the same card in the same place — nothing moves.
         val landed = sheet(request(params), couldNot)
-        assertEquals(SigningBlock.Held(rooms = rooms, shown = card), landed.blocks.single { it is SigningBlock.Held })
+        assertEquals(SigningBlock.Held(rooms = rooms, shown = card, waiting = checking), landed.blocks.single { it is SigningBlock.Held })
         assertEquals(waiting.blocks.indexOfFirst { it is SigningBlock.Held }, landed.blocks.indexOfFirst { it is SigningBlock.Held })
         assertEquals(waiting.blocks.size, landed.blocks.size)
 

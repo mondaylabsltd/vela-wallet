@@ -324,6 +324,25 @@ class SettingsController(
     fun addNetworkByChainId(chainId: Long) =
         net(NetEvent.AddByChainIdRequested(chainId, nowIso()))
 
+    /**
+     * [addNetworkByChainId], awaited — for Send's "add this network" (PR 3
+     * final notes F6 / F27): the scan path's event, then the network
+     * machine's own verdict on it the moment it has one, in the send
+     * machine's terms (`SendAddNetwork`). It was followed by a ten-second
+     * wait that only "added" could end early. [sentence] resolves the core's
+     * key for why the wizard stopped.
+     */
+    suspend fun addNetworkSettled(chainId: Long, sentence: (String) -> String): app.getvela.wallet.feature.send.core.SendAddNetworkOutcome {
+        val number = networkHost.dispatchNumbered(NetEvent.AddByChainIdRequested(chainId, nowIso()), NetEvent.serializer())
+        return app.getvela.wallet.feature.send.core.SendAddNetwork.await(
+            commits = networkHost.commits,
+            applied = { networkHost.applied(number) },
+            view = { networkHost.view.value },
+            chainId = chainId,
+            sentence = sentence,
+        )
+    }
+
     fun resetWizard() = net(NetEvent.WizardReset)
 
     // -- spec 100: a page asks to add a network ------------------------------

@@ -405,10 +405,23 @@ object WalletLive {
         money: Money,
         chainNames: Map<Int, String>,
     ): BalanceModel {
-        val live = balanceVisible(fallback, view, strings, money, chainNames)
+        val drawn = balanceVisible(fallback, view, money)
             // The label names the currency in EVERY state — it used to keep
             // the drawn board's "USD" while the figure loaded, then change.
             .copy(currency = money.label)
+        // PR 3 final note F19: the two lines only the core can say. While the
+        // FIRST read of the account is out (`checking_key`) the status line's
+        // place says "Checking…" — under the skeleton and under a cached
+        // figure alike, from the first frame, and in place of anything else
+        // that line could say: until a round has ended no chain has said the
+        // wallet is live, none has failed to answer, and a cached figure is
+        // not "still updating" yet. And "Live · listening for payments" is
+        // said exactly when the core says it (`live_key`), in every state.
+        val live = drawn.copy(
+            checkingText = view.checking_key?.let { strings.t(it) },
+            liveText = view.live_key?.let { strings.t(it) },
+            status = heroStatus(view, strings, chainNames),
+        )
         // Spec 048 (device-found): hidden used to return the FIXTURE with a hidden
         // state — "$1,383 · USD" under the eye. Hidden is the live label with
         // the figures masked.
@@ -418,13 +431,8 @@ object WalletLive {
         return live
     }
 
-    private fun balanceVisible(
-        fallback: BalanceModel,
-        view: BalanceView,
-        strings: VelaStrings,
-        money: Money,
-        chainNames: Map<Int, String>,
-    ): BalanceModel {
+    /** The figure and its state; what the line under it says is [heroStatus]'s. */
+    private fun balanceVisible(fallback: BalanceModel, view: BalanceView, money: Money): BalanceModel {
 
         // The core withholds the display total while a fetch is out; the
         // last-known cached total paints first and live replaces it
@@ -440,17 +448,7 @@ object WalletLive {
         // still decides first: a skeleton and a reason, the same reason the
         // web and desktop heroes give.
         if (view.unreachable) {
-            return fallback.copy(
-                state = BalanceStateKind.Loading,
-                integer = null,
-                decimals = null,
-                status = BalanceStatusModel(
-                    kind = BalanceStatusKind.Warning,
-                    // A read that failed inside Vela (PR 2 note 11) is said as
-                    // that — never "the request never arrived".
-                    text = strings.t(view.internal_key ?: I18nKeys.Wallet.BALANCE_UNREACHABLE),
-                ),
-            )
+            return fallback.copy(state = BalanceStateKind.Loading, integer = null, decimals = null)
         }
 
         // **A total of zero is only honest when it is one.**
@@ -462,36 +460,15 @@ object WalletLive {
         // could not be priced" warning, which assumes SOME of them were; when
         // none were, there is no total to show and the skeleton is the truthful
         // shape. Phase 4c removes this state by giving prices a source.
-        val nothingPriceable = view.tokens.isNotEmpty() && view.tokens.all { it.price_usd == null }
-        if (nothingPriceable) {
-            return fallback.copy(
-                state = BalanceStateKind.Loading,
-                integer = null,
-                decimals = null,
-                // Built here rather than borrowed from the fixture: the H1
-                // state carries no status at all, so a `?.copy` produced a
-                // bare skeleton with no explanation — a person staring at an
-                // empty hero with two holdings underneath and no reason given.
-                // Seen on the device before it was fixed.
-                status = BalanceStatusModel(
-                    kind = BalanceStatusKind.Warning,
-                    text = strings.t(I18nKeys.Wallet.BALANCE_UNPRICED),
-                ),
-            )
+        if (nothingPriceable(view)) {
+            return fallback.copy(state = BalanceStateKind.Loading, integer = null, decimals = null)
         }
 
         if (total == null) {
             // Unknown. Either still counting, or nothing could be priced —
             // both render as "not a number yet" rather than as zero, and the
             // core's own notice says which.
-            return fallback.copy(
-                state = BalanceStateKind.Loading,
-                integer = null,
-                decimals = null,
-                // A refresh the person asked for is the control's to show
-                // (issue 462), never a line pushed in above it.
-                status = null,
-            )
+            return fallback.copy(state = BalanceStateKind.Loading, integer = null, decimals = null)
         }
 
         // The display currency is not the person's yet (the core's rule on
@@ -500,18 +477,14 @@ object WalletLive {
         // kept — and appears once, in the right money: it read "$1,234" for
         // a few seconds and then jumped to "¥8,876".
         val figure = money.parts(total)
-            ?: return fallback.copy(
-                state = BalanceStateKind.Loading,
-                integer = null,
-                decimals = null,
-                liveText = null,
-                status = balanceStatus(view, strings, chainNames),
-            )
-        // A zero is "live" only once EVERY chain has answered: a zero with a
-        // chain unread (partial) or unknown is not a listening wallet, it is an
-        // unknown one — and a cached zero is not live at all.
-        val zeroLive = figure.zero && view.display_total_usd != null &&
-            !view.balance_unknown && !view.balance_partial && view.tokens.isEmpty()
+            ?: return fallback.copy(state = BalanceStateKind.Loading, integer = null, decimals = null)
+        // "Zero, live" is the core's to say (`live_key`, PR 3 final note F19)
+        // and nothing here decides it: the last round settled, every chain it
+        // asked answered, and the wallet holds nothing. It was derived here
+        // from the total and the partial flag, which a cached zero satisfies
+        // before anything has been read — "Live · listening for payments"
+        // over a wallet nothing had read, then "Can't reach 24 networks".
+        val zeroLive = view.live_key != null
         return fallback.copy(
             state = if (zeroLive) BalanceStateKind.ZeroLive else BalanceStateKind.Normal,
             integer = figure.integer,
@@ -519,9 +492,40 @@ object WalletLive {
             decimalMark = Formats.current.decimalMark(),
             // The label beside the figure names the currency it is in.
             currency = money.code,
-            liveText = if (zeroLive) strings.t(I18nKeys.Wallet.LIVE_INDICATOR) else null,
-            status = balanceStatus(view, strings, chainNames),
         )
+    }
+
+    /** Every holding is unpriced: there is no total to show, and the line says why. */
+    private fun nothingPriceable(view: BalanceView): Boolean =
+        view.tokens.isNotEmpty() && view.tokens.all { it.price_usd == null }
+
+    /**
+     * What the hero's status line says — the ONE definition, for the hero
+     * and for the sheet the line opens, which repeats the sentence in full
+     * at its top (PR 3 final note F16: the line itself is one line, cut with
+     * an ellipsis when the sentence is longer).
+     *
+     * - While the first read is out the core's "Checking…" stands alone in
+     *   the line's place ([BalanceModel.checkingText]): no status.
+     * - Nothing could be read and nothing is known: the reason — the fault's
+     *   own sentence when the read failed inside Vela (PR 2 note 11), never
+     *   "the request never arrived" for that.
+     * - Every holding unpriced: a skeleton needs its explanation. (Built
+     *   here rather than borrowed from the fixture: H1 carries no status, so
+     *   a `?.copy` drew an empty hero over two holdings with no reason.)
+     * - No figure at all yet: nothing — a refresh the person asked for is
+     *   the control's to show (issue 462), never a line pushed in above it.
+     * - Otherwise [balanceStatus].
+     */
+    fun heroStatus(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): BalanceStatusModel? = when {
+        view.checking_key != null -> null
+        view.unreachable -> BalanceStatusModel(
+            BalanceStatusKind.Warning,
+            strings.t(view.internal_key ?: I18nKeys.Wallet.BALANCE_UNREACHABLE),
+        )
+        nothingPriceable(view) -> BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNPRICED))
+        view.display_total_usd == null && view.cached_total_usd == null -> null
+        else -> balanceStatus(view, strings, chainNames)
     }
 
     /**
@@ -671,7 +675,10 @@ object WalletLive {
         val total = switcher.balances.sumOf { it.usd }
         val known = switcher.balances.isNotEmpty()
         val hidden = switcher.hidden
-        val count = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString()))
+        // A PLURAL family (F15): the number goes to the core as the count, so
+        // the core picks the form by the language's rule — "1 account · ",
+        // "2 accounts · ". As a text variable it read "1 accounts · Total".
+        val count = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, accounts.size)
         return AccountsSheetModel(
             title = strings.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
             summary = when {
@@ -794,8 +801,6 @@ object WalletLive {
             val integer: String,
             /** "28" — the cents, two digits. */
             val decimals: String,
-            /** The rounded figure is exactly zero. */
-            val zero: Boolean,
         )
 
         /**
@@ -813,7 +818,6 @@ object WalletLive {
             return Parts(
                 integer = symbol + Formats.current.groupDigits(whole.toString()),
                 decimals = cents.toString().padStart(2, '0'),
-                zero = rounded.signum() == 0,
             )
         }
 

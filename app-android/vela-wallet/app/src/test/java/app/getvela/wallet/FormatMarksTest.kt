@@ -37,8 +37,12 @@ class FormatMarksTest {
         assertEquals("1,234,567.89", Formats(locale = Locale.US).example())
         assertEquals("2026/06/13", Formats(date = DateFormatKey.YmdSlash).dateExample())
         assertEquals("13.06.2026", Formats(date = DateFormatKey.DmyDot).dateExample())
-        assertEquals("1:45 PM", Formats(time = TimeFormatKey.H12).timeExample())
-        assertEquals("13:45", Formats(time = TimeFormatKey.H24).timeExample())
+        // The clock is the core's, in the language's own convention (F5).
+        fun shown(text: String) = text.replace('\u00A0', ' ').replace("\u2060", "")
+        assertEquals("1:45 PM", shown(Formats(time = TimeFormatKey.H12, locale = Locale.US).timeExample()))
+        assertEquals("下午 1:45", shown(Formats(time = TimeFormatKey.H12, locale = Locale.SIMPLIFIED_CHINESE).timeExample()))
+        assertEquals("下午 1:45", shown(Formats(time = TimeFormatKey.H12, locale = Locale.US).timeExample("zh")))
+        assertEquals("13:45", Formats(time = TimeFormatKey.H24, locale = Locale.SIMPLIFIED_CHINESE).timeExample())
     }
 
     @Test

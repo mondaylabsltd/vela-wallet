@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Paint
@@ -227,6 +228,8 @@ private class CardText(
                 // follow the phone's font-size setting.
                 fontSize = with(density) { size.dp.toSp() },
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
+                // The card is drawn outside the theme: a name like "0xAlice" stays as written.
+                fontFeatureSettings = VelaFontFeatures,
             ),
             softWrap = false,
             maxLines = 1,
@@ -256,6 +259,8 @@ private class CardText(
                 fontWeight = weight,
                 fontSize = with(density) { size.dp.toSp() },
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
+                // The fill's own features, so the outline lands on its glyphs.
+                fontFeatureSettings = VelaFontFeatures,
                 // Skia's fake-bold width at display sizes: a 32nd of the size.
                 drawStyle = Stroke(width = size * density.density / 32f),
             ),

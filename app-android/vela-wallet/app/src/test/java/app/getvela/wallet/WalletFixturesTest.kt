@@ -231,7 +231,8 @@ class WalletFixturesTest {
             val refresh = WalletFixtures.buildMobileState(state, strings).balance.refresh
             assertEquals("$state", "更新中…", refresh?.updating)
             assertEquals("$state", false, refresh?.refreshing)
-            val expected = if (state == WalletScreenState.H3) null else "上次更新 · 2分钟前"
+            // Nothing read yet: H3's skeleton, and H15, whose first read is still out.
+            val expected = if (state == WalletScreenState.H3 || state == WalletScreenState.H15) null else "上次更新 · 2分钟前"
             assertEquals("$state", expected, refresh?.updated)
         }
     }

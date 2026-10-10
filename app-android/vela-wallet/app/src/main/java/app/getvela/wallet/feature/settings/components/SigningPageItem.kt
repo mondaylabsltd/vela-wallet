@@ -133,6 +133,8 @@ fun IntegrityLine(model: IntegrityLineModel, modifier: Modifier = Modifier) {
                     alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
                     trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
                 ),
+                // A `style` handed to Text replaces the theme's: say "0x stays 0x" again.
+                fontFeatureSettings = app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures,
             ),
             minLines = INTEGRITY_LINES,
         )
