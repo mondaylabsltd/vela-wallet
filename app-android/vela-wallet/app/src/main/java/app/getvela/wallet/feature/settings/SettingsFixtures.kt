@@ -429,6 +429,9 @@ object SettingsFixtures {
                     hint = s.t(I18nKeys.SettingsUi.NETWORK_RELAY_NOTICE),
                 ),
                 primary = s.t(I18nKeys.SettingsUi.ADD_BUTTON),
+                // The core's one rule (F4 / F14 / F22): the re-check is drawn
+                // exactly where the RPC field is.
+                recheck = s.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC),
             )
         } else {
             AddNetworkModel(
@@ -452,13 +455,14 @@ object SettingsFixtures {
                     CalloutTone.Warning,
                     s.t(if (noP256) "settingsModals.addNetwork.noP256Hint" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
                 ),
-                // An outline CTA plus a re-check link, not a greyed-out accent
-                // one: an action you cannot take should not be dressed as the
-                // action you came for. Chain Setup only where contracts can be
-                // deployed — with the core's link, opened on this chain.
+                // An outline CTA, not a greyed-out accent one: an action you
+                // cannot take should not be dressed as the action you came
+                // for. Chain Setup only where contracts can be deployed — with
+                // the core's link, opened on this chain. And NO "Re-check with
+                // this RPC" under a refusal (F22): another endpoint changes
+                // neither reason, and there is no RPC box for "this" to mean.
                 secondary = if (noP256) null else s.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL),
                 secondaryUrl = if (noP256) null else "https://getvela.app/chain-setup?chain=48900",
-                recheck = s.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC),
             )
         }
     }

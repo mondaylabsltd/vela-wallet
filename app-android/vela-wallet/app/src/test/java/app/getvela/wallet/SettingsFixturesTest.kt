@@ -256,7 +256,13 @@ class SettingsFixturesTest {
         assertEquals("Open Chain Setup Tool", bad.secondary)
         assertEquals("https://getvela.app/chain-setup?chain=48900", bad.secondaryUrl)
         assertTrue(bad.callout!!.text, bad.callout!!.text.startsWith("Some contracts Vela needs aren't on this network yet."))
-        assertNotNull(bad.recheck)
+        // The core's one rule for the wizard (F4 / F14 / F22), on the drawn
+        // boards too: the re-check exactly where the RPC field is — with the
+        // check that passed, and under neither refusal.
+        for (board in listOf(ok, bad, never)) assertEquals(board.customRpc != null, board.recheck != null)
+        assertNotNull(ok.recheck)
+        assertNull(bad.recheck)
+        assertNull(never.recheck)
         // No verifier: said plainly, and nothing to open.
         assertNull(never.primary)
         assertNull(never.secondary)
