@@ -933,6 +933,20 @@ pub fn sign_confirm_state(
     )
 }
 
+/// What the pool's `eth_simulateV1` answer means for `user` (the signing
+/// account), and every line the sheet draws for it: a `SimVerdict` JSON —
+/// `{kind, deltas, revert_reason, notice_risk, notice_key, no_change_key}`.
+/// `reply_json` is the JSON-RPC envelope as it came (`{"result": …}` or
+/// `{"error": …}`), or `{"unreachable": true}` when the pool gave up;
+/// anything else is an answer nobody can read ("could not check", never
+/// "nothing moves"). `no_change_key` is "No asset changes" for a check under
+/// which nothing of theirs moves. See `vela_core::app::sim_outcome`.
+#[wasm_bindgen(js_name = simOutcome)]
+#[must_use]
+pub fn sim_outcome(user: &str, reply_json: &str) -> String {
+    vela_core::app::sim_outcome::verdict_json(user, reply_json)
+}
+
 /// Every operation in flight on this device: the tracker's view (JSON) in, an
 /// `InFlightOp` JSON array out. Forward it on every tracker render to the send
 /// and signing machines (`InFlightOps`). An op is held until it is final or

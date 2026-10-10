@@ -21,7 +21,7 @@ use vela_core::app::token_trust::{
     TrustOperation as Op, TrustRawLog, TrustReceiptLog, TrustShellResult as Res, TrustSimJudgment,
     TrustTokenMeta, DEFAULT_MONITOR_CHAINS, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
 };
-use vela_core::app::token_trust::{merge_safe_received, SAFE_RECEIVED_TOPIC};
+use vela_core::app::token_trust::{merge_safe_received, TrustSimView, SAFE_RECEIVED_TOPIC};
 
 type Sut = DomainDriver<TokenTrust>;
 
@@ -1307,6 +1307,67 @@ fn sim_unknown_metadata_is_unverified_and_memoised() {
     });
     assert!(ops.is_empty(), "negative memo — no re-query");
     assert!(sut.view().sim.expect("re-judged").ready);
+}
+
+/// PR 3: "No asset changes" is the judged view's to say — once it is ready,
+/// with no judgment or every one a zero — so every sheet says the same line
+/// in the same case. Never while resolving, and never over a move.
+#[test]
+fn the_judged_view_says_no_asset_changes() {
+    const NO_CHANGE: &str = "componentsUi.signing.simResultNoChange";
+    let mut sut = booted(vec![1]);
+    // A check that moved nothing: judged at once, and it says so.
+    sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 1,
+        deltas: vec![],
+    });
+    let sim = sut.view().sim.expect("judged");
+    assert!(sim.ready && sim.judgments.is_empty());
+    assert_eq!(sim.no_change_key.as_deref(), Some(NO_CHANGE));
+
+    // A move of nothing is not a move.
+    sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 1,
+        deltas: vec![native_delta("0")],
+    });
+    let sim = sut.view().sim.expect("judged");
+    assert_eq!(sim.judgments.len(), 1);
+    assert_eq!(sim.no_change_key.as_deref(), Some(NO_CHANGE));
+
+    // Something moves: no such line.
+    sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 1,
+        deltas: vec![native_delta("-7")],
+    });
+    assert_eq!(sut.view().sim.expect("judged").no_change_key, None);
+
+    // Still resolving a token's name: nothing is said yet.
+    sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 1,
+        deltas: vec![erc20_delta(FRESH, "-5")],
+    });
+    let sim = sut.view().sim.expect("resolving");
+    assert!(!sim.ready);
+    assert_eq!(sim.no_change_key, None);
+
+    // A view written before the line reads without it.
+    let mut json = serde_json::to_value(TrustSimView {
+        address: WALLET_LC.to_owned(),
+        chain_id: 1,
+        ready: true,
+        judgments: vec![],
+        no_change_key: Some(NO_CHANGE.to_owned()),
+    })
+    .unwrap_or_default();
+    if let Some(map) = json.as_object_mut() {
+        map.remove("no_change_key");
+    }
+    let old: TrustSimView = serde_json::from_value(json).expect("an older view still reads");
+    assert_eq!(old.no_change_key, None);
 }
 
 #[test]

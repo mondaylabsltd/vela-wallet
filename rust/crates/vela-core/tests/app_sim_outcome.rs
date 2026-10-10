@@ -13,9 +13,9 @@
 use serde_json::{json, Value};
 use vela_core::app::clear_signing::ClearRisk;
 use vela_core::app::sim_outcome::{
-    classify, derive_deltas, notice, revert_reason, SimNotice, SimOutcome, SimReply,
-    ERROR_STRING_SELECTOR, KEY_UNAVAILABLE, KEY_WILL_FAIL, KEY_WILL_FAIL_REASON,
-    REVERT_REASON_MAX_CHARS,
+    classify, derive_deltas, no_change_key, notice, revert_reason, verdict, verdict_json,
+    SimNotice, SimOutcome, SimReply, SimVerdict, ERROR_STRING_SELECTOR, KEY_NO_CHANGE,
+    KEY_UNAVAILABLE, KEY_WILL_FAIL, KEY_WILL_FAIL_REASON, REVERT_REASON_MAX_CHARS,
 };
 use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind, TRANSFER_TOPIC};
 
@@ -434,6 +434,124 @@ fn a_clean_run_is_deltas_with_no_notice() {
     let still = classify(result(vec![ok_call(vec![])]), ME);
     assert_eq!(still, SimOutcome::Deltas { deltas: vec![] });
     assert_eq!(notice(&still), None);
+}
+
+// ---------------------------------------------------------------------------
+// "No asset changes" (PR 3)
+// ---------------------------------------------------------------------------
+
+/// A check under which nothing of the person's moves says so, in one line
+/// for every client; anything else never does — a revert moves nothing too,
+/// and a node that could not check has not said what moves.
+#[test]
+fn only_a_check_that_moves_nothing_says_no_asset_changes() {
+    let nothing = classify(result(vec![ok_call(vec![])]), ME);
+    assert_eq!(nothing.no_change_key(), Some(KEY_NO_CHANGE));
+    assert_eq!(KEY_NO_CHANGE, "componentsUi.signing.simResultNoChange");
+    // In and out of the same coin nets to nothing: nothing moves.
+    let wash = classify(
+        result(vec![ok_call(vec![
+            transfer(USDC, ME, OTHER, 5),
+            transfer(USDC, OTHER, ME, 5),
+        ])]),
+        ME,
+    );
+    assert_eq!(wash.no_change_key(), Some(KEY_NO_CHANGE));
+
+    let moves = classify(
+        result(vec![ok_call(vec![transfer(USDC, ME, OTHER, 5)])]),
+        ME,
+    );
+    assert_eq!(moves.no_change_key(), None);
+    for not_a_check in [
+        classify(SimReply::Unreachable, ME),
+        classify(
+            SimReply::Error {
+                code: Some(-32603),
+                message: None,
+            },
+            ME,
+        ),
+        classify(result(vec![reverted_call("0x")]), ME),
+    ] {
+        assert_eq!(not_a_check.no_change_key(), None, "{not_a_check:?}");
+    }
+}
+
+/// The rule over the moves themselves, as the judged view applies it: none,
+/// or every one a zero. A figure nobody can read is never "nothing moves".
+#[test]
+fn a_zero_is_not_a_move_and_an_unreadable_figure_is_not_nothing() {
+    assert_eq!(no_change_key([]), Some(KEY_NO_CHANGE));
+    assert_eq!(
+        no_change_key(["0", "-0", "+0", " 000 "]),
+        Some(KEY_NO_CHANGE)
+    );
+    assert_eq!(no_change_key(["0", "1"]), None);
+    assert_eq!(no_change_key(["-1"]), None);
+    for unreadable in ["", "-", "0x0", "0.0", "zero"] {
+        assert_eq!(no_change_key([unreadable]), None, "{unreadable:?}");
+    }
+}
+
+/// The record the clients read: the outcome and every line drawn for it.
+#[test]
+fn the_verdict_is_the_outcome_and_its_lines() {
+    let nothing = verdict(result(vec![ok_call(vec![])]), ME);
+    assert_eq!(
+        nothing,
+        SimVerdict {
+            kind: "deltas".to_owned(),
+            deltas: vec![],
+            revert_reason: None,
+            notice_risk: None,
+            notice_key: None,
+            no_change_key: Some(KEY_NO_CHANGE.to_owned()),
+        }
+    );
+    let moves = verdict(
+        result(vec![ok_call(vec![transfer(USDC, ME, OTHER, 5)])]),
+        ME,
+    );
+    assert_eq!(moves.kind, "deltas");
+    assert_eq!(moves.deltas.len(), 1);
+    assert_eq!((moves.notice_key, moves.no_change_key), (None, None));
+
+    let reverts = verdict(result(vec![reverted_call(&error_string("nope"))]), ME);
+    assert_eq!(reverts.kind, "reverts");
+    assert_eq!(reverts.revert_reason.as_deref(), Some("nope"));
+    assert_eq!(reverts.notice_risk, Some(ClearRisk::Danger));
+    assert_eq!(reverts.notice_key.as_deref(), Some(KEY_WILL_FAIL_REASON));
+    assert_eq!(reverts.no_change_key, None);
+    assert!(reverts.deltas.is_empty());
+
+    // On the wire (the wasm client's): the envelope in, the record out —
+    // and text that is not an envelope is "could not check".
+    let wire: Value = serde_json::from_str(&verdict_json(
+        ME,
+        r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#,
+    ))
+    .expect("a record");
+    assert_eq!(
+        wire,
+        json!({
+            "kind": "deltas",
+            "deltas": [],
+            "revert_reason": null,
+            "notice_risk": null,
+            "notice_key": null,
+            "no_change_key": KEY_NO_CHANGE,
+        })
+    );
+    let unreadable: Value = serde_json::from_str(&verdict_json(ME, "not json")).expect("a record");
+    assert_eq!(unreadable["kind"], "not_offered");
+    assert_eq!(unreadable["notice_risk"], "caution");
+    assert_eq!(unreadable["notice_key"], KEY_UNAVAILABLE);
+    assert_eq!(unreadable["no_change_key"], Value::Null);
+    let gone: Value =
+        serde_json::from_str(&verdict_json(ME, r#"{"unreachable":true}"#)).expect("a record");
+    assert_eq!(gone["kind"], "unreachable");
+    assert_eq!(gone["no_change_key"], Value::Null);
 }
 
 // ---------------------------------------------------------------------------

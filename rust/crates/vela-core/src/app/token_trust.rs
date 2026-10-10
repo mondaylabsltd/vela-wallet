@@ -957,6 +957,27 @@ pub struct TrustSimView {
     /// False while metadata for the judgment is still resolving.
     pub ready: bool,
     pub judgments: Vec<TrustSimJudgment>,
+    /// The verdict's quiet line when the checked answer moves nothing of the
+    /// person's: `componentsUi.signing.simResultNoChange` ("No asset
+    /// changes") once [`Self::ready`], with no judgment or every one a zero
+    /// ([`super::sim_outcome::no_change_key`]). The sheet draws this line in
+    /// the verdict's place exactly when it is `Some`, and never picks the
+    /// sentence, or the case, itself. `None` while resolving and whenever
+    /// something moves.
+    #[serde(default)]
+    pub no_change_key: Option<String>,
+}
+
+impl TrustSimJudgment {
+    /// The signed move this judgment is about, as the simulation gave it.
+    #[must_use]
+    pub fn delta(&self) -> &str {
+        match self {
+            TrustSimJudgment::Native { delta }
+            | TrustSimJudgment::Erc20Trusted { delta, .. }
+            | TrustSimJudgment::Erc20Unverified { delta, .. } => delta,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1072,6 +1093,10 @@ impl App for TokenTrust {
                 chain_id: s.chain_id,
                 ready: s.judgments.is_some(),
                 judgments: s.judgments.clone().unwrap_or_default(),
+                no_change_key: s.judgments.as_ref().and_then(|judgments| {
+                    super::sim_outcome::no_change_key(judgments.iter().map(TrustSimJudgment::delta))
+                        .map(str::to_owned)
+                }),
             }),
         }
     }
