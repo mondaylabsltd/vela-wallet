@@ -544,6 +544,11 @@ struct SigningBalances: View {
                     .padding(.top, Tokens.Space.s8)
             }
         }
+        // The card is the column's width whatever it holds. With rows it
+        // always was (a row spans it); with none — "Checking…", "No assets
+        // leave your wallet" — it hugged its words, so the card that landed
+        // over "Checking…" also grew sideways (final note F2).
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Space.s16)
         .padding(.vertical, Tokens.Space.s4)
         .overlay(
@@ -572,9 +577,8 @@ struct SigningBalances: View {
 /// unverified token — the verdict scrolls INSIDE the room rather than growing
 /// the sheet. One that fits is drawn as it is, with no scroll view around it.
 struct SigningVerdictRoom<Content: View>: View {
+    @Environment(\.theme) private var theme
     @ViewBuilder var content: Content
-
-    static var identifier: String { "signing.verdict" }
 
     var body: some View {
         VerdictRoomLayout {
@@ -583,11 +587,23 @@ struct SigningVerdictRoom<Content: View>: View {
             ViewThatFits(in: .vertical) {
                 column
                 ScrollView {
-                    column
+                    // Room under the last line, so the end of the verdict
+                    // clears the fade once it is scrolled to.
+                    column.padding(.bottom, Tokens.Space.s16)
                 }
                 .scrollBounceBehavior(.basedOnSize)
-                // More than fits: say so as it lands.
+                // More than fits: say so as it lands — the indicator, and
+                // the fold fading out rather than cutting a line in two.
                 .scrollIndicatorsFlash(onAppear: true)
+                .overlay(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [theme.bgRaised.opacity(0), theme.bgRaised],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: Tokens.Space.s16)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
             }
         }
         .clipped()
