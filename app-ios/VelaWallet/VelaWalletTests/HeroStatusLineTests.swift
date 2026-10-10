@@ -176,9 +176,10 @@ struct HeroStatusLineTests {
     /// The home under `balance`, hosted `width` points wide: every element an
     /// assistive client is given, once two reads agree on where the refresh
     /// control is.
-    private func tree(_ balance: BalanceModel, width: CGFloat = 390) async throws -> [Element] {
+    private func tree(_ balance: BalanceModel, width: CGFloat = 390, textScale: CGFloat = 1) async throws -> [Element] {
         _ = Self.automation
-        var model = drawn
+        // The 1.35× board is the drawn home at the largest text size.
+        var model = textScale == 1 ? drawn : WalletFixtures.buildMobileState(.h7x, loc: en)
         model.balance = balance
         let host = UIHostingController(
             rootView: WalletScreen(model: model, loc: en, onToggleBalance: {}, onStatusTap: {},
@@ -239,5 +240,84 @@ struct HeroStatusLineTests {
         #expect(liveAt == at, "\"Live\" moved the control: \(liveAt) vs \(at)")
         #expect(cantReachAt == at, "\"Can't reach\" moved the control: \(cantReachAt) vs \(at)")
         #expect(noneAt == at, "no line moved the control: \(noneAt) vs \(at)")
+    }
+
+    // MARK: - F16: one line, always
+
+    private func status(_ tree: [Element]) throws -> Element {
+        try #require(tree.first { $0.id == BalanceDisplay.statusId }, "the status line is in the tree")
+    }
+
+    /// A sentence longer than the line — Tempo's token list, in the two
+    /// longest languages, on an iPhone SE's 375 pt and at 320 — is ONE line:
+    /// as tall as a short sentence's, inside the hero's column, with the
+    /// control under it where it was. The whole sentence is what is read
+    /// aloud, and it titles the list the line opens.
+    @Test func aLongSentenceIsOneLineAndSaidWholeWhereItLeads() async throws {
+        let view = try #require(BalanceCoreScene.view(failedChain: 4_217, internalFault: false, tokenListFault: true))
+        let short = try #require(BalanceCoreScene.view(failedChain: 4_217, internalFault: false))
+        for width in [375.0, 320.0] as [CGFloat] {
+            let plain = try await tree(hero(short), width: width)
+            let line = try status(plain).frame
+            let at = try refreshY(plain)
+            for lang in ["es-MX", "it", "pt-BR", "ru"] {
+                let loc = Loc(overrideTag: lang, preferredLanguages: [])
+                let sentence = try #require(WalletLive.unreachableLine(view, loc: loc))
+                #expect(sentence == loc.t("assets.tokenListUnreachable", vars: ["name": "Tempo"]))
+                let long = try await tree(hero(view, loc: loc), width: width)
+                let drawn = try status(long)
+                print("MEASURE hero-status w=\(Int(width)) \(lang) chars=\(sentence.count) line=\(drawn.frame)"
+                    + " short=\(line) refresh.y=\(try refreshY(long)) (short \(at))")
+                #expect(drawn.frame.height <= line.height + 0.5,
+                        "\(lang) at \(Int(width)): the line is \(drawn.frame.height) tall, a short one \(line.height)")
+                #expect(drawn.frame.maxX <= width - 23.5, "\(lang) at \(Int(width)): the line runs past the hero: \(drawn.frame)")
+                #expect(drawn.label == sentence, "the whole sentence is not what is read: \(drawn.label)")
+                let refresh = try refreshY(long)
+                #expect(refresh == at, "\(lang) at \(Int(width)): the control moved, \(refresh) vs \(at)")
+                // The list the line opens is titled by the same sentence, whole.
+                let list = SettingsLive.withUnreachable(
+                    view, display: .usd, on: SettingsFixtures.build(.sr6, loc: loc), loc: loc
+                ).unreachable
+                #expect(list.title == sentence)
+            }
+        }
+    }
+
+    /// The two long reasons a hero can carry that open the BREAKDOWN — Vela's
+    /// own fault, and a request that never arrived — are one line too, at
+    /// the largest text size as well; the breakdown says each in full at its
+    /// top. A healthy wallet's breakdown says nothing there.
+    @Test func aLongReasonIsOneLineAndStandsAtTheTopOfTheBreakdown() async throws {
+        let short = try #require(BalanceCoreScene.view(failedChain: 4_217, internalFault: false))
+        let fault = try #require(BalanceCoreScene.view(internalFault: true))
+        let nothing = try #require(BalanceCoreScene.view(internalFault: false, everyChain: true))
+        for (width, scale) in [(375.0, 1.0), (320.0, 1.0), (375.0, 1.35)] as [(CGFloat, CGFloat)] {
+            let plain = try await tree(hero(short), width: width, textScale: scale)
+            let line = try status(plain).frame
+            for (name, view) in [("internal", fault), ("unreachable", nothing)] {
+                let sentence = try #require(WalletLive.statusSentence(view, loc: en)?.text)
+                let long = try await tree(hero(view), width: width, textScale: scale)
+                let drawn = try status(long)
+                print("MEASURE hero-reason w=\(Int(width)) x\(scale) \(name) chars=\(sentence.count) line=\(drawn.frame) short=\(line)")
+                #expect(drawn.frame.height <= line.height + 0.5, "\(name) at \(Int(width)) ×\(scale): \(drawn.frame.height) vs \(line.height)")
+                #expect(drawn.label == sentence)
+                let detail = SettingsLive.withBalanceDetail(
+                    view, display: .usd, on: SettingsFixtures.build(.st1, loc: en), loc: en
+                ).balanceDetail
+                #expect(detail.reason?.text == sentence, "the breakdown does not say the line's sentence")
+                #expect(detail.reason?.tone == .warning)
+            }
+        }
+        #expect(WalletLive.statusSentence(fault, loc: en)?.text == en.t("componentsUi.gas.reasonInternal"))
+        #expect(WalletLive.statusSentence(nothing, loc: en)?.text == en.t("onboarding.common.networkBody"))
+        // "Checking…" is no door, and a healthy wallet has no sentence.
+        let round = try #require(BalanceCoreScene.zeroWallet())
+        #expect(WalletLive.statusSentence(round.checking, loc: en) == nil)
+        #expect(WalletLive.statusSentence(round.settled, loc: en) == nil)
+        #expect(SettingsLive.withBalanceDetail(
+            round.settled, display: .usd, on: SettingsFixtures.build(.st1, loc: en), loc: en
+        ).balanceDetail.reason == nil)
+        // The drawn board has none either.
+        #expect(SettingsFixtures.build(.sr3, loc: en).balanceDetail.reason == nil)
     }
 }

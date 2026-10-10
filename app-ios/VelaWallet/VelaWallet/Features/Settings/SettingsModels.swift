@@ -496,6 +496,10 @@ struct BalanceDetailRowModel: Identifiable {
 
 struct BalanceDetailModel {
     let title: String
+    /// The sentence on the hero's status line that opened this sheet, WHOLE
+    /// (final note F16): the line is one line and may have cut it. `nil`
+    /// when the hero says nothing (a drawn board, a healthy wallet).
+    var reason: CalloutModel? = nil
     let summary: String
     let sectionPending: String
     let pendingNote: String

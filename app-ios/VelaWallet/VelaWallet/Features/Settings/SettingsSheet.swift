@@ -1323,6 +1323,13 @@ struct BalanceDetailSheetBody: View {
 
     var body: some View {
         SheetTitle(title: model.title)
+        // What the hero's line said, whole — the line is one line and may
+        // have cut it (final note F16).
+        if let reason = model.reason {
+            SettingsCallout(callout: reason)
+                .padding(.bottom, Tokens.Space.s12)
+                .accessibilityIdentifier("balanceDetail.reason")
+        }
         Text(model.summary)
             .typeRole(Typography.flowCaption)
             .foregroundStyle(theme.fgSubtle)

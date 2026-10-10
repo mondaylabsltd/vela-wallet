@@ -60,10 +60,14 @@ struct BalanceDisplay: View {
     /// wallet's "live" line, or nothing, and the page under the hero is
     /// where it was in all four.
     ///
-    /// One line is what is held. The two long reasons a hero can carry
-    /// ("Something went wrong inside Vela. If it keeps happening, reopen the
-    /// app.", "The request never arrived — …") still take their second line:
-    /// cutting a sentence that says what went wrong is the worse trade.
+    /// **One line is what is held, and one line is all it ever is** (final
+    /// note F16). A sentence longer than the line — "No podemos cargar la
+    /// lista de tokens de Tempo por ahora", "Something went wrong inside
+    /// Vela. If it keeps happening, reopen the app." — is set smaller, to
+    /// 85 % and no lower, then cut with an ellipsis. It used to take a
+    /// second line, which grew the room it was promised and pushed the page
+    /// down after all. Nothing is lost: the whole sentence is what VoiceOver
+    /// reads, and it stands in full at the top of the sheet the line opens.
     private var statusSlot: some View {
         ZStack(alignment: .leading) {
             // The room: a status row's own height, whatever stands in it.
@@ -142,10 +146,20 @@ struct BalanceDisplay: View {
     private func liveRow(_ text: String) -> some View {
         HStack(spacing: Tokens.Space.s8) {
             PulsingDot(color: theme.successBase)
-            Text(verbatim: text)
-                .typeRole(Typography.rowSub.scaled(textScale))
+            oneLine(text)
                 .foregroundStyle(theme.successBase)
         }
+    }
+
+    /// The line's words, on ONE line: smaller down to 85 %, then "…". The
+    /// whole sentence stays its accessibility label.
+    private func oneLine(_ text: String) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .lineLimit(1)
+            .minimumScaleFactor(WalletGeometry.statusMinScale)
+            .truncationMode(.tail)
+            .accessibilityLabel(Text(verbatim: text))
     }
 
     /// "Checking…" — the live line before anything has answered: the same
@@ -154,11 +168,11 @@ struct BalanceDisplay: View {
     private func checkingRow(_ text: String) -> some View {
         HStack(spacing: Tokens.Space.s8) {
             PulsingDot(color: theme.fgSubtle)
-            Text(verbatim: text)
-                .typeRole(Typography.rowSub.scaled(textScale))
+            oneLine(text)
                 .foregroundStyle(theme.fgMuted)
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: text))
         .accessibilityIdentifier("balance-checking")
     }
 
@@ -173,18 +187,26 @@ struct BalanceDisplay: View {
                 statusRow(status).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // The sentence in full, however much of it the line shows.
+            .accessibilityLabel(Text(verbatim: status.text))
+            .accessibilityIdentifier(Self.statusId)
         } else {
             statusRow(status)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: status.text))
+                .accessibilityIdentifier(Self.statusId)
         }
     }
+
+    /// The status line's test hook.
+    static let statusId = "balance-status"
 
     private func statusRow(_ status: BalanceStatusModel) -> some View {
         let tint = status.kind == .warning ? theme.warningBase : theme.fgMuted
         return HStack(spacing: Tokens.Space.s8) {
             LucideIcon(status.kind == .warning ? .triangleAlert : .refreshCw, size: LucideIconSize.statusIcon)
                 .foregroundStyle(tint)
-            Text(verbatim: status.text)
-                .typeRole(Typography.rowSub.scaled(textScale))
+            oneLine(status.text)
                 .foregroundStyle(tint)
             LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
                 .foregroundStyle(theme.fgSubtle)

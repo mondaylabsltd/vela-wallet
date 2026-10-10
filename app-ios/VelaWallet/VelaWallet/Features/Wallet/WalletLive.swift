@@ -312,7 +312,7 @@ enum WalletLive {
     /// live home, which left a ⚠ › line with no words (082 X-DEADPROXY).
     private static func status(
         _ view: BalanceViewWire,
-        fallback: BalanceModel,
+        fallback: BalanceModel?,
         loc: Loc?,
         networks: WalletNetworks
     ) -> BalanceStatusModel? {
@@ -332,7 +332,7 @@ enum WalletLive {
         if let loc, let line = unreachableLine(view, loc: loc, networks: networks) {
             return BalanceStatusModel(kind: .warning, text: line)
         }
-        let text = loc?.t("home.balanceStale") ?? fallback.status?.text ?? ""
+        let text = loc?.t("home.balanceStale") ?? fallback?.status?.text ?? ""
         if view.balancePartial || !view.failedChainIds.isEmpty {
             return BalanceStatusModel(kind: .warning, text: text)
         }
@@ -345,6 +345,19 @@ enum WalletLive {
             return BalanceStatusModel(kind: .refreshing, text: text)
         }
         return nil
+    }
+
+    /// The sentence on the hero's status line, whole (final note F16): the
+    /// line itself is ONE line and may cut it, so the sheet the line opens
+    /// says it in full at its top. `nil` when the line says nothing a sheet
+    /// answers — no status, or "Checking…", which is no door.
+    static func statusSentence(
+        _ view: BalanceViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> (kind: BalanceStatusModel.Kind, text: String)? {
+        guard view.checkingKey == nil,
+              let status = status(view, fallback: nil, loc: loc, networks: networks)
+        else { return nil }
+        return (status.kind, status.text)
     }
 
     /// The hero's refresh control (issue 462): when the figure was last read —

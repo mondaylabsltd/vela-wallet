@@ -1198,6 +1198,12 @@ enum SettingsLive {
         var live = model
         live.balanceDetail = BalanceDetailModel(
             title: model.balanceDetail.title,
+            // The hero's own sentence, in full: its line is ONE line and may
+            // have cut it (F16). In the line's tone — a reason is a warning,
+            // "still updating" is a note.
+            reason: WalletLive.statusSentence(balance, loc: loc, networks: networks).map {
+                CalloutModel(tone: $0.kind == .warning ? .warning : .info, text: $0.text)
+            },
             // "Total ¥8,876.00" — or, while the currency is on its way, the
             // line's own height with nothing on it: the total lands in place.
             summary: (balance.hidden || balance.displayTotalUsd == nil

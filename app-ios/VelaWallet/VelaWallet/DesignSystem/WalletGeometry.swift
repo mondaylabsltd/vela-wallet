@@ -53,6 +53,10 @@ enum WalletGeometry {
     /// Hero amount may shrink to this factor before it would clip (H7 at
     /// 1.35× — spec edge case: render fully, never clip).
     static let heroMinScale: CGFloat = 0.7
+    /// The line under the total is ONE line (PR 3 final note F16): a
+    /// sentence longer than the line is set smaller, to this and no lower,
+    /// and then cut with an ellipsis — never wrapped onto a second line.
+    static let statusMinScale: CGFloat = 0.85
     /// 收款/转账/扫码 card minimum height (mock ≈ 136 px @2x).
     static let actionCardHeight: CGFloat = 68
     /// Activity/asset row minimum height (mock ≈ 128 px @2x).
