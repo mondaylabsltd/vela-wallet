@@ -265,10 +265,10 @@ pub struct SettingsStrings {
     pub wizard_incompatible: SharedString,
     /// Spec 038 #E1: the probes failed — not a verdict.
     pub wizard_unable_to_verify: SharedString,
-    /// The unverifiable verdict's CTA, and the incompatible one's sentence
-    /// (the web's `retry` / `incompatibleHint`, 078 S-05).
+    /// The unverifiable verdict's CTA (the web's `retry`, 078 S-05). The
+    /// refused verdict's sentence is the core's, by reason
+    /// (`NetCompatibility.hint_key` — `live::net_refusal`).
     pub wizard_retry: SharedString,
-    pub wizard_incompatible_hint: SharedString,
     pub endpoints_reset: SharedString,
     /// Spec 072 (FR-010): the question the reset asks first.
     pub endpoints_reset_title: SharedString,
@@ -531,7 +531,6 @@ impl SettingsStrings {
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             wizard_retry: s("settingsModals.addNetwork.retry"),
-            wizard_incompatible_hint: s("settingsModals.addNetwork.incompatibleHint"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
             endpoints_reset_title: s("settingsModals.endpoints.resetTitle"),
             endpoints_reset_body: s("settingsModals.endpoints.resetBody"),

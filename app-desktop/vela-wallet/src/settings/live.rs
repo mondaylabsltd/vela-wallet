@@ -697,6 +697,51 @@ pub fn probe_badge(health: &NetProbeHealth) -> Option<Pill> {
     }
 }
 
+/// Why a checked network is refused, in the core's words — one rule for both
+/// places a network is added (Settings, and the sheet a dApp opens).
+///
+/// The two refusals are opposite in what can be done about them, so the core
+/// says which (`NetCompatibility.{blocker, hint_key, setup_url}`):
+///
+/// - **no P-256 verifier**: this network cannot check a passkey signature and
+///   nothing can be deployed to change that. The line says so, and that money
+///   sent to a Vela address there would be stuck. **No Chain Setup button** —
+///   a deploy button on a chain that can never work is an invitation to lose
+///   money.
+/// - **contracts missing**: the line says so, and Chain Setup opens on THIS
+///   chain (`?chain=<id>`), listing which and who can deploy them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NetRefusal {
+    /// The line under the verdict.
+    pub hint: SharedString,
+    /// Where "Open Chain Setup Tool" goes. `None` = the button is not drawn.
+    pub setup_url: Option<String>,
+}
+
+/// The refusal for `compat`, or `None` when the core gave no reason (a
+/// compatible chain, or a check that never answered — "unable to verify" is
+/// not a refusal).
+#[must_use]
+pub fn net_refusal(compat: &NetCompatibility, loc: &crate::loc::Loc) -> Option<NetRefusal> {
+    let key = compat.hint_key.as_deref()?;
+    Some(NetRefusal {
+        hint: loc.t(key),
+        setup_url: compat.setup_url.clone(),
+    })
+}
+
+/// `VELA_NET_REFUSAL=no_p256|missing_contracts` (developer builds): both
+/// places a network is added draw a chain refused for that reason
+/// (`fixtures::refused_wizard`, `fixtures::refused_dapp_add`). A real check
+/// cannot be made to end either way on demand — every built-in network has
+/// the verifier — and the two refusals have to be looked at side by side.
+/// The same env-pin family as `VELA_SETTINGS_STATE`.
+#[must_use]
+pub fn pinned_refusal() -> Option<vela_core::app::network_admin::NetBlocker> {
+    let want = crate::dev_env::var!("VELA_NET_REFUSAL")?;
+    serde_json::from_value(serde_json::Value::String(want)).ok()
+}
+
 /// The wizard's compatibility rows, from what the probe found.
 ///
 /// **An unreachable chain is not an incompatible one** — the core's invariant
@@ -1190,6 +1235,72 @@ mod endpoint_tests {
         assert_eq!(ok.label, "45ms");
     }
 
+    /// PR 3 item 9: the refusal's line and its button are the core's, by
+    /// reason. No P-256 verifier → the plain "can't work here, money would be
+    /// stuck" line and NO Chain Setup button; contracts missing → the
+    /// contracts line and Chain Setup opened on that chain. A check that
+    /// never answered, and a chain that works, are not refusals.
+    #[test]
+    fn a_refusal_draws_the_cores_reason_and_only_a_deployable_gap_has_a_link() {
+        use vela_core::app::network_admin::{
+            MISSING_CONTRACTS_HINT, NO_P256_HINT, NetBlocker, NetRpcFailureKind, chain_setup_url,
+        };
+        let compat = |blocker: Option<NetBlocker>| NetCompatibility {
+            chain_id: 7_777_777,
+            compatible: blocker.is_none(),
+            multi_key_ready: blocker.is_none(),
+            contracts: Vec::new(),
+            p256_available: Some(blocker != Some(NetBlocker::NoP256)),
+            best_rpc_url: None,
+            best_rpc_latency_ms: None,
+            rpc_failure: None,
+            blocker,
+            hint_key: blocker.map(|blocker| {
+                match blocker {
+                    NetBlocker::NoP256 => NO_P256_HINT,
+                    NetBlocker::MissingContracts => MISSING_CONTRACTS_HINT,
+                }
+                .to_owned()
+            }),
+            setup_url: (blocker == Some(NetBlocker::MissingContracts))
+                .then(|| chain_setup_url(7_777_777)),
+        };
+        let en = crate::loc::Loc::for_tag("en");
+
+        let no_p256 = net_refusal(&compat(Some(NetBlocker::NoP256)), &en)
+            .unwrap_or_else(|| unreachable!("a refusal has its line"));
+        assert!(no_p256.hint.contains("Vela wallets can't work here"));
+        assert!(no_p256.hint.contains("Don't send money"));
+        assert_eq!(no_p256.setup_url, None, "nothing to deploy, no button");
+
+        let missing = net_refusal(&compat(Some(NetBlocker::MissingContracts)), &en)
+            .unwrap_or_else(|| unreachable!("a refusal has its line"));
+        assert!(missing.hint.contains("Chain Setup"));
+        assert_eq!(
+            missing.setup_url.as_deref(),
+            Some("https://getvela.app/chain-setup?chain=7777777")
+        );
+        assert_ne!(no_p256.hint, missing.hint, "two reasons, two lines");
+
+        assert_eq!(net_refusal(&compat(None), &en), None);
+        let mut unanswered = compat(None);
+        unanswered.compatible = false;
+        unanswered.rpc_failure = Some(NetRpcFailureKind::AllProbesFailed);
+        assert_eq!(
+            net_refusal(&unanswered, &en),
+            None,
+            "unable to verify is not a refusal"
+        );
+
+        // Neither line echoes its key in any language the app ships.
+        for lang in ["en", "zh", "de", "ja"] {
+            let loc = crate::loc::Loc::for_tag(lang);
+            for key in [NO_P256_HINT, MISSING_CONTRACTS_HINT] {
+                assert_ne!(loc.t(key).as_ref(), key, "{lang}: {key}");
+            }
+        }
+    }
+
     /// An unreachable chain gets a retry, never four red crosses.
     #[test]
     fn a_probe_that_could_not_ask_does_not_condemn_the_chain() {
@@ -1215,6 +1326,9 @@ mod endpoint_tests {
                 best_rpc_url: None,
                 best_rpc_latency_ms: None,
                 rpc_failure,
+                blocker: None,
+                hint_key: None,
+                setup_url: None,
             };
 
         // Could not reach a verdict: NO rows. The caller draws a retry, which
@@ -1270,6 +1384,9 @@ mod endpoint_tests {
             best_rpc_url: None,
             best_rpc_latency_ms: None,
             rpc_failure: None,
+            blocker: None,
+            hint_key: None,
+            setup_url: None,
         };
 
         let rows = compat_checks(&compat, &s)

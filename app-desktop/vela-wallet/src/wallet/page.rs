@@ -1401,7 +1401,19 @@ impl WalletPage {
 
     /// `VELA_PAGE=explore` opens straight onto the browser (spec 022).
     pub fn explore(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::with_section(Section::Explore, false, window, cx)
+        let mut page = Self::with_section(Section::Explore, false, window, cx);
+        // `VELA_NET_REFUSAL` (developer builds): the Connection column is up,
+        // because that is where the pinned add-network sheet is drawn.
+        // …and `VELA_PANEL_SCROLL=bottom` shows the sheet's end — its line
+        // and whether there is a button under it — which a pass that cannot
+        // turn a wheel never reaches on a long sheet.
+        if settings_live::pinned_refusal().is_some() {
+            page.panel = PanelId::Connection;
+            if crate::dev_env::var!("VELA_PANEL_SCROLL").as_deref() == Some("bottom") {
+                page.panel_scroll.scroll_to_bottom();
+            }
+        }
+        page
     }
 
     fn with_section(
@@ -12433,10 +12445,7 @@ impl WalletPage {
             // chain is chosen it names it (078 S-05).
             SettingsDialog::AddNetwork if self.identity.is_some() => {
                 use vela_core::app::network_admin::NetWizardPhase;
-                let wizard = resident::resident::<NetworkAdmin>(cx)
-                    .read(cx)
-                    .view()
-                    .wizard;
+                let wizard = Self::wizard_view(cx);
                 let searching = matches!(
                     wizard.phase,
                     NetWizardPhase::Idle | NetWizardPhase::Searching | NetWizardPhase::Suggested
@@ -12516,6 +12525,21 @@ impl WalletPage {
         )
     }
 
+    /// The add-network wizard as the core shows it — or, under
+    /// `VELA_NET_REFUSAL` (developer builds), a chain checked and refused for
+    /// that reason (`settings_live::pinned_refusal`).
+    fn wizard_view(cx: &mut gpui::App) -> vela_core::app::network_admin::NetWizardView {
+        match settings_live::pinned_refusal() {
+            Some(blocker) => settings_fixtures::refused_wizard(blocker),
+            None => {
+                resident::resident::<NetworkAdmin>(cx)
+                    .read(cx)
+                    .view()
+                    .wizard
+            }
+        }
+    }
+
     /// DST4b's body, live: type a chain, see its verdict, add it.
     ///
     /// Two states, as the web's `AddNetworkPanel` has them (078 S-05): the
@@ -12529,8 +12553,7 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> Div {
         use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
-        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
-        let wizard = view.wizard.clone();
+        let wizard = Self::wizard_view(cx);
         if matches!(
             wizard.phase,
             NetWizardPhase::Idle | NetWizardPhase::Searching | NetWizardPhase::Suggested
@@ -12555,7 +12578,10 @@ impl WalletPage {
             callout: Option<SharedString>,
             custom_rpc: bool,
             primary: Option<SharedString>,
-            setup_tool: bool,
+            /// Where "Open Chain Setup Tool" goes — the core's
+            /// `NetCompatibility.setup_url`, only for a chain whose missing
+            /// contracts can be deployed. `None` = no such button.
+            setup_url: Option<String>,
             recheck: bool,
         }
         let checking = || Verdict {
@@ -12565,7 +12591,7 @@ impl WalletPage {
             callout: None,
             custom_rpc: false,
             primary: None,
-            setup_tool: false,
+            setup_url: None,
             recheck: false,
         };
         let verdict = match wizard.phase {
@@ -12592,19 +12618,26 @@ impl WalletPage {
                     // `can_add` is the core's whole judgement; the button
                     // appears only when it says yes.
                     primary: wizard.can_add.then(|| s.add_network.clone()),
-                    setup_tool: false,
+                    setup_url: None,
                     recheck: false,
                 },
-                Some(compat) if compat.rpc_failure.is_none() => Verdict {
-                    meta: s.compatibility_check.clone(),
-                    pill: (Tone::Error, s.wizard_incompatible.clone()),
-                    checks: settings_live::compat_checks(compat, s),
-                    callout: Some(s.wizard_incompatible_hint.clone()),
-                    custom_rpc: false,
-                    primary: None,
-                    setup_tool: true,
-                    recheck: true,
-                },
+                // Refused — and WHY is the core's (`blocker`): a network with
+                // no P-256 verifier says plainly that Vela cannot run there
+                // and offers nothing to deploy; one that only lacks contracts
+                // keeps Chain Setup, opened on this chain.
+                Some(compat) if compat.rpc_failure.is_none() => {
+                    let refusal = settings_live::net_refusal(compat, &self.loc);
+                    Verdict {
+                        meta: s.compatibility_check.clone(),
+                        pill: (Tone::Error, s.wizard_incompatible.clone()),
+                        checks: settings_live::compat_checks(compat, s),
+                        callout: refusal.as_ref().map(|refusal| refusal.hint.clone()),
+                        custom_rpc: false,
+                        primary: None,
+                        setup_url: refusal.and_then(|refusal| refusal.setup_url),
+                        recheck: true,
+                    }
+                }
                 // The probes never reached a verdict — "unable to verify",
                 // never "incompatible" (the core's invariant ③).
                 _ => Verdict {
@@ -12614,7 +12647,7 @@ impl WalletPage {
                     callout: None,
                     custom_rpc: true,
                     primary: Some(s.wizard_retry.clone()),
-                    setup_tool: false,
+                    setup_url: None,
                     recheck: true,
                 },
             },
@@ -12627,15 +12660,25 @@ impl WalletPage {
                         settings_live::WizardNotice::Refusal(text) => Some(text),
                         settings_live::WizardNotice::Progress(_) => None,
                     });
-                let incompatible =
-                    matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }));
+                // A refusal reached without the confirm step (the scan path)
+                // carries the reason only when the core kept the check; with
+                // it, the same line and button as above. Without it the
+                // verdict is said alone ("Incompatible"): which of the two
+                // reasons it was is not known here, so neither "contracts are
+                // missing" nor a deploy button is claimed.
+                let why = wizard
+                    .compat
+                    .as_ref()
+                    .filter(|_| {
+                        matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }))
+                    })
+                    .and_then(|compat| settings_live::net_refusal(compat, &self.loc));
                 Verdict {
-                    callout: Some(if incompatible {
-                        s.wizard_incompatible_hint.clone()
-                    } else {
-                        refusal.unwrap_or_else(|| s.wizard_unable_to_verify.clone())
+                    callout: Some(match why.as_ref() {
+                        Some(why) => why.hint.clone(),
+                        None => refusal.unwrap_or_else(|| s.wizard_unable_to_verify.clone()),
                     }),
-                    setup_tool: incompatible,
+                    setup_url: why.and_then(|why| why.setup_url),
                     recheck: chain_id.is_some(),
                     ..checking()
                 }
@@ -12785,7 +12828,9 @@ impl WalletPage {
         }
         // Where a chain this wallet refuses can be made ready — an outline
         // button, never the accent: it is not the action somebody came for.
-        if verdict.setup_tool {
+        // Drawn only when the core names somewhere to go (contracts that can
+        // be deployed), and it opens on the chain that was checked.
+        if let Some(url) = verdict.setup_url.clone() {
             col = col.child(
                 div()
                     .id("wizard-chain-setup-tool")
@@ -12801,9 +12846,7 @@ impl WalletPage {
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_base)
                     .child(self.settings.open_chain_setup_tool.clone())
-                    .on_click(|_, _, cx| {
-                        cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL);
-                    }),
+                    .on_click(move |_, _, cx| cx.open_url(&url)),
             );
         }
         // The web's re-check: a link in the info colour with its refresh.
@@ -16821,6 +16864,11 @@ impl WalletPage {
         &mut self,
         cx: &mut Context<Self>,
     ) -> Option<vela_core::app::network_admin::NetDappAddView> {
+        // `VELA_NET_REFUSAL` (developer builds): the sheet on a refused
+        // chain, for a screenshot pass — see `settings_live::pinned_refusal`.
+        if let Some(blocker) = settings_live::pinned_refusal() {
+            return Some(settings_fixtures::refused_dapp_add(blocker));
+        }
         self.browser_host.as_ref()?;
         let admin = self.network_admin(cx);
         admin.read(cx).view().dapp_add
@@ -16942,7 +16990,9 @@ impl WalletPage {
                     .child(crate::flows::components::accent_button(theme, label)),
             );
         }
-        if let Some(label) = sheet.setup_tool.clone() {
+        // Chain Setup, on this chain — only where the core says there is
+        // something to deploy (never for a network with no P-256 verifier).
+        if let Some((label, url)) = sheet.setup_tool.clone() {
             col = col.child(
                 outline_button(
                     ElementId::from("add-network-setup-tool"),
@@ -16951,7 +17001,7 @@ impl WalletPage {
                     None,
                     label,
                 )
-                .on_click(|_, _, cx| cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL)),
+                .on_click(move |_, _, cx| cx.open_url(&url)),
             );
         }
         col.child(
