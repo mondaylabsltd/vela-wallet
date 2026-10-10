@@ -7,7 +7,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -169,6 +173,11 @@ class SigningSheetStillTest {
      * each kind: "could not check", "expected to fail" with its reason, "no
      * asset changes", one balance row (a send), two (a swap). In both
      * languages: the lines wrap differently.
+     *
+     * PR 3 final note F2: the place is not blank while the verdict is out (a
+     * skeleton, said as "Checking…"), and a verdict TALLER than the place —
+     * a third balance row, an unverified token's warning — scrolls inside it
+     * instead of growing the sheet: the same two measurements, identical.
      */
     @Test
     fun theSimulationsVerdictLandingMovesNothing() = verdictsLandStill(strings)
@@ -196,12 +205,19 @@ class SigningSheetStillTest {
             confirmTop = compose.onNodeWithTag(CONFIRM_TAG).fetchSemanticsNode().boundsInRoot.top,
         )
         fun place() = compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_PLACE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        fun scrollRange() = compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_SCROLL_TAG, useUnmergedTree = true)
+            .fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].maxValue()
         compose.waitForIdle()
         val before = frame()
         val room = place()
         // The rooms are unseen and unsaid.
         compose.onNodeWithText(couldNotCheck).assertDoesNotExist()
         compose.onNodeWithText(words.t("componentsUi.signing.balanceChangesTitle")).assertDoesNotExist()
+        // PR 3 final note F2: and the place is not BLANK meanwhile — a
+        // skeleton fills it, the size of the place, said as "Checking…".
+        val skeleton = compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_WAITING_TAG, useUnmergedTree = true).fetchSemanticsNode()
+        assertEquals("the skeleton is the place", room, skeleton.boundsInRoot)
+        compose.onNodeWithContentDescription(words.t("componentsUi.funding.checking")).assertExists()
 
         val kinds = listOf(
             "could not check" to SigningScreenState.CS58,
@@ -209,48 +225,56 @@ class SigningSheetStillTest {
             "no asset changes" to SigningScreenState.CS62,
             "one balance row" to SigningScreenState.CS63,
             "two balance rows" to SigningScreenState.CS64,
+            // F2: taller than the place — they scroll inside it.
+            "THREE balance rows" to SigningScreenState.CS65,
+            "an unverified token and its warning" to SigningScreenState.CS66,
         )
-        val measured = StringBuilder("before: sheet ${before.sheetHeight} confirm ${before.confirmTop} place ${room.top}..${room.bottom}")
+        val tall = setOf(SigningScreenState.CS65, SigningScreenState.CS66)
+        val measured = StringBuilder("before (skeleton): sheet ${before.sheetHeight} confirm ${before.confirmTop} place ${room.top}..${room.bottom} (${room.height} px)")
         for ((kind, state) in kinds) {
             // The same request: only its verdict arrived.
             current = SigningFixtures.build(state, words).copy(state = waiting.state, requestKey = waiting.requestKey)
             compose.waitForIdle()
             val after = frame()
-            measured.append("\n$kind: sheet ${after.sheetHeight} confirm ${after.confirmTop}")
+            val beyond = scrollRange()
+            measured.append("\n$kind: sheet ${after.sheetHeight} confirm ${after.confirmTop}, scrolls inside by $beyond px")
             assertEquals("the verdict arriving ($kind) moved the sheet\n$measured", before, after)
             assertEquals("…or its own place ($kind)", room, place())
+            // The skeleton is gone the moment a verdict is there.
+            compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_WAITING_TAG, useUnmergedTree = true).assertDoesNotExist()
+            // A verdict the place holds does not scroll; a taller one does —
+            // by exactly what it used to grow the sheet by.
+            val more = compose.onAllNodesWithTag(app.getvela.wallet.feature.signing.VERDICT_MORE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            if (state in tall) {
+                assertTrue("$kind is taller than the place and must scroll inside it\n$measured", beyond > 0f)
+                assertEquals("…and says there is more under its fold", 1, more.size)
+            } else {
+                assertEquals("$kind fits the place: nothing to scroll\n$measured", 0f, beyond)
+                assertEquals("…and no \"more\" mark", 0, more.size)
+            }
         }
         compose.onNodeWithText(words.t("componentsUi.signing.balanceChangesTitle")).assertExists()
 
-        // What it was: the place kept the "could not check" card's room and no
-        // other. The same verdicts over THAT place — how far each pushed the
-        // confirm — is both the measurement of what changed and the proof
-        // that this test can see a sheet move.
-        fun asBefore(model: SigningScreenModel): SigningScreenModel = model.copy(
-            blocks = model.blocks.map { block ->
-                if (block is app.getvela.wallet.feature.signing.SigningBlock.Held) block.copy(rooms = block.rooms.take(1)) else block
-            },
-        )
-        current = asBefore(waiting)
+        // Nothing of a tall verdict is left out: its last line is reached by
+        // scrolling the place — and the sheet still has not moved.
+        // The "more" mark brings the rest up, then goes.
+        val warning = words.t("componentsUi.signing.unverifiedWarning")
+        compose.onNodeWithText(warning).assertExists()
+        compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_MORE_TAG, useUnmergedTree = true).performClick()
         compose.waitForIdle()
-        val old = frame()
-        measured.append("\nwith only the could-not-check room (the last round): sheet ${old.sheetHeight} confirm ${old.confirmTop}")
-        var moved = 0f
-        for ((kind, state) in kinds) {
-            current = asBefore(SigningFixtures.build(state, words).copy(state = waiting.state, requestKey = waiting.requestKey))
-            compose.waitForIdle()
-            val after = frame()
-            measured.append("\n  $kind: confirm ${after.confirmTop} (${after.confirmTop - old.confirmTop} px)")
-            if (state == SigningScreenState.CS64) moved = after.confirmTop - old.confirmTop
-        }
+        compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_MORE_TAG, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText(warning).assertIsDisplayed()
+        val warned = compose.onNodeWithText(warning).fetchSemanticsNode().boundsInRoot
+        assertTrue("the warning is inside the place once scrolled to: $warned in $room", warned.top >= room.top - 1f && warned.bottom <= room.bottom + 1f)
+        assertEquals("scrolling inside the place moved the sheet\n$measured", before, frame())
         android.util.Log.i("SigningSheetStill", measured.toString())
-        assertTrue("a swap's two rows did push the old place's sheet: $measured", moved > 0f)
 
         // Back to "could not check": said now.
         current = SigningFixtures.build(SigningScreenState.CS58, words).copy(state = waiting.state, requestKey = waiting.requestKey)
         compose.waitForIdle()
         compose.onNodeWithText(couldNotCheck).assertExists()
-        // And the sheet with no place kept is shorter: the room is real.
+        // And the sheet with no place kept is shorter: the room is real, and
+        // this test can see a sheet move.
         current = waiting.copy(blocks = waiting.blocks.filterNot { it is app.getvela.wallet.feature.signing.SigningBlock.Held })
         compose.waitForIdle()
         assertTrue("no room was being held", frame().sheetHeight < before.sheetHeight)

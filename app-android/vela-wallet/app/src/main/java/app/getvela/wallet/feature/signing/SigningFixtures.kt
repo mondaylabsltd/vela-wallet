@@ -327,7 +327,13 @@ object SigningFixtures {
         val ctx = SigningLive.Context(this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1)
         val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
         val landed = verdict(state)?.let { outcome -> SigningLive.simBlocks(outcome, ctx).single() }
-        return base.copy(blocks = base.blocks + SigningBlock.Held(rooms = SigningLive.verdictRooms(ctx), shown = landed))
+        return base.copy(
+            blocks = base.blocks + SigningBlock.Held(
+                rooms = SigningLive.verdictRooms(ctx),
+                shown = landed,
+                waiting = t(I18nKeys.SettingsUi.BACKUP_CHECKING),
+            ),
+        )
     }
 
     /**
@@ -347,6 +353,25 @@ object SigningFixtures {
             SigningScreenState.CS63 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(listOf(usdcOut))
             SigningScreenState.CS64 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
                 listOf(usdcOut, app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Native(delta = "390000000000000000")),
+            )
+            // Taller than the place (F2): a third balance row…
+            SigningScreenState.CS65 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
+                listOf(
+                    usdcOut,
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Native(delta = "390000000000000000"),
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Trusted(
+                        token = "0x6b175474e89094c44da98b954eedeac495271d0f", delta = "250000000000000000000", symbol = "DAI", decimals = 18,
+                    ),
+                ),
+            )
+            // …and a received token nothing verified, with its warning under the rows.
+            SigningScreenState.CS66 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
+                listOf(
+                    usdcOut,
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
+                        token = "0x" + "c0".repeat(20), delta = "5000000000000000000000",
+                    ),
+                ),
             )
             else -> null
         }
@@ -1322,7 +1347,8 @@ object SigningFixtures {
             SigningScreenState.CS54, SigningScreenState.CS55, SigningScreenState.CS56 -> correctness(state)
 
             SigningScreenState.CS57, SigningScreenState.CS58,
-            SigningScreenState.CS61, SigningScreenState.CS62, SigningScreenState.CS63, SigningScreenState.CS64 -> heldVerdict(state)
+            SigningScreenState.CS61, SigningScreenState.CS62, SigningScreenState.CS63, SigningScreenState.CS64,
+            SigningScreenState.CS65, SigningScreenState.CS66 -> heldVerdict(state)
 
             SigningScreenState.CS59, SigningScreenState.CS60 -> currencyFee(state)
 

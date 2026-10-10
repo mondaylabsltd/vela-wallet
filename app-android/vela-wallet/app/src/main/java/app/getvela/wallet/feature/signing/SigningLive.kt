@@ -371,7 +371,9 @@ object SigningLive {
             quietSim != null -> emptyList()
             own && sims.isEmpty() -> emptyList()
             sim == null -> emptyList()
-            else -> listOf(SigningBlock.Held(verdictRooms(ctx), sims.singleOrNull()))
+            // While it is out the place holds a skeleton, said as the
+            // corpus's plain "Checking…" (F2: it was blank).
+            else -> listOf(SigningBlock.Held(verdictRooms(ctx), sims.singleOrNull(), waiting = s.t(I18nKeys.SettingsUi.BACKUP_CHECKING)))
         }
         // Spec 102 D4: a page venue's sheet does not repeat the preview — the
         // page is the authority. What stays is what only Vela can decide
@@ -1233,8 +1235,8 @@ object SigningLive {
      * Each is built by [simBlocks], the builder that draws the real one, so a
      * room is the card it stands for. What can still be taller is only the
      * unusual: a third balance row, or the warning under an unverified
-     * token — those grow the place by their own height, since nothing a
-     * person must read before signing is ever cut to fit.
+     * token — those scroll inside the place (F2), nothing of them left out:
+     * the place's cut edge fades to say there is more.
      */
     internal fun verdictRooms(ctx: Context): List<SigningBlock> {
         val s = ctx.strings

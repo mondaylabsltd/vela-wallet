@@ -611,12 +611,17 @@ fun SigningBalances(
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.lg,
                 )
+                // The amount takes the rest of the row and keeps to its end:
+                // an unverified token's change is in raw units ("+5,000,000,
+                // 000,000,000,000,000") and ran straight into its label.
                 Text(
                     text = row.delta,
                     color = row.tone.color(colors),
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = VelaSpacing.lg),
                 )
             }
         }

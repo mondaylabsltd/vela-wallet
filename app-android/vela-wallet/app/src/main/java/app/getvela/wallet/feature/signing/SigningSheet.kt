@@ -3,14 +3,26 @@ package app.getvela.wallet.feature.signing
 import androidx.compose.ui.Alignment
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.clip
+import app.getvela.wallet.core.designsystem.components.VelaIcons
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -22,10 +34,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.testTag
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
+import app.getvela.wallet.core.designsystem.tokens.VelaRadius
+import app.getvela.wallet.feature.wallet.components.SkeletonBlock
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
@@ -234,13 +258,14 @@ fun SigningSheetContent(
                 // the sheet can end on is drawn unseen and unsaid, one over
                 // the other, so the place is as tall as the tallest from the
                 // first frame and whichever arrives — centred in it — moves
-                // nothing above it and nothing below.
-                is SigningBlock.Held -> Box(modifier = Modifier.fillMaxWidth().testTag(VERDICT_PLACE_TAG), contentAlignment = Alignment.Center) {
-                    block.rooms.forEach { room ->
-                        Box(modifier = Modifier.alpha(0f).clearAndSetSemantics {}) { Draw(room) }
-                    }
-                    block.shown?.let { shown -> Draw(shown) }
-                }
+                // nothing above it and nothing below. Until one does, a
+                // skeleton stands in it; and one taller than the place
+                // scrolls inside it (F2).
+                is SigningBlock.Held -> VerdictPlace(
+                    waiting = block.waiting,
+                    rooms = { block.rooms.forEach { room -> Draw(room) } },
+                    shown = block.shown?.let { shown -> { Draw(shown) } },
+                )
             }
         }
         model.blocks.forEach { block -> Draw(block) }
@@ -338,6 +363,156 @@ fun SigningSheetContent(
         }
     }
 }
+
+/**
+ * The simulation's verdict's place ([SigningBlock.Held], PR 3 final note F2).
+ *
+ * - **Its height is the rooms'**: every verdict the sheet can end on, drawn
+ *   unseen and unsaid one over the other — so the place is as tall as the
+ *   tallest from the first frame, whatever is in it.
+ * - **It is never blank.** While the verdict is out a skeleton of the card
+ *   that is coming fills it, quietly, said to a screen reader as [waiting].
+ *   A reserved 120 dp of nothing read as a sheet that had failed to draw.
+ * - **Nothing grows it.** A verdict taller than the place — a third balance
+ *   row, the warning under an unverified token — is laid out at its own
+ *   height and SCROLLS inside the place; where it is cut, its edge fades and
+ *   a small "more" mark stands on it, so it reads as "there is more", never
+ *   as the end — the row or the warning under the fold is one a person must
+ *   read before signing. A tap on the mark brings the rest up. It used to
+ *   grow the sheet by the difference, pushing the form up and the confirm
+ *   down under the finger. A verdict no taller than the place sits centred
+ *   in it, with no mark.
+ */
+@Composable
+private fun VerdictPlace(
+    waiting: String,
+    rooms: @Composable () -> Unit,
+    shown: (@Composable () -> Unit)?,
+) {
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val colors = VelaTheme.colors
+    Layout(
+        modifier = Modifier.fillMaxWidth().testTag(VERDICT_PLACE_TAG),
+        content = {
+            Box(modifier = Modifier.alpha(0f).clearAndSetSemantics {}) { rooms() }
+            if (shown != null) {
+                Box(
+                    modifier = Modifier
+                        .testTag(VERDICT_SCROLL_TAG)
+                        .fadingEdges(scroll)
+                        .verticalScroll(scroll),
+                ) { shown() }
+            } else {
+                VerdictSkeleton(waiting)
+            }
+            // The "more" mark, on the cut edge while there is more below. No
+            // words: the place is announced as scrollable by itself.
+            Box(contentAlignment = Alignment.Center) {
+                if (shown != null && scroll.canScrollForward) {
+                    Icon(
+                        imageVector = VelaIcons.ChevronDown,
+                        contentDescription = null,
+                        tint = colors.fgMuted,
+                        modifier = Modifier
+                            .testTag(VERDICT_MORE_TAG)
+                            .size(VelaSizing.controlSm)
+                            .clip(CircleShape)
+                            .clickable { scope.launch { scroll.animateScrollTo(scroll.maxValue) } }
+                            .padding(VelaSpacing.sm)
+                            .background(colors.bgRaised, CircleShape)
+                            .border(VelaBorder.hairline, colors.borderBase, CircleShape)
+                            .padding(VelaSpacing.sm),
+                    )
+                }
+            }
+        },
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minHeight = 0)
+        val room = measurables[0].measure(loose)
+        // The verdict gets the place's height at most (beyond it, it
+        // scrolls); the skeleton is given exactly the place.
+        val body = measurables[1].measure(
+            if (shown != null) loose.copy(maxHeight = room.height) else loose.copy(minHeight = room.height, maxHeight = room.height),
+        )
+        val more = measurables[2].measure(loose.copy(minWidth = 0))
+        layout(constraints.maxWidth, room.height) {
+            room.place(0, 0)
+            body.place(0, (room.height - body.height) / 2)
+            // ON the cut edge, half of it under the place (in the gap the
+            // form keeps below every block): it covers no figure.
+            more.place((constraints.maxWidth - more.width) / 2, room.height - more.height / 2)
+        }
+    }
+}
+
+/** The "more" mark on the verdict's place while part of the verdict is under its fold. */
+const val VERDICT_MORE_TAG = "signing-verdict-more"
+
+/** The scrolling body of the verdict's place: a UI test reads how far it can scroll. */
+const val VERDICT_SCROLL_TAG = "signing-verdict-scroll"
+
+/** The skeleton that stands in the verdict's place while the simulation is out. */
+const val VERDICT_WAITING_TAG = "signing-verdict-waiting"
+
+/**
+ * The verdict's place while the simulation is out: the outline of the
+ * balance card that most often lands in it — a title's bar and a row's two —
+ * pulsing gently, the size of the place. No words are drawn (the verdict is
+ * not known, and a sentence here would be one more thing to swap); a screen
+ * reader hears [label].
+ */
+@Composable
+private fun VerdictSkeleton(label: String) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(VERDICT_WAITING_TAG)
+            .clearAndSetSemantics { if (label.isNotEmpty()) contentDescription = label }
+            .border(VelaBorder.hairline, colors.borderBase, RoundedCornerShape(VelaRadius.xl))
+            .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.xl),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        SkeletonBlock(Modifier.fillMaxWidth(0.34f).height(VelaSpacing.lg))
+        repeat(SigningLive.USUAL_MOVES) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                SkeletonBlock(Modifier.fillMaxWidth(0.2f).height(VelaSpacing.lg))
+                SkeletonBlock(Modifier.fillMaxWidth(0.38f).height(VelaSpacing.lg))
+            }
+        }
+    }
+}
+
+/**
+ * Fades the content out at an edge it can still scroll past — "there is
+ * more" — by its own alpha, so it sits on any surface. Nothing is drawn over
+ * the content when everything is in view.
+ */
+private fun Modifier.fadingEdges(scroll: ScrollState): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val fade = VERDICT_FADE.toPx().coerceAtMost(size.height / 2)
+        if (scroll.canScrollBackward) {
+            drawRect(
+                brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black), startY = 0f, endY = fade),
+                size = Size(size.width, fade),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+        if (scroll.canScrollForward) {
+            drawRect(
+                brush = Brush.verticalGradient(listOf(Color.Black, Color.Transparent), startY = size.height - fade, endY = size.height),
+                topLeft = Offset(0f, size.height - fade),
+                size = Size(size.width, fade),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+    }
+
+/** How much of a cut edge fades. */
+private val VERDICT_FADE = VelaSpacing.xl3
 
 /**
  * Spec 102 D4: the hand-off card on its own, for a signature no signing sheet

@@ -107,6 +107,14 @@ enum class SigningScreenState {
     CS61, CS62, CS63, CS64,
 
     /**
+     * A verdict TALLER than the place (PR 3 final note F2): three balance
+     * rows (CS65), and a received token nothing could verify, with its
+     * warning under the rows (CS66). The place scrolls inside itself — the
+     * sheet is CS57's height and the confirm is where it was.
+     */
+    CS65, CS66,
+
+    /**
      * The fee's worth waits for the display currency like every fiat figure
      * (the core's withhold rule): CS1's transfer with a settled fee while the
      * currency is on its way — the fee in its coin, no "≈ $" beside it (CS59)
@@ -247,11 +255,21 @@ sealed interface SigningBlock {
      * prints, "no asset changes", and a balance card of the usual number of
      * moves. It was the "could not check" card alone, which every other
      * verdict is taller than: a swap's two balance rows still pushed the
-     * sheet up when they landed. Nothing moves for a [shown] no taller than
-     * the place; only one beyond the usual (a third balance row, an
-     * unverified token's warning) grows the sheet, by the difference.
+     * sheet up when they landed.
+     *
+     * PR 3 final note F2. The place is never BLANK: while the verdict is out
+     * a quiet skeleton stands in it, the size of the place, said to a screen
+     * reader as [waiting] ("Checking…"). And nothing grows it: a [shown]
+     * taller than the place (a third balance row, an unverified token's
+     * warning) scrolls INSIDE it, its cut edge faded, instead of pushing the
+     * form and the confirm — it grew the sheet by the difference.
      */
-    data class Held(val rooms: List<SigningBlock>, val shown: SigningBlock?) : SigningBlock
+    data class Held(
+        val rooms: List<SigningBlock>,
+        val shown: SigningBlock?,
+        /** What the skeleton says to a screen reader while [shown] is still out. */
+        val waiting: String = "",
+    ) : SigningBlock
 }
 
 @Immutable

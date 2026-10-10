@@ -110,8 +110,9 @@ class SigningFixturesTest {
         // the correctness batch's boards (drawn through the live builders),
         // CS57/CS58: the simulation's verdict's place, kept and taken,
         // CS59/CS60: the fee's worth waiting for the display currency, and
-        // landed, and CS61–CS64: the place taken by each other verdict.
-        assertEquals(62, SigningScreenState.entries.size)
+        // landed, CS61–CS64: the place taken by each other verdict, and
+        // CS65/CS66: a verdict taller than the place, scrolling inside it.
+        assertEquals(64, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
