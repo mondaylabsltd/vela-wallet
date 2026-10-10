@@ -776,7 +776,7 @@ fn plain_send_blocks(
 /// there is one), a node that could not check is the caution "couldn't check
 /// — review it" — never the look of "this will fail" — and "it ran and
 /// nothing moves" is no block of THIS builder's: the verdict's place says it
-/// ([`verdict_block`]), in the corpus's words for exactly that.
+/// ([`verdict_block`]) when the core does (`TrustSimView.no_change_key`).
 #[must_use]
 pub fn sim_blocks(
     judgments: &[vela_core::app::token_trust::TrustSimJudgment],
@@ -834,7 +834,8 @@ pub fn sim_blocks(
         .collect();
 
     // A zero delta changes nothing and is never drawn (RC4/RC6); a block of
-    // nothing would read as "nothing moves", which the simulation did not say.
+    // nothing would read as "nothing moves", and whether nothing moves is the
+    // core's to say ([`verdict_block`]), not this list's being empty.
     if rows.is_empty() {
         return Vec::new();
     }
@@ -867,21 +868,27 @@ pub enum SimStage {
 /// milliseconds after the sheet opened: the fee row, the signing account and
 /// the confirm all rode down by its height under a pointer already on its
 /// way to the button (measured on this column: 118 px for a swap's card).
-/// Now the place is there from the request's first frame, one height
-/// ([`crate::signing::components::verdict_room_height`]):
+/// Now the place is there from the request's first frame, at least
+/// [`crate::signing::components::verdict_room_height`] tall:
 ///
 /// - **out** — the balance card's own outline and title with "Checking…"
 ///   where its rows will be, so a card landing fills in the card;
-/// - **landed** — [`sim_blocks`]: the balance card, or the core's notice;
+/// - **landed, a notice** — the core's sentence in the core's tone: a revert
+///   is the danger, a node that could not check the caution;
 /// - **landed, and nothing of the wallet's moves** — the same card saying
-///   "No asset changes" (the corpus's words for it, as Android draws it).
-///   The room cannot be given back without moving the confirm, and an empty
-///   room under a request would read as a verdict that never arrived.
+///   "No asset changes". WHEN is the core's (`no_change_key`:
+///   `TrustSimView.no_change_key`, PR 3 device round) and so is the line —
+///   this builder used to say it whenever it had no row to draw;
+/// - **landed, with rows** — [`sim_blocks`]: the balance card;
+/// - **landed, no row and no key** — a move nobody can write, or a judgment
+///   that never came. That is not "nothing moves": the core's could-not-check
+///   caution, never an empty card.
 #[must_use]
 pub fn verdict_block(
     stage: SimStage,
     judgments: &[vela_core::app::token_trust::TrustSimJudgment],
     notice: Option<&vela_core::app::sim_outcome::SimNotice>,
+    no_change_key: Option<&str>,
     chain_id: u32,
     s: &SigningStrings,
 ) -> Option<Block> {
@@ -895,15 +902,34 @@ pub fn verdict_block(
         SimStage::NotAsked => return None,
         SimStage::Out => vec![quiet(&s.sim_checking)],
         SimStage::Landed => {
-            let blocks = sim_blocks(judgments, notice, chain_id, s);
-            if blocks.is_empty() {
+            if let Some(notice) = notice {
+                vec![sim_notice_block(notice, s)]
+            } else if no_change_key.is_some() {
+                // The core names one key for it
+                // (`sim_outcome::KEY_NO_CHANGE`), and `sim_no_change` is that
+                // key's line in the corpus.
                 vec![quiet(&s.sim_no_change)]
             } else {
-                blocks
+                let blocks = sim_blocks(judgments, None, chain_id, s);
+                if blocks.is_empty() {
+                    vec![sim_notice_block(&could_not_check(), s)]
+                } else {
+                    blocks
+                }
             }
         }
     };
     Some(Block::Verdict { inner })
+}
+
+/// The core's notice for a simulation nobody could read
+/// (`sim_outcome::KEY_UNAVAILABLE`, a caution).
+fn could_not_check() -> vela_core::app::sim_outcome::SimNotice {
+    vela_core::app::sim_outcome::SimNotice {
+        key: vela_core::app::sim_outcome::KEY_UNAVAILABLE,
+        risk: vela_core::app::clear_signing::ClearRisk::Caution,
+        reason: None,
+    }
 }
 
 fn delta_tone(delta: &str) -> Tone {
@@ -943,7 +969,7 @@ mod verdict_place_tests {
             assert_eq!(inner.len(), 1, "{name}: one thing is said in it");
         }
         // A request nothing simulates — a message, typed data — keeps none.
-        assert!(verdict_block(SimStage::NotAsked, &[], None, 1, &s).is_none());
+        assert!(verdict_block(SimStage::NotAsked, &[], None, None, 1, &s).is_none());
         assert_eq!(SimStage::default(), SimStage::NotAsked);
     }
 
@@ -985,25 +1011,111 @@ mod verdict_place_tests {
             "the core's sentence, with its reason"
         );
 
-        // A verdict whose every row was a zero says nothing moved too — a
-        // room with nothing in it would read as a verdict that never came.
-        let zero = [vela_core::app::token_trust::TrustSimJudgment::Native {
-            delta: "0".to_owned(),
-        }];
-        let Some(Block::Verdict { inner }) = verdict_block(SimStage::Landed, &zero, None, 1, &s)
-        else {
-            unreachable!("a place");
-        };
-        assert!(matches!(
-            inner.first(),
-            Some(Block::Balances { rows, note: Some(note), .. })
-                if rows.is_empty() && *note == s.sim_no_change
-        ));
-
         // In the reader's language, from the corpus.
         let zh = SigningStrings::resolve(&crate::loc::Loc::for_language("zh"));
         assert_eq!(zh.sim_checking.as_ref(), "正在检查…");
         assert_eq!(zh.sim_no_change.as_ref(), "无资产变动");
+    }
+
+    /// PR 3 device round, item 3. "No asset changes" is the core's line AND
+    /// the core's case (`TrustSimView.no_change_key`): the place says it
+    /// exactly when the judged view carries the key. This builder used to
+    /// say it whenever it had no row to draw — which is also what a judgment
+    /// that never came, and a move nobody can write, look like.
+    #[test]
+    fn nothing_moves_is_said_when_the_core_says_it_and_never_by_an_empty_list() {
+        use vela_core::app::sim_outcome::{KEY_NO_CHANGE, no_change_key};
+        use vela_core::app::token_trust::TrustSimJudgment as J;
+        let s = strings();
+        let native = |delta: &str| J::Native {
+            delta: delta.to_owned(),
+        };
+        // What the core's judged view carries for these judgments.
+        let core_key = |judgments: &[J]| no_change_key(judgments.iter().map(J::delta));
+        let landed = |judgments: &[J], key: Option<&str>| {
+            let Some(Block::Verdict { inner }) =
+                verdict_block(SimStage::Landed, judgments, None, key, 1, &s)
+            else {
+                unreachable!("a place");
+            };
+            assert_eq!(inner.len(), 1);
+            inner.into_iter().next()
+        };
+        let quiet = |block: &Option<Block>| {
+            matches!(
+                block,
+                Some(Block::Balances { rows, note: Some(note), note_tone: Tone::Neutral, .. })
+                    if rows.is_empty() && *note == s.sim_no_change
+            )
+        };
+        let could_not_check = |block: &Option<Block>| {
+            matches!(
+                block,
+                Some(Block::Warning { tone: Tone::Caution, text })
+                    if *text == s.warn_sim_unavailable
+            )
+        };
+
+        // Checked, no judgment at all — and checked, every move a zero: the
+        // core carries the key, and the place says its line.
+        for judgments in [vec![], vec![native("0")], vec![native("0"), native("-0")]] {
+            let key = core_key(&judgments);
+            assert_eq!(key, Some(KEY_NO_CHANGE));
+            assert!(quiet(&landed(&judgments, key)));
+        }
+        assert_eq!(s.sim_no_change.as_ref(), "No asset changes");
+
+        // Something moves: no key, the card with its row.
+        let moves = [native("-10000000000000000")];
+        assert_eq!(core_key(&moves), None);
+        assert!(matches!(
+            landed(&moves, None),
+            Some(Block::Balances { rows, note: None, .. }) if rows.len() == 1
+        ));
+
+        // No row to draw and NO key. A move nobody can write is not "nothing
+        // moves" — the core gives it no key, and the place says the core's
+        // could-not-check caution: never the quiet card, never an empty one.
+        let unreadable = [native("soon")];
+        assert_eq!(core_key(&unreadable), None);
+        assert!(could_not_check(&landed(&unreadable, None)));
+        // The same for a judgment that never came (the worker gone, the view
+        // not ready): no judgments and no key.
+        assert!(could_not_check(&landed(&[], None)));
+
+        // The core's notice outranks everything: a revert moves nothing and
+        // is never "no asset changes".
+        let revert = vela_core::app::sim_outcome::notice(
+            &vela_core::app::sim_outcome::SimOutcome::Reverts { reason: None },
+        );
+        let Some(Block::Verdict { inner }) = verdict_block(
+            SimStage::Landed,
+            &[],
+            revert.as_ref(),
+            Some(KEY_NO_CHANGE),
+            1,
+            &s,
+        ) else {
+            unreachable!("a place");
+        };
+        assert!(matches!(
+            inner.first(),
+            Some(Block::Warning {
+                tone: Tone::Danger,
+                ..
+            })
+        ));
+
+        // And the executor's own shortcut for a check with no move in it
+        // asks the core's rule, not its own.
+        let judged = crate::executor::token_trust::judge("0xabc", 1, Vec::new());
+        assert!(judged.judgments.is_empty());
+        assert_eq!(judged.no_change_key.as_deref(), Some(KEY_NO_CHANGE));
+        // Nobody judged: no line.
+        assert_eq!(
+            crate::executor::token_trust::Judged::default().no_change_key,
+            None
+        );
     }
 
     /// The place's height: a send's card (one row) and a swap's (two) land

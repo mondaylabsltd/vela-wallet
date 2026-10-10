@@ -260,6 +260,12 @@ pub struct SigningHost {
     /// could not check is a caution — a different sentence from "it ran and
     /// found nothing", which says nothing here.
     pub sim_notice: Option<vela_core::app::sim_outcome::SimNotice>,
+    /// The core's quiet line for a checked answer that moves nothing of the
+    /// person's (`TrustSimView.no_change_key`): the sheet says "No asset
+    /// changes" exactly when this is `Some`, and never because [`Self::sim`]
+    /// happens to be empty — empty is also what a judgment that never came
+    /// looks like.
+    pub sim_no_change: Option<String>,
     /// Where that simulation stands (PR 3 final note F2): asked or not, and
     /// back or not — what the sheet keeps the verdict's place by, from the
     /// request's first frame, so the answer landing moves nothing.
@@ -380,6 +386,7 @@ impl SigningHost {
         let mut host = Self {
             sim: Vec::new(),
             sim_notice: None,
+            sim_no_change: None,
             sim_stage: crate::signing::live::SimStage::NotAsked,
             transport_id: request.transport_id.clone(),
             request_id: request.id.clone(),
@@ -617,6 +624,7 @@ impl SigningHost {
                 host.update(cx, |host, cx| {
                     host.sim = Vec::new();
                     host.sim_notice = notice;
+                    host.sim_no_change = None;
                     host.sim_stage = crate::signing::live::SimStage::Landed;
                     cx.notify();
                 })
@@ -634,14 +642,15 @@ impl SigningHost {
             if told.is_err() {
                 return;
             }
-            let judgments = cx
+            let judged = cx
                 .background_executor()
                 .spawn(
                     async move { crate::executor::token_trust::judge(&wallet, chain_id, deltas) },
                 )
                 .await;
             host.update(cx, |host, cx| {
-                host.sim = judgments;
+                host.sim = judged.judgments;
+                host.sim_no_change = judged.no_change_key;
                 host.sim_notice = notice;
                 host.sim_stage = crate::signing::live::SimStage::Landed;
                 cx.notify();

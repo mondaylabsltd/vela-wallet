@@ -213,8 +213,25 @@ enum Request {
         address: String,
         chain_id: u32,
         deltas: Vec<vela_core::app::token_trust::TrustAssetDelta>,
-        reply: Sender<Vec<vela_core::app::token_trust::TrustSimJudgment>>,
+        reply: Sender<Judged>,
     },
+}
+
+/// What the core's judged view (`TrustSimView`) says of one simulation: the
+/// judgments the sheet draws rows from, and the core's quiet line when the
+/// checked answer moves nothing of the person's.
+///
+/// The default — no judgment and no line — is "nobody judged": the worker
+/// was gone, or the view was not ready. That is not "nothing moves", and the
+/// sheet says the core's could-not-check notice for it
+/// (`signing::live::verdict_block`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Judged {
+    pub judgments: Vec<vela_core::app::token_trust::TrustSimJudgment>,
+    /// `TrustSimView.no_change_key`: `componentsUi.signing.simResultNoChange`
+    /// once the view is ready with no judgment, or every one a zero. The
+    /// sheet draws "No asset changes" exactly when this is `Some`.
+    pub no_change_key: Option<String>,
 }
 
 static SESSION: OnceLock<Mutex<Sender<Request>>> = OnceLock::new();
@@ -325,14 +342,20 @@ pub fn judge(
     address: &str,
     chain_id: u32,
     deltas: Vec<vela_core::app::token_trust::TrustAssetDelta>,
-) -> Vec<vela_core::app::token_trust::TrustSimJudgment> {
+) -> Judged {
     if deltas.is_empty() {
-        return Vec::new();
+        // A checked answer with no move in it: there is nothing to judge,
+        // and the line for it is the core's own rule over no moves.
+        return Judged {
+            judgments: Vec::new(),
+            no_change_key: vela_core::app::sim_outcome::no_change_key(std::iter::empty())
+                .map(str::to_owned),
+        };
     }
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
-            return Vec::new();
+            return Judged::default();
         };
         if tx
             .send(Request::Judge {
@@ -343,7 +366,7 @@ pub fn judge(
             })
             .is_err()
         {
-            return Vec::new();
+            return Judged::default();
         }
     }
     answer.recv().unwrap_or_default()
@@ -378,7 +401,10 @@ fn run(rx: &std::sync::mpsc::Receiver<Request>) {
                     host.view()
                         .sim
                         .filter(|sim| sim.ready)
-                        .map(|sim| sim.judgments)
+                        .map(|sim| Judged {
+                            judgments: sim.judgments,
+                            no_change_key: sim.no_change_key,
+                        })
                         .unwrap_or_default(),
                 );
             }

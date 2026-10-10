@@ -513,7 +513,9 @@ impl SigningStrings {
             warn_order_terms: s("warnOrderTerms"),
             warn_sim_unavailable: s("simUnavailableWarning"),
             balance_unverified_token: s("balanceUnverifiedToken"),
-            sim_no_change: s("simResultNoChange"),
+            // The key is the core's (`sim_outcome::KEY_NO_CHANGE`), and so is
+            // when it is said (`TrustSimView.no_change_key`).
+            sim_no_change: loc.t(vela_core::app::sim_outcome::KEY_NO_CHANGE),
             sim_checking: loc.t(vela_core::app::balance_dashboard::CHECKING),
             warn_drain: s("drainWarning"),
             ok_self_transfer: s("balanceSelfTransfer"),

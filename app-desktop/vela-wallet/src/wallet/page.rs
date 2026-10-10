@@ -17859,6 +17859,7 @@ impl WalletPage {
                     host.sim_stage,
                     &host.sim,
                     host.sim_notice.as_ref(),
+                    host.sim_no_change.as_deref(),
                     host.chain_id,
                     &self.signing,
                 ));

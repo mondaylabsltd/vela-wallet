@@ -386,7 +386,13 @@ pub fn sim_pin_block(pin: SimPin, s: &SigningStrings) -> Option<Block> {
         ),
         SimPin::Nothing => (SimStage::Landed, Vec::new(), None),
     };
-    verdict_block(stage, &judgments, notice.as_ref(), 1, s)
+    // The line the core's judged view would carry for these judgments
+    // (`TrustSimView.no_change_key`): its own rule, once the answer is a
+    // check that landed.
+    let no_change_key = (stage == SimStage::Landed && notice.is_none())
+        .then(|| vela_core::app::sim_outcome::no_change_key(judgments.iter().map(J::delta)))
+        .flatten();
+    verdict_block(stage, &judgments, notice.as_ref(), no_change_key, 1, s)
 }
 
 /// The scenario `VELA_SIGNING_STATE=cs36` names, if it names one — with
