@@ -869,12 +869,13 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
     vec![swap, permit, sign_in]
 }
 
-/// Two transfers through the real feed core — 1.5 xDAI received, 12 USDC
-/// sent — with the feed's privacy as asked. What `VELA_ACTIVITY_FIXTURE`
-/// draws: the home's rows and a transfer's detail from the LIVE builders,
-/// shown or hidden, so the masked figure ("•••• xDAI", the core's
-/// `privacy::masked_amount`) can be looked at without a wallet that has a
-/// history.
+/// Three sends through the real feed core — a split of 683.75 USDC between
+/// two people (the newest), 1.5 xDAI received, 12 USDC sent — with the
+/// feed's privacy as asked. What `VELA_ACTIVITY_FIXTURE` draws: the home's
+/// rows and the newest one's detail from the LIVE builders, shown or hidden,
+/// so the masked figures ("•••• USDC" for the split's total AND for each
+/// recipient's share — the core's `privacy::masked_amount`) can be looked at
+/// without a wallet that has a history.
 #[must_use]
 pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
     use vela_core::app::activity_feed::{Event, FeedTxKind, FeedTxRecord, FeedTxStatus};
@@ -913,7 +914,31 @@ pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
             settlement: None,
         }
     };
+    // One send to two people: two records of one operation, which the core
+    // folds into one row (PR 3 note 15) — the shared privacy fixture's own
+    // figures.
+    let share = |id: &str, to: &str, name: Option<&str>, value: &str| FeedTxRecord {
+        user_op_hash: format!("0x{}", "ef".repeat(32)),
+        to: to.to_owned(),
+        to_name: name.map(str::to_owned),
+        decimals: 6,
+        timestamp: DAY_MS / 1000.0 + 54_000.0,
+        usd: Some(value.to_owned()),
+        ..record(id, FeedTxKind::Send, value, "USDC", 8_453)
+    };
     let mut host = core_feed_host(vec![
+        share(
+            "c3",
+            "0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd",
+            Some("Bea"),
+            "214.5",
+        ),
+        share(
+            "d4",
+            "0xFAfaFAFAfaFAfAFAFAFAfAfAFaFafAfAFAfaFaFA",
+            None,
+            "469.25",
+        ),
         record("a1", FeedTxKind::Receive, "1.5", "xDAI", 100),
         record("b2", FeedTxKind::Send, "12", "USDC", 8_453),
     ]);

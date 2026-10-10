@@ -399,7 +399,7 @@ pub fn tx_detail(
         facts.push(hash_fact(&s.detail_hash, hash));
     }
 
-    let (breakdown_title, breakdown) = detail_parts(item, s);
+    let (breakdown_title, breakdown) = detail_parts(item, s, hidden);
     Some(crate::flows::fixtures::TxDetail {
         breakdown_title,
         breakdown,
@@ -4736,9 +4736,16 @@ fn swept_coin_mark(
 /// Spec 038 #D2: a folded batch row opens to what it folded — the split's
 /// recipients by name and avatar, the sweep's assets by their marks — under
 /// the facts, where the single send's "To" would have been.
+///
+/// Each line's amount is a figure too (PR 3 note 15): while balances are
+/// hidden it reads the core's mask with its unit ("•••• USDC",
+/// `privacy::masked_amount`), as the total over it does. It was drawn in
+/// full — a hidden split masked its total and still listed who got how much,
+/// which is exactly what the mask is for.
 fn detail_parts(
     item: &vela_core::app::activity_feed::FeedItem,
     s: &FlowStrings,
+    hidden: bool,
 ) -> (Option<SharedString>, Vec<BreakdownRow>) {
     let Some(batch) = item.batch.as_ref() else {
         return (None, Vec::new());
@@ -4761,10 +4768,16 @@ fn detail_parts(
             },
             mono: false,
             detail: None,
-            value: format!("{} {}", trimmed_str(&transfer.value), transfer.symbol)
-                .trim()
-                .to_owned()
-                .into(),
+            // The core's one rule for the row (`figure_maskable`) covers
+            // what the row folded: its lines are the same money.
+            value: if hidden && item.figure_maskable {
+                vela_core::app::privacy::masked_amount(&transfer.symbol).into()
+            } else {
+                format!("{} {}", trimmed_str(&transfer.value), transfer.symbol)
+                    .trim()
+                    .to_owned()
+                    .into()
+            },
         })
         .collect();
     if rows.is_empty() {
@@ -6766,7 +6779,7 @@ mod tests {
                 figure_maskable: true,
             };
             let s = strings();
-            let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s);
+            let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s, false);
             let marks: Vec<&TokenMark> = rows
                 .iter()
                 .map(|row| {
@@ -6795,7 +6808,7 @@ mod tests {
             assert!(marks[2].logos.badge_logo.is_some());
 
             // A split's rows are people, not coins.
-            let (_, rows) = detail_parts(&item(FeedBatchKind::Split), &s);
+            let (_, rows) = detail_parts(&item(FeedBatchKind::Split), &s, false);
             assert!(
                 rows.iter()
                     .all(|row| row.mark.is_none() && row.seed.is_some())
