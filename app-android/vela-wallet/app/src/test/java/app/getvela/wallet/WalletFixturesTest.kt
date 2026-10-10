@@ -120,20 +120,23 @@ class WalletFixturesTest {
         assertEquals(BalanceStateKind.Hidden, model.balance.state)
         assertEquals("••••••", model.balance.integer)
         assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.balance == "••••" && it.fiat == AssetFiatModel.Masked })
-        // Issue #469: the home draws the core's cut — the newest three.
+        // Issue #469: the home draws the core's cut — the newest three: the
+        // received, the sent and the split (the core fixture's own cut).
         val rows = model.activityGroups.flatMap { it.rows }.associateBy { it.id }
-        assertEquals(listOf("received", "sent", "swap"), model.activityGroups.flatMap { it.rows }.map { it.id })
-        for (id in listOf("received", "sent", "swap")) assertEquals(id, "••••", rows.getValue(id).amount)
-        assertEquals("•••• xDAI", rows.getValue("swap").received)
+        assertEquals(listOf("received", "sent", "split"), model.activityGroups.flatMap { it.rows }.map { it.id })
+        for (id in listOf("received", "sent", "split")) assertEquals(id, "••••", rows.getValue(id).amount)
+        assertEquals("the split's coin stays beside its mask", "USDC", rows.getValue("split").unit)
         // The rest are History's, drawn by the same builder from the same feed.
         val feed = WalletFixtures.liveHiddenFeed()
         val history = app.getvela.wallet.feature.wallet.WalletLive.activity(feed, s).flatMap { it.rows }.associateBy { it.id }
+        assertEquals("••••", history.getValue("swap").amount)
+        assertEquals("•••• xDAI", history.getValue("swap").received)
         assertEquals("••••", history.getValue("permit").amount)
         assertEquals(s.t("componentsUi.signingApprove.unlimitedValue"), history.getValue("permit-unlimited").amount)
         assertFalse(history.getValue("signature").masked)
         val figures = ((rows.values + history.values).flatMap { listOfNotNull(it.amount, it.received) } + model.assetRows.map { it.balance } +
             listOfNotNull(model.balance.integer, model.balance.decimals)).joinToString(" ")
-        for (run in listOf("418", "376", "289", "163", "237", "352", "128")) assertFalse("$run leaks: $figures", figures.contains(run))
+        for (run in listOf("418", "376", "289", "163", "237", "352", "128", "683", "214", "469")) assertFalse("$run leaks: $figures", figures.contains(run))
     }
 
     /**

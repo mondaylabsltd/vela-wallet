@@ -63,6 +63,10 @@ import java.io.File
  *    "arrived" list is not drawn on Android.)
  * 4. A row's own figure masks exactly when the core says it is money
  *    (`figure_maskable`).
+ * 5. The fixture's SPLIT (one operation, two recipients): its row draws the
+ *    total and its detail lists each person's share. Shown, all three
+ *    figures are on screen; hidden, none is — on the row, in the detail, in
+ *    History or on the home — and each masked figure keeps its unit.
  */
 class PrivacyFixtureTest {
     private val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
@@ -85,6 +89,11 @@ class PrivacyFixtureTest {
     private val usd = CurrencyView(code = "USD", committed = true)
     private val chains = mapOf(1 to "Ethereum", 100 to "Gnosis", 56 to "BNB Chain")
     private val other = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+    /** The split's feed row id (its operation hash), its total and its two shares, as the fixture carries them. */
+    private val splitId = "0x" + "ef".repeat(32)
+    private val splitTotal = "683"
+    private val splitShares = listOf("214", "469")
     private val bea = "0xdddddddddddddddddddddddddddddddddddddddd"
 
     // -- the surfaces, each as the figures it draws ------------------------------
@@ -235,7 +244,7 @@ class PrivacyFixtureTest {
         // kind of money is not ("•••• xDAI", as iOS reads). A transfer's
         // detail used to drop it.
         val units = feed.rows.filterIsInstance<FeedRow.Item>().associate { it.item.id to it.item.symbol }
-        for (id in listOf("received", "sent", "swap")) {
+        for (id in listOf("received", "sent", "swap", splitId)) {
             val detail = FlowLive.txDetail(txFallback, feed, id, strings, chains, money = WalletLive.Money.of(usd))!!
             assertTrue("$id has a unit to keep", units.getValue(id).isNotBlank())
             assertEquals("$id: the amount", "$mask ${units.getValue(id)}", detail.amount)
@@ -246,6 +255,74 @@ class PrivacyFixtureTest {
         assertEquals("what came back masks", "$mask xDAI", FlowLive.txDetail(txFallback, feed, "swap", strings, chains)!!.received)
         assertNull("the core withholds the toast", feed.toast)
         assertNotNull("…which it sends while shown", feed("shown").toast)
+    }
+
+    // -- (5) the split: its row and its detail, shown and hidden ------------------
+
+    private fun splitRow(feed: FeedView, rows: List<FeedRow> = feed.rows): ActivityRowModel =
+        WalletLive.activity(feed.copy(rows = rows), strings, chainNames = chains).flatMap { it.rows }.single { it.id == splitId }
+
+    private fun splitDetail(feed: FeedView): TxDetailModel {
+        val fallback = (FlowFixtures.build(FlowState.A2, strings).sheet as FlowSheet.TxDetail).model
+        return FlowLive.txDetail(fallback, feed, splitId, strings, chains, money = WalletLive.Money.of(usd))!!
+    }
+
+    /** The row of a detail that lists the split's people: its value says how many, its lines who got what. */
+    private fun shares(detail: TxDetailModel) = detail.facts.single { it.lines.size == splitShares.size }
+
+    @Test
+    fun `shown, the split's row draws its total and its detail lists each share`() {
+        val feed = feed("shown")
+        val item = feed.rows.filterIsInstance<FeedRow.Item>().single { it.item.id == splitId }.item
+        assertEquals("the fixture's row is a split of two", 2, item.batch?.transfers?.size)
+
+        val row = splitRow(feed)
+        assertTrue("the row's total: ${row.amount}", row.amount.contains(splitTotal))
+        assertEquals("USDC", row.unit)
+        assertTrue("the home draws it too: it is in the core's cut", splitRow(feed, feed.home_rows).amount.contains(splitTotal))
+
+        val detail = splitDetail(feed)
+        assertEquals("\u2212683.75 USDC", detail.amount)
+        val people = shares(detail)
+        assertEquals("2 recipients", people.value)
+        assertEquals(listOf("Bea · 214.5 USDC", "0xfafa…fafa · 469.25 USDC"), people.lines)
+        // …so each of the three runs is on a surface this shell draws.
+        val drawn = (rowFigures(row) + detailFigures(detail)).joinToString(" ")
+        for (run in splitShares + splitTotal) assertTrue("shown: \"$run\" in $drawn", drawn.contains(run))
+    }
+
+    @Test
+    fun `hidden, the split leaks neither its total nor a share, and each mask keeps its unit`() {
+        val feed = feed("hidden")
+        // The row, in History and on the home: the mask, its coin drawn beside it as always.
+        for ((where, rows) in listOf("history" to feed.rows, "home" to feed.home_rows)) {
+            val row = splitRow(feed, rows)
+            assertTrue("$where: masked", row.masked)
+            assertEquals("$where: the figure", mask, row.amount)
+            assertEquals("$where: the unit stays", "USDC", row.unit)
+        }
+        // The detail: the total and EVERY share are the mask with the coin —
+        // who was paid stays, how much each got does not.
+        val detail = splitDetail(feed)
+        assertEquals("$mask USDC", detail.amount)
+        assertEquals("the worth", mask, detail.fiat)
+        val people = shares(detail)
+        assertEquals("2 recipients", people.value)
+        assertEquals(listOf("Bea · $mask USDC", "0xfafa…fafa · $mask USDC"), people.lines)
+        assertEquals("the unit rule is the core's", uniffi.vela_core_uniffi.maskedAmount("USDC"), detail.amount)
+        for (figure in rowFigures(splitRow(feed)) + detailFigures(detail)) {
+            assertNull("the split leaks \"$figure\" while hidden", holdsForbidden(figure))
+        }
+        // The contact's page (Bea was paid by it) draws no share either.
+        val contact = ContactsLive.detail(
+            ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings).detail!!,
+            Contact(address = bea, name = "Bea"),
+            ContactsView(loaded = true, contacts = listOf(Contact(address = bea, name = "Bea"))),
+            feed = feed,
+            strings = strings,
+            chainNames = chains,
+        )
+        for (figure in contact.activity.rows.flatMap(::rowFigures)) assertNull("the contact page leaks \"$figure\"", holdsForbidden(figure))
     }
 
     // -- (3) hidden: Send and the signing sheet keep their figures ----------------

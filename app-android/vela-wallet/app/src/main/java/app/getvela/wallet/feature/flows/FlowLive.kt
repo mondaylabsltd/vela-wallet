@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.flows
 
 import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.tokenAmountText
 import kotlinx.serialization.json.jsonPrimitive
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.i18n.VelaStrings
@@ -13,6 +14,8 @@ import app.getvela.wallet.feature.wallet.AssetFiatModel
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedBatchKind
+import app.getvela.wallet.feature.wallet.core.FeedBatchTransfer
 import app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole
 import app.getvela.wallet.feature.wallet.core.FeedDapp
 import app.getvela.wallet.feature.wallet.core.FeedDappChange
@@ -275,23 +278,55 @@ object FlowLive {
         // Spec 043 phase 4 (device-found): the notification's deep link opened
         // this sheet with the fixture's title, status, counterparty, network,
         // date and hash around a live amount. Every line is the item's now.
+        // A folded batch opens to what it folded (spec 038 #D2, as the web and
+        // the desktop draw it): a split's people, each with their share; a
+        // sweep's coins. Each part is money on a masked surface — hidden, it
+        // is the mask and its coin, never who got how much under a masked
+        // total. This detail used to show a split as one figure and a "To"
+        // row with nobody in it.
+        val batch = item.batch
+        val parts = batch?.transfers.orEmpty()
+        val split = batch?.kind == FeedBatchKind.Split && parts.size > 1
+        val sweep = batch?.kind == FeedBatchKind.MultiSelect && parts.isNotEmpty()
+        fun partFigure(part: FeedBatchTransfer): String =
+            if (hidden) maskedAmount(part.symbol) else "${tokenAmountText(part.value)} ${part.symbol}".trim()
         val facts = buildList {
-            add(
-                FactRowModel(
-                    // Spec 082 RJ16: a call's `to` is the contract it went to,
-                    // not somebody paid — the core says which.
-                    label = when {
-                        received -> strings.t(I18nKeys.Flows.DETAIL_FROM)
-                        item.counterparty_role == FeedCounterpartyRole.Contract -> strings.t(I18nKeys.Flows.DETAIL_CONTRACT)
-                        else -> strings.t(I18nKeys.Flows.DETAIL_TO)
-                    },
-                    value = item.alias ?: shortAddress(counterparty),
-                    copyValue = counterparty,
-                    lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
-                    mono = item.alias == null,
-                    copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
-                ),
-            )
+            if (split) {
+                add(
+                    FactRowModel(
+                        label = strings.t(I18nKeys.Flows.DETAIL_TO),
+                        value = strings.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to parts.size.toString())),
+                        lines = parts.map { part -> "${partName(part.to_name, part.to)} · ${partFigure(part)}" },
+                    ),
+                )
+            } else {
+                add(
+                    FactRowModel(
+                        // Spec 082 RJ16: a call's `to` is the contract it went to,
+                        // not somebody paid — the core says which.
+                        label = when {
+                            received -> strings.t(I18nKeys.Flows.DETAIL_FROM)
+                            item.counterparty_role == FeedCounterpartyRole.Contract -> strings.t(I18nKeys.Flows.DETAIL_CONTRACT)
+                            else -> strings.t(I18nKeys.Flows.DETAIL_TO)
+                        },
+                        value = item.alias ?: shortAddress(counterparty),
+                        copyValue = counterparty,
+                        lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
+                        mono = item.alias == null,
+                        copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+                    ),
+                )
+            }
+            // A sweep is several coins to one person: each coin, under how many there are.
+            if (sweep) {
+                add(
+                    FactRowModel(
+                        label = strings.t(I18nKeys.Flows.ASSETS_COUNT, mapOf("n" to parts.size.toString())),
+                        value = partFigure(parts.first()),
+                        lines = parts.drop(1).map(::partFigure),
+                    ),
+                )
+            }
             add(networkFact(item.chain_id, strings, chainNames, nativeSymbols))
             // Spec 082 RG2: a dApp's transaction says which site asked for it.
             item.site?.takeIf { dapp && it.isNotBlank() }?.let { site ->
@@ -313,10 +348,12 @@ object FlowLive {
         return fallback.copy(
             explorerUrl = txHash?.let { tx -> explorers[item.chain_id]?.let { "${it.trimEnd('/')}/tx/$tx" } },
             explorerShown = txHash != null && explorers[item.chain_id] != null,
-            title = if (dapp) {
-                strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
-            } else {
-                strings.t(if (received) I18nKeys.Flows.TX_LABEL_RECEIVED else I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to item.symbol))
+            title = when {
+                dapp -> strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
+                // A record that names no one coin (a sweep) is "Sent", as its
+                // receipt was — never "Sent " with nothing after it.
+                item.symbol.isBlank() && !received -> strings.t(I18nKeys.Flows.TX_SENT)
+                else -> strings.t(if (received) I18nKeys.Flows.TX_LABEL_RECEIVED else I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to item.symbol))
             },
             // Spec 082 RG1: where the record stands is the core's `status` —
             // the tracker alone moves it — never a guess from whether a hash
@@ -324,6 +361,11 @@ object FlowLive {
             status = statusChip(item.status, strings),
             // A dApp's call that moved no coin of ours has no amount (RG2).
             amount = when {
+                // A sweep has no one figure and no one coin (the core sends
+                // neither): its hero says how many coins left, as its confirm
+                // did — and hidden, the mask alone, with no coin to keep.
+                amount.isBlank() && sweep && !dapp ->
+                    if (hidden) maskedAmount("") else strings.t(I18nKeys.Flows.ASSETS_COUNT, mapOf("n" to parts.size.toString()))
                 amount.isBlank() -> ""
                 // Hidden: how much is masked, what it is stays ("•••• xDAI").
                 hidden -> maskedAmount(item.symbol)
@@ -426,6 +468,19 @@ object FlowLive {
             deleteQuiet = item.status == FeedTxStatus.Pending || item.status == FeedTxStatus.Unknown,
         )
     }
+
+    /**
+     * Who a split's part went to, on the line that also carries their share:
+     * the name, else the short address. A long name is cut HERE, in the
+     * middle of nothing that matters, so the line's one-line limit never cuts
+     * the figure at its end.
+     */
+    private fun partName(name: String?, address: String): String {
+        val shown = name?.takeIf { it.isNotBlank() } ?: return shortAddress(address)
+        return if (shown.length <= PART_NAME_MAX) shown else shown.take(PART_NAME_MAX - 1).trimEnd() + "…"
+    }
+
+    private const val PART_NAME_MAX = 18
 
     /** Why a dApp operation failed, in the words its request ended with (spec 097 N4). */
     private fun failureText(failure: app.getvela.wallet.feature.send.core.TrackFailure, strings: VelaStrings): String = when (failure) {

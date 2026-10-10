@@ -307,6 +307,23 @@ object FlowFixtures {
         )
     }
 
+    /**
+     * A2S / A2SH: the split of the same feed, opened, through the live
+     * builders — shown, and hidden (every share the mask with its coin).
+     */
+    private fun splitDetail(s: VelaStrings, hidden: Boolean): FlowScreenModel {
+        val feed = WalletFixtures.liveHiddenFeed(hidden = hidden)
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        val money = app.getvela.wallet.feature.wallet.WalletLive.Money.dollars()
+        val detail = FlowLive.txDetail(txDetail(s, received = false), feed, WalletFixtures.SPLIT_ROW, s, chains, money = money)
+            ?: txDetail(s, received = false)
+        return FlowScreenModel(
+            state = if (hidden) FlowState.A2SH else FlowState.A2S,
+            base = FlowBase.History(FlowLive.history(history(s), feed, s, chainNames = chains)),
+            sheet = FlowSheet.TxDetail(detail),
+        )
+    }
+
     private fun history(s: VelaStrings) = HistoryModel(
         header = FlowHeaderModel(
             title = s.t(I18nKeys.Flows.HISTORY_TITLE),
@@ -1080,6 +1097,8 @@ object FlowFixtures {
             FlowState.SD4B -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Submitted)))
             FlowState.SD4C -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Confirmed)))
             FlowState.A2H -> hiddenDetail(s)
+            FlowState.A2S -> splitDetail(s, hidden = false)
+            FlowState.A2SH -> splitDetail(s, hidden = true)
             FlowState.SD3D -> screen(FlowBase.SendConfirm(heldConfirm(s)))
             FlowState.SD4D -> screen(FlowBase.SendReceipt(refusedReceipt(s)))
             FlowState.SD2G, FlowState.SD2H -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.ChainDown)))

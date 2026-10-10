@@ -65,6 +65,16 @@ enum class FlowState {
      * way. Never on the live flow stack.
      */
     A2H,
+
+    /**
+     * The same feed's SPLIT (one operation, two recipients), opened — its
+     * total, then each person with their share — shown (A2S) and with the
+     * balance hidden (A2SH): the total and EVERY share are the mask with the
+     * coin kept, over History masked the same way. Who was paid stays; how
+     * much each got does not. Through the live builders, never on the live
+     * flow stack.
+     */
+    A2S, A2SH,
 }
 
 /* ------------------------------------------------------------------ chrome */
