@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import androidx.compose.foundation.layout.BoxWithConstraints
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import app.getvela.wallet.feature.scan.ScanCallbacks
 import app.getvela.wallet.core.diagnostics.VelaLog
@@ -324,6 +325,11 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
         containerColor = VelaTheme.colors.bgBase,
         dragHandle = { FlowSheetHandle() },
     ) {
+        // The receive code is the one sheet that must fit a phone screen
+        // whole (issue #321): it is told how much height the sheet has, so
+        // its code can give way before anything scrolls. [room]: that height
+        // in px, less this column's own bottom margin; `null` — unbounded.
+        val body: @Composable (Int?) -> Unit = { room ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -345,6 +351,7 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
             when (sheet) {
                 is FlowSheet.ReceiveQr -> ReceiveQrBody(
                     model = sheet.model,
+                    heightLimit = room,
                     close = { SheetCloseButton(label = sheetClose(sheet)) { dismiss() } },
                     onSave = { onSaveImage?.invoke() },
                     onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) },
@@ -389,6 +396,15 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                     onMerge = { send?.onBatchMerge?.invoke() },
                 )
             }
+        }
+        }
+        if (sheet is FlowSheet.ReceiveQr) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val margin = with(LocalDensity.current) { VelaSpacing.xl4.roundToPx() }
+                body(if (constraints.hasBoundedHeight) constraints.maxHeight - margin else null)
+            }
+        } else {
+            body(null)
         }
     }
 }
