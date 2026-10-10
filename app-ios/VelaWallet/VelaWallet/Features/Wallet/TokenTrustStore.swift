@@ -47,6 +47,8 @@ final class TokenTrustStore {
     private(set) var trust: TrustViewWire?
 
     private let executor: TokenTrustExecutor
+    /// The pool the scan reads through — kept for `chainRead`.
+    private let pool: RpcPool
     private let registry: ChainTokens
     private let held: HeldTokens
     private var core: CoreStore<TrustViewWire>!
@@ -60,6 +62,7 @@ final class TokenTrustStore {
             store: store, pool: pool,
             metadata: TokenMetadata(store: store, pool: pool)
         )
+        self.pool = pool
         self.registry = ChainTokens(accounts: accounts)
         self.held = held
         self.core = CoreStore(
@@ -142,6 +145,15 @@ final class TokenTrustStore {
                 resume(self?.trust)
             }
         }
+    }
+
+    /// One read through the pool the scan itself reads through — for the
+    /// feed's repair of a receipt's time (`ActivityExecutor`,
+    /// `read_receive_time`), which asks the chain about a transfer this
+    /// machine found: the same endpoints, bans and cooldowns, never a URL of
+    /// its own. Transport only; the answer is the caller's to hand on.
+    func chainRead(chainId: Int, method: String, params: [Any]) async -> RpcOutcome {
+        await pool.call(chainId: chainId, method: method, params: params)
     }
 
     /// `boot` commits the core's first view; everything after is a dispatch.

@@ -32,7 +32,9 @@ struct TrustIncomingWire: Decodable, Equatable {
     let txHash: String
     let blockNumber: Double
     let logIndex: Int
-    /// Unix seconds: the block's time, falling back to when it was seen.
+    /// Unix seconds: the time of the transfer's own block, as the chain gave
+    /// it — never a clock's (invariant ⑨). A transfer whose block could not
+    /// be read is not here yet.
     let timestampSec: Double
     let symbol: String?
     let decimals: Int?

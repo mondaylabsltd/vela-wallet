@@ -26,8 +26,12 @@
 //  ② **`MulticallErc20Meta` answers EVERY requested address**, resolved or not.
 //    An omitted address leaves the metadata gate permanently unmet and the scan
 //    chain never finishes. `meta: null` is a fact; silence is a wedge.
-//  ③ **`BlockTimestamp` carries `now_ms`.** The core never reads a clock, so
-//    the "fall back to now" rule is fed to it rather than computed by it.
+//  ③ **`BlockTimestamp` carries no clock.** A block nobody could read is
+//    answered `timestamp_sec: null` and nothing else: the core withholds its
+//    transfers and asks for the block again on a later poll (invariant ⑨).
+//    This answer carried `now_ms` until PR 3, the core stamped such a
+//    transfer with it, and three receipts of 2026-09-29 stood under "Today"
+//    eleven days later.
 //
 
 import Foundation
@@ -113,12 +117,12 @@ final class TokenTrustExecutor {
             return CoreJSON.string([
                 "type": "block_timestamp", "address": address, "chain_id": chainId,
                 // The core answers by block, so a block hex the shell cannot
-                // read back is reported as 0 — the core drops it and the
-                // transfer takes the `now` fallback.
+                // read back is reported as 0 — a block the core did not ask
+                // about, which it drops.
                 "block_number": Self.hexToNumber(block) ?? 0,
+                // ③ the block's own time or `null` — never a clock's. An
+                // unread block's transfers are withheld, not stamped "now".
                 "timestamp_sec": timestamp,
-                // ③ the clock, carried.
-                "now_ms": Date().timeIntervalSince1970 * 1000,
             ])
 
         case "multicall_erc20_meta":
