@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedRow } from '$lib/core/generated/FeedRow';
-import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { chainName } from '$lib/services/networks';
 import { preferences } from '$lib/services/preferences.svelte';
