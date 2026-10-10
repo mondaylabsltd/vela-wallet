@@ -830,6 +830,12 @@ class SettingsLiveTest {
         assertNull(add.secondary)
         assertNull(add.secondaryUrl)
         assertNull(add.candidate!!.badge)
+        // A failed RPC request is what another RPC fixes: "Re-check with this
+        // RPC" has a box for "this" to mean, under the sentence that says why.
+        assertNotNull("an RPC to re-check with can be typed", add.customRpc)
+        assertTrue(add.calloutAsksForRpc)
+        assertTrue(add.recheck!!.isNotBlank())
+        assertNull("nothing can be added from a stop", add.primary)
     }
 
     /**
@@ -855,6 +861,8 @@ class SettingsLiveTest {
         assertEquals("No RPC endpoint is listed for this network. Enter one, then re-check.", noRpc.callout!!.text)
         assertEquals("Zircuit", noRpc.candidate!!.name)
         assertNotNull("\"Enter one\" needs the box to enter it in", noRpc.customRpc)
+        assertTrue("…and the sentence sits over that box: why, then where", noRpc.calloutAsksForRpc)
+        assertFalse(added.calloutAsksForRpc || missing.calloutAsksForRpc)
         assertTrue("…and the re-check it promises", noRpc.recheck!!.isNotBlank())
         assertNull(noRpc.secondary)
         assertNull(noRpc.primary)

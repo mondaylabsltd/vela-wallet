@@ -423,8 +423,13 @@ object SettingsLive {
         val refusal = compat?.hint_key?.takeIf { refusedCheck }
         val setupUrl = compat?.setup_url?.takeIf { refusedStop || refusedCheck }
         // "No RPC endpoint is listed for this network. Enter one, then
-        // re-check." — so the box to enter one in is there.
-        val needsRpc = stopped && wizard.error is NetWizardErrorKind.NoRpcEndpoint
+        // re-check." — so the box to enter one in is there. And a check that
+        // could not be completed ("Unable to verify — RPC request failed") is
+        // the one stop another RPC fixes: the link under it reads "Re-check
+        // with this RPC", so there is an RPC box for "this" to mean — as in
+        // the wizard's own could-not-check state, which always had it. (The
+        // re-check runs the wizard's check, which tries a typed RPC first.)
+        val needsRpc = stopped && (wizard.error is NetWizardErrorKind.NoRpcEndpoint || wizard.error is NetWizardErrorKind.CheckFailed)
         return model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
@@ -495,7 +500,8 @@ object SettingsLive {
                 },
                 // The person's own RPC for this chain, as the core holds it —
                 // so a keystroke round-trips. Offered where the web offers it:
-                // once checked, unless the chain was ruled incompatible.
+                // once checked, unless the chain was ruled incompatible — and
+                // at the two stops an RPC is the way on from (`needsRpc`).
                 customRpc = if (compatible || unverified || needsRpc) {
                     UrlFieldModel(
                         id = "custom-rpc",
@@ -533,6 +539,7 @@ object SettingsLive {
                 // needs aren't on this network yet") — over a network that was
                 // already added, one nobody could find and one with no RPC
                 // listed, none of which is about contracts.
+                calloutAsksForRpc = needsRpc,
                 callout = when {
                     stop != null -> CalloutModel(CalloutTone.Warning, strings.t(stop))
                     refusal != null -> CalloutModel(CalloutTone.Warning, strings.t(refusal))

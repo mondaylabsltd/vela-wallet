@@ -458,6 +458,14 @@ data class AddNetworkModel(
     val checks: List<CheckItemModel> = emptyList(),
     val customRpc: UrlFieldModel? = null,
     val callout: CalloutModel? = null,
+    /**
+     * The callout is the reason the field under it is there ("No RPC
+     * endpoint is listed for this network. Enter one, then re-check.", or
+     * "Unable to verify — RPC request failed"): it is drawn ABOVE
+     * [customRpc] — why, then where, then the re-check — instead of under
+     * it, where it read as a verdict on what was typed.
+     */
+    val calloutAsksForRpc: Boolean = false,
     val primary: String? = null,
     /** "Open Chain Setup Tool" — drawn only with [secondaryUrl]. */
     val secondary: String? = null,

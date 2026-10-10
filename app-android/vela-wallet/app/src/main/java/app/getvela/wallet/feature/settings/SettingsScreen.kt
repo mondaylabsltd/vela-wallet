@@ -1111,6 +1111,12 @@ private fun SettingsPageBody(
                     VelaCheckList(add.checksTitle, add.checks)
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
+                // Why, then where: a stop that asks for an RPC says so over
+                // the box it is typed in.
+                if (add.callout != null && add.calloutAsksForRpc) {
+                    VelaCallout(add.callout)
+                    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                }
                 if (add.customRpc != null) {
                     VelaUrlField(
                         label = add.customRpc.label,
@@ -1120,7 +1126,7 @@ private fun SettingsPageBody(
                     )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
-                if (add.callout != null) {
+                if (add.callout != null && !add.calloutAsksForRpc) {
                     VelaCallout(add.callout)
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
