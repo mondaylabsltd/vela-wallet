@@ -188,6 +188,9 @@ class WalletController(
         store = store,
         ownAccounts = ownAccounts,
         haptic = haptic,
+        // PR 3: a stored receipt's block time is read through the same pool
+        // the trust machine's reads go through.
+        pool = pool,
     )
 
     /**

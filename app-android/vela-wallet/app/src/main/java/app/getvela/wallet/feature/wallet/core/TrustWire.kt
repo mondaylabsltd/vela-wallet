@@ -15,9 +15,9 @@ import kotlinx.serialization.Serializable
  * is a place a scam token gets in if a shell starts deciding.
  *
  * Numeric types from the Rust: `chain_id`, `log_index`, `decimals`, `cap` are
- * `u32` → `Int`; `block_number`, `timestamp_sec`, `now_ms` are `f64` → `Double`
- * (a block number crosses as a double because it can exceed 2^32, and the core
- * takes it as one).
+ * `u32` → `Int`; `block_number`, `timestamp_sec` are `f64` → `Double` (a block
+ * number crosses as a double because it can exceed 2^32, and the core takes it
+ * as one).
  */
 
 // -- value types -------------------------------------------------------------
@@ -198,15 +198,23 @@ sealed class TrustShellResult {
         val outcome: TrustLogsOutcome,
     ) : TrustShellResult()
 
+    /**
+     * A block's own time, or that it could not be read — and nothing else.
+     * No clock crosses here (PR 3; it carried `now_ms` until then, and the
+     * core stamped a transfer whose block it could not read with it: three
+     * receipts of 2026-09-29 stood under "Today" eleven days later).
+     */
     @Serializable
     @SerialName("block_timestamp")
     data class BlockTimestamp(
         val address: String,
         val chain_id: Int,
         val block_number: Double,
-        /** `null` = the header could not be read; the transfer falls back to now. */
+        /**
+         * `null` = the header could not be read: the core WITHHOLDS the
+         * block's transfers and asks for it again on a later poll.
+         */
         val timestamp_sec: Double? = null,
-        val now_ms: Double,
     ) : TrustShellResult()
 
     @Serializable
@@ -307,7 +315,11 @@ data class TrustIncomingView(
     val tx_hash: String,
     val block_number: Double,
     val log_index: Int,
-    /** Unix seconds: block time, falling back to when it was seen. */
+    /**
+     * Unix seconds: the time of the transfer's own block, always — a transfer
+     * whose block could not be read is not in the feed yet (`token_trust`
+     * invariant ⑨). Never when it was seen.
+     */
     val timestamp_sec: Double,
     val symbol: String? = null,
     val decimals: Int? = null,

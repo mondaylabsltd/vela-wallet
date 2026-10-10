@@ -119,6 +119,8 @@ class IncomingScanTest {
         logs: List<JSONObject>,
         symbol: String? = "USDC",
         decimals: Int? = 6,
+        /** What `eth_getBlockByNumber` answers: the block's header, or `JSONObject.NULL` when the endpoint has none to give. */
+        header: () -> Any = { JSONObject().put("timestamp", BLOCK_TIME_HEX) },
     ): Harness {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scopes += scope
@@ -143,8 +145,7 @@ class IncomingScanTest {
                     }
                     FakeRpcTransport.body(JSONArray().also { visible.forEach(it::put) })
                 }
-                "eth_getBlockByNumber" ->
-                    FakeRpcTransport.body(JSONObject().put("timestamp", "0x68bd0000"))
+                "eth_getBlockByNumber" -> FakeRpcTransport.body(header())
                 "eth_call" -> metadataAnswer(symbol, decimals)
                 else -> FakeRpcTransport.body("0x")
             }
@@ -353,6 +354,60 @@ class IncomingScanTest {
         assertEquals(1, refreshes.get())
     }
 
+    /**
+     * PR 3, fix A: a receipt's time is its block's time. A record written
+     * from the trust feed carries the block's own time — the feed holds no
+     * transfer whose block it has not read — and says so (`timeVerified`),
+     * which is what tells it from a record stored before, when a block that
+     * could not be read was stamped with the clock.
+     */
+    @Test
+    fun `a receipt is stored at its block's time and marked time-verified`() = runBlocking {
+        val harness = harness(listOf(transferLog(usdc)))
+
+        assertEquals(1, harness.scan.runOnce(wallet))
+
+        val row = JSONArray(harness.store.read(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0)
+        assertEquals("receive", row.getString("type"))
+        assertEquals(BLOCK_TIME, row.getLong("timestamp"))
+        assertEquals(true, row.getBoolean("timeVerified"))
+        // And as the feed's core is handed it back.
+        val record = storedRecords(harness).single()
+        assertEquals(BLOCK_TIME.toDouble(), record.timestamp, 0.0)
+        assertEquals(true, record.time_verified)
+    }
+
+    /**
+     * The owner's three receipts of 2026-09-29, filed under "Today" on
+     * 2026-10-10: their block's time could not be read, and the transfer was
+     * stored with the clock. Now nothing is stored while the block does not
+     * answer — not under "now", not at all — and the receipt lands, at the
+     * block's time, on the poll that reads it.
+     */
+    @Test
+    fun `a receipt whose block cannot be read is not stored under the clock, and lands once the block answers`() = runBlocking {
+        val readable = java.util.concurrent.atomic.AtomicBoolean(false)
+        val harness = harness(
+            listOf(transferLog(usdc)),
+            header = { if (readable.get()) JSONObject().put("timestamp", BLOCK_TIME_HEX) else JSONObject.NULL },
+        )
+
+        assertEquals(0, harness.scan.runOnce(wallet))
+        assertEquals("nothing is written for a block nobody read", null, harness.store.read(KeyValueStore.Keys.TRANSACTIONS))
+        assertEquals(0, harness.scan.runOnce(wallet))
+        assertEquals(null, harness.store.read(KeyValueStore.Keys.TRANSACTIONS))
+
+        readable.set(true)
+        assertEquals(1, harness.scan.runOnce(wallet))
+        val row = JSONArray(harness.store.read(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0)
+        assertEquals(BLOCK_TIME, row.getLong("timestamp"))
+        assertEquals(true, row.getBoolean("timeVerified"))
+        assertTrue("stored at the block's time, years from this test's clock", System.currentTimeMillis() / 1000 - row.getLong("timestamp") > 0)
+        // Seen again: still one record.
+        assertEquals(0, harness.scan.runOnce(wallet))
+        assertEquals(1, storedRecords(harness).size)
+    }
+
     // -- what should not ------------------------------------------------------
 
     @Test
@@ -424,5 +479,11 @@ class IncomingScanTest {
 
         assertEquals(0, harness.scan.runOnce(""))
         assertEquals(null, harness.store.read(KeyValueStore.Keys.TRANSACTIONS))
+    }
+
+    private companion object {
+        /** The scanned block's own time: 2025-09-07 05:58:24 UTC. */
+        const val BLOCK_TIME = 0x68bd0000L
+        const val BLOCK_TIME_HEX = "0x68bd0000"
     }
 }

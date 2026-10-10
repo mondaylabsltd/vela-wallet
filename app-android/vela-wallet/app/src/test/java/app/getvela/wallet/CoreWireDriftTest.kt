@@ -440,12 +440,35 @@ class CoreWireDriftTest {
 
     @Test
     fun feedOperationsAndResultsAreExhaustive() {
-        // Six operations. `read_tx_store` and `scan_incoming_transfers` are
+        // Eight operations. `read_tx_store` and `scan_incoming_transfers` are
         // issued together on a tick, which is why `read_id` exists — an
         // unanswered operation here does not hang one screen, it strands a
         // celebration.
         assertVariantsExhaustive<FeedOperation>("FeedOperation")
         assertVariantsExhaustive<FeedShellResult>("FeedShellResult")
+        // PR 3: a stored receipt's time is checked against its block. The two
+        // operations decode as the core writes them (one this build could not
+        // decode would be answered `haptic_played`, and the core's round
+        // would wait on it for ever), and the answers go out as it reads them.
+        assertEquals(
+            FeedOperation.ReadReceiveTime(id = "100-0xaa-0", chain_id = 100, tx_hash = "0xaa"),
+            roundTrip<FeedOperation>("""{"type":"read_receive_time","id":"100-0xaa-0","chain_id":100,"tx_hash":"0xaa"}"""),
+        )
+        assertEquals(
+            FeedOperation.WriteReceiveTime(id = "100-0xaa-0", timestamp_sec = 1790683200.0),
+            roundTrip<FeedOperation>("""{"type":"write_receive_time","id":"100-0xaa-0","timestamp_sec":1790683200.0}"""),
+        )
+        assertEquals(
+            """{"type":"receive_time_read","id":"100-0xaa-0","timestamp_sec":1.7906832E9}""",
+            Wire.json.encodeToString(FeedShellResult.serializer(), FeedShellResult.ReceiveTimeRead("100-0xaa-0", 1790683200.0)),
+        )
+        assertEquals(
+            """{"type":"receive_time_written","id":"100-0xaa-0","ok":false}""",
+            Wire.json.encodeToString(FeedShellResult.serializer(), FeedShellResult.ReceiveTimeWritten("100-0xaa-0", ok = false)),
+        )
+        // The mark a record carries, or does not: absent stays absent.
+        assertTrue(elementDescriptor<FeedTxRecord>("time_verified").isNullable)
+        assertEquals("boolean | null", tsFieldType("FeedTxRecord", "time_verified"))
     }
 
     @Test
@@ -561,6 +584,14 @@ class CoreWireDriftTest {
     fun trustOperationsAndResultsAreExhaustive() {
         assertVariantsExhaustive<TrustOperation>("TrustOperation")
         assertVariantsExhaustive<TrustShellResult>("TrustShellResult")
+        // PR 3: no clock crosses to the trust machine beside a block's time —
+        // it carried `now_ms` "for the fallback", and a receipt of eleven days
+        // before was filed under today with it.
+        assertEquals(
+            listOf("address", "chain_id", "block_number", "timestamp_sec"),
+            serializer<TrustShellResult.BlockTimestamp>().descriptor.elementNames.toList(),
+        )
+        assertTrue(elementDescriptor<TrustShellResult.BlockTimestamp>("timestamp_sec").isNullable)
     }
 
     @Test

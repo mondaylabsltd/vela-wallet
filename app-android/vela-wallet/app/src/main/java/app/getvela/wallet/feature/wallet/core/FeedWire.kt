@@ -120,6 +120,16 @@ data class FeedTxRecord(
     val summary: DappSummary? = null,
     /** Spec 097: how its operation ended, as the tracker's patch stored it (`settlement`). */
     val settlement: app.getvela.wallet.feature.send.core.TrackSettlement? = null,
+    /**
+     * PR 3, `receive` only: [timestamp] is the time of the transaction's own
+     * block — the stored `timeVerified` mark, as stored. `null` (no mark) is a
+     * record from before the mark existed, when a transfer whose block could
+     * not be read was stamped with the clock: the core re-reads its block's
+     * time in the background ([FeedOperation.ReadReceiveTime]) and rewrites
+     * it ([FeedOperation.WriteReceiveTime]). Never set here for a record
+     * that carries none: absent is what marks it for repair.
+     */
+    val time_verified: Boolean? = null,
 )
 
 /** What a dApp request did (spec 093) — `dapp_activity::DappAction`. */
@@ -558,6 +568,28 @@ sealed class FeedOperation {
     @Serializable
     @SerialName("haptic")
     data object Haptic : FeedOperation()
+
+    /**
+     * PR 3: the time of the block that holds transaction [tx_hash] on
+     * [chain_id], through the app's RPC pool — `eth_getTransactionReceipt`
+     * for its `blockNumber`, then `eth_getBlockByNumber(that, false)` for its
+     * `timestamp`. Answered [FeedShellResult.ReceiveTimeRead], `null`
+     * whenever either read gave no usable answer; never a clock's time.
+     * Which records are asked about, and when again, is the core's.
+     */
+    @Serializable
+    @SerialName("read_receive_time")
+    data class ReadReceiveTime(val id: String, val chain_id: Int, val tx_hash: String) : FeedOperation()
+
+    /**
+     * PR 3: rewrite ONE stored record — its `timestamp` becomes
+     * [timestamp_sec] (whole Unix seconds, a block's time) and it is marked
+     * `timeVerified: true`; nothing else of it changes, and nothing of any
+     * other record. Answered [FeedShellResult.ReceiveTimeWritten].
+     */
+    @Serializable
+    @SerialName("write_receive_time")
+    data class WriteReceiveTime(val id: String, val timestamp_sec: Double) : FeedOperation()
 }
 
 // -- what the shell observed -------------------------------------------------
@@ -596,6 +628,16 @@ sealed class FeedShellResult {
     @Serializable
     @SerialName("haptic_played")
     data object HapticPlayed : FeedShellResult()
+
+    /** The block's time in Unix seconds, or `null`: not read — the record keeps its time and is asked about again later. */
+    @Serializable
+    @SerialName("receive_time_read")
+    data class ReceiveTimeRead(val id: String, val timestamp_sec: Double? = null) : FeedShellResult()
+
+    /** `ok = false`: no record has that id, or the store did not take the write. */
+    @Serializable
+    @SerialName("receive_time_written")
+    data class ReceiveTimeWritten(val id: String, val ok: Boolean) : FeedShellResult()
 }
 
 // -- what the screen sends ---------------------------------------------------
