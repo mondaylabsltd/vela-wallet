@@ -1119,8 +1119,11 @@ private fun SettingsPageBody(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (add.secondary != null) {
-                    VelaSecondaryButton(add.secondary, onClick = {}, modifier = Modifier.fillMaxWidth())
+                // The button was drawn with an empty handler. It opens the
+                // core's link — Chain Setup on this very chain — and is not
+                // drawn where there is none (a network with no P-256 verifier).
+                if (add.secondary != null && add.secondaryUrl != null) {
+                    VelaSecondaryButton(add.secondary, onClick = { onOpenLink(add.secondaryUrl) }, modifier = Modifier.fillMaxWidth())
                 }
                 if (add.recheck != null) {
                     Text(

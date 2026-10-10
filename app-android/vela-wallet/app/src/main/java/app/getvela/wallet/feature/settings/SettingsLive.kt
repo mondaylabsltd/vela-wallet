@@ -396,6 +396,11 @@ object SettingsLive {
         val inconclusive = wizard.error is NetWizardErrorKind.CheckFailed
         val unverified = checked && (compat == null || compat.rpc_failure != null)
         val compatible = checked && compat != null && compat.compatible && compat.rpc_failure == null
+        // The check answered and the chain is refused: the core's reason and
+        // — for missing contracts only — its link.
+        val refused = (stopped && !inconclusive) || (checked && !compatible && !unverified)
+        val refusal = compat?.hint_key?.takeIf { refused }
+        val setupUrl = compat?.setup_url?.takeIf { refused }
         return model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
@@ -492,12 +497,18 @@ object SettingsLive {
                 // sentence. Without it the pill says Compatible while two rows
                 // carry a red cross. It cannot collide with the arm above it:
                 // that one needs `!compatible`, this one needs `compatible`.
+                //
+                // A refusal says WHY, in the core's words (`compat.hint_key`):
+                // no P-256 verifier — Vela wallets cannot work here and money
+                // sent here would be stuck — or contracts that are missing and
+                // can be deployed. The two used to share one sentence about
+                // contracts, which is false of the first.
                 callout = when {
-                    stopped -> CalloutModel(
-                        CalloutTone.Warning,
-                        strings.t(if (inconclusive) "settingsModals.addNetwork.unableToVerify" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
-                    )
-                    checked && !compatible && !unverified -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
+                    stopped && inconclusive -> CalloutModel(CalloutTone.Warning, strings.t("settingsModals.addNetwork.unableToVerify"))
+                    refusal != null -> CalloutModel(CalloutTone.Warning, strings.t(refusal))
+                    // A stop with no check to read (the scan path keeps none):
+                    // the general line, and no button — there is no link to give.
+                    stopped -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
                     compat?.let { it.compatible && !it.multi_key_ready } == true -> CalloutModel(
                         tone = CalloutTone.Warning,
                         text = strings.t(I18nKeys.SettingsUi.ADD_SINGLE_KEY_ONLY),
@@ -514,12 +525,12 @@ object SettingsLive {
                     else -> null
                 },
                 // The chain setup tool is for a chain that is really missing
-                // Vela's contracts — never for one that could not be reached.
-                secondary = if ((stopped && !inconclusive) || (checked && !compatible && !unverified)) {
-                    strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL)
-                } else {
-                    null
-                },
+                // Vela's contracts — never for one that could not be reached,
+                // and never for one with no P-256 verifier (nothing can be
+                // deployed to add it). The core says which by sending the
+                // link, opened on this chain (`setup_url`), or not.
+                secondary = setupUrl?.let { strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL) },
+                secondaryUrl = setupUrl,
                 recheck = if (stopped || unverified || (checked && !compatible)) {
                     strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC)
                 } else {

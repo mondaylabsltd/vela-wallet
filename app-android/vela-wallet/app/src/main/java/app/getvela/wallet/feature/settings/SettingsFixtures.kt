@@ -384,13 +384,18 @@ object SettingsFixtures {
         }
 
         val ok = mode == "compatible"
-        // Four rows in both verdicts: "incompatible" is only legible as an
-        // answer if it shows WHICH requirement failed, so the list never
-        // shortens. EntryPoint is deployed everywhere and passes in both.
+        // The two refusals are told apart by the signer row (the core's
+        // `NetBlocker`): a chain with no P-256 verifier is refused for that
+        // and nothing else matters; a chain that has it and lacks contracts
+        // can be made ready.
+        val noP256 = mode == "no-p256"
+        // Four rows in every verdict: a refusal is only legible as an answer
+        // if it shows WHICH requirement failed, so the list never shortens.
+        // EntryPoint is deployed everywhere and passes in all three.
         val checks = listOf(
             CheckItemModel("EntryPoint v0.7", true),
             CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SAFE), ok),
-            CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SIGNER), ok),
+            CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SIGNER), !noP256),
             CheckItemModel(
                 s.t(I18nKeys.SettingsUi.ADD_CHECK_REMAINING, mapOf("count" to "8")),
                 ok,
@@ -441,14 +446,17 @@ object SettingsFixtures {
                 ),
                 checksTitle = checksTitle,
                 checks = checks,
+                // The core's line for the reason (`NetCompatibility.hint_key`).
                 callout = CalloutModel(
                     CalloutTone.Warning,
-                    s.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
+                    s.t(if (noP256) "settingsModals.addNetwork.noP256Hint" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
                 ),
                 // An outline CTA plus a re-check link, not a greyed-out accent
                 // one: an action you cannot take should not be dressed as the
-                // action you came for.
-                secondary = s.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL),
+                // action you came for. Chain Setup only where contracts can be
+                // deployed — with the core's link, opened on this chain.
+                secondary = if (noP256) null else s.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL),
+                secondaryUrl = if (noP256) null else "https://getvela.app/chain-setup?chain=48900",
                 recheck = s.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC),
             )
         }
@@ -1002,7 +1010,7 @@ object SettingsFixtures {
         SettingsScreenState.ST8 -> Shape(SettingsPage.Home, SettingsOverlay.TimeFormat)
         SettingsScreenState.ST9 -> Shape(SettingsPage.Networks, SettingsOverlay.None)
         SettingsScreenState.ST9B -> Shape(SettingsPage.NetworkDetail, SettingsOverlay.None)
-        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C ->
+        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C, SettingsScreenState.ST10D ->
             Shape(SettingsPage.AddNetwork, SettingsOverlay.None)
         SettingsScreenState.ST11 -> Shape(SettingsPage.RpcProviders, SettingsOverlay.None)
         SettingsScreenState.ST12 -> Shape(SettingsPage.Endpoints, SettingsOverlay.None)
@@ -1186,6 +1194,7 @@ object SettingsFixtures {
         val addMode = when (state) {
             SettingsScreenState.ST10B -> "compatible"
             SettingsScreenState.ST10C -> "incompatible"
+            SettingsScreenState.ST10D -> "no-p256"
             else -> "search"
         }
         val backdropTitle = when (shape.backdrop) {

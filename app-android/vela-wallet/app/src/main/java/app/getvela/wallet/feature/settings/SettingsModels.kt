@@ -24,7 +24,15 @@ import app.getvela.wallet.feature.wallet.TabsModel
  */
 enum class SettingsScreenState {
     ST1, ST1B, ST2, ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
-    ST9, ST9B, ST10, ST10B, ST10C, ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
+    ST9, ST9B, ST10, ST10B, ST10C,
+    /**
+     * Add network, refused for the OTHER reason: no P-256 verifier. ST10C is
+     * the chain whose contracts are missing (Chain Setup, opened on it); here
+     * nothing can be deployed, so the line says Vela wallets cannot work on
+     * this network — and there is no button.
+     */
+    ST10D,
+    ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
     /**
      * Spec 102, the web's boards: "Where you review and sign" for an account
      * on `getvela.app` reviewing on the official page (ST17) and for one on
@@ -411,7 +419,10 @@ data class AddNetworkModel(
     val customRpc: UrlFieldModel? = null,
     val callout: CalloutModel? = null,
     val primary: String? = null,
+    /** "Open Chain Setup Tool" — drawn only with [secondaryUrl]. */
     val secondary: String? = null,
+    /** Where [secondary] goes: the core's `setup_url`, Chain Setup opened on this chain. */
+    val secondaryUrl: String? = null,
     val recheck: String? = null,
 )
 

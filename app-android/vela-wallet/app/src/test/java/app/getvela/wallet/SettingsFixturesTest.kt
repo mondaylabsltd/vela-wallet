@@ -71,8 +71,9 @@ class SettingsFixturesTest {
         // ST14B (spec 091) has no mock: About with the debug-mode switch revealed.
         // ST17–ST18B are spec 102's: where you review and sign, and the signing pages.
         // SK1–SK4: the Keys block with its copy-to-Ethereum row in each state.
-        assertEquals(39, states.size)
-        assertEquals(28, states.count { it.name.startsWith("ST") })
+        // ST10D: Add network refused for no P-256 verifier (ST10C is missing contracts).
+        assertEquals(40, states.size)
+        assertEquals(29, states.count { it.name.startsWith("ST") })
         assertEquals(7, states.count { it.name.startsWith("SR") })
         assertEquals(4, states.count { it.name.startsWith("SK") })
     }
@@ -170,18 +171,34 @@ class SettingsFixturesTest {
         assertNull("a custom network has no latency to show", last.badge)
     }
 
+    /**
+     * Two refusals, told apart by the signer row: ST10C has the P-256
+     * verifier and lacks contracts — Chain Setup, opened on that chain;
+     * ST10D has no verifier — nothing can be deployed, so no button, and the
+     * line says Vela wallets cannot work there.
+     */
     @Test
-    fun `ST10b passes every check and ST10c fails all but EntryPoint`() {
-        val s = strings("zh")
+    fun `ST10b passes every check, ST10c lacks contracts and ST10d has no P-256 verifier`() {
+        val s = strings("en")
         val ok = SettingsFixtures.buildState(SettingsScreenState.ST10B, s).addNetwork
         val bad = SettingsFixtures.buildState(SettingsScreenState.ST10C, s).addNetwork
+        val never = SettingsFixtures.buildState(SettingsScreenState.ST10D, s).addNetwork
         assertEquals(listOf(true, true, true, true), ok.checks.map { it.ok })
-        assertEquals(listOf(true, false, false, false), bad.checks.map { it.ok })
+        assertEquals(listOf(true, false, true, false), bad.checks.map { it.ok })
+        assertEquals(listOf(true, false, false, false), never.checks.map { it.ok })
         // The failing state offers a way forward, not a greyed-out CTA.
         assertNotNull(ok.primary)
         assertNull(bad.primary)
-        assertNotNull(bad.secondary)
+        assertEquals("Open Chain Setup Tool", bad.secondary)
+        assertEquals("https://getvela.app/chain-setup?chain=48900", bad.secondaryUrl)
+        assertTrue(bad.callout!!.text, bad.callout!!.text.startsWith("Some contracts Vela needs aren't on this network yet."))
         assertNotNull(bad.recheck)
+        // No verifier: said plainly, and nothing to open.
+        assertNull(never.primary)
+        assertNull(never.secondary)
+        assertNull(never.secondaryUrl)
+        assertTrue(never.callout!!.text, never.callout!!.text.contains("Vela wallets can't work here"))
+        assertTrue(never.callout!!.text, never.callout!!.text.contains("It would be stuck."))
     }
 
     @Test

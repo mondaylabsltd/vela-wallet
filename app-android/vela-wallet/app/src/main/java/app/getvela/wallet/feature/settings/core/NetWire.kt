@@ -326,6 +326,21 @@ data class NetCompatibility(
     val best_rpc_url: String? = null,
     val best_rpc_latency_ms: Long? = null,
     val rpc_failure: NetRpcFailureKind? = null,
+    /**
+     * WHY a network that answered the check is refused: `no_p256` (no
+     * verifier at 0x100 — nothing can be deployed to add one, and it wins)
+     * or `missing_contracts`. A string on purpose: a reason this build does
+     * not know still has the core's [hint_key] to say.
+     */
+    val blocker: String? = null,
+    /** The corpus key of the line under the refusal — the core picks it by [blocker]. */
+    val hint_key: String? = null,
+    /**
+     * Where "Open Chain Setup Tool" goes — Chain Setup opened on THIS chain
+     * (`?chain=<id>`) — and only for missing contracts. `null`: no such
+     * button. A network with no P-256 verifier has nothing to deploy.
+     */
+    val setup_url: String? = null,
 )
 
 @Serializable

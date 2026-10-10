@@ -1713,14 +1713,10 @@ fun VelaNavHost(
                                     }
                                 },
                                 litTab = { onPage -> app.getvela.wallet.feature.browser.core.BrowserTabs.litTab(exploreView, exploreView.selected_tab, onPage) },
-                                onChainSetupTool = {
+                                // The core's link: Chain Setup opened on the refused chain.
+                                onChainSetupTool = { url ->
                                     runCatching {
-                                        context.startActivity(
-                                            android.content.Intent(
-                                                android.content.Intent.ACTION_VIEW,
-                                                android.net.Uri.parse(app.getvela.wallet.feature.explore.AddNetworkModel.CHAIN_SETUP_URL),
-                                            ),
-                                        )
+                                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
                                     }
                                 },
                             ),
@@ -1828,14 +1824,14 @@ fun VelaNavHost(
             // route guard.
             composable(VelaDestinations.EXPLORE) {
                 val strings = LocalVelaStrings.current
-                val model = remember(strings) {
-                    val state = ExploreScreenState.entries.firstOrNull { it.name.equals(exploreState, ignoreCase = true) } ?: ExploreScreenState.E2
-                    ExploreFixtures.buildState(state, strings)
-                }
+                val state = remember { ExploreScreenState.entries.firstOrNull { it.name.equals(exploreState, ignoreCase = true) } ?: ExploreScreenState.E2 }
+                val model = remember(strings) { ExploreFixtures.buildState(state, strings) }
                 val signing = remember(strings) {
                     SigningFixtures.build(SigningScreenState.CS12, strings)
                 }
-                ExploreScreen(model = model, signing = signing)
+                // E8 / E9: the add-network sheet over the page, for a refused chain.
+                val addNetwork = remember(strings) { ExploreFixtures.addNetwork(state, strings) }
+                ExploreScreen(model = model, signing = signing, addNetwork = addNetwork)
             }
 
             composable(VelaDestinations.GALLERY) {
