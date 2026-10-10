@@ -465,9 +465,12 @@ enum SettingsLive {
     /// The row id the screen routes to the host (spec 062).
     static let ethereumBackupRow = "ethereum-backup"
 
-    /// The keys that control this wallet, with their Ethereum backup beneath
-    /// them (spec 062) — ONE block, under the account it belongs to. A person
-    /// offered "back up your keys" is owed the sight of them first.
+    /// The keys that control this wallet, with the copy of its record to
+    /// Ethereum beneath them (spec 062) — ONE block, under the account it
+    /// belongs to. A person offered a copy of the record is owed the sight of
+    /// the keys in it first.
+    ///
+    /// `backup == nil` is "still asking" too: the row reads "Checking…".
     ///
     /// `keys == nil` is "still asking": a title and no guessed count. A registry
     /// that did not answer leaves the device's own memory on screen, labelled,
@@ -475,7 +478,7 @@ enum SettingsLive {
     /// unreachable.
     static func withWalletKeys(
         _ keys: WalletKeys.Result?,
-        backup: RegistryBackup.State?,
+        backup: RegistryBackup.Check?,
         on model: SettingsScreenModel,
         loc: Loc
     ) -> SettingsScreenModel {
@@ -546,25 +549,40 @@ enum SettingsLive {
         hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
     }
 
-    /// The backup as a row: one line, three states, a chevron only when there
-    /// is something to do; `nil` where there is no registry on Ethereum or the
-    /// wallet was never registered at home.
-    static func ethereumBackupRow(_ state: RegistryBackup.State?, loc: Loc) -> SettingsRowModel? {
+    /// "Copy this wallet's record to Ethereum" as a row — the CORE's row
+    /// (`BackupState::row`, PR 3): its words, its tone and what a tap does.
+    ///
+    /// - still asking (`nil`): the title over "Checking…", nothing to tap;
+    /// - copied: said in the positive tone, nothing to tap;
+    /// - not copied yet (optional): neutral — a copy costs a fee and nobody
+    ///   owes one — with a chevron, and a tap opens the sheet;
+    /// - couldn't check: neutral, and a tap asks again (it had none here);
+    /// - can never be copied (a wallet from before registry V13): a calm
+    ///   end, nothing to tap;
+    /// - no row at all where there is no registry on Ethereum, or the wallet
+    ///   was never registered at home.
+    static func ethereumBackupRow(_ check: RegistryBackup.Check?, loc: Loc) -> SettingsRowModel? {
         let k = I18nKeys.SettingsUi.self
-        let subtitle: String
-        switch state {
-        case .unavailable, .notRegistered: return nil
-        case nil: subtitle = loc.t(k.backupChecking)
-        case .backedUp: subtitle = loc.t(k.backupBackedUp)
-        case .notBackedUp: subtitle = loc.t(k.backupNotBackedUp)
-        case .couldNotCheck: subtitle = loc.t(k.backupCouldNotCheck)
+        guard let check else {
+            return SettingsRowModel(
+                id: ethereumBackupRow, title: loc.t(k.backupTitle), icon: .upload,
+                subtitle: loc.t(k.backupChecking), trailing: RowTrailing.none
+            )
+        }
+        guard let row = check.row else { return nil }
+        let trailing: RowTrailing
+        switch row.action {
+        case .copy: trailing = .chevron
+        case .retry: trailing = .retry
+        case .none: trailing = RowTrailing.none
         }
         return SettingsRowModel(
             id: ethereumBackupRow,
-            title: loc.t(k.backupTitle),
+            title: loc.t(row.titleKey),
             icon: .upload,
-            subtitle: subtitle,
-            trailing: state == .notBackedUp ? .chevron : RowTrailing.none
+            subtitle: loc.t(row.subtitleKey),
+            trailing: trailing,
+            subtitleTone: row.tone == .positive ? .positive : .standard
         )
     }
 

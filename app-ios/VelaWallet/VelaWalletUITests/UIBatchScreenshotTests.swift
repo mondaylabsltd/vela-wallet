@@ -16,6 +16,9 @@
 //  - `testInsertYourSecurityKey`: "Insert your security key" with "Use
 //    Apple's security-key sheet" and its hint.
 //
+//  - `testCopyTheRecordToEthereum`: the Keys block's row in each state the
+//    core words, and the sheet it opens.
+//
 //  Simulator only; skipped in the scheme (a copy of the .xctestrun with the
 //  skip removed runs it).
 //
@@ -203,6 +206,48 @@ final class UIBatchScreenshotTests: XCTestCase {
             XCTAssertFalse(insert.exists, "the option left the insert sheet waiting")
         }
         app.terminate()
+    }
+
+    // MARK: - "Copy this wallet's record to Ethereum"
+
+    /// The Keys block's row in every state the core words, and the sheet a
+    /// tap on "not copied yet" opens.
+    func testCopyTheRecordToEthereum() {
+        let states: [(board: String, zh: String, en: String)] = [
+            ("checking", "正在检查…", "Checking…"),
+            ("not-copied", "尚未复制（可选）", "Not copied yet (optional)"),
+            ("copied", "已复制到以太坊", "Copied to Ethereum"),
+            ("could-not-check", "无法检查，点按重试", "Couldn't check. Tap to try again."),
+            ("cannot-copy", "这个较早创建的钱包无法复制", "This older wallet can't be copied"),
+        ]
+        for look in Self.looks {
+            let zh = look.lang == "zh"
+            for state in states {
+                let tag = "\(state.board)-\(look.lang)-\(look.theme)"
+                let app = launch(env: ["VELA_PAGE": "pr3", "VELA_STATE": "backup-\(state.board)"],
+                                 lang: look.lang, theme: look.theme)
+                let title = app.staticTexts[zh ? "把钱包记录复制到以太坊" : "Copy this wallet's record to Ethereum"].firstMatch
+                var scrolls = 0
+                while !(title.exists && title.isHittable), scrolls < 6 {
+                    if !title.waitForExistence(timeout: scrolls == 0 ? 20 : 1) || !title.isHittable { app.swipeUp() }
+                    scrolls += 1
+                }
+                XCTAssertTrue(title.exists, "no record row (\(tag))")
+                XCTAssertTrue(app.staticTexts[zh ? state.zh : state.en].exists, "the row does not read its state (\(tag))")
+                settle(0.8)
+                attach(app, "backup-row-\(tag)")
+                app.terminate()
+            }
+            // The sheet: the wallet's own request, with its name as a row.
+            let app = launch(env: ["VELA_PAGE": "signing", "VELA_STATE": "cs36"], lang: look.lang, theme: look.theme)
+            XCTAssertTrue(app.staticTexts[zh ? "复制钱包记录" : "Copy this wallet's record"].firstMatch
+                .waitForExistence(timeout: 20), "the sheet is not headed by its intent")
+            XCTAssertTrue(app.staticTexts[zh ? "钱包名称" : "Wallet name"].exists, "the wallet's name is not a row")
+            XCTAssertTrue(app.staticTexts[zh ? "包含的钥匙" : "Keys included"].exists)
+            settle(0.8)
+            attach(app, "backup-sheet-\(look.lang)-\(look.theme)")
+            app.terminate()
+        }
     }
 
     // MARK: - Helpers

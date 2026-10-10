@@ -14,6 +14,10 @@
 //  - `insert-key` — "Insert your security key" with its way out for a key
 //    the app's own USB route cannot reach: "Use Apple's security-key sheet"
 //    and which keys that is for.
+//  - `backup-checking` / `backup-not-copied` / `backup-copied` /
+//    `backup-could-not-check` / `backup-cannot-copy` — Settings' Keys block
+//    with the "Copy this wallet's record to Ethereum" row in each state the
+//    core words (`BackupState::row`): its line, its tone and what a tap does.
 //
 //  Fixture data only: nothing here is scanned, signed or sent.
 //
@@ -31,6 +35,8 @@ struct UIBatchGalleryScreen: View {
 
     var body: some View {
         switch state {
+        case let board where board.hasPrefix("backup-"):
+            backupBoard(String(board.dropFirst("backup-".count)))
         case "insert-key":
             sheetBoard(title: loc.t(I18nKeys.Create.keysTitle)) {
                 UsbInsertKeySheet(loc: loc, onUseSystemSheet: {}, onCancel: {})
@@ -40,6 +46,59 @@ struct UIBatchGalleryScreen: View {
         default:
             cableBoard(chooser: .create)
         }
+    }
+
+    // MARK: - "Copy this wallet's record to Ethereum"
+
+    /// The row the core attaches to each finished check (`BackupState::row`),
+    /// written out: a drawing has no chain behind it.
+    private static func backupCheck(_ state: String) -> RegistryBackup.Check? {
+        func row(_ subtitle: String, _ tone: RegistryBackup.Row.Tone, _ action: RegistryBackup.Row.Action) -> RegistryBackup.Row {
+            RegistryBackup.Row(
+                titleKey: "settingsModals.backup.title",
+                subtitleKey: "settingsModals.backup.\(subtitle)", tone: tone, action: action
+            )
+        }
+        switch state {
+        case "not-copied":
+            return RegistryBackup.Check(
+                state: .notBackedUp,
+                call: RegistryBackup.Call(chainId: 1, to: "0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9", data: "0xcd438f9b"),
+                row: row("notBackedUp", .neutral, .copy)
+            )
+        case "copied":
+            return RegistryBackup.Check(state: .backedUp, call: nil, row: row("backedUp", .positive, .none))
+        case "could-not-check":
+            return RegistryBackup.Check(state: .couldNotCheck, call: nil, row: .couldNotCheck)
+        case "cannot-copy":
+            return RegistryBackup.Check(state: .notCopyable, call: nil, row: row("cannotCopy", .neutral, .none))
+        default:
+            // Still asking.
+            return nil
+        }
+    }
+
+    private func backupBoard(_ state: String) -> some View {
+        func key(_ name: String, provider: String, method: KeyMethod, synced: Bool) -> WalletKeys.Row {
+            WalletKeys.Row(
+                key: CreateKeyRow(
+                    name: name, authenticatorAttachment: method == .securityKey ? "cross-platform" : "platform",
+                    transports: method == .securityKey ? "usb" : "internal", confirmed: true,
+                    synced: synced, syncedKnown: true, aaguid: "", providerName: provider,
+                    method: method, kind: method
+                ),
+                synced: synced,
+                publicKeyHex: "04" + String(repeating: "ab", count: 64)
+            )
+        }
+        let keys = WalletKeys.Result(source: .registry, rows: [
+            key("Everyday wallet", provider: "Apple Passwords", method: .platform, synced: true),
+            key("", provider: "", method: .securityKey, synced: false),
+        ])
+        let model = SettingsLive.withWalletKeys(
+            keys, backup: Self.backupCheck(state), on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        )
+        return SettingsScreen(model: model, loc: loc)
     }
 
     // MARK: - Issue #480: the scan-a-code sheet

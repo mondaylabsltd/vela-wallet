@@ -3355,14 +3355,23 @@ struct RootView: View {
                 onOpenProviders: { settings.openProviders() }
             ),
             onOpenAccounts: { openAccountSwitcher() },
-            // Only "not backed up" carries a call; every other state's row is
-            // not a button, and a tap on it sends nothing.
+            // What a tap on the row does is the core's (`BackupRow.action`):
+            // "not copied yet" opens the sheet with its call, "couldn't
+            // check" asks again — the row reads "Checking…" while it does —
+            // and every other state's row is a statement that sends nothing.
             onEthereumBackup: {
                 guard let asked = backupCheck,
-                      asked.address.caseInsensitiveCompare(session.view.address) == .orderedSame,
-                      let call = asked.check.call
+                      asked.address.caseInsensitiveCompare(session.view.address) == .orderedSame
                 else { return }
-                openEthereumBackup(call)
+                switch asked.check.row?.action {
+                case .copy:
+                    if let call = asked.check.call { openEthereumBackup(call) }
+                case .retry:
+                    backupCheck = nil
+                    Task { await checkEthereumBackup() }
+                case .none?, nil:
+                    break
+                }
             },
             signingActions: SigningSettingsActions(
                 onChooseVenue: { chooseSigningVenue($0) },
@@ -3509,7 +3518,7 @@ struct RootView: View {
         )
         // Asked of the chain for THIS wallet, or still being asked (spec 062).
         let backedUp = backupCheck.flatMap {
-            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.check.state : nil
+            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.check : nil
         }
         let keys = walletKeys.flatMap {
             $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.result : nil
@@ -3683,7 +3692,7 @@ struct RootView: View {
         guard !address.isEmpty else { return }
         let key = await RegistryBackup.foundingKeyHex(of: address, in: sendAccountPort)
         guard !key.isEmpty else {
-            backupCheck = (address, RegistryBackup.Check(state: .unavailable, call: nil))
+            backupCheck = (address, RegistryBackup.Check(state: .unavailable, call: nil, row: nil))
             return
         }
         let backup = RegistryBackup(ethCall: { [pool] chainId, to, data in

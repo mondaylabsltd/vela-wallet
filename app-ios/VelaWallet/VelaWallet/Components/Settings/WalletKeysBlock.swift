@@ -94,7 +94,12 @@ struct WalletKeysBlock: View {
 
             if let backup = model.backup {
                 SettingsRow(row: backup, divider: false, onTap: onTap)
-                // PUBLIC keys: "back up keys" read as handing over the keys themselves.
+                // What a copy IS, in the core's words: the record is already
+                // public on Gnosis — the wallet's name, each key's name, its
+                // public key, credential ID and authenticator model — and
+                // this is one Ethereum transaction the person confirms and
+                // pays for. It moves no money and brings no passkey back.
+                // ("Only public keys are published" said less than is true.)
                 Text(model.backupExplain)
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.fgSubtle)

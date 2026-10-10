@@ -94,8 +94,14 @@ struct CalloutModel {
 /// Row emphasis. `danger` is the red 退出登录 / 清理数据 family.
 enum RowTone { case standard, accent, danger }
 
-/// What sits at the end of a settings row.
-enum RowTrailing { case chevron, external, none }
+/// What sits at the end of a settings row. `retry` is a row whose tap asks
+/// again (the Ethereum record's "Couldn't check").
+enum RowTrailing { case chevron, external, retry, none }
+
+/// The tone of a row's second line: `positive` is a state that is done and
+/// good ("Copied to Ethereum"). Never a caution — a row that needs one is a
+/// callout.
+enum RowSubtitleTone { case standard, positive }
 
 struct SettingsRowModel: Identifiable {
     /// Action-sink id — routed by the screen, never by the component.
@@ -107,6 +113,7 @@ struct SettingsRowModel: Identifiable {
     var value: String?
     var trailing: RowTrailing = .chevron
     var tone: RowTone = .standard
+    var subtitleTone: RowSubtitleTone = .standard
 }
 
 struct SettingsSectionModel: Identifiable {
@@ -548,7 +555,9 @@ struct WalletKeysModel {
     let note: String?
     let rows: [WalletKeyRowModel]
     let backup: SettingsRowModel?
-    /// Under the backup: PUBLIC keys only; private keys never leave the device.
+    /// Under the row: what a copy of the record is (`settingsModals.backup
+    /// .explain`) — what is already public, that it is a transaction the
+    /// person pays for, and that it moves no money and recovers no passkey.
     let backupExplain: String
     let copyLabel: String
     let copiedLabel: String
