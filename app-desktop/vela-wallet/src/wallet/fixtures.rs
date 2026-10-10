@@ -136,7 +136,14 @@ pub struct BalanceModel {
     pub state: BalanceState,
     pub integer: SharedString,
     pub decimals: Option<SharedString>,
+    /// "Live · listening for payments" — the core's `BalanceView::live_key`,
+    /// and nothing the shell works out: `Some` only under a zero a settled
+    /// round found with every chain answering (PR 3 final note F19).
     pub live: Option<SharedString>,
+    /// "Checking…" — the core's `BalanceView::checking_key`: the first read
+    /// of this account is still out, so nothing under the figure has been
+    /// said by a chain yet (F19).
+    pub checking: Option<SharedString>,
     pub status: Option<(StatusKind, SharedString)>,
     /// Issue #443: when the figure was last read — "Updated 2m" — drawn
     /// beside the control that reads it again. `None`: never read yet.
@@ -166,6 +173,7 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
         integer: "$1,383".into(),
         decimals: Some("28".into()),
         live: None,
+        checking: None,
         status: None,
         updated: None,
         refreshing: false,
@@ -379,6 +387,82 @@ pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
     host.view()
 }
 
+/// Where the first read of a wallet that held nothing last session stands —
+/// the three things the hero's one line says about a zero (PR 3 final note
+/// F19), each a view the real balance core produced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FirstRead {
+    /// The cached zero is on screen and the first round is still out:
+    /// "Checking…".
+    Checking,
+    /// The round settled and every chain answered, holding nothing: "Live ·
+    /// listening for payments".
+    Live,
+    /// The round settled with two chains missing: "Can't reach 2 networks".
+    CantReach,
+}
+
+impl FirstRead {
+    pub const ALL: [(Self, &'static str); 3] = [
+        (Self::Checking, "checking"),
+        (Self::Live, "live"),
+        (Self::CantReach, "cant_reach"),
+    ];
+
+    /// The stage a pin's value names (`VELA_FIRST_READ`).
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(stage, name)| (name == want.trim()).then_some(stage))
+    }
+}
+
+/// A wallet that held nothing last session, at `stage` of its first read,
+/// through the real balance core: the cache answers 0, and the round is
+/// either still out, back with every chain answering, or back with Ethereum
+/// and BNB Chain missing. The figure is the same "$0.00" in all three — what
+/// changes is the one line under it, and only the core says which.
+#[must_use]
+pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, Event,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: Some(0.0),
+            },
+            // The first round, still out: nothing has read this wallet.
+            BalanceOperation::FetchTokens { .. } if stage == FirstRead::Checking => continue,
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: Vec::new(),
+                failed_chain_ids: if stage == FirstRead::CantReach {
+                    vec![1, 56]
+                } else {
+                    Vec::new()
+                },
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 56, 100],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
 /// Component-board balance variants (gallery Components tab).
 pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
     vec![
@@ -390,6 +474,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: "$0".into(),
             decimals: Some("00".into()),
             live: Some(s.live_indicator.clone()),
+            checking: None,
             status: None,
             updated: None,
             refreshing: false,
@@ -402,6 +487,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: "".into(),
             decimals: None,
             live: None,
+            checking: None,
             status: None,
             updated: None,
             refreshing: false,
@@ -414,6 +500,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: BALANCE_MASK.into(),
             decimals: None,
             live: None,
+            checking: None,
             status: None,
             updated: None,
             refreshing: false,
@@ -426,6 +513,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: "$1,383".into(),
             decimals: Some("46".into()),
             live: None,
+            checking: None,
             status: Some((StatusKind::Warning, s.balance_unpriced.clone())),
             updated: None,
             refreshing: false,
@@ -438,6 +526,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: "$1,383".into(),
             decimals: Some("28".into()),
             live: None,
+            checking: None,
             status: Some((StatusKind::Refreshing, s.balance_stale.clone())),
             updated: None,
             refreshing: false,

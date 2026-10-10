@@ -44,6 +44,9 @@ pub struct WalletStrings {
     pub nav_settings: SharedString,
     pub total_balance: SharedString,
     pub live_indicator: SharedString,
+    /// "Checking…" — the hero's line while the first read of the account is
+    /// out (the core's `BalanceView::checking_key`).
+    pub balance_checking: SharedString,
     pub balance_stale: SharedString,
     /// Issue #443: "Updated {{ago}}" beside the hero's refresh control.
     pub last_updated: SharedString,
@@ -189,7 +192,8 @@ impl WalletStrings {
             nav_explore: s("componentsUi.mainNav.explore"),
             nav_settings: s("componentsUi.mainNav.settings"),
             total_balance: s("home.totalBalance"),
-            live_indicator: s("home.liveIndicator"),
+            live_indicator: s(vela_core::app::balance_dashboard::LIVE_ZERO),
+            balance_checking: s(vela_core::app::balance_dashboard::CHECKING),
             balance_stale: s("home.balanceStale"),
             last_updated: s("home.lastUpdated"),
             updating: s("home.updating"),

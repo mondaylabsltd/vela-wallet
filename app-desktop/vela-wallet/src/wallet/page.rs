@@ -3866,12 +3866,15 @@ impl WalletPage {
         // holds nothing while others do. The empty state rather than a blank
         // strip, which reads as a list that failed to load (the web's
         // `assetsSection.mode === 'empty'`).
+        let strip_view = if self.identity.is_some() {
+            Some(resident::resident::<BalanceDashboard>(cx).read(cx).view())
+        } else {
+            // The first-read board draws the same rule over its own view.
+            Self::pinned_first_read().map(fixtures::first_read_view)
+        };
         if assets.is_empty()
-            && self.identity.is_some()
-            && wallet_live::assets_strip_empty(
-                &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
-                self.chain_filter,
-            )
+            && strip_view
+                .is_some_and(|view| wallet_live::assets_strip_empty(&view, self.chain_filter))
         {
             assets_col = assets_col.child(empty_state(
                 theme,
@@ -4633,6 +4636,18 @@ impl WalletPage {
     /// whole cut exists to fix.
     fn asset_models(&mut self, cx: &mut Context<Self>) -> Vec<fixtures::AssetRowModel> {
         if self.identity.is_none() {
+            // `VELA_FIRST_READ`: the wallet holds nothing — its list is the
+            // core's too (empty), not the board's stock holdings.
+            if let Some(stage) = Self::pinned_first_read() {
+                let money = self.money(cx);
+                return wallet_live::asset_rows(
+                    &fixtures::first_read_view(stage),
+                    &self.strings,
+                    &self.locale,
+                    None,
+                    &money,
+                );
+            }
             // `VELA_CURRENCY_PENDING`: a held wallet through the live
             // builder, its worth waiting on the currency.
             if let Some(money) = Self::pinned_currency() {
@@ -4788,6 +4803,18 @@ impl WalletPage {
                 let money = self.money(cx);
                 return wallet_live::balance(
                     &fixtures::breakdown_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
+            // `VELA_FIRST_READ`: a wallet that held nothing last session,
+            // at a stage of its first read — "Checking…", then "Live ·
+            // listening" or "Can't reach 2 networks" (PR 3 final note F19).
+            if let Some(stage) = Self::pinned_first_read() {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::first_read_view(stage),
                     &self.strings,
                     &self.locale,
                     &money,
@@ -10939,6 +10966,15 @@ impl WalletPage {
     /// committed, at a fixed rate — the frame to hold beside the waiting
     /// one, to see that nothing but the figures arrived.
     /// The same env-pin family as `VELA_SETTINGS_STATE`.
+    /// `VELA_FIRST_READ=checking|live|cant_reach` (developer builds): the
+    /// home of a wallet that held nothing last session, at that stage of its
+    /// first read (`fixtures::first_read_view`, through the real balance
+    /// core). A session cannot be held in the half second before its first
+    /// round ends, and the three lines have to be looked at side by side.
+    fn pinned_first_read() -> Option<fixtures::FirstRead> {
+        fixtures::FirstRead::named(&crate::dev_env::var!("VELA_FIRST_READ")?)
+    }
+
     fn pinned_currency() -> Option<wallet_live::Money> {
         let want = crate::dev_env::var!("VELA_CURRENCY_PENDING")?;
         let want = want.trim();

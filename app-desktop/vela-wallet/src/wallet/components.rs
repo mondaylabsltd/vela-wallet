@@ -561,15 +561,22 @@ pub fn status_slot_height() -> gpui::Pixels {
     theme::text_row_sub() * LINE_BODY + px(8.)
 }
 
-/// What stands in the hero's one slot under the figure: the status (a
-/// network out of reach, a total still being brought up to date, a holding
-/// nobody prices), else the "listening" line of a wallet every chain
-/// answered zero for, else nothing. Never two of them — a live zero is a
-/// round with nothing wrong in it, and if both were ever set the status is
-/// the one that matters.
+/// What stands in the hero's one slot under the figure. Never two of them,
+/// and in this order:
+///
+/// 1. a WARNING — a network out of reach, a read that failed inside Vela, a
+///    holding nobody prices: something is wrong and the line opens it;
+/// 2. "Checking…" — the first read of the account is still out (PR 3 final
+///    note F19): until a round has ended nothing here was said by a chain,
+///    so neither "still updating" nor "listening" is true yet;
+/// 3. the grey "still updating" of a total being brought up to date;
+/// 4. the "listening" line of a wallet every chain answered zero for — a
+///    round with nothing wrong in it;
+/// 5. nothing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SlotLine {
     Status(StatusKind, SharedString),
+    Checking(SharedString),
     Listening(SharedString),
     Empty,
 }
@@ -577,10 +584,16 @@ pub enum SlotLine {
 impl SlotLine {
     #[must_use]
     pub fn of(model: &BalanceModel) -> Self {
-        match (model.status.clone(), model.live.clone()) {
-            (Some((kind, text)), _) => Self::Status(kind, text),
-            (None, Some(live)) => Self::Listening(live),
-            (None, None) => Self::Empty,
+        match (
+            model.status.clone(),
+            model.checking.clone(),
+            model.live.clone(),
+        ) {
+            (Some((StatusKind::Warning, text)), _, _) => Self::Status(StatusKind::Warning, text),
+            (_, Some(checking), _) => Self::Checking(checking),
+            (Some((kind, text)), None, _) => Self::Status(kind, text),
+            (None, None, Some(live)) => Self::Listening(live),
+            (None, None, None) => Self::Empty,
         }
     }
 }
@@ -651,45 +664,58 @@ fn status_slot(
                 None => line.into_any_element(),
             })
         }
-        SlotLine::Listening(live) => slot.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .min_w(px(0.))
-                .text_size(theme::text_row_sub())
-                .line_height(gpui::relative(LINE_BODY))
-                .text_color(theme.fg_muted)
-                // The web's `.live-dot`: it breathes — opacity 1 to .35 and
-                // back over 800 ms — so the line reads as listening, not as
-                // a label (078 H-05).
-                .child(
-                    div()
-                        .flex_none()
-                        .w(px(8.))
-                        .h(px(8.))
-                        .rounded(px(4.))
-                        .bg(theme.success)
-                        .with_animation(
-                            "balance-live-dot",
-                            gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
-                            |dot, delta| {
-                                // Out and back in one cycle: the web's
-                                // `alternate` over two 800 ms halves.
-                                let t = if delta < 0.5 {
-                                    delta * 2.
-                                } else {
-                                    2. - delta * 2.
-                                };
-                                dot.opacity(1. - 0.65 * t)
-                            },
-                        ),
-                )
-                .child(sentence(live)),
-        ),
+        // The web's `.live-dot`: it breathes — opacity 1 to .35 and back
+        // over 800 ms — so the line reads as listening, not as a label
+        // (078 H-05).
+        SlotLine::Listening(live) => slot.child(dotted(theme, theme.success, sentence(live))),
+        // The same line before any chain has answered (F19): the dot is
+        // there, breathing, and not yet green — when the round settles on a
+        // live zero it turns green where it is and the words change beside
+        // it. Quiet, and not a button: there is nothing to open yet.
+        SlotLine::Checking(checking) => {
+            slot.child(dotted(theme, theme.fg_subtle, sentence(checking)))
+        }
         // Nothing to say: the room stays.
         SlotLine::Empty => slot,
     }
+}
+
+/// A slot line that is not a button: a breathing 8 px dot and its words, in
+/// the status line's own text box (13 px at the body leading) — "Live ·
+/// listening for payments" (green) and "Checking…" (neutral) are the same
+/// line in two colours, so one becoming the other moves nothing.
+fn dotted(theme: &Theme, dot: gpui::Hsla, words: Div) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .min_w(px(0.))
+        .text_size(theme::text_row_sub())
+        .line_height(gpui::relative(LINE_BODY))
+        .text_color(theme.fg_muted)
+        .child(
+            div()
+                .flex_none()
+                .w(px(8.))
+                .h(px(8.))
+                .rounded(px(4.))
+                .bg(dot)
+                .with_animation(
+                    "balance-live-dot",
+                    gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+                    |dot, delta| {
+                        // Out and back in one cycle: the web's `alternate`
+                        // over two 800 ms halves.
+                        let t = if delta < 0.5 {
+                            delta * 2.
+                        } else {
+                            2. - delta * 2.
+                        };
+                        dot.opacity(1. - 0.65 * t)
+                    },
+                ),
+        )
+        .child(words)
 }
 
 /// How long the refresh glyph takes to turn once, and in how many frames:/// How long the refresh glyph takes to turn once, and in how many frames:
@@ -1644,18 +1670,23 @@ mod tests {
     #[test]
     fn the_heros_status_slot_is_one_height_whatever_it_says() {
         use crate::wallet::fixtures::BalanceState;
-        let hero = |status: Option<(StatusKind, &str)>, live: Option<&str>| BalanceModel {
+        let hero_with = |status: Option<(StatusKind, &str)>,
+                         live: Option<&str>,
+                         checking: Option<&str>| BalanceModel {
             label: SharedString::from("Total balance"),
             currency: SharedString::from("USD"),
             state: BalanceState::Normal,
             integer: SharedString::from("$1"),
             decimals: None,
             live: live.map(SharedString::from),
+            checking: checking.map(SharedString::from),
             status: status.map(|(kind, text)| (kind, SharedString::from(text))),
             updated: None,
             refreshing: false,
             updating: SharedString::from("Updating…"),
         };
+        let hero =
+            |status: Option<(StatusKind, &str)>, live: Option<&str>| hero_with(status, live, None);
         // One line of the status text at the body leading, and the 4 px above
         // and below that make it a button: a height that is there before any
         // model is.
@@ -1687,6 +1718,37 @@ mod tests {
         assert_eq!(
             SlotLine::of(&both),
             SlotLine::Status(StatusKind::Refreshing, "Still updating".into())
+        );
+
+        // PR 3 final note F19 — "Checking…", the first read's line, in the
+        // same slot. It outranks what only a finished round can say (the
+        // grey "still updating", the "listening" of a live zero); a warning
+        // outranks it, because something wrong is the one thing to act on.
+        let checking = SlotLine::Checking("Checking…".into());
+        assert_eq!(
+            SlotLine::of(&hero_with(None, None, Some("Checking…"))),
+            checking
+        );
+        assert_eq!(
+            SlotLine::of(&hero_with(None, Some("Listening"), Some("Checking…"))),
+            checking,
+            "never live before a round has ended"
+        );
+        assert_eq!(
+            SlotLine::of(&hero_with(
+                Some((StatusKind::Refreshing, "Still updating")),
+                None,
+                Some("Checking…")
+            )),
+            checking
+        );
+        assert_eq!(
+            SlotLine::of(&hero_with(
+                Some((StatusKind::Warning, "Can't reach Tempo right now")),
+                None,
+                Some("Checking…")
+            )),
+            SlotLine::Status(StatusKind::Warning, "Can't reach Tempo right now".into())
         );
     }
 }

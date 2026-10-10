@@ -269,6 +269,15 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     // currency is not committed, the person's own choice on its way, and
     // nothing at all rather than the placeholder's "USD".
     let currency = SharedString::from(money.label_code().unwrap_or_default().to_owned());
+    // The two lines only the core can say (PR 3 final note F19). "Checking…"
+    // while the first read of the account is out; "Live · listening for
+    // payments" under a zero a settled round found with every chain
+    // answering. This shell used to work the second out for itself — a zero
+    // total, nothing partial, no tokens — which is also true of a CACHED
+    // zero nothing has read: the home said "Live · listening", then swapped
+    // it for "Can't reach 24 networks" when the round came back.
+    let checking = checking_line(view, s);
+    let live = live_line(view, s);
     if view.hidden {
         return BalanceModel {
             label: s.total_balance.clone(),
@@ -277,6 +286,9 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             integer: SharedString::from(BALANCE_MASK),
             decimals: None,
             live: None,
+            // Hiding the figure is not hiding that the wallet is being
+            // read: the first read says so here too.
+            checking,
             status: None,
             updated: None,
             // The control under a hidden hero still turns: hiding the
@@ -305,9 +317,10 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             integer: SharedString::from(""),
             decimals: None,
             live: None,
+            // The first read, still out: the skeleton's line says so (F19).
+            checking,
             // A first launch with no network says so over the skeleton rather
-            // than show a settled-looking zero (spec 038 finding 15) — and a
-            // skeleton says nothing else: it is already "still counting".
+            // than show a settled-looking zero (spec 038 finding 15).
             status: internal_line(view, s)
                 .or_else(|| view.unreachable.then(|| s.balance_unreachable.clone()))
                 .map(|line| (StatusKind::Warning, line)),
@@ -358,7 +371,10 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             state: BalanceState::Loading,
             integer: SharedString::from(""),
             decimals: None,
-            live: None,
+            // Neither is a fiat figure: both are said now, as the landed
+            // frame will say them.
+            live,
+            checking,
             status,
             updated: None,
             refreshing: view.refreshing,
@@ -370,28 +386,22 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     BalanceModel {
         label: s.total_balance.clone(),
         currency,
-        // A zero is "live" only once EVERY chain has answered: a partial zero
-        // (some chain unreachable), or a cached one, is an unknown wallet,
-        // not a listening one.
-        state: if usd == 0.0
-            && !view.balance_unknown
-            && !view.balance_partial
-            && view.tokens.is_empty()
-        {
+        // "Zero, live" is the core's `live_key` and nothing else (F19): a
+        // partial zero (some chain unreachable), a cached one nothing has
+        // read, or one a throwing read left standing is an unknown wallet,
+        // not a listening one — and only the core knows which this is.
+        state: if live.is_some() {
             BalanceState::ZeroLive
         } else {
             BalanceState::Normal
         },
         integer,
         decimals,
-        // The web's "listening" line under a live zero (078 H-05): a wallet
-        // every chain has answered for, holding nothing, is waiting for its
-        // first deposit — and says so rather than looking empty.
-        live: (usd == 0.0
-            && !view.balance_unknown
-            && !view.balance_partial
-            && view.tokens.is_empty())
-        .then(|| s.live_indicator.clone()),
+        // The "listening" line under a live zero (078 H-05): a wallet every
+        // chain has answered for, holding nothing, is waiting for its first
+        // deposit — and says so rather than looking empty.
+        live,
+        checking,
         status,
         // Filled by the page, which holds the clock and the language (#443).
         updated: None,
@@ -399,6 +409,27 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         refreshing: view.refreshing,
         updating: s.updating.clone(),
     }
+}
+
+/// The hero's line while the FIRST read of the account is still out (PR 3
+/// final note F19, `BalanceView.checking_key`): "Checking…". `None` from the
+/// first round's end on — a later refresh is not "checking".
+#[must_use]
+pub fn checking_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
+    // The core names one key for it today; one this build does not know is
+    // still "the wallet is being read", said in the words it has.
+    view.checking_key.as_ref()?;
+    Some(s.balance_checking.clone())
+}
+
+/// The hero's line under a LIVE zero (F19, `BalanceView.live_key`): "Live ·
+/// listening for payments". The core's fact, never this shell's reading of
+/// the total: `None` unless the last round settled, every chain it asked
+/// answered and the wallet holds nothing.
+#[must_use]
+pub fn live_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
+    view.live_key.as_ref()?;
+    Some(s.live_indicator.clone())
 }
 
 /// The hero's line when the last read failed inside Vela (PR 2 note 11,
@@ -2032,12 +2063,171 @@ mod tests {
     }
 
     /// A real zero is a different fact from an unknown one, and gets its own
-    /// state — the mocks draw them differently on purpose.
+    /// state — the mocks draw them differently on purpose. "Real" is the
+    /// core's word (`live_key`): a round settled with every chain answering.
     #[test]
     fn a_real_zero_is_not_the_same_as_unknown() {
-        let model = balance(&view(Some(0.0)), &strings(), "en", &Money::default());
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        let model = balance(
+            &first_read_view(FirstRead::Live),
+            &strings(),
+            "en",
+            &Money::default(),
+        );
         assert_eq!(model.state, BalanceState::ZeroLive);
         assert_eq!(model.integer, SharedString::from("$0"));
+    }
+
+    /// PR 3 final note F19. A wallet that held nothing last session opens on
+    /// a cached zero. The hero drew "Live · listening for payments" over it
+    /// before anything had been read — this shell's own rule (a zero total,
+    /// nothing partial, no tokens) — and swapped it for "Can't reach 24
+    /// networks" when the round came back. Now the three lines are the
+    /// core's: "Checking…" until the first round ends, then "Live" only if
+    /// every chain answered, else "Can't reach".
+    #[test]
+    fn a_cached_zero_says_checking_then_what_the_round_found() {
+        use crate::wallet::components::SlotLine;
+        use crate::wallet::fixtures::{FirstRead, StatusKind, first_read_view};
+        let s = strings();
+        let hero = |stage| balance(&first_read_view(stage), &s, "en", &Money::default());
+
+        // Before the first settle: the cached zero, and "Checking…".
+        let checking = hero(FirstRead::Checking);
+        assert_eq!(checking.state, BalanceState::Normal, "not a live zero");
+        assert_eq!(checking.integer, SharedString::from("$0"));
+        assert_eq!(checking.live, None, "nothing has read this wallet yet");
+        assert_eq!(checking.checking, Some(s.balance_checking.clone()));
+        assert_eq!(
+            SlotLine::of(&checking),
+            SlotLine::Checking(s.balance_checking.clone())
+        );
+
+        // Settled, every chain answering: live.
+        let live = hero(FirstRead::Live);
+        assert_eq!(live.state, BalanceState::ZeroLive);
+        assert_eq!(live.checking, None);
+        assert_eq!(
+            SlotLine::of(&live),
+            SlotLine::Listening(s.live_indicator.clone())
+        );
+
+        // Settled with two chains missing: a zero nobody can vouch for.
+        let cant_reach = hero(FirstRead::CantReach);
+        assert_eq!(cant_reach.state, BalanceState::Normal);
+        assert_eq!(
+            (cant_reach.checking.clone(), cant_reach.live.clone()),
+            (None, None)
+        );
+        let line = crate::wallet::fill(&s.unreachable_many, "n", "2");
+        assert_eq!(
+            SlotLine::of(&cant_reach),
+            SlotLine::Status(StatusKind::Warning, SharedString::from(line))
+        );
+
+        // The same figure in all three: what changes is the one line.
+        for model in [&checking, &live, &cant_reach] {
+            assert_eq!(
+                (model.integer.as_ref(), model.decimals.as_deref()),
+                ("$0", Some("00"))
+            );
+        }
+        // And the words are the corpus's, by the core's keys.
+        let en = WalletStrings::resolve(&crate::loc::Loc::for_tag("en"));
+        assert_eq!(en.balance_checking.as_ref(), "Checking…");
+        assert_eq!(en.live_indicator.as_ref(), "Live · listening for payments");
+        let zh = WalletStrings::resolve(&crate::loc::Loc::for_tag("zh"));
+        assert_eq!(zh.balance_checking.as_ref(), "正在检查…");
+    }
+
+    /// F19, the rule itself: "zero, live" is `live_key` and NOTHING else. A
+    /// view that looks like a live zero by every figure on it — total 0,
+    /// known, nothing partial, no tokens — is not one until the core says
+    /// so; and the core's word is enough.
+    #[test]
+    fn zero_live_is_the_cores_key_and_nothing_else() {
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        let s = strings();
+        let mut looks_live = first_read_view(FirstRead::Checking);
+        looks_live.checking_key = None;
+        assert!(
+            looks_live.display_total_usd == Some(0.0)
+                && !looks_live.balance_unknown
+                && !looks_live.balance_partial
+                && looks_live.tokens.is_empty(),
+            "the old rule would have called this live"
+        );
+        let model = balance(&looks_live, &s, "en", &Money::default());
+        assert_eq!((model.state, model.live), (BalanceState::Normal, None));
+
+        looks_live.live_key = Some(vela_core::app::balance_dashboard::LIVE_ZERO.to_owned());
+        let model = balance(&looks_live, &s, "en", &Money::default());
+        assert_eq!(model.state, BalanceState::ZeroLive);
+        assert_eq!(model.live, Some(s.live_indicator.clone()));
+    }
+
+    /// F19: the first read says "Checking…" whatever the hero is drawing —
+    /// the skeleton of a wallet with no cache, a cached figure, the hidden
+    /// mask — and stops saying it when the round ends. A later refresh is
+    /// not "checking": the core keeps the key `None`, and so does the hero.
+    #[test]
+    fn checking_is_said_from_the_first_frame_and_only_for_the_first_read() {
+        use crate::wallet::components::SlotLine;
+        let s = strings();
+        let checking = SlotLine::Checking(s.balance_checking.clone());
+
+        // No cache: a skeleton, and the line under it.
+        let fresh = view(None);
+        assert!(fresh.checking_key.is_some(), "the core's first frame");
+        let model = balance(&fresh, &s, "en", &Money::default());
+        assert_eq!(model.state, BalanceState::Loading);
+        assert_eq!(SlotLine::of(&model), checking);
+
+        // A cached figure: the figure, and the same line — not "still
+        // updating", which is a round's finding and no round has ended.
+        let mut cached = view(None);
+        cached.cached_total_usd = Some(42.5);
+        let model = balance(&cached, &s, "en", &Money::default());
+        assert_eq!(model.integer, SharedString::from("$42"));
+        assert_eq!(SlotLine::of(&model), checking);
+
+        // Hidden: the mask, and still the line — hiding the figure is not
+        // hiding that the wallet is being read.
+        let mut hidden = view(None);
+        hidden.hidden = true;
+        let model = balance(&hidden, &s, "en", &Money::default());
+        assert_eq!(model.state, BalanceState::Hidden);
+        assert_eq!(SlotLine::of(&model), checking);
+
+        // The display currency not committed: the figure waits, the line
+        // does not.
+        let waiting = Money::of(&vela_core::app::display_currency::CurrencyView {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+            committed: false,
+            pending: Some("CNY".to_owned()),
+        });
+        let zero =
+            crate::wallet::fixtures::first_read_view(crate::wallet::fixtures::FirstRead::Checking);
+        let model = balance(&zero, &s, "en", &waiting);
+        assert_eq!(model.state, BalanceState::Loading);
+        assert_eq!(SlotLine::of(&model), checking);
+        // …and the live zero's line is there before its figure too.
+        let live =
+            crate::wallet::fixtures::first_read_view(crate::wallet::fixtures::FirstRead::Live);
+        let model = balance(&live, &s, "en", &waiting);
+        assert_eq!(
+            SlotLine::of(&model),
+            SlotLine::Listening(s.live_indicator.clone())
+        );
+
+        // The round ended: no "checking", whatever it found.
+        let settled = settle("0x0000000000000000000000000000000000000000");
+        assert_eq!(settled.checking_key, None);
+        assert_eq!(
+            balance(&settled, &s, "en", &Money::default()).checking,
+            None
+        );
     }
 
     /// The last-known total paints first — with the refreshing line, so it
