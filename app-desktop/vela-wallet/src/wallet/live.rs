@@ -968,7 +968,7 @@ mod tests {
 
     fn set_unreachable(view: &mut BalanceView, chain_ids: &[u32]) {
         use vela_core::app::balance_dashboard::{
-            LastKnown, NOT_READ_YET, UnreachableCause, UnreachableNetwork,
+            LastKnown, NOT_READ_YET, STATUS_RPC_UNAVAILABLE, UnreachableCause, UnreachableNetwork,
         };
         view.unreachable_networks = chain_ids
             .iter()
@@ -978,6 +978,7 @@ mod tests {
                 last_seen_usd: None,
                 line_key: NOT_READ_YET.to_owned(),
                 cause: UnreachableCause::Network,
+                status_key: STATUS_RPC_UNAVAILABLE.to_owned(),
                 rpc_fixable: true,
             })
             .collect();

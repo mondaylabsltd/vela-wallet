@@ -389,7 +389,7 @@ pub fn refused_compat(
 pub fn refused_wizard(
     blocker: vela_core::app::network_admin::NetBlocker,
 ) -> vela_core::app::network_admin::NetWizardView {
-    use vela_core::app::network_admin::{NetChainInfo, NetWizardPhase, NetWizardView};
+    use vela_core::app::network_admin::{NetChainInfo, NetRpcField, NetWizardPhase, NetWizardView};
     NetWizardView {
         phase: NetWizardPhase::Checked,
         query: REFUSED_CHAIN_ID.to_string(),
@@ -411,6 +411,10 @@ pub fn refused_wizard(
         compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
         error: None,
         error_key: None,
+        // A refusal: another endpoint would not change it, so no field and
+        // no re-check (the core's `wizard_rpc_field`).
+        rpc_field: NetRpcField::None,
+        rpc_field_label_key: None,
         can_add: false,
     }
 }
@@ -465,7 +469,8 @@ impl WizardStopPin {
 #[must_use]
 pub fn stopped_wizard(stop: WizardStopPin) -> vela_core::app::network_admin::NetWizardView {
     use vela_core::app::network_admin::{
-        NetBlocker, NetRpcFailureKind, NetWizardErrorKind, NetWizardPhase, wizard_error_key,
+        NetBlocker, NetRpcFailureKind, NetRpcField, NetWizardErrorKind, NetWizardPhase,
+        RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED, wizard_error_key, wizard_rpc_field,
     };
     // The chosen chain, as a check on it would have left the wizard.
     let mut view = refused_wizard(NetBlocker::MissingContracts);
@@ -514,6 +519,13 @@ pub fn stopped_wizard(stop: WizardStopPin) -> vela_core::app::network_admin::Net
     };
     view.phase = NetWizardPhase::Error;
     view.error_key = Some(wizard_error_key(&error, view.compat.as_ref()).to_owned());
+    // The field and its label by the core's own rule, as its view has them.
+    view.rpc_field = wizard_rpc_field(view.phase, Some(&error), view.compat.as_ref());
+    view.rpc_field_label_key = match view.rpc_field {
+        NetRpcField::None => None,
+        NetRpcField::Optional => Some(RPC_FIELD_OPTIONAL.to_owned()),
+        NetRpcField::Required => Some(RPC_FIELD_REQUIRED.to_owned()),
+    };
     view.error = Some(error);
     view.can_add = false;
     view

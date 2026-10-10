@@ -180,7 +180,7 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
 pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
     use vela_core::app::balance_dashboard::{
         BalanceSwitcherView, BalanceView, LAST_SEEN, LAST_SEEN_EMPTY, LastKnown, NOT_READ_YET,
-        UNREACHABLE_MANY, UnreachableCause, UnreachableNetwork,
+        STATUS_RPC_UNAVAILABLE, UNREACHABLE_MANY, UnreachableCause, UnreachableNetwork,
     };
     let row =
         |chain_id: u32, last_known: LastKnown, usd: Option<f64>, key: &str| UnreachableNetwork {
@@ -189,6 +189,7 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
             last_seen_usd: usd,
             line_key: key.to_owned(),
             cause: UnreachableCause::Network,
+            status_key: STATUS_RPC_UNAVAILABLE.to_owned(),
             rpc_fixable: true,
         };
     BalanceView {
@@ -213,6 +214,10 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
         unreachable_key: Some(UNREACHABLE_MANY.to_owned()),
         internal_chain_ids: Vec::new(),
         internal_key: None,
+        // A round ended (three chains out of reach), and the wallet holds
+        // money: neither "checking" nor "live".
+        checking_key: None,
+        live_key: None,
         holdings_loading: false,
         cached_total_usd: Some(4_500.0),
         switcher: BalanceSwitcherView {
