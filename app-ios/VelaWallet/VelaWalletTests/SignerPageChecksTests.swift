@@ -377,7 +377,10 @@ struct HandoffCardTests {
         #expect(card.opens)
         #expect(card.trust == nil, "the official page never asks to be trusted")
         let text = line.text(loc)
-        #expect(text.hasPrefix("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        // The "·" is bound to the word before it (U+00A0, PR 3): a line —
+        // a CJK one above all — never starts with the dot.
+        #expect(text.hasPrefix("Version 0ba8ee8c\u{00A0}· matches Vela's published build list\u{00A0}· checked "))
+        #expect(!text.contains(" · "), "a breakable space before a separator dot: \(text)")
         #expect(!text.contains("{{"), "a placeholder was left unfilled: \(text)")
 
         let refused = HandoffCardModel.build(
@@ -416,7 +419,7 @@ struct HandoffCardTests {
         let ask = SignerIntegrityLine(state: .askToTrust, version: "3f9a1c22", checkedAtMs: 1,
                                       key: "componentsUi.signing.integrity.askTrust", opens: false)
         let card = HandoffCardModel.build(page: "https://sign.example.com/", keyLabel: nil, line: ask, loc: zh)
-        #expect(card.pageName == "自己部署的签名页 · \(signingPageDomain(url: "https://sign.example.com/"))")
+        #expect(card.pageName == "自己部署的签名页\u{00A0}· \(signingPageDomain(url: "https://sign.example.com/"))")
         #expect(card.trust == "信任这个版本")
         #expect(!card.opens)
         let named = HandoffCardModel.build(page: "https://sign.example.com/", keyLabel: nil, line: ask, loc: zh, name: "Work")

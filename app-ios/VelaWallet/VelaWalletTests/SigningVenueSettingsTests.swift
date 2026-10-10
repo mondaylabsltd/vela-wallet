@@ -59,7 +59,7 @@ struct SigningVenueSettingsTests {
         #expect(inVela.title == "Review and sign in Vela")
         #expect(venue.pagesHeader == "Review and sign on a trusted signing page")
         // D6: the official page by its name; a self-hosted one as such.
-        #expect(venue.pages.map(\.title) == ["Vela's official signing page", "Self-hosted · sign.example.com"])
+        #expect(venue.pages.map(\.title) == ["Vela's official signing page", "Self-hosted\u{00A0}· sign.example.com"])
         let officialRow = try #require(venue.pages.first)
         #expect(officialRow.enabled && !officialRow.active)
         #expect(officialRow.line?.state == .matches)
@@ -91,7 +91,7 @@ struct SigningVenueSettingsTests {
         #expect(venue.inVela?.reason == "Vela can't reach keys on sign.example.com.")
         #expect(venue.pages.first { $0.active }?.subtitle == "sign.example.com")
         #expect(venue.pages.first { $0.title == "Vela's official signing page" }?.enabled == false)
-        #expect(venue.row.subtitle == "Self-hosted · sign.example.com")
+        #expect(venue.row.subtitle == "Self-hosted\u{00A0}· sign.example.com")
         #expect(model.keys?.domainLine == "Keys on sign.example.com")
     }
 
@@ -134,7 +134,7 @@ struct SigningVenueSettingsTests {
         // keys are not on its own host; a self-hosted page's are.
         #expect(panel.rows.map(\.domainLine) == ["Keys on getvela.app", nil])
         #expect(panel.rows.first?.line.state == .matches)
-        #expect(panel.rows.map(\.title) == ["Vela's official signing page", "Self-hosted · sign.example.com"])
+        #expect(panel.rows.map(\.title) == ["Vela's official signing page", "Self-hosted\u{00A0}· sign.example.com"])
         let row = try #require(SettingsFixtures.build(.st1, loc: loc).sections.flatMap(\.rows)
             .first { $0.id == SigningPagesPageModel.rowId })
         #expect(row.title == "Signing pages")
@@ -162,7 +162,7 @@ struct SigningVenueSettingsTests {
         #expect(panel.rename == "重命名" && panel.remove == "移除" && panel.trust == "信任这个版本")
         #expect(panel.nameLabel == "名称")
         #expect(panel.addLabel == "添加自己部署的签名页")
-        #expect(panel.rows.map(\.title) == ["Vela 官方签名页", "自己部署的签名页 · sign.example.com", "Work"])
+        #expect(panel.rows.map(\.title) == ["Vela 官方签名页", "自己部署的签名页\u{00A0}· sign.example.com", "Work"])
         #expect(panel.rows.first?.trustVersion == nil, "the official page was offered a trust")
         #expect(panel.rows.dropFirst().allSatisfy { $0.trustVersion == version })
         for row in panel.rows {
