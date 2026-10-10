@@ -336,6 +336,7 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 			expect(getComputedStyle(figure).whiteSpace, at).toBe('nowrap');
 			expect(drawn.right, at).toBeLessThanOrEqual(column.right + 0.5);
 			expect(drawn.left, at).toBeGreaterThanOrEqual(column.left - 0.5);
+			expect(figure.classList.contains('fitted'), at).toBe(true);
 			expect(Number(figure.style.getPropertyValue('--fit')), at).toBeLessThan(1);
 			expect(drawn.width, at).toBeGreaterThan(column.width * 0.9);
 			// The page is not given a sideways scroll by the figure's layout box.
@@ -343,16 +344,13 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 			// The hero is as tall as it was with the skeleton, and the control is where it was.
 			expect(measure(), at).toEqual(before);
 
-			// A figure that fits is drawn as set: no scale at all.
+			// A figure that fits is drawn as set: no transform at all.
 			await screen.rerender(props({ ...long, integer: '₫1,250' }));
 			await tick();
 			await new Promise((r) => requestAnimationFrame(() => r(null)));
-			expect(
-				Number(
-					(screen.container.querySelector('.figure') as HTMLElement).style.getPropertyValue('--fit')
-				),
-				at
-			).toBe(1);
+			const short = screen.container.querySelector('.figure') as HTMLElement;
+			expect(short.classList.contains('fitted'), at).toBe(false);
+			expect(getComputedStyle(short).transform, at).toBe('none');
 			expect(measure(), at).toEqual(before);
 			screen.unmount();
 			host.remove();

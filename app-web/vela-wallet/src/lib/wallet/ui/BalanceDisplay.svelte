@@ -95,7 +95,8 @@
 				<button
 					type="button"
 					class="amount figure amount-toggle"
-					style:--fit={fit}
+					class:fitted={fit < 1}
+					style:--fit={fit < 1 ? fit : undefined}
 					aria-label={balance.a11yHide}
 					onclick={ontoggle}
 					bind:this={figure}
@@ -105,7 +106,12 @@
 					>
 				</button>
 			{:else}
-				<p class="amount figure" style:--fit={fit} bind:this={figure}>
+				<p
+					class="amount figure"
+					class:fitted={fit < 1}
+					style:--fit={fit < 1 ? fit : undefined}
+					bind:this={figure}
+				>
 					<span class="integer">{balance.integer}</span><span class="decimals"
 						>{balance.decimalMark ?? '.'}{balance.decimals}</span
 					>
@@ -218,17 +224,22 @@
 		overflow-wrap: anywhere;
 	}
 
-	/* One line, drawn to fit it (`fit`, 1 when it already does): scaled from
-	   its start, so a long figure ends where the column ends. */
+	/* One line. A figure that fits is drawn as it is set — no transform at
+	   all, so nothing about its rendering changes. */
 	.figure {
 		flex: none;
 		white-space: nowrap;
 		overflow-wrap: normal;
-		transform: scale(var(--fit, 1));
+	}
+
+	/* One that does not is drawn to fit (`--fit`, under 1): scaled from its
+	   start, so a long figure ends where the column ends. */
+	.figure.fitted {
+		transform: scale(var(--fit));
 		transform-origin: 0 50%;
 	}
 
-	:global([dir='rtl']) .figure {
+	:global([dir='rtl']) .figure.fitted {
 		transform-origin: 100% 50%;
 	}
 
