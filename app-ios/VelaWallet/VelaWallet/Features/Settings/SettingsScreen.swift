@@ -857,6 +857,11 @@ private struct AddNetworkBody: View {
                 if let title = panel.checksTitle {
                     SettingsCheckList(title: title, items: panel.checks)
                 }
+                // Why it stopped, then the box that is the way on.
+                if panel.calloutLeads, let callout = panel.callout {
+                    SettingsCallout(callout: callout)
+                        .accessibilityIdentifier("addNetwork.stop")
+                }
                 if let custom = panel.customRpc {
                     SettingsUrlField(
                         field: custom,
@@ -864,7 +869,7 @@ private struct AddNetworkBody: View {
                         onCommit: { actions.onEditCustomRpc(customRpc) }
                     )
                 }
-                if let callout = panel.callout { SettingsCallout(callout: callout) }
+                if !panel.calloutLeads, let callout = panel.callout { SettingsCallout(callout: callout) }
                 // An outline CTA plus a re-check link when it cannot be added:
                 // an action you cannot take should not be dressed as the action
                 // you came for.
@@ -903,6 +908,7 @@ private struct AddNetworkBody: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!actions.isLive)
+                    .accessibilityIdentifier("addNetwork.recheck")
                 }
             } else {
                 SettingsUrlField(

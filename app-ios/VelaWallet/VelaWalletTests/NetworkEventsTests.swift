@@ -312,6 +312,17 @@ struct NetworkEventsTests {
         #expect(noRpcPage.recheck != nil, "the sentence says to re-check, and there is nothing to re-check with")
         #expect(noRpcPage.customRpc != nil, "the sentence says to enter one, and there is no field")
         #expect(noRpcPage.secondary == nil)
+        // The core's rule (final note F4): the field is REQUIRED here, and
+        // called "RPC URL" — never "(optional)" under a sentence asking for it.
+        #expect(noRpc.settings.networkAdmin?.wizard.rpcField == .required)
+        #expect(noRpc.settings.networkAdmin?.wizard.rpcFieldLabelKey == I18nKeys.SettingsUi.fieldRpcUrl)
+        #expect(noRpcPage.customRpc?.label == "RPC URL")
+        #expect(noRpcPage.calloutLeads, "the stop says why above its field")
+        // No chain to check: no field and no re-check.
+        #expect(unknown.settings.networkAdmin?.wizard.rpcField == NetRpcFieldWire.none)
+        #expect(try drawn(unknown).customRpc == nil && drawn(unknown).recheck == nil)
+        #expect(known.settings.networkAdmin?.wizard.rpcField == NetRpcFieldWire.none)
+        #expect(try drawn(known).customRpc == nil && drawn(known).recheck == nil)
 
         // Known, and nobody answers: nothing was learned — never a refusal,
         // no reason and no link, and the check can run again.
@@ -324,6 +335,8 @@ struct NetworkEventsTests {
         #expect(silentPage.callout?.text == "Unable to verify — RPC request failed")
         #expect(silentPage.secondary == nil && silentPage.secondaryUrl == nil, "an unverified chain is offered Chain Setup")
         #expect(silentPage.recheck != nil)
+        #expect(silent.settings.networkAdmin?.wizard.rpcField == .optional)
+        #expect(silentPage.customRpc?.label == "Custom RPC (optional)")
         #expect(silentPage.checks.isEmpty && silentPage.candidate?.badge == nil, "a verdict is drawn for a check that never ran")
     }
 
@@ -356,6 +369,11 @@ struct NetworkEventsTests {
         #expect(noP256Page.secondary == nil && noP256Page.secondaryUrl == nil, "a button to a tool that cannot help")
         #expect(noP256Page.primary == nil, "a refused chain is offered Add")
         #expect(noP256.shelf.readList(VelaStore.Key.customNetworks).isEmpty, "a refused chain was saved")
+        // Final note F22: a refusal is `rpc_field: none` — another endpoint
+        // would not change it — so no field, and no "Re-check with this RPC"
+        // with nothing to read.
+        #expect(refused.rpcField == NetRpcFieldWire.none && refused.rpcFieldLabelKey == nil)
+        #expect(noP256Page.customRpc == nil && noP256Page.recheck == nil)
 
         // The verifier is there; nothing else is deployed.
         let missing = await world(reported: { _ in 7_777_777 }, chains: zora(),
@@ -375,6 +393,8 @@ struct NetworkEventsTests {
         // the one button are the whole answer.
         #expect(missingPage.checks.isEmpty)
         #expect(missing.shelf.readList(VelaStore.Key.customNetworks).isEmpty)
+        #expect(lacking.rpcField == NetRpcFieldWire.none)
+        #expect(missingPage.customRpc == nil && missingPage.recheck == nil)
     }
 
     /// The bin's "yes" removes the custom network, from the list and the disk.
@@ -416,6 +436,12 @@ struct NetworkEventsTests {
         // Nothing answered, so nothing was learned: unverified, not a verdict.
         #expect(world.settings.networkAdmin?.wizard.compat?.rpcFailure != nil)
         #expect(!world.asked.urls.contains(mine))
+        // An inconclusive check: the field (optional) and its re-check.
+        #expect(world.settings.networkAdmin?.wizard.rpcField == .optional)
+        let unverified = world.settings.networkAdmin.map {
+            SettingsLive.wizard($0.wizard, loc: loc, fallback: SettingsFixtures.build(.st10, loc: loc).addNetwork)
+        }
+        #expect(unverified?.customRpc?.label == "Custom RPC (optional)" && unverified?.recheck != nil)
 
         world.settings.recheck(customRpc: mine)
         await settle(world.settings) { world.settings.networkAdmin?.wizard.compat?.rpcFailure == nil
@@ -426,6 +452,13 @@ struct NetworkEventsTests {
         // A verdict now — reached through the RPC the person typed.
         #expect(world.settings.networkAdmin?.wizard.compat?.rpcFailure == nil)
         #expect(world.settings.networkAdmin?.wizard.compat?.bestRpcUrl == mine)
+        // Whatever the verdict, the page follows the core: the field and the
+        // re-check together, or neither.
+        if let wizard = world.settings.networkAdmin?.wizard {
+            let page = SettingsLive.wizard(wizard, loc: loc, fallback: SettingsFixtures.build(.st10, loc: loc).addNetwork)
+            #expect((page.customRpc != nil) == (wizard.rpcField != .none))
+            #expect((page.recheck != nil) == (page.customRpc != nil))
+        }
     }
 
     /// Opening the wizard clears what the last visit found.

@@ -95,7 +95,11 @@ struct SettingsFixturesTests {
         #expect(ok.primary != nil)
         #expect(bad.primary == nil)
         #expect(bad.secondary != nil)
-        #expect(bad.recheck != nil)
+        // The core's rule for the RPC field (final notes F4/F14/F22), as the
+        // boards draw it: a compatible result has the field and the re-check
+        // that reads it; a refusal has neither.
+        #expect(ok.customRpc != nil && ok.recheck != nil)
+        #expect(bad.customRpc == nil && bad.recheck == nil)
     }
 
     @Test func storageAccountsForTwoPointFourMegabytes() {

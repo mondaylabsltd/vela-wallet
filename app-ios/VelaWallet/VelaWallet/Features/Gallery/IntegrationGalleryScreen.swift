@@ -270,8 +270,9 @@ struct IntegrationGalleryScreen: View {
     }
 
     /// The wizard's view at each stop, as the core writes it: the error, the
-    /// sentence it names for it (`error_key`), and — for a refusal the check
-    /// itself raised — the check beside it.
+    /// sentence it names for it (`error_key`), for a refusal the check
+    /// itself raised the check beside it, and whether naming an RPC is a way
+    /// on (`rpc_field` — none under a refusal, final note F22).
     private func wizard(_ stop: String) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
         let chain = Self.refusedChain
@@ -286,12 +287,16 @@ struct IntegrationGalleryScreen: View {
         case "unverified":
             view = NetWizardViewWire(
                 phase: .error, query: "", customRpc: "", suggestions: [], chainInfo: Self.zircuit,
-                compat: nil, error: .checkFailed(chainId: chain), errorKey: k.addUnableToVerify, canAdd: false
+                compat: nil, error: .checkFailed(chainId: chain), errorKey: k.addUnableToVerify,
+                // The core's rule: another endpoint may answer.
+                rpcField: .optional, rpcFieldLabelKey: k.addCustomRpcTitle, canAdd: false
             )
         case "no-rpc":
             view = NetWizardViewWire(
                 phase: .error, query: "", customRpc: "", suggestions: [], chainInfo: Self.zircuit,
-                compat: nil, error: .noRpcEndpoint, errorKey: k.addNoRpcEndpoint, canAdd: false
+                compat: nil, error: .noRpcEndpoint, errorKey: k.addNoRpcEndpoint,
+                // … and here one typed is the only way on: "RPC URL".
+                rpcField: .required, rpcFieldLabelKey: k.fieldRpcUrl, canAdd: false
             )
         case "already":
             view = NetWizardViewWire(

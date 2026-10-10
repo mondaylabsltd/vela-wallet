@@ -804,14 +804,26 @@ enum SettingsLive {
         }
 
         model.subtitle = "\(info.name) · \(chainMeta(loc, info.chainId))"
-        model.customRpc = UrlFieldModel(
-            id: "custom-rpc",
-            label: loc.t(k.addCustomRpcTitle),
-            value: wizard.customRpc,
-            placeholder: loc.t(k.addCustomRpcPlaceholder),
-            // Spec 098 §5.1: the relay is sent this RPC, key and all.
-            hint: loc.t(k.networkRelayNotice)
-        )
+        // The RPC field and "Re-check with this RPC" are the core's ONE rule
+        // (`rpcField`, final notes F4 / F14 / F22), set here and nowhere
+        // else: the field exactly when the core names one, under the core's
+        // label — "Custom RPC (optional)", or plain "RPC URL" where it is
+        // the one thing asked for — and the re-check exactly where the field
+        // is. This builder used to draw the field under every candidate
+        // (while it was still being checked, and under a refusal no endpoint
+        // would change) and decide the re-check state by state.
+        if wizard.rpcField != .none {
+            model.customRpc = UrlFieldModel(
+                id: "custom-rpc",
+                label: loc.t(wizard.rpcFieldLabelKey
+                    ?? (wizard.rpcField == .required ? k.fieldRpcUrl : k.addCustomRpcTitle)),
+                value: wizard.customRpc,
+                placeholder: loc.t(k.addCustomRpcPlaceholder),
+                // Spec 098 §5.1: the relay is sent this RPC, key and all.
+                hint: loc.t(k.networkRelayNotice)
+            )
+            model.recheck = loc.t(k.addRecheckWithRpc)
+        }
         func candidate(meta: String, badge: StatusPillModel?) -> SettingsNetworkRowModel {
             SettingsNetworkRowModel(
                 id: String(info.chainId),
@@ -838,27 +850,21 @@ enum SettingsLive {
             // refusal that is the check's own reason: no P-256 verifier, or
             // missing contracts (PR 3 notes 5, 10, 18).
             model.callout = errorCallout(wizard, loc: loc)
-            switch wizard.error {
-            // A check that could not run can run again; a refusal cannot.
-            // "Unable to verify" carries no reason and no link, whatever
-            // the check kept.
-            case .checkFailed, .noRpcEndpoint: model.recheck = loc.t(k.addRecheckWithRpc)
-            // A refusal on the scan / auto-add path now keeps its check, so
-            // it draws what the wizard's own `checked` phase draws: the
-            // reason, and "Open Chain Setup Tool" only where the core gives
-            // it somewhere to go — a gap somebody can fill, on the page for
+            // A stop says why first, then gives the box: "No RPC endpoint is
+            // listed for this network. Enter one, then re-check." reads into
+            // the field under it, not back up to one above it.
+            model.calloutLeads = true
+            // A refusal on the scan / auto-add path keeps its check, so it
+            // draws what the wizard's own `checked` phase draws: the reason,
+            // and "Open Chain Setup Tool" only where the core gives it
+            // somewhere to go — a gap somebody can fill, on the page for
             // THIS chain. No verdict badge and no check list: this path has
-            // no confirm step, and the sentence is the whole answer.
-            case .notCompatible:
-                if let setup = refusal(wizard.compat, loc: loc)?.setup {
-                    model.secondary = setup.label
-                    model.secondaryUrl = setup.url
-                }
-                // And the re-check, as there: the RPC field is on this page,
-                // and another endpoint may answer differently — a field with
-                // nothing to send it would be a dead end.
-                model.recheck = loc.t(k.addRecheckWithRpc)
-            default: break
+            // no confirm step, and the sentence is the whole answer. (No
+            // field and no re-check there: the core's rule above.)
+            if case .notCompatible = wizard.error,
+               let setup = refusal(wizard.compat, loc: loc)?.setup {
+                model.secondary = setup.label
+                model.secondaryUrl = setup.url
             }
             return model
         default:
@@ -877,7 +883,6 @@ enum SettingsLive {
                 badge: StatusPillModel(tone: .warn, label: loc.t(k.addUnableToVerify))
             )
             model.retry = loc.t(k.addRetry)
-            model.recheck = loc.t(k.addRecheckWithRpc)
             return model
         }
 
@@ -901,7 +906,7 @@ enum SettingsLive {
                 : nil)
 
         // The gate. An accent CTA appears only when the CORE says the chain can
-        // be added; otherwise the re-check, because an action you cannot take
+        // be added; otherwise the reason, because an action you cannot take
         // should not be dressed as the action you came for.
         if wizard.canAdd {
             model.primary = loc.t(k.addButton)
@@ -915,7 +920,6 @@ enum SettingsLive {
             model.callout = refused.callout
             model.secondary = refused.setup?.label
             model.secondaryUrl = refused.setup?.url
-            model.recheck = loc.t(k.addRecheckWithRpc)
         }
         return model
     }
