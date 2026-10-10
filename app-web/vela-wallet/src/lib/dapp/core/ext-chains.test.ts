@@ -5,7 +5,7 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildExtChainCatalog } from './ext-chains';
+import { buildExtChainCatalog, WORKER_PUBLIC_RPCS } from './ext-chains';
 import { publicRpcUrls } from '$lib/core/client';
 import { DEFAULT_NETWORKS } from '$lib/services/networks';
 import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
@@ -47,7 +47,7 @@ describe('the published network catalog', () => {
 		const network = DEFAULT_NETWORKS.find((n) => n.chainId === 100)!;
 		expect(gnosis.rpc[0]).toBe(network.rpcURL);
 		// The public nodes are the core's curated list, in its order, behind
-		// the default — for every built-in chain, not a copy kept here.
+		// the default — for every built-in chain.
 		expect(publicRpcUrls(100).length).toBeGreaterThan(0);
 		for (const network of DEFAULT_NETWORKS) {
 			const listed = catalog.chains[String(network.chainId)].rpc;
@@ -61,6 +61,24 @@ describe('the published network catalog', () => {
 		expect(gnosis.bundler).toBe(network.bundlerURL);
 		expect(gnosis.symbol).toBe('xDAI');
 		expect(gnosis.name).toBe(network.displayName);
+	});
+
+	// The catalog is built before the wasm is up (and for a worker that cannot
+	// run the core), so it keeps a COPY of the core's curated list — the one
+	// copy on the web. This is what stops the copy drifting: it is the core's
+	// list, chain for chain and in order, and names no chain the core does not.
+	it('its copy of the curated public nodes IS the core’s list', () => {
+		for (const network of DEFAULT_NETWORKS) {
+			expect(WORKER_PUBLIC_RPCS[network.chainId] ?? [], network.displayName).toEqual(
+				publicRpcUrls(network.chainId)
+			);
+		}
+		for (const [chainId, urls] of Object.entries(WORKER_PUBLIC_RPCS)) {
+			expect(urls, chainId).toEqual(publicRpcUrls(Number(chainId)));
+			expect(urls.length, chainId).toBeGreaterThan(0);
+		}
+		// Not vacuous: the core curates for eleven chains today.
+		expect(Object.keys(WORKER_PUBLIC_RPCS)).toHaveLength(11);
 	});
 
 	// The catalog is the only thing the worker has: a dApp's bundler call goes
