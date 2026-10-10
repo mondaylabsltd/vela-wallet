@@ -82,7 +82,7 @@ class PrivacyFixtureTest {
     private fun feed(half: String): FeedView =
         Wire.json.decodeFromString(FeedView.serializer(), fixture.getJSONObject(half).getJSONObject("feed").toString())
 
-    private val usd = CurrencyView(code = "USD")
+    private val usd = CurrencyView(code = "USD", committed = true)
     private val chains = mapOf(1 to "Ethereum", 100 to "Gnosis", 56 to "BNB Chain")
     private val other = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     private val bea = "0xdddddddddddddddddddddddddddddddddddddddd"
@@ -97,7 +97,8 @@ class PrivacyFixtureTest {
             is AssetFiatModel.Value -> fiat.text
             is AssetFiatModel.NoPrice -> fiat.text
             AssetFiatModel.Masked -> mask
-            AssetFiatModel.None -> ""
+            // No figure at all: neither a digit nor the mask.
+            AssetFiatModel.Loading, AssetFiatModel.None -> ""
         },
     )
 

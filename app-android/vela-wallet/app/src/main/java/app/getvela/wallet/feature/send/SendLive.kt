@@ -523,7 +523,8 @@ object SendLive {
             badgeHidden = mark.badgeHidden,
             balance = "${trim(token.balance)} ${token.symbol}",
             fiat = token.price_usd?.let { price ->
-                AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
+                // As the home's holdings: no worth in a currency that is not the person's yet.
+                if (!ctx.money.settled) AssetFiatModel.Loading else AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
             } ?: AssetFiatModel.NoPrice("—"),
             masked = false,
         )

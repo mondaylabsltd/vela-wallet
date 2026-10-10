@@ -469,7 +469,7 @@ object WalletFixtures {
         val view = app.getvela.wallet.feature.wallet.core.BalanceBoards.internalFault(ADDRESS_FULL, now - 120_000.0, everyChain)
         val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
         return WalletLive.home(
-            base, view, app.getvela.wallet.feature.wallet.core.FeedView(), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD"), strings, chains, now = now,
+            base, view, app.getvela.wallet.feature.wallet.core.FeedView(), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true), strings, chains, now = now,
         ).copy(state = if (everyChain) WalletScreenState.H12 else WalletScreenState.H11)
     }
 
@@ -498,7 +498,7 @@ object WalletFixtures {
         )
         val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
         return WalletLive.home(
-            base, view, liveHiddenFeed(now), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD"), strings, chains, now = now,
+            base, view, liveHiddenFeed(now), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true), strings, chains, now = now,
         ).copy(state = WalletScreenState.H10)
     }
 

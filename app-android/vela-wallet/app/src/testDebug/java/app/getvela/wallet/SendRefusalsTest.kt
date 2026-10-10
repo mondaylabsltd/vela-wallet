@@ -77,7 +77,7 @@ class SendRefusalsTest {
         strings = strings,
         chainNames = mapOf(100 to "Gnosis"),
         explorers = mapOf(100 to "https://gnosisscan.io"),
-        money = WalletLive.Money.of(CurrencyView(code = "USD")),
+        money = WalletLive.Money.of(CurrencyView(code = "USD", committed = true)),
         fromName = "Parallel space",
         fromAddress = safe,
     )

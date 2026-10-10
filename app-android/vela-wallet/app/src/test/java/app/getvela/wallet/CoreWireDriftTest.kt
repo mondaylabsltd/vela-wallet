@@ -260,6 +260,8 @@ class CoreWireDriftTest {
     @Test
     fun currencyViewMatchesTheGeneratedMirror() {
         assertFieldsExist<CurrencyView>("CurrencyView")
+        // The stored choice on its way, for a label that names its currency while the figure waits.
+        assertTrue("pending" in serializer<CurrencyView>().descriptor.elementNames)
     }
 
     @Test

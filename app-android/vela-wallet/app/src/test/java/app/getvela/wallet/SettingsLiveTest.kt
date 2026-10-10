@@ -440,6 +440,20 @@ class SettingsLiveTest {
         assertEquals("JPY · ¥", row.value)
     }
 
+    /**
+     * While the stored choice is still being priced the core is on its USD
+     * placeholder (`committed == false`) and names the choice as `pending`:
+     * the row and the sheet say the person's own currency, never "USD" for
+     * someone who chose yen.
+     */
+    @Test
+    fun theCurrencyRowNamesTheChoiceOnItsWayNotThePlaceholder() {
+        val model = SettingsLive.withCurrency(base(), CurrencyView("USD", null, false, pending = "JPY"))
+        val row = model.sections.flatMap { it.rows }.single { it.id == "currency" }
+        assertEquals("JPY · ¥", row.value)
+        assertEquals("JPY", model.currencySheet.rows.single { it.selected }.id)
+    }
+
     // -- the add-network wizard (spec 041 phase 8) ---------------------------
 
     private fun indexEntry(chainId: Long, name: String, symbol: String) = NetChainIndexEntry(

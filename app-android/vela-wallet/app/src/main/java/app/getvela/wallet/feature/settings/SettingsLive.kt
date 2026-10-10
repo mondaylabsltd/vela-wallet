@@ -300,12 +300,14 @@ object SettingsLive {
     const val VENUE_ROW = "signing-venue"
 
     fun withCurrency(model: SettingsScreenModel, view: CurrencyView): SettingsScreenModel {
-        val code = view.code
+        // The person's own choice — on its way (`pending`) or settled — never
+        // the USD placeholder standing in for it.
+        val code = view.pending?.takeIf { !view.committed } ?: view.code
         return model.copy(
             sections = model.sections.map { section ->
                 section.copy(
                     rows = section.rows.map { row ->
-                        if (row.id == "currency") row.copy(value = currencyRowValue(view)) else row
+                        if (row.id == "currency") row.copy(value = currencyRowValue(code)) else row
                     },
                 )
             },
@@ -690,15 +692,12 @@ object SettingsLive {
     }
 
     /**
-     * The row's right-hand value.
-     *
-     * `committed == false` means the core is still showing its USD placeholder
-     * rather than a settled choice — the row says the code it would use and
-     * nothing more, because a sample amount implies a rate and there is not one
-     * yet.
+     * The row's right-hand value: the code and its sign, and nothing more —
+     * a sample amount implies a rate, and while the choice is still on its
+     * way (`pending`) there is not one yet.
      */
-    private fun currencyRowValue(view: CurrencyView): String =
-        "${view.code} · ${CurrencyCatalog.glyph(view.code)}"
+    private fun currencyRowValue(code: String): String =
+        "$code · ${CurrencyCatalog.glyph(code)}"
 
     // -- Spec 047 US1: the rows that read the device, not a fixture -----------------
 

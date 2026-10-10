@@ -52,7 +52,7 @@ class WalletLiveTest {
     private fun home(
         view: BalanceView,
         feed: FeedView = FeedView(),
-        currency: CurrencyView = CurrencyView(code = "USD"),
+        currency: CurrencyView = CurrencyView(code = "USD", committed = true),
         chainFilter: Int? = null,
         now: Long = System.currentTimeMillis(),
     ) = WalletLive.home(base(), view, feed, currency, strings, chains, now = now, chainFilter = chainFilter)
@@ -663,15 +663,57 @@ class WalletLiveTest {
         assertEquals(AssetFiatModel.Value("$100.00"), model.assetRows.single().fiat)
     }
 
-    /** An uncommitted placeholder is not a choice, and does not convert either. */
+    /**
+     * The 102 device run: a home read "$1,234 · USD" for a few seconds and
+     * then jumped to "¥8,876 · CNY". While the display currency is not the
+     * person's yet (`committed == false`, the core's USD placeholder) NO
+     * figure in it is drawn — the total and each holding's worth wait, in
+     * their loading state — and the label names the stored choice on its way
+     * (`pending`), or nothing at all before one is known. Never "USD" for a
+     * person who did not choose it.
+     */
     @Test
-    fun `the USD placeholder does not convert`() {
-        val view = BalanceView(display_total_usd = 100.0)
+    fun `no figure is drawn in a currency that is not the person's yet`() {
+        val view = BalanceView(
+            display_total_usd = 100.0,
+            tokens = listOf(token("POL", "100", price = 1.0)),
+        )
 
-        val model = home(view, currency = CurrencyView(code = "GBP", rate = 0.78, committed = false))
+        // The stored choice (CNY) is being priced: its code, and no figure.
+        val waiting = home(view, currency = CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY"))
+        assertEquals(BalanceStateKind.Loading, waiting.balance.state)
+        assertNull(waiting.balance.integer)
+        assertNull(waiting.balance.decimals)
+        assertEquals("CNY", waiting.balance.currency)
+        assertEquals(AssetFiatModel.Loading, waiting.assetRows.single().fiat)
+        // What is held is not a figure in the display currency: it is shown.
+        assertEquals("100 POL", waiting.assetRows.single().balance)
 
-        assertEquals("$100", model.balance.integer)
-        assertEquals("USD", model.balance.currency)
+        // Before the preference is read there is no code to name either.
+        val unread = home(view, currency = CurrencyView(code = "USD", rate = null, committed = false))
+        assertEquals(BalanceStateKind.Loading, unread.balance.state)
+        assertEquals("", unread.balance.currency)
+
+        // Committed: the figure appears once, in the right money, under the same label.
+        val settled = home(view, currency = CurrencyView(code = "CNY", rate = 7.1, committed = true))
+        assertEquals(BalanceStateKind.Normal, settled.balance.state)
+        assertEquals("CN¥710", settled.balance.integer)
+        assertEquals("CNY", settled.balance.currency)
+        assertEquals(AssetFiatModel.Value("CN¥710.00"), settled.assetRows.single().fiat)
+
+        // Hidden stays hidden — the mask, and the same label rule.
+        val hidden = home(view.copy(hidden = true), currency = CurrencyView(code = "USD", committed = false, pending = "CNY"))
+        assertEquals(BalanceStateKind.Hidden, hidden.balance.state)
+        assertEquals("CNY", hidden.balance.currency)
+        assertEquals(AssetFiatModel.Masked, hidden.assetRows.single().fiat)
+    }
+
+    /** The label names the currency in every state — a total still being read does not borrow the board's "USD". */
+    @Test
+    fun `a total still loading already names the person's currency`() {
+        val model = home(BalanceView(refreshing = true), currency = gbp())
+        assertEquals(BalanceStateKind.Loading, model.balance.state)
+        assertEquals("GBP", model.balance.currency)
     }
 
     /** A currency with no sign in the JVM's table reads as a code, never a wrong sign. */

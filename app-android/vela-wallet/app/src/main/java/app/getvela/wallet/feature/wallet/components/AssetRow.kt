@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -252,6 +253,15 @@ fun AssetRow(
                     fontSize = VelaTextSize.base,
                     maxLines = 1,
                     textAlign = TextAlign.End,
+                )
+                // A line's worth of placeholder, so the row keeps its height
+                // and nothing moves when the figure lands.
+                AssetFiatModel.Loading -> Box(
+                    modifier = Modifier
+                        .padding(vertical = VelaSpacing.sm)
+                        .width(VelaSpacing.xl5)
+                        .height(VelaSpacing.lg + VelaSpacing.xs)
+                        .background(colors.borderBase, CircleShape),
                 )
                 AssetFiatModel.None -> Unit
             }

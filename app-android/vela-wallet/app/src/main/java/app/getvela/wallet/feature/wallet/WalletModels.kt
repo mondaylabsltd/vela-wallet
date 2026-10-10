@@ -149,6 +149,13 @@ sealed interface AssetFiatModel {
     data object Masked : AssetFiatModel
 
     /**
+     * The worth exists and is not drawn YET: the display currency is not the
+     * person's until the core commits it (`CurrencyView.committed`), and a
+     * figure in the placeholder's dollars would change under the eye.
+     */
+    data object Loading : AssetFiatModel
+
+    /**
      * Spec 021 SD2d: the row has no fiat line at all. Distinct from [Masked],
      * which HIDES a figure that exists — a sweep row is an editable amount, and
      * dots under it read as a concealed second number.

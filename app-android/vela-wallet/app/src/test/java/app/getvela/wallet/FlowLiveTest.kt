@@ -610,7 +610,7 @@ class FlowLiveTest {
             ),
         )
 
-        val live = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"))
+        val live = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true))
 
         assertEquals(listOf("POL", "ETH"), live.rows.map { it.ticker })
         assertEquals(listOf("Polygon", "Arbitrum"), live.rows.map { it.chain })
@@ -624,7 +624,7 @@ class FlowLiveTest {
             assetsFixture(),
             BalanceView(),
             chainNames,
-            CurrencyView(code = "USD"),
+            CurrencyView(code = "USD", committed = true),
         )
 
         assertEquals(emptyList<Any>(), live.rows)
@@ -676,15 +676,15 @@ class FlowLiveTest {
         )
         val copy = FlowFixtures.assetsEmpty(strings)
 
-        val base = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 8453, emptyCopy = copy)
+        val base = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true), chainFilter = 8453, emptyCopy = copy)
         assertEquals(emptyList<Any>(), base.rows)
         assertEquals(copy, base.empty)
 
         // Each pick is its own list: Polygon, then Arbitrum, never the other's rows.
-        val polygon = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 137, emptyCopy = copy)
+        val polygon = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true), chainFilter = 137, emptyCopy = copy)
         assertEquals(listOf("POL"), polygon.rows.map { it.ticker })
         assertNull(polygon.empty)
-        val arbitrum = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 42161, emptyCopy = copy)
+        val arbitrum = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true), chainFilter = 42161, emptyCopy = copy)
         assertEquals(listOf("ETH"), arbitrum.rows.map { it.ticker })
         assertNull(arbitrum.empty)
     }
@@ -696,7 +696,7 @@ class FlowLiveTest {
             assetsFixture(),
             BalanceView(holdings_loading = true),
             chainNames,
-            CurrencyView(code = "USD"),
+            CurrencyView(code = "USD", committed = true),
             emptyCopy = FlowFixtures.assetsEmpty(strings),
         )
 
@@ -717,7 +717,7 @@ class FlowLiveTest {
         feed = feed,
         id = id,
         chainNames = chainNames,
-        currency = CurrencyView(code = "USD"),
+        currency = CurrencyView(code = "USD", committed = true),
         strings = strings,
     )
 
