@@ -83,6 +83,20 @@
    }
   },
   {
+   "name": "en/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 accounts · "
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -203,6 +217,20 @@
    },
    "expect": {
     "value": "1 site"
+   }
+  },
+  {
+   "name": "en/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 account · "
    }
   },
   {
@@ -329,6 +357,20 @@
    }
   },
   {
+   "name": "en/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 accounts · "
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -449,6 +491,20 @@
    },
    "expect": {
     "value": "3 sites"
+   }
+  },
+  {
+   "name": "en/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 accounts · "
    }
   },
   {
@@ -575,6 +631,20 @@
    }
   },
   {
+   "name": "en/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 accounts · "
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -695,6 +765,20 @@
    },
    "expect": {
     "value": "11 sites"
+   }
+  },
+  {
+   "name": "en/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 accounts · "
    }
   },
   {
@@ -821,6 +905,20 @@
    }
   },
   {
+   "name": "en/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 accounts · "
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -944,6 +1042,20 @@
    }
   },
   {
+   "name": "en/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 accounts · "
+   }
+  },
+  {
    "name": "en/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1064,6 +1176,20 @@
    },
    "expect": {
     "value": "1000000 sites"
+   }
+  },
+  {
+   "name": "en/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "en",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 accounts · "
    }
   },
   {
@@ -1203,6 +1329,20 @@
    }
   },
   {
+   "name": "zh/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 个账户 · "
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1323,6 +1463,20 @@
    },
    "expect": {
     "value": "1 个网站"
+   }
+  },
+  {
+   "name": "zh/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 个账户 · "
    }
   },
   {
@@ -1449,6 +1603,20 @@
    }
   },
   {
+   "name": "zh/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 个账户 · "
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1569,6 +1737,20 @@
    },
    "expect": {
     "value": "3 个网站"
+   }
+  },
+  {
+   "name": "zh/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 个账户 · "
    }
   },
   {
@@ -1695,6 +1877,20 @@
    }
   },
   {
+   "name": "zh/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 个账户 · "
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -1815,6 +2011,20 @@
    },
    "expect": {
     "value": "11 个网站"
+   }
+  },
+  {
+   "name": "zh/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 个账户 · "
    }
   },
   {
@@ -1941,6 +2151,20 @@
    }
   },
   {
+   "name": "zh/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 个账户 · "
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2064,6 +2288,20 @@
    }
   },
   {
+   "name": "zh/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 个账户 · "
+   }
+  },
+  {
    "name": "zh/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2184,6 +2422,20 @@
    },
    "expect": {
     "value": "1000000 个网站"
+   }
+  },
+  {
+   "name": "zh/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 个账户 · "
    }
   },
   {
@@ -2323,6 +2575,20 @@
    }
   },
   {
+   "name": "zh-TW/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2443,6 +2709,20 @@
    },
    "expect": {
     "value": "1 個網站"
+   }
+  },
+  {
+   "name": "zh-TW/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 個帳戶 · "
    }
   },
   {
@@ -2569,6 +2849,20 @@
    }
   },
   {
+   "name": "zh-TW/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2689,6 +2983,20 @@
    },
    "expect": {
     "value": "3 個網站"
+   }
+  },
+  {
+   "name": "zh-TW/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 個帳戶 · "
    }
   },
   {
@@ -2815,6 +3123,20 @@
    }
   },
   {
+   "name": "zh-TW/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -2935,6 +3257,20 @@
    },
    "expect": {
     "value": "11 個網站"
+   }
+  },
+  {
+   "name": "zh-TW/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 個帳戶 · "
    }
   },
   {
@@ -3061,6 +3397,20 @@
    }
   },
   {
+   "name": "zh-TW/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3184,6 +3534,20 @@
    }
   },
   {
+   "name": "zh-TW/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-TW/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3304,6 +3668,20 @@
    },
    "expect": {
     "value": "1000000 個網站"
+   }
+  },
+  {
+   "name": "zh-TW/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-TW",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 個帳戶 · "
    }
   },
   {
@@ -3443,6 +3821,20 @@
    }
   },
   {
+   "name": "zh-HK/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3563,6 +3955,20 @@
    },
    "expect": {
     "value": "1 個網站"
+   }
+  },
+  {
+   "name": "zh-HK/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 個帳戶 · "
    }
   },
   {
@@ -3689,6 +4095,20 @@
    }
   },
   {
+   "name": "zh-HK/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -3809,6 +4229,20 @@
    },
    "expect": {
     "value": "3 個網站"
+   }
+  },
+  {
+   "name": "zh-HK/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 個帳戶 · "
    }
   },
   {
@@ -3935,6 +4369,20 @@
    }
   },
   {
+   "name": "zh-HK/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4055,6 +4503,20 @@
    },
    "expect": {
     "value": "11 個網站"
+   }
+  },
+  {
+   "name": "zh-HK/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 個帳戶 · "
    }
   },
   {
@@ -4181,6 +4643,20 @@
    }
   },
   {
+   "name": "zh-HK/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4304,6 +4780,20 @@
    }
   },
   {
+   "name": "zh-HK/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 個帳戶 · "
+   }
+  },
+  {
    "name": "zh-HK/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4424,6 +4914,20 @@
    },
    "expect": {
     "value": "1000000 個網站"
+   }
+  },
+  {
+   "name": "zh-HK/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "zh-HK",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 個帳戶 · "
    }
   },
   {
@@ -4563,6 +5067,20 @@
    }
   },
   {
+   "name": "ja/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 個のアカウント · "
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4683,6 +5201,20 @@
    },
    "expect": {
     "value": "1 件のサイト"
+   }
+  },
+  {
+   "name": "ja/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 個のアカウント · "
    }
   },
   {
@@ -4809,6 +5341,20 @@
    }
   },
   {
+   "name": "ja/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 個のアカウント · "
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -4929,6 +5475,20 @@
    },
    "expect": {
     "value": "3 件のサイト"
+   }
+  },
+  {
+   "name": "ja/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 個のアカウント · "
    }
   },
   {
@@ -5055,6 +5615,20 @@
    }
   },
   {
+   "name": "ja/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 個のアカウント · "
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5175,6 +5749,20 @@
    },
    "expect": {
     "value": "11 件のサイト"
+   }
+  },
+  {
+   "name": "ja/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 個のアカウント · "
    }
   },
   {
@@ -5301,6 +5889,20 @@
    }
   },
   {
+   "name": "ja/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 個のアカウント · "
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5424,6 +6026,20 @@
    }
   },
   {
+   "name": "ja/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 個のアカウント · "
+   }
+  },
+  {
    "name": "ja/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5544,6 +6160,20 @@
    },
    "expect": {
     "value": "1000000 件のサイト"
+   }
+  },
+  {
+   "name": "ja/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ja",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 個のアカウント · "
    }
   },
   {
@@ -5683,6 +6313,20 @@
    }
   },
   {
+   "name": "ko/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "계정 0개 · "
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -5803,6 +6447,20 @@
    },
    "expect": {
     "value": "사이트 1개"
+   }
+  },
+  {
+   "name": "ko/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "계정 1개 · "
    }
   },
   {
@@ -5929,6 +6587,20 @@
    }
   },
   {
+   "name": "ko/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "계정 2개 · "
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6049,6 +6721,20 @@
    },
    "expect": {
     "value": "사이트 3개"
+   }
+  },
+  {
+   "name": "ko/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "계정 3개 · "
    }
   },
   {
@@ -6175,6 +6861,20 @@
    }
   },
   {
+   "name": "ko/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "계정 5개 · "
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6295,6 +6995,20 @@
    },
    "expect": {
     "value": "사이트 11개"
+   }
+  },
+  {
+   "name": "ko/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "계정 11개 · "
    }
   },
   {
@@ -6421,6 +7135,20 @@
    }
   },
   {
+   "name": "ko/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "계정 21개 · "
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6544,6 +7272,20 @@
    }
   },
   {
+   "name": "ko/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "계정 101개 · "
+   }
+  },
+  {
    "name": "ko/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6664,6 +7406,20 @@
    },
    "expect": {
     "value": "사이트 1000000개"
+   }
+  },
+  {
+   "name": "ko/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ko",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "계정 1000000개 · "
    }
   },
   {
@@ -6803,6 +7559,20 @@
    }
   },
   {
+   "name": "vi/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 tài khoản · "
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -6923,6 +7693,20 @@
    },
    "expect": {
     "value": "1 trang"
+   }
+  },
+  {
+   "name": "vi/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 tài khoản · "
    }
   },
   {
@@ -7049,6 +7833,20 @@
    }
   },
   {
+   "name": "vi/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 tài khoản · "
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7169,6 +7967,20 @@
    },
    "expect": {
     "value": "3 trang"
+   }
+  },
+  {
+   "name": "vi/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 tài khoản · "
    }
   },
   {
@@ -7295,6 +8107,20 @@
    }
   },
   {
+   "name": "vi/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 tài khoản · "
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7415,6 +8241,20 @@
    },
    "expect": {
     "value": "11 trang"
+   }
+  },
+  {
+   "name": "vi/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 tài khoản · "
    }
   },
   {
@@ -7541,6 +8381,20 @@
    }
   },
   {
+   "name": "vi/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 tài khoản · "
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7664,6 +8518,20 @@
    }
   },
   {
+   "name": "vi/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 tài khoản · "
+   }
+  },
+  {
    "name": "vi/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -7784,6 +8652,20 @@
    },
    "expect": {
     "value": "1000000 trang"
+   }
+  },
+  {
+   "name": "vi/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "vi",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 tài khoản · "
    }
   },
   {
@@ -7923,6 +8805,20 @@
    }
   },
   {
+   "name": "id/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 akun · "
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8043,6 +8939,20 @@
    },
    "expect": {
     "value": "1 situs"
+   }
+  },
+  {
+   "name": "id/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 akun · "
    }
   },
   {
@@ -8169,6 +9079,20 @@
    }
   },
   {
+   "name": "id/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 akun · "
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8289,6 +9213,20 @@
    },
    "expect": {
     "value": "3 situs"
+   }
+  },
+  {
+   "name": "id/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 akun · "
    }
   },
   {
@@ -8415,6 +9353,20 @@
    }
   },
   {
+   "name": "id/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 akun · "
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8535,6 +9487,20 @@
    },
    "expect": {
     "value": "11 situs"
+   }
+  },
+  {
+   "name": "id/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 akun · "
    }
   },
   {
@@ -8661,6 +9627,20 @@
    }
   },
   {
+   "name": "id/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 akun · "
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8784,6 +9764,20 @@
    }
   },
   {
+   "name": "id/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 akun · "
+   }
+  },
+  {
    "name": "id/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -8904,6 +9898,20 @@
    },
    "expect": {
     "value": "1000000 situs"
+   }
+  },
+  {
+   "name": "id/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "id",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 akun · "
    }
   },
   {
@@ -9043,6 +10051,20 @@
    }
   },
   {
+   "name": "tr/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 hesap · "
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9163,6 +10185,20 @@
    },
    "expect": {
     "value": "1 site"
+   }
+  },
+  {
+   "name": "tr/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 hesap · "
    }
   },
   {
@@ -9289,6 +10325,20 @@
    }
   },
   {
+   "name": "tr/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 hesap · "
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9409,6 +10459,20 @@
    },
    "expect": {
     "value": "3 site"
+   }
+  },
+  {
+   "name": "tr/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 hesap · "
    }
   },
   {
@@ -9535,6 +10599,20 @@
    }
   },
   {
+   "name": "tr/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 hesap · "
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9655,6 +10733,20 @@
    },
    "expect": {
     "value": "11 site"
+   }
+  },
+  {
+   "name": "tr/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 hesap · "
    }
   },
   {
@@ -9781,6 +10873,20 @@
    }
   },
   {
+   "name": "tr/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 hesap · "
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -9904,6 +11010,20 @@
    }
   },
   {
+   "name": "tr/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 hesap · "
+   }
+  },
+  {
    "name": "tr/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10024,6 +11144,20 @@
    },
    "expect": {
     "value": "1000000 site"
+   }
+  },
+  {
+   "name": "tr/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "tr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 hesap · "
    }
   },
   {
@@ -10163,6 +11297,20 @@
    }
   },
   {
+   "name": "es-MX/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 cuentas · "
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10283,6 +11431,20 @@
    },
    "expect": {
     "value": "1 sitio"
+   }
+  },
+  {
+   "name": "es-MX/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 cuenta · "
    }
   },
   {
@@ -10409,6 +11571,20 @@
    }
   },
   {
+   "name": "es-MX/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 cuentas · "
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10529,6 +11705,20 @@
    },
    "expect": {
     "value": "3 sitios"
+   }
+  },
+  {
+   "name": "es-MX/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 cuentas · "
    }
   },
   {
@@ -10655,6 +11845,20 @@
    }
   },
   {
+   "name": "es-MX/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 cuentas · "
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -10775,6 +11979,20 @@
    },
    "expect": {
     "value": "11 sitios"
+   }
+  },
+  {
+   "name": "es-MX/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 cuentas · "
    }
   },
   {
@@ -10901,6 +12119,20 @@
    }
   },
   {
+   "name": "es-MX/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 cuentas · "
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11024,6 +12256,20 @@
    }
   },
   {
+   "name": "es-MX/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 cuentas · "
+   }
+  },
+  {
    "name": "es-MX/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11144,6 +12390,20 @@
    },
    "expect": {
     "value": "1000000 sitios"
+   }
+  },
+  {
+   "name": "es-MX/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "es-MX",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 cuentas · "
    }
   },
   {
@@ -11283,6 +12543,20 @@
    }
   },
   {
+   "name": "pt-BR/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 contas · "
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11403,6 +12677,20 @@
    },
    "expect": {
     "value": "1 site"
+   }
+  },
+  {
+   "name": "pt-BR/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 conta · "
    }
   },
   {
@@ -11529,6 +12817,20 @@
    }
   },
   {
+   "name": "pt-BR/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 contas · "
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11649,6 +12951,20 @@
    },
    "expect": {
     "value": "3 sites"
+   }
+  },
+  {
+   "name": "pt-BR/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 contas · "
    }
   },
   {
@@ -11775,6 +13091,20 @@
    }
   },
   {
+   "name": "pt-BR/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 contas · "
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -11895,6 +13225,20 @@
    },
    "expect": {
     "value": "11 sites"
+   }
+  },
+  {
+   "name": "pt-BR/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 contas · "
    }
   },
   {
@@ -12021,6 +13365,20 @@
    }
   },
   {
+   "name": "pt-BR/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 contas · "
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12144,6 +13502,20 @@
    }
   },
   {
+   "name": "pt-BR/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 contas · "
+   }
+  },
+  {
    "name": "pt-BR/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12264,6 +13636,20 @@
    },
    "expect": {
     "value": "1000000 sites"
+   }
+  },
+  {
+   "name": "pt-BR/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "pt-BR",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 contas · "
    }
   },
   {
@@ -12403,6 +13789,20 @@
    }
   },
   {
+   "name": "fr/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 comptes · "
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12523,6 +13923,20 @@
    },
    "expect": {
     "value": "1 site"
+   }
+  },
+  {
+   "name": "fr/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 compte · "
    }
   },
   {
@@ -12649,6 +14063,20 @@
    }
   },
   {
+   "name": "fr/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 comptes · "
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -12769,6 +14197,20 @@
    },
    "expect": {
     "value": "3 sites"
+   }
+  },
+  {
+   "name": "fr/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 comptes · "
    }
   },
   {
@@ -12895,6 +14337,20 @@
    }
   },
   {
+   "name": "fr/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 comptes · "
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13015,6 +14471,20 @@
    },
    "expect": {
     "value": "11 sites"
+   }
+  },
+  {
+   "name": "fr/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 comptes · "
    }
   },
   {
@@ -13141,6 +14611,20 @@
    }
   },
   {
+   "name": "fr/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 comptes · "
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13264,6 +14748,20 @@
    }
   },
   {
+   "name": "fr/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 comptes · "
+   }
+  },
+  {
    "name": "fr/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13384,6 +14882,20 @@
    },
    "expect": {
     "value": "1000000 sites"
+   }
+  },
+  {
+   "name": "fr/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "fr",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 comptes · "
    }
   },
   {
@@ -13523,6 +15035,20 @@
    }
   },
   {
+   "name": "de/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 Konten · "
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13643,6 +15169,20 @@
    },
    "expect": {
     "value": "1 Website"
+   }
+  },
+  {
+   "name": "de/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 Konto · "
    }
   },
   {
@@ -13769,6 +15309,20 @@
    }
   },
   {
+   "name": "de/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 Konten · "
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -13889,6 +15443,20 @@
    },
    "expect": {
     "value": "3 Websites"
+   }
+  },
+  {
+   "name": "de/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 Konten · "
    }
   },
   {
@@ -14015,6 +15583,20 @@
    }
   },
   {
+   "name": "de/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 Konten · "
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14135,6 +15717,20 @@
    },
    "expect": {
     "value": "11 Websites"
+   }
+  },
+  {
+   "name": "de/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 Konten · "
    }
   },
   {
@@ -14261,6 +15857,20 @@
    }
   },
   {
+   "name": "de/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 Konten · "
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14384,6 +15994,20 @@
    }
   },
   {
+   "name": "de/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 Konten · "
+   }
+  },
+  {
    "name": "de/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14504,6 +16128,20 @@
    },
    "expect": {
     "value": "1000000 Websites"
+   }
+  },
+  {
+   "name": "de/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "de",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 Konten · "
    }
   },
   {
@@ -14643,6 +16281,20 @@
    }
   },
   {
+   "name": "ru/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 0 · "
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -14763,6 +16415,20 @@
    },
    "expect": {
     "value": "1 сайт"
+   }
+  },
+  {
+   "name": "ru/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 1 · "
    }
   },
   {
@@ -14889,6 +16555,20 @@
    }
   },
   {
+   "name": "ru/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 2 · "
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15009,6 +16689,20 @@
    },
    "expect": {
     "value": "3 сайтов"
+   }
+  },
+  {
+   "name": "ru/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 3 · "
    }
   },
   {
@@ -15135,6 +16829,20 @@
    }
   },
   {
+   "name": "ru/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 5 · "
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15255,6 +16963,20 @@
    },
    "expect": {
     "value": "11 сайтов"
+   }
+  },
+  {
+   "name": "ru/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 11 · "
    }
   },
   {
@@ -15381,6 +17103,20 @@
    }
   },
   {
+   "name": "ru/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 21 · "
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15504,6 +17240,20 @@
    }
   },
   {
+   "name": "ru/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 101 · "
+   }
+  },
+  {
    "name": "ru/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15624,6 +17374,20 @@
    },
    "expect": {
     "value": "1000000 сайтов"
+   }
+  },
+  {
+   "name": "ru/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "ru",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "Аккаунтов: 1000000 · "
    }
   },
   {
@@ -15763,6 +17527,20 @@
    }
   },
   {
+   "name": "it/home.switcherAccountCount/0",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 0
+    }
+   },
+   "expect": {
+    "value": "0 account · "
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/0",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -15883,6 +17661,20 @@
    },
    "expect": {
     "value": "1 sito"
+   }
+  },
+  {
+   "name": "it/home.switcherAccountCount/1",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1
+    }
+   },
+   "expect": {
+    "value": "1 account · "
    }
   },
   {
@@ -16009,6 +17801,20 @@
    }
   },
   {
+   "name": "it/home.switcherAccountCount/2",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 2
+    }
+   },
+   "expect": {
+    "value": "2 account · "
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/2",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16129,6 +17935,20 @@
    },
    "expect": {
     "value": "3 siti"
+   }
+  },
+  {
+   "name": "it/home.switcherAccountCount/3",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 3
+    }
+   },
+   "expect": {
+    "value": "3 account · "
    }
   },
   {
@@ -16255,6 +18075,20 @@
    }
   },
   {
+   "name": "it/home.switcherAccountCount/5",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 5
+    }
+   },
+   "expect": {
+    "value": "5 account · "
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/5",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16375,6 +18209,20 @@
    },
    "expect": {
     "value": "11 siti"
+   }
+  },
+  {
+   "name": "it/home.switcherAccountCount/11",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 11
+    }
+   },
+   "expect": {
+    "value": "11 account · "
    }
   },
   {
@@ -16501,6 +18349,20 @@
    }
   },
   {
+   "name": "it/home.switcherAccountCount/21",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 21
+    }
+   },
+   "expect": {
+    "value": "21 account · "
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/21",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16624,6 +18486,20 @@
    }
   },
   {
+   "name": "it/home.switcherAccountCount/101",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 101
+    }
+   },
+   "expect": {
+    "value": "101 account · "
+   }
+  },
+  {
    "name": "it/onboarding.create.successMessage/101",
    "fn": "i18n_t_legacy_plural",
    "input": {
@@ -16744,6 +18620,20 @@
    },
    "expect": {
     "value": "1000000 siti"
+   }
+  },
+  {
+   "name": "it/home.switcherAccountCount/1000000",
+   "fn": "i18n_t_legacy_plural",
+   "input": {
+    "lng": "it",
+    "key": "home.switcherAccountCount",
+    "opts": {
+     "count": 1000000
+    }
+   },
+   "expect": {
+    "value": "1000000 account · "
    }
   },
   {

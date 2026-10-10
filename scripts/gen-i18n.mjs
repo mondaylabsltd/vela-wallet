@@ -772,8 +772,21 @@ for (let i = 1; i < PATHS.length; i++) {
 //   Shortened in place: `onboarding.create.methodHybridBody` in de, fr, it
 //   and es-MX (52–55 characters only fit a 375 pt phone's row at 80 %).
 //   1772 − 1 + 3 = 1774 leaves, 101 branches.
-if (PATHS.length !== 1875) fail(`expected 1875 paths (1774 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1774) fail(`expected 1774 leaf paths, got ${leafSet.size}`);
+// 1879 (UI batch, final integration, 2026-10-10): `home.switcherAccountCount`
+//   — the account switcher's "{{count}} accounts · " — becomes
+//   `switcherAccountCount_{one,few,many,other}`, each locale its own CLDR
+//   categories, as `explore.openTabs` did: a wallet with one account read
+//   "1 accounts · Total". Shells pass the count. + `home.
+//   balanceDetailStatusTokenList` ("Token list unavailable"): the balance
+//   breakdown's short status for a network whose RPC answers and whose
+//   token list could not be loaded — "RPC unavailable" was false there, and
+//   the desktop had borrowed the home's whole sentence. The core names the
+//   row's status (`UnreachableNetwork.status_key`). Shortened in place:
+//   `onboarding.create.methodHybridBody` in ru and pt-BR (309 / 307 pt
+//   against a 280 pt column on a 375 pt phone).
+//   1774 − 1 + 4 + 1 = 1778 leaves, 101 branches.
+if (PATHS.length !== 1879) fail(`expected 1879 paths (1778 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1778) fail(`expected 1778 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
