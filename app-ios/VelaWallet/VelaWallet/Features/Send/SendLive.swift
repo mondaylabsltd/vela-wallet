@@ -350,6 +350,20 @@ enum SendLive {
     static func lockNotice(
         _ view: SendViewWire, loc: Loc, networks: WalletNetworks = .builtin
     ) -> SendNoticeModel? {
+        // An add-network attempt that FAILED owes its own sentence — the
+        // person asked for something and it did not happen — and it is said
+        // OVER the lock it could not lift (final notes F6/F27). The core
+        // keeps `lock_error` beside `add_network_msg` after a failed add, so
+        // read lock-first the attempt's answer was never drawn: the notice
+        // went on saying "Network not supported", as if nothing had been
+        // tried.
+        if let said = addNetworkSentence(view.addNetworkMsg, loc: loc) {
+            var mark: TokenMarkModel?
+            if case .network(let chainId) = view.lockError {
+                mark = networkMark(chainId, networks: networks)
+            }
+            return SendNoticeModel(mark: mark, text: said)
+        }
         switch view.lockError {
         case .network(let chainId):
             return SendNoticeModel(
@@ -363,18 +377,17 @@ enum SendLive {
                 text: "\(loc.t("send.lock.tokenTitle")) · \(loc.t("send.lock.tokenBody"))"
             )
         case nil:
-            // An add-network attempt that FAILED still owes a sentence — the
-            // person asked for something and it did not happen.
-            switch view.addNetworkMsg {
-            case .netNotFound:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotFound"))
-            case .netNotCompatible:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotCompatible"))
-            case .netAddError:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netAddError"))
-            case nil:
-                return nil
-            }
+            return nil
+        }
+    }
+
+    /// What the last add-network attempt had to say, in the core's sentence.
+    static func addNetworkSentence(_ message: SendAddNetworkMsgWire?, loc: Loc) -> String? {
+        switch message {
+        case .netNotFound: loc.t("send.lock.netNotFound")
+        case .netNotCompatible: loc.t("send.lock.netNotCompatible")
+        case .netAddError: loc.t("send.lock.netAddError")
+        case nil: nil
         }
     }
 
