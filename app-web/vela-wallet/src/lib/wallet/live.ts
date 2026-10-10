@@ -372,6 +372,11 @@ export function exactAmount(amount: string): string {
  * never reads "Can't reach Ethereum", and the core already leaves such chains
  * out of `unreachable_networks`. A key this build has no words for falls
  * through to the network line (or none), never a dotted path.
+ *
+ * PR 3 note 4: the one network may be one whose RPC is fine and whose token
+ * list could not be loaded (Tempo, its registry document away). The core names
+ * that sentence too (`assets.tokenListUnreachable`, `{{name}}` as for the one
+ * network) — "Can't reach Tempo" there named the wrong thing.
  */
 export function unreachableLine(
 	view: Pick<BalanceView, 'unreachable_networks' | 'unreachable_key'> &
@@ -379,6 +384,7 @@ export function unreachableLine(
 	words: {
 		unreachableOne: string;
 		unreachableMany: string;
+		tokenListUnreachable: string;
 		internal?: Readonly<Record<string, string>>;
 	}
 ): string | undefined {
@@ -387,6 +393,9 @@ export function unreachableLine(
 	const first = view.unreachable_networks[0];
 	if (view.unreachable_key === 'assets.unreachableOne' && first !== undefined) {
 		return fill(words.unreachableOne, { name: chainName(first.chain_id) });
+	}
+	if (view.unreachable_key === 'assets.tokenListUnreachable' && first !== undefined) {
+		return fill(words.tokenListUnreachable, { name: chainName(first.chain_id) });
 	}
 	if (view.unreachable_key === 'assets.unreachableMany') {
 		return fill(words.unreachableMany, { n: view.unreachable_networks.length });

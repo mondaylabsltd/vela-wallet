@@ -1389,7 +1389,11 @@ export function liveUnreachable(
 				amount:
 					view.hidden || row.last_seen_usd === null ? MASK : moneyText(row.last_seen_usd, currency)
 			}),
-			action: m.rescue.rpcFix
+			// The core's rule, not the shell's (PR 3 note 4): only a network that
+			// itself did not answer is offered its RPC editor. One whose token
+			// list could not be loaded has an endpoint that works — "Fix" there
+			// sent a person to repair what was not broken.
+			...(row.rpc_fixable ? { action: m.rescue.rpcFix } : {})
 		}))
 	};
 }
@@ -1413,13 +1417,18 @@ export function liveBalanceDetail(
 		status: m.balanceDetail.statusRetrying,
 		tone: 'neutral'
 	}));
-	for (const { chain_id: id } of view.unreachable_networks) {
+	for (const { chain_id: id, rpc_fixable: rpcFailed } of view.unreachable_networks) {
 		if (pending.some((row) => row.id === String(id))) continue;
 		pending.push({
 			id: String(id),
 			mark: rescueMark(id),
 			name: chainName(id),
-			status: m.balanceDetail.statusFailed,
+			// "RPC unavailable" is only true of a network that did not answer.
+			// One whose token list could not be loaded (PR 3 note 4) says that,
+			// in the core's own sentence; reading again is still the way out.
+			status: rpcFailed
+				? m.balanceDetail.statusFailed
+				: fill(m.rescue.tokenListUnreachable, { name: chainName(id) }),
 			tone: 'error',
 			action: m.balanceDetail.retry
 		});

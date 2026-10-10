@@ -112,13 +112,15 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 				// (the callback never fires) still reports an empty set.
 				let failed: number[] = [];
 				let internal: number[] = [];
+				let registry: number[] = [];
 				const tokens = await fetchTokens(operation.address, {
 					forceRefresh: operation.force,
 					onProgress: (partial) =>
 						stream.chainAssetsArrived(operation.address, partial.map(toBalanceToken)),
-					onFailedChains: (ids, insideApp) => {
+					onFailedChains: (ids, insideApp, tokenListUnread) => {
 						failed = ids;
 						internal = insideApp;
+						registry = tokenListUnread;
 					}
 				});
 				stream.roundEnded?.(operation.address);
@@ -138,6 +140,12 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 					// read this code threw on — which home says as Vela's own fault
 					// (`BalanceView.internal_key`), never "Can't reach Ethereum".
 					internal_chain_ids: internal,
+					// PR 3 note 4: the failed chains whose RPC was never the problem —
+					// their token list (the registry document) could not be loaded and
+					// they have no coin of their own to read without it (Tempo). The
+					// core says that as "can't load Tempo's token list" and gives the
+					// row no RPC fix (`UnreachableNetwork.rpc_fixable`).
+					registry_chain_ids: registry,
 					now_ms: Date.now()
 				};
 			}

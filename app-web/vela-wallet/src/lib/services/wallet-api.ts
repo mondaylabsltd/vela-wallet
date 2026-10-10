@@ -118,6 +118,21 @@ class ChainUnreachableError extends Error {
 }
 
 /**
+ * A chain that was not read because its TOKEN LIST could not be loaded — the
+ * registry document that names its stablecoins — and it has no coin of its
+ * own to read without one (Tempo). Nothing was asked of its RPC, so the RPC
+ * was never the problem (PR 3 note 4): the round reports it in
+ * `registry_chain_ids` beside the failed chains, the core says it as "can't
+ * load Tempo's token list", and its row is never offered an RPC fix.
+ */
+class TokenListUnreadError extends ChainUnreachableError {
+	constructor(chainId: number, options?: ErrorOptions) {
+		super(chainId, options);
+		this.name = 'TokenListUnreadError';
+	}
+}
+
+/**
  * Whether a chain's read failed INSIDE the app — nothing of it left the
  * device (PR 2 note 11, issue 483): the request pool faulted or never booted
  * (`PoolFailedError.internal`, which `vela.faultPool(chain)` stands in for),
@@ -205,13 +220,18 @@ export type FetchTokensOptions = {
 	/**
 	 * Called after all chains finish, with the chain IDs this round could not
 	 * read — and, second, the subset whose read never left the app
-	 * (`readFailedInsideApp`, PR 2 note 11): never "can't reach" those.
+	 * (`readFailedInsideApp`, PR 2 note 11): never "can't reach" those — and,
+	 * third, the subset that was not read because its token list could not be
+	 * loaded (`TokenListUnreadError`, PR 3 note 4): never an RPC fix for those.
 	 */
-	onFailedChains?: (chainIds: number[], internalIds: number[]) => void;
+	onFailedChains?: (chainIds: number[], internalIds: number[], registryIds: number[]) => void;
 };
 
-/** The chains a round could not read, and which of them failed inside the app. */
-type FailedChains = { failed: number[]; internal: number[] };
+/**
+ * The chains a round could not read, which of them failed inside the app, and
+ * which were not read for want of their token list.
+ */
+type FailedChains = { failed: number[]; internal: number[]; registry: number[] };
 
 // ---------------------------------------------------------------------------
 // Public API (same interface as before)
@@ -231,16 +251,17 @@ export async function fetchTokens(
 	if (!options.forceRefresh && !options.includeZeroBalance && cached) {
 		if (cached.inFlight) {
 			const tokens = await cached.inFlight;
-			const none: FailedChains = { failed: [], internal: [] };
-			const { failed, internal } = (await cached.inFlightFailed?.catch(() => none)) ?? none;
-			if (failed.length > 0) options.onFailedChains?.(failed, internal);
+			const none: FailedChains = { failed: [], internal: [], registry: [] };
+			const { failed, internal, registry } =
+				(await cached.inFlightFailed?.catch(() => none)) ?? none;
+			if (failed.length > 0) options.onFailedChains?.(failed, internal, registry);
 			return cloneTokens(tokens);
 		}
 		if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
 	}
 
 	let partial = false;
-	let failedIds: FailedChains = { failed: [], internal: [] };
+	let failedIds: FailedChains = { failed: [], internal: [], registry: [] };
 	const request = fetchAllChainTokens(
 		address,
 		// The snapshot a chain falls back to when it does not answer. The
@@ -248,10 +269,10 @@ export async function fetchTokens(
 		// (uncached) shape, so it carries nothing over.
 		options.includeZeroBalance ? [] : (cached?.tokens ?? []),
 		options.onProgress,
-		(ids, internal) => {
+		(ids, internal, registry) => {
 			partial = ids.length > 0;
-			failedIds = { failed: ids, internal };
-			options.onFailedChains?.(ids, internal);
+			failedIds = { failed: ids, internal, registry };
+			options.onFailedChains?.(ids, internal, registry);
 		},
 		options.includeZeroBalance
 	);
@@ -379,7 +400,7 @@ async function fetchAllChainTokens(
 	address: string,
 	previous: readonly APIToken[],
 	onProgress?: (tokens: APIToken[]) => void,
-	onFailedChains?: (chainIds: number[], internalIds: number[]) => void,
+	onFailedChains?: (chainIds: number[], internalIds: number[], registryIds: number[]) => void,
 	includeZeroBalance?: boolean
 ): Promise<APIToken[]> {
 	// Phase 1: load prerequisites in parallel
@@ -391,6 +412,8 @@ async function fetchAllChainTokens(
 	const answered = new Set<number>();
 	/** Chains whose read failed inside the app this round (PR 2 note 11). */
 	const insideApp = new Set<number>();
+	/** Chains not read for want of their token list this round (PR 3 note 4). */
+	const tokenListUnread = new Set<number>();
 	const carryable = new Set(previous.map(tokenChainId));
 
 	const sortAndFilter = () =>
@@ -415,6 +438,7 @@ async function fetchAllChainTokens(
 				(tokens) => ({ answered: true, tokens }),
 				(error: unknown) => {
 					if (readFailedInsideApp(error)) insideApp.add(net.chainId);
+					if (error instanceof TokenListUnreadError) tokenListUnread.add(net.chainId);
 					return { answered: false, tokens: [] };
 				}
 			);
@@ -452,7 +476,11 @@ async function fetchAllChainTokens(
 	// …and which of them never left the app: a subset, as the core's
 	// `internal_chain_ids` is of `failed_chain_ids`.
 	const internal = failed.filter((id) => insideApp.has(id) && !answered.has(id));
-	if (failed.length > 0) onFailedChains?.(failed, internal);
+	// …and which were never asked at all, because the list of what to ask for
+	// could not be loaded: a subset too (`registry_chain_ids`). The RPC of such
+	// a chain is fine, so the core gives its row no "Fix" and its own sentence.
+	const registry = failed.filter((id) => tokenListUnread.has(id) && !answered.has(id));
+	if (failed.length > 0) onFailedChains?.(failed, internal, registry);
 
 	return sortAndFilter();
 }
@@ -521,8 +549,12 @@ async function queryChainAssets(
 	// holdings carried, and it is in the round's failed chains — never
 	// "answered, holds nothing" ($0.00). A chain with a coin of its own still
 	// reads that coin (the native-only degrade, as before).
+	//
+	// PR 3 note 4: and it is said as what it is. The chain's RPC was never
+	// asked, so this is the token list's failure, not the network's — its own
+	// error, which the round reports apart (`registry_chain_ids`).
 	if (registry.kind === 'unread' && !plan.some((slot) => slot.kind === 'native')) {
-		throw new ChainUnreachableError(chainId, { cause: registry.cause });
+		throw new TokenListUnreadError(chainId, { cause: registry.cause });
 	}
 	for (const slot of plan) {
 		switch (slot.kind) {

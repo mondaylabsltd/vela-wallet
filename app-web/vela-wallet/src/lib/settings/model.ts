@@ -665,7 +665,12 @@ export interface UnreachableModel {
 		name: string;
 		/** "Last seen $1,234.50", "Not read yet", … */
 		line: string;
-		action: string;
+		/**
+		 * "Fix" — the network's RPC editor. Absent when the core says the RPC is
+		 * not what failed (`UnreachableNetwork.rpc_fixable`, PR 3 note 4: a token
+		 * list that could not be loaded): the row then offers nothing to press.
+		 */
+		action?: string;
 	}[];
 }
 

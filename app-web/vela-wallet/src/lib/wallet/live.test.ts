@@ -83,7 +83,9 @@ function unreachableRow(chainId: number): UnreachableNetwork {
 		chain_id: chainId,
 		last_known: 'not_read',
 		last_seen_usd: null,
-		line_key: 'assets.notReadYet'
+		line_key: 'assets.notReadYet',
+		cause: 'network',
+		rpc_fixable: true
 	};
 }
 

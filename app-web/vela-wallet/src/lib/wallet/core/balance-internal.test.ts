@@ -13,9 +13,14 @@ import { describe, expect, it } from 'vitest';
 import { BalanceDashboardCore } from '$lib/core/client';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
-import { resolveWalletMessages } from '$lib/i18n/engine.server';
+import { resolveSettingsMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
 import { liveBalance, withLiveWallet } from '$lib/wallet/live';
-import { switcherBalances } from '$lib/settings/live';
+import {
+	liveBalanceDetail,
+	liveUnreachable,
+	pickRescueMessages,
+	switcherBalances
+} from '$lib/settings/live';
 import { buildMobileState } from '$lib/wallet/fixtures';
 
 const ADDRESS = '0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c';
@@ -54,7 +59,11 @@ function homeAfter(settle: (fetch: { id: number }) => BalanceShellResult): Balan
 	return view;
 }
 
-const settled = (failed: number[], internal: number[]): BalanceShellResult => ({
+const settled = (
+	failed: number[],
+	internal: number[],
+	registry: number[] = []
+): BalanceShellResult => ({
 	type: 'fetch_settled',
 	address: ADDRESS,
 	pull: false,
@@ -74,6 +83,7 @@ const settled = (failed: number[], internal: number[]): BalanceShellResult => ({
 	rate_limited_chain_ids: [],
 	read_chain_ids: [1, 100],
 	internal_chain_ids: internal,
+	registry_chain_ids: registry,
 	now_ms: 1_000
 });
 
@@ -168,5 +178,77 @@ describe('the switcher over a home that read nothing (PR 2 polish)', () => {
 		const view = homeAfter(() => settled([], []));
 		expect(view.display_total_usd).toBe(10);
 		expect(switcherBalances(view, ADDRESS).get(ADDRESS.toLowerCase())).toBe(10);
+	});
+});
+
+/**
+ * PR 3 note 4: Tempo's token list (its registry document) away read "Can't
+ * reach Tempo" on home, and the list under it offered "Fix" — the RPC editor —
+ * for a network whose RPC nobody had asked. The executor now says which failed
+ * chains failed for that reason (`registry_chain_ids`); the REAL core words
+ * the line and decides the fix, and the builders draw both.
+ */
+describe('a token list that cannot be loaded is not a network out of reach (PR 3 note 4)', () => {
+	const TEMPO = 4217;
+	const rescue = pickRescueMessages(resolveSettingsMessages('en'));
+
+	it('home says the token list, by name — never "Can’t reach Tempo"', () => {
+		const view = homeAfter(() => ({
+			...settled([TEMPO], [], [TEMPO]),
+			read_chain_ids: [100, TEMPO]
+		}));
+		expect(view.unreachable_key).toBe('assets.tokenListUnreachable');
+		expect(view.unreachable_networks).toMatchObject([
+			{ chain_id: TEMPO, cause: 'token_list', rpc_fixable: false }
+		]);
+		const status = liveBalance(view, USD, m).status;
+		expect(status).toEqual({ kind: 'warning', text: "Can't load Tempo's token list right now" });
+		expect(status?.text).not.toMatch(/reach/i);
+	});
+
+	it('its row in the list offers no "Fix": there is no endpoint to repair', () => {
+		const view = homeAfter(() => ({
+			...settled([TEMPO], [], [TEMPO]),
+			read_chain_ids: [100, TEMPO]
+		}));
+		const panel = liveUnreachable(view, USD, rescue);
+		expect(panel.title).toBe("Can't load Tempo's token list right now");
+		expect(panel.rows).toHaveLength(1);
+		expect(panel.rows[0]).toMatchObject({ name: 'Tempo', chainId: TEMPO });
+		expect(panel.rows[0].action).toBeUndefined();
+		expect('action' in panel.rows[0]).toBe(false);
+	});
+
+	it('a network that did not answer keeps its "Fix", beside one that has none', () => {
+		const view = homeAfter(() => ({
+			...settled([1, TEMPO], [], [TEMPO]),
+			read_chain_ids: [1, 100, TEMPO]
+		}));
+		// Several: the counted line, unchanged.
+		expect(view.unreachable_key).toBe('assets.unreachableMany');
+		const panel = liveUnreachable(view, USD, rescue);
+		expect(panel.title).toBe("Can't reach 2 networks right now");
+		const byName = Object.fromEntries(panel.rows.map((row) => [row.name, row.action]));
+		expect(byName).toEqual({ Ethereum: rescue.rescue.rpcFix, Tempo: undefined });
+	});
+
+	it('the breakdown never says "RPC unavailable" of it', () => {
+		const view = homeAfter(() => ({
+			...settled([1, TEMPO], [], [TEMPO]),
+			read_chain_ids: [1, 100, TEMPO]
+		}));
+		const detail = liveBalanceDetail(view, USD, rescue, m.balance.unpriced);
+		const status = Object.fromEntries(detail.pending.map((row) => [row.name, row.status]));
+		expect(status).toEqual({
+			Ethereum: rescue.balanceDetail.statusFailed,
+			Tempo: "Can't load Tempo's token list right now"
+		});
+	});
+
+	it('a chain named in the set that did not fail is not in the list at all', () => {
+		// Only a chain that failed can have failed for this reason (the core's rule).
+		const view = homeAfter(() => ({ ...settled([], [], [TEMPO]), read_chain_ids: [100, TEMPO] }));
+		expect(view.unreachable_networks).toEqual([]);
+		expect(view.unreachable_key).toBeNull();
 	});
 });

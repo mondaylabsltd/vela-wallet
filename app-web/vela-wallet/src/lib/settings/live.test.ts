@@ -668,7 +668,9 @@ describe('the unreachable-networks list (spec 092)', () => {
 		chain_id,
 		last_known: last_seen_usd === null ? 'not_read' : 'held',
 		last_seen_usd,
-		line_key
+		line_key,
+		cause: 'network',
+		rpc_fixable: true
 	});
 	const view = (
 		networks: UnreachableNetwork[],

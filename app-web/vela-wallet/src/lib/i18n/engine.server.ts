@@ -204,6 +204,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyCaption: k('assets.emptySubtext'),
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
+			tokenListUnreachable: k('assets.tokenListUnreachable'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)]))
 		},
 		networkFilter: {
@@ -709,6 +710,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		rescue: {
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
+			tokenListUnreachable: k('assets.tokenListUnreachable'),
 			unreachableBody: k('assets.unreachableBody'),
 			unreachableNone: k('assets.unreachableNone'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)])),

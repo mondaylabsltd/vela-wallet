@@ -400,6 +400,12 @@ export interface SettingsMessages {
 		 */
 		unreachableOne: string;
 		unreachableMany: string;
+		/**
+		 * PR 3 note 4: the one network whose token list could not be loaded
+		 * (`{{name}}`) — the home's line and the list's title then, and the
+		 * status of that network's row in the balance breakdown.
+		 */
+		tokenListUnreachable: string;
 		/** Under the title: what is there is unaffected, only unread. */
 		unreachableBody: string;
 		/** The title once every network in the list has come back. */
@@ -876,6 +882,7 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.removeFromViewer',
 	'assets.unreachableOne',
 	'assets.unreachableMany',
+	'assets.tokenListUnreachable',
 	'assets.unreachableBody',
 	'assets.unreachableNone',
 	// PR 2 note 11: the list's title when the read failed inside Vela.

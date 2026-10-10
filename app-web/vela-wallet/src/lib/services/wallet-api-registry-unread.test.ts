@@ -114,17 +114,24 @@ beforeEach(() => {
 const onTempo = (tokens: APIToken[]) => tokens.filter((t) => tokenChainId(t) === TEMPO);
 
 /** One round, forced, with the chains it could not read. */
-async function round(): Promise<{ tokens: APIToken[]; failed: number[]; internal: number[] }> {
+async function round(): Promise<{
+	tokens: APIToken[];
+	failed: number[];
+	internal: number[];
+	registry: number[];
+}> {
 	let failed: number[] = [];
 	let internal: number[] = [];
+	let registry: number[] = [];
 	const tokens = await fetchTokens(ADDRESS, {
 		forceRefresh: true,
-		onFailedChains: (ids, inside) => {
+		onFailedChains: (ids, inside, tokenList) => {
 			failed = ids;
 			internal = inside;
+			registry = tokenList;
 		}
 	});
-	return { tokens, failed, internal };
+	return { tokens, failed, internal, registry };
 }
 
 describe('Tempo, with its registry document unread (PR 2 polish)', () => {
@@ -159,8 +166,43 @@ describe('Tempo, with its registry document unread (PR 2 polish)', () => {
 
 	it('a chain with a coin of its own keeps the native-only read when its document is unread', async () => {
 		registry.set(BASE, 'unread');
-		const { tokens, failed } = await round();
+		const { tokens, failed, registry: tokenList } = await round();
 		expect(failed).not.toContain(BASE);
+		// It was read: nothing of it is a token-list failure.
+		expect(tokenList).toEqual([]);
 		expect(tokens.filter((t) => tokenChainId(t) === BASE).map((t) => t.symbol)).toEqual(['ETH']);
+	});
+});
+
+/**
+ * PR 3 note 4: Tempo with its registry document away read "Can't reach
+ * Tempo", and its row offered an RPC fix — for a chain whose RPC was never
+ * asked. The round now says which failed chains failed for THAT reason
+ * (`registry_chain_ids`), so the core can word the line and withhold the fix.
+ */
+describe('the round says which chains were not read for want of their token list (PR 3 note 4)', () => {
+	it('Tempo, document unread: failed AND in the token-list set', async () => {
+		registry.set(TEMPO, 'unread');
+		const { failed, internal, registry: tokenList } = await round();
+		expect(failed).toEqual([TEMPO]);
+		expect(tokenList).toEqual([TEMPO]);
+		expect(internal).toEqual([]);
+	});
+
+	it('a round with nothing failed names none', async () => {
+		const { failed, registry: tokenList } = await round();
+		expect(failed).toEqual([]);
+		expect(tokenList).toEqual([]);
+	});
+
+	it('a fetch that joins the round in flight is told the same set', async () => {
+		registry.set(TEMPO, 'unread');
+		const first = round();
+		let joined: number[] = [];
+		const second = fetchTokens(ADDRESS, {
+			onFailedChains: (_ids, _inside, tokenList) => (joined = tokenList)
+		});
+		await Promise.all([first, second]);
+		expect(joined).toEqual([TEMPO]);
 	});
 });
