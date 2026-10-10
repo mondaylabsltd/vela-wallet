@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -1071,6 +1072,14 @@ private fun SettingsPageBody(
                     keyboard = KeyboardType.Text,
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                // A stop that named no network to show — it is already in the
+                // list, or nobody could find it — is said here, under what
+                // was typed. It used to be said nowhere: the tap emptied the
+                // list and the screen gave no reason.
+                if (add.callout != null) {
+                    VelaCallout(add.callout)
+                    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                }
                 add.results.forEach { row ->
                     VelaNetworkRow(row = row, onClick = onPickNetwork)
                 }
@@ -1102,6 +1111,12 @@ private fun SettingsPageBody(
                     VelaCheckList(add.checksTitle, add.checks)
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
+                // Why, then where: a stop that asks for an RPC says so over
+                // the box it is typed in.
+                if (add.callout != null && add.calloutAsksForRpc) {
+                    VelaCallout(add.callout)
+                    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                }
                 if (add.customRpc != null) {
                     VelaUrlField(
                         label = add.customRpc.label,
@@ -1111,7 +1126,7 @@ private fun SettingsPageBody(
                     )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
-                if (add.callout != null) {
+                if (add.callout != null && !add.calloutAsksForRpc) {
                     VelaCallout(add.callout)
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
@@ -2522,12 +2537,14 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: 
 private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(model.title)
+    // "Total …": withheld until the display currency is the person's — the
+    // line keeps its room, so the sections under it do not move.
     Text(
         text = model.summary,
         color = colors.fgSubtle,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
-        modifier = Modifier.padding(bottom = VelaSpacing.xl),
+        modifier = Modifier.padding(bottom = VelaSpacing.xl).withheldFigure(model.summaryWithheld, colors.borderBase),
     )
     BalanceDetailSection(model.sectionPending)
     Text(
@@ -2581,9 +2598,18 @@ private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) 
             VelaChainMark(row.mark)
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = row.name, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
-                Text(text = row.line, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+                // "Last seen …" waits for the display currency like any fiat figure: its line kept.
+                Text(
+                    text = row.line,
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier.withheldFigure(row.lineWithheld, colors.borderBase),
+                )
             }
-            UnreachableFixAction(row.action) { onFix(row.chainId) }
+            // No "Fix" where there is no RPC to fix (the core's `rpc_fixable`):
+            // the row is its name and what was last read there.
+            row.action?.let { action -> UnreachableFixAction(action) { onFix(row.chainId) } }
         }
     }
 }
@@ -2663,12 +2689,13 @@ private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Un
                 modifier = Modifier.clickable { onRetry(row.id) }.padding(VelaSpacing.sm),
             )
         }
-        if (row.amount != null) {
+        if (row.amount != null || row.amountWithheld) {
             Text(
-                text = row.amount,
+                text = row.amount.orEmpty(),
                 color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.lg,
+                modifier = Modifier.withheldFigure(row.amountWithheld, colors.borderBase),
             )
         }
     }

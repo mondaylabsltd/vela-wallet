@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows.components
 
+import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.LaunchedEffect
@@ -296,7 +297,7 @@ private fun FactLeadArt(lead: FactLead?) {
 private fun FactValues(fact: FactRowModel) {
     val colors = VelaTheme.colors
     Column(horizontalAlignment = Alignment.End) {
-        (listOf(fact.value) + fact.lines).forEach { line ->
+        (listOf(fact.value) + fact.lines).forEachIndexed { index, line ->
             Text(
                 text = line,
                 color = if (fact.danger) colors.errorBase else colors.fgBase,
@@ -306,6 +307,9 @@ private fun FactValues(fact: FactRowModel) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.End,
+                // A fiat value withheld until the display currency is the
+                // person's (a token's price): its line, empty, its room kept.
+                modifier = Modifier.withheldFigure(fact.withheld && index == 0, colors.borderBase),
             )
         }
     }

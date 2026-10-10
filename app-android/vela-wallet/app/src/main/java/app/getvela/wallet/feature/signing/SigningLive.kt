@@ -359,19 +359,19 @@ object SigningLive {
         // not check, a balance that would move) stays on the sheet.
         val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
         // The verdict's place is kept from the first frame, the size of the
-        // card a node that cannot simulate ends on ("Vela couldn't check what
-        // this transaction does" — every request on a chain whose nodes have
-        // no simulator, Gnosis among them). The sheet is bottom-anchored: a
-        // card landing a second late pushed the whole form up. Not on the
-        // wallet's own request, whose verdict folds into the technical
-        // details and takes no place at all.
+        // tallest verdict a sheet can end on ([verdictRooms]). The sheet is
+        // bottom-anchored: a card landing a second late pushed the whole form
+        // up — "Vela couldn't check what this transaction does" on every
+        // request on a chain whose nodes have no simulator, Gnosis among
+        // them, and then, once that card's room alone was kept, every verdict
+        // taller than it (a swap's two balance rows). Not on the wallet's own
+        // request, whose verdict folds into the technical details and takes
+        // no place at all.
         val simPlace: List<SigningBlock> = when {
             quietSim != null -> emptyList()
             own && sims.isEmpty() -> emptyList()
             sim == null -> emptyList()
-            else -> simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx).singleOrNull()
-                ?.let { room -> listOf(SigningBlock.Held(room, sims.singleOrNull())) }
-                ?: sims
+            else -> listOf(SigningBlock.Held(verdictRooms(ctx), sims.singleOrNull()))
         }
         // Spec 102 D4: a page venue's sheet does not repeat the preview — the
         // page is the authority. What stays is what only Vela can decide
@@ -1219,6 +1219,35 @@ object SigningLive {
     }
 
     /**
+     * The verdicts a sheet can end on, as rooms: its place is as tall as the
+     * tallest of them from the first frame ([SigningBlock.Held]), so whichever
+     * lands moves nothing — not the form above it, not the confirm under it.
+     *
+     * - the core's "could not check" line (a node with no simulator);
+     * - its "expected to fail" line at the longest reason it prints (the
+     *   core caps a revert reason; this is that cap, read back from the core);
+     * - "no asset changes";
+     * - a balance card of [USUAL_MOVES] rows — what a send (one) and a swap
+     *   (two) show.
+     *
+     * Each is built by [simBlocks], the builder that draws the real one, so a
+     * room is the card it stands for. What can still be taller is only the
+     * unusual: a third balance row, or the warning under an unverified
+     * token — those grow the place by their own height, since nothing a
+     * person must read before signing is ever cut to fit.
+     */
+    internal fun verdictRooms(ctx: Context): List<SigningBlock> {
+        val s = ctx.strings
+        return simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx) +
+            simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.longestRevert(), ctx) +
+            SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")) +
+            SigningBlock.Balances(s.s("balanceChangesTitle"), List(USUAL_MOVES) { BalanceDeltaRow("0", "0", SigningTone.Neutral) })
+    }
+
+    /** The balance rows a sheet keeps room for: a swap's — what leaves and what comes back. */
+    internal const val USUAL_MOVES = 2
+
+    /**
      * Spec 046 US1 — the one block a site cannot author: the simulated balance
      * changes as the trust machine judged them. Sent amounts render whenever
      * the token's symbol resolved; a received unverified token says so and
@@ -1382,8 +1411,11 @@ object SigningLive {
             chevronRoom = choosable,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->
-                SendLive.speedModel(inputs, ctx.strings) { quote, view -> feeLine(quote, view ?: fee, ctx) }
+                SendLive.speedModel(inputs, ctx.strings, worthRoom = !ctx.money.settled) { quote, view -> feeLine(quote, view ?: fee, ctx) }
             },
+            // The fee's worth joins the line when the display currency
+            // commits: the row keeps the longer line's room from now.
+            worthRoom = !ctx.money.settled,
         )
     }
 

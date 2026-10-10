@@ -1,5 +1,9 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.core.designsystem.tokens.VelaSizing
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
+import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -258,13 +262,27 @@ fun ReceiveQrBody(
     onExplorer: () -> Unit = {},
     /** Spec 090: the "include network" switch, flipped. Absent in the gallery. */
     onIncludeNetwork: ((Boolean) -> Unit)? = null,
+    /**
+     * The height this body has, in px (the sheet's, less its margins) —
+     * `null` when it is unbounded. The code gives way to it: it is the one
+     * part of the sheet that can be smaller and still do its job, and a
+     * receive sheet that has to be scrolled hides its last button (issue
+     * #321; an asset's code carries a contract line a network's does not,
+     * and that one line was enough to push "View on Explorer" off a 6.7"
+     * phone).
+     */
+    heightLimit: Int? = null,
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
     val context = LocalContext.current
     val haptic = rememberVelaHaptic()
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    CodeBetween(
+        modifier = modifier.fillMaxWidth(),
+        heightLimit = heightLimit,
+        above = {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = model.title,
@@ -319,7 +337,9 @@ fun ReceiveQrBody(
             onCopy = { if (Clipboard.copy(context, model.account.copyLabel, model.account.lines.first + model.account.lines.second)) { haptic(VelaHaptic.Select); setCopied(0) } },
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    }
+        },
+        code = {
             QrCard(
                 label = model.title,
                 // The core's code (spec 090) — the address the card spells out,
@@ -353,7 +373,9 @@ fun ReceiveQrBody(
                     }
                 }
             }
-        }
+        },
+        below = {
+    Column(modifier = Modifier.fillMaxWidth()) {
         // Spec 090: under the code, the switch that makes it name its network,
         // and — only while it does — the calm line about wallets that can't
         // read it. Subtle ink: a fact, not a danger.
@@ -394,6 +416,44 @@ fun ReceiveQrBody(
             accent = false,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+        },
+    )
+}
+
+/** The receive code is never drawn smaller than this: below it a camera has to come too close to read 33 modules. */
+internal val RECEIVE_CODE_MIN = 240.dp
+
+/**
+ * [above], the code centred under it, [below] — the code a square of the
+ * card's own size (`VelaSizing.qrCard`, or the sheet's width where that is
+ * less), or of what [heightLimit] leaves between the other two, never under
+ * [RECEIVE_CODE_MIN]. So on a screen a little too short the code gives way a
+ * little and nothing scrolls; only a screen too short even for the smallest
+ * code scrolls, as before. The same rule the "scan a code" sheet keeps
+ * (`CodeUnderWords`, issue #480).
+ */
+@Composable
+private fun CodeBetween(
+    modifier: Modifier,
+    heightLimit: Int?,
+    above: @Composable () -> Unit,
+    code: @Composable () -> Unit,
+    below: @Composable () -> Unit,
+) {
+    Layout(content = { Box { above() }; Box { code() }; Box { below() } }, modifier = modifier) { measurables, constraints ->
+        val wide = constraints.maxWidth
+        val parts = Constraints(maxWidth = wide)
+        val head = measurables[0].measure(parts)
+        val foot = measurables[2].measure(parts)
+        val left = heightLimit?.let { it - head.height - foot.height } ?: Int.MAX_VALUE
+        val side = minOf(VelaSizing.qrCard.roundToPx(), wide, maxOf(left, RECEIVE_CODE_MIN.roundToPx()))
+        val drawn = measurables[1].measure(Constraints.fixed(side, side))
+        layout(wide, head.height + side + foot.height) {
+            head.place(0, 0)
+            drawn.place((wide - side) / 2, head.height)
+            foot.place(0, head.height + side)
+        }
     }
 }
 
@@ -494,7 +554,7 @@ fun TxDetailBody(
         // A request that moved and granted nothing (a sign-in) has no figure,
         // and an empty hero would only be a gap.
         if (model.amount.isNotBlank() || model.fiat.isNotBlank()) {
-            AmountHero(amount = model.amount, fiat = model.fiat, positive = model.positive, danger = model.amountDanger, received = model.received)
+            AmountHero(amount = model.amount, fiat = model.fiat, positive = model.positive, danger = model.amountDanger, received = model.received, fiatWithheld = model.fiatWithheld)
         } else {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
@@ -792,11 +852,15 @@ fun TokenDetailBody(
             lineHeight = VelaLeading.amountHero * VelaTextSize.xl4,
             maxLines = 1,
         )
+        // The worth under the balance: withheld until the display currency
+        // is the person's, its line kept — Receive and Send do not move
+        // when it lands.
         Text(
             text = model.fiat,
             color = colors.fgSubtle,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
+            modifier = Modifier.withheldFigure(model.fiatWithheld, colors.borderBase),
         )
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
         // Receive and Send sit under the balance because they are the two
@@ -1846,6 +1910,9 @@ fun SendConfirmBody(
                 color = colors.fgSubtle,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
+                // The worth under the figure, withheld until the display
+                // currency is the person's: its line kept.
+                modifier = Modifier.withheldFigure(model.sublineWithheld, colors.borderBase),
             )
         }
         Column(

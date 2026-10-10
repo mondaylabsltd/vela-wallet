@@ -407,14 +407,29 @@ object SettingsLive {
         val compat = wizard.compat
         val checked = wizard.phase == NetWizardPhase.Checked
         val stopped = wizard.phase == NetWizardPhase.Error
-        val inconclusive = wizard.error is NetWizardErrorKind.CheckFailed
         val unverified = checked && (compat == null || compat.rpc_failure != null)
         val compatible = checked && compat != null && compat.compatible && compat.rpc_failure == null
-        // The check answered and the chain is refused: the core's reason and
-        // — for missing contracts only — its link.
-        val refused = (stopped && !inconclusive) || (checked && !compatible && !unverified)
-        val refusal = compat?.hint_key?.takeIf { refused }
-        val setupUrl = compat?.setup_url?.takeIf { refused }
+        // Why the wizard stopped, in the core's sentence (`error_key`): the
+        // network is already added, was not found, lists no RPC endpoint,
+        // could not be verified — or was refused by its check, in the check's
+        // own words. This file words no stop itself.
+        val stop = wizard.error_key?.takeIf { stopped }
+        // The check answered and the chain is refused — in the wizard
+        // (`checked`), or on the scan path, which has no confirm step and so
+        // stops with the check kept beside it. The core's reason and — for
+        // missing contracts only — its link, the same on both.
+        val refusedStop = stopped && wizard.error is NetWizardErrorKind.NotCompatible
+        val refusedCheck = checked && !compatible && !unverified
+        val refusal = compat?.hint_key?.takeIf { refusedCheck }
+        val setupUrl = compat?.setup_url?.takeIf { refusedStop || refusedCheck }
+        // "No RPC endpoint is listed for this network. Enter one, then
+        // re-check." — so the box to enter one in is there. And a check that
+        // could not be completed ("Unable to verify — RPC request failed") is
+        // the one stop another RPC fixes: the link under it reads "Re-check
+        // with this RPC", so there is an RPC box for "this" to mean — as in
+        // the wizard's own could-not-check state, which always had it. (The
+        // re-check runs the wizard's check, which tries a typed RPC first.)
+        val needsRpc = stopped && (wizard.error is NetWizardErrorKind.NoRpcEndpoint || wizard.error is NetWizardErrorKind.CheckFailed)
         return model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
@@ -485,8 +500,9 @@ object SettingsLive {
                 },
                 // The person's own RPC for this chain, as the core holds it —
                 // so a keystroke round-trips. Offered where the web offers it:
-                // once checked, unless the chain was ruled incompatible.
-                customRpc = if (compatible || unverified) {
+                // once checked, unless the chain was ruled incompatible — and
+                // at the two stops an RPC is the way on from (`needsRpc`).
+                customRpc = if (compatible || unverified || needsRpc) {
                     UrlFieldModel(
                         id = "custom-rpc",
                         label = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
@@ -517,12 +533,16 @@ object SettingsLive {
                 // sent here would be stuck — or contracts that are missing and
                 // can be deployed. The two used to share one sentence about
                 // contracts, which is false of the first.
+                //
+                // A stop is said in the core's sentence, whichever stop it is.
+                // It used to be one line for all of them ("Some contracts Vela
+                // needs aren't on this network yet") — over a network that was
+                // already added, one nobody could find and one with no RPC
+                // listed, none of which is about contracts.
+                calloutAsksForRpc = needsRpc,
                 callout = when {
-                    stopped && inconclusive -> CalloutModel(CalloutTone.Warning, strings.t("settingsModals.addNetwork.unableToVerify"))
+                    stop != null -> CalloutModel(CalloutTone.Warning, strings.t(stop))
                     refusal != null -> CalloutModel(CalloutTone.Warning, strings.t(refusal))
-                    // A stop with no check to read (the scan path keeps none):
-                    // the general line, and no button — there is no link to give.
-                    stopped -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
                     compat?.let { it.compatible && !it.multi_key_ready } == true -> CalloutModel(
                         tone = CalloutTone.Warning,
                         text = strings.t(I18nKeys.SettingsUi.ADD_SINGLE_KEY_ONLY),
@@ -545,7 +565,9 @@ object SettingsLive {
                 // link, opened on this chain (`setup_url`), or not.
                 secondary = setupUrl?.let { strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL) },
                 secondaryUrl = setupUrl,
-                recheck = if (stopped || unverified || (checked && !compatible)) {
+                // A re-check needs a network to check again: a stop that named
+                // none (already added, not found) has only its sentence.
+                recheck = if ((stopped && info != null) || unverified || (checked && !compatible)) {
                     strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC)
                 } else {
                     null
@@ -1035,7 +1057,10 @@ object SettingsLive {
     /**
      * SR6 (spec 092): the list the home's "can't reach" line opens — every
      * network the core lists, in its order, each with what was last read there
-     * (its worth in the display currency, masked while hidden) and its RPC fix.
+     * (its worth in the display currency, masked while hidden) and its RPC fix
+     * — where the core says an RPC fix belongs (`rpc_fixable`): a network
+     * whose RPC answers and whose token list could not be loaded gets none,
+     * since "Fix RPC" there sends a person to repair what is working.
      * Built from the live view on every composition, so a network that comes
      * back leaves the open sheet; the title is the home's own line.
      */
@@ -1049,13 +1074,22 @@ object SettingsLive {
         val rows = view.unreachable_networks.map { network ->
             val id = network.chain_id
             val name = chainNames[id] ?: id.toString()
-            val amount = network.last_seen_usd?.takeIf { !view.hidden }?.let(money::fiat) ?: MASK
+            // "Last seen {{amount}}" carries a worth in the display currency:
+            // masked while hidden (the core withholds the figure and this
+            // writes the mask), and WITHHELD while that currency is not the
+            // person's yet — the line is not said then, its room kept, since
+            // the sentence is built around the figure. Every other line
+            // ("Not read yet", "Held nothing when last read") has no figure.
+            val worth = network.last_seen_usd?.takeIf { !view.hidden }
+            val withheld = worth != null && !money.settled
+            val amount = worth?.let { money.fiat(it) } ?: MASK
             UnreachableRowModel(
                 chainId = id,
                 mark = ChainMarkModel(name.take(1).uppercase(), markColour(id.toLong()), Marks.chainLogoUrl(id)),
                 name = name,
-                line = strings.t(network.line_key, mapOf("amount" to amount)),
-                action = strings.t(I18nKeys.SettingsUi.RPC_FIX),
+                line = if (withheld) "" else strings.t(network.line_key, mapOf("amount" to amount)),
+                lineWithheld = withheld,
+                action = if (network.rpc_fixable) strings.t(I18nKeys.SettingsUi.RPC_FIX) else null,
             )
         }
         return UnreachableModel(
@@ -1093,13 +1127,22 @@ object SettingsLive {
                 tone = SettingsTone.Neutral,
             )
         }.toMutableList()
-        view.unreachable_networks.map { it.chain_id }.filter { id -> pending.none { it.id == id.toString() } }.distinct().forEach { id ->
+        view.unreachable_networks.distinctBy { it.chain_id }.filter { network -> pending.none { it.id == network.chain_id.toString() } }.forEach { network ->
+            val id = network.chain_id
             pending += BalanceDetailRowModel(
                 id = id.toString(),
                 mark = mark(id),
                 name = name(id),
-                status = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
+                // "RPC unavailable" only where the RPC is what failed. A
+                // network whose token list could not be loaded says that, in
+                // the core's own sentence — its RPC is fine.
+                status = if (network.rpc_fixable) {
+                    strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED)
+                } else {
+                    strings.t(I18nKeys.Wallet.TOKEN_LIST_UNREACHABLE, mapOf("name" to name(id)))
+                },
                 tone = SettingsTone.Error,
+                // Reading again is right for both: it asks for the list again too.
                 action = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY),
             )
         }
@@ -1118,16 +1161,28 @@ object SettingsLive {
                     id = id.toString(),
                     mark = mark(id),
                     name = name(id),
+                    // A network's worth is a fiat figure: the mask while
+                    // hidden, and withheld (`null` from the one helper) while
+                    // the display currency is not the person's yet.
                     amount = if (view.hidden) MASK else money.fiat(usd),
+                    amountWithheld = !view.hidden && !money.settled,
                 )
             }
         val total = view.display_total_usd ?: view.cached_total_usd
+        // "Total {{amount}}": the mask while hidden or unknown; while the
+        // currency is on its way the line is not said, its room kept.
+        val totalWithheld = !view.hidden && total != null && !money.settled
         return fallback.copy(
             title = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TITLE),
-            summary = strings.t(
-                I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL,
-                mapOf("amount" to if (view.hidden || total == null) MASK else money.fiat(total)),
-            ),
+            summary = if (totalWithheld) {
+                ""
+            } else {
+                strings.t(
+                    I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL,
+                    mapOf("amount" to (total?.takeIf { !view.hidden }?.let { money.fiat(it) } ?: MASK)),
+                )
+            },
+            summaryWithheld = totalWithheld,
             pending = pending,
             done = done,
             // The hero's "some tokens couldn't be priced" is answered here by name.
@@ -1228,7 +1283,11 @@ object SettingsLive {
                 domain = signingDomain.takeIf { !it.equals("getvela.app", ignoreCase = true) && it.isNotBlank() }
                     ?.let { strings.t("settings.signing.keysOn", mapOf("domain" to it)) },
                 backup = ethereumBackupRow(backup, strings),
-                backupExplain = strings.t(k.BACKUP_EXPLAIN),
+                // While the walk is still running the paragraph is the
+                // explanation itself; once it has answered, the core says
+                // whether this state has one (`explain_key`) — a wallet that
+                // can never be copied is not told how a copy is made.
+                backupExplain = if (backup == null) strings.t(k.BACKUP_EXPLAIN) else backup.row?.explainKey?.let { strings.t(it) },
                 copyLabel = strings.t(k.KEYS_COPY),
                 copiedLabel = strings.t(k.KEYS_COPIED),
             ),

@@ -31,6 +31,11 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
  * [stackedValue] says where the value sits once it has its own line: at the
  * end (a money figure, which reads down a right edge) or at the start (a
  * setting's current value, read as the second line of its row).
+ *
+ * [stacked] takes the two-line arrangement whether or not both fit: for a
+ * value that is about to grow (a fee whose worth is withheld until the
+ * display currency commits, see [KeptRoom]) — so its room is there before
+ * it does, and nothing under the row moves when it lands.
  */
 @Composable
 fun VelaLabelBesideValue(
@@ -40,8 +45,9 @@ fun VelaLabelBesideValue(
     gap: Dp = VelaSpacing.sm,
     rowGap: Dp = VelaSpacing.xs,
     stackedValue: Alignment.Horizontal = Alignment.End,
+    stacked: Boolean = false,
 ) {
-    val policy = remember(gap, rowGap, stackedValue) { LabelBesideValuePolicy(gap, rowGap, stackedValue) }
+    val policy = remember(gap, rowGap, stackedValue, stacked) { LabelBesideValuePolicy(gap, rowGap, stackedValue, stacked) }
     Layout(contents = listOf(label, value), modifier = modifier, measurePolicy = policy)
 }
 
@@ -56,6 +62,7 @@ private class LabelBesideValuePolicy(
     private val gap: Dp,
     private val rowGap: Dp,
     private val stackedValue: Alignment.Horizontal,
+    private val stacked: Boolean = false,
 ) : MultiContentMeasurePolicy {
 
     override fun MeasureScope.measure(measurables: List<List<Measurable>>, constraints: Constraints): MeasureResult {
@@ -68,7 +75,7 @@ private class LabelBesideValuePolicy(
         val sideBySide = labelWide + gapPx + valueWide
         // Unbounded (an intrinsic pass, a scroller): both on one line.
         val width = if (constraints.hasBoundedWidth) constraints.maxWidth else sideBySide.coerceAtLeast(constraints.minWidth)
-        return if (sideBySide <= width) {
+        return if (sideBySide <= width && !stacked) {
             val l = labelPart.measure(loose.copy(maxWidth = width))
             val v = valuePart.measure(loose.copy(maxWidth = (width - l.width - gapPx).coerceAtLeast(0)))
             val height = maxOf(l.height, v.height)
@@ -105,7 +112,7 @@ private class LabelBesideValuePolicy(
         val gapPx = gap.roundToPx()
         val labelWide = label.maxIntrinsicWidth(Constraints.Infinity)
         val valueWide = value.maxIntrinsicWidth(Constraints.Infinity)
-        return if (width == Constraints.Infinity || labelWide + gapPx + valueWide <= width) {
+        return if (!stacked && (width == Constraints.Infinity || labelWide + gapPx + valueWide <= width)) {
             val valueRoom = if (width == Constraints.Infinity) width else (width - labelWide - gapPx).coerceAtLeast(0)
             maxOf(label.maxIntrinsicHeight(width), value.maxIntrinsicHeight(valueRoom))
         } else {

@@ -162,15 +162,30 @@ class SigningSheetStillTest {
      * upward under the eye. Its place is kept from the first frame (CS57), so
      * the card arriving (CS58) changes neither the sheet's height nor where
      * the confirm is; and it is not said to TalkBack before it is there.
+     *
+     * The integration's note 12: and so for EVERY verdict the sheet can end
+     * on, not that card alone — the place is as tall as the tallest. The
+     * sheet's height and the confirm's top, before the verdict and after
+     * each kind: "could not check", "expected to fail" with its reason, "no
+     * asset changes", one balance row (a send), two (a swap). In both
+     * languages: the lines wrap differently.
      */
     @Test
-    fun theSimulationsVerdictLandingMovesNothing() {
-        val waiting = SigningFixtures.build(SigningScreenState.CS57, strings)
-        val landed = SigningFixtures.build(SigningScreenState.CS58, strings)
-        val couldNotCheck = strings.t("componentsUi.signing.simUnavailableWarning")
+    fun theSimulationsVerdictLandingMovesNothing() = verdictsLandStill(strings)
+
+    @Test
+    fun theSimulationsVerdictLandingMovesNothingInEnglish() = verdictsLandStill(
+        InstrumentationRegistry.getInstrumentation().targetContext.let { context ->
+            I18nRuntime { tag -> context.assets.open("i18n/$tag.json").use { it.readBytes() } }.apply { initialize("en") }
+        },
+    )
+
+    private fun verdictsLandStill(words: I18nRuntime) {
+        val waiting = SigningFixtures.build(SigningScreenState.CS57, words)
+        val couldNotCheck = words.t("componentsUi.signing.simUnavailableWarning")
         var current by mutableStateOf(waiting)
         compose.setContent {
-            CompositionLocalProvider(LocalVelaStrings provides strings) {
+            CompositionLocalProvider(LocalVelaStrings provides words) {
                 VelaTheme(darkTheme = false) {
                     SigningSheetContent(model = current, onConfirm = {}, modifier = Modifier.testTag(SHEET))
                 }
@@ -180,14 +195,61 @@ class SigningSheetStillTest {
             sheetHeight = compose.onNodeWithTag(SHEET).fetchSemanticsNode().boundsInRoot.height,
             confirmTop = compose.onNodeWithTag(CONFIRM_TAG).fetchSemanticsNode().boundsInRoot.top,
         )
+        fun place() = compose.onNodeWithTag(app.getvela.wallet.feature.signing.VERDICT_PLACE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         compose.waitForIdle()
         val before = frame()
-        // The room is unseen and unsaid.
+        val room = place()
+        // The rooms are unseen and unsaid.
         compose.onNodeWithText(couldNotCheck).assertDoesNotExist()
-        current = landed
+        compose.onNodeWithText(words.t("componentsUi.signing.balanceChangesTitle")).assertDoesNotExist()
+
+        val kinds = listOf(
+            "could not check" to SigningScreenState.CS58,
+            "expected to fail, with its reason" to SigningScreenState.CS61,
+            "no asset changes" to SigningScreenState.CS62,
+            "one balance row" to SigningScreenState.CS63,
+            "two balance rows" to SigningScreenState.CS64,
+        )
+        val measured = StringBuilder("before: sheet ${before.sheetHeight} confirm ${before.confirmTop} place ${room.top}..${room.bottom}")
+        for ((kind, state) in kinds) {
+            // The same request: only its verdict arrived.
+            current = SigningFixtures.build(state, words).copy(state = waiting.state, requestKey = waiting.requestKey)
+            compose.waitForIdle()
+            val after = frame()
+            measured.append("\n$kind: sheet ${after.sheetHeight} confirm ${after.confirmTop}")
+            assertEquals("the verdict arriving ($kind) moved the sheet\n$measured", before, after)
+            assertEquals("…or its own place ($kind)", room, place())
+        }
+        compose.onNodeWithText(words.t("componentsUi.signing.balanceChangesTitle")).assertExists()
+
+        // What it was: the place kept the "could not check" card's room and no
+        // other. The same verdicts over THAT place — how far each pushed the
+        // confirm — is both the measurement of what changed and the proof
+        // that this test can see a sheet move.
+        fun asBefore(model: SigningScreenModel): SigningScreenModel = model.copy(
+            blocks = model.blocks.map { block ->
+                if (block is app.getvela.wallet.feature.signing.SigningBlock.Held) block.copy(rooms = block.rooms.take(1)) else block
+            },
+        )
+        current = asBefore(waiting)
+        compose.waitForIdle()
+        val old = frame()
+        measured.append("\nwith only the could-not-check room (the last round): sheet ${old.sheetHeight} confirm ${old.confirmTop}")
+        var moved = 0f
+        for ((kind, state) in kinds) {
+            current = asBefore(SigningFixtures.build(state, words).copy(state = waiting.state, requestKey = waiting.requestKey))
+            compose.waitForIdle()
+            val after = frame()
+            measured.append("\n  $kind: confirm ${after.confirmTop} (${after.confirmTop - old.confirmTop} px)")
+            if (state == SigningScreenState.CS64) moved = after.confirmTop - old.confirmTop
+        }
+        android.util.Log.i("SigningSheetStill", measured.toString())
+        assertTrue("a swap's two rows did push the old place's sheet: $measured", moved > 0f)
+
+        // Back to "could not check": said now.
+        current = SigningFixtures.build(SigningScreenState.CS58, words).copy(state = waiting.state, requestKey = waiting.requestKey)
         compose.waitForIdle()
         compose.onNodeWithText(couldNotCheck).assertExists()
-        assertEquals("the card arriving moved the sheet", before, frame())
         // And the sheet with no place kept is shorter: the room is real.
         current = waiting.copy(blocks = waiting.blocks.filterNot { it is app.getvela.wallet.feature.signing.SigningBlock.Held })
         compose.waitForIdle()

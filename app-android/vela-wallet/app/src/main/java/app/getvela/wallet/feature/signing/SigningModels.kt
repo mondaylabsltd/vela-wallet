@@ -93,6 +93,27 @@ enum class SigningScreenState {
      * (CS58). The two are the same height, and the confirm is where it was.
      */
     CS57, CS58,
+
+    /**
+     * The verdict's place holds EVERY verdict a sheet can end on (the
+     * integration's note 12 — it held "could not check" alone, and a taller
+     * one still pushed the sheet up): CS57's waiting sheet once the node
+     * says the call is expected to fail, with its reason (CS61); once it
+     * says nothing of theirs moves (CS62); once it shows the one balance a
+     * send moves (CS63), and the two a swap does (CS64). Each is the same
+     * height as CS57, and the confirm is where it was. Through the live
+     * builders.
+     */
+    CS61, CS62, CS63, CS64,
+
+    /**
+     * The fee's worth waits for the display currency like every fiat figure
+     * (the core's withhold rule): CS1's transfer with a settled fee while the
+     * currency is on its way — the fee in its coin, no "≈ $" beside it (CS59)
+     * — and the SAME sheet once it commits, the worth in the person's money
+     * on the same one line (CS60). Through the live [SigningLive.feeModel].
+     */
+    CS59, CS60,
 }
 
 /**
@@ -217,12 +238,20 @@ sealed interface SigningBlock {
      * The sheet is bottom-anchored and as tall as its content, so a card
      * that appears a second after the sheet opened pushed everything above
      * it up (the 102 device run: 「Vela 未能检查这笔交易的结果」 on every
-     * Gnosis request). The place is there from the first frame, [room]'s
-     * size — drawn unseen and unsaid — and [shown] takes it when it lands.
-     * Nothing moves for a [shown] no taller than [room]; a taller one grows
-     * the sheet by the difference only.
+     * Gnosis request). The place is there from the first frame — as tall as
+     * the TALLEST of [rooms], each drawn unseen and unsaid — and [shown]
+     * takes it when it lands, centred in it.
+     *
+     * [rooms] are the verdicts a sheet can end on (`SigningLive.verdictRooms`):
+     * "could not check", "expected to fail" at the longest reason the core
+     * prints, "no asset changes", and a balance card of the usual number of
+     * moves. It was the "could not check" card alone, which every other
+     * verdict is taller than: a swap's two balance rows still pushed the
+     * sheet up when they landed. Nothing moves for a [shown] no taller than
+     * the place; only one beyond the usual (a third balance row, an
+     * unverified token's warning) grows the sheet, by the difference.
      */
-    data class Held(val room: SigningBlock, val shown: SigningBlock?) : SigningBlock
+    data class Held(val rooms: List<SigningBlock>, val shown: SigningBlock?) : SigningBlock
 }
 
 @Immutable
@@ -337,6 +366,13 @@ sealed interface FeeModel {
          * is kept, unmarked, so the figure does not move when it comes back.
          */
         val chevronRoom: Boolean = false,
+        /**
+         * The display currency is on its way: the fee is its coin amount
+         * alone, and its worth will join the line when the currency commits.
+         * The row keeps the room that longer line needs from now, so the
+         * confirm under it does not move when it lands.
+         */
+        val worthRoom: Boolean = false,
     ) : FeeModel
 
     /** Off-chain signature: the ✓ line, in place of a fee row. */
@@ -391,7 +427,13 @@ data class HandoffModel(
 
 /** The hand-off card's fee row: "Network fee  ~0.00012 ETH · ≈$0.31", and the speed's name. */
 @Immutable
-data class HandoffFeeModel(val label: String, val value: String, val tier: String?)
+data class HandoffFeeModel(
+    val label: String,
+    val value: String,
+    val tier: String?,
+    /** The fee's worth is withheld until the display currency commits: the row keeps the room the longer line needs. */
+    val worthRoom: Boolean = false,
+)
 
 /**
  * Spec 102: a key row — "Confirm with | Phone or tablet", "New key on | This

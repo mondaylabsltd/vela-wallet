@@ -366,6 +366,9 @@ class CoreWireDriftTest {
         assertFieldsExist<BalanceCacheEntry>("BalanceCacheEntry")
         // Every field: `hidden` is what masks the switcher's rows and total.
         assertFieldsExhaustive<BalanceSwitcherView>("BalanceSwitcherView")
+        // Every field: `cause` and `rpc_fixable` decide whether a row may
+        // offer its RPC editor (a token list that did not load is no RPC's fault).
+        assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.UnreachableNetwork>("UnreachableNetwork")
     }
 
     @Test
@@ -695,7 +698,10 @@ class CoreWireDriftTest {
         assertFieldsExist<NetProviderView>("NetProviderView")
         assertFieldsExist<NetProviderTestView>("NetProviderTestView")
         assertFieldsExist<NetProviderNetRow>("NetProviderNetRow")
-        assertFieldsExist<NetWizardView>("NetWizardView")
+        // Every field: `error_key` is the sentence a stop is said in, and
+        // `compat` rides beside an error on the scan path — a field left
+        // unread here is a stop with the wrong words.
+        assertFieldsExhaustive<NetWizardView>("NetWizardView")
         assertFieldsExist<NetChainIndexEntry>("NetChainIndexEntry")
         assertFieldsExist<NetChainInfo>("NetChainInfo")
         assertFieldsExist<NetCompatibility>("NetCompatibility")

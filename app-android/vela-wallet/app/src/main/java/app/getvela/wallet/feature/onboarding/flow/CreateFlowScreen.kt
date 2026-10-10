@@ -145,6 +145,7 @@ fun CreateFlowScreen(
                 busy = view.busy,
                 addHeadingKey = view.addHeadingKey,
                 methodsPinned = view.methodsPinned,
+                keyCountShown = view.keyCountShown,
                 addMethods = view.addMethods,
                 signingPage = chosenPage,
                 canChoosePage = view.canChoosePage,

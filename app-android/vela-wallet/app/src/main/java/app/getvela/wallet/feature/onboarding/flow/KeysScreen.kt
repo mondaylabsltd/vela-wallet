@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -60,6 +61,9 @@ import app.getvela.wallet.feature.settings.components.SettingsDivider
 /** The founding-set cap, mirroring the core's `MAX_MULTI_KEYS`. */
 const val MAX_KEYS: Int = 7
 
+/** The "Added n / 7" row's test tag. */
+const val KEY_COUNT_TAG: String = "keys-count"
+
 /**
  * The founding key list — the screen spec 014 never had, and the only place a
  * multi-key wallet can be assembled.
@@ -89,6 +93,13 @@ fun ColumnScope.KeysScreen(
      * be added). Otherwise they fold under the heading.
      */
     methodsPinned: Boolean,
+    /**
+     * The core's word that the "Added n / 7" counter is drawn
+     * (`CreateView.key_count_shown`): from the first key on. It heads the
+     * list of keys and arrives with the first of them; with none there is no
+     * list to head, and "0 / 7" counted nothing.
+     */
+    keyCountShown: Boolean,
     addMethods: List<KeyMethod> = KeyMethod.entries,
     /**
      * Spec 102: the page chosen with "Use a trusted signing page" (its address,
@@ -178,32 +189,38 @@ fun ColumnScope.KeysScreen(
 
         Spacer(modifier = Modifier.height(VelaSpacing.xl3))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = strings.t(I18nKeys.Create.KEYS_LABEL),
-                color = colors.fgMuted,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.semibold,
-                fontSize = VelaTextSize.sm,
-            )
-            Text(
-                // Mono: it is a count, and a count that jitters in width as it
-                // changes reads as the layout moving rather than the number.
-                text = strings.t(
-                    I18nKeys.Create.KEY_COUNT,
-                    mapOf("current" to keys.size.toString(), "max" to MAX_KEYS.toString()),
-                ),
-                color = colors.fgMuted,
-                fontFamily = VelaMonoFontFamily,
-                fontSize = VelaTextSize.sm,
-            )
-        }
+        // "Added n / 7" heads the list of keys, so it comes and goes with the
+        // list (the core's `key_count_shown`): the title and subtitle above
+        // never move for it, and what is below moves only as far as the key
+        // that arrived with it.
+        if (keyCountShown) {
+            Row(
+                modifier = Modifier.fillMaxWidth().testTag(KEY_COUNT_TAG),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = strings.t(I18nKeys.Create.KEYS_LABEL),
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.semibold,
+                    fontSize = VelaTextSize.sm,
+                )
+                Text(
+                    // Mono: it is a count, and a count that jitters in width as it
+                    // changes reads as the layout moving rather than the number.
+                    text = strings.t(
+                        I18nKeys.Create.KEY_COUNT,
+                        mapOf("current" to keys.size.toString(), "max" to MAX_KEYS.toString()),
+                    ),
+                    color = colors.fgMuted,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.sm,
+                )
+            }
 
-        Spacer(modifier = Modifier.height(VelaSpacing.md))
+            Spacer(modifier = Modifier.height(VelaSpacing.md))
+        }
 
         keys.forEachIndexed { index, key ->
             if (index > 0) HorizontalDivider(color = colors.borderBase, thickness = VelaBorder.hairline)

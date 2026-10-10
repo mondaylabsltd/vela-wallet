@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.signing.components
 
+import androidx.compose.runtime.remember
+import app.getvela.wallet.core.designsystem.components.KeptRoom
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -1078,6 +1080,10 @@ fun KeyRow(model: app.getvela.wallet.feature.signing.KeyRowModel, modifier: Modi
 @Composable
 private fun HandoffFeeRow(model: app.getvela.wallet.feature.signing.HandoffFeeModel) {
     val colors = VelaTheme.colors
+    // The fee's worth joins this line when the display currency commits:
+    // two lines' room from the first frame, kept, so the card's Open does
+    // not move when it lands.
+    val worthRoom = remember { KeptRoom() }.keep(model.worthRoom)
     Row(
         modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.Top,
@@ -1095,6 +1101,7 @@ private fun HandoffFeeRow(model: app.getvela.wallet.feature.signing.HandoffFeeMo
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            minLines = if (worthRoom) 2 else 1,
             modifier = Modifier.weight(1f),
         )
     }

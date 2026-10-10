@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet.components
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,9 +33,18 @@ import app.getvela.wallet.feature.wallet.BalanceStateKind
 /**
  * Hero balance (spec vocabulary #4): label line (总余额 · USD), amount with
  * de-emphasised decimals, and exactly one of normal / zero-live / loading /
- * hidden, plus the optional BalanceStatusLine slot, then the refresh control
- * (issue 462) under it. The refresh the control starts adds no status line
+ * hidden, then the status line's place, then the refresh control (issue 462)
+ * under it. The refresh the control starts adds no status line
  * (WalletLive.balanceStatus), so nothing above it moves when it is tapped.
+ *
+ * **The line under the figure keeps its place from the first frame** (the
+ * integration's note 26b). It comes and goes with the wallet's state — "Some
+ * balances are still updating." on every cold start with a cached total,
+ * "Can't reach Polygon right now" when a network drops, the empty wallet's
+ * "live" line — and each arrival used to push the refresh control, Receive,
+ * Send and the whole page down by its height (32 dp), and each departure
+ * pulled them back up. One line of room is always there now; a status (or
+ * the live line) is drawn in it, and nothing under the hero moves.
  */
 @Composable
 fun BalanceDisplay(
@@ -62,18 +72,21 @@ fun BalanceDisplay(
         )
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         when (model.state) {
-            BalanceStateKind.Normal -> HeroLine { AmountRow(model, onToggleVisibility) }
-            BalanceStateKind.ZeroLive -> {
-                HeroLine { AmountRow(model, onToggleVisibility) }
-                Spacer(modifier = Modifier.height(VelaSpacing.md))
-                LiveIndicatorRow(model.liveText.orEmpty())
-            }
+            BalanceStateKind.Normal, BalanceStateKind.ZeroLive -> HeroLine { AmountRow(model, onToggleVisibility) }
             BalanceStateKind.Loading -> HeroLine { SkeletonBalanceBlock() }
             BalanceStateKind.Hidden -> HeroLine { HiddenRow(model, onToggleVisibility) }
         }
-        model.status?.let { status ->
-            Spacer(modifier = Modifier.height(VelaSpacing.md))
-            BalanceStatusLine(model = status, onClick = onStatusClick)
+        // The status line's place: one line of the row a status draws, kept
+        // whether or not there is one. What is said in it is the status —
+        // the most actionable thing — else the empty wallet's live line.
+        Spacer(modifier = Modifier.height(VelaSpacing.md))
+        Box(modifier = Modifier.testTag(BALANCE_STATUS_PLACE_TAG), contentAlignment = Alignment.CenterStart) {
+            BalanceStatusRoom()
+            val status = model.status
+            when {
+                status != null -> BalanceStatusLine(model = status, onClick = onStatusClick)
+                model.state == BalanceStateKind.ZeroLive -> LiveIndicatorRow(model.liveText.orEmpty())
+            }
         }
         model.refresh?.let { refresh ->
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
@@ -81,6 +94,9 @@ fun BalanceDisplay(
         }
     }
 }
+
+/** The status line's place under the figure — there in every state. */
+const val BALANCE_STATUS_PLACE_TAG = "balance-status-place"
 
 /**
  * The figure's own line, held in every state (PR 2 polish): the mask and the

@@ -74,7 +74,28 @@ data class UnreachableNetwork(
     val last_seen_usd: Double? = null,
     /** The corpus key of the row's line; `assets.lastSeen` fills `{{amount}}`. */
     val line_key: String = "",
-)
+    /**
+     * What kept it from being read: `network` (none of its RPC endpoints
+     * answered) or `token_list` (its RPC answers; the list that names what to
+     * read there could not be loaded, and it has no coin of its own to read
+     * without one — Tempo). A string on purpose: a cause this build does not
+     * know still has [rpc_fixable] to say whether a "Fix" belongs on the row.
+     */
+    val cause: String = CAUSE_NETWORK,
+    /**
+     * May the row offer its RPC editor ("Fix")? The core's word — true only
+     * when the network itself did not answer. For any other cause the
+     * endpoint is fine, and a "Fix RPC" there sends a person to repair what
+     * is working. `true` from a core that predates the field: every row was
+     * the network's then.
+     */
+    val rpc_fixable: Boolean = true,
+) {
+    companion object {
+        const val CAUSE_NETWORK = "network"
+        const val CAUSE_TOKEN_LIST = "token_list"
+    }
+}
 
 /**
  * `BalanceView`.
@@ -255,6 +276,14 @@ sealed class BalanceShellResult {
          * [failed_chain_ids], never said as "can't reach".
          */
         val internal_chain_ids: List<Int> = emptyList(),
+        /**
+         * The failed chains whose RPC was never the problem: the chain's
+         * token list (the registry document that names its stablecoins) could
+         * not be loaded, and the chain has no native coin to read without it
+         * (Tempo). A subset of [failed_chain_ids]; the core says "can't load
+         * its token list" for them and offers no RPC fix.
+         */
+        val registry_chain_ids: List<Int> = emptyList(),
         val now_ms: Double,
     ) : BalanceShellResult()
 

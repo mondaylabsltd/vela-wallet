@@ -455,7 +455,26 @@ object WalletFixtures {
             WalletScreenState.H11 -> liveInternalFault(base, strings)
             WalletScreenState.H12 -> liveInternalFault(base, strings, everyChain = true)
             WalletScreenState.H13 -> liveCurrencyOnItsWay(base, strings)
+            WalletScreenState.H13B -> liveCurrencyOnItsWay(base, strings, committed = true)
+            WalletScreenState.H14 -> liveTokenListUnreachable(base, strings)
         }
+    }
+
+    /** The names H14 and Settings' SR7 call their networks by. */
+    val TOKEN_LIST_CHAINS = mapOf(100 to "Gnosis", app.getvela.wallet.feature.wallet.core.BalanceBoards.TEMPO to "Tempo")
+
+    /**
+     * H14 — Tempo's token list could not be loaded: the real balance
+     * machine's view of that round (`BalanceBoards.tokenListUnreachable`)
+     * through [WalletLive.home]. The hero keeps its figure and says what the
+     * core says — the list, not the network.
+     */
+    private fun liveTokenListUnreachable(base: WalletHomeModel, strings: VelaStrings): WalletHomeModel {
+        val now = System.currentTimeMillis()
+        val view = app.getvela.wallet.feature.wallet.core.BalanceBoards.tokenListUnreachable(ADDRESS_FULL, now - 120_000.0)
+        return WalletLive.home(
+            base, view, app.getvela.wallet.feature.wallet.core.FeedView(), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true), strings, TOKEN_LIST_CHAINS, now = now,
+        ).copy(state = WalletScreenState.H14)
     }
 
     /**
@@ -511,7 +530,7 @@ object WalletFixtures {
      * state — never "$794" for a few seconds, then "¥5,640" — and what is
      * held is shown, since a token amount is not in the display currency.
      */
-    private fun liveCurrencyOnItsWay(base: WalletHomeModel, strings: VelaStrings): WalletHomeModel {
+    private fun liveCurrencyOnItsWay(base: WalletHomeModel, strings: VelaStrings, committed: Boolean = false): WalletHomeModel {
         val now = System.currentTimeMillis()
         val view = app.getvela.wallet.feature.wallet.core.BalanceView(
             address = ADDRESS_FULL,
@@ -526,18 +545,26 @@ object WalletFixtures {
             ),
         )
         val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
-        val waiting = app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
-        return WalletLive.home(base, view, app.getvela.wallet.feature.wallet.core.FeedView(), waiting, strings, chains, now = now)
-            .copy(state = WalletScreenState.H13)
+        // H13B: the same frame once the rate is in — CNY, committed.
+        val currency = if (committed) {
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "CNY", rate = 7.1, committed = true)
+        } else {
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+        }
+        return WalletLive.home(base, view, app.getvela.wallet.feature.wallet.core.FeedView(), currency, strings, chains, now = now)
+            .copy(state = if (committed) WalletScreenState.H13B else WalletScreenState.H13)
     }
 
     /**
      * H10's feed: the core privacy fixture's rows, dated today and yesterday.
      * The home draws the core's cut (issue #469) — `home_rows`, the newest
      * three and the two day headers over them, as the core's fixture carries
-     * it; the allowance and signature rows are History's.
+     * it: received, sent and the SPLIT (one operation, two recipients — its
+     * row is the total, its detail lists each share); the swap, the
+     * allowance and the signature rows are History's. [hidden] `false` is
+     * the same feed shown, for the boards that set the two side by side.
      */
-    internal fun liveHiddenFeed(now: Long = System.currentTimeMillis()): app.getvela.wallet.feature.wallet.core.FeedView {
+    internal fun liveHiddenFeed(now: Long = System.currentTimeMillis(), hidden: Boolean = true): app.getvela.wallet.feature.wallet.core.FeedView {
         val today = java.util.Calendar.getInstance().apply {
             timeInMillis = now
             set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -575,13 +602,34 @@ object WalletFixtures {
                 intent_term = term, place = "swap.example", site = "swap.example", allowance = allowance,
                 received = received, estimated = received != null, off_chain = offChain,
             )
+        // The split, as the core folds it: one row for the operation, its
+        // total the sum, each person's share on the batch.
+        val shares = listOf(
+            app.getvela.wallet.feature.wallet.core.FeedBatchTransfer(to = "0xdddddddddddddddddddddddddddddddddddddddd", to_name = "Bea", value = "214.5", symbol = "USDC", decimals = 6, usd_value = 214.5),
+            app.getvela.wallet.feature.wallet.core.FeedBatchTransfer(to = "0xfafafafafafafafafafafafafafafafafafafafa", value = "469.25", symbol = "USDC", decimals = 6, usd_value = 469.25),
+        )
+        val split = item(SPLIT_ROW, FeedTxKind.Send, Out, "683.75", "USDC", 1, yesterday, true, listOf(FeedLine.Network(1))).let { row ->
+            row.copy(
+                item = row.item.copy(
+                    decimals = 6,
+                    tx_hash = "0x" + "af".repeat(32),
+                    batch = app.getvela.wallet.feature.wallet.core.FeedBatch(
+                        kind = app.getvela.wallet.feature.wallet.core.FeedBatchKind.Split, count = shares.size, total_usd = 683.75,
+                        transfers = shares, ids = listOf("split-a", "split-b"), from = ADDRESS_FULL, chain_id = 1,
+                        timestamp = row.item.timestamp, status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Confirmed,
+                        tx_hash = "0x" + "af".repeat(32), user_op_hash = "0x" + "ef".repeat(32), symbol = "USDC",
+                    ),
+                ),
+            )
+        }
         val all = app.getvela.wallet.feature.wallet.core.FeedView(
-            hidden = true,
+            hidden = hidden,
             rows = listOf(
                 header(today),
                 item("received", FeedTxKind.Receive, In, "289.5", "USDT", 1, today, true, listOf(FeedLine.From(address = "0xcccccccccccccccccccccccccccccccccccccccc"))),
                 header(yesterday),
                 item("sent", FeedTxKind.Send, Out, "163.25", "USDC", 1, yesterday, true, listOf(FeedLine.To(address = "0xdddddddddddddddddddddddddddddddddddddddd", name = "Bea"))),
+                split,
                 item(
                     "swap", FeedTxKind.DappTx, Out, "237.5", "USDC", 100, yesterday, true, listOf(FeedLine.Network(100)),
                     dapp("intentContractCall", received = app.getvela.wallet.feature.wallet.core.FeedDappChange(direction = In, verified = true, symbol = "xDAI", value = "128.75", decimals = 18)),
@@ -599,4 +647,7 @@ object WalletFixtures {
         )
         return all.copy(home_rows = all.rows.take(5))
     }
+
+    /** The boards' split row (in the core's fixture its id is the operation's hash). */
+    const val SPLIT_ROW = "split"
 }

@@ -120,20 +120,23 @@ class WalletFixturesTest {
         assertEquals(BalanceStateKind.Hidden, model.balance.state)
         assertEquals("••••••", model.balance.integer)
         assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.balance == "••••" && it.fiat == AssetFiatModel.Masked })
-        // Issue #469: the home draws the core's cut — the newest three.
+        // Issue #469: the home draws the core's cut — the newest three: the
+        // received, the sent and the split (the core fixture's own cut).
         val rows = model.activityGroups.flatMap { it.rows }.associateBy { it.id }
-        assertEquals(listOf("received", "sent", "swap"), model.activityGroups.flatMap { it.rows }.map { it.id })
-        for (id in listOf("received", "sent", "swap")) assertEquals(id, "••••", rows.getValue(id).amount)
-        assertEquals("•••• xDAI", rows.getValue("swap").received)
+        assertEquals(listOf("received", "sent", "split"), model.activityGroups.flatMap { it.rows }.map { it.id })
+        for (id in listOf("received", "sent", "split")) assertEquals(id, "••••", rows.getValue(id).amount)
+        assertEquals("the split's coin stays beside its mask", "USDC", rows.getValue("split").unit)
         // The rest are History's, drawn by the same builder from the same feed.
         val feed = WalletFixtures.liveHiddenFeed()
         val history = app.getvela.wallet.feature.wallet.WalletLive.activity(feed, s).flatMap { it.rows }.associateBy { it.id }
+        assertEquals("••••", history.getValue("swap").amount)
+        assertEquals("•••• xDAI", history.getValue("swap").received)
         assertEquals("••••", history.getValue("permit").amount)
         assertEquals(s.t("componentsUi.signingApprove.unlimitedValue"), history.getValue("permit-unlimited").amount)
         assertFalse(history.getValue("signature").masked)
         val figures = ((rows.values + history.values).flatMap { listOfNotNull(it.amount, it.received) } + model.assetRows.map { it.balance } +
             listOfNotNull(model.balance.integer, model.balance.decimals)).joinToString(" ")
-        for (run in listOf("418", "376", "289", "163", "237", "352", "128")) assertFalse("$run leaks: $figures", figures.contains(run))
+        for (run in listOf("418", "376", "289", "163", "237", "352", "128", "683", "214", "469")) assertFalse("$run leaks: $figures", figures.contains(run))
     }
 
     /**
@@ -188,6 +191,24 @@ class WalletFixturesTest {
         assertEquals(listOf("418.25 xDAI", "376.54 USDC"), model.assetRows.map { it.balance })
         val drawn = (listOfNotNull(model.balance.integer, model.balance.decimals) + model.assetRows.map { it.fiat.toString() }).joinToString(" ")
         assertFalse("no dollar figure anywhere: $drawn", drawn.contains("$") || drawn.contains("794"))
+    }
+
+    /**
+     * H14 (the integration's note 4): Tempo's token list did not load — the
+     * real balance machine's view through the live builder. The hero keeps
+     * what it could read and says the LIST is what failed, in the core's
+     * sentence, in both languages.
+     */
+    @Test
+    fun h14SaysTheTokenListNotTheNetwork() {
+        val english = I18nRuntime { tag -> File(repoRoot, "assets/i18n/$tag.json").readBytes() }.apply { initialize("en") }
+        val en = WalletFixtures.buildMobileState(WalletScreenState.H14, english)
+        assertEquals(WalletScreenState.H14, en.state)
+        assertEquals(BalanceStateKind.Normal, en.balance.state)
+        assertEquals(BalanceStatusKind.Warning, en.balance.status?.kind)
+        assertEquals("Can't load Tempo's token list right now", en.balance.status?.text)
+        assertEquals("暂时读不到 Tempo 的代币列表", WalletFixtures.buildMobileState(WalletScreenState.H14, zhStrings()).balance.status?.text)
+        assertTrue("what could be read is shown", en.assetRows.isNotEmpty())
     }
 
     @Test

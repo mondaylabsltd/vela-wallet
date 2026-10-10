@@ -192,6 +192,7 @@ fun GalleryScreen(initialDarkTheme: Boolean) {
                                 busy = view.busy,
                                 addHeadingKey = view.addHeadingKey,
                                 methodsPinned = view.methodsPinned,
+                                keyCountShown = view.keyCountShown,
                                 addMethods = view.addMethods,
                                 signingPage = FlowFixtures.ownPageItem(view, strings),
                                 canChoosePage = view.canChoosePage,

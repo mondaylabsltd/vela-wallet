@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.wallet.components
 
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -30,13 +32,32 @@ fun BalanceStatusLine(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
 ) {
+    StatusLineRow(model = model, modifier = modifier.clickable(onClick = onClick))
+}
+
+/**
+ * The line's ROOM: the very row a status draws, one line of it, unseen and
+ * unsaid and taking no tap. The hero keeps it from the first frame
+ * ([BalanceDisplay]), so a status arriving, changing or going moves nothing
+ * under it — it is the same row, so it is the same height.
+ */
+@Composable
+fun BalanceStatusRoom(modifier: Modifier = Modifier) {
+    StatusLineRow(
+        model = BalanceStatusModel(BalanceStatusKind.Refreshing, " "),
+        modifier = modifier.alpha(0f).clearAndSetSemantics { },
+    )
+}
+
+@Composable
+private fun StatusLineRow(model: BalanceStatusModel, modifier: Modifier) {
     val colors = VelaTheme.colors
     val tint = when (model.kind) {
         BalanceStatusKind.Warning -> colors.warningBase
         BalanceStatusKind.Refreshing -> colors.fgMuted
     }
     Row(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
     ) {

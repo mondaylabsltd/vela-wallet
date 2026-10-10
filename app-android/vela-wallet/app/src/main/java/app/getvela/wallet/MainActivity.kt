@@ -295,6 +295,11 @@ class MainActivity : ComponentActivity() {
         val coldStart = savedInstanceState == null && !launchAnimationDisabled() && !galleryRequested()
         super.onCreate(savedInstanceState)
         readDebugOverrides()
+        // A gallery, a board or a developer route opens no camera, whatever
+        // is drawn there (the scanner shows its fixture frame): said once,
+        // from the extras this build honoured, before anything composes.
+        app.getvela.wallet.feature.scan.ScanCamera.fixtureSession =
+            app.getvela.wallet.feature.scan.ScanCamera.isFixtureSession(startDestination(), galleryRequested())
         securityKeyCeremony = SecurityKeyCeremony(this)
         cameraPermissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),

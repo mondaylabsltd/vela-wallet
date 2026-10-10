@@ -728,8 +728,15 @@ class SigningLiveTest {
      * simulation's verdict lands a second after it opens — on a chain whose
      * nodes cannot simulate (Gnosis), as 「Vela 未能检查这笔交易的结果」 on
      * every request — pushing the whole form up. Its place is kept from the
-     * first frame: the room of that very card, empty while the simulation is
-     * out, and the card in it when it lands. Same block, same size.
+     * first frame, empty while the simulation is out, and the card in it
+     * when it lands. Same block, same size.
+     *
+     * The integration's note 12: the place is as tall as the tallest verdict
+     * a sheet can end on — it was that one card's, and every other verdict
+     * is taller than it (a swap's two balance rows still pushed the sheet
+     * up). Its rooms are those verdicts, each the card the live builder
+     * draws: "could not check", "expected to fail" at the core's longest
+     * reason, "no asset changes", and a balance card of a swap's two rows.
      */
     @Test
     fun `the simulation's verdict has its place from the first frame`() {
@@ -749,14 +756,32 @@ class SigningLiveTest {
             card,
         )
 
+        // The rooms: every verdict the sheet can end on.
+        val rooms = SigningLive.verdictRooms(ctx)
+        assertEquals("could not check", card, rooms[0])
+        val fails = rooms[1] as SigningBlock.Warning
+        assertEquals("a revert is a danger", SigningTone.Danger, fails.tone)
+        // …at the core's own cap: the reason the core prints is never longer than this one.
+        val longest = app.getvela.wallet.feature.signing.core.SimDeltas.longestRevert()!!
+        assertEquals("componentsUi.signing.simWillFailReason", longest.key)
+        assertEquals("the core cut it at its cap", 64, longest.reason!!.length)
+        assertTrue(longest.reason!!, longest.reason!!.endsWith("…"))
+        assertEquals(strings.t(longest.key, mapOf("reason" to longest.reason!!)), fails.text)
+        assertEquals(
+            SigningBlock.Balances(strings.t("componentsUi.signing.balanceChangesTitle"), emptyList(), strings.t("componentsUi.signing.simResultNoChange")),
+            rooms[2],
+        )
+        assertEquals("a swap's two rows", 2, (rooms[3] as SigningBlock.Balances).rows.size)
+        assertEquals(4, rooms.size)
+
         // Out: the place, nothing said in it.
         val waiting = sheet(request(params), SigningController.SimOutcome.Pending)
-        assertEquals(SigningBlock.Held(room = card, shown = null), waiting.blocks.single { it is SigningBlock.Held })
+        assertEquals(SigningBlock.Held(rooms = rooms, shown = null), waiting.blocks.single { it is SigningBlock.Held })
         assertTrue("nothing is said before a verdict", waiting.blocks.said().none { it is SigningBlock.Warning || it is SigningBlock.Balances })
 
         // Landed "could not check": the same card in the same place — nothing moves.
         val landed = sheet(request(params), couldNot)
-        assertEquals(SigningBlock.Held(room = card, shown = card), landed.blocks.single { it is SigningBlock.Held })
+        assertEquals(SigningBlock.Held(rooms = rooms, shown = card), landed.blocks.single { it is SigningBlock.Held })
         assertEquals(waiting.blocks.indexOfFirst { it is SigningBlock.Held }, landed.blocks.indexOfFirst { it is SigningBlock.Held })
         assertEquals(waiting.blocks.size, landed.blocks.size)
 

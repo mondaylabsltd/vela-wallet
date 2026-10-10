@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.signing
 
+import androidx.compose.runtime.remember
+import app.getvela.wallet.core.designsystem.components.KeptRoom
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -88,6 +90,11 @@ private fun SigningFeeBody(
     onRefresh: (() -> Unit)?,
 ) {
     val colors = VelaTheme.colors
+    // The fee's worth is withheld until the display currency commits, and
+    // the line it joins ("~0.000123 ETH · ≈CN¥2.24") wraps onto a second
+    // line: the figure keeps two lines' room from the first frame, and keeps
+    // it — the confirm under the card does not move when the worth lands.
+    val worthRoom = remember { KeptRoom() }.keep(fee.worthRoom)
     run {
         if (fee.selectorTitle == null) Column(
             modifier = Modifier
@@ -118,14 +125,24 @@ private fun SigningFeeBody(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md, Alignment.End),
                 ) {
-                    Text(
-                        text = fee.value,
-                        color = colors.fgBase,
-                        fontFamily = VelaFontFamily,
-                        fontSize = VelaTextSize.base,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
+                    Box(modifier = Modifier.weight(1f, fill = false), contentAlignment = Alignment.CenterEnd) {
+                        if (worthRoom) {
+                            // Two lines of the figure's own face: the room, unseen and unsaid.
+                            Text(
+                                text = "\n",
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.base,
+                                modifier = Modifier.alpha(0f).clearAndSetSemantics {},
+                            )
+                        }
+                        Text(
+                            text = fee.value,
+                            color = colors.fgBase,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.base,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        )
+                    }
                     if (fee.chevron) {
                         Icon(
                             VelaIcons.ChevronRight, null, tint = colors.fgMuted,

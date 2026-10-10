@@ -72,10 +72,44 @@ class SettingsFixturesTest {
         // ST17–ST18B are spec 102's: where you review and sign, and the signing pages.
         // SK1–SK4: the Keys block with its copy-to-Ethereum row in each state.
         // ST10D: Add network refused for no P-256 verifier (ST10C is missing contracts).
-        assertEquals(40, states.size)
-        assertEquals(29, states.count { it.name.startsWith("ST") })
-        assertEquals(7, states.count { it.name.startsWith("SR") })
+        // ST10E–ST10J: the wizard's stops, each from the real machine's view.
+        // SR7: the unreachable list when the one network is there for its token list.
+        // SR3B / SR3C: the balance sheet with the currency on its way, and landed.
+        assertEquals(49, states.size)
+        assertEquals(35, states.count { it.name.startsWith("ST") })
+        assertEquals(10, states.count { it.name.startsWith("SR") })
         assertEquals(4, states.count { it.name.startsWith("SK") })
+    }
+
+    /**
+     * SR7 (the integration's note 4): Tempo's token list did not load. One
+     * row, what was last read there, and NO "Fix" — its RPC is fine.
+     */
+    @Test
+    fun `SR7 lists the network whose token list did not load, with no Fix`() {
+        val model = SettingsFixtures.buildState(SettingsScreenState.SR7, strings("en"))
+        assertEquals(SettingsOverlay.Unreachable, model.overlay)
+        assertEquals("Can't load Tempo's token list right now", model.unreachable.title)
+        val row = model.unreachable.rows.single()
+        assertEquals("Tempo", row.name)
+        assertEquals("Last seen \$120.50", row.line)
+        assertNull(row.action)
+        assertEquals("暂时读不到 Tempo 的代币列表", SettingsFixtures.buildState(SettingsScreenState.SR7, strings("zh")).unreachable.title)
+    }
+
+    /** ST10E–ST10J: every stop is on the Add network page, saying something. */
+    @Test
+    fun `each wizard stop board says its sentence in every shipped locale`() {
+        for (locale in SHIPPED_LOCALES) {
+            val s = strings(locale)
+            for (state in SettingsScreenState.entries.filter { SettingsFixtures.wizardStop(it) != null }) {
+                val add = SettingsFixtures.buildState(state, s).addNetwork
+                val text = add.callout?.text.orEmpty()
+                assertTrue("$locale $state: a stop always says why", text.isNotBlank())
+                assertTrue("$locale $state: a sentence, not a key ($text)", !text.contains("settingsModals.") && !text.contains("addToken."))
+            }
+        }
+        assertEquals(6, SettingsScreenState.entries.count { SettingsFixtures.wizardStop(it) != null })
     }
 
     /** Spec 092: SR6 is the unreachable list, drawn through the live builder. */

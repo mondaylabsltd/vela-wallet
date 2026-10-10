@@ -162,6 +162,7 @@ class BalanceExecutor(
             "held" to holdings.tokens.size,
             "failed" to holdings.failed.size,
             "internal" to holdings.internal.size,
+            "registry" to holdings.registry.size,
             "rateLimited" to pool.view.value.rate_limited_chains.size,
         )
         return BalanceShellResult.FetchSettled(
@@ -174,6 +175,7 @@ class BalanceExecutor(
             rate_limited_chain_ids = pool.view.value.rate_limited_chains,
             read_chain_ids = holdings.read,
             internal_chain_ids = holdings.internal,
+            registry_chain_ids = holdings.registry,
             now_ms = now(),
         )
     }
@@ -185,6 +187,13 @@ class BalanceExecutor(
         val read: List<Int> = emptyList(),
         /** The failed chains whose read never left the app (PR 2 note 11) — a subset of [failed]. */
         val internal: List<Int> = emptyList(),
+        /**
+         * The failed chains whose RPC was never asked because their token
+         * list could not be loaded and they have no coin of their own to read
+         * without it — a subset of [failed]. The core words them as "can't
+         * load its token list" and offers no RPC fix.
+         */
+        val registry: List<Int> = emptyList(),
     )
 
     /**
@@ -206,6 +215,12 @@ class BalanceExecutor(
          * note 11): not answered, and not the network's doing either.
          */
         val internal: Boolean = false,
+        /**
+         * Not answered because the chain's token list (its registry document)
+         * could not be loaded and it has no native coin to read without one:
+         * the RPC was never the problem, and was never asked.
+         */
+        val registryUnread: Boolean = false,
     )
 
     /** What a slot in the batch is, which decides how it gets priced. */
@@ -313,6 +328,7 @@ class BalanceExecutor(
             failed = results.filterNot { it.answered }.map { it.chainId },
             read = results.map { it.chainId },
             internal = results.filter { it.internal }.map { it.chainId },
+            registry = results.filter { it.registryUnread && !it.answered }.map { it.chainId },
         )
     }
 
@@ -361,7 +377,10 @@ class BalanceExecutor(
         // its own keeps today's degrade: its coin is still read.
         if (!readsNative && doc == ChainDoc.Unread) {
             VelaLog.event("balance.plan", "registry unread, chain not read", "chain" to chainId)
-            return ChainAnswer(chainId, answered = false, tokens = emptyList())
+            // The integration's note 4: said for what it is — the chain's
+            // token list, not its RPC (which nobody asked). The core then
+            // says "can't load its token list" and offers no RPC fix.
+            return ChainAnswer(chainId, answered = false, tokens = emptyList(), registryUnread = true)
         }
         plan.forEach { slot ->
             val contract = slot.contract

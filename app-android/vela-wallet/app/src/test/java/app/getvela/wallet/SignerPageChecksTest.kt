@@ -333,6 +333,48 @@ class SignerPageChecksTest {
         assertEquals("Checking the page…", SignerPageChecks.words(SignerPageChecks.CHECKING, strings, now, formats, zone))
     }
 
+    /**
+     * The integration's note 14: a 12-hour CJK moment is one unbreakable unit
+     * too. U+00A0 does not bind two Han characters to each other, so 「下午
+     * 2:32」 could still break BETWEEN 下 and 午 at some widths; the core puts
+     * U+2060 WORD JOINER between them (and between kana, and Hangul). This
+     * shell draws the core's string as it comes — it neither strips nor adds
+     * a joiner — and a Latin-script moment is byte for byte what it was.
+     */
+    @Test
+    fun `a twelve-hour CJK checked time is one unbreakable unit, joiners and all`() {
+        val zone = java.util.TimeZone.getTimeZone("UTC")
+        val h12 = app.getvela.wallet.core.format.Formats(
+            date = app.getvela.wallet.core.format.DateFormatKey.MdySlash,
+            time = app.getvela.wallet.core.format.TimeFormatKey.H12,
+        )
+        val now = java.time.Instant.parse("2026-10-09T18:00:00Z").toEpochMilli()
+        val line = uniffi.vela_core_uniffi.SignerIntegrityLine(
+            SignerIntegrityState.MATCHES, "0ba8ee8c", java.time.Instant.parse("2026-10-09T14:32:00Z").toEpochMilli().toULong(),
+            "componentsUi.signing.integrity.matches", true,
+        )
+        fun runtime(lang: String) = app.getvela.wallet.core.i18n.I18nRuntime { tag -> java.io.File(System.getProperty("vela.repo.root"), "assets/i18n/$tag.json").readBytes() }
+            .apply { initialize(lang) }
+        fun words(lang: String) = SignerPageChecks.words(line, runtime(lang), now, h12, zone)
+
+        val zh = words("zh")
+        assertEquals("版本 0ba8ee8c\u00a0· 与 Vela 公布的构建清单一致\u00a0· 检查于 下\u2060午\u00a02:32", zh)
+        val ja = words("ja")
+        // (Japanese puts the moment before its verb: "… 午後 2:32 に確認".)
+        assertTrue(ja, ja.contains("\u00a0· 午\u2060後\u00a02:32 "))
+        // Latin script: unchanged — no joiner anywhere.
+        val en = words("en")
+        assertTrue(en, en.endsWith("checked 2:32\u00a0PM"))
+        assertFalse(en.contains('\u2060'))
+
+        // No ordinary space is left inside any of the three moments: every
+        // gap in one is U+00A0 or U+2060, so nothing in it is a place a line
+        // may break.
+        assertEquals("下\u2060午\u00a02:32", zh.substringAfterLast(' '))
+        assertEquals("午\u2060後\u00a02:32", ja.substringBeforeLast(' ').substringAfterLast(' '))
+        assertEquals("2:32\u00a0PM", en.substringAfterLast(' '))
+    }
+
     @Test
     fun `the check asks for the page as a browser navigates to it`() {
         val headers = uniffi.vela_core_uniffi.signerPageCheckHeaders()

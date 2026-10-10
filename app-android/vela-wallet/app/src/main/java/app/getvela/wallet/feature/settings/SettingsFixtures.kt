@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.settings
 
 import app.getvela.wallet.feature.settings.core.WalletKeys
 import app.getvela.wallet.feature.settings.core.RegistryBackup
+import app.getvela.wallet.feature.settings.core.NetBoards
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.core.data.DebugMode
@@ -956,6 +957,32 @@ object SettingsFixtures {
         ),
     )
 
+    /**
+     * SR3B / SR3C: the balance by network through [SettingsLive.balanceDetail]
+     * — two networks read (Ethereum, Gnosis), one busy, one holding — with the
+     * currency on its way and then committed.
+     */
+    private fun liveBalanceDetail(s: VelaStrings, committed: Boolean): BalanceDetailModel {
+        val view = BalanceView(
+            display_total_usd = 794.79,
+            tokens = listOf(
+                app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                app.getvela.wallet.feature.wallet.core.BalanceToken(
+                    chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54", decimals = 6,
+                    token_address = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", price_usd = 1.0,
+                ),
+            ),
+            failed_chain_ids = listOf(137),
+            rate_limited_chain_ids = listOf(137),
+        )
+        val currency = if (committed) {
+            CurrencyView(code = "CNY", rate = 7.1, committed = true)
+        } else {
+            CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+        }
+        return SettingsLive.balanceDetail(balanceDetail(s), view, currency, mapOf(1 to "Ethereum", 100 to "Gnosis", 137 to "Polygon"), s)
+    }
+
     private fun relayer(s: VelaStrings) = RelayerModel(
         title = s.t(I18nKeys.SettingsUi.RELAYER_TITLE),
         lead = s.t(I18nKeys.SettingsUi.RELAYER_LEAD),
@@ -1010,7 +1037,9 @@ object SettingsFixtures {
         SettingsScreenState.ST8 -> Shape(SettingsPage.Home, SettingsOverlay.TimeFormat)
         SettingsScreenState.ST9 -> Shape(SettingsPage.Networks, SettingsOverlay.None)
         SettingsScreenState.ST9B -> Shape(SettingsPage.NetworkDetail, SettingsOverlay.None)
-        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C, SettingsScreenState.ST10D ->
+        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C, SettingsScreenState.ST10D,
+        SettingsScreenState.ST10E, SettingsScreenState.ST10F, SettingsScreenState.ST10G,
+        SettingsScreenState.ST10H, SettingsScreenState.ST10I, SettingsScreenState.ST10J ->
             Shape(SettingsPage.AddNetwork, SettingsOverlay.None)
         SettingsScreenState.ST11 -> Shape(SettingsPage.RpcProviders, SettingsOverlay.None)
         SettingsScreenState.ST12 -> Shape(SettingsPage.Endpoints, SettingsOverlay.None)
@@ -1025,12 +1054,12 @@ object SettingsFixtures {
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR2, SettingsScreenState.SR2B ->
             Shape(SettingsPage.Home, SettingsOverlay.RpcFix, rescue = true, backdrop = "wallet")
-        SettingsScreenState.SR3 ->
+        SettingsScreenState.SR3, SettingsScreenState.SR3B, SettingsScreenState.SR3C ->
             Shape(SettingsPage.Home, SettingsOverlay.BalanceDetail, rescue = true, backdrop = "wallet")
         SettingsScreenState.SR4 ->
             Shape(SettingsPage.Home, SettingsOverlay.Relayer, rescue = true, backdrop = "send")
         SettingsScreenState.SR5 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
-        SettingsScreenState.SR6 ->
+        SettingsScreenState.SR6, SettingsScreenState.SR7 ->
             Shape(SettingsPage.Home, SettingsOverlay.Unreachable, rescue = true, backdrop = "wallet")
         SettingsScreenState.SK1, SettingsScreenState.SK2, SettingsScreenState.SK3, SettingsScreenState.SK4 ->
             Shape(SettingsPage.Home, SettingsOverlay.None)
@@ -1045,8 +1074,13 @@ object SettingsFixtures {
      * reads the row off the step and maps nothing.
      */
     fun backupCheck(state: SettingsScreenState): RegistryBackup.Check? {
-        fun row(subtitle: String, tone: RegistryBackup.Tone, action: RegistryBackup.Action) =
-            RegistryBackup.Row("settingsModals.backup.title", "settingsModals.backup.$subtitle", tone, action)
+        // The paragraph under the row rides with it, as the core sends it:
+        // every state but the one that can never be copied.
+        fun row(subtitle: String, tone: RegistryBackup.Tone, action: RegistryBackup.Action, explained: Boolean = true) =
+            RegistryBackup.Row(
+                "settingsModals.backup.title", "settingsModals.backup.$subtitle", tone, action,
+                explainKey = I18nKeys.SettingsUi.BACKUP_EXPLAIN.takeIf { explained },
+            )
         return when (state) {
             SettingsScreenState.SK1 -> RegistryBackup.Check(
                 RegistryBackup.State.NotBackedUp,
@@ -1060,7 +1094,7 @@ object SettingsFixtures {
             SettingsScreenState.SK3 -> RegistryBackup.COULD_NOT
             SettingsScreenState.SK4 -> RegistryBackup.Check(
                 RegistryBackup.State.NotCopyable, null,
-                row("cannotCopy", RegistryBackup.Tone.Neutral, RegistryBackup.Action.None),
+                row("cannotCopy", RegistryBackup.Tone.Neutral, RegistryBackup.Action.None, explained = false),
             )
             else -> null
         }
@@ -1187,7 +1221,29 @@ object SettingsFixtures {
     }
 
     fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel =
-        withKeys(withSigning(baseState(state, s), state, s), state, s)
+        withWizardStop(withKeys(withSigning(baseState(state, s), state, s), state, s), state, s)
+
+    /** Which of the wizard's stops a board draws; `null` on every other board. */
+    fun wizardStop(state: SettingsScreenState): NetBoards.Stop? = when (state) {
+        SettingsScreenState.ST10E -> NetBoards.Stop.ScanMissingContracts
+        SettingsScreenState.ST10F -> NetBoards.Stop.ScanNoP256
+        SettingsScreenState.ST10G -> NetBoards.Stop.ScanCheckFailed
+        SettingsScreenState.ST10H -> NetBoards.Stop.AlreadyAdded
+        SettingsScreenState.ST10I -> NetBoards.Stop.NotFound
+        SettingsScreenState.ST10J -> NetBoards.Stop.NoRpcEndpoint
+        else -> null
+    }
+
+    /**
+     * ST10E–ST10J: the wizard stopped — the real machine's view of it
+     * (`NetBoards`) through [SettingsLive.withWizard], the builder a session
+     * draws with. Nothing here words a stop.
+     */
+    private fun withWizardStop(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+        val stop = wizardStop(state) ?: return model
+        val search = addNetwork(s, "search").copy(results = emptyList())
+        return SettingsLive.withWizard(model.copy(addNetwork = search), NetBoards.view(stop), s)
+    }
 
     private fun baseState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
         val shape = shape(state)
@@ -1308,15 +1364,30 @@ object SettingsFixtures {
             feedback = feedback(s),
             rpcBanner = if (state == SettingsScreenState.SR1) rpcBanner(s) else null,
             rpcFix = rpcFix(s, restored = state == SettingsScreenState.SR2B),
-            balanceDetail = balanceDetail(s),
+            balanceDetail = when (state) {
+                SettingsScreenState.SR3B -> liveBalanceDetail(s, committed = false)
+                SettingsScreenState.SR3C -> liveBalanceDetail(s, committed = true)
+                else -> balanceDetail(s)
+            },
             // SR6 is drawn through the live builder, from a view shaped like
             // the core's: what the gallery shows is what a session would.
-            unreachable = SettingsLive.unreachable(
-                UNREACHABLE_VIEW,
-                CurrencyView(code = "USD", rate = 1.0, committed = true),
-                UNREACHABLE_NAMES,
-                s,
-            ),
+            unreachable = if (state == SettingsScreenState.SR7) {
+                // SR7: the real machine's round in which Tempo's token list
+                // did not load — one row, what was last read there, no Fix.
+                SettingsLive.unreachable(
+                    app.getvela.wallet.feature.wallet.core.BalanceBoards.tokenListUnreachable(ADDRESS_FULL, System.currentTimeMillis().toDouble()),
+                    CurrencyView(code = "USD", rate = 1.0, committed = true),
+                    app.getvela.wallet.feature.wallet.WalletFixtures.TOKEN_LIST_CHAINS,
+                    s,
+                )
+            } else {
+                SettingsLive.unreachable(
+                    UNREACHABLE_VIEW,
+                    CurrencyView(code = "USD", rate = 1.0, committed = true),
+                    UNREACHABLE_NAMES,
+                    s,
+                )
+            },
             relayer = relayer(s),
             indexDown = indexDown(s),
             backdropTitle = backdropTitle,
