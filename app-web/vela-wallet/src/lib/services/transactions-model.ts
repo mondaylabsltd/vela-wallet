@@ -32,6 +32,15 @@ export interface LocalTransaction {
 	chainId: number;
 	/** Unix seconds. */
 	timestamp: number;
+	/**
+	 * `receive` only (PR 3): `timestamp` is the time of the transaction's own
+	 * block, as a chain gave it. Written `true` on every receipt taken from the
+	 * `token_trust` feed (whose times are block times) and by the feed's
+	 * `write_receive_time`. Absent on a record from before the mark, when a
+	 * receipt whose block could not be read was stamped with the clock: the
+	 * feed core re-reads such a record's block time and rewrites it.
+	 */
+	timeVerified?: boolean;
 	status: 'pending' | 'confirmed' | 'failed';
 	/** Defaults to 'send' for records older than the field. */
 	type?: TransactionType;

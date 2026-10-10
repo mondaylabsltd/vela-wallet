@@ -16,6 +16,6 @@ export interface IncomingTransfer {
 	txHash: string;
 	blockNumber: number;
 	logIndex: number;
-	/** Unix seconds (resolved from the block; falls back to now). */
+	/** Unix seconds: the block's own time, never the clock's (PR 3). */
 	timestamp: number;
 }

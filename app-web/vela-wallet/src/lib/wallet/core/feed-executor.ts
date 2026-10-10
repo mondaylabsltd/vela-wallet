@@ -2,11 +2,13 @@
 /**
  * The only place the `activity_feed` core touches the outside world.
  *
- * Six operations, one existing service call each — the vocabulary the core
+ * Eight operations, one existing service call each — the vocabulary the core
  * declares (`ReadTxStore` / `ScanIncomingTransfers` / `DeleteTxRecord` /
- * `ResolveRecipientIdentity` / `Timer` / `Haptic`). No branching on business
+ * `ResolveRecipientIdentity` / `Timer` / `Haptic`, and since PR 3
+ * `ReadReceiveTime` / `WriteReceiveTime`). No branching on business
  * meaning: the dedupe, the batch fold, the tombstone filter, the celebration
- * gate and the "when to read again" choices all live in Rust.
+ * gate, the "when to read again" choices and the repair of a receipt's time
+ * (which records, how many a round, when to ask again) all live in Rust.
  *
  * Wire vs stored shape — the two things this file must get exactly right:
  *
@@ -17,6 +19,14 @@
  * - **`timestamp` stays the stored epoch SECONDS**, and `usd` stays the legacy
  *   pre-formatted string exactly as persisted — the core parses it once, the way
  *   `txUsdValue` does.
+ * - **`time_verified` is the stored `timeVerified` mark, and absent stays
+ *   absent** (PR 3): no mark is what tells the core a receipt was written
+ *   when its time could still be the clock's, and so is to be read again.
+ *
+ * A receipt's time (PR 3) is read here and never made here: `ReadReceiveTime`
+ * answers the time of the transaction's own block, through the RPC pool, or
+ * `null` — no clock, no guess, no retry (the core asks again when it means
+ * to); `WriteReceiveTime` rewrites that one record behind the store's lock.
  *
  * A record whose `type` is present but not one of the six known values is
  * dropped rather than guessed at: it can be neither a feed item nor an
@@ -34,7 +44,8 @@
 
 import { dayStartMs, syncReceivedTransfers } from '$lib/services/activity';
 import { hapticSuccess } from '$lib/services/platform';
-import { deleteTransaction, loadTransactions } from '$lib/services/records';
+import { deleteTransaction, loadTransactions, rewriteReceiveTime } from '$lib/services/records';
+import { poolRpcCall } from '$lib/services/rpc-pool';
 import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 
@@ -296,6 +307,11 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 		status: STATUSES.includes(tx.status) ? tx.status : 'confirmed',
 		kind: (rawKind as FeedTxKind | undefined) ?? null,
 		usd: typeof tx.usd === 'string' ? tx.usd : null,
+		// PR 3: the stored mark, as stored. Absent stays absent — that is what
+		// marks a record for the core's repair — and anything but a boolean is
+		// no mark (serde takes nothing else here, and a refused record would
+		// fault the whole feed).
+		...(typeof tx.timeVerified === 'boolean' ? { time_verified: tx.timeVerified } : {}),
 		...dapp,
 		// The call's data, for a dApp transaction (spec 082 RJ16): the core
 		// decodes a plain token transfer's real recipient from it, and names
@@ -351,6 +367,36 @@ async function scanOnce(address: string): Promise<number> {
 		return await scan;
 	} finally {
 		inFlightScans.delete(address);
+	}
+}
+
+/** A whole hex quantity (`0x…`) as a number, or `null` when it is not one. */
+function hexQuantity(value: unknown): number | null {
+	if (typeof value !== 'string' || !/^0x[0-9a-fA-F]+$/.test(value)) return null;
+	const n = Number.parseInt(value, 16);
+	return Number.isSafeInteger(n) ? n : null;
+}
+
+/**
+ * The time of the block that holds `txHash`, in Unix seconds — the chain's
+ * own word, through the RPC pool: the transaction's receipt names its block,
+ * and the block its time. `null` whenever either read gave no usable answer
+ * (no receipt yet, an RPC error, a pool that gave up, a hex that does not
+ * read). Never a clock's time, never a guess, and asked once: when to ask
+ * again is the core's.
+ */
+export async function readReceiveTime(chainId: number, txHash: string): Promise<number | null> {
+	try {
+		const receipt = await poolRpcCall('eth_getTransactionReceipt', [txHash], chainId);
+		if (receipt?.error) return null;
+		const blockNumber = (receipt?.result as { blockNumber?: unknown } | null | undefined)
+			?.blockNumber;
+		if (hexQuantity(blockNumber) === null) return null;
+		const block = await poolRpcCall('eth_getBlockByNumber', [blockNumber, false], chainId);
+		if (block?.error) return null;
+		return hexQuantity((block?.result as { timestamp?: unknown } | null | undefined)?.timestamp);
+	} catch {
+		return null;
 	}
 }
 
@@ -419,6 +465,23 @@ export function createFeedExecutor(ownAccounts: () => FeedOwnAccount[], records:
 			case 'haptic':
 				hapticSuccess();
 				return { type: 'haptic_played' };
+			case 'read_receive_time':
+				// PR 3: the block's own time, or `null`. Transport only.
+				return {
+					type: 'receive_time_read',
+					id: operation.id,
+					timestamp_sec: await readReceiveTime(operation.chain_id, operation.tx_hash)
+				};
+			case 'write_receive_time': {
+				// PR 3: that one record, behind the store's own lock. A time that
+				// is not one is never written — `NaN` would be stored as `null`.
+				const sec = operation.timestamp_sec;
+				const ok =
+					Number.isFinite(sec) && sec > 0
+						? await rewriteReceiveTime(operation.id, sec).catch(() => false)
+						: false;
+				return { type: 'receive_time_written', id: operation.id, ok };
+			}
 		}
 	}
 
@@ -451,6 +514,12 @@ export function createFeedExecutor(ownAccounts: () => FeedOwnAccount[], records:
 				return { type: 'toast_expired', generation: operation.generation };
 			case 'haptic':
 				return { type: 'haptic_played' };
+			case 'read_receive_time':
+				// Not read: the record keeps its time and the core asks later.
+				return { type: 'receive_time_read', id: operation.id, timestamp_sec: null };
+			case 'write_receive_time':
+				// Not written: the same, and the core's round is not left waiting.
+				return { type: 'receive_time_written', id: operation.id, ok: false };
 		}
 	}
 

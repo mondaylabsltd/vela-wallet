@@ -20,9 +20,13 @@
  *  ② `MulticallErc20Meta` answers EVERY requested address, resolved or not.
  *    An omitted address leaves the core's metadata gate permanently unmet and
  *    the scan chain (or the admission session) never finishes.
- *  ③ `BlockTimestamp` carries `now_ms` — the core never reads a clock, so the
- *    "fall back to now" rule (`Math.floor(Date.now()/1000)`) is fed, not
- *    computed, here.
+ *  ③ `BlockTimestamp` carries the block's own time or `null`, and NO clock
+ *    (PR 3). A transfer's time is its block's time: this file used to hand
+ *    the core `Date.now()` beside the answer, the core stamped a transfer
+ *    whose block it could not read with it, and the store kept that for
+ *    good — receipts eleven days old under "Today". A block that cannot be
+ *    read is `timestamp_sec: null`; the core withholds its transfers and
+ *    asks again on a later poll.
  *
  * Failure contract (shared effect loop): nothing rejects. Every rejection is
  * converted into the result variant that operation answers with.
@@ -191,12 +195,11 @@ export async function executeTokenTrustOperation(effect: TrustEffect): Promise<T
 				address: operation.address,
 				chain_id: operation.chain_id,
 				// The core answers by block, so a block hex it cannot read back is
-				// reported as 0 — the core drops a non-pending block and the transfer
-				// takes the `now` fallback, the same nothing `tsByBlock.get` gives.
+				// reported as 0 — the core drops a block it is not waiting for, and
+				// the transfer stays withheld until its block is read (③).
 				block_number: blockNumber ?? 0,
-				timestamp_sec: typeof timestamp === 'string' ? hexToNumber(timestamp) : null,
-				// ③ the clock, carried.
-				now_ms: Date.now()
+				// ③ the block's own time, or `null` — never a clock's.
+				timestamp_sec: typeof timestamp === 'string' ? hexToNumber(timestamp) : null
 			};
 		}
 
@@ -263,14 +266,14 @@ export function tokenTrustOperationFailure(effect: TrustEffect, error: unknown):
 				outcome: { type: 'failed' }
 			};
 		case 'rpc_get_block_by_number':
-			// The rejected `Promise.allSettled` arm: no timestamp, fall back to now.
+			// The rejected `Promise.allSettled` arm: the block was not read. No
+			// time is made up for it (③): its transfers wait for a later poll.
 			return {
 				type: 'block_timestamp',
 				address: operation.address,
 				chain_id: operation.chain_id,
 				block_number: hexToNumber(operation.block) ?? 0,
-				timestamp_sec: null,
-				now_ms: Date.now()
+				timestamp_sec: null
 			};
 		case 'multicall_erc20_meta':
 			// ② still one entry per address — silence would wedge the metadata gate.
