@@ -349,6 +349,15 @@ data class TrustSimView(
     /** False while the metadata behind the judgement is still resolving. */
     val ready: Boolean = false,
     val judgments: List<TrustSimJudgment> = emptyList(),
+    /**
+     * The verdict's quiet line when the checked answer moves nothing of the
+     * person's: `componentsUi.signing.simResultNoChange` ("No asset changes")
+     * once [ready], with no judgment or every one a zero. The sheet draws
+     * this line in the verdict's place exactly when it is set, and never
+     * picks the sentence, or the case, itself. `null` while resolving,
+     * whenever something moves, and from a core that predates the field.
+     */
+    val no_change_key: String? = null,
 )
 
 @Serializable

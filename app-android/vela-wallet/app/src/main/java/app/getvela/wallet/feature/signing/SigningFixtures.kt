@@ -206,7 +206,10 @@ object SigningFixtures {
             tech = tech(
                 functionLabel = sg("techFunction"),
                 signature = intent,
-                simResult = SigningRow(sg("simResultLabel"), sg("simResultNoChange")),
+                // The core's line for a check under which nothing moves —
+                // the row the live builder folds in here (issue #314).
+                simResult = (app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves() as? app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready)
+                    ?.noChangeKey?.let { key -> SigningRow(sg("simResultLabel"), t(key)) },
             ),
             fee = FeeModel.OnChain(
                 t("componentsUi.gas.networkFee"), "~0.00093 ETH ≈ $2.40",
@@ -349,7 +352,8 @@ object SigningFixtures {
         return when (state) {
             SigningScreenState.CS58 -> app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck()
             SigningScreenState.CS61 -> app.getvela.wallet.feature.signing.core.SimDeltas.reverted("ERC20: transfer amount exceeds balance")
-            SigningScreenState.CS62 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(emptyList())
+            // Checked, and nothing of theirs moves: the core's reading, with its line.
+            SigningScreenState.CS62 -> app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves()
             SigningScreenState.CS63 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(listOf(usdcOut))
             SigningScreenState.CS64 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
                 listOf(usdcOut, app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Native(delta = "390000000000000000")),

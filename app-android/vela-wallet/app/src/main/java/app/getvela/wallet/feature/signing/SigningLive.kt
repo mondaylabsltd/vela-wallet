@@ -356,8 +356,10 @@ object SigningLive {
         // nothing only confirms what the wallet itself wrote — a technical
         // fact, folded with the others, not a bordered card weighing as much as
         // the outcome. Anything else it has to say (a revert, a node that could
-        // not check, a balance that would move) stays on the sheet.
-        val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
+        // not check, a balance that would move) stays on the sheet. "Moves
+        // nothing" is the core's line being there (`no_change_key`), and the
+        // fact folded is that line.
+        val quietSim = (sim as? SigningController.SimOutcome.Ready)?.noChangeKey?.takeIf { own }?.let { s.t(it) }
         // The verdict's place is kept from the first frame, the size of the
         // tallest verdict a sheet can end on ([verdictRooms]). The sheet is
         // bottom-anchored: a card landing a second late pushed the whole form
@@ -418,7 +420,7 @@ object SigningLive {
                 signature = if (hidePreview) null else clear.result?.intent,
                 params = emptyList(),
                 identities = emptyList(),
-                simResult = quietSim?.takeIf { !hidePreview }?.let { SigningRow(s.s("simResultLabel"), it.note ?: s.s("simResultNoChange")) },
+                simResult = quietSim?.takeIf { !hidePreview }?.let { SigningRow(s.s("simResultLabel"), it) },
                 rawLabel = if (!hidePreview && (dataBytes > 0 || wholeBatch)) s.s("techRawData") else null,
                 rawHex = when {
                     hidePreview -> null
@@ -1228,21 +1230,21 @@ object SigningLive {
      * - the core's "could not check" line (a node with no simulator);
      * - its "expected to fail" line at the longest reason it prints (the
      *   core caps a revert reason; this is that cap, read back from the core);
-     * - "no asset changes";
+     * - "no asset changes", in the core's line (a check under which nothing
+     *   moves, read by the core: `SimDeltas.nothingMoves`);
      * - a balance card of [USUAL_MOVES] rows — what a send (one) and a swap
      *   (two) show.
      *
      * Each is built by [simBlocks], the builder that draws the real one, so a
      * room is the card it stands for. What can still be taller is only the
      * unusual: a third balance row, or the warning under an unverified
-     * token — those scroll inside the place (F2), nothing of them left out:
-     * the place's cut edge fades to say there is more.
+     * token.
      */
     internal fun verdictRooms(ctx: Context): List<SigningBlock> {
         val s = ctx.strings
         return simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx) +
             simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.longestRevert(), ctx) +
-            SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")) +
+            simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves(), ctx) +
             SigningBlock.Balances(s.s("balanceChangesTitle"), List(USUAL_MOVES) { BalanceDeltaRow("0", "0", SigningTone.Neutral) })
     }
 
@@ -1270,8 +1272,12 @@ object SigningLive {
                 ),
             )
             is SigningController.SimOutcome.Ready -> {
-                if (sim.judgments.isEmpty()) {
-                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")))
+                // "No asset changes" is the core's line, drawn exactly when
+                // the judged view carries it (`no_change_key`): which case
+                // this is, and the sentence, were this builder's own — "no
+                // judgments", then "every row came out a zero".
+                sim.noChangeKey?.let { key ->
+                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.t(key)))
                 }
                 var unverified = false
                 // A delta the core writes as nothing (a zero) is not drawn
@@ -1286,9 +1292,11 @@ object SigningLive {
                         }
                     }
                 }
-                // Every move was a zero: nothing of theirs moves.
+                // No row to draw and no line from the core: moves nobody
+                // here can write out. That is not "nothing moves" — the
+                // core's could-not-check notice, never an empty card.
                 if (rows.isEmpty()) {
-                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")))
+                    return simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx)
                 }
                 listOf(
                     SigningBlock.Balances(

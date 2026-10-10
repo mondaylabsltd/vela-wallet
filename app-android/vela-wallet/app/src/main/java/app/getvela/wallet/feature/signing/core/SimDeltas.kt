@@ -105,6 +105,20 @@ object SimDeltas {
             ?: SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
 
     /**
+     * A check under which nothing of the person's moves, as the core reads
+     * one (`simOutcome` over a clean run with no logs): no judgment, and the
+     * core's own line for it (`no_change_key`, "No asset changes"). For the
+     * room the sheet keeps and for a board; a session's comes from the trust
+     * machine's judged view, which carries the same key.
+     */
+    fun nothingMoves(): SigningController.SimOutcome = NOTHING_MOVES
+
+    private val NOTHING_MOVES: SigningController.SimOutcome by lazy {
+        val record = simOutcome("", JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray()))))).toString())
+        notice(record) ?: SigningController.SimOutcome.Ready(emptyList(), noChangeKey = record.noChangeKey)
+    }
+
+    /**
      * The core's "expected to fail" line at the LONGEST reason it prints — a
      * revert whose `Error(string)` runs past the core's cap, read by the core
      * like any other (`simOutcome`), so the reason comes back cut where the

@@ -45,6 +45,8 @@ import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.signing.core.SigningController
 import app.getvela.wallet.feature.signing.core.ClearRisk
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
+import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
+import app.getvela.wallet.feature.wallet.core.TrustDeltaKind
 import app.getvela.wallet.feature.signing.SigningTone
 import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
@@ -642,7 +644,7 @@ class SigningLiveTest {
         assertEquals(listOf(SigningTone.Neutral, SigningTone.Success, SigningTone.Caution), balances.rows.map { it.tone })
         assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), balances.note)
 
-        val none = SigningLive.simBlocks(SigningController.SimOutcome.Ready(emptyList()), ctx).single() as SigningBlock.Balances
+        val none = SigningLive.simBlocks(judged(), ctx).single() as SigningBlock.Balances
         assertEquals(strings.t("componentsUi.signing.simResultNoChange"), none.note)
         assertTrue(none.rows.isEmpty())
         val unavailable = SigningLive.simBlocks(SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning"), ctx).single() as SigningBlock.Warning
@@ -692,7 +694,9 @@ class SigningLiveTest {
             ),
         )
         val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
-        val nothingMoves = SigningController.SimOutcome.Ready(emptyList())
+        // The trust machine's judged view of a check that moves nothing: its line.
+        val nothingMoves = judged()
+        assertEquals("componentsUi.signing.simResultNoChange", nothingMoves.noChangeKey)
         fun sheet(request: IncomingRequest, sim: SigningController.SimOutcome) =
             SigningLive.model(drawn, request, sign(request == own), backup, GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
 
@@ -721,6 +725,107 @@ class SigningLiveTest {
         val moves = sheet(own, SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000"))))
         assertTrue("a balance that would move stays on the sheet", moves.blocks.said().any { it is SigningBlock.Balances })
         assertNull(moves.tech.simResult)
+        // The fold is the core's line, not this sheet's reading of an empty
+        // list: judgments with no line are not "nothing moves", so nothing is
+        // folded away — the sheet says it could not check.
+        val unsaid = sheet(own, SigningController.SimOutcome.Ready(emptyList()))
+        assertNull(unsaid.tech.simResult)
+        assertEquals(
+            listOf<SigningBlock>(SigningBlock.Warning(SigningTone.Caution, strings.t("componentsUi.signing.simUnavailableWarning"))),
+            unsaid.blocks.said().filter { it is SigningBlock.Warning || it is SigningBlock.Balances },
+        )
+        // And the line folded is whichever the core names.
+        val named = sheet(own, SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.balanceChangesTitle"))
+        assertEquals(strings.t("componentsUi.signing.balanceChangesTitle"), named.tech.simResult?.value)
+    }
+
+    /**
+     * The device round, item 3 — "No asset changes" is the core's line, and
+     * the core says when (`TrustSimView.no_change_key`): once its judged view
+     * is ready and nothing moves — no judgment, or every one a zero. This
+     * builder used to decide both the case (`judgments.isEmpty()`, then "every
+     * row came out a zero") and the sentence. The real trust machine judges;
+     * the sheet draws the line exactly when the view carries it.
+     */
+    @Test
+    fun `no asset changes is drawn from the core's key, and from nothing else`() {
+        val line = strings.t("componentsUi.signing.simResultNoChange")
+        assertEquals("No asset changes", line)
+        val title = strings.t("componentsUi.signing.balanceChangesTitle")
+        val quiet = SigningBlock.Balances(title, emptyList(), line)
+        val couldNotCheck = SigningBlock.Warning(SigningTone.Caution, strings.t("componentsUi.signing.simUnavailableWarning"))
+
+        // Nothing moves: no delta at all, and a wash of zeros.
+        val nothing = judged()
+        assertTrue(nothing.judgments.isEmpty())
+        assertEquals("componentsUi.signing.simResultNoChange", nothing.noChangeKey)
+        assertEquals(listOf<SigningBlock>(quiet), SigningLive.simBlocks(nothing, ctx))
+        val wash = judged(TrustAssetDelta(TrustDeltaKind.Native, delta = "0"))
+        assertEquals(listOf<TrustSimJudgment>(TrustSimJudgment.Native("0")), wash.judgments)
+        assertEquals("componentsUi.signing.simResultNoChange", wash.noChangeKey)
+        assertEquals(listOf<SigningBlock>(quiet), SigningLive.simBlocks(wash, ctx))
+
+        // Something moves: no line, the rows.
+        val moves = judged(TrustAssetDelta(TrustDeltaKind.Native, delta = "-1000000000000000"))
+        assertNull(moves.noChangeKey)
+        val card = SigningLive.simBlocks(moves, ctx).single() as SigningBlock.Balances
+        assertEquals(listOf("\u22120.001"), card.rows.map { it.delta })
+        assertNull("rows, and no quiet line under them", card.note)
+
+        // The sentence is the key's, whichever the core names…
+        assertEquals(
+            listOf<SigningBlock>(SigningBlock.Balances(title, emptyList(), strings.t("componentsUi.signing.simWillFail"))),
+            SigningLive.simBlocks(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.simWillFail"), ctx),
+        )
+        // …and the case is the key's too: with it set the line is drawn and
+        // no row, whatever this builder could have made of the judgments.
+        assertEquals(
+            listOf<SigningBlock>(quiet),
+            SigningLive.simBlocks(SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-5")), noChangeKey = "componentsUi.signing.simResultNoChange"), ctx),
+        )
+
+        // No row to draw and NO key is not "nothing moves": the core's
+        // could-not-check notice, a caution — never an empty card, and never
+        // the quiet line. An empty list with no key (a core that predates the
+        // field), a zero the core did not call nothing, a figure nobody can
+        // write out.
+        for (unsaid in listOf(
+            SigningController.SimOutcome.Ready(emptyList()),
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("0"))),
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("not a number"))),
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Erc20Unverified(token = "0xbad", delta = "?"))),
+        )) {
+            assertNull(unsaid.noChangeKey)
+            assertEquals(unsaid.toString(), listOf<SigningBlock>(couldNotCheck), SigningLive.simBlocks(unsaid, ctx))
+        }
+        // A figure nobody can read is not "nothing" to the core either.
+        assertNull(judged(TrustAssetDelta(TrustDeltaKind.Native, delta = "not a number")).noChangeKey)
+
+        // The room the sheet keeps for this verdict, and the board, are the
+        // core's reading too (`simOutcome` over a clean run with no logs).
+        val read = app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves()
+        assertEquals(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.simResultNoChange"), read)
+        assertEquals(nothing, read)
+        assertEquals(read, SigningFixtures.verdict(SigningScreenState.CS62))
+        // The key backup's board folds that line into its technical details.
+        assertEquals(SigningRow(strings.t("componentsUi.signing.simResultLabel"), line), SigningFixtures.build(SigningScreenState.CS36, strings).tech.simResult)
+    }
+
+    /**
+     * The trust machine's judged view of a simulation's [deltas] for this
+     * wallet — the real `token_trust`, driven as the app drives it
+     * (`WalletController.judgeSimDeltas`) — as the sheet's controller hands it
+     * over: the judgments, and the core's line when nothing moves.
+     */
+    private fun judged(vararg deltas: TrustAssetDelta): SigningController.SimOutcome.Ready {
+        val script = app.getvela.wallet.core.crux.CoreScript(uniffi.vela_core_uniffi.TokenTrustCore().asBridge()) { null }
+        val event: app.getvela.wallet.feature.wallet.core.TrustEvent =
+            app.getvela.wallet.feature.wallet.core.TrustEvent.SimDeltasComputed(address = ctx.walletAddress.lowercase(), chain_id = 100, deltas = deltas.toList())
+        script.dispatch(app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.wallet.core.TrustEvent.serializer(), event))
+        val sim = app.getvela.wallet.core.crux.Wire.json.decodeFromString(app.getvela.wallet.feature.wallet.core.TrustView.serializer(), script.viewJson()).sim
+            ?: error("the trust machine judged nothing")
+        assertTrue("native moves need no metadata: the judged view is ready at once", sim.ready)
+        return SigningController.SimOutcome.Ready(sim.judgments, noChangeKey = sim.no_change_key)
     }
 
     /**
@@ -767,10 +872,12 @@ class SigningLiveTest {
         assertEquals("the core cut it at its cap", 64, longest.reason!!.length)
         assertTrue(longest.reason!!, longest.reason!!.endsWith("…"))
         assertEquals(strings.t(longest.key, mapOf("reason" to longest.reason!!)), fails.text)
+        // "No asset changes": the card the live builder draws from the core's line.
         assertEquals(
             SigningBlock.Balances(strings.t("componentsUi.signing.balanceChangesTitle"), emptyList(), strings.t("componentsUi.signing.simResultNoChange")),
             rooms[2],
         )
+        assertEquals(SigningLive.simBlocks(judged(), ctx).single(), rooms[2])
         assertEquals("a swap's two rows", 2, (rooms[3] as SigningBlock.Balances).rows.size)
         assertEquals(4, rooms.size)
 
@@ -861,7 +968,8 @@ class SigningLiveTest {
         assertEquals("\u22120.000000000000001", dust.rows.single().delta)
         assertTrue("never −0", dust.rows.none { it.delta == "\u22120" || it.delta == "-0" })
 
-        val zeros = SigningLive.simBlocks(SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("0"))), ctx).single() as SigningBlock.Balances
+        // Every move a zero: the core's judged view says nothing moves.
+        val zeros = SigningLive.simBlocks(judged(TrustAssetDelta(TrustDeltaKind.Native, delta = "0")), ctx).single() as SigningBlock.Balances
         assertTrue(zeros.rows.isEmpty())
         assertEquals("nothing of theirs moves", strings.t("componentsUi.signing.simResultNoChange"), zeros.note)
     }

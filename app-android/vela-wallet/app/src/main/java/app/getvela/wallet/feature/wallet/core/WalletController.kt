@@ -685,8 +685,10 @@ class WalletController(
      * facts it judges a RECEIVED amount by are pushed first (what this wallet
      * holds on the chain, the registry's stables and wrapped native), then
      * `SimDeltasComputed`; the answer is read once `sim.ready`. Never a write.
+     * The judged view whole: its judgments, and the line the core says when
+     * nothing of the person's moves (`no_change_key`).
      */
-    suspend fun judgeSimDeltas(address: String, chainId: Int, deltas: List<TrustAssetDelta>): List<TrustSimJudgment>? {
+    suspend fun judgeSimDeltas(address: String, chainId: Int, deltas: List<TrustAssetDelta>): TrustSimView? {
         val held = balances.value.tokens
             .filter { it.chain_id == chainId }
             .mapNotNull { it.token_address?.lowercase() }
@@ -705,7 +707,7 @@ class WalletController(
         val settled = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
             trustHost.view.first { view -> view.sim?.let { it.ready && it.chain_id == chainId && it.address.equals(address, ignoreCase = true) } == true }
         } ?: return null
-        return settled.sim?.judgments
+        return settled.sim
     }
 
     /** The activity feed: day-grouped rows, already in render order. */

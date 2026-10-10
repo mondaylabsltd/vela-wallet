@@ -19,6 +19,7 @@ import app.getvela.wallet.feature.send.core.SpeedControl
 import app.getvela.wallet.feature.send.core.TrackHandoff
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
+import app.getvela.wallet.feature.wallet.core.TrustSimView
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
@@ -299,17 +300,29 @@ class SigningController(
          */
         suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult? = null
 
-        /** The core's deltas, judged by the trust machine; `null` = could not judge. */
-        suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<TrustAssetDelta>): List<TrustSimJudgment>? = null
+        /**
+         * The core's deltas, judged by the trust machine — its judged view,
+         * whole: the judgments and the line it says when nothing moves
+         * (`no_change_key`). `null` = could not judge.
+         */
+        suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<TrustAssetDelta>): TrustSimView? = null
     }
 
     /**
      * What the simulation said (spec 046 US1, 082 RG6): pending (`null`), the
-     * checked moves ([Ready]; empty = nothing of theirs moves), or the core's
-     * notice — a revert (danger) or "could not check" (caution).
+     * checked moves ([Ready]), or the core's notice — a revert (danger) or
+     * "could not check" (caution).
      */
     sealed class SimOutcome {
-        data class Ready(val judgments: List<TrustSimJudgment>) : SimOutcome()
+        /**
+         * The checked moves as the trust machine judged them, and
+         * [noChangeKey]: the core's line for a check under which nothing of
+         * the person's moves (`TrustSimView.no_change_key`, "No asset
+         * changes"). **"Nothing moves" is that key being set** — never an
+         * empty list of judgments read here, nor rows that all came out as
+         * zeros: which case it is, and which sentence, are the core's.
+         */
+        data class Ready(val judgments: List<TrustSimJudgment>, val noChangeKey: String? = null) : SimOutcome()
         data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null) : SimOutcome()
 
         /**
@@ -614,7 +627,8 @@ class SigningController(
             .onFailure { VelaLog.failure("signing.sim", "the trust machine could not judge the deltas", it) }
             .getOrNull()
         // Checked, but nothing could say what the moves are: "could not check".
-        return judged?.let { SimOutcome.Ready(it) } ?: SimDeltas.couldNotCheck()
+        // Whether it is "no asset changes" is the judged view's to say.
+        return judged?.let { SimOutcome.Ready(it.judgments, noChangeKey = it.no_change_key) } ?: SimDeltas.couldNotCheck()
     }
 
     @Volatile

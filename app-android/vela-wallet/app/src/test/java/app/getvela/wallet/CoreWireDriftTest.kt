@@ -545,7 +545,9 @@ class CoreWireDriftTest {
     fun trustViewsMatchTheGeneratedMirrors() {
         assertFieldsExist<TrustView>("TrustView")
         assertFieldsExist<TrustIncomingView>("TrustIncomingView")
-        assertFieldsExist<TrustSimView>("TrustSimView")
+        // Every field: `no_change_key` is the line the signing sheet draws
+        // when the judged view says nothing moves (the device round).
+        assertFieldsExhaustive<TrustSimView>("TrustSimView")
         assertFieldsExist<TrustRawLog>("TrustRawLog")
         assertFieldsExist<TrustCustomToken>("TrustCustomToken")
         assertFieldsExist<TrustMetaEntry>("TrustMetaEntry")
