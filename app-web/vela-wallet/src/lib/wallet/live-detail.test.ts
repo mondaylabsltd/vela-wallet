@@ -751,6 +751,110 @@ function rowLabel(row: TxTechnicalRow): string {
 }
 
 /**
+ * PR 3 — an unverified token is a direction, never a figure.
+ *
+ * Android's signing sheet printed "Unverified token
+ * +5,000,000,000,000,000,000,000.00": the simulation's raw delta, a number
+ * the site being signed for chose. The web's sheet draws no balance rows
+ * (spec 082 RG6), so the one place this shell prints an unverified judgment
+ * is here — a dApp transaction's detail in Activity, from the lines its
+ * record stored. The judgment no longer holds the figure; a record written
+ * before still does, and the core reads it for its sign and drops it.
+ */
+describe('an unverified token in a record’s balance changes is a sign and a name, never a figure (PR 3)', () => {
+	const ctx = { m: fm, wm: m, currency: USD, hidden: false, identicon: IDENTICON };
+	const LURE = '5000000000000000000000';
+	const OUT = '-7000000000000000000000';
+	const LABEL = fm['componentsUi.signing.balanceUnverifiedToken'];
+	const [, , swap] = dappActivityRecords(ACCOUNT, NOW_S);
+	const record = (balanceChanges: unknown): LocalTransaction => ({
+		...swap,
+		balanceChanges: balanceChanges as LocalTransaction['balanceChanges']
+	});
+	/** The detail of the one record, through the real core. */
+	async function detailOf(balanceChanges: unknown) {
+		const [row] = await feedItemsThroughCore(
+			[record(balanceChanges)],
+			ACCOUNT,
+			NOW_S * 1000 + 1000
+		);
+		return liveTxDetail(row, ctx);
+	}
+	/** The balance-change rows of a detail: the titled one, and the untitled ones after it. */
+	function changeRows(detail: ReturnType<typeof liveTxDetail>) {
+		const at = detail.facts.findIndex(
+			(f) => f.label === fm['componentsUi.signing.balanceChangesTitle']
+		);
+		if (at === -1) return [];
+		const rest = detail.facts.slice(at + 1);
+		const end = rest.findIndex((f) => f.label !== '');
+		return [detail.facts[at], ...rest.slice(0, end === -1 ? rest.length : end)];
+	}
+	/** Every string the detail would draw, wherever it sits in the model. */
+	function everyString(value: unknown, out: string[] = []): string[] {
+		if (typeof value === 'string') out.push(value);
+		else if (Array.isArray(value)) value.forEach((entry) => everyString(entry, out));
+		else if (value !== null && typeof value === 'object') {
+			Object.values(value).forEach((entry) => everyString(entry, out));
+		}
+		return out;
+	}
+	/** The figure in any way a formatter writes it: "5000", "5,000", "5 000", "5.000". */
+	const figure = (lead: string) => new RegExp(`${lead}[\\s,.\u00a0\u202f']?000`);
+
+	it('the label is the corpus’s, and the search for the figure finds one when it is there', () => {
+		expect(LABEL).toBe('Unverified token');
+		for (const written of ['+5000000000000000000000', '+5,000,000.00', '5\u202f000', '5.000,00']) {
+			expect(figure('5').test(written), written).toBe(true);
+		}
+		expect(figure('5').test(`+ ${LABEL}`)).toBe(false);
+	});
+
+	it.each([
+		[
+			'a record stored before (the figure still in it)',
+			[
+				{ type: 'erc20_unverified', token: '0x' + 'ba'.repeat(20), delta: LURE },
+				{ type: 'erc20_unverified', token: '0x' + 'cd'.repeat(20), delta: OUT }
+			]
+		],
+		[
+			'a record stored since (a direction, no figure)',
+			[
+				{ type: 'erc20_unverified', token: '0x' + 'ba'.repeat(20), direction: 'in' },
+				{ type: 'erc20_unverified', token: '0x' + 'cd'.repeat(20), direction: 'out' }
+			]
+		]
+	])(
+		'%s: "+" and "−" beside the label, and no digit run of the figure anywhere',
+		async (_, lines) => {
+			const detail = await detailOf(lines);
+			expect(changeRows(detail).map((f) => [f.value, f.tone])).toEqual([
+				[`+ ${LABEL}`, 'success'],
+				[`\u2212 ${LABEL}`, undefined]
+			]);
+			// Not in the rows, and not in the hero, the technical section or any
+			// other string of the page.
+			const drawn = everyString(detail);
+			expect(drawn.filter((text) => figure('5').test(text) || figure('7').test(text))).toEqual([]);
+			expect(drawn.some((text) => text.includes(LABEL))).toBe(true);
+		},
+		30_000
+	);
+
+	it('a zero is never drawn, and a line with no direction costs nothing else its place', async () => {
+		const detail = await detailOf([
+			{ type: 'erc20_unverified', token: '0x' + 'ba'.repeat(20), direction: 'still' },
+			{ type: 'erc20_unverified', token: '0x' + 'ba'.repeat(20), delta: '0' },
+			{ type: 'erc20_unverified', token: '0x' + 'cd'.repeat(20), delta: LURE },
+			{ type: 'erc20_unverified', token: null, direction: 'unreadable' }
+		]);
+		expect(changeRows(detail).map((f) => f.value)).toEqual([`+ ${LABEL}`]);
+		expect(everyString(detail).filter((text) => figure('5').test(text))).toEqual([]);
+	}, 30_000);
+});
+
+/**
  * Issue 211: a send that paid its gas in a coin the account did not hold was
  * listed as "Confirmed" in the Transaction Details panel while nothing had
  * landed on chain and no balance had moved. The panel stamped the confirmed

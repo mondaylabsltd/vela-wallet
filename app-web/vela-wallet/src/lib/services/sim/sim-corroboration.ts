@@ -74,11 +74,15 @@ export function simCorroboratedByHero(
 ): boolean {
 	if (heroFlows.length === 0 || changes.length === 0) return false;
 	if (changes.some((c) => c.unverified)) return false;
-	return changes.every((c) =>
-		heroFlows.some(
+	return changes.every((c) => {
+		// Only an unverified change has no figure (PR 3), and those were
+		// turned away above; a change with none corroborates nothing.
+		const delta = c.delta;
+		if (delta === undefined) return false;
+		return heroFlows.some(
 			(h) =>
 				h.token === (c.token?.toLowerCase() ?? undefined) &&
-				(h.dir === 'out' ? c.delta < 0n : c.delta > 0n)
-		)
-	);
+				(h.dir === 'out' ? delta < 0n : delta > 0n)
+		);
+	});
 }

@@ -816,9 +816,11 @@ describe('the record persisted (spec 093)', () => {
 	it("a transaction's record keeps the core's result and the sheet's balance changes", async () => {
 		store.saveTransaction.mockClear();
 		const executor = createSignExecutor(makePorts());
+		// An unverified token's line is a direction and no figure (PR 3): the
+		// core hands none over, so none is stored.
 		const changes = [
 			{ type: 'native' as const, delta: '30000000000000000' },
-			{ type: 'erc20_unverified' as const, token: null, delta: '-5' }
+			{ type: 'erc20_unverified' as const, token: null, direction: 'out' as const }
 		];
 		await executor.execute({
 			id: 92,
@@ -854,5 +856,7 @@ describe('the record persisted (spec 093)', () => {
 			balanceChanges: changes,
 			requestTruncated: false
 		});
+		// Kept as the core wrote them, line for line — nothing added on the way.
+		expect(saved.balanceChanges).toEqual(changes);
 	});
 });

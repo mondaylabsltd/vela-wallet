@@ -72,6 +72,10 @@ export interface LocalTransaction {
 	 * What the wallet's own simulation said the operation moves, as the sheet
 	 * drew it when the person approved — the core's `SignRecord.balance_changes`,
 	 * verbatim (083 F1, spec 093). Absent when the sheet recorded none.
+	 *
+	 * A record from before PR 3 holds an unverified token's line in its older
+	 * shape (`delta` where there is `direction` now). Nothing on this side
+	 * reads the lines: they go back to the core as stored, and it reads both.
 	 */
 	balanceChanges?: TrustSimJudgment[];
 	/** Opaque to this feature; carried so a stored record survives a rewrite. */

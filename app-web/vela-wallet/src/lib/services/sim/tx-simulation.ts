@@ -29,6 +29,7 @@ import { enrichDeltas } from './sim-trust';
 import { parseRevertReason, simValueParam, type SimCall } from './sim-assets';
 import { rpcSimulate } from './sim-engine-rpc';
 import { tevmSimulate } from './sim-engine-tevm';
+import type { TrustSimDirection } from '$lib/core/generated/TrustSimDirection';
 
 // Re-exported so existing import sites (and tests) keep their path.
 export { parseRevertReason } from './sim-assets';
@@ -49,8 +50,19 @@ export interface AssetChange {
 	kind: 'native' | 'erc20';
 	/** Lowercased ERC-20 address; undefined for the native coin. */
 	token?: string;
-	/** Signed smallest-unit change: positive = received, negative = sent. */
-	delta: bigint;
+	/**
+	 * Signed smallest-unit change: positive = received, negative = sent.
+	 * ABSENT for an unverified token (PR 3): its figure is whatever the site
+	 * being signed for chose to emit, the core hands none over, and what is
+	 * not here cannot be printed. Such a change says only its `direction`.
+	 */
+	delta?: bigint;
+	/**
+	 * An unverified token's direction, the core's (`TrustSimDirection`) — all
+	 * that may be said of it: `in` "+", `out` "−", `unreadable` neither. Absent
+	 * on every change that carries a `delta`.
+	 */
+	direction?: TrustSimDirection;
 	/** Display symbol (native symbol, or on-chain ERC-20 symbol). */
 	symbol?: string;
 	/** Decimals for formatting `delta`. */
@@ -78,14 +90,15 @@ export interface AssetSimResult extends SimResult {
 /**
  * JSON-safe form of `AssetSimResult`, persisted on a signing record so the
  * "what moved" preview can be replayed from history. Identical shape except each
- * `delta` bigint is a decimal string (AsyncStorage holds JSON, not bigints).
+ * `delta` bigint is a decimal string (AsyncStorage holds JSON, not bigints) —
+ * and, like the change it stores, an unverified token's has none (PR 3).
  */
 export interface StoredAssetSim {
 	ok: boolean;
 	revertReason?: string;
 	underfundedNative?: boolean;
 	engine: SimEngine;
-	changes: (Omit<AssetChange, 'delta'> & { delta: string })[] | null;
+	changes: (Omit<AssetChange, 'delta'> & { delta?: string })[] | null;
 }
 
 /** Capture a live sim into its persistable form (bigint delta → decimal string). */
@@ -95,19 +108,47 @@ export function serializeAssetSim(r: AssetSimResult): StoredAssetSim {
 		revertReason: r.revertReason,
 		underfundedNative: r.underfundedNative,
 		engine: r.engine,
-		changes: r.changes ? r.changes.map((c) => ({ ...c, delta: c.delta.toString() })) : null
+		changes: r.changes
+			? r.changes.map(({ delta, ...change }) =>
+					delta === undefined ? change : { ...change, delta: delta.toString() }
+				)
+			: null
 	};
 }
 
-/** Rehydrate a persisted sim back into the shape `BalanceChangePreview` renders. */
+/**
+ * Rehydrate a persisted sim back into the shape `BalanceChangePreview` renders.
+ *
+ * Both shapes of an unverified token's change are read (PR 3): one stored
+ * since carries its `direction` and no figure; one stored before carries the
+ * simulation's raw `delta`, which is read for its sign and dropped — the
+ * figure does not come back with it.
+ */
 export function deserializeAssetSim(s: StoredAssetSim): AssetSimResult {
 	return {
 		ok: s.ok,
 		revertReason: s.revertReason,
 		underfundedNative: s.underfundedNative,
 		engine: s.engine,
-		changes: s.changes ? s.changes.map((c) => ({ ...c, delta: safeBigInt(c.delta) })) : null
+		changes: s.changes ? s.changes.map(storedChange) : null
 	};
+}
+
+function storedChange({
+	delta,
+	...change
+}: NonNullable<StoredAssetSim['changes']>[number]): AssetChange {
+	if (!change.unverified) return { ...change, delta: safeBigInt(delta ?? '') };
+	return { ...change, direction: change.direction ?? storedDirection(delta) };
+}
+
+/** The direction an older record's stored `delta` had; a figure that does not read has none. */
+function storedDirection(delta: string | undefined): TrustSimDirection {
+	// A signed run of decimal digits, as the simulation wrote it; anything
+	// else has no direction to state (`BigInt` alone would read "" as zero).
+	if (delta === undefined || !/^[+-]?[0-9]+$/.test(delta.trim())) return 'unreadable';
+	const value = BigInt(delta.trim());
+	return value > 0n ? 'in' : value < 0n ? 'out' : 'still';
 }
 
 /** Parse a stored decimal delta back to bigint; a corrupt value reads as 0. */
@@ -211,12 +252,16 @@ async function nativeUnderfunded(
 	changes: AssetChange[],
 	chainId: number
 ): Promise<boolean> {
-	const out = changes.find((c) => c.kind === 'native' && c.delta < 0n);
-	if (!out) return false;
+	// The native coin's change always carries its figure; only an unverified
+	// token's has none.
+	const out = changes
+		.map((c) => (c.kind === 'native' ? c.delta : undefined))
+		.find((delta) => delta !== undefined && delta < 0n);
+	if (out === undefined) return false;
 	try {
 		const res = await poolRpcCall('eth_getBalance', [from, 'latest'], chainId);
 		if (res?.error || typeof res?.result !== 'string') return false; // unknown → don't warn
-		return BigInt(res.result) < -out.delta;
+		return BigInt(res.result) < -out;
 	} catch {
 		return false;
 	}

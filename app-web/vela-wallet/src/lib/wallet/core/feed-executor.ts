@@ -217,52 +217,23 @@ export function storedSettlement(value: unknown): TrackSettlement | null {
 }
 
 /**
- * The stored balance changes (`balanceChanges`, 083 F1), handed back exactly
- * as the sheet judged them — or `null` when any line is not one a judgment
- * can be. Dropped whole for the reason `storedSummary` gives: a list with a
- * line missing would be a different account of what moved.
+ * The stored balance changes (`balanceChanges`, 083 F1), handed to the core
+ * AS STORED — a list, or `null` when there is none.
+ *
+ * Until PR 3 this side decoded each line itself, and a line of another shape
+ * dropped them all. But the shape has changed once: an unverified token's
+ * judgment kept the simulation's raw `delta` and now keeps only a
+ * `direction` (the figure is whatever the site being signed for chose to
+ * emit, and no shell is handed it any more). A second reader here would have
+ * had to read both shapes exactly as the core's does, and the day it did not,
+ * a record written by the newer build would have lost its lines — this
+ * decoder asked every line for a `delta`. So there is one reader, the core's
+ * (`activity_feed::stored_judgments`): it reads both shapes, maps a stored
+ * `delta` to the direction it had and drops the figure, and reads a list it
+ * cannot take as no list — never a fault of the feed, never a lost record.
  */
 export function storedJudgments(value: unknown): TrustSimJudgment[] | null {
-	if (!Array.isArray(value) || value.length === 0) return null;
-	const judgments: TrustSimJudgment[] = [];
-	for (const line of value) {
-		if (!isRecord(line) || typeof line.delta !== 'string') return null;
-		switch (line.type) {
-			case 'native':
-				judgments.push({ type: 'native', delta: line.delta });
-				break;
-			case 'erc20_trusted': {
-				const decimals = asU32(line.decimals);
-				if (typeof line.token !== 'string' || typeof line.symbol !== 'string') return null;
-				if (decimals === undefined) return null;
-				if (line.in_trusted_set !== undefined && typeof line.in_trusted_set !== 'boolean') {
-					return null;
-				}
-				judgments.push({
-					type: 'erc20_trusted',
-					token: line.token,
-					delta: line.delta,
-					symbol: line.symbol,
-					decimals,
-					...(line.in_trusted_set === true ? { in_trusted_set: true } : {})
-				});
-				break;
-			}
-			case 'erc20_unverified':
-				if (line.token !== null && line.token !== undefined && typeof line.token !== 'string') {
-					return null;
-				}
-				judgments.push({
-					type: 'erc20_unverified',
-					token: typeof line.token === 'string' ? line.token : null,
-					delta: line.delta
-				});
-				break;
-			default:
-				return null;
-		}
-	}
-	return judgments;
+	return Array.isArray(value) && value.length > 0 ? (value as TrustSimJudgment[]) : null;
 }
 
 /**
