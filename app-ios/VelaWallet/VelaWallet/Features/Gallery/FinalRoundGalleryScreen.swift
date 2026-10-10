@@ -25,6 +25,16 @@
 //    refusals `no-p256` / `missing` (neither).
 //  - `signing-out|send|swap|three|unverified|nothing|caution|danger` (F2) —
 //    the signing sheet with the simulation's verdict in the place it keeps.
+//  - `signing-tall` (device round) — a verdict taller than that place: four
+//    balance rows and the unverified-token warning, as the real `token_trust`
+//    core judges them, shown whole over a confirm that stays where it is.
+//    `sheet-<verdict>` is the same sheet presented the way the browser
+//    presents it (a large sheet no swipe closes); `signing-lands` and
+//    `sheet-lands` open on "Checking…" and land the tall verdict a moment
+//    later, as a simulation does. `sheet-rich-<verdict>` and
+//    `sheet-rich-lands` are the drawn send (cs1: a sentence, a contact,
+//    technical details) with the verdict in its place — a request with
+//    enough to say that the sheet's body has to scroll.
 //  - `accounts-1` / `accounts-2` (F15) — "1 account · ", "2 accounts · ".
 //  - `signout-one` / `signout-many` (F26) — the sign-out sheet, as tall as
 //    what it holds.
@@ -58,8 +68,20 @@ struct FinalRoundGalleryScreen: View {
             SettingsScreen(model: breakdown, loc: loc)
         case let board where board.hasPrefix("wizard-"):
             IntegrationGalleryScreen(loc: loc, state: board)
+        case "signing-lands":
+            LandingVerdictBoard(before: signing("out"), after: signing("tall"), presented: false)
+        case "sheet-lands":
+            LandingVerdictBoard(before: signing("out"), after: signing("tall"), presented: true)
+        case "sheet-rich-lands":
+            LandingVerdictBoard(before: rich("out"), after: rich("tall"), presented: true)
+        case let board where board.hasPrefix("sheet-rich-"):
+            let model = rich(String(board.dropFirst("sheet-rich-".count)))
+            LandingVerdictBoard(before: model, after: model, presented: true)
         case let board where board.hasPrefix("signing-"):
             SigningSheet(model: signing(String(board.dropFirst("signing-".count))), onRefreshFee: {})
+        case let board where board.hasPrefix("sheet-"):
+            let model = signing(String(board.dropFirst("sheet-".count)))
+            LandingVerdictBoard(before: model, after: model, presented: true)
         case "accounts-1", "accounts-2":
             SettingsScreen(model: accounts(state == "accounts-1" ? 1 : 2), loc: loc)
         case "signout-one", "signout-many":
@@ -132,8 +154,10 @@ struct FinalRoundGalleryScreen: View {
         case "swap": return (judged([native, usdc]), .answered)
         case "three": return (judged([native, weth, usdc]), .answered)
         case "unverified": return (judged([native, unknown]), .answered)
-        // The core's own view: "No asset changes" is its key.
+        // The core's own views: "No asset changes" is its key, and the tall
+        // verdict its judgments.
         case "nothing": return (TrustCoreScene.nothing(), .answered)
+        case "tall": return (TrustCoreScene.tall(), .answered)
         case "caution":
             return (nil, .notice(risk: "caution", key: "componentsUi.signing.simUnavailableWarning", reason: nil))
         case "danger":
@@ -177,6 +201,32 @@ struct FinalRoundGalleryScreen: View {
         )
     }
 
+    /// The drawn send (cs1) — a requester, the figure in words, a contact,
+    /// technical details — with `verdict` in the place the sheet keeps, as
+    /// the production builder writes it: a request with more to say.
+    private func rich(_ verdict: String) -> SigningModel {
+        let base = SigningFixtures.build(.cs1, loc: loc)
+        let sim = simulation(verdict)
+        var context = SigningLive.Context(
+            loc: loc, chainName: "Base", chainDot: SettingsLive.chainColor(8_453), nativeSymbol: "ETH",
+            walletName: "Everyday wallet", walletAddress: Self.address
+        )
+        context.sim = sim.sim
+        context.simulation = sim.state
+        let landed = SigningLive.balanceBlocks(isTransaction: true, context: context)
+        var model = SigningModel(
+            id: base.id, dapp: base.dapp, network: base.network, blocks: base.blocks + landed,
+            tech: base.tech, techOpen: false, fee: base.fee, signer: base.signer, confirm: base.confirm,
+            confirmBlockLine: nil, panelTitle: base.panelTitle
+        )
+        model.closeLabel = loc.t("onboarding.common.close")
+        model.feeRefresh = FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: false)
+        model.verdictPlace = SigningVerdictPlace(
+            at: base.blocks.count, count: landed.count, pending: SigningLive.pendingVerdict(loc)
+        )
+        return model
+    }
+
     /// The core's own reading of the request.
     private func plainSend(to: String?, value: String?) -> ClearSigningViewWire {
         guard let result = try? ClearSigningCore().dispatch(eventJson: CoreJSON.string([
@@ -187,6 +237,47 @@ struct FinalRoundGalleryScreen: View {
             let clear = try? CoreJSON.decode(ClearSigningViewWire.self, from: view)
         else { return .empty }
         return clear
+    }
+
+    /// The signing sheet over `before`, then — a moment later, as a
+    /// simulation answers — over `after`; `presented` the way the browser
+    /// presents it (`ExploreScreen`): a large sheet no swipe closes.
+    private struct LandingVerdictBoard: View {
+        @Environment(\.theme) private var theme
+        @Environment(\.colorScheme) private var scheme
+        let before: SigningModel
+        let after: SigningModel
+        let presented: Bool
+        @State private var landed = false
+
+        /// Long enough for a test to read the sheet before the verdict.
+        private static let landsAfter: TimeInterval = 6
+
+        var body: some View {
+            Group {
+                if presented {
+                    theme.bgBase.ignoresSafeArea()
+                        .sheet(isPresented: .constant(true)) {
+                            sheet
+                                .presentationDragIndicator(.hidden)
+                                .presentationDetents([.large])
+                                .presentationCornerRadius(Tokens.Radius.r20)
+                                .presentationBackground(theme.bgRaised)
+                                .interactiveDismissDisabled()
+                                .themed(scheme)
+                        }
+                } else {
+                    sheet
+                }
+            }
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.landsAfter) { landed = true }
+            }
+        }
+
+        private var sheet: some View {
+            SigningSheet(model: landed ? after : before, onClose: {}, onRefreshFee: {})
+        }
     }
 
     // MARK: - The switcher's count (F15)
