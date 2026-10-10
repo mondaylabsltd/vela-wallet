@@ -2892,8 +2892,12 @@ mod tests {
                 .unwrap_or_else(|| unreachable!("row 1 exists"));
             assert_eq!(mon.ticker, "MON");
             assert_eq!(mon.amount, "12 MON");
-            // Unpriced: the chain, never "$0.00 · Monad".
-            assert!(mon.sub.contains("Monad"));
+            // Unpriced: the chain, never "Monad · $0.00".
+            assert!(
+                mon.sub.starts_with("Monad"),
+                "the network leads: {}",
+                mon.sub
+            );
             assert!(!mon.sub.contains('$'), "an unpriced holding is not $0.00");
             // An ERC-20 names its contract, and keeps it whole for the copy;
             // the price row says there is none rather than going missing
@@ -2915,7 +2919,7 @@ mod tests {
             let xdai = asset_detail(&held, &feed, 0, &s, "en-US", &Money::default())
                 .unwrap_or_else(|| unreachable!("row 0 exists"));
             assert_eq!(xdai.ticker, "xDAI");
-            assert!(xdai.sub.starts_with("$0.76"));
+            assert_eq!(xdai.sub.as_ref(), "Gnosis · $0.76", "the network leads");
             // A native coin has no contract, and says so in words.
             assert!(
                 xdai.facts
@@ -2923,6 +2927,37 @@ mod tests {
                     .any(|(label, value)| *label == s.label_contract && *value == s.native_token)
             );
             assert_eq!(xdai.activity.len(), 1, "its own transaction");
+
+            // PR 3 final note F23 — the worth is what arrives (it waits on
+            // the display currency), and it arrives AFTER the network's
+            // name: the line before it lands is a prefix of the line after,
+            // so nothing already drawn moves. It used to arrive in front
+            // ("$0.76 · Gnosis") and push the name 80 px to the right.
+            let waiting = Money::of(&vela_core::app::display_currency::CurrencyView {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                committed: false,
+                pending: Some("CNY".to_owned()),
+            });
+            let before = asset_detail(&held, &feed, 0, &s, "en-US", &waiting)
+                .unwrap_or_else(|| unreachable!("row 0 exists"));
+            assert_eq!(
+                before.sub.as_ref(),
+                "Gnosis",
+                "the line is there, the worth is not"
+            );
+            assert!(
+                xdai.sub.starts_with(before.sub.as_ref()),
+                "{:?} then {:?}",
+                before.sub,
+                xdai.sub
+            );
+            // Hidden says the network and no figure, from the same place.
+            let mut masked = held.clone();
+            masked.hidden = true;
+            let hidden = asset_detail(&masked, &feed, 0, &s, "en-US", &Money::default())
+                .unwrap_or_else(|| unreachable!("row 0 exists"));
+            assert_eq!(hidden.sub.as_ref(), "Gnosis");
             // …and the id that row opens, from the same walk.
             assert_eq!(xdai.activity_ids, vec!["a".to_owned()]);
             assert!(mon.activity_ids.is_empty());
@@ -3686,19 +3721,25 @@ pub fn asset_detail(
                 token.symbol
             ))
         },
+        // The network FIRST, then what the holding is worth (PR 3 final
+        // note F23). The line was "$1,234.50 · Gnosis": the worth is the
+        // part that arrives — it waits on the display currency — and it
+        // arrived in front, so the network's name slid 80 px to the right
+        // when it landed. What is known from the first frame leads; what
+        // lands is added after it, and nothing already drawn moves.
         sub: if view.hidden {
             SharedString::from(chain.clone())
         } else {
             match token.price_usd {
-                // "$1,234.50 · Gnosis" — and the chain alone while the worth
+                // "Gnosis · $1,234.50" — and the chain alone while the worth
                 // is withheld: the line is there either way.
                 Some(price) => SharedString::from(
                     money
                         .figure(amount * price, locale)
-                        .map_or_else(|| chain.clone(), |worth| format!("{worth} · {chain}")),
+                        .map_or_else(|| chain.clone(), |worth| format!("{chain} · {worth}")),
                 ),
-                // Unpriced: the chain alone, never "$0.00 · Gnosis".
-                None => SharedString::from(format!("{} · {chain}", s.no_price)),
+                // Unpriced: said so, never "Gnosis · $0.00".
+                None => SharedString::from(format!("{chain} · {}", s.no_price)),
             }
         },
         facts,

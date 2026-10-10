@@ -864,7 +864,7 @@ pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
         ticker: "BNB".into(),
         badge: chain_bnb(),
         amount: "0.8533 BNB".into(),
-        sub: "$496.46 · BNB Chain".into(),
+        sub: "BNB Chain · $496.46".into(),
         facts: bnb_facts(s),
         activity: bnb_activity(s),
         activity_ids: Vec::new(),
