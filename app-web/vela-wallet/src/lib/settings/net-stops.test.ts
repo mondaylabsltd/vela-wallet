@@ -30,7 +30,7 @@ import { liveAddToken } from '$lib/flows/live';
 import { resolveSettingsMessages, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { liveAddNetwork } from './live';
-import { NET_HINT_KEYS, NET_STOP_KEYS } from './messages';
+import { NET_HINT_KEYS, NET_RPC_FIELD_KEYS, NET_STOP_KEYS } from './messages';
 import { netStopLine, stopIsRefusal } from './net-refusal';
 
 const m = resolveSettingsMessages('en');
@@ -400,6 +400,149 @@ describe('the wizard’s own verdict is unchanged: a refused check still says wh
 			kind: 'network',
 			setup: { href: `https://getvela.app/chain-setup?chain=${CHAIN}` }
 		});
+	});
+});
+
+/*
+ * PR 3 final notes F4, F14 and F22: one rule for the RPC field and "Re-check
+ * with this RPC", the core's (`NetWizardView.rpc_field`), read by both
+ * surfaces. Settings decided it per state — a stop always drew both, a
+ * refused check drew the re-check with no field to read — and the add-token
+ * tab drew neither, under a sentence that says "Enter one, then re-check".
+ */
+describe('the RPC field and its re-check follow the core’s rule, on both surfaces', () => {
+	const OPTIONAL = { field: 'optional', label: 'Custom RPC (optional)' } as const;
+	const REQUIRED = { field: 'required', label: 'RPC URL' } as const;
+	const NONE = { field: 'none', label: undefined } as const;
+	const table: [
+		string,
+		() => NetWizardView,
+		{ field: 'none' | 'optional' | 'required'; label: string | undefined }
+	][] = [
+		['searching, nothing chosen', () => wizardAfter({ type: 'search_input', query: 'sam' }), NONE],
+		['checked, compatible', () => wizardAfter(pick(CHAIN)), OPTIONAL],
+		[
+			'checked, unable to verify',
+			() => wizardAfter(pick(CHAIN), { ...HEALTHY, up: false }),
+			OPTIONAL
+		],
+		[
+			'checked, refused: no P-256 verifier',
+			() => wizardAfter(pick(CHAIN), { ...HEALTHY, p256: false }),
+			NONE
+		],
+		[
+			'checked, refused: missing contracts',
+			() => wizardAfter(pick(CHAIN), { ...HEALTHY, contracts: false }),
+			NONE
+		],
+		[
+			'stopped: no RPC endpoint listed',
+			() => wizardAfter(pick(CHAIN), { ...HEALTHY, doc: { ...DOC, rpc: [] } }),
+			REQUIRED
+		],
+		[
+			'stopped: the check could not be made',
+			() => wizardAfter(auto(CHAIN), { ...HEALTHY, up: false }),
+			OPTIONAL
+		],
+		[
+			'stopped: refused, no P-256 verifier',
+			() => wizardAfter(auto(CHAIN), { ...HEALTHY, p256: false }),
+			NONE
+		],
+		[
+			'stopped: refused, missing contracts',
+			() => wizardAfter(auto(CHAIN), { ...HEALTHY, contracts: false }),
+			NONE
+		],
+		['stopped: already added', () => wizardAfter(pick(1)), NONE],
+		['stopped: not found', () => wizardAfter(pick(CHAIN), { ...HEALTHY, doc: null }), NONE]
+	];
+
+	it.each(table)('%s', (_state, make, expected) => {
+		const wizard = make();
+		// The core's own answer first: this is what both builders read.
+		expect(wizard.rpc_field).toBe(expected.field);
+
+		const page = liveAddNetwork(wizard, m);
+		expect(page.customRpc?.label).toBe(expected.label);
+		// Never one without the other.
+		expect(page.recheck).toBe(expected.field === 'none' ? undefined : m.addNetwork.recheckWithRpc);
+
+		const card = tab(wizard);
+		const rpc = card.kind === 'network' ? card.rpc : undefined;
+		expect(rpc?.label).toBe(expected.label);
+		expect(rpc?.recheck).toBe(
+			expected.field === 'none' ? undefined : fm['settingsModals.addNetwork.recheckWithRpc']
+		);
+		if (expected.field !== 'none') {
+			// A field is only given with a network in hand: there is a chain to
+			// check again, and a card for the field to stand under.
+			expect(wizard.chain_info?.chain_id).toBe(CHAIN);
+			expect(card.kind).toBe('network');
+			expect(page.candidate).toBeDefined();
+		}
+	});
+
+	it('the no-RPC stop on the add-token tab: the sentence, the field it asks for, and the re-check', () => {
+		const wizard = wizardAfter(pick(CHAIN), { ...HEALTHY, doc: { ...DOC, rpc: [] } });
+		const card = tab(wizard);
+		expect(card).toMatchObject({
+			kind: 'network',
+			note: 'No RPC endpoint is listed for this network. Enter one, then re-check.',
+			rpc: {
+				label: 'RPC URL',
+				value: '',
+				placeholder: fm['settingsModals.addNetwork.customRpcPlaceholder'],
+				recheck: 'Re-check with this RPC'
+			}
+		});
+		// Not "(optional)": it is the one thing asked for.
+		expect(JSON.stringify(card)).not.toContain('optional');
+	});
+
+	it('what was typed in the field is the core’s `custom_rpc`, drawn back on both surfaces', () => {
+		const wizard = {
+			...wizardAfter(pick(CHAIN), { ...HEALTHY, doc: { ...DOC, rpc: [] } }),
+			custom_rpc: 'https://my.rpc.example'
+		};
+		expect(liveAddNetwork(wizard, m).customRpc?.value).toBe('https://my.rpc.example');
+		const card = tab(wizard);
+		expect(card.kind === 'network' && card.rpc?.value).toBe('https://my.rpc.example');
+	});
+
+	it('a network this sheet has just added draws no field, whatever the wizard under it holds', () => {
+		const wizard = wizardAfter(pick(CHAIN));
+		expect(wizard.rpc_field).toBe('optional');
+		const sheet = buildFlowState('t3', fm, () => '').sheet;
+		if (sheet?.kind !== 'add-token') throw new Error('not the add-token sheet');
+		const added = liveAddToken(sheet.model, {
+			view: EMPTY_TOKENS,
+			m: fm,
+			tab: 'native',
+			native: { query: 'sample', wizard, addedChainId: 1 }
+		}).result;
+		expect(added).toMatchObject({ kind: 'network', name: 'Ethereum' });
+		expect(added).not.toHaveProperty('rpc');
+	});
+
+	it('names every label `network_admin.rs` can answer with, in every language', () => {
+		const source = readFileSync('../../rust/crates/vela-core/src/app/network_admin.rs', 'utf8');
+		const labels = [
+			...source.matchAll(/pub const RPC_FIELD_[A-Z]+: &str = "([A-Za-z0-9.]+)";/g)
+		].map((match) => match[1]);
+		expect(labels).toEqual([...NET_RPC_FIELD_KEYS]);
+		for (const locale of SUPPORTED_LOCALES) {
+			const settings = resolveSettingsMessages(locale).addNetwork;
+			const flow = resolveWalletFlowMessages(locale);
+			for (const key of NET_RPC_FIELD_KEYS) {
+				expect(settings.rpcFieldLabels[key], `${locale} ${key}`).toBeTruthy();
+				expect(flow[key], `${locale} ${key}`).toBe(settings.rpcFieldLabels[key]);
+			}
+			// Two different labels: "(optional)" is not what the required field says.
+			expect(new Set(Object.values(settings.rpcFieldLabels)).size).toBe(2);
+		}
 	});
 });
 

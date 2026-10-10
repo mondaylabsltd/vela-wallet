@@ -29,6 +29,13 @@ describe('settings messages', () => {
 			expect(value, `${key} in ${locale}`).not.toBe(key);
 			expect(value.trim()).not.toBe('');
 		}
+		// The switcher's count is a plural family: no bare value, a form per
+		// category the locale has, each one counting.
+		const forms = resolveSettingsMessages(locale).accounts.countPrefix.forms;
+		expect(Object.keys(forms)).toContain('_other');
+		for (const [suffix, form] of Object.entries(forms)) {
+			expect(form, `home.switcherAccountCount${suffix} in ${locale}`).toContain('{{count}}');
+		}
 	});
 });
 
@@ -242,6 +249,11 @@ describe('canon numbers (pinned against the PNGs)', () => {
 		const verifier = buildMobileState('st10d', zh, IDENTICON_STUB).addNetwork;
 		expect(ok.checks?.map((c) => c.ok)).toEqual([true, true, true, true]);
 		expect(ok.primary).toBeDefined();
+		// The core's rule for the RPC field (PR 3 final notes F4, F14, F22): a
+		// check that passed offers the field and the re-check that reads it; a
+		// refusal offers neither — another endpoint would not change it.
+		expect(ok.customRpc).toBeDefined();
+		expect(ok.recheck).toBeDefined();
 		// ST10c — contracts are missing, the P-256 verifier is there: something
 		// can be deployed, so Chain Setup is offered, opened on that chain.
 		expect(contracts.checks?.map((c) => c.ok)).toEqual([true, false, true, false]);
@@ -253,14 +265,16 @@ describe('canon numbers (pinned against the PNGs)', () => {
 			label: zh.addNetwork.openChainSetupTool,
 			href: 'https://getvela.app/chain-setup?chain=48900'
 		});
-		expect(contracts.recheck).toBeDefined();
+		expect(contracts.customRpc).toBeUndefined();
+		expect(contracts.recheck).toBeUndefined();
 		// ST10d — no P-256 verifier: nothing to deploy, so no button; the line
 		// says the network cannot run Vela wallets and not to send money there.
 		expect(verifier.checks?.map((c) => c.ok)).toEqual([true, true, false, true]);
 		expect(verifier.primary).toBeUndefined();
 		expect(verifier.secondary).toBeUndefined();
 		expect(verifier.callout?.text).toContain('转进去会被卡住');
-		expect(verifier.recheck).toBeDefined();
+		expect(verifier.customRpc).toBeUndefined();
+		expect(verifier.recheck).toBeUndefined();
 	});
 
 	it('ST13 accounts for 2.4 MB over three groups and 216 records', () => {

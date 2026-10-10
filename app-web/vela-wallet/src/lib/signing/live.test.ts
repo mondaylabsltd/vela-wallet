@@ -221,7 +221,10 @@ describe('the fee the sheet shows', () => {
 		expect(model?.fee).toEqual({
 			kind: 'onchain',
 			label: m.feeLabel,
-			value: '0.0021 ETH · ≈$6.30',
+			// The send form's two pieces (PR 3 final note F12): the coin, and
+			// what it costs — the row stands the money under the coin whole.
+			value: '0.0021 ETH',
+			valueFiat: '≈ $6.30',
 			selector: undefined,
 			speed: undefined,
 			warning: undefined,
@@ -2036,7 +2039,10 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 			expect(model.blocks[1]).toEqual({
 				kind: 'warning',
 				tone: 'danger',
-				text: fill(m.warnWillFailReason, { reason: 'ERC20: transfer amount exceeds balance' })
+				text: fill(m.warnWillFailReason, { reason: 'ERC20: transfer amount exceeds balance' }),
+				// Marked as the line that lands after the sheet has opened (F2):
+				// the sheet keeps its confirm where it was across it.
+				verdict: true
 			});
 			// A warning informs, never blocks (L-D5).
 			expect(model.confirm.enabled).toBe(true);
@@ -2862,18 +2868,29 @@ describe('no fiat figure before the display currency commits — the signing she
 	it('signing_sheet: the fee’s money and the amount’s worth wait; the coin figures do not', () => {
 		expectWithheld('signing_sheet', (currency) => {
 			const model = buildSigningModel(inputs({ fee: PRICED_FEE, currency }))!;
-			return [model.fee, model.blocks];
+			// `valueFiatWithheld` is the row's own note that its money is
+			// withheld — the one field that differs by design (as the send
+			// form's fee row).
+			return [{ ...model.fee, valueFiatWithheld: undefined }, model.blocks];
 		});
 		const model = buildSigningModel(inputs({ fee: PRICED_FEE, currency: ON_ITS_WAY }))!;
 		// The fee in its coin is a token amount: drawn. Its money: withheld.
-		expect(model.fee).toMatchObject({ kind: 'onchain', value: `0.0021 ETH · ≈${MONEY_PENDING}` });
+		// The row is told so (`valueFiatWithheld`): it keeps the money's line
+		// from now, and the figure landing in it moves nothing (F12).
+		expect(model.fee).toMatchObject({
+			kind: 'onchain',
+			value: '0.0021 ETH',
+			valueFiat: `≈ ${MONEY_PENDING}`,
+			valueFiatWithheld: true
+		});
 		// The amount is what is being signed: drawn. Its worth: withheld, on
 		// the line it will stand on.
 		const amount = model.blocks.find((block) => block.kind === 'amount');
 		expect(JSON.stringify(amount)).toContain('100 USDC');
 		expect(JSON.stringify(amount)).toContain(`≈ ${MONEY_PENDING}`);
 		const landed = buildSigningModel(inputs({ fee: PRICED_FEE, currency: COMMITTED }))!;
-		expect(landed.fee).toMatchObject({ value: '0.0021 ETH · ≈¥45.36' });
+		expect(landed.fee).toMatchObject({ value: '0.0021 ETH', valueFiat: '≈ ¥45.36' });
+		expect(landed.fee).not.toHaveProperty('valueFiatWithheld');
 		expect(JSON.stringify(landed.blocks)).toContain('≈ ¥720.00');
 	});
 
@@ -2896,8 +2913,11 @@ describe('no fiat figure before the display currency commits — the signing she
 				}
 			]
 		};
-		const open = (currency: SigningLiveInputs['currency']) =>
-			buildSigningModel(inputs({ fee: twoCoins, currency, feeOpen: true }))!.fee;
+		const open = (currency: SigningLiveInputs['currency']) => ({
+			...buildSigningModel(inputs({ fee: twoCoins, currency, feeOpen: true }))!.fee,
+			// The row's own note, as above.
+			valueFiatWithheld: undefined
+		});
 		const selector = open(COMMITTED);
 		expect(selector).toMatchObject({ kind: 'onchain' });
 		expect(selector.kind === 'onchain' && selector.selector?.options).toHaveLength(2);

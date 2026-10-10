@@ -18,6 +18,7 @@
  * the line or the button from `phase` / `compatible` any more. Pure.
  */
 import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
+import type { NetWizardView } from '$lib/core/generated/NetWizardView';
 
 export interface NetRefusal {
 	/** The line under the check; absent when the core named none (or one this build has no words for). */
@@ -93,4 +94,34 @@ export function stopIsRefusal(
 		compat.hint_key !== null &&
 		compat.hint_key === errorKey
 	);
+}
+
+/**
+ * The RPC field under a wizard's result — and with it, always and only with
+ * it, "Re-check with this RPC" (PR 3 final notes F4, F14 and F22).
+ *
+ * Whether naming another endpoint is a way on from here is the core's to say
+ * (`NetWizardView.rpc_field`), and so is what the field is called
+ * (`rpc_field_label_key`): "Custom RPC (optional)" where the check passed or
+ * could not reach a verdict, "RPC URL" where the network lists no endpoint
+ * and one typed here is the only way on, and no field at all under a refusal
+ * another endpoint would not change. Every place the web draws the wizard —
+ * Settings' page and the add-token sheet's network tab — asks this, so
+ * neither decides it from the phase any more: Settings offered the re-check
+ * under a refusal with no field to read, and the tab said "Enter one, then
+ * re-check" with no field at all.
+ *
+ * `undefined` = no field and no re-check. A label key this build has no words
+ * for reads as the plain "RPC URL", never a dotted path. Pure.
+ */
+export function netRpcField(
+	wizard: Pick<NetWizardView, 'rpc_field' | 'rpc_field_label_key'>,
+	/** The resolved labels, by corpus key (`NET_RPC_FIELD_KEYS`). */
+	labels: Readonly<Record<string, string | undefined>>
+): { label: string } | undefined {
+	// Absent (a view from before the rule) is no field, as the core reads it.
+	if ((wizard.rpc_field ?? 'none') === 'none') return undefined;
+	const key = wizard.rpc_field_label_key;
+	const named = key && Object.hasOwn(labels, key) ? labels[key] : undefined;
+	return { label: named ?? labels['settingsModals.network.fieldRpcUrl'] ?? '' };
 }

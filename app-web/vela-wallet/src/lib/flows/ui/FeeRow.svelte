@@ -55,14 +55,14 @@
 	const stacked = $derived(stackedOnce || fee.valueFiatWithheld === true);
 </script>
 
-{#snippet face()}
-	<span class="label">{fee.label}</span>
-	<!-- The label and the fee are two wholes (078 round 3): side by side
-			     while both fit; otherwise the label keeps a line of its own, WHOLE,
-			     and the fee goes under it at the row's end. German at the largest
-			     size cut the label mid-word ("Netzwerkg…") and the value with it;
-			     a label is never elided and never broken inside a word. -->
-	<span class="amount">
+{#snippet coin()}
+	<!-- The coin's mark is ONE piece with the coin's figure (PR 3 final note
+	     F13). It stood before the two figures as a column of their own, so it
+	     sat at that column's start — and the column is as wide as its longer
+	     line: when "≈ …" became "≈ ₫112,500.00" the mark slid 19 px left, away
+	     from the coin it marks. Beside the coin it is anchored to the row's
+	     end with it, whatever lands underneath. -->
+	<span class="coin">
 		<TokenIcon
 			ticker={fee.mark.ticker}
 			badgeColor={fee.mark.badgeColor}
@@ -71,21 +71,51 @@
 			badgeHidden={fee.mark.badgeHidden}
 			size="inline"
 		/>
-		<!-- Two pieces, each unbreakable (issue 231): when even the fee's own
-				     line is tight, the money drops under the coin WHOLE, right-aligned.
-				     No "·" between them: "≈" already joins a coin to its money, and a
-				     dropped line that began "· ≈ $0.55" read as a rendering leftover. -->
-		<span class="values">
-			<span class="value">{fee.value}</span>
-			{#if fee.valueFiat}
-				<span class="value">{fee.valueFiat}</span>
-			{/if}
-		</span>
-		<!-- The chevron promises the list of coins: only where a tap opens it. -->
-		{#if tap === 'open'}
-			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-		{/if}
+		<span class="value">{fee.value}</span>
 	</span>
+{/snippet}
+
+{#snippet chevron()}
+	<!-- The chevron promises the list of coins: only where a tap opens it. -->
+	{#if tap === 'open'}
+		<span class="chevron"><Icon icon={UTILITY_ICONS['chevron-right']} size="sm" /></span>
+	{/if}
+{/snippet}
+
+{#snippet face()}
+	<span class="label">{fee.label}</span>
+	{#if stacked}
+		<!-- Held (see `stacked`): the coin — its mark, its figure, the chevron
+		     that belongs with it — beside the label or under it, and the money
+		     on a line that is its own whatever its length. -->
+		<span class="lead">
+			{@render coin()}
+			{@render chevron()}
+		</span>
+		{#if fee.valueFiat}
+			<span class="value money" class:indent={tap === 'open'}>{fee.valueFiat}</span>
+		{/if}
+	{:else}
+		<!-- The label and the fee are two wholes (078 round 3): side by side
+		     while both fit; otherwise the label keeps a line of its own, WHOLE,
+		     and the fee goes under it at the row's end. German at the largest
+		     size cut the label mid-word ("Netzwerkg…") and the value with it;
+		     a label is never elided and never broken inside a word. -->
+		<span class="amount">
+			<!-- Two pieces, each unbreakable (issue 231): when even the fee's
+			     own line is tight, the money drops under the coin WHOLE,
+			     right-aligned. No "·" between them: "≈" already joins a coin to
+			     its money, and a dropped line that began "· ≈ $0.55" read as a
+			     rendering leftover. -->
+			<span class="values">
+				{@render coin()}
+				{#if fee.valueFiat}
+					<span class="value">{fee.valueFiat}</span>
+				{/if}
+			</span>
+			{@render chevron()}
+		</span>
+	{/if}
 {/snippet}
 
 <div class="fee">
@@ -185,13 +215,39 @@
 		min-width: min-content;
 	}
 
-	/* Held (see `stacked`): the money on a line of its own under the coin,
-	   both at the row's end — so a figure landing in it, long or short, changes
-	   no line count, and the coin above it does not move. */
-	.stacked .values {
-		flex-direction: column;
-		flex-wrap: nowrap;
-		align-items: flex-end;
+	.chevron {
+		display: flex;
+		flex: none;
+	}
+
+	/* Held (see `stacked`): the money has a line to itself, the full width of
+	   the row, at the row's end. The label and the coin above it share a line
+	   or not as THEY fit — both are known before the money is — so a figure
+	   landing in the money's line, long or short, at any width or text size,
+	   changes no line count, and the coin and its mark above it do not move.
+	   (As a column beside the label the pair was as wide as its longer line:
+	   a long figure slid the mark left, and in a tight row pushed the whole
+	   pair under the label.) */
+	.lead {
+		display: flex;
+		flex: 1 1 auto;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--space-md);
+		min-width: min-content;
+	}
+
+	.money {
+		flex: 0 0 100%;
+		/* The whole line and no more, its end padding included. */
+		box-sizing: border-box;
+		text-align: end;
+	}
+
+	/* Under the coin, not under the chevron beside it: the two figures end at
+	   one edge. */
+	.money.indent {
+		padding-inline-end: calc(var(--icon-sm) + var(--space-md));
 	}
 
 	/* Within its line the money still drops under the coin, whole, when even
@@ -201,8 +257,21 @@
 		min-width: min-content;
 		display: flex;
 		flex-wrap: wrap;
+		/* The coin's piece is as tall as its mark; the money beside it sits on
+		   the same middle. */
+		align-items: center;
 		justify-content: flex-end;
 		column-gap: var(--space-sm);
+	}
+
+	/* The mark and its coin: one unbreakable piece, the gap the mark always
+	   kept from the figures. */
+	.coin {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		gap: var(--space-md);
+		white-space: nowrap;
 	}
 
 	.value {

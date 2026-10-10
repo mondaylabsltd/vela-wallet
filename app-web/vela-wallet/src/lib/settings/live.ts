@@ -11,6 +11,7 @@
 
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
+import { pluralForm } from '$lib/i18n/plural';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
 import { moneyText, trimBalance, unreachableLine } from '$lib/wallet/live';
@@ -87,7 +88,13 @@ import {
 	type EnvironmentLabels
 } from '$lib/services/bug-report';
 import type { EthereumBackupRow } from '$lib/services/registry-backup';
-import { netRefusal, netStopLine, stopIsRefusal, type NetRefusal } from './net-refusal';
+import {
+	netRefusal,
+	netRpcField,
+	netStopLine,
+	stopIsRefusal,
+	type NetRefusal
+} from './net-refusal';
 import type { EthereumBackupRowModel, WalletKeysModel } from './model';
 import type { WalletKeys } from '$lib/services/wallet-keys';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
@@ -262,13 +269,27 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
 		{ label: m.addNetwork.checkSigner, ok: compat.p256_available === true }
 	];
-	const customRpc: UrlFieldModel = {
-		id: 'custom-rpc',
-		label: m.addNetwork.customRpcTitle,
-		value: wizard.custom_rpc,
-		placeholder: m.addNetwork.customRpcPlaceholder,
-		hint: m.networks.relayNotice
-	};
+	// The RPC field and "Re-check with this RPC" are the core's to give, and
+	// it gives them together or not at all (`rpc_field`, PR 3 final notes F4,
+	// F14, F22): the field where another endpoint is a way on, labelled by the
+	// key the core names, and the re-check exactly where the field is. This
+	// decided both per state: a stop always drew them, a refused check drew
+	// the re-check with no field to read, and a check that passed drew the
+	// field with nothing to read it.
+	const field = netRpcField(wizard, m.addNetwork.rpcFieldLabels);
+	const rpc: Pick<AddNetworkModel, 'customRpc' | 'recheck'> =
+		field === undefined
+			? {}
+			: {
+					customRpc: {
+						id: 'custom-rpc',
+						label: field.label,
+						value: wizard.custom_rpc,
+						placeholder: m.addNetwork.customRpcPlaceholder,
+						hint: m.networks.relayNotice
+					},
+					recheck: m.addNetwork.recheckWithRpc
+				};
 
 	if (wizard.phase === 'error') {
 		// The wizard stopped, and the core says why in a sentence of its own
@@ -290,6 +311,8 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 			// The search still says what was asked for: a stop that came back
 			// from the "resolving" candidate re-drew the field EMPTY, and
 			// "Chain info not found" stood under a placeholder.
+			// (No RPC field here: the core gives one only with a network in
+			// hand — there is no chain to check again.)
 			return { ...base, query: wizard.query, results: [], ...callout };
 		}
 		return {
@@ -308,16 +331,13 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 				? { checksTitle: m.addNetwork.compatibilityCheck, checks: checksOf(wizard.compat) }
 				: {}),
 			...callout,
-			// "Enter one, then re-check": the field the sentence points at, and
-			// the re-check that reads it. Where no endpoint is listed the field
-			// is the only way on, so it is not labelled "(optional)" under a
-			// sentence that asks for it.
-			customRpc:
-				wizard.error_key === 'settingsModals.addNetwork.noRpcEndpoint'
-					? { ...customRpc, label: m.networks.rpcUrl }
-					: customRpc,
-			secondary: setupLink(refusal, m),
-			recheck: m.addNetwork.recheckWithRpc
+			// "Enter one, then re-check": the field the sentence points at and
+			// the re-check that reads it — under the stops the core gives them
+			// to (no endpoint listed, where the field is "RPC URL" and not
+			// "(optional)"; a check that could not be made), and under no
+			// refusal: another endpoint would not change that verdict.
+			...rpc,
+			secondary: setupLink(refusal, m)
 		};
 	}
 
@@ -351,7 +371,7 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 			callout: compat.multi_key_ready
 				? undefined
 				: { tone: 'warning', text: m.addNetwork.singleKeyOnly },
-			customRpc,
+			...rpc,
 			primary: m.addNetwork.addNetworkBtn
 		};
 	}
@@ -367,9 +387,8 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 				meta: m.addNetwork.compatibilityCheck,
 				badge: { tone: 'warn', label: m.addNetwork.unableToVerify, dot: true }
 			},
-			customRpc,
-			primary: m.addNetwork.retry,
-			recheck: m.addNetwork.recheckWithRpc
+			...rpc,
+			primary: m.addNetwork.retry
 		};
 	}
 
@@ -391,7 +410,9 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		// missing contracts (Chain Setup, opened on this chain).
 		callout: refusal.hint === undefined ? undefined : { tone: 'warning', text: refusal.hint },
 		secondary: setupLink(refusal, m),
-		recheck: m.addNetwork.recheckWithRpc
+		// No re-check under a refusal (F22): the core gives it no field, and a
+		// button that reads a field is drawn where the field is.
+		...rpc
 	};
 }
 
@@ -1111,7 +1132,8 @@ function liveAccountRows(input: LiveAccountsInput) {
 function liveAccountsSummary(input: LiveAccountsInput, m: SettingsMessages['accounts']): string {
 	let total = 0;
 	for (const row of input.rows) total += input.balances.get(row.account.address.toLowerCase()) ?? 0;
-	return `${fill(m.countPrefix, { count: input.rows.length })}${fill(m.total, {
+	const count = input.rows.length;
+	return `${fill(pluralForm(m.countPrefix, count), { count })}${fill(m.total, {
 		// Hidden: the total masks with the rows — it IS their sum.
 		amount: input.hidden ? MASK : moneyText(total, input.currency)
 	})}`;
@@ -1445,18 +1467,20 @@ export function liveBalanceDetail(
 		status: m.balanceDetail.statusRetrying,
 		tone: 'neutral'
 	}));
-	for (const { chain_id: id, rpc_fixable: rpcFailed } of view.unreachable_networks) {
+	for (const { chain_id: id, status_key: statusKey } of view.unreachable_networks) {
 		if (pending.some((row) => row.id === String(id))) continue;
 		pending.push({
 			id: String(id),
 			mark: rescueMark(id),
 			name: chainName(id),
-			// "RPC unavailable" is only true of a network that did not answer.
-			// One whose token list could not be loaded (PR 3 note 4) says that,
-			// in the core's own sentence; reading again is still the way out.
-			status: rpcFailed
-				? m.balanceDetail.statusFailed
-				: fill(m.rescue.tokenListUnreachable, { name: chainName(id) }),
+			// The row's short status is the core's to name (`status_key`, PR 3
+			// final note F21): "RPC unavailable" is only true of a network that
+			// did not answer, and one whose token list could not be loaded says
+			// "Token list unavailable" — a status as short as its neighbours',
+			// where this shell had borrowed the home line's whole sentence. A
+			// key this build has no words for reads as the one status there
+			// was, never a dotted path. Reading again is the way out of both.
+			status: m.balanceDetail.statuses[statusKey] ?? m.balanceDetail.statusFailed,
 			tone: 'error',
 			action: m.balanceDetail.retry
 		});

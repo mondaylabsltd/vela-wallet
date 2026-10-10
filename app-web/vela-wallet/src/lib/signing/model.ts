@@ -145,7 +145,18 @@ export type Block =
 	  }
 	| { kind: 'party'; label: string; name: string; address?: string; badge?: PartyBadge }
 	| { kind: 'rows'; rows: KeyValueRow[] }
-	| { kind: 'warning'; tone: 'caution' | 'danger'; text: string }
+	| {
+			kind: 'warning';
+			tone: 'caution' | 'danger';
+			text: string;
+			/**
+			 * This line LANDS after the sheet has opened: the relay's own
+			 * estimate saying the operation will revert (spec 082 RJ19). The
+			 * sheet keeps its confirm where it was across the landing (PR 3
+			 * final note F2).
+			 */
+			verdict?: true;
+	  }
 	| { kind: 'positive'; text: string }
 	/** Message, hex, typed-data JSON or calldata — always monospace. */
 	| { kind: 'code'; lines: string[]; note?: string }
@@ -210,7 +221,29 @@ export type FeeModel =
 	| {
 			kind: 'onchain';
 			label: string;
+			/**
+			 * The coin half — "0.0021 ETH" — or what stands in for it
+			 * ("Estimating…", "Tap to retry", the dash). The gallery's boards
+			 * carry the whole line here, as drawn.
+			 */
 			value: string;
+			/**
+			 * What that costs — "≈ $0.55" — when anything can say: the send
+			 * form's own two pieces (`FeeRowModel.valueFiat`). As one string the
+			 * row broke wherever the text ran out: at 320 px the worth landing
+			 * ("≈…" → "≈₫112,500.00") wrapped "Network fee" onto a second line
+			 * and moved the whole bottom-anchored sheet 18 px (PR 3 final note
+			 * F12).
+			 */
+			valueFiat?: string;
+			/**
+			 * The display currency has not committed: the money is not a figure
+			 * yet ("≈ …"), or will not be until the fee itself lands. The row
+			 * then holds the layout its figure may need — the money on a line of
+			 * its own under the coin — and keeps it, so neither the fee landing
+			 * nor its worth moves anything.
+			 */
+			valueFiatWithheld?: boolean;
 			/** Present only while the selector is open (cs33). */
 			selector?: { title: string; options: FeeTokenOption[] };
 			/**

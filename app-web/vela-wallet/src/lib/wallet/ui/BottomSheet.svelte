@@ -206,6 +206,81 @@
 		dismiss('explicit');
 	}
 
+	// --- keeping one thing where it is --------------------------------------
+
+	/**
+	 * px the centred card is raised from its own middle (`keepAt`). A card
+	 * grows from its middle — both edges move — so what stands at its foot
+	 * goes down by half of whatever was added above it.
+	 */
+	let lift = $state(0);
+
+	/**
+	 * Where the first `selector` in this sheet RESTS on the screen (its top),
+	 * whatever the entry animation or a drag is doing to the sheet at this
+	 * instant. `null` when it is not drawn.
+	 */
+	export function placeOf(selector: string): number | null {
+		const target = panel?.querySelector(selector);
+		if (!panel || !target) return null;
+		// The sheet's laid-out top, then the target's place inside it: the
+		// difference of two boxes under one transform is no transform at all.
+		const inside = target.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+		return panel.offsetTop - lift + inside;
+	}
+
+	/**
+	 * Put the first `selector` back where it rested (`top`, from `placeOf`)
+	 * after the sheet's content changed above it (PR 3 final note F2).
+	 *
+	 * The phone sheet is bottom-anchored: content added above its foot grows
+	 * it upward and the foot stays — until the sheet is as tall as it may be.
+	 * Then it scrolls, and the foot goes down under what was added: scrolled
+	 * by that much, it is where it was. Past the breakpoint the sheet is a
+	 * centred card that grows from its middle: raised by what scrolling could
+	 * not take, it grows upward only.
+	 *
+	 * `show` is never scrolled out of sight for it — what was added is there
+	 * to be read — nor under `under`, a header the content keeps at its top
+	 * (the foot then moves by the rest).
+	 */
+	export function keepAt(
+		selector: string,
+		top: number,
+		keep: { show?: string; under?: string } = {}
+	): void {
+		const now = placeOf(selector);
+		if (!panel || now === null) return;
+		let drift = now - top;
+		if (Math.abs(drift) < 0.5) return;
+		if (scroller) {
+			const from = scroller.scrollTop;
+			scroller.scrollTop = from + drift;
+			const added = keep.show === undefined ? null : panel.querySelector(keep.show);
+			if (added) {
+				const cover = keep.under === undefined ? null : panel.querySelector(keep.under);
+				const edge = Math.max(
+					scroller.getBoundingClientRect().top,
+					cover?.getBoundingClientRect().bottom ?? 0
+				);
+				const hidden = edge - added.getBoundingClientRect().top;
+				if (hidden > 0) scroller.scrollTop = Math.max(from, scroller.scrollTop - hidden);
+			}
+			drift -= scroller.scrollTop - from;
+		}
+		if (Math.abs(drift) < 0.5 || !isCard()) return;
+		// Never past the room the card has above or below it: its own margin
+		// from the window's edge (`--space-3xl`, as its max-height keeps).
+		const margin = parseFloat(getComputedStyle(panel).getPropertyValue('--space-3xl')) || 0;
+		const room = Math.max(0, panel.offsetTop - margin);
+		lift = Math.min(room, Math.max(-room, lift + drift));
+	}
+
+	/** Back to its middle: the window changed, or what the sheet holds did. */
+	export function recentre(): void {
+		lift = 0;
+	}
+
 	function springBack(): void {
 		if (offset === 0) {
 			settling = 'none';
@@ -510,7 +585,7 @@
 	const scrimLevel = $derived(settling === 'out' ? 0 : scrimOpacity(offset, panelHeight()));
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} onresize={recentre} />
 
 <div
 	class="root {variant} {variant === 'wallet' ? height : ''}"
@@ -538,6 +613,7 @@
 		data-focus-inner
 		bind:this={panel}
 		style:transform={offset !== 0 || settling !== 'none' ? `translateY(${offset}px)` : undefined}
+		style:translate={lift !== 0 ? `0 ${-lift}px` : undefined}
 		style:transition
 		ontransitionend={onPanelTransitionEnd}
 		onclickcapture={onPanelClickCapture}

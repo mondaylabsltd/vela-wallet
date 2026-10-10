@@ -7,7 +7,8 @@
  * refresh control and stale note, and says why a quote failed.
  */
 import { tick } from 'svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import SigningSheet from './SigningSheet.svelte';
@@ -573,6 +574,133 @@ describe('a fee being measured moves nothing above it', () => {
 		await view.screen.rerender({ model: model({ fee: landed, confirm: open }) });
 		await tick();
 		expect(view.sheet.querySelector('.warning')).toBeNull();
+		await view.screen.unmount();
+	});
+});
+
+/*
+ * PR 3 final note F2. This sheet runs no simulation and keeps no room for a
+ * verdict; the one it can say lands after it has opened — the relay's own
+ * estimate answering that the operation will revert, a danger line under the
+ * intent, at the moment the confirm opens. On the centred card the confirm
+ * went down by half the line's height (39 px measured live), and on a phone
+ * sheet already as tall as it may be by all of it (69 px, out of a 320 × 700
+ * window). The confirm's place is kept across the landing.
+ */
+describe('a verdict landing does not move the confirm (F2)', () => {
+	const INTENT = { kind: 'intent', text: 'Send 1 xDAI', tone: 'neutral' } as const;
+	const ROWS = {
+		kind: 'rows',
+		rows: Array.from({ length: 4 }, (_, i) => ({
+			label: `Field ${i + 1}`,
+			value: `value ${i + 1}`
+		}))
+	} as const;
+	const VERDICT = {
+		kind: 'warning',
+		tone: 'danger',
+		text: 'This transaction is expected to fail — you’d still pay gas.',
+		verdict: true
+	} as const;
+	const before = () => model({ blocks: [INTENT, ROWS] as SigningModel['blocks'] });
+	const landed = (text: string = VERDICT.text) =>
+		model({ blocks: [INTENT, { ...VERDICT, text }, ROWS] as SigningModel['blocks'] });
+
+	const top = (el: Element) => Math.round(el.getBoundingClientRect().top * 10) / 10;
+	const confirm = (sheet: HTMLElement) =>
+		sheet.querySelector('[data-testid="signing-confirm"]') as HTMLElement;
+	const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+	// The harness's own window, back as the other suites expect it.
+	afterAll(() => page.viewport(414, 896));
+
+	async function at(width: number, height: number) {
+		await page.viewport(width, height);
+		const view = await drawn({ model: before() });
+		return view;
+	}
+
+	it('the phone sheet: it grows upward, and the confirm is where it was', async () => {
+		const view = await at(390, 844);
+		const was = top(confirm(view.sheet));
+		const sheetTop = top(view.sheet);
+		await view.screen.rerender({ model: landed() });
+		await tick();
+		await frame();
+		const line = view.sheet.querySelector('[data-verdict]') as HTMLElement;
+		expect(line.textContent).toContain('expected to fail');
+		expect(top(confirm(view.sheet))).toBe(was);
+		// The sheet made the room above itself.
+		expect(top(view.sheet)).toBeLessThan(sheetTop - 20);
+		// …and gives it back when a new estimate takes the line away.
+		await view.screen.rerender({ model: before() });
+		await tick();
+		await frame();
+		expect(top(confirm(view.sheet))).toBe(was);
+		expect(top(view.sheet)).toBe(sheetTop);
+		await view.screen.unmount();
+	});
+
+	it('the centred card: it grows upward only — not from its middle', async () => {
+		const view = await at(1400, 900);
+		const was = top(confirm(view.sheet));
+		const cardTop = top(view.sheet);
+		const cardHeight = view.sheet.getBoundingClientRect().height;
+		await view.screen.rerender({ model: landed() });
+		await tick();
+		await frame();
+		const grown = view.sheet.getBoundingClientRect().height - cardHeight;
+		expect(grown).toBeGreaterThan(20);
+		expect(Math.abs(top(confirm(view.sheet)) - was)).toBeLessThanOrEqual(0.5);
+		// All of the growth went up (from its middle, half of it would have).
+		expect(Math.abs(cardTop - top(view.sheet) - grown)).toBeLessThanOrEqual(1);
+
+		// A longer reason: the line is taller, the confirm still does not move.
+		await view.screen.rerender({
+			model: landed(
+				'Expected to fail: ERC20: transfer amount exceeds balance, and the allowance granted to the router is lower than the amount it was asked to move — you’d still pay gas.'
+			)
+		});
+		await tick();
+		await frame();
+		expect(Math.abs(top(confirm(view.sheet)) - was)).toBeLessThanOrEqual(0.5);
+
+		// The line goes: the card is where it started.
+		await view.screen.rerender({ model: before() });
+		await tick();
+		await frame();
+		expect(Math.abs(top(confirm(view.sheet)) - was)).toBeLessThanOrEqual(0.5);
+		expect(Math.abs(top(view.sheet) - cardTop)).toBeLessThanOrEqual(0.5);
+		await view.screen.unmount();
+	});
+
+	it('a sheet already as tall as it may be: scrolled by what was added — the line and the header stay in sight', async () => {
+		const view = await at(390, 520);
+		const scroller = view.sheet.querySelector('.content') as HTMLElement;
+		const was = top(confirm(view.sheet));
+		await view.screen.rerender({ model: landed() });
+		await tick();
+		await frame();
+		const line = view.sheet.querySelector('[data-verdict]') as HTMLElement;
+		const header = view.sheet.querySelector('[data-signing-top]') as HTMLElement;
+		const added = line.getBoundingClientRect().height;
+		// The sheet could not grow by all of it, so it scrolled…
+		expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+		expect(scroller.scrollTop).toBeGreaterThan(0);
+		// …and the confirm went down by less than what was added above it
+		// (unscrolled, by all of it).
+		expect(top(confirm(view.sheet)) - was).toBeLessThan(added);
+		// Who is asking, and the ✕, are still at the top of the sheet…
+		expect(header.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			scroller.getBoundingClientRect().top - 0.5
+		);
+		expect(view.close?.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			view.sheet.getBoundingClientRect().top
+		);
+		// …and the line that landed is whole, under them.
+		expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			header.getBoundingClientRect().bottom - 0.5
+		);
 		await view.screen.unmount();
 	});
 });

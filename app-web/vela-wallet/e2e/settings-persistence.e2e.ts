@@ -6,6 +6,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { en, seedSignedIn } from './live-helpers';
+import { denyOffOrigin } from './stub-chain';
 
 // The live wiring's phase-3/4 scope is the mobile layout (desktop
 // interactivity is a recorded debt) — so the suites speak to it.
@@ -27,6 +28,18 @@ async function openAdvanced(page: Page): Promise<void> {
 }
 
 test('the display currency survives a reload (core-persisted, not staged)', async ({ page }) => {
+	// Hermetic: a currency commits when its rate is in hand, and this used to
+	// ask the LIVE rate sources for EUR — a slow or unreachable service failed
+	// a test about persistence. Nothing leaves the machine now: every
+	// off-origin read is refused (the Chainlink feed among them), and the
+	// configured rates endpoint — registered after, so it wins — answers EUR.
+	await denyOffOrigin(page);
+	await page.route(/vela-currency\.getvela\.app\/v2\/rates/, (route) =>
+		route.fulfill({
+			contentType: 'application/json',
+			body: JSON.stringify([{ base: 'USD', quote: 'EUR', rate: 0.92 }])
+		})
+	);
 	await openSettings(page);
 	await page.getByText(en('settings.localization.currencyTitle'), { exact: true }).click();
 	// The sheet lists codes; EUR is one of the canon rows.

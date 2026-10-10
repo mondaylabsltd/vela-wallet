@@ -12,6 +12,7 @@
  * describe screens these mocks redraw. Spec 023 minted 45 new keys and reused
  * roughly two hundred.
  */
+import type { PluralCopy } from '$lib/i18n/plural';
 
 export interface SettingsMessages {
 	title: string;
@@ -208,6 +209,12 @@ export interface SettingsMessages {
 		 */
 		stops: Record<NetStopKey, string>;
 		/**
+		 * The RPC field's label BY CORPUS KEY — the one the core names for the
+		 * wizard's state (`NetWizardView.rpc_field_label_key`,
+		 * {@link NET_RPC_FIELD_KEYS}).
+		 */
+		rpcFieldLabels: Record<NetRpcFieldKey, string>;
+		/**
 		 * Spec 081 FR-009: the chain works, and a wallet with more than one
 		 * passkey still cannot be created on it. Said beside a green
 		 * "Compatible", which without this reads as a contradiction of the two
@@ -321,8 +328,11 @@ export interface SettingsMessages {
 		title: string;
 		/** Template with `{{amount}}`. */
 		total: string;
-		/** Template with `{{count}}`. */
-		countPrefix: string;
+		/**
+		 * "{{count}} accounts · " in each plural form this locale has
+		 * (`pluralForm`): one account is "1 account · ", not "1 accounts · ".
+		 */
+		countPrefix: PluralCopy;
 		createNew: string;
 		signInExisting: string;
 		/** Taking ONE wallet off this device (2026-09-23). */
@@ -446,6 +456,13 @@ export interface SettingsMessages {
 		networksNote: string;
 		statusRetrying: string;
 		statusFailed: string;
+		/**
+		 * A row's short status BY CORPUS KEY — the one the core names for a
+		 * network out of reach (`UnreachableNetwork.status_key`,
+		 * {@link BALANCE_STATUS_KEYS}): "RPC unavailable", or "Token list
+		 * unavailable" where the RPC is answering (PR 3 final note F21).
+		 */
+		statuses: Readonly<Record<string, string>>;
 		updatedLabel: string;
 		retry: string;
 	};
@@ -561,6 +578,17 @@ export const UNREACHABLE_LINE_KEYS = [
 ] as const;
 
 /**
+ * The short status of a network out of reach in the balance breakdown — every
+ * `status_key` `balance_dashboard` names (`STATUS_RPC_UNAVAILABLE`,
+ * `STATUS_TOKEN_LIST_UNAVAILABLE`). `live.test.ts` holds the list to the
+ * core's source.
+ */
+export const BALANCE_STATUS_KEYS = [
+	'home.balanceDetailStatusFailed',
+	'home.balanceDetailStatusTokenList'
+] as const;
+
+/**
  * The lines a venue refusal can say (`VenueBlock::key()`): R1's two —
  * `blockedApp {{domain}}`, `blockedPage {{pageDomain}} {{domain}}` — and the
  * web's `blockedWeb` (no vars: it opens no signing page, D-16). Only what a
@@ -607,6 +635,20 @@ export const NET_STOP_KEYS = [
 ] as const;
 
 export type NetStopKey = (typeof NET_STOP_KEYS)[number];
+
+/**
+ * The labels the wizard's RPC field can wear — every key `network_admin`
+ * names for `NetWizardView.rpc_field_label_key` (`RPC_FIELD_OPTIONAL`:
+ * "Custom RPC (optional)"; `RPC_FIELD_REQUIRED`: "RPC URL", where an endpoint
+ * is the one thing asked for). `net-rpc-field.test.ts` holds the list to the
+ * core's source.
+ */
+export const NET_RPC_FIELD_KEYS = [
+	'settingsModals.addNetwork.customRpcTitle',
+	'settingsModals.network.fieldRpcUrl'
+] as const;
+
+export type NetRpcFieldKey = (typeof NET_RPC_FIELD_KEYS)[number];
 
 /**
  * Every corpus key the core's backup row can name
@@ -868,7 +910,6 @@ export const SETTINGS_KEYS = [
 	'about.footer',
 	'settingsModals.account.modalTitle',
 	'settingsModals.account.total',
-	'home.switcherAccountCount',
 	'settingsModals.account.createNew',
 	'settingsModals.account.signInExisting',
 	'settings.signOut.button',
@@ -948,6 +989,7 @@ export const SETTINGS_KEYS = [
 	'home.balanceDetailNetworksNote',
 	'home.balanceDetailStatusRetrying',
 	'home.balanceDetailStatusFailed',
+	'home.balanceDetailStatusTokenList',
 	'home.balanceDetailUpdatedLabel',
 	'home.balanceDetailRetry',
 	'componentsUi.treasuryBootstrap.title',

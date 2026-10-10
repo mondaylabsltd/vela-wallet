@@ -69,6 +69,8 @@ describe('logo URLs', () => {
 				unreachable_key: null,
 				internal_chain_ids: [],
 				internal_key: null,
+				checking_key: null,
+				live_key: null,
 				holdings_loading: false,
 				cached_total_usd: null,
 				switcher: { open: false, loading: false, balances: [], hidden: false }

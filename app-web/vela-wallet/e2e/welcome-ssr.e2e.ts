@@ -5,7 +5,7 @@
  * corpus catalogs, so this is a differential against the translation source.
  */
 import { execSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -223,11 +223,30 @@ test('the DEPLOY bundle contains no wasm (the i18n engine is build-time only)', 
 	   The client-side half of the promise (Welcome itself fetches nothing) is
 	   the test below. */
 	test.setTimeout(120_000);
-	const outdir = mkdtempSync(join(tmpdir(), 'vela-worker-dry-run-'));
-	execSync(`pnpm exec wrangler deploy --dry-run --outdir ${JSON.stringify(outdir)}`, {
-		cwd: APP_ROOT,
-		stdio: 'pipe'
-	});
+	/* The dry-run is given a project directory of its OWN (PR 3 final note
+	   F18). It ran in the app's directory, where the suite's server —
+	   `wrangler dev`, the preview — is running from the same `wrangler.jsonc`
+	   and the same `.wrangler/` working directory; twice, about fifty seconds
+	   after this test, that server died and took every suite after it down.
+	   The same config, with the worker and its assets named by absolute path,
+	   is written into a temp directory: the bundle that comes out is the same
+	   one, and nothing is written beside the running server. */
+	const project = mkdtempSync(join(tmpdir(), 'vela-worker-dry-run-'));
+	const outdir = join(project, 'out');
+	const config = JSON.parse(
+		readFileSync(join(APP_ROOT, 'wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, '')
+	) as { main: string; assets?: { directory?: string }; $schema?: string };
+	delete config.$schema;
+	config.main = join(APP_ROOT, config.main);
+	if (config.assets?.directory !== undefined) {
+		config.assets.directory = join(APP_ROOT, config.assets.directory);
+	}
+	writeFileSync(join(project, 'wrangler.json'), JSON.stringify(config, null, '\t'));
+	execSync(
+		`${JSON.stringify(join(APP_ROOT, 'node_modules', '.bin', 'wrangler'))} deploy --dry-run ` +
+			`--config ${JSON.stringify(join(project, 'wrangler.json'))} --outdir ${JSON.stringify(outdir)}`,
+		{ cwd: project, stdio: 'pipe' }
+	);
 	const bundles = readdirSync(outdir).filter((name) => name.endsWith('.js'));
 	expect(bundles.length).toBeGreaterThan(0);
 	for (const name of bundles) {

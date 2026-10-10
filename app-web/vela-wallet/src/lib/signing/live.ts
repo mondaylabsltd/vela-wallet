@@ -31,13 +31,7 @@ import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
 import type { SignView } from '$lib/core/generated/SignView';
-import {
-	feeAmountText,
-	feeLine,
-	feeLineParts,
-	feeOptionPriceUsd,
-	feeParts
-} from '$lib/flows/fee-line';
+import { feeAmountText, feeLineParts, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
 import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
@@ -723,6 +717,10 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// the new figure lands; the core's gate holds the confirm meanwhile.
 	const measuring = fee.busy || fee.provisional;
 	const refresh = { refreshLabel: m.feeRefresh, refreshing: measuring, chevron: choosable };
+	// The display currency is not the person's yet: the fee's money is
+	// withheld, and the row keeps the line it will land on from now — under
+	// "Estimating…" too, so the fee landing moves nothing either (F12).
+	const withheld = inputs.currency.committed ? {} : { valueFiatWithheld: true };
 	// PR 2 note 1: the fee's failure, said ONCE by the core for this row and
 	// the line under the confirm (`FeeView.failure`) — present while the run
 	// failed AND through the re-ask that follows it, so nothing here holds a
@@ -769,6 +767,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 				kind: 'onchain',
 				label: m.feeLabel,
 				value: m.feeEstimating,
+				...withheld,
 				speed,
 				tappable,
 				// A first figure the core already knows no coin can pay
@@ -787,7 +786,11 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// eighteen-decimal number under a coin nobody was spending. The design
 	// sheet is explicit that these two surfaces must not drift.
 	const parts = feeParts(fee.fee, fee.options);
-	const value = feeLine(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
+	// In the send form's two pieces — the coin, and what it costs — so the row
+	// can stand the money under the coin WHOLE (F12). As one string, "0.0015
+	// ETH · ≈…" became "0.0015 ETH · ≈₫112,500.00" at 320 px, "Network fee"
+	// wrapped to make room, and the bottom-anchored sheet moved 18 px.
+	const line = feeLineParts(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
 	const selector = feeSelector(inputs);
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
@@ -810,7 +813,9 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	return {
 		kind: 'onchain',
 		label: m.feeLabel,
-		value,
+		value: line.coin,
+		...(line.fiat === null ? {} : { valueFiat: line.fiat }),
+		...withheld,
 		selector,
 		speed,
 		warning,
@@ -1216,7 +1221,7 @@ function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[
 		: m.warnWillFail;
 	const at = blocks.findIndex((block) => block.kind === 'intent');
 	const next = [...blocks];
-	next.splice(at + 1, 0, { kind: 'warning', tone: 'danger', text });
+	next.splice(at + 1, 0, { kind: 'warning', tone: 'danger', text, verdict: true });
 	return next;
 }
 

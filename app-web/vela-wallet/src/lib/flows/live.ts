@@ -19,7 +19,7 @@ import type { MtokView } from '$lib/core/generated/MtokView';
 import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
 import type { NetWizardView } from '$lib/core/generated/NetWizardView';
 import { NET_HINT_KEYS, NET_STOP_KEYS } from '$lib/settings/messages';
-import { netRefusal, netStopLine, stopIsRefusal } from '$lib/settings/net-refusal';
+import { netRefusal, netRpcField, netStopLine, stopIsRefusal } from '$lib/settings/net-refusal';
 import type { WalletFlowMessages } from './messages';
 import {
 	chainName,
@@ -529,6 +529,22 @@ function liveAddNetworkTab(
 	// is not a reason.
 	const hints = Object.fromEntries(NET_HINT_KEYS.map((key) => [key, m[key]]));
 	const stops = Object.fromEntries(NET_STOP_KEYS.map((key) => [key, m[key]]));
+	// The RPC field and its re-check, where the core gives the wizard one
+	// (`rpc_field`, PR 3 final notes F4, F14, F22) — the rule Settings' page
+	// reads too. Not on the card of a network this sheet has already added:
+	// the wizard under it has moved on.
+	const field = addedChainId !== null ? undefined : netRpcField(wizard, m);
+	const rpc =
+		field === undefined
+			? {}
+			: {
+					rpc: {
+						label: field.label,
+						value: wizard.custom_rpc,
+						placeholder: m['settingsModals.addNetwork.customRpcPlaceholder'],
+						recheck: m['settingsModals.addNetwork.recheckWithRpc']
+					}
+				};
 	const card = (
 		chip: StatusChipModel | undefined,
 		more: { note?: string; setup?: { label: string; href: string } } = {},
@@ -544,7 +560,8 @@ function liveAddNetworkTab(
 		name: name ?? query,
 		...(chip === undefined ? {} : { chip }),
 		...more,
-		facts: chainId === undefined ? [] : facts(chainId, symbol ?? nativeSymbol(chainId))
+		facts: chainId === undefined ? [] : facts(chainId, symbol ?? nativeSymbol(chainId)),
+		...rpc
 	});
 	/**
 	 * A refused network: the verdict, WHY in the check's own words (no P-256

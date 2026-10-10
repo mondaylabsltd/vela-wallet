@@ -63,6 +63,61 @@
 		watch.observe(drawn);
 		return () => watch.disconnect();
 	});
+
+	/**
+	 * The status is ONE line, always (PR 3 final note F16).
+	 *
+	 * Its line is the hero's from the first frame, and a sentence longer than
+	 * the line wrapped onto a second one and grew it: "No podemos cargar la
+	 * lista de tokens de Tempo por ahora" at 320 px pushed the page under the
+	 * hero down a line when it landed. A sentence that does not fit is first
+	 * set a little smaller — never under 85 % — and what still does not fit
+	 * ends in "…". Nothing is lost: the whole sentence is the line's
+	 * accessible name, and the sheet the line opens says it in full at its top.
+	 */
+	const SAID_FLOOR = 0.85;
+	let saidRoom = $state<HTMLElement | null>(null);
+	let saidDoor = $state<HTMLElement | null>(null);
+	let saidWords = $state<HTMLElement | null>(null);
+	let shrink = $state(1);
+	$effect(() => {
+		const room = saidRoom;
+		const door = saidDoor;
+		const words = saidWords;
+		// Another sentence on the same line is measured again.
+		void balance.status?.text;
+		if (!room || !door || !words) {
+			shrink = 1;
+			return;
+		}
+		const measure = () => {
+			// The sentence's width at full size, whatever size it is drawn at
+			// now; and the room the line has for it beside its two glyphs.
+			const drawnAt = Number(words.dataset.shrink) || 1;
+			const natural = words.scrollWidth / drawnAt;
+			const beside = door.getBoundingClientRect().width - words.getBoundingClientRect().width;
+			const have = room.clientWidth - beside;
+			if (natural <= 0 || have <= 0) return;
+			const next = natural > have ? Math.max(SAID_FLOOR, have / natural) : 1;
+			if (Math.abs(next - drawnAt) > 0.005) shrink = next;
+		};
+		measure();
+		// The room changes with the window, the sentence with its face (a web
+		// font landing). Measured on the next frame, not inside the observer:
+		// setting the size there resizes what it observes, in its own loop.
+		let frame = 0;
+		const later = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(measure);
+		};
+		const watch = new ResizeObserver(later);
+		watch.observe(room);
+		watch.observe(words);
+		return () => {
+			cancelAnimationFrame(frame);
+			watch.disconnect();
+		};
+	});
 </script>
 
 <div class="balance">
@@ -162,16 +217,40 @@
 		said on it, and it stands under the refresh control: what a person
 		presses never moves, and a status lands in room that was already there.
 	-->
-	<div class="said">
-		{#if balance.status !== undefined}
-			<button type="button" class="status {balance.status.kind}" onclick={onstatus}>
+	<div class="said" bind:this={saidRoom}>
+		{#if balance.checkingText !== undefined}
+			<!-- The first read is still out (F19): said quietly, where "Live" or
+			     "Can't reach…" will stand once a round has ended. The dot is the
+			     live line's own, not yet green — the words start where they will. -->
+			<p class="live checking">
+				<span class="live-dot" aria-hidden="true"></span>
+				{balance.checkingText}
+			</p>
+		{:else if balance.status !== undefined}
+			<!-- One line (F16): the whole sentence is its name — to a screen
+			     reader, and under a pointer — whatever part of it the line has
+			     room to draw. -->
+			<button
+				type="button"
+				class="status {balance.status.kind}"
+				aria-label={balance.status.text}
+				title={balance.status.text}
+				onclick={onstatus}
+				bind:this={saidDoor}
+			>
 				<Icon
 					icon={balance.status.kind === 'warning'
 						? UTILITY_ICONS['triangle-alert']
 						: UTILITY_ICONS['refresh-cw']}
 					size="sm"
 				/>
-				<span>{balance.status.text}</span>
+				<span
+					class="sentence"
+					class:shrunk={shrink < 1}
+					style:--shrink={shrink < 1 ? shrink : undefined}
+					data-shrink={shrink}
+					bind:this={saidWords}>{balance.status.text}</span
+				>
 				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 			</button>
 		{:else if balance.state === 'zero-live' && balance.liveText !== undefined}
@@ -316,6 +395,11 @@
 		animation: pulse calc(var(--motion-entrance-fadeUp) * 2) ease-in-out infinite alternate;
 	}
 
+	/* Not live yet: the same dot, in the line's own quiet ink. */
+	.checking .live-dot {
+		background: var(--color-fg-subtle);
+	}
+
 	@keyframes pulse {
 		from {
 			opacity: 1;
@@ -336,18 +420,44 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-md);
+		/* As wide as its sentence, and never wider than the line. */
+		min-width: 0;
+		max-width: 100%;
+		/* One line of the status face, said out loud: a sentence drawn smaller
+		   to fit (`.shrunk`) stands in the same line, on the same middle. */
+		box-sizing: content-box;
+		min-height: 1lh;
 		padding: var(--space-sm) 0;
 		border: none;
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
-		/* A line that wraps reads from its start, beside its glyph — a button
-		   centres its text by default, and Vela's own-fault sentence (PR 2
-		   note 11) is the first status long enough to wrap. */
 		text-align: start;
 		cursor: pointer;
 		border-radius: var(--radius-sm);
+	}
+
+	/* The two glyphs keep their size; the sentence between them gives. */
+	.status > :global(svg) {
+		flex: none;
+	}
+
+	/* ONE line (F16): what does not fit ends in "…" — never a second line,
+	   which would grow the line the hero keeps for it. The whole sentence is
+	   the button's name and stands at the top of the sheet it opens. */
+	.status .sentence {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+
+	/* A sentence a little too long is set a little smaller first (`--shrink`,
+	   never under 0.85). */
+	.status .sentence.shrunk {
+		font-size: calc(var(--text-base) * var(--text-scale, 1) * var(--shrink));
 	}
 
 	.warning {

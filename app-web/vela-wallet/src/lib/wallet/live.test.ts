@@ -72,6 +72,8 @@ const PRISTINE: BalanceView = {
 	unreachable_key: null,
 	internal_chain_ids: [],
 	internal_key: null,
+	checking_key: null,
+	live_key: null,
 	holdings_loading: false,
 	cached_total_usd: null,
 	switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -85,7 +87,8 @@ function unreachableRow(chainId: number): UnreachableNetwork {
 		last_seen_usd: null,
 		line_key: 'assets.notReadYet',
 		cause: 'network',
-		rpc_fixable: true
+		rpc_fixable: true,
+		status_key: 'home.balanceDetailStatusFailed'
 	};
 }
 
@@ -309,14 +312,23 @@ describe('liveBalance', () => {
 		expect(model.integer).toBe('••••••');
 		expect(model.decimals).toBeUndefined();
 	});
-	it('a live zero with nothing held is the zero-live state', () => {
+	it('the zero-live state is the core’s `live_key`, and nothing this shell derives (F19)', () => {
+		const zero = { ...PRISTINE, balance_unknown: false, display_total_usd: 0 };
+		const model = liveBalance({ ...zero, live_key: 'home.liveIndicator' }, USD, m);
+		expect(model.state).toBe('zero-live');
+		expect(model.liveText).toBe(m.balance.liveIndicator);
+		// A zero, nothing partial, no tokens — and the core has not said live.
+		expect(liveBalance(zero, USD, m).state).toBe('normal');
+		expect(liveBalance(zero, USD, m).liveText).toBeUndefined();
+	});
+	it('the first read still out is "Checking…" on the status line, alone (F19)', () => {
 		const model = liveBalance(
-			{ ...PRISTINE, balance_unknown: false, display_total_usd: 0 },
+			{ ...PRISTINE, cached_total_usd: 1383.28, checking_key: 'componentsUi.funding.checking' },
 			USD,
 			m
 		);
-		expect(model.state).toBe('zero-live');
-		expect(model.liveText).toBe(m.balance.liveIndicator);
+		expect(model).toMatchObject({ state: 'normal', integer: '$1,383', checkingText: 'Checking…' });
+		expect(model.status).toBeUndefined();
 	});
 	it('a cached total paints first, marked as refreshing', () => {
 		const model = liveBalance({ ...PRISTINE, cached_total_usd: 1383.28 }, USD, m);

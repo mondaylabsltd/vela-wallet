@@ -164,18 +164,37 @@ async function drawn(page: Page): Promise<Drawn[]> {
 }
 
 /**
- * The texts drawn exactly once in both frames whose box moved: another x,
- * another y or another height. A figure landing changes ITS text, so it is
- * not among them — anything here is something else that shifted because of it.
+ * Every text drawn in both frames whose box moved: another x, another y or
+ * another height. A figure landing changes ITS text, so it is not among them
+ * — anything here is something else that shifted because of it.
+ *
+ * A text drawn the same number of times in both frames is followed occurrence
+ * by occurrence, in document order ("ETH" drawn three times is three boxes,
+ * named "ETH", "ETH #2", "ETH #3"). This used to follow only the texts drawn
+ * ONCE, and so could not see the fee coin's mark — one "ETH" among several —
+ * slide 19 px when the fee's worth landed beside it (PR 3 final note F13).
  */
 function moved(before: Drawn[], after: Drawn[]): string[] {
-	const once = (list: Drawn[]) => {
+	const tally = (list: Drawn[]) => {
 		const count = new Map<string, number>();
 		for (const item of list) count.set(item.text, (count.get(item.text) ?? 0) + 1);
-		return new Map(list.filter((item) => count.get(item.text) === 1).map((d) => [d.text, d]));
+		return count;
 	};
-	const then = once(before);
-	const now = once(after);
+	const inBefore = tally(before);
+	const inAfter = tally(after);
+	const followed = (list: Drawn[]) => {
+		const seen = new Map<string, number>();
+		const out = new Map<string, Drawn>();
+		for (const item of list) {
+			if (inBefore.get(item.text) !== inAfter.get(item.text)) continue;
+			const nth = (seen.get(item.text) ?? 0) + 1;
+			seen.set(item.text, nth);
+			out.set(nth === 1 ? item.text : `${item.text} #${nth}`, item);
+		}
+		return out;
+	};
+	const then = followed(before);
+	const now = followed(after);
 	const out: string[] = [];
 	for (const [text, from] of then) {
 		const to = now.get(text);
@@ -356,4 +375,88 @@ test('the send form and its review: the "≈" lines and the fee’s money wait, 
 	expect(texts(review.before)).not.toMatch(FIAT_FIGURE);
 	expect(texts(review.before)).toMatch(/[\d.]+ ETH · ≈…/);
 	expect(moved(review.before, review.after), 'the review').toEqual([]);
+});
+
+/*
+ * PR 3 final note F12 — the signing sheet at 320 px.
+ *
+ * The fee was one string: "0.0015 ETH · ≈…" fitted beside "Network fee",
+ * "0.0015 ETH · ≈₫112,500.00" did not, the label wrapped, the row grew a line,
+ * and the bottom-anchored sheet — the request, the recipient, everything above
+ * the fee — moved 18 px under the person. The row draws the send form's two
+ * pieces now, the money on a line of its own while it is withheld.
+ */
+test.describe('the signing sheet at 320 px', () => {
+	test.use({ viewport: { width: 320, height: 700 } });
+
+	const SIGNER = '0xD400866e00B055B20752a826CD5C89b811de130b';
+	const SIGNER_KEY =
+		'04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b';
+
+	test('the fee’s worth lands under its coin, and the sheet does not move', async ({ page }) => {
+		// A signed-in wallet with the dev gate on, so the page's own requester
+		// exists (`signing-scenarios.e2e.ts`).
+		await page.addInitScript(
+			([key, address]) => {
+				localStorage.setItem('vela.intro.seen', String(Date.now()));
+				localStorage.setItem('vela.dev.console', '1');
+				if (localStorage.getItem('vela.accounts') === null) {
+					localStorage.setItem(
+						'vela.accounts',
+						JSON.stringify([
+							{
+								id: 'e2e-credential-id',
+								name: 'E2E Wallet',
+								address,
+								public_key_hex: key,
+								created_at_iso: '2026-01-01T00:00:00.000Z',
+								keys: []
+							}
+						])
+					);
+					localStorage.setItem('vela.activeAccountIndex', '0');
+				}
+			},
+			[SIGNER_KEY, SIGNER] as const
+		);
+		await stubChain(page);
+		await stubRelay(page, RELAY, happyRelay('0x' + '11'.repeat(32), '0x' + '22'.repeat(32)));
+		const rate = await rates(page);
+		await openHome(page);
+
+		const confirm = page.getByTestId('signing-confirm');
+		const sheet = await withheldThenLanded(
+			page,
+			rate,
+			async (p) => {
+				await p.waitForFunction(
+					() =>
+						(window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,
+					null,
+					{ timeout: 20_000 }
+				);
+				await p.evaluate(
+					([to, from]) => {
+						const w = window as unknown as {
+							vela: { requester: { fire(method: string, params: unknown[]): Promise<unknown> } };
+						};
+						void w.vela.requester
+							.fire('eth_sendTransaction', [{ to, value: '0x16345785d8a0000', data: '0x', from }])
+							.catch(() => {});
+					},
+					[RECIPIENT, SIGNER] as const
+				);
+				await expect(confirm).toBeVisible({ timeout: 6_000 });
+				// The fee in its coin is there to decide with; its money waits.
+				await expect(p.getByText(/^[\d.]+ ETH$/).first()).toBeVisible({ timeout: 6_000 });
+			},
+			async (p) => expect(p.getByText(/^≈ ₫[\d,.]+$/).first()).toBeVisible({ timeout: 30_000 })
+		);
+		expect(texts(sheet.before)).not.toMatch(FIAT_FIGURE);
+		expect(texts(sheet.before)).toMatch(/[\d.]+ ETH/);
+		expect(texts(sheet.after)).toMatch(/≈ ₫112,500/);
+		// Nothing drawn in both frames is anywhere else: not the fee's label,
+		// not the request above it, not the confirm under a thumb.
+		expect(moved(sheet.before, sheet.after), 'the signing sheet').toEqual([]);
+	});
 });

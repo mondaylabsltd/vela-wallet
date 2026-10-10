@@ -11,7 +11,12 @@
  * happen where the fixture knows the value, through spec 015's `fill`.
  */
 
-import { NET_HINT_KEYS, NET_STOP_KEYS, VENUE_BLOCK_KEYS } from '$lib/settings/messages';
+import {
+	NET_HINT_KEYS,
+	NET_RPC_FIELD_KEYS,
+	NET_STOP_KEYS,
+	VENUE_BLOCK_KEYS
+} from '$lib/settings/messages';
 
 /**
  * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082
@@ -191,8 +196,27 @@ export const WALLET_FLOW_KEYS = [
 	...NET_HINT_KEYS,
 	...NET_STOP_KEYS,
 	'settingsModals.addNetwork.openChainSetupTool',
+	// The RPC field under the wizard's result and "Re-check with this RPC" —
+	// drawn when the core gives the field (`NetWizardView.rpc_field`), labelled
+	// by the key it names. The tab's no-RPC stop said "Enter one, then
+	// re-check" and had neither.
+	...NET_RPC_FIELD_KEYS,
+	'settingsModals.addNetwork.customRpcPlaceholder',
+	'settingsModals.addNetwork.recheckWithRpc',
 
 	// ------------------------------------------------------------------ send
+	// A payment request this wallet cannot take up as it is (the send core's
+	// `lock_error`): a network it does not have — with "Add this network" and
+	// what came of it — or a token it cannot describe. In the corpus since the
+	// first client, and on no web surface until PR 3's final round (F6/F27).
+	'send.lock.netTitle',
+	'send.lock.netBody',
+	'send.lock.addNetwork',
+	'send.lock.netNotFound',
+	'send.lock.netNotCompatible',
+	'send.lock.netAddError',
+	'send.lock.tokenTitle',
+	'send.lock.tokenBody',
 	'send.selectTokenTitle',
 	'send.searchPlaceholder',
 	// What an EMPTY list says. Both were in the corpus and neither was on a

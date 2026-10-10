@@ -13,6 +13,7 @@
  */
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
+import { pluralForm } from '$lib/i18n/plural';
 import type { SettingsMessages } from './messages';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
@@ -482,13 +483,17 @@ function addNetwork(
 			},
 			checksTitle: m.addNetwork.compatibilityCheck,
 			checks,
+			// The core's rule for the field (`NetWizardView.rpc_field`): a check
+			// that passed offers it, "(optional)", and the re-check that reads it
+			// — the two together, or neither.
 			customRpc: {
 				id: 'custom-rpc',
 				label: m.addNetwork.customRpcTitle,
 				value: '',
 				placeholder: m.addNetwork.customRpcPlaceholder
 			},
-			primary: m.addNetwork.addNetworkBtn
+			primary: m.addNetwork.addNetworkBtn,
+			recheck: m.addNetwork.recheckWithRpc
 		};
 	}
 	if (mode === 'no-p256') {
@@ -509,8 +514,9 @@ function addNetwork(
 			callout: {
 				tone: 'warning',
 				text: m.addNetwork.hints['settingsModals.addNetwork.noP256Hint']
-			},
-			recheck: m.addNetwork.recheckWithRpc
+			}
+			// No field and no re-check under a refusal: another endpoint would
+			// not change it (`rpc_field: none`).
 		};
 	}
 	return {
@@ -534,8 +540,7 @@ function addNetwork(
 		secondary: {
 			label: m.addNetwork.openChainSetupTool,
 			href: 'https://getvela.app/chain-setup?chain=48900'
-		},
-		recheck: m.addNetwork.recheckWithRpc
+		}
 	};
 }
 
@@ -826,7 +831,7 @@ function accountsSheet(
 ): AccountsSheetModel {
 	return {
 		title: m.accounts.title,
-		summary: `${fill(m.accounts.countPrefix, { count: ACCOUNTS.length })}${fill(m.accounts.total, { amount: TOTAL_BALANCE })}`,
+		summary: `${fill(pluralForm(m.accounts.countPrefix, ACCOUNTS.length), { count: ACCOUNTS.length })}${fill(m.accounts.total, { amount: TOTAL_BALANCE })}`,
 		rows: ACCOUNTS.map((a, i) => ({
 			name: a.name,
 			addressDisplay: a.display,
@@ -1173,6 +1178,17 @@ function balanceDetail(m: SettingsMessages): BalanceDetailModel {
 				mark: MARKS.gnosis,
 				name: 'Gnosis',
 				status: m.balanceDetail.statusFailed,
+				tone: 'error',
+				action: m.balanceDetail.retry
+			},
+			// A network whose RPC answers and whose token list could not be
+			// loaded: the core's other short status (`status_key`, PR 3 final
+			// note F21) — "RPC unavailable" would be false of it.
+			{
+				id: 'tempo',
+				mark: MARKS.tempo,
+				name: 'Tempo',
+				status: m.balanceDetail.statuses['home.balanceDetailStatusTokenList'],
 				tone: 'error',
 				action: m.balanceDetail.retry
 			}

@@ -73,6 +73,8 @@ const WIZARD_IDLE: NetWizardView = {
 	compat: null,
 	error: null,
 	error_key: null,
+	rpc_field: 'none',
+	rpc_field_label_key: null,
 	can_add: false
 };
 
@@ -312,8 +314,58 @@ describe('liveAddNetwork', () => {
 		// Nothing to deploy: no button, and nothing that adds the network.
 		expect(model.secondary).toBeUndefined();
 		expect(model.primary).toBeUndefined();
-		// The re-check stays: a different RPC may answer differently.
-		expect(model.recheck).toBe(m.addNetwork.recheckWithRpc);
+		// No re-check under a refusal (PR 3 final note F22): the core gives it
+		// no RPC field, and a button that reads a field is drawn where the
+		// field is. It stood here with nothing to read.
+		expect(model.customRpc).toBeUndefined();
+		expect(model.recheck).toBeUndefined();
+	});
+
+	it('the RPC field and its re-check are the core’s `rpc_field`: both, or neither', () => {
+		const compat: NetCompatibility = {
+			...NO_P256,
+			compatible: true,
+			blocker: null,
+			hint_key: null
+		};
+		const wizard = { ...WIZARD_IDLE, phase: 'checked' as const, chain_info: info, compat };
+		// The core gives none: neither is drawn, whatever the phase.
+		const none = liveAddNetwork(wizard, m);
+		expect(none.customRpc).toBeUndefined();
+		expect(none.recheck).toBeUndefined();
+		// Optional: the field by the label the core names, and the re-check.
+		const optional = liveAddNetwork(
+			{
+				...wizard,
+				custom_rpc: 'https://my.rpc.example',
+				rpc_field: 'optional',
+				rpc_field_label_key: 'settingsModals.addNetwork.customRpcTitle'
+			},
+			m
+		);
+		expect(optional.customRpc).toMatchObject({
+			id: 'custom-rpc',
+			label: 'Custom RPC (optional)',
+			value: 'https://my.rpc.example'
+		});
+		expect(optional.recheck).toBe(m.addNetwork.recheckWithRpc);
+		// Required: "RPC URL" — not "(optional)" where it is the one thing asked for.
+		const required = liveAddNetwork(
+			{
+				...wizard,
+				rpc_field: 'required',
+				rpc_field_label_key: 'settingsModals.network.fieldRpcUrl'
+			},
+			m
+		);
+		expect(required.customRpc?.label).toBe('RPC URL');
+		expect(required.recheck).toBe(m.addNetwork.recheckWithRpc);
+		// A label key this build has no words for: the plain one, never a path.
+		const unknown = liveAddNetwork(
+			{ ...wizard, rpc_field: 'optional', rpc_field_label_key: 'settingsModals.addNetwork.new' },
+			m
+		);
+		expect(unknown.customRpc?.label).toBe('RPC URL');
 	});
 
 	/**
@@ -582,6 +634,35 @@ describe('liveAccountsSheet', () => {
 		// The count is not money: it stays.
 		expect(sheet.summary).toContain('2');
 	});
+
+	// "home.switcherAccountCount" is a plural family: a wallet with one account
+	// read "1 accounts · Total". The form is the locale's own for the count,
+	// chosen by the core's rule (`pluralForm`), never by `count === 1` here.
+	it('counts the accounts in the form the count takes', async () => {
+		const { liveAccountsSheet } = await import('./live');
+		const { resolveSettingsMessages } = await import('$lib/i18n/engine.server');
+		const summary = (locale: Parameters<typeof resolveSettingsMessages>[0], n: number) =>
+			liveAccountsSheet(
+				{
+					rows: Array.from({ length: n }, (_, index) => ({ ...rows[index % 2]!, index })),
+					activeIndex: 0,
+					balances: new Map(),
+					hidden: false,
+					currency: usd,
+					identicon: () => ''
+				},
+				resolveSettingsMessages(locale).accounts
+			).summary;
+		expect(summary('en', 1)).toMatch(/^1 account · /);
+		expect(summary('en', 2)).toMatch(/^2 accounts · /);
+		// Russian's corpus sentence is the count-neutral "Accounts: N" in all
+		// four of its forms; every one of them resolves and counts.
+		expect(summary('ru', 1)).toMatch(/^Аккаунтов: 1 · /);
+		expect(summary('ru', 3)).toMatch(/^Аккаунтов: 3 · /);
+		expect(summary('ru', 5)).toMatch(/^Аккаунтов: 5 · /);
+		expect(summary('zh', 1)).toMatch(/^1 个账户 · /);
+		expect(summary('zh', 2)).toMatch(/^2 个账户 · /);
+	});
 });
 
 // The out-of-gas relayer sheet has to answer a question before it asks for
@@ -718,7 +799,8 @@ describe('the unreachable-networks list (spec 092)', () => {
 		last_seen_usd,
 		line_key,
 		cause: 'network',
-		rpc_fixable: true
+		rpc_fixable: true,
+		status_key: 'home.balanceDetailStatusFailed'
 	});
 	const view = (
 		networks: UnreachableNetwork[],
@@ -742,6 +824,8 @@ describe('the unreachable-networks list (spec 092)', () => {
 		unreachable_key: key,
 		internal_chain_ids: [],
 		internal_key: null,
+		checking_key: null,
+		live_key: null,
 		holdings_loading: false,
 		cached_total_usd: null,
 		switcher: { open: false, loading: false, balances: [], hidden: false }

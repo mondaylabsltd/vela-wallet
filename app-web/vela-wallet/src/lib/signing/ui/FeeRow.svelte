@@ -53,7 +53,73 @@
 		const text = held ?? fee.warningReserved;
 		return text === undefined ? undefined : { text, said: false };
 	});
+
+	/**
+	 * The money under the coin, held — the send form's rule for its own fee
+	 * row (0.8: withholding never moves the layout), here for PR 3 final note
+	 * F12.
+	 *
+	 * The fee was one string, "0.0015 ETH · ≈…". When the display currency
+	 * committed it became "0.0015 ETH · ≈₫112,500.00"; at 320 px that no longer
+	 * fitted beside "Network fee", the label wrapped, the row grew a line and
+	 * the whole bottom-anchored sheet moved 18 px. How long the figure will be
+	 * is exactly what is not known while it is withheld. So while it is, the
+	 * money takes a line of its own under the coin — the one layout whose line
+	 * count does not depend on the figure's length — from the first frame
+	 * (under "Estimating…" the line is kept empty), and KEEPS it for as long
+	 * as this row stands: a row that folded back up for a short figure would
+	 * be the same jump the other way.
+	 */
+	let stackedOnce = $state(false);
+	$effect.pre(() => {
+		if (fee.kind === 'onchain' && fee.valueFiatWithheld === true) stackedOnce = true;
+	});
+	const stacked = $derived(
+		stackedOnce || (fee.kind === 'onchain' && fee.valueFiatWithheld === true)
+	);
 </script>
+
+<!--
+	The label and the fee are two wholes, as on the send form: side by side
+	while both fit; otherwise the label keeps a line of its own, WHOLE, and the
+	fee goes under it at the row's end — a label is never broken to make room.
+	The coin and its money are two unbreakable pieces; no "·" between them
+	("≈" already joins a coin to its money, and a dropped line that began "·"
+	read as a leftover).
+-->
+{#snippet chevronMark()}
+	<!-- Only where a tap opens the list of coins; a failed quote with one
+	     coin is tapped to ask again. -->
+	<span class="chevron"><Icon icon={UTILITY_ICONS['chevron-right']} size="sm" /></span>
+{/snippet}
+
+{#snippet face(label: string, value: string, money: string | undefined, chevron: boolean)}
+	<span class="label">{label}</span>
+	{#if stacked}
+		<!-- Held: the coin (and the chevron it belongs with) beside the label
+		     or under it, and the money on a line that is its own whatever its
+		     length. Kept empty while there is no figure to stand on it. -->
+		<span class="lead">
+			<span class="value">{value}</span>
+			{#if chevron}{@render chevronMark()}{/if}
+		</span>
+		{#if money !== undefined}
+			<span class="value money" class:indent={chevron}>{money}</span>
+		{:else}
+			<span class="value money kept" aria-hidden="true">&nbsp;</span>
+		{/if}
+	{:else}
+		<span class="amount">
+			<span class="values">
+				<span class="value">{value}</span>
+				{#if money !== undefined}
+					<span class="value">{money}</span>
+				{/if}
+			</span>
+			{#if chevron}{@render chevronMark()}{/if}
+		</span>
+	{/if}
+{/snippet}
 
 {#if fee.kind === 'offchain'}
 	<PositiveNote text={fee.note} quiet />
@@ -109,13 +175,7 @@
 		<div class="line">
 			{#if fee.tappable}
 				<button type="button" class="row" onclick={ontoggle}>
-					<span class="label">{fee.label}</span>
-					<span class="value">{fee.value}</span>
-					<!-- The chevron only where a tap opens the list of coins; a
-					     failed quote with one coin is tapped to ask again. -->
-					{#if fee.chevron !== false}
-						<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-					{/if}
+					{@render face(fee.label, fee.value, fee.valueFiat, fee.chevron !== false)}
 				</button>
 			{:else}
 				<!-- One coin, and a quote in hand: there is nothing to choose, so
@@ -123,8 +183,7 @@
 				     house rule that a control which cannot act is not drawn as one
 				     (spec 081, dead-controls #6). -->
 				<div class="row stated">
-					<span class="label">{fee.label}</span>
-					<span class="value">{fee.value}</span>
+					{@render face(fee.label, fee.value, fee.valueFiat, false)}
 				</div>
 			{/if}
 			{#if fee.refreshLabel !== undefined}
@@ -185,8 +244,10 @@
 	.row {
 		display: flex;
 		flex: 1 1 auto;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-md);
+		column-gap: var(--space-md);
+		row-gap: var(--space-xs);
 		min-width: 0;
 		padding: var(--space-lg) var(--space-xl);
 		border: none;
@@ -202,16 +263,71 @@
 		cursor: default;
 	}
 
+	/* The label is WHOLE: it may wrap between words when a line cannot hold
+	   it, never inside one (`min-content` is its longest word). When it and
+	   the fee do not share a line, the fee — the next flex item — drops under
+	   it. */
 	.label {
-		flex: 1;
+		flex: 0 1 auto;
+		min-width: min-content;
+		overflow-wrap: normal;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
-	.value {
-		font-family: var(--font-numeric);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		font-variant-numeric: tabular-nums;
-		color: var(--color-fg-base);
+	/* The figures and the chevron, at the row's end — beside the label, or on
+	   the line under it. Never narrower than its widest unbroken piece. */
+	.amount {
+		display: flex;
+		flex: 1 1 auto;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--space-md);
+		min-width: min-content;
+	}
+
+	/* Within its line the money drops under the coin, whole, when even that
+	   line is tight. */
+	.values {
+		flex: 0 1 auto;
+		min-width: min-content;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		column-gap: var(--space-sm);
+	}
+
+	.chevron {
+		display: flex;
+		flex: none;
+	}
+
+	/* Held (see `stacked`): the money has a line to itself, the full width of
+	   the row, at the row's end. The label and the coin above it share a line
+	   or not as THEY fit — both are known before the money is — so a figure
+	   landing in the money's line, long or short, at any width or text size,
+	   changes no line count and moves nothing. (As one piece with the coin,
+	   the pair was as wide as its longer line: a long figure pushed the whole
+	   pair under the label, or the label onto a second line.) */
+	.lead {
+		display: flex;
+		flex: 1 1 auto;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--space-md);
+		min-width: min-content;
+	}
+
+	.money {
+		flex: 0 0 100%;
+		/* The whole line and no more, its end padding included. */
+		box-sizing: border-box;
+		text-align: end;
+	}
+
+	/* Under the coin, not under the chevron beside it: the two figures end at
+	   one edge. */
+	.money.indent {
+		padding-inline-end: calc(var(--icon-sm) + var(--space-md));
 	}
 
 	.selector {
