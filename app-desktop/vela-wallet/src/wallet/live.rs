@@ -544,6 +544,31 @@ pub fn unreachable_list(
     }
 }
 
+/// The sentence the balance breakdown says at its top: the hero's own
+/// status line, in full (PR 3 final note F16).
+///
+/// The hero's line is ONE line — a sentence longer than the column ends in
+/// an ellipsis rather than growing the reserved slot — so what it opens has
+/// to carry the whole of it. The unreachable list does already (the line is
+/// its title). The breakdown did not: "Something went wrong inside Vela. If
+/// it keeps happening, reopen the app." is 82 characters in Russian, longer
+/// than the home column at the largest text size, and the sheet it opened
+/// never said it.
+///
+/// `None` when the hero has no status line — and for "some tokens couldn't
+/// be priced", which the sheet already says in full as the heading of the
+/// very section it is about: said twice on one sheet it would be noise.
+#[must_use]
+pub fn breakdown_lead(
+    view: &BalanceView,
+    s: &WalletStrings,
+    locale: &str,
+    money: &Money,
+) -> Option<SharedString> {
+    let (_, line) = balance(view, s, locale, money).status?;
+    (line != s.balance_unpriced).then_some(line)
+}
+
 /// SR3, the balance by network (078 H-03) — the web's `liveBalanceDetail`:
 /// the chains still being read (rate-limited, retrying on their own) or
 /// unreachable (with a Retry), the chains that settled, largest first, and the
@@ -2503,6 +2528,74 @@ mod tests {
             // A key this build does not know says nothing false.
             assert_eq!(s.detail_status("home.someLaterStatus").as_ref(), "");
         });
+    }
+
+    /// PR 3 final note F16: the hero's status line is ONE line and may end
+    /// in an ellipsis, so whatever it opens says the whole sentence at its
+    /// top. The unreachable list does as its title; the breakdown as its
+    /// lead — for every line that opens it, except the one the sheet already
+    /// says in full as a section's heading.
+    #[test]
+    fn what_the_heros_line_opens_says_the_sentence_in_full() {
+        use crate::wallet::fixtures::{
+            FirstRead, breakdown_view, first_read_view, held_view, internal_view, token_list_view,
+            unreachable_view,
+        };
+        let s = WalletStrings::resolve(&crate::loc::Loc::for_language("en"));
+        let money = &Money::default();
+        let hero_line =
+            |view: &BalanceView| balance(view, &s, "en", money).status.map(|(_, line)| line);
+
+        // A read that failed inside Vela: 72 characters in English, 82 in
+        // Russian — the line that is cut first. It opens the breakdown
+        // (no network is unreachable), which now says it.
+        let internal = internal_view();
+        assert!(
+            internal.unreachable_networks.is_empty(),
+            "opens the breakdown"
+        );
+        let line = hero_line(&internal).unwrap_or_else(|| unreachable!("a line"));
+        assert_eq!(line, s.balance_internal);
+        assert_eq!(breakdown_lead(&internal, &s, "en", money), Some(line));
+
+        // A network out of reach opens the LIST, whose title is the line.
+        for view in [unreachable_view(), token_list_view()] {
+            let line = hero_line(&view).unwrap_or_else(|| unreachable!("a line"));
+            assert!(!view.unreachable_networks.is_empty(), "opens the list");
+            assert_eq!(unreachable_list(&view, &s, "en", money).title, line);
+        }
+        // …also where the sentence names a network nobody shortened.
+        let named = crate::wallet::fill(
+            &s.token_list_unreachable,
+            "name",
+            crate::wallet::fixtures::LONG_NETWORK_NAME,
+        );
+        assert!(
+            named.chars().count() > 90,
+            "longer than any column: {named}"
+        );
+
+        // "Some tokens couldn't be priced" opens the breakdown, which heads
+        // its own section with that sentence: not said twice.
+        let mut unpriced = breakdown_view();
+        unpriced.notice = Some(BalanceNotice::Unpriced);
+        assert_eq!(hero_line(&unpriced), Some(s.balance_unpriced.clone()));
+        assert_eq!(breakdown_lead(&unpriced, &s, "en", money), None);
+        assert!(
+            !balance_detail(&unpriced, &s, "en", money)
+                .unpriced
+                .is_empty()
+        );
+
+        // Nothing to say on the hero, nothing to lead with — and "Checking…"
+        // and "Live" are not lines that open anything.
+        assert_eq!(breakdown_lead(&held_view(), &s, "en", money), None);
+        for stage in [FirstRead::Checking, FirstRead::Live] {
+            assert_eq!(
+                breakdown_lead(&first_read_view(stage), &s, "en", money),
+                None
+            );
+        }
     }
 
     /// PR 3 final note F21: each unreachable row of the breakdown draws

@@ -463,6 +463,11 @@ pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::B
     host.view()
 }
 
+/// A network name longer than any column: what a custom network may be
+/// called, for the board that shows the hero's line ending in an ellipsis.
+pub const LONG_NETWORK_NAME: &str =
+    "Example Rollup Testnet With a Name Nobody Shortened Before Adding It";
+
 /// Component-board balance variants (gallery Components tab).
 pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
     vec![
@@ -475,6 +480,40 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             decimals: Some("00".into()),
             live: Some(s.live_indicator.clone()),
             checking: None,
+            status: None,
+            updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
+        },
+        // PR 3 final note F16: a status sentence longer than the line. A
+        // custom network is named by whoever added it, so no column is wide
+        // enough for every sentence that names one — it stays ONE line and
+        // ends in an ellipsis, and the list it opens says it in full.
+        BalanceModel {
+            label: s.total_balance.clone(),
+            currency: "USD".into(),
+            state: BalanceState::Normal,
+            integer: "$1,383".into(),
+            decimals: Some("28".into()),
+            live: None,
+            checking: None,
+            status: Some((
+                StatusKind::Warning,
+                crate::wallet::fill(&s.token_list_unreachable, "name", LONG_NETWORK_NAME).into(),
+            )),
+            updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
+        },
+        // …and the first read's line, in the same slot (F19).
+        BalanceModel {
+            label: s.total_balance.clone(),
+            currency: "USD".into(),
+            state: BalanceState::Normal,
+            integer: "$0".into(),
+            decimals: Some("00".into()),
+            live: None,
+            checking: Some(s.balance_checking.clone()),
             status: None,
             updated: None,
             refreshing: false,

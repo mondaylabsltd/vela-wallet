@@ -607,8 +607,12 @@ impl SlotLine {
 /// never moves for it. The line used to be added and removed, and everything
 /// below it jumped a row each time.
 ///
-/// One line, never two: it is as wide as the home column, and a sentence
-/// longer than that ends in an ellipsis rather than growing the slot.
+/// One line, never two (PR 3 final note F16): it is as wide as the home
+/// column, and a sentence longer than that ends in an ellipsis rather than
+/// wrapping or growing the slot. The whole sentence is the line's accessible
+/// name, and what the line opens says it in full at its top — the
+/// unreachable list as its title, the breakdown as its subtitle
+/// (`wallet::live::breakdown_lead`).
 fn status_slot(
     theme: &Theme,
     icons: &mut IconCache,
@@ -616,6 +620,19 @@ fn status_slot(
     on_status: Option<BalanceToggle>,
 ) -> Div {
     let slot = div().h(status_slot_height()).flex().items_center();
+    // The line's accessible name is its whole sentence — on the ONE hero a
+    // session draws. A board draws several heroes side by side, and an id
+    // (which a name needs) on each would be the same id many times over.
+    let live_hero = on_status.is_some();
+    let named = |line: Div, full: SharedString| {
+        if live_hero {
+            line.id("balance-status")
+                .aria_label(full)
+                .into_any_element()
+        } else {
+            line.into_any_element()
+        }
+    };
     let sentence = |text: SharedString| {
         div()
             .min_w(px(0.))
@@ -626,6 +643,7 @@ fn status_slot(
     };
     match SlotLine::of(model) {
         SlotLine::Status(kind, text) => {
+            let full = text.clone();
             let (icon, color) = match kind {
                 StatusKind::Warning => (Icon::TriangleAlert, theme.warning),
                 StatusKind::Refreshing => (Icon::RefreshCw, theme.fg_muted),
@@ -656,8 +674,11 @@ fn status_slot(
                     14.,
                 )));
             slot.child(match on_status {
+                // The whole sentence is the line's accessible name: what is
+                // drawn may end in an ellipsis, what is read out never does.
                 Some(on_status) => line
                     .id("balance-status")
+                    .aria_label(full)
                     .cursor_pointer()
                     .on_click(on_status)
                     .into_any_element(),
@@ -667,14 +688,18 @@ fn status_slot(
         // The web's `.live-dot`: it breathes — opacity 1 to .35 and back
         // over 800 ms — so the line reads as listening, not as a label
         // (078 H-05).
-        SlotLine::Listening(live) => slot.child(dotted(theme, theme.success, sentence(live))),
+        SlotLine::Listening(live) => slot.child(named(
+            dotted(theme, theme.success, sentence(live.clone())),
+            live,
+        )),
         // The same line before any chain has answered (F19): the dot is
         // there, breathing, and not yet green — when the round settles on a
         // live zero it turns green where it is and the words change beside
         // it. Quiet, and not a button: there is nothing to open yet.
-        SlotLine::Checking(checking) => {
-            slot.child(dotted(theme, theme.fg_subtle, sentence(checking)))
-        }
+        SlotLine::Checking(checking) => slot.child(named(
+            dotted(theme, theme.fg_subtle, sentence(checking.clone())),
+            checking,
+        )),
         // Nothing to say: the room stays.
         SlotLine::Empty => slot,
     }

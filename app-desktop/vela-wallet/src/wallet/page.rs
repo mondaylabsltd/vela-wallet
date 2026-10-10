@@ -1285,6 +1285,19 @@ impl WalletPage {
                 page.section = Section::Settings;
                 page.unreachable_open = false;
             }
+            // `VELA_SHEET=closed`: the chip's home WITHOUT the sheet the chip
+            // opens over it — the hero's own line (DSR6 / DSR7 / DSR8), which
+            // the sheet covers, at whatever width the window has.
+            if crate::dev_env::var!("VELA_SHEET").as_deref() == Some("closed") {
+                page.unreachable_open = false;
+                page.balance_detail_open = false;
+                // …and beside a pinned flow panel (`VELA_FLOW`), which is
+                // where the home column is at its narrowest.
+                if let Some(flow) = FlowPanel::from_env() {
+                    page.flows = flow.stack();
+                    page.panel = PanelId::Flow;
+                }
+            }
         }
         // `VELA_SIGNING_STATE=cs36`: the third column on one drawn request —
         // there is no live request on this route, and no way to click to one.
@@ -11012,10 +11025,14 @@ impl WalletPage {
     /// DSR3's view: the breakdown board — or, with `VELA_BREAKDOWN=statuses`
     /// (developer builds), the one where a network carries each short status
     /// a row can (rate-limited, RPC unavailable, token list unavailable; PR 3
-    /// final note F21).
+    /// final note F21), or with `=internal` the wallet whose read failed
+    /// inside Vela.
     fn breakdown_fixture() -> vela_core::app::balance_dashboard::BalanceView {
         match crate::dev_env::var!("VELA_BREAKDOWN").as_deref() {
             Some("statuses") => fixtures::breakdown_statuses_view(),
+            // The sheet as the hero's "something went wrong inside Vela"
+            // line opens it: that sentence, in full, at its top (F16).
+            Some("internal") => fixtures::internal_view(),
             _ => fixtures::breakdown_view(),
         }
     }
@@ -19044,6 +19061,7 @@ impl WalletPage {
         };
         let money = self.money(cx);
         let detail = wallet_live::balance_detail(&view, &self.strings, &self.locale, &money);
+        let lead = wallet_live::breakdown_lead(&view, &self.strings, &self.locale, &money);
         let s = &self.strings;
         let section = |text: SharedString| {
             div()
@@ -19168,7 +19186,10 @@ impl WalletPage {
                 theme,
                 window,
                 title,
-                None,
+                // The hero's line is one line and may end in an ellipsis
+                // (F16): the sheet it opens says the sentence in full, at
+                // its top.
+                lead,
                 self.dialog_close_icon(theme),
                 body.pb(px(8.)),
                 &self.dialog_scroll("balance-detail"),
