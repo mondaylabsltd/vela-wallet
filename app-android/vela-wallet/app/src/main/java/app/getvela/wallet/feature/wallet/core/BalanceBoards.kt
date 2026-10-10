@@ -110,6 +110,45 @@ object BalanceBoards {
         return Wire.json.decodeFromString(BalanceView.serializer(), script.viewJson())
     }
 
+    /**
+     * A healthy wallet with one token nothing could price (PR 3 final note
+     * F20), as the real machine says it: every network answered, the total
+     * counts what has a price, and the hero's line is "Some tokens couldn't
+     * be priced." — nothing is out of reach and nothing is being retried.
+     */
+    fun unpriced(address: String, nowMs: Double): BalanceView {
+        val settled = BalanceShellResult.FetchSettled(
+            address = address,
+            pull = false,
+            tokens = listOf(
+                BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                BalanceToken(chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54", decimals = 6, token_address = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", price_usd = 1.0),
+                BalanceToken(chain_id = 1, symbol = "ODD", name = "Odd Token", balance = "1250", decimals = 18, token_address = "0x0dd0000000000000000000000000000000000dd0"),
+            ),
+            read_chain_ids = listOf(1, 100),
+            now_ms = nowMs,
+        )
+        val script = CoreScript(BalanceDashboardCore().asBridge()) { operation ->
+            val result: BalanceShellResult? = when (operation.optString("type")) {
+                "fetch_tokens" -> settled
+                "read_balance_cache" -> BalanceShellResult.CachedTotalLoaded(address, null)
+                "read_balance_cache_many" -> BalanceShellResult.CachedBalancesLoaded(emptyList())
+                "write_balance_cache" -> BalanceShellResult.BalanceCacheWritten
+                "fetch_account_assets" -> BalanceShellResult.AccountAssetsFetched(address, null)
+                "write_privacy" -> BalanceShellResult.PrivacyWritten
+                // The core reads again, quietly, before it says a price is
+                // missing (its invariant ③): each of its timers elapses here,
+                // each re-read answers the same, and then the notice is honest.
+                "start_retry_timer" -> BalanceShellResult.RetryElapsed(operation.optInt("timer_id"))
+                else -> null
+            }
+            result?.let { Wire.json.encodeToString(BalanceShellResult.serializer(), it) }
+        }
+        script.dispatch(Wire.json.encodeToString(BalanceEvent.serializer(), BalanceEvent.PrivacyHydrated(false)))
+        script.dispatch(Wire.json.encodeToString(BalanceEvent.serializer(), BalanceEvent.AccountChanged(address)))
+        return Wire.json.decodeFromString(BalanceView.serializer(), script.viewJson())
+    }
+
     /** Tempo: a chain with no coin of its own — its money is all in its token list's stablecoins. */
     const val TEMPO = 4217
 

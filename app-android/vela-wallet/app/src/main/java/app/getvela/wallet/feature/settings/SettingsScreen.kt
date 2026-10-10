@@ -127,6 +127,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.getvela.wallet.core.designsystem.components.VelaDangerButton
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -2537,6 +2538,11 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: 
 private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(model.title)
+    // The sentence the home's line said, in full (F16) — unless the sheet
+    // says it itself, as the heading of the rows it is about.
+    model.lead
+        ?.takeIf { it != model.title && !(it == model.sectionUnpriced && model.unpriced.isNotEmpty()) }
+        ?.let { lead -> SheetLead(lead) }
     // "Total …": withheld until the display currency is the person's — the
     // line keeps its room, so the sections under it do not move.
     Text(
@@ -2546,24 +2552,53 @@ private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) 
         fontSize = VelaTextSize.base,
         modifier = Modifier.padding(bottom = VelaSpacing.xl).withheldFigure(model.summaryWithheld, colors.borderBase),
     )
-    BalanceDetailSection(model.sectionPending)
-    Text(
-        text = model.pendingNote,
-        color = colors.fgSubtle,
-        fontFamily = VelaFontFamily,
-        fontSize = VelaTextSize.sm,
-        modifier = Modifier.padding(vertical = VelaSpacing.md),
-    )
-    model.pending.forEach { row -> BalanceDetailRow(row, onRetry) }
-    // Three sections, as the web draws them (BalanceDetailBody): the settled
-    // chains under their own label, and the unpriced holdings only when any.
-    BalanceDetailSection(model.sectionDone, top = VelaSpacing.xl)
-    model.done.forEach { row -> BalanceDetailRow(row, onRetry) }
+    // Three sections, as the web draws them (BalanceDetailBody) — and a
+    // heading is drawn WITH the rows it is about, never without them (PR 3
+    // final note F20). "Networks still updating — These networks couldn't be
+    // reached, so your cached balance is shown until they recover." headed an
+    // EMPTY list: the sheet a person opens from "Some tokens couldn't be
+    // priced." told a healthy wallet that networks could not be reached and
+    // its balance was cached. "Updated" over nothing said as little.
+    var first = true
+    fun top() = (if (first) 0.dp else VelaSpacing.xl).also { first = false }
+    if (model.pending.isNotEmpty()) {
+        BalanceDetailSection(model.sectionPending, top = top())
+        Text(
+            text = model.pendingNote,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+            modifier = Modifier.padding(vertical = VelaSpacing.md),
+        )
+        model.pending.forEach { row -> BalanceDetailRow(row, onRetry) }
+    }
+    if (model.done.isNotEmpty()) {
+        BalanceDetailSection(model.sectionDone, top = top())
+        model.done.forEach { row -> BalanceDetailRow(row, onRetry) }
+    }
     if (model.unpriced.isNotEmpty()) {
-        BalanceDetailSection(model.sectionUnpriced, top = VelaSpacing.xl)
+        BalanceDetailSection(model.sectionUnpriced, top = top())
         model.unpriced.forEach { row -> BalanceDetailRow(row, onRetry) }
     }
 }
+
+/**
+ * The home line's sentence at the top of the sheet it opened (F16): whole,
+ * on as many lines as it takes — the one place it is never cut.
+ */
+@Composable
+private fun SheetLead(text: String) {
+    Text(
+        text = text,
+        color = VelaTheme.colors.fgMuted,
+        fontFamily = VelaFontFamily,
+        fontSize = VelaTextSize.base,
+        modifier = Modifier.padding(bottom = VelaSpacing.md).testTag(SHEET_LEAD_TAG),
+    )
+}
+
+/** The home line's full sentence at the top of the sheet it opened ([SheetLead]). */
+const val SHEET_LEAD_TAG = "sheet-lead"
 
 /**
  * SR6 (spec 092): every network the wallet cannot reach, one row each — what
@@ -2574,6 +2609,7 @@ private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) 
 private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) {
     val colors = VelaTheme.colors
     SheetTitle(model.title)
+    model.lead?.takeIf { it != model.title }?.let { lead -> SheetLead(lead) }
     model.summary?.let { summary ->
         Text(
             text = summary,

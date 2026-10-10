@@ -74,9 +74,11 @@ class SettingsFixturesTest {
         assertEquals("1 cuenta · ", es.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1))
         assertEquals("2 cuentas · ", es.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 2))
         assertEquals("1 个账户 · ", strings("zh").t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1))
-        // The gallery's sheet counts the same way.
+        // The gallery's sheets count the same way: three accounts, and one (ST2B).
         val sheet = SettingsFixtures.buildState(SettingsScreenState.ST1, en).accountsSheet
         assertTrue(sheet.summary, sheet.summary.startsWith("${sheet.rows.size} accounts · "))
+        assertEquals("1 account · Total \$1,383.28", SettingsFixtures.buildState(SettingsScreenState.ST2B, en).accountsSheet.summary)
+        assertEquals("1 个账户 · 总计 \$1,383.28", SettingsFixtures.buildState(SettingsScreenState.ST2B, strings("zh")).accountsSheet.summary)
     }
 
     /** Spec 095 (App Review 5.1.1(i)): About links the policy, the terms and support. */
@@ -105,10 +107,43 @@ class SettingsFixturesTest {
         // ST10E–ST10J: the wizard's stops, each from the real machine's view.
         // SR7: the unreachable list when the one network is there for its token list.
         // SR3B / SR3C: the balance sheet with the currency on its way, and landed.
-        assertEquals(49, states.size)
-        assertEquals(35, states.count { it.name.startsWith("ST") })
-        assertEquals(10, states.count { it.name.startsWith("SR") })
+        // ST2B: the switcher with one account. SR3D–SR3F: the balance sheet in
+        // three rounds the real machine wrote (the final round's F21, F20, F16).
+        assertEquals(53, states.size)
+        assertEquals(36, states.count { it.name.startsWith("ST") })
+        assertEquals(13, states.count { it.name.startsWith("SR") })
         assertEquals(4, states.count { it.name.startsWith("SK") })
+    }
+
+    /**
+     * PR 3 final notes F21, F20 and F16, on the balance-by-network sheet, in
+     * three rounds the real balance machine wrote.
+     */
+    @Test
+    fun `the balance sheet says the core's short status, heads only the rows it has, and leads with the home's line`() {
+        val en = strings("en")
+        // F21 — a network down for its token list: the core's short status.
+        val tempo = SettingsFixtures.buildState(SettingsScreenState.SR3D, en).balanceDetail
+        assertEquals("Token list unavailable", tempo.pending.single().status)
+        assertEquals("Tempo", tempo.pending.single().name)
+        assertEquals("代币列表无法读取", SettingsFixtures.buildState(SettingsScreenState.SR3D, strings("zh")).balanceDetail.pending.single().status)
+
+        // F20 — nothing out of reach, one token unpriced: the "still updating"
+        // list is EMPTY (its heading and note are drawn with rows only —
+        // `WalletRescueSheetTest` holds the sheet to that), and the sheet's
+        // lead is the heading of the rows it is about, said once.
+        val unpriced = SettingsFixtures.buildState(SettingsScreenState.SR3E, en).balanceDetail
+        assertTrue(unpriced.pending.isEmpty())
+        assertEquals(listOf("Gnosis", "Ethereum"), unpriced.done.map { it.name })
+        assertEquals(listOf("ODD"), unpriced.unpriced.map { it.name })
+        assertEquals("Some tokens couldn't be priced.", unpriced.lead)
+        assertEquals(unpriced.sectionUnpriced, unpriced.lead)
+
+        // F16 — the home's line cut this sentence to one line: the sheet says all of it.
+        val fault = SettingsFixtures.buildState(SettingsScreenState.SR3F, en).balanceDetail
+        assertEquals("Something went wrong inside Vela. If it keeps happening, reopen the app.", fault.lead)
+        assertTrue("an internal fault is never listed as a network out of reach", fault.pending.isEmpty())
+        assertEquals(listOf("Gnosis"), fault.done.map { it.name })
     }
 
     /**

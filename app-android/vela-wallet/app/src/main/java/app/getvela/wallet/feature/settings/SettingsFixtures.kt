@@ -987,6 +987,35 @@ object SettingsFixtures {
         return SettingsLive.balanceDetail(balanceDetail(s), view, currency, mapOf(1 to "Ethereum", 100 to "Gnosis", 137 to "Polygon"), s)
     }
 
+    /**
+     * SR3D / SR3E / SR3F: the balance by network in a round the real balance
+     * machine wrote (`BalanceBoards`), through [SettingsLive.balanceDetail],
+     * with the home line's sentence at its top as a session passes it
+     * ([WalletLive.heroStatus]).
+     */
+    private fun roundBalanceDetail(s: VelaStrings, state: SettingsScreenState): BalanceDetailModel {
+        val now = System.currentTimeMillis().toDouble()
+        val boards = app.getvela.wallet.feature.wallet.core.BalanceBoards
+        val (view, names) = when (state) {
+            SettingsScreenState.SR3D -> boards.tokenListUnreachable(ADDRESS_FULL, now) to app.getvela.wallet.feature.wallet.WalletFixtures.TOKEN_LIST_CHAINS
+            SettingsScreenState.SR3E -> boards.unpriced(ADDRESS_FULL, now) to mapOf(1 to "Ethereum", 100 to "Gnosis")
+            else -> boards.internalFault(ADDRESS_FULL, now) to mapOf(1 to "Ethereum", 100 to "Gnosis")
+        }
+        return SettingsLive.balanceDetail(balanceDetail(s), view, CurrencyView(code = "USD", rate = 1.0, committed = true), names, s)
+            .copy(lead = app.getvela.wallet.feature.wallet.WalletLive.heroStatus(view, s, names)?.text)
+    }
+
+    /** ST2B: the switcher's sheet for a wallet with ONE account, through the live builder. */
+    private fun oneAccountSheet(s: VelaStrings) = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(
+        accounts = listOf(ACCOUNTS.first().let { it.name to it.addressFull }),
+        activeIndex = 0,
+        switcher = app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(
+            balances = listOf(app.getvela.wallet.feature.wallet.core.BalanceCacheEntry(ACCOUNTS.first().addressFull, 1383.28)),
+        ),
+        currency = CurrencyView(code = "USD", rate = 1.0, committed = true),
+        strings = s,
+    )
+
     private fun relayer(s: VelaStrings) = RelayerModel(
         title = s.t(I18nKeys.SettingsUi.RELAYER_TITLE),
         lead = s.t(I18nKeys.SettingsUi.RELAYER_LEAD),
@@ -1031,7 +1060,7 @@ object SettingsFixtures {
     private fun shape(state: SettingsScreenState): Shape = when (state) {
         SettingsScreenState.ST1, SettingsScreenState.ST1B ->
             Shape(SettingsPage.Home, SettingsOverlay.None)
-        SettingsScreenState.ST2 -> Shape(SettingsPage.Home, SettingsOverlay.Accounts)
+        SettingsScreenState.ST2, SettingsScreenState.ST2B -> Shape(SettingsPage.Home, SettingsOverlay.Accounts)
         SettingsScreenState.ST3, SettingsScreenState.ST3B ->
             Shape(SettingsPage.Home, SettingsOverlay.SignOut)
         SettingsScreenState.ST4 -> Shape(SettingsPage.Home, SettingsOverlay.Language)
@@ -1058,7 +1087,8 @@ object SettingsFixtures {
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR2, SettingsScreenState.SR2B ->
             Shape(SettingsPage.Home, SettingsOverlay.RpcFix, rescue = true, backdrop = "wallet")
-        SettingsScreenState.SR3, SettingsScreenState.SR3B, SettingsScreenState.SR3C ->
+        SettingsScreenState.SR3, SettingsScreenState.SR3B, SettingsScreenState.SR3C,
+        SettingsScreenState.SR3D, SettingsScreenState.SR3E, SettingsScreenState.SR3F ->
             Shape(SettingsPage.Home, SettingsOverlay.BalanceDetail, rescue = true, backdrop = "wallet")
         SettingsScreenState.SR4 ->
             Shape(SettingsPage.Home, SettingsOverlay.Relayer, rescue = true, backdrop = "send")
@@ -1321,7 +1351,7 @@ object SettingsFixtures {
             endpoints = endpoints(s),
             storage = storage(s),
             about = about(s, state),
-            accountsSheet = accountsSheet(s),
+            accountsSheet = if (state == SettingsScreenState.ST2B) oneAccountSheet(s) else accountsSheet(s),
             signOutSheet = signOutSheet(s, warned = state == SettingsScreenState.ST3B),
             languageSheet = languageSheet(s, "zh"),
             currencySheet = currencySheet(s),
@@ -1371,6 +1401,7 @@ object SettingsFixtures {
             balanceDetail = when (state) {
                 SettingsScreenState.SR3B -> liveBalanceDetail(s, committed = false)
                 SettingsScreenState.SR3C -> liveBalanceDetail(s, committed = true)
+                SettingsScreenState.SR3D, SettingsScreenState.SR3E, SettingsScreenState.SR3F -> roundBalanceDetail(s, state)
                 else -> balanceDetail(s)
             },
             // SR6 is drawn through the live builder, from a view shaped like

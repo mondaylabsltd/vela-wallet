@@ -407,11 +407,21 @@ class SettingsLiveTest {
         assertEquals("what was last read there stays", "Last seen ${WalletLive.Money.of(usd).fiat(120.5)}", list.rows.single().line)
         assertNull("no RPC to fix: no Fix action", list.rows.single().action)
 
-        // The breakdown never says "RPC unavailable" over it either; reading again is still offered.
+        // The breakdown never says "RPC unavailable" over it either: its
+        // short status is the core's (`status_key`, F21) — "Token list
+        // unavailable", as short as its neighbours', where this shell had
+        // borrowed the home line's whole sentence. Reading again is still offered.
+        assertEquals("home.balanceDetailStatusTokenList", tempo.status_key)
         val detail = SettingsLive.balanceDetail(base().balanceDetail, view, usd, names, strings)
         val row = detail.pending.single { it.id == "4217" }
-        assertEquals("Can't load Tempo's token list right now", row.status)
+        assertEquals("Token list unavailable", row.status)
         assertEquals(strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY), row.action)
+        // A status this build has no words for reads as the one there was — never a dotted path.
+        val unknown = view.copy(unreachable_networks = listOf(tempo.copy(status_key = "home.balanceDetailStatusFromTheFuture")))
+        assertEquals(
+            strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
+            SettingsLive.balanceDetail(base().balanceDetail, unknown, usd, names, strings).pending.single { it.id == "4217" }.status,
+        )
 
         // A network whose RPC did not answer keeps both.
         val down = BalanceView(

@@ -1136,14 +1136,15 @@ object SettingsLive {
                 id = id.toString(),
                 mark = mark(id),
                 name = name(id),
-                // "RPC unavailable" only where the RPC is what failed. A
-                // network whose token list could not be loaded says that, in
-                // the core's own sentence — its RPC is fine.
-                status = if (network.rpc_fixable) {
-                    strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED)
-                } else {
-                    strings.t(I18nKeys.Wallet.TOKEN_LIST_UNREACHABLE, mapOf("name" to name(id)))
-                },
+                // The row's short status is the core's to name (`status_key`,
+                // PR 3 final note F21): "RPC unavailable" only where the RPC
+                // is what failed, "Token list unavailable" where the RPC
+                // answers and the list could not be loaded — a status as
+                // short as its neighbours', where this shell had borrowed the
+                // home line's whole sentence. A key this build has no words
+                // for reads as the one status there was, never a dotted path.
+                status = strings.t(network.status_key).takeIf { it.isNotBlank() && it != network.status_key }
+                    ?: strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
                 tone = SettingsTone.Error,
                 // Reading again is right for both: it asks for the list again too.
                 action = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY),

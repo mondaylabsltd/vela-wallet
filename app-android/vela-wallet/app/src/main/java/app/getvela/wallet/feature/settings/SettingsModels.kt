@@ -23,7 +23,15 @@ import app.getvela.wallet.feature.wallet.TabsModel
  * ST14B (spec 091, no mock): About with the debug-mode switch revealed.
  */
 enum class SettingsScreenState {
-    ST1, ST1B, ST2, ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
+    ST1, ST1B, ST2,
+
+    /**
+     * The account switcher with ONE account, through the live builder (PR 3
+     * final note F15): "1 account · Total …" — the count is a plural family
+     * and the core picks its form. It read "1 accounts · Total".
+     */
+    ST2B,
+    ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
     ST9, ST9B, ST10, ST10B, ST10C,
     /**
      * Add network, refused for the OTHER reason: no P-256 verifier. ST10C is
@@ -65,6 +73,20 @@ enum class SettingsScreenState {
      * the pair shows that nothing moved.
      */
     SR3B, SR3C,
+
+    /**
+     * The same sheet in three rounds the REAL balance machine wrote
+     * (`BalanceBoards`), through the live builder — PR 3 final notes F21, F20
+     * and F16. SR3D: Tempo's token list did not load — its row's short
+     * status is the core's "Token list unavailable", never "RPC unavailable"
+     * over an RPC that answers. SR3E: every network answered and one token
+     * has no price — the sheet a person opens from "Some tokens couldn't be
+     * priced." draws NO "Networks still updating / couldn't be reached" over
+     * an empty list. SR3F: Ethereum's read failed inside the app — the home's
+     * line is one line and cuts that sentence, so the sheet it opens says it
+     * in full at its top.
+     */
+    SR3D, SR3E, SR3F,
     SR4, SR5,
     /** Spec 092: every network the wallet cannot reach, in one list. */
     SR6,
@@ -716,6 +738,13 @@ data class BalanceDetailModel(
     val unpriced: List<BalanceDetailRowModel> = emptyList(),
     /** The total in [summary] is withheld until the display currency is the person's: empty, its line kept. */
     val summaryWithheld: Boolean = false,
+    /**
+     * The sentence the home's status line said when it opened this sheet, in
+     * FULL (PR 3 final note F16): the line itself is one line and ends in an
+     * ellipsis when the sentence is longer, so the whole of it stands here,
+     * at the top. `null` when the line says nothing.
+     */
+    val lead: String? = null,
 )
 
 /**
@@ -729,6 +758,12 @@ data class UnreachableModel(
     /** Absent once the list is empty. */
     val summary: String? = null,
     val rows: List<UnreachableRowModel> = emptyList(),
+    /**
+     * The home line's sentence in full when it is NOT [title] (F16): the line
+     * said the fault's own sentence, or "Offline", over networks that are also
+     * out of reach. `null` when the title already is the line.
+     */
+    val lead: String? = null,
 )
 
 @Immutable

@@ -691,11 +691,15 @@ fun VelaNavHost(
                 if (rescue.overlay != SettingsOverlay.None) {
                     val rescueBase = remember(strings) { SettingsFixtures.buildState(SettingsScreenState.SR6, strings) }
                     val rescueRow = rescue.chainId?.let { id -> networks.networks.firstOrNull { it.chain_id == id } }
+                    // F16: the home's line is one line, cut with an ellipsis when its
+                    // sentence is longer — so the sheet it opens says the sentence in
+                    // full at its top (the list's title already is its own line).
+                    val heroLine = if (online) WalletLive.heroStatus(balances, strings, chainNames)?.text else strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE)
                     WalletRescueSheet(
                         rescue = rescue,
                         model = rescueBase.copy(
-                            unreachable = SettingsLive.unreachable(balances, currency, chainNames, strings),
-                            balanceDetail = SettingsLive.balanceDetail(rescueBase.balanceDetail, balances, currency, chainNames, strings),
+                            unreachable = SettingsLive.unreachable(balances, currency, chainNames, strings).copy(lead = heroLine),
+                            balanceDetail = SettingsLive.balanceDetail(rescueBase.balanceDetail, balances, currency, chainNames, strings).copy(lead = heroLine),
                             rpcFix = rescueRow?.let { SettingsLive.rpcFix(rescueBase.rpcFix, it, rpcDraft, rpcSaved, strings) }
                                 ?: rescueBase.rpcFix,
                         ),
