@@ -897,9 +897,11 @@ impl AssetSub {
     /// Between the worth and the network.
     pub const JOINT: &'static str = " · ";
 
-    /// Every glyph the line draws, in order — what a test, or a search for
-    /// a figure that should not be there, reads. A withheld worth draws
-    /// none: its bar, then the joint and the network.
+    /// Every glyph the line draws, in order — what the tests read: the
+    /// line's own, and the withhold and privacy rules' search for a figure
+    /// that should not be there. A withheld worth draws none: its bar, then
+    /// the joint and the network.
+    #[cfg(test)]
     #[must_use]
     pub fn text(&self) -> String {
         match &self.worth {

@@ -1192,23 +1192,34 @@ pub fn asset_sub(theme: &Theme, sub: &super::fixtures::AssetSub) -> Div {
         .text_color(theme.fg_muted);
     // The joint belongs to the name's box: a worth that lands changes only
     // what is in its own cell.
+    // Both boxes say where they are to a measurement pass
+    // (`crate::dev_probe`): the name's x, before and after the worth lands.
     let after = |joint: &str| {
         div()
+            .relative()
             .min_w(px(0.))
             .child(crate::ui::prose(SharedString::from(format!(
                 "{joint}{}",
                 sub.chain
             ))))
+            .children(crate::dev_probe::mark("asset-sub-network"))
     };
     match &sub.worth {
         SubWorth::Said(worth) => line
-            .child(div().flex_none().child(worth.clone()))
+            .child(
+                div()
+                    .relative()
+                    .flex_none()
+                    .child(worth.clone())
+                    .children(crate::dev_probe::mark("asset-sub-worth")),
+            )
             .child(after(AssetSub::JOINT)),
         SubWorth::Waiting { room } => line
             .child(
                 div()
                     .relative()
                     .flex_none()
+                    .children(crate::dev_probe::mark("asset-sub-worth"))
                     .child(div().invisible().child(room.clone()))
                     // The holding row's bar (`Fiat::Pending`), as wide as
                     // the room, on the middle of the line.

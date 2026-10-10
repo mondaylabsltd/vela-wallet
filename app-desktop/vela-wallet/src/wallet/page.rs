@@ -976,11 +976,18 @@ pub struct WalletPage {
     content_scroll: crate::ui::SmoothScroll,
     /// The third column's body, and which subject it last scrolled for.
     panel_scroll: crate::ui::SmoothScroll,
-    /// The simulation verdict's own scroll, inside its reserved place on the
-    /// signing column (PR 3 final note F2): a verdict taller than the place
-    /// scrolls here instead of growing the column.
-    verdict_scroll: crate::ui::SmoothScroll,
     panel_scroll_subject: String,
+    /// The landed simulation verdict the signing column last drew: whose it
+    /// was (the request's id, or the drawn scenario) and what it said. One
+    /// that differs has just landed, or grown — and is brought into view
+    /// once, if part of it is outside the column's body (PR 3 device round).
+    verdict_seen: Option<(String, String)>,
+    /// Set when such a verdict is drawn; taken where its place is laid out,
+    /// which is where its box and the body's are first known.
+    verdict_reveal: std::rc::Rc<std::cell::Cell<bool>>,
+    /// `VELA_SIM=<first>><then>` (developer builds): the drawn request's
+    /// pinned answer has landed on its second one.
+    sim_pin_landed: bool,
     /// The sidebar's network list — twenty-odd chains outgrow a short window.
     networks_scroll: crate::ui::SmoothScroll,
     /// The settings panel's, for the same bar.
@@ -1238,6 +1245,25 @@ struct SendBindings {
     can_change_token: bool,
 }
 
+/// Where the third column's foot stands (`WalletPage::panel_scaffold_placed`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FootPlace {
+    /// Under the content, and pinned to the column's bottom once the list
+    /// overflows — CSS `sticky`, the web's `.pinned` (078 F-09). What is in
+    /// it rides down as the content above it grows.
+    UnderContent,
+    /// At the bottom of the column, always, with the body scrolling in the
+    /// room above it. What is in it is never moved by the content: the
+    /// signing column's confirm (PR 3 device round), which a verdict that
+    /// lands, or grows, must not push.
+    Bottom,
+}
+
+/// Between the end of the signing column's body and the confirm in the foot
+/// under it: the column's own gap between two blocks. Half of it ends the
+/// body and half starts the foot, the hairline on the seam.
+const FOOT_GAP: f32 = 16.;
+
 impl Identity {
     /// `0x14fB1f…D1eA5c` — the same middle-truncation every other client uses.
     fn display(&self) -> SharedString {
@@ -1308,6 +1334,37 @@ impl WalletPage {
         if gallery && let Some(state) = signing_fixtures::from_env() {
             page.signing_state = state;
             page.panel = PanelId::Signing;
+            // `VELA_SIM=out>tall`: the pinned answer lands a moment after
+            // the window opens, as a simulation's does.
+            if signing_fixtures::sim_pin_lands().is_some() {
+                cx.spawn(async move |page, cx| {
+                    cx.background_executor()
+                        .timer(signing_fixtures::SIM_PIN_LANDS_AFTER)
+                        .await;
+                    let _ = page.update(cx, |page, cx| {
+                        page.sim_pin_landed = true;
+                        cx.notify();
+                    });
+                })
+                .detach();
+            }
+            // `VELA_PANEL_SCROLL=<px>|bottom` on the drawn request: its
+            // body scrolled that far down — a measurement pass cannot turn
+            // a wheel, and on a window too short for the sheet part of the
+            // body is under the confirm's fold.
+            match crate::dev_env::var!("VELA_PANEL_SCROLL").as_deref() {
+                Some("bottom") => page.panel_scroll.scroll_to_bottom(),
+                Some(raw) => {
+                    if let Ok(down) = raw.parse::<f32>() {
+                        // The scaffold starts a new subject at its top:
+                        // this one is already the column's.
+                        page.panel_scroll_subject = page.panel_subject();
+                        page.panel_scroll
+                            .set_offset(gpui::point(px(0.), px(-down.max(0.))));
+                    }
+                }
+                None => {}
+            }
         }
         page
     }
@@ -1656,8 +1713,10 @@ impl WalletPage {
             address_focus: cx.focus_handle(),
             content_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll: crate::ui::SmoothScroll::new(),
-            verdict_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll_subject: String::new(),
+            verdict_seen: None,
+            verdict_reveal: std::rc::Rc::default(),
+            sim_pin_landed: false,
             networks_scroll: crate::ui::SmoothScroll::new(),
             settings_scroll: crate::ui::SmoothScroll::new(),
             text_scale_slider: crate::ui::StepSlider::new(),
@@ -3461,11 +3520,10 @@ impl WalletPage {
     /// The columns this page builds without the window at hand, stepped once
     /// per frame at the top of `render` (`ui::smooth_scroll`). Dialogs and the
     /// pick list step their own, in `attach`.
-    fn scrolls(&self) -> [&crate::ui::SmoothScroll; 7] {
+    fn scrolls(&self) -> [&crate::ui::SmoothScroll; 6] {
         [
             &self.content_scroll,
             &self.panel_scroll,
-            &self.verdict_scroll,
             &self.networks_scroll,
             &self.settings_scroll,
             &self.contacts_scroll,
@@ -5737,7 +5795,7 @@ impl WalletPage {
         body: Div,
         cx: &mut Context<Self>,
     ) -> Div {
-        self.panel_scaffold_foot(theme, title, lead, underline, body, None, cx)
+        self.panel_scaffold_placed(theme, title, lead, underline, body, None, cx)
     }
 
     /// [`panel_scaffold_with`], with a foot pinned under the scrolling body —
@@ -5755,6 +5813,36 @@ impl WalletPage {
         underline: bool,
         body: Div,
         foot: Option<Div>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let foot = foot.map(|foot| (foot, FootPlace::UnderContent));
+        self.panel_scaffold_placed(theme, title, lead, underline, body, foot, cx)
+    }
+
+    /// What the third column is about, as far as its scroll is concerned: a
+    /// new subject starts at its top.
+    fn panel_subject(&self) -> String {
+        format!(
+            "{:?}{:?}{:?}",
+            self.panel,
+            self.flows.last(),
+            self.asset_detail
+        )
+    }
+
+    /// The scaffold, with its foot — if it has one — where `FootPlace` says.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the scaffold and its one extra slot"
+    )]
+    fn panel_scaffold_placed(
+        &mut self,
+        theme: &Theme,
+        title: SharedString,
+        lead: Option<gpui::AnyElement>,
+        underline: bool,
+        body: Div,
+        foot: Option<(Div, FootPlace)>,
         cx: &mut Context<Self>,
     ) -> Div {
         // The web's `ThirdPanel` (`wallet/ui/ThirdPanel.svelte`): header
@@ -5842,21 +5930,20 @@ impl WalletPage {
             .child({
                 // A new subject starts at its top: the scroll of the last
                 // asset, flow step or request is not this one's.
-                let subject = format!(
-                    "{:?}{:?}{:?}",
-                    self.panel,
-                    self.flows.last(),
-                    self.asset_detail
-                );
+                let subject = self.panel_subject();
                 if self.panel_scroll_subject != subject {
                     self.panel_scroll_subject = subject;
                     self.panel_scroll.set_offset(gpui::point(px(0.), px(0.)));
                 }
-                // With a foot, the body takes its own height and shrinks
-                // (then scrolls) only when it must, so the foot sits under
-                // the content and pins to the bottom once the list overflows
-                // — CSS `sticky`, as the web's `.pinned` is (078 F-09).
-                let with_foot = foot.is_some();
+                // With a foot under the content, the body takes its own
+                // height and shrinks (then scrolls) only when it must, so the
+                // foot sits under the content and pins to the bottom once the
+                // list overflows — CSS `sticky`, as the web's `.pinned` is
+                // (078 F-09). With a foot at the bottom, the body takes all
+                // the room the foot leaves, as a column with no foot does.
+                let place = foot.as_ref().map(|(_, place)| *place);
+                let with_foot = place == Some(FootPlace::UnderContent);
+                let at_bottom = place == Some(FootPlace::Bottom);
                 // Content-sized, both levels shrinkable flex items: a
                 // `size_full` scroll view has no height to take from a parent
                 // that is itself sized by content, and collapsed to nothing.
@@ -5875,20 +5962,61 @@ impl WalletPage {
                                 cx.entity_id(),
                             )
                             .px(px(24.))
-                            .pb(px(24.))
+                            // Over a foot at the bottom the body ends half
+                            // the column's gap above it; the foot's own top
+                            // is the other half ([`FootPlace::Bottom`]).
+                            .pb(px(if at_bottom { FOOT_GAP / 2. } else { 24. }))
                             .child(body),
                     )
                     .children(crate::ui::vertical_scrollbar(theme, &self.panel_scroll))
+                    .children(crate::dev_probe::scroll_mark(
+                        "panel-body",
+                        (*self.panel_scroll).clone(),
+                    ))
             })
-            .children(foot.map(|foot| {
-                div()
-                    .flex_none()
-                    .px(px(24.))
-                    .pt(px(4.))
-                    .bg(theme.bg_base)
-                    .border_t_1()
-                    .border_color(theme.divider)
-                    .child(foot)
+            .children(foot.map(|(foot, place)| {
+                match place {
+                    FootPlace::UnderContent => div()
+                        .flex_none()
+                        .px(px(24.))
+                        .pt(px(4.))
+                        .bg(theme.bg_base)
+                        .border_t_1()
+                        .border_color(theme.divider)
+                        .child(foot),
+                    FootPlace::Bottom => {
+                        // The hairline is drawn only while part of the body is
+                        // under the fold, and asked at PAINT: the body has been
+                        // placed by then, so the answer is this frame's. Its
+                        // pixel of room is always there, so it moves nothing.
+                        let body = (*self.panel_scroll).clone();
+                        let rule = theme.divider;
+                        div()
+                            .relative()
+                            .flex_none()
+                            .bg(theme.bg_base)
+                            .child(
+                                gpui::canvas(
+                                    |_, _, _| {},
+                                    move |bounds, (), window, _| {
+                                        if f32::from(body.max_offset().y) > 0.5 {
+                                            window.paint_quad(gpui::fill(bounds, rule));
+                                        }
+                                    },
+                                )
+                                .w_full()
+                                .h(px(1.)),
+                            )
+                            .child(
+                                div()
+                                    .px(px(24.))
+                                    .pt(px(FOOT_GAP / 2. - 1.))
+                                    .pb(px(24.))
+                                    .child(foot),
+                            )
+                            .children(crate::dev_probe::mark("panel-foot"))
+                    }
+                }
             }))
     }
 
@@ -16420,6 +16548,25 @@ impl WalletPage {
         return true;
     }
 
+    /// Whose simulation verdict the signing column is drawing: the open
+    /// request's id — or, with none open (always so on Linux), the drawn
+    /// scenario. What tells one request's verdict from the next one's.
+    fn verdict_subject(&self, cx: &gpui::App) -> String {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(id) = self.signing_host.as_ref().and_then(|host| {
+            host.read(cx)
+                .view
+                .request
+                .as_ref()
+                .map(|request| request.id.clone())
+        }) {
+            return id;
+        }
+        #[cfg(target_os = "linux")]
+        let _ = cx;
+        self.signing_state.to_owned()
+    }
+
     /// The open request's operation has been accepted — its receipt counts.
     fn request_submitted(&self, cx: &gpui::App) -> bool {
         #[cfg(not(target_os = "linux"))]
@@ -17728,7 +17875,22 @@ impl WalletPage {
         }
     }
 
-    fn signing_body(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
+    /// The signing column: its scrolling body and, for a request, its foot —
+    /// the confirm (or the top-up's "check again") and the one line the core
+    /// says under a shut confirm.
+    ///
+    /// The foot is NOT part of the body (PR 3 device round): the scaffold
+    /// pins it at the bottom of the column ([`FootPlace::Bottom`]), so the
+    /// simulation's verdict — which is shown whole, however tall
+    /// (`signing_components::verdict_room`) — grows the body and never moves
+    /// the confirm. When the sheet is taller than the window it is the body
+    /// that scrolls, under a confirm that stays fully on screen.
+    fn signing_body(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> (Div, Option<Div>) {
         // What currency every `≈` figure below is drawn in.
         let currency = self.money(cx);
         // The live sheet when a request is open, the mock otherwise — the same
@@ -17747,7 +17909,11 @@ impl WalletPage {
         // the request says of itself.
         if self.gallery
             && self.no_signing_host()
-            && let Some(pin) = signing_fixtures::sim_pin()
+            && let Some(pin) = if self.sim_pin_landed {
+                signing_fixtures::sim_pin_lands()
+            } else {
+                signing_fixtures::sim_pin()
+            }
         {
             model
                 .blocks
@@ -17771,14 +17937,17 @@ impl WalletPage {
                 &clock,
                 &self.signing,
             ) {
-                return self.signing_receipt_view(
-                    theme,
-                    window,
-                    Some(&header),
-                    &receipt,
-                    100,
-                    Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {}),
-                    cx,
+                return (
+                    self.signing_receipt_view(
+                        theme,
+                        window,
+                        Some(&header),
+                        &receipt,
+                        100,
+                        Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {}),
+                        cx,
+                    ),
+                    None,
                 );
             }
         }
@@ -17983,8 +18152,10 @@ impl WalletPage {
                     .is_none_or(|(held, _)| *held != id)
                 {
                     self.signing_held = Some((id, signing_live::HeldLines::default()));
-                    // Another request: its verdict is read from its top.
-                    self.verdict_scroll.set_offset(gpui::point(px(0.), px(0.)));
+                    // Another request is read from its top: the column's
+                    // subject (`panel_scaffold_placed`) is "signing" for
+                    // both, so the last one's scroll would otherwise stand.
+                    self.panel_scroll.set_offset(gpui::point(px(0.), px(0.)));
                 }
                 if let Some((_, held)) = self.signing_held.as_mut() {
                     let measuring =
@@ -18067,26 +18238,32 @@ impl WalletPage {
             // column. A window-wide scrim paints under the dApp page on
             // Windows, and until 083 nothing drew these here at all.
             if let Some(card) = self.signing_ceremony_card(theme, cx) {
-                return div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(16.))
-                    .children(signing_components::header_view(theme, &header))
-                    .child(card);
+                return (
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(16.))
+                        .children(signing_components::header_view(theme, &header))
+                        .child(card),
+                    None,
+                );
             }
             if let Some((receipt, chain_id)) = self.open_request_receipt(summary.as_ref(), cx) {
                 let on_close: panels::Click =
                     Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                         this.close_signing_column(cx);
                     }));
-                return self.signing_receipt_view(
-                    theme,
-                    window,
-                    Some(&header),
-                    &receipt,
-                    chain_id,
-                    on_close,
-                    cx,
+                return (
+                    self.signing_receipt_view(
+                        theme,
+                        window,
+                        Some(&header),
+                        &receipt,
+                        chain_id,
+                        on_close,
+                        cx,
+                    ),
+                    None,
                 );
             }
         }
@@ -18163,7 +18340,10 @@ impl WalletPage {
             // who signs, the row the card's key row reads beside.
             let fee_block =
                 self.signing_fee_block(theme, &model.fee, signing_speed.as_ref(), &speed_tiers, cx);
-            return div()
+            // The hand-off draws no request and so no verdict: nothing in
+            // this column lands late, and its one action is the card's own
+            // Open. No foot.
+            let column = div()
                 .flex()
                 .flex_col()
                 .gap(px(16.))
@@ -18194,6 +18374,7 @@ impl WalletPage {
                         })
                         .child(crate::ui::prose(note))
                 }));
+            return (column, None);
         }
         // The wallet's own request draws no header — and no gap where it was:
         // its intent, the headline below, is the first thing in the column.
@@ -18334,20 +18515,37 @@ impl WalletPage {
                     field,
                     window,
                 ));
-            } else if let signing_fixtures::Block::Verdict { inner } = item {
-                // The verdict's place: one height, its own scroll inside
-                // (F2). The wheel over it moves the verdict while there is
-                // more of it, then the column, as any nested column does.
-                let scroller = self
-                    .verdict_scroll
-                    .wire(div().id("signing-verdict"), cx.entity_id());
-                let thumb = crate::ui::vertical_scrollbar(theme, &self.verdict_scroll);
+            } else if let signing_fixtures::Block::Verdict { inner, landed } = item {
+                // A verdict that has just landed, or grown (it is not the
+                // one this column drew last), is brought into view if part
+                // of it lies outside the body: a verdict under the fold over
+                // a live confirm is what this round closes. Once per
+                // verdict — after that the column is the reader's.
+                if *landed && !Self::pinned_panel_scroll() {
+                    let now = (self.verdict_subject(cx), signing_live::verdict_said(inner));
+                    if self.verdict_seen.as_ref() != Some(&now) {
+                        self.verdict_seen = Some(now);
+                        self.verdict_reveal.set(true);
+                    }
+                }
+                // Asked where the place is laid out: its box and the body's
+                // are this frame's there, the grown verdict's included.
+                let reveal = self.verdict_reveal.clone();
+                let body = self.panel_scroll.clone();
+                let laid_out: signing_components::VerdictLaidOut =
+                    Box::new(move |place, window, _| {
+                        if reveal.replace(false) && body.reveal(place) {
+                            window.request_animation_frame();
+                        }
+                    });
+                // The verdict's place: the least room from the first frame,
+                // and as tall as the verdict when it is taller — whole,
+                // with no scroll or fold of its own.
                 column = column.child(signing_components::verdict_room(
                     theme,
                     &mut self.icons,
                     inner,
-                    Some(scroller),
-                    thumb,
+                    Some(laid_out),
                 ));
             } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
                 (model.first_party, item)
@@ -18522,58 +18720,71 @@ impl WalletPage {
             &speed_tiers,
             cx,
         ));
-        column = column
-            .child(signing_components::signer_row(
-                theme,
-                &mut self.identicons,
-                model.signer_label.clone(),
-                model.signer_name.clone(),
-                &model.signer_seed,
-            ))
-            .children((!model.confirm_label.is_empty()).then(|| {
-                if funding {
-                    // The top-up's "check again": a plain button, not a
-                    // confirm — nothing is signed by it.
-                    signing_components::funding_check_button(
-                        theme,
-                        model.confirm_label.clone(),
-                        confirm_action,
-                    )
-                } else {
-                    // A tap (issue #461), never a drag: the send Confirm's own
-                    // button, saying the action alone.
-                    signing_components::confirm_button(
-                        theme,
-                        model.confirm_label.clone(),
-                        model.confirm_enabled,
-                        confirm_action,
-                    )
-                }
-            }))
-            // Spec 099 R7: a shut confirm says why, in the core's words — in
-            // a line that, once said, stays with its last words invisible
-            // while there is nothing to say, so the next measurement's note
-            // fills it rather than growing the column.
-            .children(
-                held_note
-                    .unwrap_or_else(|| {
-                        model
-                            .confirm_note
-                            .clone()
-                            .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
-                            .map(|note| (note, true))
+        column = column.child(signing_components::signer_row(
+            theme,
+            &mut self.identicons,
+            model.signer_label.clone(),
+            model.signer_name.clone(),
+            &model.signer_seed,
+        ));
+        // The column's one action and the line under it are its FOOT, not
+        // its last blocks: pinned at the bottom, where nothing above can
+        // move them.
+        let action = (!model.confirm_label.is_empty()).then(|| {
+            if funding {
+                // The top-up's "check again": a plain button, not a
+                // confirm — nothing is signed by it.
+                signing_components::funding_check_button(
+                    theme,
+                    model.confirm_label.clone(),
+                    confirm_action,
+                )
+            } else {
+                // A tap (issue #461), never a drag: the send Confirm's own
+                // button, saying the action alone.
+                signing_components::confirm_button(
+                    theme,
+                    model.confirm_label.clone(),
+                    model.confirm_enabled,
+                    confirm_action,
+                )
+            }
+        });
+        // Spec 099 R7: a shut confirm says why, in the core's words — in
+        // a line that, once said, stays with its last words invisible
+        // while there is nothing to say, so the next measurement's note
+        // fills it rather than growing the foot.
+        let note = held_note
+            .unwrap_or_else(|| {
+                model
+                    .confirm_note
+                    .clone()
+                    .filter(|_| !model.confirm_enabled && !model.confirm_label.is_empty())
+                    .map(|note| (note, true))
+            })
+            .map(|(note, said)| {
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(if said {
+                        theme.fg_subtle
+                    } else {
+                        gpui::transparent_black()
                     })
-                    .map(|(note, said)| {
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(if said {
-                                theme.fg_subtle
-                            } else {
-                                gpui::transparent_black()
-                            })
-                            .child(crate::ui::prose(note))
-                    }),
-            );
+                    .child(crate::ui::prose(note))
+            });
+        let foot = (action.is_some() || note.is_some()).then(|| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(16.))
+                .children(action.map(|action| {
+                    div()
+                        .relative()
+                        .child(action)
+                        .children(crate::dev_probe::mark("signing-confirm"))
+                }))
+                .children(note)
+        });
         // A refused request's one way out (the web's `dismissOnly`): Close,
         // full width, the same dismissal as the ✕. It had none — the confirm
         // is absent, rightly, and nothing stood in its place.
@@ -18601,7 +18812,13 @@ impl WalletPage {
                     })),
             );
         }
-        column
+        (column, foot)
+    }
+
+    /// `VELA_PANEL_SCROLL` is set (developer builds): the third column
+    /// stands where the pin put it, so nothing scrolls it by itself.
+    fn pinned_panel_scroll() -> bool {
+        crate::dev_env::var!("VELA_PANEL_SCROLL").is_some()
     }
 
     /// The sheet's fee row and, under it, the speed control (spec 069) —
@@ -18836,11 +19053,13 @@ impl WalletPage {
             }
             PanelId::Signing => {
                 // The web body's 1.4 (078 G-06), as the flow column's.
-                let body = self
-                    .signing_body(theme, window, cx)
-                    .line_height(gpui::relative(crate::wallet::components::LINE_BODY));
+                let line = gpui::relative(crate::wallet::components::LINE_BODY);
+                let (body, foot) = self.signing_body(theme, window, cx);
+                let body = body.line_height(line);
+                // The confirm and its note, pinned at the column's bottom.
+                let foot = foot.map(|foot| (foot.line_height(line), FootPlace::Bottom));
                 let title = self.signing.panel_title.clone();
-                columns.child(self.panel_scaffold(theme, title, body, cx))
+                columns.child(self.panel_scaffold_placed(theme, title, None, false, body, foot, cx))
             }
             PanelId::Flow => match self.sync_send_flow(cx) {
                 // DS1L is a centred modal over the window, not a column — the

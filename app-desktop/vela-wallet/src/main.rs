@@ -11,6 +11,7 @@ mod contacts;
 mod core_host;
 mod ctap;
 mod dev_env;
+mod dev_probe;
 mod diag;
 mod executor;
 mod explore;
@@ -261,7 +262,19 @@ fn open_window_with<V: gpui::Render + 'static>(
     cx: &mut App,
     build: impl FnOnce(&mut gpui::Window, &mut App) -> gpui::Entity<V>,
 ) {
-    let bounds = Bounds::centered(None, size(px(WINDOW_W), px(WINDOW_H)), cx);
+    // `VELA_WINDOW=<width>x<height>` (developer builds): the window opens at
+    // that size, never under the design's — a measurement pass cannot drag
+    // an edge, and what a taller window gives a column is part of what it
+    // measures.
+    let (width, height) = dev_env::var!("VELA_WINDOW")
+        .and_then(|want| {
+            let (width, height) = want.trim().split_once('x')?;
+            Some((width.parse::<f32>().ok()?, height.parse::<f32>().ok()?))
+        })
+        .map_or((WINDOW_W, WINDOW_H), |(width, height)| {
+            (width.max(WINDOW_W), height.max(WINDOW_H))
+        });
+    let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
     // Spec 082 RD14 (W17): closing the window quits the app
     // (`LastWindowClosed`), so a close during a submit POST is held once —
     // the window comes forward and says why (RJ17); a second close within

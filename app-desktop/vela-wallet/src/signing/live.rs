@@ -839,11 +839,23 @@ pub fn sim_blocks(
     if rows.is_empty() {
         return Vec::new();
     }
+    // One warning for the whole card when a token nobody vouches for moves —
+    // the sentence the phones say under the same card (`unverifiedWarning`),
+    // and the reason its row carries a direction and no figure. Once, not per
+    // row: the caution is the same each time, and repeating it is how people
+    // stop reading it.
+    let unverified = judgments
+        .iter()
+        .any(|judgment| matches!(judgment, J::Erc20Unverified { .. }));
     vec![Block::Balances {
         title: s.balances_title.clone(),
         rows,
-        note: None,
-        note_tone: Tone::Neutral,
+        note: unverified.then(|| s.warn_unverified_amount.clone()),
+        note_tone: if unverified {
+            Tone::Caution
+        } else {
+            Tone::Neutral
+        },
     }]
 }
 
@@ -919,7 +931,43 @@ pub fn verdict_block(
             }
         }
     };
-    Some(Block::Verdict { inner })
+    Some(Block::Verdict {
+        inner,
+        landed: stage == SimStage::Landed,
+    })
+}
+
+/// What a verdict says, as one string: every word of every block in its
+/// place. Two verdicts that read the same are the same verdict to the page
+/// — what tells one that has just landed, or grown, from the one the column
+/// already drew (and already brought into view).
+#[must_use]
+pub fn verdict_said(inner: &[Block]) -> String {
+    let mut said = String::new();
+    for block in inner {
+        match block {
+            Block::Balances {
+                title, rows, note, ..
+            } => {
+                said.push_str(title);
+                for (symbol, delta, _) in rows {
+                    said.push('\n');
+                    said.push_str(symbol);
+                    said.push(' ');
+                    said.push_str(delta);
+                }
+                if let Some(note) = note {
+                    said.push('\n');
+                    said.push_str(note);
+                }
+            }
+            Block::Warning { text, .. } => said.push_str(text),
+            // Nothing else stands in the verdict's place.
+            _ => {}
+        }
+        said.push('\u{1e}');
+    }
+    said
 }
 
 /// The core's notice for a simulation nobody could read
@@ -956,17 +1004,19 @@ mod verdict_place_tests {
     /// and everything under it rode down (measured on the drawn send: the
     /// confirm 89 px for a send's card, 118 for a swap's, 147 for three
     /// coins, 78 and 96 for the two notices). Now every answer — and no
-    /// answer yet — is ONE block, the place, whose height does not depend on
-    /// what stands in it: the column under it has one position.
+    /// answer yet — is ONE block, the place, kept from the request's first
+    /// frame.
     #[test]
     fn every_verdict_and_none_yet_stand_in_the_one_place() {
         let s = strings();
         for (pin, name) in SimPin::ALL {
             let block = sim_pin_block(pin, &s);
-            let Some(Block::Verdict { inner }) = block else {
+            let Some(Block::Verdict { inner, landed }) = block else {
                 unreachable!("{name}: a transaction's sheet keeps the place");
             };
             assert_eq!(inner.len(), 1, "{name}: one thing is said in it");
+            // Only an answer that is in is a verdict to bring into view.
+            assert_eq!(landed, pin != SimPin::Out, "{name}");
         }
         // A request nothing simulates — a message, typed data — keeps none.
         assert!(verdict_block(SimStage::NotAsked, &[], None, None, 1, &s).is_none());
@@ -981,7 +1031,7 @@ mod verdict_place_tests {
     fn the_place_is_never_blank() {
         let s = strings();
         let said = |pin| match sim_pin_block(pin, &s) {
-            Some(Block::Verdict { inner }) => match inner.into_iter().next() {
+            Some(Block::Verdict { inner, .. }) => match inner.into_iter().next() {
                 Some(Block::Balances {
                     title, rows, note, ..
                 }) => (
@@ -1001,7 +1051,11 @@ mod verdict_place_tests {
         assert_eq!(said(SimPin::Send), card(1, None));
         assert_eq!(said(SimPin::Swap), card(2, None));
         assert_eq!(said(SimPin::Three), card(3, None));
-        assert_eq!(said(SimPin::Unverified), card(2, None));
+        // A token nobody vouches for: its row, and the warning under the
+        // card — the sentence the phones say there.
+        let unverified = s.warn_unverified_amount.to_string();
+        assert_eq!(said(SimPin::Unverified), card(2, Some(unverified.as_str())));
+        assert_eq!(said(SimPin::Tall), card(4, Some(unverified.as_str())));
         assert_eq!(said(SimPin::Nothing), card(0, Some("No asset changes")));
         let (_, _, caution) = said(SimPin::Caution);
         assert_eq!(caution, Some(s.warn_sim_unavailable.to_string()));
@@ -1033,7 +1087,7 @@ mod verdict_place_tests {
         // What the core's judged view carries for these judgments.
         let core_key = |judgments: &[J]| no_change_key(judgments.iter().map(J::delta));
         let landed = |judgments: &[J], key: Option<&str>| {
-            let Some(Block::Verdict { inner }) =
+            let Some(Block::Verdict { inner, .. }) =
                 verdict_block(SimStage::Landed, judgments, None, key, 1, &s)
             else {
                 unreachable!("a place");
@@ -1088,7 +1142,7 @@ mod verdict_place_tests {
         let revert = vela_core::app::sim_outcome::notice(
             &vela_core::app::sim_outcome::SimOutcome::Reverts { reason: None },
         );
-        let Some(Block::Verdict { inner }) = verdict_block(
+        let Some(Block::Verdict { inner, .. }) = verdict_block(
             SimStage::Landed,
             &[],
             revert.as_ref(),
@@ -1118,13 +1172,14 @@ mod verdict_place_tests {
         );
     }
 
-    /// The place's height: a send's card (one row) and a swap's (two) land
-    /// whole, and a third row is CUT, not hidden — half of it shows over the
-    /// fold, with the room's scrollbar, so a third coin moving cannot be
-    /// missed on the one part of the sheet a site cannot author. In the
-    /// text's own sizes, so at every text scale.
+    /// The place's LEAST height: a send's card (one row) and a swap's (two)
+    /// land in room the sheet already kept, so the usual verdict moves
+    /// nothing. In the text's own sizes, so at every text scale. It is a
+    /// minimum and no limit — what is taller is shown whole (the device
+    /// round's rule; the drawn column is measured for it,
+    /// `VELA_LAYOUT_PROBE`).
     #[test]
-    fn the_place_fits_the_usual_verdict_and_shows_there_is_more() {
+    fn the_least_room_holds_the_usual_verdict() {
         // The smallest, the standard and the largest text size (the core's
         // factors run 0.85 to 1.35), without touching the setting itself.
         for factor in [0.85_f32, 1., 1.35] {
@@ -1132,22 +1187,54 @@ mod verdict_place_tests {
                 balance_card_height_at(rows, gpui::px(13. * factor), gpui::px(15. * factor))
             };
             let room = at(2.5);
+            assert!(room > at(1.), "×{factor}: a send's card fits");
             assert!(room > at(2.), "×{factor}: a swap's card fits");
-            let third_row = at(3.) - at(2.);
-            let shown = room - at(2.);
-            let (shown, half): (f32, f32) = (shown.into(), (third_row * 0.5).into());
-            assert!(
-                (shown - half).abs() < 0.01,
-                "×{factor}: half of a third row shows ({shown} of {half})"
-            );
+            // Three rows do not: that verdict grows the place.
+            assert!(room < at(3.), "×{factor}");
         }
-        // The room IS that arithmetic, at the size in force.
+        // The room IS that arithmetic, at the size in force — the height
+        // round 3 reserved, not re-tuned.
         assert_eq!(verdict_room_height(), balance_card_height(2.5));
-        // At the standard size: 116.7 px — what the drawn column measures
-        // (the confirm stands 132.5 px lower than on a sheet with no place:
-        // the room and the column's 16 px gap).
+        // At the standard size: 116.7 px.
         let standard: f32 = balance_card_height_at(2.5, gpui::px(13.), gpui::px(15.)).into();
         assert!((standard - 116.7).abs() < 0.05, "{standard}");
+    }
+
+    /// The warning under an unverified token is the card's own note, once,
+    /// in the caution's colour — and a card with no such token has none.
+    #[test]
+    fn an_unverified_token_puts_one_warning_under_the_card() {
+        use vela_core::app::token_trust::TrustSimJudgment as J;
+        let s = strings();
+        let unverified = |delta: &str| J::Erc20Unverified {
+            token: Some("0xbad".to_owned()),
+            delta: delta.to_owned(),
+        };
+        let native = J::Native {
+            delta: "-10000000000000000".to_owned(),
+        };
+        let note = |judgments: &[J]| match sim_blocks(judgments, None, 1, &s).into_iter().next() {
+            Some(Block::Balances {
+                rows,
+                note,
+                note_tone,
+                ..
+            }) => (rows.len(), note, note_tone),
+            _ => unreachable!("a balances block"),
+        };
+        assert_eq!(
+            note(std::slice::from_ref(&native)),
+            (1, None, Tone::Neutral)
+        );
+        assert_eq!(
+            note(&[native.clone(), unverified("5")]),
+            (2, Some(s.warn_unverified_amount.clone()), Tone::Caution)
+        );
+        // Two of them: still one warning.
+        assert_eq!(
+            note(&[unverified("5"), unverified("-7"), native]),
+            (3, Some(s.warn_unverified_amount.clone()), Tone::Caution)
+        );
     }
 }
 

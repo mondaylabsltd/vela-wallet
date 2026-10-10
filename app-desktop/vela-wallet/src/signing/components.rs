@@ -778,76 +778,101 @@ fn block_inner(
             rows,
             note,
             note_tone,
-        } => {
-            let mut col = div()
-                .px(px(16.))
-                .py(px(4.))
-                .rounded(px(16.))
-                .border_1()
-                .border_color(theme.border_card)
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .py(px(8.))
-                        .text_size(theme::text_row_sub())
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme.fg_muted)
-                        .child(title.clone()),
-                );
-            for (symbol, delta, tone) in rows {
-                col = col.child(
-                    div()
-                        .py(px(4.))
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .text_size(theme::text_row_title())
-                                .text_color(theme.fg_base)
-                                .child(symbol.clone()),
-                        )
-                        .child(
-                            div()
-                                .text_size(theme::text_row_title())
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(tone_color(theme, *tone))
-                                .child(delta.clone()),
-                        ),
-                );
-            }
-            if let Some(note) = note {
-                col = col.child(
-                    div()
-                        .py(px(8.))
-                        .text_size(theme::text_row_sub())
-                        .text_color(if *note_tone == Tone::Neutral {
-                            theme.fg_subtle
-                        } else {
-                            tone_color(theme, *note_tone)
-                        })
-                        .child(crate::ui::prose(note.clone())),
-                );
-            }
-            col
-        }
+        } => balances_card(theme, title, rows, note.as_ref(), *note_tone, None),
 
-        // The page draws the room with its own scroll (`verdict_room`); with
-        // none at hand it is the same room, clipped.
-        Block::Verdict { inner } => verdict_room(theme, icons, inner, None, None),
+        // The page draws the place itself, with what it does when the
+        // verdict is laid out (`verdict_room`); anywhere else it is the same
+        // place, whole.
+        Block::Verdict { inner, .. } => verdict_room(theme, icons, inner, None),
     }
 }
 
-/// The height of the simulation verdict's place (PR 3 final note F2): a
-/// balance card of two rows and half of a third.
+/// The balance card ([`Block::Balances`]): its title, a row per coin that
+/// moves, and the note under them. Every row and the note at their own
+/// height — the card is as tall as what it holds.
+///
+/// `probe` names the card for a measurement pass (`crate::dev_probe`): the
+/// card, each row and the note report their boxes under it. `None` for a
+/// card nobody measures.
+fn balances_card(
+    theme: &Theme,
+    title: &SharedString,
+    rows: &[(SharedString, SharedString, Tone)],
+    note: Option<&SharedString>,
+    note_tone: Tone,
+    probe: Option<&str>,
+) -> Div {
+    let mark =
+        |part: String| probe.and_then(|probe| crate::dev_probe::mark(format!("{probe}-{part}")));
+    let mut col = div()
+        .relative()
+        .px(px(16.))
+        .py(px(4.))
+        .rounded(px(16.))
+        .border_1()
+        .border_color(theme.border_card)
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .py(px(8.))
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_muted)
+                .child(title.clone()),
+        )
+        .children(mark("card".to_owned()));
+    for (index, (symbol, delta, tone)) in rows.iter().enumerate() {
+        col = col.child(
+            div()
+                .relative()
+                .py(px(4.))
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(symbol.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(tone_color(theme, *tone))
+                        .child(delta.clone()),
+                )
+                .children(mark(format!("row-{index}"))),
+        );
+    }
+    if let Some(note) = note {
+        col = col.child(
+            div()
+                .relative()
+                .py(px(8.))
+                .text_size(theme::text_row_sub())
+                .text_color(if note_tone == Tone::Neutral {
+                    theme.fg_subtle
+                } else {
+                    tone_color(theme, note_tone)
+                })
+                .child(crate::ui::prose(note.clone()))
+                .children(mark("note".to_owned())),
+        );
+    }
+    col
+}
+
+/// The LEAST height of the simulation verdict's place (PR 3 final note F2):
+/// a balance card of two rows and half of a third.
 ///
 /// Two rows is what a send (one) and a swap (two) show, and every notice the
-/// core words is shorter — so the usual verdict lands whole. The half row is
-/// deliberate: a third coin moving is the unusual case that must not be
-/// missed on a sheet a site cannot author, and a room cut exactly at a row's
-/// edge would show nothing of it. Cut through its middle, the third row is
-/// visibly there, under a scrollbar that says the same.
+/// core words is shorter — so the usual verdict lands in room the sheet
+/// already kept from the request's first frame, and nothing under it moves.
+/// It is a minimum and never a limit (PR 3 device round): a taller verdict
+/// is shown whole, and the place is as tall as the verdict
+/// ([`verdict_room`]).
 ///
 /// In the text's own sizes, so it holds at every text scale.
 #[must_use]
@@ -874,28 +899,66 @@ pub fn balance_card_height_at(rows: f32, sub: gpui::Pixels, row: gpui::Pixels) -
     chrome + title + row * rows
 }
 
-/// The verdict's place, drawn: [`verdict_room_height`] tall whatever stands
-/// in it, and scrolling INSIDE itself when the verdict is taller — a third
-/// balance row, the note under an unverified token — rather than growing
-/// the column and moving the confirm under it. `scroller` is the room's own
-/// clip-and-scroll element (the page wires its scroll to it; `None` clips
-/// and stays put), `thumb` its scrollbar when there is more than fits.
+/// What the page does once the verdict's place has been laid out: it is
+/// handed the place's box, in the window, on every frame.
+pub type VerdictLaidOut =
+    Box<dyn FnOnce(gpui::Bounds<gpui::Pixels>, &mut gpui::Window, &mut gpui::App)>;
+
+/// The verdict's place, drawn: at least [`verdict_room_height`] tall, and as
+/// tall as the verdict when the verdict is taller.
+///
+/// **Nothing of the verdict is ever hidden** (PR 3 device round — this
+/// reverses final note F2's fixed room). The verdict is the one part of the
+/// sheet a site cannot write. The room was one height with a scroll of its
+/// own, so a third coin moving, or the warning under an unverified token,
+/// sat cut by a fold inside the sheet — over a confirm that could be live.
+/// There is no inner scroll, no clip and no scrollbar here any more: every
+/// row and every note is laid out at its own height.
+///
+/// A place that grows would push the confirm down, so the confirm is not
+/// under it: the page pins the confirm at the bottom of the column, outside
+/// the scrolling body (`WalletPage::signing_body`), and when the sheet is
+/// taller than the window it is the body that scrolls. `laid_out` is how
+/// the page then brings a verdict that landed below the body's fold into
+/// view.
 pub fn verdict_room(
     theme: &Theme,
     icons: &mut IconCache,
     inner: &[Block],
-    scroller: Option<gpui::Stateful<Div>>,
-    thumb: Option<Div>,
+    laid_out: Option<VerdictLaidOut>,
 ) -> Div {
-    let mut col = div().flex().flex_col().gap(px(16.));
+    let mut col = div().relative().flex().flex_col().gap(px(16.));
     for item in inner {
-        col = col.child(block(theme, icons, item));
+        col = col.child(match item {
+            Block::Balances {
+                title,
+                rows,
+                note,
+                note_tone,
+            } => balances_card(
+                theme,
+                title,
+                rows,
+                note.as_ref(),
+                *note_tone,
+                Some("verdict"),
+            ),
+            other => block(theme, icons, other),
+        });
     }
-    let room = div().relative().h(verdict_room_height());
-    match scroller {
-        Some(scroller) => room.child(scroller.size_full().child(col)).children(thumb),
-        None => room.overflow_hidden().child(col),
-    }
+    div()
+        .relative()
+        .min_h(verdict_room_height())
+        .child(col.children(crate::dev_probe::mark("verdict-content")))
+        .children(laid_out.map(|laid_out| {
+            gpui::canvas(
+                move |bounds, window, cx| laid_out(bounds, window, cx),
+                |_, (), _, _| {},
+            )
+            .absolute()
+            .inset_0()
+        }))
+        .children(crate::dev_probe::mark("verdict-place"))
 }
 
 fn kv_row(

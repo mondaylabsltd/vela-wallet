@@ -119,14 +119,20 @@ pub enum Block {
         note: Option<SharedString>,
         note_tone: Tone,
     },
-    /// The simulation verdict's PLACE (PR 3 final note F2): a room of one
-    /// height from the request's first frame, holding whatever the
+    /// The simulation verdict's PLACE (PR 3 final note F2): room the sheet
+    /// keeps from the request's first frame, holding whatever the
     /// simulation has to say — the quiet "being worked out" card while it is
-    /// out, then its balance card or its notice. Whichever lands, and
-    /// whenever, nothing under it moves; a verdict taller than the room
-    /// scrolls inside it (`components::verdict_room`).
+    /// out, then its balance card or its notice. The room is a least height
+    /// (`components::verdict_room_height`), so the usual verdict lands and
+    /// nothing under it moves; a taller one is shown whole, the place as
+    /// tall as it is (`components::verdict_room`) — nothing of a verdict is
+    /// ever under a fold of its own.
     Verdict {
         inner: Vec<Block>,
+        /// The simulation's answer is in (`live::SimStage::Landed`) — not
+        /// the "Checking…" card. The page brings a landed verdict into view
+        /// when part of it lies outside the column's body.
+        landed: bool,
     },
 }
 
@@ -272,10 +278,15 @@ pub enum SimPin {
     Send,
     /// A swap: one leaves, one arrives.
     Swap,
-    /// Three coins move — taller than the room.
+    /// Three coins move — taller than the least room.
     Three,
-    /// A swap whose inflow is a token nobody vouches for.
+    /// A swap whose inflow is a token nobody vouches for: two rows and the
+    /// warning under them.
     Unverified,
+    /// Four coins move, one of them a token nobody vouches for: four rows
+    /// and the warning — the tall verdict the device round's rule is
+    /// measured on (nothing of it hidden, the confirm not moved by it).
+    Tall,
     /// The node could not check.
     Caution,
     /// The chain says it fails, with the longest reason the core prints.
@@ -285,12 +296,13 @@ pub enum SimPin {
 }
 
 impl SimPin {
-    pub const ALL: [(Self, &'static str); 8] = [
+    pub const ALL: [(Self, &'static str); 9] = [
         (Self::Out, "out"),
         (Self::Send, "send"),
         (Self::Swap, "swap"),
         (Self::Three, "three"),
         (Self::Unverified, "unverified"),
+        (Self::Tall, "tall"),
         (Self::Caution, "caution"),
         (Self::Danger, "danger"),
         (Self::Nothing, "nothing"),
@@ -304,17 +316,35 @@ impl SimPin {
     }
 }
 
-/// `VELA_SIM=out|send|swap|three|unverified|caution|danger|nothing`
+/// `VELA_SIM=out|send|swap|three|unverified|tall|caution|danger|nothing`
 /// (developer builds), with `VELA_PAGE=gallery` and a drawn request: the
 /// verdict's place on that sheet, holding that answer — built by the LIVE
 /// builder (`live::verdict_block`) from judgments and notices the core's own
 /// types carry. A real simulation answers in a few hundred milliseconds and
 /// only one way per request; the room has to be looked at, and measured,
 /// under each. Same env-pin family as `VELA_SIGNING_STATE`.
+///
+/// `VELA_SIM=out>tall` is an answer that LANDS: the first while the window
+/// opens, the second ([`sim_pin_lands`]) a moment later, as a real
+/// simulation does — what is measured before and after is whether anything
+/// under the verdict moved, and whether a verdict that landed under the
+/// body's fold was brought into view.
 #[must_use]
 pub fn sim_pin() -> Option<SimPin> {
-    SimPin::named(&crate::dev_env::var!("VELA_SIM")?)
+    let want = crate::dev_env::var!("VELA_SIM")?;
+    SimPin::named(want.split('>').next().unwrap_or_default())
 }
+
+/// The answer `VELA_SIM=<first>><then>` lands on, if it names one.
+#[must_use]
+pub fn sim_pin_lands() -> Option<SimPin> {
+    let want = crate::dev_env::var!("VELA_SIM")?;
+    SimPin::named(want.split_once('>')?.1)
+}
+
+/// How long after the window opens a pinned answer lands
+/// ([`sim_pin_lands`]): long enough for the first frame to be measured.
+pub const SIM_PIN_LANDS_AFTER: std::time::Duration = std::time::Duration::from_millis(2500);
 
 /// [`sim_pin`]'s verdict block for `pin`.
 #[must_use]
@@ -353,6 +383,19 @@ pub fn sim_pin_block(pin: SimPin, s: &SigningStrings) -> Option<Block> {
             SimStage::Landed,
             vec![
                 usdc_out(),
+                J::Erc20Unverified {
+                    token: Some("0xdead".to_owned()),
+                    delta: "1000000".to_owned(),
+                },
+            ],
+            None,
+        ),
+        SimPin::Tall => (
+            SimStage::Landed,
+            vec![
+                usdc_out(),
+                eth_in(),
+                trusted("DAI", "-250000000000000000000", 18),
                 J::Erc20Unverified {
                     token: Some("0xdead".to_owned()),
                     delta: "1000000".to_owned(),
