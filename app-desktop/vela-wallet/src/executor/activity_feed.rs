@@ -1,7 +1,21 @@
 //! The only place the `activity_feed` machine touches the outside world.
 //!
-//! Six operations: the local transaction store, receipt discovery, a delete, a
-//! counterparty lookup, the toast timer, and a haptic the desktop does not have.
+//! Eight operations: the local transaction store, receipt discovery, a delete,
+//! a counterparty lookup, the toast timer, a haptic the desktop does not have —
+//! and, since PR 3, the two halves of the repair of a receipt's time: reading
+//! the time of the block that holds its transaction, and rewriting the one
+//! stored record with it.
+//!
+//! ## A receipt's time is its block's time
+//!
+//! A `receive` row this shell writes comes from `token_trust`'s feed, whose
+//! every time is a block's own (its invariant ⑨), so the row is stored marked
+//! `timeVerified: true`. A row stored before the mark existed may hold the
+//! clock of the day it was scanned (three receipts of 2026-09-29 stood under
+//! "Today" on 2026-10-10); the core finds those by the missing mark, asks for
+//! the block's time ([`receive_time`]) and has the row rewritten
+//! ([`write_receive_time`]). Which rows, how many a round and when to ask
+//! again are the core's; this file reads, and writes what it is told.
 //!
 //! ## `day_start_ms` is the shell's, and it is not a formatting detail
 //!
@@ -141,6 +155,10 @@ pub(crate) fn to_record(row: &Value) -> Option<FeedTxRecord> {
         settlement: row
             .get("settlement")
             .and_then(|settlement| serde_json::from_value(settlement.clone()).ok()),
+        // PR 3: the stored `timeVerified` mark — this row's time is its
+        // block's own. Absent stays absent: that is what marks a row written
+        // before the mark existed, and the core repairs those.
+        time_verified: row.get("timeVerified").and_then(Value::as_bool),
     })
 }
 
@@ -311,7 +329,15 @@ fn sync_received(address: &str) -> u32 {
 static SCANNING: AtomicBool = AtomicBool::new(false);
 
 fn scan(address: &str) -> u32 {
-    let incoming = crate::executor::token_trust::poll(address);
+    persist_incoming(address, &crate::executor::token_trust::poll(address))
+}
+
+/// Store the transfers the scan admitted that the store does not hold yet,
+/// and answer how many that was.
+fn persist_incoming(
+    address: &str,
+    incoming: &[vela_core::app::token_trust::TrustIncomingView],
+) -> u32 {
     if incoming.is_empty() {
         return 0;
     }
@@ -325,7 +351,7 @@ fn scan(address: &str) -> u32 {
             .iter()
             .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
             .collect();
-        for transfer in &incoming {
+        for transfer in incoming {
             if known.contains(&transfer.id) {
                 continue;
             }
@@ -383,6 +409,11 @@ fn incoming_row(
         "decimals": decimals,
         "chainId": transfer.chain_id,
         "timestamp": transfer.timestamp_sec,
+        // PR 3: the feed's time is the transfer's own block's, by
+        // construction (`token_trust` invariant ⑨ — a transfer whose block
+        // could not be read never reaches the feed). Marked, so the core's
+        // repair of older rows leaves this one alone.
+        "timeVerified": true,
         "status": "confirmed",
         "type": "receive",
         // No `usd`. The ingest valuation needs a live price this path does not
@@ -390,6 +421,58 @@ fn incoming_row(
         // including the ≈$1 stablecoin fallback. Writing "$0.00" would store a
         // claim; writing nothing lets the rule that owns it decide.
     }))
+}
+
+/// The time of the block that holds transaction `tx_hash` on `chain_id`, in
+/// Unix seconds (`FeedOperation::ReadReceiveTime`, PR 3): the transaction's
+/// receipt names its block, and that block's header carries the time.
+///
+/// `None` whenever either read gave no usable answer — no receipt (a node
+/// that has pruned it, a hash it never saw), an RPC error, a block that did
+/// not come back, a `timestamp` that is no number. Never a clock's time and
+/// never a guess: the record then keeps the time it has, and when to ask
+/// again is the core's. One attempt, no retry here.
+///
+/// `rpc` is the routed call — in the app,
+/// [`crate::executor::token_trust::rpc`], the pool the scan itself reads
+/// through.
+fn receive_time(
+    chain_id: u32,
+    tx_hash: &str,
+    rpc: impl Fn(u32, &str, Value) -> Option<Value>,
+) -> Option<f64> {
+    let receipt = rpc(chain_id, "eth_getTransactionReceipt", json!([tx_hash]))?;
+    let block = receipt
+        .get("blockNumber")
+        .and_then(Value::as_str)?
+        .to_owned();
+    let header = rpc(chain_id, "eth_getBlockByNumber", json!([block, false]))?;
+    crate::executor::token_trust::header_timestamp_sec(&header)
+}
+
+/// Rewrite ONE stored record's time (`FeedOperation::WriteReceiveTime`,
+/// PR 3): its `timestamp` becomes `timestamp_sec` — a block's own time — and
+/// it is marked `timeVerified: true`. Nothing else of it changes, and nothing
+/// of any other record. Answers whether it was written: `false` when no
+/// record has that id, or the store refused.
+///
+/// Under the store's lock, like the scan's merge, the delete, the tracker's
+/// patches and a dApp's record: one read-modify-write, so none of them writes
+/// a stale copy back over this.
+fn write_receive_time(id: &str, timestamp_sec: f64) -> bool {
+    storage::update_list(TX_KEY, |rows| {
+        let Some(row) = rows
+            .iter_mut()
+            .find(|row| row.get("id").and_then(Value::as_str) == Some(id))
+            .and_then(Value::as_object_mut)
+        else {
+            return false;
+        };
+        row.insert("timestamp".to_owned(), json!(timestamp_sec));
+        row.insert("timeVerified".to_owned(), json!(true));
+        true
+    })
+    .unwrap_or(false)
 }
 
 /// A chain's own coin, for a native transfer the core did not name.
@@ -507,6 +590,33 @@ impl Machine for ActivityFeed {
             // A desktop has no haptics. Answered rather than skipped — the
             // celebration still runs, it just has one fewer sense.
             FeedOperation::Haptic => Answer::Now(FeedShellResult::HapticPlayed),
+
+            // PR 3: the time of the block that holds a receipt's transaction
+            // — two reads through the pool the scan uses, off the window's
+            // thread. `None` is an honest "not read"; the core asks again
+            // when it chooses to.
+            FeedOperation::ReadReceiveTime {
+                id,
+                chain_id,
+                tx_hash,
+            } => {
+                let (id, chain_id, tx_hash) = (id.clone(), *chain_id, tx_hash.clone());
+                Answer::Blocking(Box::new(move || FeedShellResult::ReceiveTimeRead {
+                    timestamp_sec: receive_time(chain_id, &tx_hash, |chain, method, params| {
+                        crate::executor::token_trust::rpc(chain, method, params).ok()
+                    }),
+                    id,
+                }))
+            }
+
+            // PR 3: that one record, rewritten with its block's time. On this
+            // thread like the delete: a local write under the store's lock.
+            FeedOperation::WriteReceiveTime { id, timestamp_sec } => {
+                Answer::Now(FeedShellResult::ReceiveTimeWritten {
+                    ok: write_receive_time(id, *timestamp_sec),
+                    id: id.clone(),
+                })
+            }
         }
     }
 }
@@ -746,6 +856,567 @@ mod tests {
             // stored price is worth its amount, not zero.
             let usd = vela_core::app::activity_feed::tx_usd_value(&records[0]);
             assert!((usd - 1.5).abs() < 1e-9, "{usd}");
+        });
+    }
+
+    const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    /// 2026-10-10T08:00:00Z: the scan's clock, stored as the receipts' time.
+    const SCANNED_AT: i64 = 1_791_619_200;
+    /// 2026-09-29T09:41:35Z: the first receipt's own block.
+    const BLOCK_TIME: f64 = 1_790_674_895.0;
+
+    /// One of the three receipts of the evidence: 0.001 xDAI, really
+    /// received on 2026-09-29 (Gnosis), stored with the clock of the day the
+    /// scan found it — 2026-10-10 — and no mark.
+    fn stale_receipt(n: u32) -> Value {
+        json!({
+            "id": format!("100-0xfeed{n}-{n}"),
+            "txHash": format!("0xfeed{n}"),
+            "userOpHash": "",
+            "from": "0xAbCd000000000000000000000000000000000001",
+            "to": ME,
+            "value": "0.001",
+            "symbol": "xDAI",
+            "decimals": 18,
+            "chainId": 100,
+            "timestamp": SCANNED_AT + i64::from(n),
+            "status": "confirmed",
+            "type": "receive",
+            // Fields this build writes nowhere: kept as they are.
+            "logoUrls": ["https://example.org/xdai.png"],
+            "toName": "",
+            "note": { "kept": [1, 2.5, "three", null] },
+        })
+    }
+
+    fn stored_rows() -> Vec<Value> {
+        match storage::read_value(TX_KEY) {
+            Ok(Some(Value::Array(rows))) => rows,
+            other => unreachable!("no tx store: {other:?}"),
+        }
+    }
+
+    fn store_file() -> (String, Option<u64>) {
+        let path = storage::path().unwrap_or_else(|e| unreachable!("{e:?}"));
+        let bytes = std::fs::read_to_string(&path).unwrap_or_else(|e| unreachable!("{e}"));
+        // The store writes beside the file and renames over it, so a write
+        // of any kind is a new file — which bytes alone would not show.
+        #[cfg(unix)]
+        let file = {
+            use std::os::unix::fs::MetadataExt as _;
+            std::fs::metadata(&path).ok().map(|meta| meta.ino())
+        };
+        #[cfg(not(unix))]
+        let file = None;
+        (bytes, file)
+    }
+
+    fn written(id: &str, timestamp_sec: f64) -> bool {
+        match ActivityFeed::perform(&FeedOperation::WriteReceiveTime {
+            id: id.to_owned(),
+            timestamp_sec,
+        }) {
+            Answer::Now(FeedShellResult::ReceiveTimeWritten { id: answered, ok }) => {
+                assert_eq!(
+                    answered, id,
+                    "the answer names the record it was asked about"
+                );
+                ok
+            }
+            _ => unreachable!("the rewrite is a local write, answered at once"),
+        }
+    }
+
+    fn loaded(read_id: u32) -> Vec<FeedTxRecord> {
+        match ActivityFeed::perform(&FeedOperation::ReadTxStore {
+            address: ME.to_owned(),
+            read_id,
+        }) {
+            Answer::Now(FeedShellResult::StoreLoaded {
+                records,
+                read_id: echoed,
+                ..
+            }) => {
+                assert_eq!(echoed, read_id);
+                records
+            }
+            _ => unreachable!("the store read is answered at once"),
+        }
+    }
+
+    /// PR 3 fix A, the store's half (`write_receive_time`). A stored receipt
+    /// with the scan's clock for a time and no mark is rewritten with its
+    /// block's time and `timeVerified: true` — that record, those two
+    /// fields. Every other field of it is byte for byte what it was, the
+    /// records beside it are untouched, and the next store read hands the
+    /// core `time_verified: true` and the block's day. An id no record has
+    /// answers `ok: false` and writes nothing at all.
+    #[test]
+    fn a_receipts_time_is_rewritten_in_place_and_nothing_else_is() {
+        storage::tests::with_temp_state("feed-receive-time-write", || {
+            let sent = json!({
+                "id": "s1", "userOpHash": "0xop", "txHash": "0xsent", "from": ME,
+                "to": "0xyou", "value": "5", "symbol": "xDAI", "decimals": 18,
+                "chainId": 100, "timestamp": SCANNED_AT, "status": "confirmed",
+                "type": "send", "usd": "$5.00"
+            });
+            seed(json!([sent, stale_receipt(1), stale_receipt(2)]));
+            let before = stored_rows();
+            let text = |value: &Value| value.to_string();
+
+            // Before: no mark, so the core reads it as a record to repair.
+            let unmarked = loaded(1);
+            assert_eq!(unmarked[1].time_verified, None);
+            assert_eq!(unmarked[1].kind, Some(FeedTxKind::Receive));
+            #[allow(clippy::cast_precision_loss, reason = "seconds")]
+            let scanned = (SCANNED_AT + 1) as f64;
+            assert!((unmarked[1].timestamp - scanned).abs() < f64::EPSILON);
+
+            // An id nobody has: `ok: false`, and the file is the same file.
+            let untouched = store_file();
+            assert!(!written("100-0xnobody-0", BLOCK_TIME));
+            assert_eq!(store_file(), untouched, "nothing was written");
+
+            // The record itself.
+            assert!(written("100-0xfeed1-1", BLOCK_TIME));
+            let after = stored_rows();
+            assert_eq!(after.len(), 3);
+            assert_eq!(text(&after[0]), text(&before[0]), "the send is untouched");
+            assert_eq!(text(&after[2]), text(&before[2]), "the other receipt too");
+            let (was, now) = (
+                before[1].as_object().unwrap_or_else(|| unreachable!()),
+                after[1].as_object().unwrap_or_else(|| unreachable!()),
+            );
+            assert_eq!(now.get("timestamp"), Some(&json!(BLOCK_TIME)));
+            assert_eq!(now.get("timeVerified"), Some(&json!(true)));
+            assert_eq!(now.len(), was.len() + 1, "one field added: the mark");
+            for (field, value) in was {
+                if field != "timestamp" {
+                    assert_eq!(
+                        now.get(field).map(text),
+                        Some(text(value)),
+                        "{field} is what it was"
+                    );
+                }
+            }
+
+            // …and the core's next read of it.
+            let records = loaded(2);
+            assert_eq!(records[1].id, "100-0xfeed1-1");
+            assert_eq!(records[1].time_verified, Some(true));
+            assert!((records[1].timestamp - BLOCK_TIME).abs() < f64::EPSILON);
+            assert_eq!(
+                records[1].day_start_ms,
+                crate::executor::day_start_ms(BLOCK_TIME * 1000.0),
+                "it stands under its block's day"
+            );
+            assert_ne!(records[1].day_start_ms, unmarked[1].day_start_ms);
+            // Absent stays absent: the other receipt is still one to repair.
+            assert_eq!(records[2].time_verified, None);
+            assert_eq!(records[0].time_verified, None);
+
+            // Written again with the same time: still that one record.
+            assert!(written("100-0xfeed1-1", BLOCK_TIME));
+            assert_eq!(text(&stored_rows()[1]), text(&after[1]));
+        });
+    }
+
+    /// A stored mark that is not `true` is handed over as it is — the core
+    /// reads `false` like no mark, and a junk value is no mark.
+    #[test]
+    fn the_stored_mark_is_mapped_and_never_invented() {
+        let row = |mark: Value| {
+            let mut row = stale_receipt(1);
+            row["timeVerified"] = mark;
+            to_record(&row).and_then(|record| record.time_verified)
+        };
+        assert_eq!(row(json!(true)), Some(true));
+        assert_eq!(row(json!(false)), Some(false));
+        assert_eq!(row(json!("true")), None);
+        assert_eq!(row(Value::Null), None);
+        assert_eq!(
+            to_record(&stale_receipt(1)).and_then(|record| record.time_verified),
+            None
+        );
+    }
+
+    /// A node, scripted: what it answers each method with, and what it was
+    /// asked.
+    struct Node {
+        receipt: Option<Value>,
+        block: Option<Value>,
+        asked: std::cell::RefCell<Vec<(u32, String, Value)>>,
+    }
+
+    impl Node {
+        fn new(receipt: Option<Value>, block: Option<Value>) -> Self {
+            Self {
+                receipt,
+                block,
+                asked: std::cell::RefCell::default(),
+            }
+        }
+
+        fn rpc(&self, chain_id: u32, method: &str, params: Value) -> Option<Value> {
+            self.asked
+                .borrow_mut()
+                .push((chain_id, method.to_owned(), params));
+            match method {
+                "eth_getTransactionReceipt" => self.receipt.clone(),
+                "eth_getBlockByNumber" => self.block.clone(),
+                other => unreachable!("the repair asked for {other}"),
+            }
+        }
+
+        fn time_of(&self, tx_hash: &str) -> Option<f64> {
+            receive_time(100, tx_hash, |chain, method, params| {
+                self.rpc(chain, method, params)
+            })
+        }
+    }
+
+    /// PR 3 fix A, the chain's half (`receive_time`), over a scripted node.
+    /// The receipt names the block and the block's header carries the time:
+    /// that, in seconds, is the answer. No receipt, a receipt with no block,
+    /// a block that did not come back, a header with no readable time — each
+    /// is `None`, asked once and not again, and never this machine's clock.
+    #[test]
+    fn a_receipts_time_is_read_from_its_block_or_not_at_all() {
+        let receipt = || json!({ "transactionHash": "0xfeed1", "blockNumber": "0x2b1d3f7" });
+        // 0x6ab8f1cf = 1_790_505_423.
+        let block = || json!({ "number": "0x2b1d3f7", "timestamp": "0x6ab8f1cf" });
+
+        let node = Node::new(Some(receipt()), Some(block()));
+        assert_eq!(node.time_of("0xfeed1"), Some(1_790_505_423.0));
+        assert_eq!(
+            *node.asked.borrow(),
+            vec![
+                (
+                    100,
+                    "eth_getTransactionReceipt".to_owned(),
+                    json!(["0xfeed1"])
+                ),
+                (
+                    100,
+                    "eth_getBlockByNumber".to_owned(),
+                    json!(["0x2b1d3f7", false])
+                ),
+            ],
+            "the receipt, then the block it names — headers only"
+        );
+
+        let now_s = crate::executor::now_ms() / 1000.0;
+        let unread: [(&str, Option<Value>, Option<Value>, usize); 8] = [
+            ("the receipt read failed", None, Some(block()), 1),
+            ("no such receipt", Some(Value::Null), Some(block()), 1),
+            (
+                "a receipt with no block yet",
+                Some(json!({ "transactionHash": "0xfeed1", "blockNumber": null })),
+                Some(block()),
+                1,
+            ),
+            (
+                "a block number that is no string",
+                Some(json!({ "blockNumber": 45_208_567 })),
+                Some(block()),
+                1,
+            ),
+            ("the block read failed", Some(receipt()), None, 2),
+            ("no such block", Some(receipt()), Some(Value::Null), 2),
+            (
+                "a header with no time",
+                Some(receipt()),
+                Some(json!({ "number": "0x2b1d3f7" })),
+                2,
+            ),
+            (
+                "a time that is no number",
+                Some(receipt()),
+                Some(json!({ "timestamp": "yesterday" })),
+                2,
+            ),
+        ];
+        for (why, receipt, block, reads) in unread {
+            let node = Node::new(receipt, block);
+            let answer = node.time_of("0xfeed1");
+            assert_eq!(answer, None, "{why}");
+            assert_eq!(node.asked.borrow().len(), reads, "{why}: asked once each");
+        }
+        // The only number this ever answers is the header's own: with the
+        // header's time a decade away from the clock, so is the answer.
+        let old = Node::new(Some(receipt()), Some(json!({ "timestamp": "0x55d4a80" })));
+        let answer = old.time_of("0xfeed1");
+        assert_eq!(answer, Some(90_000_000.0));
+        assert!(answer.is_some_and(|sec| (sec - now_s).abs() > 300_000_000.0));
+    }
+
+    /// The operation itself (`FeedOperation::ReadReceiveTime`): blocking
+    /// work, through the pool the scan reads through — so with that chain's
+    /// pool out of reach (faulted for this thread) the answer is `null` for
+    /// the record asked about, at once, and never a time.
+    #[test]
+    fn the_receive_time_read_answers_null_when_the_pool_has_no_answer() {
+        let operation = FeedOperation::ReadReceiveTime {
+            id: "100-0xfeed1-1".to_owned(),
+            chain_id: 100,
+            tx_hash: "0xfeed1".to_owned(),
+        };
+        let Answer::Blocking(work) = ActivityFeed::perform(&operation) else {
+            unreachable!("two network reads never run on the window's thread");
+        };
+        let answer = crate::executor::pool::with_fault(Some(&[100]), work);
+        assert_eq!(
+            answer,
+            FeedShellResult::ReceiveTimeRead {
+                id: "100-0xfeed1-1".to_owned(),
+                timestamp_sec: None,
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(&answer).ok(),
+            Some(json!({
+                "type": "receive_time_read",
+                "id": "100-0xfeed1-1",
+                "timestamp_sec": null,
+            }))
+        );
+    }
+
+    /// PR 3 fix A, the ingest's half: a receipt stored from `token_trust`'s
+    /// feed is stored marked — its time is its block's by construction — and
+    /// reads back to the core as `time_verified: true`, so the repair never
+    /// asks about a row this build wrote. Stored once, counted once.
+    #[test]
+    fn a_receipt_from_the_trust_feed_is_stored_time_verified() {
+        use vela_core::app::token_trust::TrustIncomingView;
+
+        storage::tests::with_temp_state("feed-ingest-verified", || {
+            let incoming = [
+                TrustIncomingView {
+                    id: "100-0xfeed1-1".to_owned(),
+                    chain_id: 100,
+                    token: None,
+                    is_native: true,
+                    from: "0xAbCd000000000000000000000000000000000001".to_owned(),
+                    value: "1000000000000000".to_owned(),
+                    tx_hash: "0xfeed1".to_owned(),
+                    block_number: 45_208_567.0,
+                    log_index: 1,
+                    timestamp_sec: BLOCK_TIME,
+                    symbol: None,
+                    decimals: None,
+                },
+                TrustIncomingView {
+                    id: "100-0xdead-0".to_owned(),
+                    chain_id: 100,
+                    token: Some("0xDDAf".to_owned()),
+                    is_native: false,
+                    from: "0xAbCd".to_owned(),
+                    value: "1500000".to_owned(),
+                    tx_hash: "0xdead".to_owned(),
+                    block_number: 45_208_570.0,
+                    log_index: 0,
+                    timestamp_sec: BLOCK_TIME + 15.0,
+                    symbol: Some("USDC".to_owned()),
+                    decimals: Some(6),
+                },
+            ];
+            // An older row beside them, with no mark: left as it is.
+            seed(json!([stale_receipt(2)]));
+
+            assert_eq!(persist_incoming(ME, &incoming), 2);
+            let rows = stored_rows();
+            assert_eq!(rows.len(), 3);
+            assert_eq!(
+                rows[0].get("timeVerified"),
+                None,
+                "an older row is not marked here"
+            );
+            for (row, transfer) in rows[1..].iter().zip(&incoming) {
+                assert_eq!(row["id"], json!(transfer.id));
+                assert_eq!(row["type"], json!("receive"));
+                assert_eq!(row["timeVerified"], json!(true));
+                assert_eq!(row["timestamp"], json!(transfer.timestamp_sec));
+            }
+            assert_eq!(rows[1]["value"], json!("0.001"));
+            assert_eq!(rows[1]["symbol"], json!("xDAI"));
+
+            let records = loaded(1);
+            assert_eq!(records[0].time_verified, None);
+            assert_eq!(records[1].time_verified, Some(true));
+            assert_eq!(records[2].time_verified, Some(true));
+            assert!((records[1].timestamp - BLOCK_TIME).abs() < f64::EPSILON);
+
+            // The scan's windows overlap: the same two again add nothing.
+            assert_eq!(persist_incoming(ME, &incoming), 0);
+            assert_eq!(stored_rows().len(), 3);
+        });
+    }
+
+    /// PR 3 fix A, the whole loop on this shell's wiring: the REAL feed core
+    /// over the real store, with only the chain scripted. Three receipts
+    /// stored under the day they were scanned: the core asks for each one's
+    /// block time, this executor reads it and rewrites the record, the core
+    /// reads the store once more — and every receipt stands under its own
+    /// day, marked, with nothing else in the store changed. A second tick
+    /// asks about none of them again.
+    #[test]
+    fn stale_receipts_are_put_under_their_own_day_by_the_cores_repair() {
+        use crate::core_host::{CoreHost, Pending};
+
+        /// Perform everything the core asks for until it asks no more —
+        /// through this executor, but for the scan (a network poll: found
+        /// nothing) and the chain (`node`). Returns the operations, in order.
+        fn settle(
+            host: &mut CoreHost<ActivityFeed>,
+            mut pending: Vec<Pending<FeedOperation>>,
+            node: &dyn Fn(u32, &str, Value) -> Option<Value>,
+        ) -> Vec<FeedOperation> {
+            let mut performed = Vec::new();
+            while !pending.is_empty() {
+                let next = pending.remove(0);
+                performed.push(next.operation.clone());
+                let result = match &next.operation {
+                    FeedOperation::ScanIncomingTransfers { .. } => {
+                        FeedShellResult::SyncCompleted { new_count: 0 }
+                    }
+                    FeedOperation::ResolveRecipientIdentity { addr } => {
+                        FeedShellResult::AliasResolved {
+                            addr: addr.clone(),
+                            name: None,
+                        }
+                    }
+                    FeedOperation::ReadReceiveTime {
+                        id,
+                        chain_id,
+                        tx_hash,
+                    } => FeedShellResult::ReceiveTimeRead {
+                        id: id.clone(),
+                        timestamp_sec: receive_time(*chain_id, tx_hash, node),
+                    },
+                    FeedOperation::Timer { .. } => continue,
+                    operation => match ActivityFeed::perform(operation) {
+                        Answer::Now(result) => result,
+                        _ => unreachable!("{operation:?} is answered at once"),
+                    },
+                };
+                pending.extend(host.resolve(next.id, result));
+            }
+            performed
+        }
+
+        storage::tests::with_temp_state("feed-receive-time-loop", || {
+            let sent = json!({
+                "id": "s1", "userOpHash": "0xop", "txHash": "0xsent", "from": ME,
+                "to": "0xyou", "value": "5", "symbol": "xDAI", "decimals": 18,
+                "chainId": 100, "timestamp": SCANNED_AT - 60, "status": "confirmed",
+                "type": "send"
+            });
+            seed(json!([
+                stale_receipt(1),
+                sent,
+                stale_receipt(2),
+                stale_receipt(3)
+            ]));
+            let before = stored_rows();
+
+            // Gnosis, 2026-09-29: block 0x2b1d3f0 + n holds receipt n, five
+            // seconds a block.
+            let node = |chain_id: u32, method: &str, params: Value| -> Option<Value> {
+                assert_eq!(chain_id, 100);
+                let first = params.get(0).and_then(Value::as_str).unwrap_or_default();
+                match method {
+                    "eth_getTransactionReceipt" => {
+                        let n = u64::from_str_radix(first.trim_start_matches("0xfeed"), 16).ok()?;
+                        Some(json!({ "blockNumber": format!("0x{:x}", 0x2b1_d3f0 + n) }))
+                    }
+                    "eth_getBlockByNumber" => {
+                        let block = u64::from_str_radix(first.trim_start_matches("0x"), 16).ok()?;
+                        #[allow(clippy::cast_possible_truncation, reason = "a block time")]
+                        let time = BLOCK_TIME as u64 + (block - 0x2b1_d3f0) * 5;
+                        Some(json!({ "timestamp": format!("0x{time:x}") }))
+                    }
+                    other => unreachable!("the repair asked for {other}"),
+                }
+            };
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let pending = host.dispatch(Event::AccountSwitched {
+                address: ME.to_owned(),
+            });
+            let performed = settle(&mut host, pending, &node);
+
+            let reads: Vec<&str> = performed
+                .iter()
+                .filter_map(|operation| match operation {
+                    FeedOperation::ReadReceiveTime { id, .. } => Some(id.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                reads,
+                ["100-0xfeed3-3", "100-0xfeed2-2", "100-0xfeed1-1"],
+                "each unmarked receipt, newest first; the send is not asked about"
+            );
+            let writes = performed
+                .iter()
+                .filter(|operation| matches!(operation, FeedOperation::WriteReceiveTime { .. }))
+                .count();
+            assert_eq!(writes, 3);
+            let store_reads = performed
+                .iter()
+                .filter(|operation| matches!(operation, FeedOperation::ReadTxStore { .. }))
+                .count();
+            assert_eq!(
+                store_reads, 2,
+                "the first read, and one more after the round"
+            );
+
+            // The store: each receipt at its block's time and marked, every
+            // other field as it was; the send untouched.
+            let after = stored_rows();
+            assert_eq!(after[1].to_string(), before[1].to_string());
+            for (index, n) in [(0usize, 1.0f64), (2, 2.0), (3, 3.0)] {
+                let mut expected = before[index].clone();
+                expected["timestamp"] = json!(BLOCK_TIME + n * 5.0);
+                expected["timeVerified"] = json!(true);
+                assert_eq!(after[index], expected);
+            }
+
+            // What the core now holds is what Activity draws: every receipt
+            // on 2026-09-29, none on the day it was scanned.
+            let scanned_day = crate::executor::day_start_ms(
+                1000.0 * {
+                    #[allow(clippy::cast_precision_loss, reason = "seconds")]
+                    {
+                        SCANNED_AT as f64
+                    }
+                },
+            );
+            let own_day = crate::executor::day_start_ms(BLOCK_TIME * 1000.0);
+            assert_ne!(scanned_day, own_day);
+            let receipts: Vec<FeedTxRecord> = read_records()
+                .into_iter()
+                .filter(|record| record.kind == Some(FeedTxKind::Receive))
+                .collect();
+            assert_eq!(receipts.len(), 3);
+            for receipt in &receipts {
+                assert_eq!(receipt.time_verified, Some(true));
+                assert_eq!(receipt.day_start_ms, own_day, "{}", receipt.id);
+            }
+
+            // The next tick: a store read and a scan, and no question about
+            // a record already put right.
+            let pending = host.dispatch(Event::FocusTick);
+            let again = settle(&mut host, pending, &node);
+            assert!(
+                !again.iter().any(|operation| matches!(
+                    operation,
+                    FeedOperation::ReadReceiveTime { .. } | FeedOperation::WriteReceiveTime { .. }
+                )),
+                "{again:?}"
+            );
+            assert_eq!(stored_rows(), after);
         });
     }
 

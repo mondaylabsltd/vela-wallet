@@ -6966,6 +6966,7 @@ mod tests {
                     call_data: None,
                     summary: None,
                     settlement: None,
+                    time_verified: None,
                 }
             };
             let (s, w) = (strings(), wallet_strings());
@@ -7043,6 +7044,7 @@ mod tests {
             call_data: None,
             summary: None,
             settlement: None,
+            time_verified: None,
         };
         let view = crate::wallet::fixtures::core_feed(vec![record]);
         let (s, w) = (strings(), wallet_strings());
@@ -7308,6 +7310,7 @@ mod tests {
                     call_data: None,
                     summary: None,
                     settlement: None,
+                    time_verified: None,
                 }],
                 ..host.view()
             };
@@ -7585,6 +7588,7 @@ mod tests {
                 ..DappSummary::default()
             }),
             settlement: None,
+            time_verified: None,
         };
         let mut borrow = record("dapp-1-tx", 1_756_000_000.0, FeedTxStatus::Confirmed);
         borrow.tx_hash = format!("0x{}", "cb".repeat(32));

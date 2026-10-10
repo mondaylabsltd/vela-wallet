@@ -996,6 +996,7 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
         call_data: None,
         summary: Some(summary),
         settlement: None,
+        time_verified: None,
     };
     let swap = FeedTxRecord {
         user_op_hash: "0x5c1e3fa0b2d4c6e8f0a1b3c5d7e9f1a3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3e5"
@@ -1212,6 +1213,7 @@ pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
             call_data: None,
             summary: None,
             settlement: None,
+            time_verified: None,
         }
     };
     // One send to two people: two records of one operation, which the core
@@ -1290,6 +1292,17 @@ pub fn core_feed_host(
                 FeedShellResult::DeleteCommitted { id: id.clone() }
             }
             FeedOperation::Haptic => FeedShellResult::HapticPlayed,
+            // PR 3: the repair of a receipt's time. A drawing has no chain
+            // to ask — "not read", so its rows keep the times they were
+            // given and nothing is rewritten.
+            FeedOperation::ReadReceiveTime { id, .. } => FeedShellResult::ReceiveTimeRead {
+                id: id.clone(),
+                timestamp_sec: None,
+            },
+            FeedOperation::WriteReceiveTime { id, .. } => FeedShellResult::ReceiveTimeWritten {
+                id: id.clone(),
+                ok: false,
+            },
         };
         pending.extend(host.resolve(next.id, result));
     }

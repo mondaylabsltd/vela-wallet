@@ -1200,6 +1200,9 @@ mod tests {
             call_data: None,
             summary: None,
             settlement: None,
+            // As the scan stores a receipt it found (PR 3): its time is its
+            // block's, so the core has nothing to repair here.
+            time_verified: Some(true),
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -1242,6 +1245,18 @@ mod tests {
                         FeedShellResult::DeleteCommitted { id: id.clone() }
                     }
                     FeedOperation::Haptic => FeedShellResult::HapticPlayed,
+                    // PR 3: the repair of a receipt's time has no chain to
+                    // ask here — "not read", and nothing is rewritten.
+                    FeedOperation::ReadReceiveTime { id, .. } => FeedShellResult::ReceiveTimeRead {
+                        id: id.clone(),
+                        timestamp_sec: None,
+                    },
+                    FeedOperation::WriteReceiveTime { id, .. } => {
+                        FeedShellResult::ReceiveTimeWritten {
+                            id: id.clone(),
+                            ok: false,
+                        }
+                    }
                 };
                 pending.extend(host.resolve(next.id, result));
             }
@@ -1392,6 +1407,7 @@ mod tests {
             call_data: None,
             summary: None,
             settlement: None,
+            time_verified: None,
         }
     }
 
