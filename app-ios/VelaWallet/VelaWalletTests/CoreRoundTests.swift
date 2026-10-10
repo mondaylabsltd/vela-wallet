@@ -331,13 +331,19 @@ struct CoreRoundTests {
         #expect(list.rows.first?.action == nil, "a chain whose RPC is fine is offered an RPC fix")
         #expect(list.rows.first?.line == loc.t("assets.notReadYet"))
 
-        // The balance detail's row never reads "RPC unavailable" for it.
+        // The balance detail's row never reads "RPC unavailable" for it: its
+        // short status is the core's (`statusKey`, final note F21) — two
+        // words like every other row's, not the home's whole sentence.
+        #expect(row.statusKey == "home.balanceDetailStatusTokenList")
         let detail = SettingsLive.withBalanceDetail(
             view, display: .usd, on: SettingsFixtures.build(.st1, loc: loc), loc: loc
         ).balanceDetail
         let pending = try #require(detail.pending.first { $0.id == "4217" })
-        #expect(pending.status == line)
+        #expect(pending.status == "Token list unavailable")
         #expect(pending.status != loc.t("home.balanceDetailStatusFailed"))
+        #expect(SettingsLive.withBalanceDetail(
+            view, display: .usd, on: SettingsFixtures.build(.st1, loc: zh), loc: zh
+        ).balanceDetail.pending.first { $0.id == "4217" }?.status == "代币列表无法读取")
 
         // The same chain really out of reach is the network's, with its Fix.
         let down = try #require(BalanceCoreScene.view(failedChain: 4217, internalFault: false))
@@ -349,9 +355,77 @@ struct CoreRoundTests {
             down, display: .usd, on: SettingsFixtures.build(.sr6, loc: loc), loc: loc
         ).unreachable
         #expect(downList.rows.first?.action == loc.t("assets.rpcFix"))
+        #expect(downRow.statusKey == "home.balanceDetailStatusFailed")
         #expect(SettingsLive.withBalanceDetail(
             down, display: .usd, on: SettingsFixtures.build(.st1, loc: loc), loc: loc
-        ).balanceDetail.pending.first { $0.id == "4217" }?.status == loc.t("home.balanceDetailStatusFailed"))
+        ).balanceDetail.pending.first { $0.id == "4217" }?.status == "RPC unavailable")
+    }
+
+    /// Final note F21 — the row's status is whatever key the core names, and
+    /// a rate-limited chain keeps "retrying"; a row from before the key reads
+    /// "RPC unavailable", the only status there was.
+    @Test func theBreakdownsStatusIsTheCoresKey() throws {
+        var view = try #require(BalanceCoreScene.view(failedChain: 4217, internalFault: false, tokenListFault: true))
+        func status(_ id: Int) -> String? {
+            SettingsLive.withBalanceDetail(
+                view, display: .usd, on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+            ).balanceDetail.pending.first { $0.id == String(id) }?.status
+        }
+        // Not derived from `rpcFixable` or `cause`: the key alone decides.
+        view.unreachableNetworks = [UnreachableNetworkWire(
+            chainId: 4217, lastKnown: "not_read", lastSeenUsd: nil, lineKey: "assets.notReadYet",
+            cause: .network, rpcFixable: true, statusKey: "home.balanceDetailStatusTokenList"
+        )]
+        #expect(status(4217) == "Token list unavailable")
+        // The transient subset: it resolves itself, and says so.
+        view = BalanceViewWire(
+            address: view.address, displayTotalUsd: view.displayTotalUsd,
+            balanceUnknown: false, balancePartial: true, notice: nil, hidden: false,
+            refreshing: false, lastRefreshedAtMs: nil, tokens: view.tokens, unpricedTokens: [],
+            failedChainIds: [4217], rateLimitedChainIds: [4217],
+            unreachableNetworks: view.unreachableNetworks, unreachableKey: view.unreachableKey,
+            holdingsLoading: false, cachedTotalUsd: nil, switcher: view.switcher
+        )
+        #expect(status(4217) == loc.t("home.balanceDetailStatusRetrying"))
+
+        let old = try CoreJSON.decode(UnreachableNetworkWire.self, from: [
+            "chain_id": 56, "last_known": "not_read", "last_seen_usd": NSNull(),
+            "line_key": "assets.notReadYet",
+        ])
+        #expect(old.statusKey == "home.balanceDetailStatusFailed")
+        let keyed = try CoreJSON.decode(UnreachableNetworkWire.self, from: [
+            "chain_id": 4217, "last_known": "not_read", "last_seen_usd": NSNull(),
+            "line_key": "assets.notReadYet", "cause": "token_list", "rpc_fixable": false,
+            "status_key": "home.balanceDetailStatusTokenList",
+        ])
+        #expect(keyed.statusKey == "home.balanceDetailStatusTokenList")
+        // The two statuses resolve in every language.
+        for lang in ["en", "zh", "zh-TW", "zh-HK", "ja", "ko", "de", "fr", "es-MX", "it", "pt-BR", "ru", "tr", "vi", "id"] {
+            let other = Loc(overrideTag: lang, preferredLanguages: [])
+            for key in ["home.balanceDetailStatusTokenList", "home.balanceDetailStatusFailed"] {
+                #expect(other.t(key) != key, "\(key) \(lang)")
+            }
+        }
+    }
+
+    /// Final note F20 — a heading is drawn with its rows and not without
+    /// them. A healthy wallet's breakdown (opened from "Some tokens couldn't
+    /// be priced.") has no network out: it must not be told "These networks
+    /// couldn't be reached, so your cached balance is shown".
+    @Test func theBreakdownHeadsOnlyTheRowsItHas() throws {
+        let healthy = try #require(BalanceCoreScene.zeroWallet()).settled
+        let none = SettingsLive.withBalanceDetail(
+            healthy, display: .usd, on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        ).balanceDetail
+        #expect(none.pending.isEmpty && none.done.isEmpty)
+        #expect(!BalanceDetailSheetBody.headsPending(none), "\"Networks still updating\" heads an empty list")
+        #expect(!BalanceDetailSheetBody.headsDone(none), "\"Updated\" heads an empty list")
+
+        let down = try #require(BalanceCoreScene.view(internalFault: false))
+        let some = SettingsLive.withBalanceDetail(
+            down, display: .usd, on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        ).balanceDetail
+        #expect(BalanceDetailSheetBody.headsPending(some) && BalanceDetailSheetBody.headsDone(some))
     }
 
     /// The two new fields ride on the wire under these names; a row from

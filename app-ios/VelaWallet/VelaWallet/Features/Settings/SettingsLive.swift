@@ -1146,12 +1146,14 @@ enum SettingsLive {
             let id = network.chainId
             pending.append(BalanceDetailRowModel(
                 id: String(id), mark: row(id), name: chainName(id),
-                // PR 3 note 4: a chain whose RPC answers is never "RPC
-                // unavailable" — its token list is what could not be loaded,
-                // said in the core's sentence for exactly that.
-                status: network.rpcFixable
-                    ? loc.t(k.balanceDetailFailed)
-                    : loc.t(k.tokenListUnreachable, vars: ["name": chainName(id)]),
+                // The row's SHORT status is the core's (`statusKey`, final
+                // note F21): "RPC unavailable", or "Token list unavailable"
+                // for a chain whose RPC is answering. This shell chose it
+                // from `rpcFixable` and borrowed the home line's whole
+                // sentence for the token-list row — a sentence where every
+                // other row has two words, naming the network a second time
+                // under its own name.
+                status: loc.t(network.statusKey),
                 tone: .error,
                 action: loc.t(k.balanceDetailRetry)
             ))
