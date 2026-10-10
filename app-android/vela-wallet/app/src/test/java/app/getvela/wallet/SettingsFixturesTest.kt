@@ -252,6 +252,17 @@ class SettingsFixturesTest {
         assertEquals("调试模式", shown.title)
     }
 
+    /** F5: the gallery's Time format sheet draws the core's clock in the board's language. */
+    @Test
+    fun `ST8's twelve-hour example is the core's clock in the board's language`() {
+        fun twelve(locale: String) = SettingsFixtures.buildState(SettingsScreenState.ST8, strings(locale)).timeSheet.rows.last().label
+            .replace('\u00A0', ' ').replace("\u2060", "")
+        assertEquals("1:45 PM", twelve("en"))
+        assertEquals("下午 1:45", twelve("zh"))
+        assertEquals("午後 1:45", twelve("ja"))
+        assertEquals("13:45", SettingsFixtures.buildState(SettingsScreenState.ST8, strings("zh")).timeSheet.rows[1].label)
+    }
+
     @Test
     fun `the rescue states sit on the wallet tab, not on settings`() {
         val s = strings("zh")

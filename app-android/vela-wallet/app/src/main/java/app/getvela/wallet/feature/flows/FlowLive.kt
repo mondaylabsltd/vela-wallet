@@ -687,7 +687,7 @@ object FlowLive {
         val sameDay = calendar.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
             calendar.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
         // The person's date and time presets (spec 047 D2), not a fixed US shape.
-        val time = Formats.current.time(millis)
+        val time = Formats.current.time(millis, strings.language)
         return if (sameDay) "${strings.t(I18nKeys.Flows.DAY_TODAY)} $time" else "${Formats.current.date(millis)} $time"
     }
 

@@ -146,16 +146,34 @@ class Formats(
         }
     }
 
-    fun time(epochMs: Long): String {
-        val c = Calendar.getInstance(locale).apply { timeInMillis = epochMs }
-        val minute = c.get(Calendar.MINUTE).toString().padStart(2, '0')
-        return when (resolvedTime()) {
-            TimeFormatKey.H12 -> {
-                val h = c.get(Calendar.HOUR).let { if (it == 0) 12 else it }
-                "$h:$minute ${if (c.get(Calendar.AM_PM) == Calendar.AM) "AM" else "PM"}"
-            }
-            else -> "${c.get(Calendar.HOUR_OF_DAY).toString().padStart(2, '0')}:$minute"
-        }
+    /**
+     * A clock time in the person's preset, WRITTEN BY THE CORE
+     * (`l10n::datetime::format_time`, the formatter behind every time the
+     * core itself says) in [language]'s own day-period convention: "1:45 PM",
+     * 「下午 1:45」, "午後 1:45", "ÖS 1:45", "13:45".
+     *
+     * This shell used to write the twelve-hour clock itself — English "AM" /
+     * "PM", after the hour, in every language — so Settings → Time format
+     * showed "1:45 PM" as its Chinese example while the core's own lines
+     * said 「下午」 (PR 3 final note F5), and a transaction's time disagreed
+     * with a signing page's "checked" time on the same phone.
+     *
+     * The moment is the core's "checked at" moment on its own day, which is
+     * the clock time alone; its spaces are no-break and a CJK period is
+     * joined to its hour, so the time never breaks across lines.
+     * [language] is the app's — by default this format's own locale, which
+     * is the app's.
+     */
+    fun time(epochMs: Long, language: String = locale.toLanguageTag()): String {
+        val at = epochMs.coerceAtLeast(0L)
+        return uniffi.vela_core_uniffi.signerIntegrityTime(
+            checkedAtMs = at.toULong(),
+            nowMs = at.toULong(),
+            utcOffsetMinutes = Calendar.getInstance(locale).timeZone.getOffset(at) / 60_000,
+            dateFormat = resolvedDate().wire,
+            timeFormat = resolvedTime().wire,
+            language = language,
+        )
     }
 
     fun dateTime(epochMs: Long): String = "${date(epochMs)} ${time(epochMs)}"
@@ -177,7 +195,7 @@ class Formats(
     /** The settings row's sample — the web's `formatNumber(1234567.89, 2, 2)`. */
     fun example(): String = number(BigDecimal("1234567.89"), 2, 2)
     fun dateExample(): String = date(sampleMs())
-    fun timeExample(): String = time(sampleMs())
+    fun timeExample(language: String = locale.toLanguageTag()): String = time(sampleMs(), language)
 
     /** 2026-06-13 13:45 local — the web's `FORMAT_SAMPLE`. */
     private fun sampleMs(): Long = Calendar.getInstance(locale).run {

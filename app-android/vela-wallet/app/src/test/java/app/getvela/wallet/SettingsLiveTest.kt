@@ -1042,12 +1042,41 @@ class SettingsLiveTest {
             assertEquals(base().numberSheet.rows[0].note, live.numberSheet.rows[0].note)
             assertEquals("12,34,567.89", live.numberSheet.rows[4].label)
             assertEquals(listOf("auto", "h24", "h12"), live.timeSheet.rows.map { it.id })
-            assertEquals("1:45 PM", live.timeSheet.rows.single { it.selected }.label)
+            assertEquals("1:45 PM", shown(live.timeSheet.rows.single { it.selected }.label))
 
             val rows = live.sections.flatMap { it.rows }
             assertEquals("1.234.567,89", rows.single { it.id == "number-format" }.value)
-            assertEquals("1:45 PM", rows.single { it.id == "time-format" }.value)
+            assertEquals("1:45 PM", shown(rows.single { it.id == "time-format" }.value!!))
             assertEquals("06/13/2026", rows.single { it.id == "date-format" }.value)
+        } finally {
+            Formats.current = saved
+        }
+    }
+
+    /** A time as read: the core's no-break space as a space, its zero-width joiners gone. */
+    private fun shown(time: String) = time.replace('\u00A0', ' ').replace("\u2060", "")
+
+    /**
+     * PR 3 final note F5: under Chinese, Settings → Time format showed
+     * "1:45 PM" as its 12-hour example — this shell's own clock — while the
+     * core's lines on the same phone said 「下午」. The examples are the
+     * core's clock in the APP's language now, whatever the format's locale.
+     */
+    @Test
+    fun `the time format examples are the core's clock in the app's language`() {
+        val zh = I18nRuntime { tag -> File(System.getProperty("vela.repo.root")!!, "assets/i18n/$tag.json").readBytes() }.apply { initialize("zh") }
+        val saved = Formats.current
+        // The format's own locale is English here: the language named is the app's.
+        Formats.current = Formats(time = TimeFormatKey.H12, locale = Locale.US)
+        try {
+            val prefs = PrefsView(timeFormat = TimeFormatKey.H12, loaded = true)
+            val live = SettingsLive.withPreferences(SettingsFixtures.buildState(SettingsScreenState.ST1, zh), prefs, "zh", zh, theme = "auto")
+            assertEquals("下午 1:45", shown(live.timeSheet.rows.single { it.id == "h12" }.label))
+            assertEquals("13:45", live.timeSheet.rows.single { it.id == "h24" }.label)
+            assertEquals("下午 1:45", shown(live.sections.flatMap { it.rows }.single { it.id == "time-format" }.value!!))
+            // In English it is the English it always was.
+            val en = SettingsLive.withPreferences(base(), prefs, "en", strings, theme = "auto")
+            assertEquals("1:45 PM", shown(en.timeSheet.rows.single { it.id == "h12" }.label))
         } finally {
             Formats.current = saved
         }

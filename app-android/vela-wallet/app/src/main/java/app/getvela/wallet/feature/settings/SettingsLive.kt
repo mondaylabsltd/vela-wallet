@@ -775,7 +775,9 @@ object SettingsLive {
             Formats(date = it, locale = formats.locale).dateExample()
         }
         val timeSheet = formatSheet(model.timeSheet, TimeFormatKey.entries, { it.wire }, prefs.timeFormat.wire) {
-            Formats(time = it, locale = formats.locale).timeExample()
+            // The example is the CORE's clock in the app's language (F5):
+            // 「下午 1:45」, never this shell's own "1:45 PM" under Chinese.
+            Formats(time = it, locale = formats.locale).timeExample(strings.language)
         }
         return model.copy(
             sections = model.sections.map { section ->
@@ -786,7 +788,7 @@ object SettingsLive {
                             // The row shows the CURRENT rendering (the web's `currentExamples`).
                             "number-format" -> row.copy(value = formats.example())
                             "date-format" -> row.copy(value = formats.dateExample())
-                            "time-format" -> row.copy(value = formats.timeExample())
+                            "time-format" -> row.copy(value = formats.timeExample(strings.language))
                             else -> row
                         }
                     },

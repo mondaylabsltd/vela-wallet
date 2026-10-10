@@ -138,7 +138,14 @@ object SettingsFixtures {
         listOf("1,234,567.89", "1,234,567.89", "1.234.567,89", "1 234 567,89", "12,34,567.89")
     private val DATE_SAMPLES =
         listOf("2026/06/13", "2026/06/13", "06/13/2026", "13/06/2026", "13.06.2026", "2026-06-13")
-    private val TIME_SAMPLES = listOf("13:45", "13:45", "1:45 PM")
+    /**
+     * Automatic, 24-hour, 12-hour — each the CORE's clock in the board's
+     * language (F5), as a session's sheet is: 「下午 1:45」 under Chinese. The
+     * board drew "1:45 PM" in every language.
+     */
+    private fun timeSamples(s: VelaStrings): List<String> =
+        listOf(app.getvela.wallet.core.format.TimeFormatKey.H24, app.getvela.wallet.core.format.TimeFormatKey.H24, app.getvela.wallet.core.format.TimeFormatKey.H12)
+            .map { app.getvela.wallet.core.format.Formats(time = it).timeExample(s.language) }
 
     // --- Helpers -------------------------------------------------------------
 
@@ -199,7 +206,7 @@ object SettingsFixtures {
                     id = "time-format",
                     title = s.t(I18nKeys.SettingsUi.TIME_TITLE),
                     icon = SettingsIcon.Clock,
-                    value = TIME_SAMPLES[0],
+                    value = timeSamples(s)[0],
                 ),
             ),
         ),
@@ -1373,7 +1380,7 @@ object SettingsFixtures {
                 s,
                 s.t(I18nKeys.SettingsUi.TIME_TITLE),
                 s.t(I18nKeys.SettingsUi.TIME_SUBTITLE),
-                TIME_SAMPLES,
+                timeSamples(s),
                 mapOf(
                     1 to s.t(I18nKeys.SettingsUi.NOTE_H24),
                     2 to s.t(I18nKeys.SettingsUi.NOTE_H12),
