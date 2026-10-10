@@ -786,7 +786,7 @@ enum SettingsLive {
                     meta: chainMeta(loc, entry.chainId)
                 )
             }
-            model.callout = errorCallout(wizard.error, loc: loc)
+            model.callout = errorCallout(wizard, loc: loc)
             return model
         }
 
@@ -821,17 +821,25 @@ enum SettingsLive {
             return model
         case .error:
             model.candidate = candidate(meta: chainMeta(loc, info.chainId), badge: nil)
-            model.callout = errorCallout(wizard.error, loc: loc)
-            // A check that could not run can run again; a refusal cannot.
+            // Why it stopped, in the core's sentence (`error_key`) — for a
+            // refusal that is the check's own reason: no P-256 verifier, or
+            // missing contracts (PR 3 notes 5, 10, 18).
+            model.callout = errorCallout(wizard, loc: loc)
             switch wizard.error {
+            // A check that could not run can run again; a refusal cannot.
+            // "Unable to verify" carries no reason and no link, whatever
+            // the check kept.
             case .checkFailed, .noRpcEndpoint: model.recheck = loc.t(k.addRecheckWithRpc)
-            // A refusal that still carries its check says WHY, and offers
-            // Chain Setup only for a gap somebody can fill (PR 3).
+            // A refusal on the scan / auto-add path now keeps its check, so
+            // it draws what the wizard's own `checked` phase draws: the
+            // reason, and "Open Chain Setup Tool" only where the core gives
+            // it somewhere to go — a gap somebody can fill, on the page for
+            // THIS chain. No verdict badge and no check list: this path has
+            // no confirm step, and the sentence is the whole answer.
             case .notCompatible:
-                if let refusal = refusal(wizard.compat, loc: loc) {
-                    model.callout = refusal.callout
-                    model.secondary = refusal.setup?.label
-                    model.secondaryUrl = refusal.setup?.url
+                if let setup = refusal(wizard.compat, loc: loc)?.setup {
+                    model.secondary = setup.label
+                    model.secondaryUrl = setup.url
                 }
             default: break
             }
@@ -866,7 +874,7 @@ enum SettingsLive {
         model.checks = checks(compat, loc: loc)
 
         let refused = refusal(compat, loc: loc)
-        model.callout = errorCallout(wizard.error, loc: loc)
+        model.callout = errorCallout(wizard, loc: loc)
             ?? refused?.callout
             // Spec 081 FR-009: compatible, and still not somewhere a wallet
             // with several passkeys can be created. Both halves are true;
@@ -956,22 +964,15 @@ enum SettingsLive {
         return loc.t(k.addCompatibilityCheck)
     }
 
-    /// The core's refusal, in the words the corpus already has.
-    private static func errorCallout(_ error: NetWizardErrorWire?, loc: Loc) -> CalloutModel? {
-        let k = I18nKeys.SettingsUi.self
-        guard let error else { return nil }
-        let text = switch error {
-        case .alreadyAdded: loc.t(k.addAlreadyAdded)
-        case .notFound: loc.t(k.addChainNotFound)
-        // The corpus has no "no RPC endpoint" sentence. `unableToVerify` is the
-        // true thing rather than the exact thing: with no endpoint there is
-        // nothing to verify against. Recorded as a wording gap.
-        case .noRpcEndpoint: loc.t(k.addUnableToVerify)
-        case .notCompatible: loc.t(k.addNotCompatible)
-        // Not a verdict: the probes failed and nothing was learned.
-        case .checkFailed: loc.t(k.addUnableToVerify)
-        }
-        return CalloutModel(tone: .warning, text: text)
+    /// Why the wizard stopped, in the CORE's sentence (`error_key`, PR 3
+    /// notes 5/10/18). Nothing here maps `error.type` to words any more: the
+    /// shell's own table said "unable to verify" for a network that lists no
+    /// RPC endpoint, and could not tell a refusal's two reasons apart. No
+    /// error, no line; an error with no key (a view no core wrote) says
+    /// nothing rather than something this file made up.
+    private static func errorCallout(_ wizard: NetWizardViewWire, loc: Loc) -> CalloutModel? {
+        guard wizard.error != nil, let key = wizard.errorKey else { return nil }
+        return CalloutModel(tone: .warning, text: loc.t(key))
     }
 
     /// One row of 设置 → 网络.

@@ -454,9 +454,16 @@ enum I18nKeys {
             // added", "Chain info not found", "Not compatible with Vela
             // Wallet". Using the corpus entry whose text says the right thing
             // beats inventing a key, which this feature may not do.
+            //
+            // PR 3 (notes 5/10/18): the CORE names the sentence for every
+            // wizard stop (`NetWizardView.error_key`) and the shell draws
+            // `t(error_key)`; these stay as the names the tests pin the
+            // core's choice against — with the one it added.
         static let addAlreadyAdded = "addToken.errorAlreadyAdded"
         static let addChainNotFound = "addToken.errorChainNotFound"
         static let addNotCompatible = "addToken.errorNotCompatible"
+        static let addNoRpcEndpoint = "settingsModals.addNetwork.noRpcEndpoint"
+        static let addNoP256Hint = "settingsModals.addNetwork.noP256Hint"
 
             // RPC providers.
         static let providersDescription = "settingsModals.rpcProviders.description"

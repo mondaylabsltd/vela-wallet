@@ -73,12 +73,13 @@ struct SettingsLiveTests {
         chainInfo: NetChainInfoWire? = nil,
         compat: NetCompatibilityWire? = nil,
         error: NetWizardErrorWire? = nil,
+        errorKey: String? = nil,
         canAdd: Bool = false,
         suggestions: [NetChainIndexEntryWire] = []
     ) -> NetWizardViewWire {
         NetWizardViewWire(
             phase: phase, query: "", customRpc: "", suggestions: suggestions,
-            chainInfo: chainInfo, compat: compat, error: error, canAdd: canAdd
+            chainInfo: chainInfo, compat: compat, error: error, errorKey: errorKey, canAdd: canAdd
         )
     }
 
@@ -287,21 +288,99 @@ struct SettingsLiveTests {
         #expect(model.candidate == nil)
     }
 
-    /// The core's refusals get the corpus sentences that say the right thing —
-    /// including the three whose keys live under `addToken.*` for historical
-    /// reasons.
-    @Test func everyRefusalKindRendersARealSentence() {
-        let kinds: [NetWizardErrorWire] = [
-            .alreadyAdded(chainId: 1), .notFound(chainId: 1),
-            .noRpcEndpoint, .notCompatible(chainId: 1),
+    /// Every wizard stop is said in the sentence the CORE names
+    /// (`error_key`, PR 3 notes 5/10/18) — the five keys it can name are
+    /// real sentences in the corpus, each different from the others.
+    @Test func everyWizardStopRendersTheCoresSentence() {
+        let k = I18nKeys.SettingsUi.self
+        let stops: [(NetWizardErrorWire, String)] = [
+            (.alreadyAdded(chainId: 1), k.addAlreadyAdded),
+            (.notFound(chainId: 1), k.addChainNotFound),
+            (.noRpcEndpoint, k.addNoRpcEndpoint),
+            (.checkFailed(chainId: 1), k.addUnableToVerify),
+            (.notCompatible(chainId: 1), k.addNotCompatible),
+            (.notCompatible(chainId: 1), k.addNoP256Hint),
+            (.notCompatible(chainId: 1), k.addIncompatibleHint),
         ]
-        for kind in kinds {
-            let model = SettingsLive.wizard(
-                wizardView(phase: .error, error: kind), loc: loc, fallback: fallback()
-            )
-            let text = model.callout?.text ?? ""
-            #expect(!text.isEmpty, "no wording for \(kind)")
-            #expect(!text.contains("."), "an unresolved corpus key echoed: \(text)")
+        var said: Set<String> = []
+        for (kind, key) in stops {
+            for info in [nil, zora] as [NetChainInfoWire?] {
+                let model = SettingsLive.wizard(
+                    wizardView(phase: .error, chainInfo: info, error: kind, errorKey: key),
+                    loc: loc, fallback: fallback()
+                )
+                let text = model.callout?.text ?? ""
+                #expect(text == loc.t(key), "\(kind) is not said in the core's sentence: \(text)")
+                #expect(!text.isEmpty && text != key, "an unresolved corpus key echoed: \(text)")
+                said.insert(text)
+            }
         }
+        #expect(said.count == stops.count, "two stops read the same: \(said)")
+    }
+
+    /// The shell maps NO `error.type` to words any more: the sentence is the
+    /// key's, whatever the type. (Its own table said "unable to verify" for a
+    /// network that lists no RPC endpoint.) An error with no key — a view no
+    /// core wrote — says nothing rather than a sentence made up here; no
+    /// error, no line.
+    @Test func theShellMapsNoErrorTypeToWords() {
+        let k = I18nKeys.SettingsUi.self
+        // The same type under two keys draws two sentences…
+        let first = SettingsLive.wizard(
+            wizardView(phase: .error, error: .noRpcEndpoint, errorKey: k.addNoRpcEndpoint),
+            loc: loc, fallback: fallback()
+        )
+        let second = SettingsLive.wizard(
+            wizardView(phase: .error, error: .noRpcEndpoint, errorKey: k.addChainNotFound),
+            loc: loc, fallback: fallback()
+        )
+        #expect(first.callout?.text == loc.t(k.addNoRpcEndpoint))
+        #expect(second.callout?.text == loc.t(k.addChainNotFound))
+        // …and with none, nothing is said.
+        let keyless = SettingsLive.wizard(
+            wizardView(phase: .error, chainInfo: zora, error: .notCompatible(chainId: 7_777_777)),
+            loc: loc, fallback: fallback()
+        )
+        #expect(keyless.callout == nil)
+        let calm = SettingsLive.wizard(
+            wizardView(phase: .suggested, errorKey: k.addChainNotFound), loc: loc, fallback: fallback()
+        )
+        #expect(calm.callout == nil, "a sentence with no error behind it")
+    }
+
+    /// A refusal that keeps its check (the scan / auto-add path, `phase:
+    /// error` beside `compat`) draws the reason and — for missing contracts
+    /// only — Chain Setup for THIS chain; "unable to verify" beside a check
+    /// draws neither reason nor link.
+    @Test func aRefusalBesideItsCheckDrawsTheReasonAndTheButton() {
+        let k = I18nKeys.SettingsUi.self
+        func page(_ error: NetWizardErrorWire, _ key: String, _ compat: NetCompatibilityWire?) -> AddNetworkModel {
+            SettingsLive.wizard(
+                wizardView(phase: .error, chainInfo: zora, compat: compat, error: error, errorKey: key),
+                loc: loc, fallback: fallback()
+            )
+        }
+        let missing = page(.notCompatible(chainId: 7_777_777), k.addIncompatibleHint,
+                           compat(compatible: false, missing: ["Multicall3"]))
+        #expect(missing.callout?.text == loc.t(k.addIncompatibleHint))
+        #expect(missing.secondary == loc.t(k.addChainTool))
+        #expect(missing.secondaryUrl == "https://getvela.app/chain-setup?chain=7777777")
+        #expect(missing.checks.isEmpty && missing.candidate?.badge == nil && missing.primary == nil)
+
+        let noP256 = page(.notCompatible(chainId: 7_777_777), k.addNoP256Hint, compat(compatible: false, p256: false))
+        #expect(noP256.callout?.text == loc.t(k.addNoP256Hint))
+        #expect(noP256.secondary == nil && noP256.secondaryUrl == nil)
+
+        // The check could not run: whatever it kept, no reason and no link.
+        var unverified = compat(compatible: false, missing: ["Multicall3"])
+        unverified = NetCompatibilityWire(
+            chainId: unverified.chainId, compatible: false, multiKeyReady: false, contracts: [],
+            p256Available: nil, bestRpcUrl: nil, bestRpcLatencyMs: nil, rpcFailure: .allProbesFailed,
+            blocker: nil, hintKey: nil, setupUrl: "https://getvela.app/chain-setup?chain=7777777"
+        )
+        let failed = page(.checkFailed(chainId: 7_777_777), k.addUnableToVerify, unverified)
+        #expect(failed.callout?.text == loc.t(k.addUnableToVerify))
+        #expect(failed.secondary == nil && failed.secondaryUrl == nil)
+        #expect(failed.recheck != nil)
     }
 }
