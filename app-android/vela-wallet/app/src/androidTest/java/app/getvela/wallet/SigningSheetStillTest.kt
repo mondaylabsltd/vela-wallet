@@ -220,8 +220,31 @@ class SigningSheetStillTest {
             assertEquals("the verdict arriving ($kind) moved the sheet\n$measured", before, after)
             assertEquals("…or its own place ($kind)", room, place())
         }
-        android.util.Log.i("SigningSheetStill", measured.toString())
         compose.onNodeWithText(words.t("componentsUi.signing.balanceChangesTitle")).assertExists()
+
+        // What it was: the place kept the "could not check" card's room and no
+        // other. The same verdicts over THAT place — how far each pushed the
+        // confirm — is both the measurement of what changed and the proof
+        // that this test can see a sheet move.
+        fun asBefore(model: SigningScreenModel): SigningScreenModel = model.copy(
+            blocks = model.blocks.map { block ->
+                if (block is app.getvela.wallet.feature.signing.SigningBlock.Held) block.copy(rooms = block.rooms.take(1)) else block
+            },
+        )
+        current = asBefore(waiting)
+        compose.waitForIdle()
+        val old = frame()
+        measured.append("\nwith only the could-not-check room (the last round): sheet ${old.sheetHeight} confirm ${old.confirmTop}")
+        var moved = 0f
+        for ((kind, state) in kinds) {
+            current = asBefore(SigningFixtures.build(state, words).copy(state = waiting.state, requestKey = waiting.requestKey))
+            compose.waitForIdle()
+            val after = frame()
+            measured.append("\n  $kind: confirm ${after.confirmTop} (${after.confirmTop - old.confirmTop} px)")
+            if (state == SigningScreenState.CS64) moved = after.confirmTop - old.confirmTop
+        }
+        android.util.Log.i("SigningSheetStill", measured.toString())
+        assertTrue("a swap's two rows did push the old place's sheet: $measured", moved > 0f)
 
         // Back to "could not check": said now.
         current = SigningFixtures.build(SigningScreenState.CS58, words).copy(state = waiting.state, requestKey = waiting.requestKey)
