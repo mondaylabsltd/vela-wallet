@@ -119,26 +119,38 @@ pub fn picked_language(index: usize) -> Option<&'static str> {
 
 /// One account's total in the display currency (spec 072).
 ///
-/// Converted only when the core priced the currency: `rate: None` is not 1,
-/// so an unpriced choice prints the USD figure the core does have rather than
-/// dressing it in another currency's symbol.
-///
-/// And not at all while the display currency is not committed (the core's
-/// withhold rule, `CurrencyView.committed`): the placeholder is not the
-/// person's currency, so the figure waits as a dash rather than read "$…"
-/// for a moment and then jump to "¥…".
+/// Made by the one place every fiat figure is made (`wallet::live::Money`):
+/// converted only when the core priced the currency (`rate: None` is not 1,
+/// so an unpriced choice prints the USD figure the core does have rather
+/// than dressing it in another currency's symbol), and not at all while the
+/// display currency is not committed — the figure is withheld, and its place
+/// in the row stays empty until it lands. With no currency view at all (a
+/// design surface) it is dollars.
 #[must_use]
 pub fn account_total(usd: f64, currency: Option<&CurrencyView>, locale: &str) -> SharedString {
-    let options = crate::executor::format_prefs::fiat_options();
-    SharedString::from(match currency {
-        Some(view) if !view.committed => crate::wallet::live::WITHHELD_FIGURE.to_owned(),
-        Some(CurrencyView {
-            code,
-            rate: Some(rate),
-            ..
-        }) => format_fiat(usd * rate, code, symbol_for(code), locale, options),
-        _ => format_fiat(usd, "USD", "$", locale, options),
-    })
+    SharedString::from(
+        currency
+            .map_or_else(
+                crate::wallet::live::Money::default,
+                crate::wallet::live::Money::of,
+            )
+            .alone(usd, locale),
+    )
+}
+
+/// "1 accounts · Total $0.75" — the count, then the total's own clause
+/// (`total`, carrying `{{amount}}`). While the total is withheld (the
+/// display currency is not committed) the count stands alone: "· Total"
+/// with nothing after it would read as a fault. One line either way.
+#[must_use]
+pub fn accounts_summary(count: &str, total: &str, known_total: &str) -> SharedString {
+    if known_total.is_empty() {
+        return SharedString::from(count.to_owned());
+    }
+    SharedString::from(format!(
+        "{count}{}",
+        crate::wallet::fill(total, "amount", known_total)
+    ))
 }
 
 /// The account switcher's figures: the total of every listed account the
@@ -171,8 +183,9 @@ pub fn switcher_figures(
     // The sum is over what is actually KNOWN — an account with no cached
     // figure contributes nothing rather than making the sentence wait for it.
     let known_total: f64 = accounts.iter().filter_map(|address| figure(address)).sum();
-    // The display currency not committed yet: the total is the withheld
-    // dash, and a row has no figure — as for an account nobody has counted.
+    // The display currency not committed yet: the total is withheld (empty,
+    // its place kept), and a row has no figure — as for an account nobody
+    // has counted.
     let withheld = currency.is_some_and(|currency| !currency.committed);
     (
         account_total(known_total, currency, locale),
@@ -639,8 +652,11 @@ mod tests {
         assert_eq!(currency_row_value(&waiting(None), "en").as_ref(), "");
 
         let total = account_total(1234.5, Some(&waiting(Some("CNY"))), "en");
-        assert_eq!(total.as_ref(), crate::wallet::live::WITHHELD_FIGURE);
-        assert!(!total.contains('$') && !total.contains("1,234"), "{total}");
+        assert_eq!(
+            total.as_ref(),
+            "",
+            "withheld: no figure, no dash, no dollar"
+        );
 
         let switcher = vela_core::app::balance_dashboard::BalanceSwitcherView {
             open: false,
@@ -653,8 +669,18 @@ mod tests {
         };
         let (total, rows) =
             switcher_figures(&switcher, &["0xaaa"], Some(&waiting(Some("CNY"))), "en");
-        assert_eq!(total.as_ref(), crate::wallet::live::WITHHELD_FIGURE);
+        assert_eq!(total.as_ref(), "");
         assert_eq!(rows, vec![None], "no figure in a row either");
+        // The header says the count alone — never "· Total" with nothing
+        // after it — and the whole sentence once the total lands.
+        assert_eq!(
+            accounts_summary("1 accounts", " · Total {{amount}}", &total).as_ref(),
+            "1 accounts"
+        );
+        assert_eq!(
+            accounts_summary("1 accounts", " · Total {{amount}}", "¥8,888.40").as_ref(),
+            "1 accounts · Total ¥8,888.40"
+        );
 
         // Committed: the figures appear, in the person's money.
         let cny = view("CNY", Some(7.2));

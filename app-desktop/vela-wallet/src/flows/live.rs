@@ -723,7 +723,9 @@ fn fiat_of(
     if hidden || !item.priced {
         SharedString::from("")
     } else {
-        SharedString::from(currency.text(item.usd_value, locale))
+        // Withheld while the display currency is not committed: the line
+        // under the amount stays, with nothing in it yet.
+        SharedString::from(currency.alone(item.usd_value, locale))
     }
 }
 
@@ -1342,12 +1344,11 @@ fn deposits(
                         SharedString::from(match item.usd {
                             // An unpriced arrival still says which chain it came
                             // in on. Printing `$0.00` beside it would be the
-                            // assets panel's mistake on a happier screen.
-                            Some(usd) => format!(
-                                "{}  {}",
-                                chain_name(item.chain_id),
-                                currency.text(usd, locale)
-                            ),
+                            // assets panel's mistake on a happier screen. And
+                            // so does a priced one whose worth is withheld.
+                            Some(usd) => {
+                                currency.after(&chain_name(item.chain_id), "  ", usd, locale)
+                            }
                             None => chain_name(item.chain_id),
                         }),
                     )
@@ -1497,7 +1498,9 @@ fn fiat_line(
     locale: &str,
     currency: &crate::wallet::live::Money,
 ) -> Option<SharedString> {
-    usd.map(|usd| SharedString::from(format!("≈ {}", currency.text(usd, locale))))
+    // `Some("")` while the figure is withheld: the line is this amount's,
+    // and it stays — `None` is a token nobody prices, which has no line.
+    usd.map(|usd| SharedString::from(currency.approx(usd, locale)))
 }
 
 /// A settled estimate as one line: the fee coin's amount. `—` while there is
@@ -1614,7 +1617,9 @@ pub(crate) fn fee_line(
     if !usd.is_finite() || usd < FEE_FIAT_MIN_USD {
         return coin;
     }
-    format!("{coin} · ≈{}", currency.text(usd, locale))
+    // The fee in its coin is not fiat: it stands alone while the display
+    // currency is on its way, and the money beside it lands on the same line.
+    currency.after(&coin, " · ≈", usd, locale)
 }
 
 /// The fee row's mark: the coin the CORE names (`SendView.fee_coin` — the
@@ -4120,16 +4125,21 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         amount_unit: (sweep.is_none() && !send.split_mode && !symbol.is_empty())
             .then(|| SharedString::from(symbol.clone())),
         subline: match &sweep {
-            Some((_, total_usd)) => fill(
-                &fill(
-                    &s.confirm_total_line,
+            // "≈ $53.48 on Ethereum" — a sentence about the total: withheld
+            // with it while the currency is on its way, its line kept.
+            Some((_, total_usd)) => i
+                .money
+                .sentence(
+                    &fill(
+                        &s.confirm_total_line,
+                        "network",
+                        &chain_name(send.multi_chain_id.unwrap_or(chain_id)),
+                    ),
                     "fiat",
-                    &money(*total_usd, i.locale, i.money),
-                ),
-                "network",
-                &chain_name(send.multi_chain_id.unwrap_or(chain_id)),
-            )
-            .into(),
+                    *total_usd,
+                    i.locale,
+                )
+                .into(),
             None => fiat_line(usd, i.locale, i.money).unwrap_or_default(),
         },
         facts,
@@ -4250,11 +4260,6 @@ pub fn with_handoff(
     confirm
 }
 
-/// One amount of money, in the hero's own formatting (no `≈`).
-fn money(usd: f64, locale: &str, currency: &crate::wallet::live::Money) -> String {
-    currency.text(usd, locale)
-}
-
 /// SD3c — the sweep's rows and their summed value: every picked coin at the
 /// amount the signature will move — the core's reserved spec (`multi_specs`,
 /// net of the gas the fee coin pays), else the full balance the spec will
@@ -4298,7 +4303,7 @@ fn sweep_breakdown(
                 mono: false,
                 detail: None,
                 value: match row_usd {
-                    Some(row_usd) => format!("{value} · ≈{}", money(row_usd, locale, currency)),
+                    Some(row_usd) => currency.after(&value, " · ≈", row_usd, locale),
                     None => value,
                 }
                 .into(),

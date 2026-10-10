@@ -2184,6 +2184,51 @@ fn fee_quote(
     (host, pending)
 }
 
+/// A drawn request as the LIVE sheet would say it, where money in the
+/// display currency goes (`VELA_CURRENCY_PENDING`): the fee row through the
+/// live builder in `currency` ([`settled_fee_row`]), and no worth under an
+/// amount — the live sheet draws a coin and how much of it, never "≈
+/// $1,000.00" beside it; that line is the mock's own literal, and a board
+/// about the withhold rule cannot keep a dollar figure the rule never saw.
+pub fn in_display_currency(
+    model: &mut SigningModel,
+    s: &SigningStrings,
+    currency: &crate::wallet::live::Money,
+) {
+    for block in &mut model.blocks {
+        match block {
+            Block::Amount { line, .. } => line.fiat = None,
+            Block::Swap { pay, receive } => {
+                pay.fiat = None;
+                receive.fiat = None;
+            }
+            _ => {}
+        }
+    }
+    model.fee = settled_fee_row(s, currency);
+}
+
+/// A settled fee's row as the live sheet draws it in `currency` — the
+/// quote the real `fee_policy` core produced for cs1's transfer
+/// ([`fee_coin_switch`]), through the live `fee_model`. What
+/// `VELA_CURRENCY_PENDING` puts on a drawn request: the fee in its coin,
+/// and the money beside it only once the display currency is committed.
+#[must_use]
+pub fn settled_fee_row(s: &SigningStrings, currency: &crate::wallet::live::Money) -> FeeModel {
+    let [quoted, ..] = fee_coin_switch();
+    let clear =
+        crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+    crate::signing::live::fee_model(&clear, &quoted, 1, false, s, "en", None, currency)
+}
+
+/// The fee view behind [`settled_fee_row`] — for the send's boards, which
+/// price the same quote through their own builders.
+#[must_use]
+pub fn settled_fee() -> vela_core::app::fee_policy::FeeView {
+    let [quoted, ..] = fee_coin_switch();
+    quoted
+}
+
 /// A fee coin switched, through the real `fee_policy` core with canned
 /// answers: quoted in ETH, then USDC picked (`provisional` — the switched
 /// figure, measured again with the USDC leg before it can be confirmed),

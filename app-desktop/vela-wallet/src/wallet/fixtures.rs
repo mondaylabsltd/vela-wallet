@@ -869,6 +869,60 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
     vec![swap, permit, sign_in]
 }
 
+/// The balance breakdown's board (DSR3), through the real balance core:
+/// $4,500 on Gnosis and half an ETH read and priced, and a token on Base
+/// nobody prices — so the sheet has its total, a figure per network and its
+/// "no price" list. What every figure on it is drawn in depends only on the
+/// display currency (`VELA_CURRENCY_PENDING`).
+#[must_use]
+pub fn breakdown_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    let token = |chain_id: u32, symbol: &str, balance: &str, price: Option<f64>| BalanceToken {
+        chain_id,
+        symbol: symbol.to_owned(),
+        name: symbol.to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: (symbol == "LEAF")
+            .then(|| "0x1eAF000000000000000000000000000000001EaF".to_owned()),
+        price_usd: price,
+        spam: false,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![
+                    token(100, "XDAI", "4500", Some(1.0)),
+                    token(1, "ETH", "0.5", Some(2_469.0)),
+                    token(8_453, "LEAF", "1200", None),
+                ],
+                failed_chain_ids: Vec::new(),
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 100, 8_453],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
 /// Three sends through the real feed core — a split of 683.75 USDC between
 /// two people (the newest), 1.5 xDAI received, 12 USDC sent — with the
 /// feed's privacy as asked. What `VELA_ACTIVITY_FIXTURE` draws: the home's

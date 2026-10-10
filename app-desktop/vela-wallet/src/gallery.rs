@@ -350,6 +350,79 @@ pub fn net_stop_pin(
     }
 }
 
+/// `VELA_CURRENCY_PENDING` (developer builds) — with `VELA_PAGE=gallery` and
+/// the send's form or confirm (`VELA_FLOW=DSD2` / `DSD3`): the LIVE builders
+/// over one send — the mock's own (20 USDT on Ethereum, its fee in ETH, the
+/// real fee core's quote) — drawn in `currency`: withheld while the display
+/// currency is on its way ("≈" lines kept empty, the fee in its coin alone),
+/// then the same frame once it has landed. The mock's literals ("≈ $53.48")
+/// know nothing of the rule; this is what a person's screen does.
+pub fn currency_pin_flow(
+    body: crate::flows::fixtures::FlowBody,
+    currency: &crate::wallet::live::Money,
+    s: &crate::flows::FlowStrings,
+    wallet: &crate::wallet::WalletStrings,
+) -> crate::flows::fixtures::FlowBody {
+    use crate::flows::fixtures::FlowBody;
+    if !matches!(body, FlowBody::SendForm(_) | FlowBody::SendConfirm(_)) {
+        return body;
+    }
+    let token = |symbol: &str, balance: &str, decimals: u32, contract: Option<&str>, price: f64| {
+        vela_core::app::send::SendToken {
+            network: "ethereum".to_owned(),
+            chain_id: 1,
+            symbol: symbol.to_owned(),
+            balance: balance.to_owned(),
+            decimals,
+            token_address: contract.map(str::to_owned),
+            price_usd: Some(price),
+            logo_urls: Vec::new(),
+            spam: false,
+        }
+    };
+    let usdt = token(
+        "USDT",
+        "53.4836",
+        6,
+        Some("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
+        1.0,
+    );
+    let mut send = crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+    // ETH is held too: it is the coin the fee is quoted in, and its price is
+    // what the fee's money is worked out from.
+    send.tokens = vec![usdt.clone(), token("ETH", "0.5", 18, None, 2_469.0)];
+    send.selected_token = Some(usdt);
+    send.amount = "20".to_owned();
+    send.token_amount = "20".to_owned();
+    send.confirm_amount = "20".to_owned();
+    send.recipient = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE".to_owned();
+    send.fee_coin = Some(vela_core::app::send::SendFeeCoin {
+        symbol: "ETH".to_owned(),
+        contract: None,
+        chain_id: 1,
+    });
+    let fee = crate::signing::fixtures::settled_fee();
+    let inputs = crate::flows::live::SendInputs {
+        send: &send,
+        fee: &fee,
+        s,
+        wallet,
+        locale: "en",
+        money: currency,
+        identity_name: crate::wallet::fixtures::WALLET_NAME,
+        identity_address: crate::wallet::fixtures::ADDRESS_FULL,
+        speed: None,
+        relay_sent_at_ms: None,
+    };
+    match body {
+        FlowBody::SendForm(_) => FlowBody::SendForm(crate::flows::live::send_form(&inputs)),
+        FlowBody::SendConfirm(_) => {
+            FlowBody::SendConfirm(crate::flows::live::send_confirm(&inputs))
+        }
+        other => other,
+    }
+}
+
 /// `VELA_SEND_STATE=alert-down|alert-internal|alert-other` — with
 /// `VELA_PAGE=gallery`: Continue's alert when its estimate failed, worded by
 /// its cause (PR 2 note 13) — the chain out of reach (the mock's Ethereum by

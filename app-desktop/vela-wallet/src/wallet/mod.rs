@@ -21,6 +21,8 @@ mod privacy_tests;
 /// lesson 1).
 pub mod signing_host;
 pub mod speed_control;
+#[cfg(test)]
+mod withhold_tests;
 
 use gpui::SharedString;
 

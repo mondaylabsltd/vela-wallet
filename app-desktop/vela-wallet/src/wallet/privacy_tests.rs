@@ -32,11 +32,11 @@ use crate::wallet::live::Money;
 const FIXTURE: &str =
     include_str!("../../../../rust/crates/vela-core/tests/fixtures/privacy-hidden.json");
 
-fn fixture() -> Value {
+pub(super) fn fixture() -> Value {
     serde_json::from_str(FIXTURE).unwrap_or_else(|error| unreachable!("the fixture reads: {error}"))
 }
 
-fn views(fixture: &Value, side: &str) -> (BalanceView, FeedView) {
+pub(super) fn views(fixture: &Value, side: &str) -> (BalanceView, FeedView) {
     let balance = serde_json::from_value(fixture[side]["balance"].clone())
         .unwrap_or_else(|error| unreachable!("{side} balance: {error}"));
     let feed = serde_json::from_value(fixture[side]["feed"].clone())
@@ -44,7 +44,7 @@ fn views(fixture: &Value, side: &str) -> (BalanceView, FeedView) {
     (balance, feed)
 }
 
-fn strings() -> (WalletStrings, FlowStrings) {
+pub(super) fn strings() -> (WalletStrings, FlowStrings) {
     let loc = crate::loc::Loc::for_language("en");
     (WalletStrings::resolve(&loc), FlowStrings::resolve(&loc))
 }
@@ -71,7 +71,7 @@ fn contacts() -> ContactsView {
     view
 }
 
-fn activity_text(rows: &[ActivityRowModel]) -> Vec<String> {
+pub(super) fn activity_text(rows: &[ActivityRowModel]) -> Vec<String> {
     rows.iter()
         .flat_map(|row| {
             [
@@ -96,7 +96,7 @@ fn fiat_text(fiat: &Fiat) -> String {
     }
 }
 
-fn asset_text(rows: &[AssetRowModel]) -> Vec<String> {
+pub(super) fn asset_text(rows: &[AssetRowModel]) -> Vec<String> {
     rows.iter()
         .flat_map(|row| [row.balance.to_string(), fiat_text(&row.fiat)])
         .collect()
@@ -136,7 +136,7 @@ fn breakdown_text(rows: &[BreakdownRow]) -> Vec<String> {
         .collect()
 }
 
-fn detail_text(detail: &TxDetail) -> Vec<String> {
+pub(super) fn detail_text(detail: &TxDetail) -> Vec<String> {
     let mut out = vec![detail.amount.to_string(), detail.fiat.to_string()];
     out.extend(fact_text(&detail.facts));
     out.extend(breakdown_text(&detail.breakdown));
@@ -268,7 +268,7 @@ fn masked_surfaces(balance: &BalanceView, feed: &FeedView) -> Vec<(&'static str,
 }
 
 /// The feed's rows, headers aside.
-fn feed_items(feed: &FeedView) -> Vec<&vela_core::app::activity_feed::FeedItem> {
+pub(super) fn feed_items(feed: &FeedView) -> Vec<&vela_core::app::activity_feed::FeedItem> {
     feed.rows
         .iter()
         .filter_map(|row| match row {

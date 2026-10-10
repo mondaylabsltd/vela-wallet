@@ -588,6 +588,11 @@ enum GalleryTab {
     Dst7,
     Dst8,
     Dsr1,
+    /// SR3 — the balance by network, the sheet the hero's status line opens:
+    /// the total, a figure per network, the tokens nobody prices. Every
+    /// figure on it is in the display currency, so it is one of the boards
+    /// `VELA_CURRENCY_PENDING` holds open.
+    Dsr3,
     /// Spec 092 — the hero's "can't reach" line and the list it opens.
     Dsr6,
     /// PR 2 note 11 — a balance read that failed inside Vela: the hero says
@@ -606,7 +611,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 26] = [
+    const ALL: [(GalleryTab, &'static str); 27] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -627,6 +632,7 @@ impl GalleryTab {
         (GalleryTab::Dst7, "DST7"),
         (GalleryTab::Dst8, "DST8"),
         (GalleryTab::Dsr1, "DSR1"),
+        (GalleryTab::Dsr3, "DSR3"),
         (GalleryTab::Dsr6, "DSR6"),
         (GalleryTab::Dsr7, "DSR7"),
         (GalleryTab::Dsr8, "DSR8"),
@@ -4695,6 +4701,25 @@ impl WalletPage {
 
     /// D3's model: the selected holding, or the mock's BNB.
     fn asset_detail_model(&mut self, cx: &mut Context<Self>) -> fixtures::AssetDetailModel {
+        // `VELA_CURRENCY_PENDING` on a design surface: the held wallet's ETH
+        // through the live builder — its worth and its price in the pinned
+        // currency, withheld or landed.
+        if self.identity.is_none()
+            && let Some(money) = Self::pinned_pending_currency()
+        {
+            let view = fixtures::held_view();
+            let eth = view
+                .tokens
+                .iter()
+                .position(|token| token.symbol == "ETH")
+                .unwrap_or(0);
+            let feed = crate::core_host::CoreHost::<ActivityFeed>::new().view();
+            if let Some(model) =
+                wallet_live::asset_detail(&view, &feed, eth, &self.strings, &self.locale, &money)
+            {
+                return model;
+            }
+        }
         let Some(index) = self.asset_detail else {
             return fixtures::asset_detail_default(&self.strings);
         };
@@ -4754,6 +4779,15 @@ impl WalletPage {
                 let money = self.money(cx);
                 return wallet_live::balance(
                     &fixtures::token_list_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
+            if self.tab == GalleryTab::Dsr3 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::breakdown_view(),
                     &self.strings,
                     &self.locale,
                     &money,
@@ -6703,6 +6737,14 @@ impl WalletPage {
             (body, _) => body,
         };
         let body = crate::gallery::net_stop_pin(body, &self.flow_strings);
+        // `VELA_CURRENCY_PENDING`: the send's form and confirm through the
+        // live builders, in the pinned currency.
+        let body = match Self::pinned_pending_currency() {
+            Some(money) => {
+                crate::gallery::currency_pin_flow(body, &money, &self.flow_strings, &self.strings)
+            }
+            None => body,
+        };
         crate::gallery::send_state_pin(body, &self.flow_strings, &self.strings)
     }
 
@@ -8193,6 +8235,7 @@ impl WalletPage {
         // so a toast cannot leak onto the state next door.
         self.celebrating = tab == GalleryTab::D1b;
         self.unreachable_open = matches!(tab, GalleryTab::Dsr6 | GalleryTab::Dsr8);
+        self.balance_detail_open = tab == GalleryTab::Dsr3;
         self.contact = 0;
         self.contacts_empty = tab == GalleryTab::Dc3;
         self.group = match tab {
@@ -9152,10 +9195,8 @@ impl WalletPage {
             .collect();
         let (known_total, row_totals) =
             settings_live::switcher_figures(&switcher, &addresses, Some(&currency), &self.locale);
-        let summary = gpui::SharedString::from(format!(
-            "{summary_count}{}",
-            crate::wallet::fill(&accounts_total, "amount", &known_total)
-        ));
+        let summary =
+            settings_live::accounts_summary(&summary_count, &accounts_total, &known_total);
         // Two copies of this list can be on screen at once — the dialog over
         // the settings panel — so each names its own rows.
         let (art_id, row_id, remove_id, confirm_id, cancel_id) = if in_dialog {
@@ -10889,10 +10930,30 @@ impl WalletPage {
     /// `fixtures::held_view` through the live builders, so the waiting hero
     /// and the holdings' bars can be looked at: the window between launch
     /// and the first rate is a second or two, and cannot be held open by
-    /// hand. The same env-pin family as `VELA_SETTINGS_STATE`.
+    /// hand. So do the token page (D3), the balance breakdown (DSR3), the
+    /// unreachable list (DSR6), the send's form and confirm (DSD2, DSD3)
+    /// and a drawn request's fee row — every board the core's withhold rule
+    /// has a surface on.
+    ///
+    /// `<code>:landed` is the SAME boards a moment later: that currency
+    /// committed, at a fixed rate — the frame to hold beside the waiting
+    /// one, to see that nothing but the figures arrived.
+    /// The same env-pin family as `VELA_SETTINGS_STATE`.
     fn pinned_pending_currency() -> Option<wallet_live::Money> {
         let want = crate::dev_env::var!("VELA_CURRENCY_PENDING")?;
         let want = want.trim();
+        if let Some(code) = want.strip_suffix(":landed") {
+            return Some(wallet_live::Money::of(
+                &vela_core::app::display_currency::CurrencyView {
+                    code: code.to_uppercase(),
+                    // A board's rate, not a quote: the figures only have to
+                    // be in that money.
+                    rate: Some(7.12),
+                    committed: true,
+                    pending: None,
+                },
+            ));
+        }
         Some(wallet_live::Money::of(
             &vela_core::app::display_currency::CurrencyView {
                 code: "USD".to_owned(),
@@ -17559,6 +17620,13 @@ impl WalletPage {
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
         let mut model = signing_fixtures::build(self.signing_state, &self.signing);
+        // `VELA_CURRENCY_PENDING`: the drawn request as the live sheet says
+        // it where money goes — the fee row through the live builder, in the
+        // pinned currency (the fee in its coin, and the money beside it only
+        // once the currency has landed), and no mock worth under an amount.
+        if self.gallery && self.no_signing_host() && Self::pinned_pending_currency().is_some() {
+            signing_fixtures::in_display_currency(&mut model, &self.signing, &currency);
+        }
         // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the
         // operation (PR 2 note 9), drawn from the real core's view by the
         // live receipt builder — there is no request on this route.
@@ -18882,10 +18950,18 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
-        if !self.balance_detail_open || self.identity.is_none() {
+        if !self.balance_detail_open {
             return None;
         }
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        // The gallery's DSR3 draws the breakdown fixture through the same
+        // builders; any other design surface has no sheet to open.
+        let view = if self.identity.is_some() {
+            resident::resident::<BalanceDashboard>(cx).read(cx).view()
+        } else if self.tab == GalleryTab::Dsr3 {
+            fixtures::breakdown_view()
+        } else {
+            return None;
+        };
         let money = self.money(cx);
         let detail = wallet_live::balance_detail(&view, &self.strings, &self.locale, &money);
         let s = &self.strings;
@@ -21826,6 +21902,7 @@ mod tests {
                 "DST7",
                 "DST8",
                 "DSR1",
+                "DSR3",
                 "DSR6",
                 "DSR7",
                 "DSR8",

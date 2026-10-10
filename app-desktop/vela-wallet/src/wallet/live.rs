@@ -31,13 +31,31 @@ use crate::wallet::fixtures::{
 /// that code at rate 1.** A rate of 1 is a claim — "1 USD = 1 CNY" — and the
 /// core answers `rate: None` rather than 1 for exactly this reason.
 ///
-/// And one more refusal, the core's (`CurrencyView.committed`, PR 3 item 10):
-/// **until the display currency is committed, no money figure is drawn.** The
-/// machine starts on a USD/1 placeholder while the person's stored choice is
-/// priced; drawing it put "$1,234" on a home for a moment before it jumped to
-/// "¥8,876". The placeholder is not their currency, so every figure waits —
-/// the hero on its skeleton, a holding's worth on a bar — and appears once,
-/// in the right money. Nothing jumps.
+/// And one more refusal, the core's (`CurrencyView.committed`, the withhold
+/// rule of `app::display_currency`): **until the display currency is
+/// committed, no fiat figure is drawn — on any surface.** The machine starts
+/// on a USD/1 placeholder while the person's stored choice is priced;
+/// drawing it put "$1,234" on a home for a moment before it jumped to
+/// "¥8,876". The placeholder is not their currency, so every figure waits
+/// and appears once, in the right money.
+///
+/// **This type is the one place a fiat figure is made**, and so the one
+/// place the rule is kept: every surface in the core's `FIAT_SURFACES` asks
+/// it for its figure, and while the currency is not committed it answers
+/// "withheld" — in the shape that surface draws, so the figure's room is
+/// kept and nothing moves when it lands:
+///
+/// - the hero waits on its skeleton ([`Self::committed`]);
+/// - a holding's worth waits on its bar ([`Self::fiat`]);
+/// - a figure in a place of its own — a row's amount, the "≈" line under an
+///   amount, a sentence about it — is not drawn, and its line or column
+///   stays ([`Self::alone`], [`Self::approx`], [`Self::sentence`]);
+/// - a figure said after something that is not fiat ("0.0021 ETH · ≈$5.40")
+///   leaves that something standing alone ([`Self::after`]): a token amount
+///   is not in the display currency and is drawn as always.
+///
+/// Never a dash, a zero or the placeholder's dollars: each of those is a
+/// figure, and there is none yet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Money {
     code: String,
@@ -59,11 +77,6 @@ impl Default for Money {
         }
     }
 }
-
-/// What stands where a figure would while the display currency is not
-/// committed, on a surface with no loading treatment of its own: the dash,
-/// which is no amount — never the placeholder's dollars.
-pub const WITHHELD_FIGURE: &str = "—";
 
 impl Money {
     /// Dollars, borrowable for as long as the process lives.
@@ -155,12 +168,48 @@ impl Money {
         ))
     }
 
-    /// [`Self::figure`] as text — [`WITHHELD_FIGURE`] while it is withheld,
-    /// for a surface that has no loading treatment of its own.
+    /// A figure in a place of its own — a row's amount, a network's total —
+    /// or nothing while it is withheld. What draws it keeps the place: the
+    /// row stays its height and the column its side, and the figure lands
+    /// in it.
     #[must_use]
-    pub fn text(&self, usd: f64, locale: &str) -> String {
+    pub fn alone(&self, usd: f64, locale: &str) -> String {
+        self.figure(usd, locale).unwrap_or_default()
+    }
+
+    /// "≈ $1,234.50" — the other denomination's line under an amount — or
+    /// nothing while it is withheld. The line itself stays (an empty text
+    /// keeps its line), so the amount over it and the rows under it do not
+    /// move when the figure lands.
+    #[must_use]
+    pub fn approx(&self, usd: f64, locale: &str) -> String {
         self.figure(usd, locale)
-            .unwrap_or_else(|| WITHHELD_FIGURE.to_owned())
+            .map(|figure| format!("≈ {figure}"))
+            .unwrap_or_default()
+    }
+
+    /// A figure said after something that is not fiat, on its line: `lead`,
+    /// `joint`, the figure ("0.0021 ETH" + " · ≈" + "$5.40") — or `lead`
+    /// alone while the figure is withheld. A token amount is not in the
+    /// display currency: it is drawn as always, and the screen it is on
+    /// stays decidable while the currency is on its way.
+    #[must_use]
+    pub fn after(&self, lead: &str, joint: &str, usd: f64, locale: &str) -> String {
+        match self.figure(usd, locale) {
+            Some(figure) => format!("{lead}{joint}{figure}"),
+            None => lead.to_owned(),
+        }
+    }
+
+    /// A sentence about a figure (`template`, its `{{key}}` filled) — or
+    /// nothing while the figure is withheld: without its figure the
+    /// sentence says nothing, and half of it ("Last seen", "Total") would
+    /// read as a fault. Its line stays, as [`Self::approx`]'s does.
+    #[must_use]
+    pub fn sentence(&self, template: &str, key: &str, usd: f64, locale: &str) -> String {
+        self.figure(usd, locale)
+            .map(|figure| crate::wallet::fill(template, key, &figure))
+            .unwrap_or_default()
     }
 
     /// A holding's worth as a row draws it: the figure, or the row's waiting
@@ -243,12 +292,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     // figure is `None` then too (PR 2 polish); `unreachable` is still read
     // here, so a cached total can never stand in for a round that read
     // nothing.
-    //
-    // And the same skeleton while the display currency is not committed
-    // (the core's withhold rule): the total is known, but not yet in the
-    // person's money — it is drawn once, in the right currency, never in
-    // dollars first.
-    let known = (!view.unreachable && money.committed())
+    let known = (!view.unreachable)
         .then(|| view.display_total_usd.or(view.cached_total_usd))
         .flatten();
     let Some(usd) = known else {
@@ -297,6 +341,30 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         }
         None => None,
     };
+
+    // The total is known, but not yet in the person's money (the core's
+    // withhold rule: the display currency is not committed): the figure
+    // waits on the skeleton — it is drawn once, in the right currency, never
+    // in dollars first — and everything about it that is NOT a fiat figure
+    // is already said: the line under it is what the landed frame will say,
+    // so the figure arriving changes the figure and nothing else. (The line
+    // used to wait with it; when the currency landed over a wallet with a
+    // network out of reach, "Can't reach …" arrived too and pushed the page
+    // down a row.)
+    if !money.committed() {
+        return BalanceModel {
+            label: s.total_balance.clone(),
+            currency,
+            state: BalanceState::Loading,
+            integer: SharedString::from(""),
+            decimals: None,
+            live: None,
+            status,
+            updated: None,
+            refreshing: view.refreshing,
+            updating: s.updating.clone(),
+        };
+    }
 
     let (integer, decimals) = split_fiat(usd, locale, money);
     BalanceModel {
@@ -420,16 +488,20 @@ pub fn unreachable_list(
                 .iter()
                 .find(|(key, _)| *key == network.line_key)
                 .map_or("", |(_, template)| template.as_str());
-            let amount = match network.last_seen_usd {
-                Some(usd) if !view.hidden => money.text(usd, locale),
-                _ => crate::wallet::fixtures::MASK.to_owned(),
+            // "Last seen $1,234.50" is a sentence about a figure: withheld
+            // with it while the display currency is not committed, its line
+            // kept. The other lines ("Not read yet") carry no figure, and a
+            // hidden one reads the mask.
+            let line = match network.last_seen_usd {
+                Some(usd) if !view.hidden => money.sentence(template, "amount", usd, locale),
+                _ => crate::wallet::fill(template, "amount", crate::wallet::fixtures::MASK),
             };
             UnreachableRow {
                 chain_id: network.chain_id,
                 name: SharedString::from(crate::executor::custom_tokens::network_name(
                     network.chain_id,
                 )),
-                line: SharedString::from(crate::wallet::fill(template, "amount", &amount)),
+                line: SharedString::from(line),
                 rpc_fixable: network.rpc_fixable,
             }
         })
@@ -531,29 +603,31 @@ pub fn balance_detail(
             chain_id,
             name: name(chain_id),
             status: None,
+            // Withheld while the display currency is not committed: the row
+            // keeps its place and its side, with no figure in it yet.
             amount: Some(if view.hidden {
                 mask()
             } else {
-                SharedString::from(money.text(usd, locale))
+                SharedString::from(money.alone(usd, locale))
             }),
             retry: false,
         })
         .collect();
 
     let total = view.display_total_usd.or(view.cached_total_usd);
-    let summary = crate::wallet::fill(
-        &s.detail_total,
-        "amount",
-        &match total {
-            _ if view.hidden => crate::wallet::fixtures::MASK.to_owned(),
-            Some(usd) => money.text(usd, locale),
-            // Nothing read and nothing kept — the core hands no figure while
-            // `unreachable` (PR 2 polish), where it used to hand a zero this
-            // line printed as "$0.00": the dash, which is no amount, and not
-            // the privacy mask, which hides one.
-            None => "—".to_owned(),
-        },
-    );
+    let summary = match total {
+        _ if view.hidden => {
+            crate::wallet::fill(&s.detail_total, "amount", crate::wallet::fixtures::MASK)
+        }
+        // The sheet's own line over the networks: withheld with its figure
+        // while the currency is on its way, its line kept.
+        Some(usd) => money.sentence(&s.detail_total, "amount", usd, locale),
+        // Nothing read and nothing kept — the core hands no figure while
+        // `unreachable` (PR 2 polish), where it used to hand a zero this
+        // line printed as "$0.00": the dash, which is no amount, and not
+        // the privacy mask, which hides one.
+        None => crate::wallet::fill(&s.detail_total, "amount", "—"),
+    };
 
     let unpriced = view
         .unpriced_tokens
@@ -616,13 +690,15 @@ pub fn network_balances(
     sums.into_iter()
         // Half a cent is the smallest figure a person reads as money.
         .filter(|(_, usd)| *usd >= 0.005)
-        .map(|(chain_id, usd)| {
+        .filter_map(|(chain_id, usd)| {
             let figure = if view.hidden {
                 crate::wallet::fixtures::MASK.to_owned()
             } else {
-                money.text(usd, locale)
+                // No figure at all while the display currency is not
+                // committed — as for a network whose balance is not known.
+                money.figure(usd, locale)?
             };
-            (chain_id, SharedString::from(figure))
+            Some((chain_id, SharedString::from(figure)))
         })
         .collect()
 }
@@ -635,7 +711,9 @@ pub fn network_balances(
 /// keeps a locale whose group separator is `.` from being cut in half.
 fn split_fiat(usd: f64, locale: &str, money: &Money) -> (SharedString, Option<SharedString>) {
     split_at_mark(
-        &money.text(usd, locale),
+        // The hero asks only once the currency is committed (it waits on its
+        // skeleton before that); a withheld figure splits to nothing.
+        &money.alone(usd, locale),
         crate::executor::format_prefs::current()
             .number
             .separators()
@@ -736,7 +814,7 @@ mod tests {
         let figures = network_balances(&shown, "en", money);
         assert_eq!(
             figures.get(&1),
-            Some(&SharedString::from(money.text(7.5, "en")))
+            Some(&SharedString::from(money.alone(7.5, "en")))
         );
         for chain_id in [100, 8453, 10, 42161, 137] {
             assert!(
@@ -2292,23 +2370,23 @@ mod tests {
     #[test]
     fn an_unpriceable_currency_is_drawn_in_dollars() {
         let priced = Money::new("EUR", Some(0.92));
-        let text = priced.text(1000.0, "en-US");
+        let text = priced.alone(1000.0, "en-US");
         assert!(text.contains("920"), "converted: {text}");
         assert!(!text.contains('$'), "and wearing its own symbol: {text}");
 
         let unpriced = Money::new("EUR", None);
-        let text = unpriced.text(1000.0, "en-US");
+        let text = unpriced.alone(1000.0, "en-US");
         assert!(text.contains('$'), "USD, symbol and all: {text}");
         assert!(text.contains("1,000"), "the figure is untouched: {text}");
 
         // Zero-decimal currencies keep the core's own rule about minor units.
         let yen = Money::new("JPY", Some(157.0));
-        let text = yen.text(10.0, "en-US");
+        let text = yen.alone(10.0, "en-US");
         assert!(!text.contains('.'), "a yen figure has no cents: {text}");
 
         assert_eq!(
-            Money::default().text(1.5, "en-US"),
-            Money::new("USD", Some(1.0)).text(1.5, "en-US"),
+            Money::default().alone(1.5, "en-US"),
+            Money::new("USD", Some(1.0)).alone(1.5, "en-US"),
             "the default IS dollars"
         );
     }
@@ -2601,13 +2679,17 @@ mod tests {
             );
             assert_eq!(rows[0].balance.as_ref(), "0.5", "the amount is not money");
             assert_eq!(money.figure(1.0, "en-US"), None);
-            assert_eq!(money.text(1.0, "en-US"), WITHHELD_FIGURE);
-            let detail = balance_detail(&held, &s, "en-US", &money);
-            assert!(
-                !detail.summary.contains('$') && !detail.summary.contains("1,234"),
-                "{}",
-                detail.summary
+            // Withheld, in each shape a surface asks for: never a dash, a
+            // zero or a dollar — nothing, with its place kept by what draws it.
+            assert_eq!(money.alone(1.0, "en-US"), "");
+            assert_eq!(money.approx(1.0, "en-US"), "");
+            assert_eq!(money.after("0.5 ETH", " · ≈", 1.0, "en-US"), "0.5 ETH");
+            assert_eq!(
+                money.sentence("Total {{amount}}", "amount", 1.0, "en-US"),
+                ""
             );
+            let detail = balance_detail(&held, &s, "en-US", &money);
+            assert_eq!(detail.summary.as_ref(), "", "the total's line, kept empty");
 
             // A hidden hero is still hidden — and still names no placeholder.
             let mut hidden = held.clone();
@@ -3207,19 +3289,21 @@ pub fn asset_detail(
         .collect();
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     let chain = crate::executor::custom_tokens::network_name(token.chain_id);
-    let figure = |value: f64| money.text(value, locale);
 
     let mut facts = vec![(s.label_name.clone(), SharedString::from(token.name.clone()))];
     // Price is always a row — "No price" when there is none (the web's
     // `liveAssetDetail`, 078 H-06): a fact that disappears reads as a panel
-    // that forgot it rather than a token nobody quotes.
+    // that forgot it rather than a token nobody quotes. While the display
+    // currency is not committed the row is there with no value in it yet:
+    // "1 ETH = $2,469" is a figure in that currency like any other.
     facts.push((
         s.label_price.clone(),
         match token.price_usd {
-            Some(price) => SharedString::from(crate::wallet::fill(
+            Some(price) => SharedString::from(money.sentence(
                 &crate::wallet::fill(&s.price_value, "symbol", &token.symbol),
                 "value",
-                &figure(price),
+                price,
+                locale,
             )),
             None => s.no_price.clone(),
         },
@@ -3262,7 +3346,13 @@ pub fn asset_detail(
             SharedString::from(chain.clone())
         } else {
             match token.price_usd {
-                Some(price) => SharedString::from(format!("{} · {chain}", figure(amount * price))),
+                // "$1,234.50 · Gnosis" — and the chain alone while the worth
+                // is withheld: the line is there either way.
+                Some(price) => SharedString::from(
+                    money
+                        .figure(amount * price, locale)
+                        .map_or_else(|| chain.clone(), |worth| format!("{worth} · {chain}")),
+                ),
                 // Unpriced: the chain alone, never "$0.00 · Gnosis".
                 None => SharedString::from(format!("{} · {chain}", s.no_price)),
             }
