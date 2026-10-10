@@ -103,13 +103,16 @@ struct ChainDeadlineTests {
             var abandoned = false
         }
         let hold = OSAllocatedUnfairLock(initialState: Hold())
-        // `true` = the answer arrived while this held the main actor.
-        let holder = Task { @MainActor () -> Bool in
+        // `true` = the answer arrived while this held the main actor; and
+        // for how long it was held, which every main-actor test beside this
+        // one waited out.
+        let holder = Task { @MainActor () -> (answered: Bool, held: TimeInterval) in
+            let began = Date()
             hold.withLock { $0.holding = true }
             while true {
                 let now = hold.withLock { $0 }
-                if now.answered { return true }
-                if now.abandoned { return false }
+                if now.answered { return (true, Date().timeIntervalSince(began)) }
+                if now.abandoned { return (false, Date().timeIntervalSince(began)) }
             }
         }
         // The read runs in a detached task. This target's nonisolated async
@@ -135,8 +138,9 @@ struct ChainDeadlineTests {
             reader.cancel()
         }
         #expect(result.failed)
-        let answeredWhileHeld = await holder.value
-        #expect(answeredWhileHeld, "the deadline waited for the main actor")
+        let held = await holder.value
+        print("ChainDeadlineTests: the main actor was held \(Int(held.held * 1000)) ms for a 150 ms deadline")
+        #expect(held.answered, "the deadline waited for the main actor")
     }
 
     /// The default is the core's number, not one typed into this client.
