@@ -13,13 +13,14 @@ import type { LocalTransaction } from '$lib/services/transactions-model';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
 import { dayLabel, liveActivityGroups, liveActivityRow } from './live';
+import { withFigureMaskable } from './testing/figure-maskable';
 
 const m = resolveWalletMessages('en');
 const zh = resolveWalletMessages('zh');
 const DAY = 86_400_000;
 
 function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
-	return {
+	return withFigureMaskable({
 		direction: 'in',
 		counterparty: '0x' + 'b1'.repeat(20),
 		alias: null,
@@ -39,7 +40,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		counterparty_role: 'recipient',
 		subtitle: [],
 		...partial
-	};
+	});
 }
 
 describe('dayLabel', () => {
@@ -537,6 +538,7 @@ describe('liveActivityGroups', () => {
 			toast: null,
 			history_empty_key: 'history.emptyTitle',
 			home_empty_key: 'home.emptyNoActivity',
+			hidden: false,
 			contact_rows: []
 		};
 		const groups = liveActivityGroups(view, m, false);

@@ -50,10 +50,28 @@ struct BalanceDisplay: View {
     }
 
     private var amount: some View {
-        // Hidden, the figure is already called "Show balance": no hint to add.
-        figure.modifier(BalanceToggleA11y(
-            hint: model.state == .hidden ? nil : model.a11yHide, onToggle: onToggle
-        ))
+        ZStack(alignment: .leading) {
+            heroLine
+            // Hidden, the figure is already called "Show balance": no hint to add.
+            figure.modifier(BalanceToggleA11y(
+                hint: model.state == .hidden ? nil : model.a11yHide, onToggle: onToggle
+            ))
+        }
+    }
+
+    /// The figure's own line, held in every state (PR 2 polish): the mask and
+    /// the skeleton stand in the height the figure takes, so hiding or showing
+    /// the balance — or the first figure landing — moves nothing under it. The
+    /// mask's row was 9 pt shorter than the figure on an iPhone 11, and Receive,
+    /// Send and the activity jumped by that much at every toggle.
+    private var heroLine: some View {
+        (Text(verbatim: "0")
+            .font(Typography.amountHero.scaled(textScale).font)
+            + Text(verbatim: ".00")
+            .font(Typography.amountHeroDecimals.scaled(textScale).font))
+            .lineLimit(1)
+            .hidden()
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private var figure: some View {

@@ -788,9 +788,13 @@ class SigningLiveTest {
     @Test
     fun `the fee row's reason is the core's, naming the chain's node when that is what failed`() {
         fun warning(failure: app.getvela.wallet.feature.send.core.FeeFailure) =
-            (SigningLive.feeModel(ClearSigningView(), FeeView(failed = failure), ctx) as FeeModel.OnChain).warning
+            (SigningLive.feeModel(ClearSigningView(), failedFee(failure), ctx) as FeeModel.OnChain).warning
         assertEquals(strings.t("home.balanceDetailStatusRetrying"), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = true)))
-        assertEquals(strings.t("explore.chainDown", mapOf("chain" to "Gnosis")), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false)))
+        // Issue #483: the fee's own sentence for a chain out of reach, and its
+        // own for a fault inside the app — never the browser's "page data".
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_CHAIN_DOWN, mapOf("chain" to "Gnosis")), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false)))
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REASON_INTERNAL), warning(app.getvela.wallet.feature.send.core.FeeFailure.Internal))
+        assertTrue("an internal fault never names the chain", !warning(app.getvela.wallet.feature.send.core.FeeFailure.Internal)!!.contains("Gnosis"))
         assertTrue("the chain is named", warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false))!!.contains("Gnosis"))
         // Each relay failure says which it was — never "check your connection"
         // over a simulation the relay did not answer (Arbitrum, 2026-10-03).
@@ -799,7 +803,7 @@ class SigningLiveTest {
         assertEquals(strings.t("componentsUi.gas.reasonSimulation"), warning(app.getvela.wallet.feature.send.core.FeeFailure.EstimateFailed))
         assertEquals(strings.t("componentsUi.gas.reasonQuoteHigh"), warning(app.getvela.wallet.feature.send.core.FeeFailure.GasQuoteTooHigh))
         assertNull(warning(app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed))
-        val down = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(true)), ctx) as FeeModel.OnChain
+        val down = SigningLive.feeModel(ClearSigningView(), failedFee(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(true)), ctx) as FeeModel.OnChain
         assertTrue("a chain read that failed is tapped to ask again", down.tappable)
     }
 
@@ -1022,12 +1026,33 @@ class SigningLiveTest {
         val measuring = SigningLive.feeModel(ClearSigningView(), FeeView(busy = true), ctx) as FeeModel.OnChain
         assertTrue(measuring.refreshing)
 
-        val down = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable), ctx) as FeeModel.OnChain
+        val down = SigningLive.feeModel(ClearSigningView(), failedFee(app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable), ctx) as FeeModel.OnChain
         assertEquals(strings.t("componentsUi.gas.reasonQuote"), down.warning)
         assertTrue("a failed quote is tapped to ask again", down.tappable)
+        assertEquals("the core retries it: the dash, no tap asked for", "—", down.value)
 
-        val broken = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.MissingPublicKey), ctx) as FeeModel.OnChain
+        val broken = SigningLive.feeModel(ClearSigningView(), failedFee(app.getvela.wallet.feature.send.core.FeeFailure.MissingPublicKey), ctx) as FeeModel.OnChain
         assertNull("no network sentence for a failure the network did not cause", broken.warning)
+        assertEquals("only a tap fixes it, and the row says so", strings.t(I18nKeys.Flows.FEE_TAP_TO_RETRY), broken.value)
+    }
+
+    /**
+     * A failed fee view as the core writes it (`FeeFailureView::of`, PR 2 note
+     * 1): the reason and whether the core retries by itself are the core's
+     * own functions' answers; the figure and the footer follow from those.
+     */
+    private fun failedFee(failure: app.getvela.wallet.feature.send.core.FeeFailure): FeeView {
+        val auto = uniffi.vela_core_uniffi.feeRequoteDelayMs(failure.wire, 1u) != null
+        return FeeView(
+            failed = failure,
+            failure = app.getvela.wallet.feature.send.core.FeeFailureView(
+                failure = failure,
+                reason_key = uniffi.vela_core_uniffi.feeFailureReasonKey(failure.wire),
+                auto_retry = auto,
+                figure_key = if (auto) null else I18nKeys.Flows.FEE_TAP_TO_RETRY,
+                footer_key = if (auto) I18nKeys.Flows.FEE_RETRYING else I18nKeys.Flows.FEE_FAILED,
+            ),
+        )
     }
 
     /** The approve signs the coin that was picked, in that coin's units (the send core's own rule). */

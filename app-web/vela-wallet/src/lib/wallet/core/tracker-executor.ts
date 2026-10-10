@@ -117,7 +117,11 @@ function toPendingRecords(txs: LocalTransaction[]): TrackPendingRecord[] {
 			// its MaybeSent outcome, its NotSent end and its find-event. A row
 			// from before 082 has neither field: `false` / unknown.
 			maybe_sent: tx.maybeSent === true,
-			submit_block: asBlock(tx.submitBlock)
+			submit_block: asBlock(tx.submitBlock),
+			// The account that signed it — so after a reload this device still
+			// knows the account has an operation in flight on this chain, and
+			// holds its next confirm (correctness batch item 3).
+			sender: typeof tx.from === 'string' && tx.from !== '' ? tx.from : null
 		});
 	}
 	return records;
@@ -310,7 +314,11 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 					stage: status.stage ?? null,
 					now_ms,
 					// The relay's bundle tx — an explorer link while no receipt has.
-					tx_hash: status.txHash ?? null
+					tx_hash: status.txHash ?? null,
+					// Why the relay refused or failed it, passed through: the core
+					// tells a refusal by its reason (correctness batch item 3). An
+					// older relay says none; the core then reads the stage.
+					...(status.rejectionReason ? { rejection_reason: status.rejectionReason } : {})
 				};
 			}
 

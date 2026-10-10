@@ -115,7 +115,7 @@ use vela_core::app::network_admin::{Event as NetEvent, NetOverrideField, Network
 use vela_core::app::payment_request::PaymentRequest;
 use vela_core::app::receive_watch::ReceiveWatch;
 use vela_core::app::send::{
-    Event as SendEvent, SendAlertKind, SendDisplayContext, SendOpenParams, SendRecipientDraft,
+    Event as SendEvent, SendDisplayContext, SendOpenParams, SendRecipientDraft,
 };
 use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
@@ -590,6 +590,10 @@ enum GalleryTab {
     Dsr1,
     /// Spec 092 — the hero's "can't reach" line and the list it opens.
     Dsr6,
+    /// PR 2 note 11 — a balance read that failed inside Vela: the hero says
+    /// the app's own fault where the "can't reach" line goes, never "Can't
+    /// reach Ethereum".
+    Dsr7,
     Components,
     ContactsComponents,
     Identicons,
@@ -598,7 +602,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 24] = [
+    const ALL: [(GalleryTab, &'static str); 25] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -620,6 +624,7 @@ impl GalleryTab {
         (GalleryTab::Dst8, "DST8"),
         (GalleryTab::Dsr1, "DSR1"),
         (GalleryTab::Dsr6, "DSR6"),
+        (GalleryTab::Dsr7, "DSR7"),
         (GalleryTab::Components, "Components"),
         (GalleryTab::ContactsComponents, "Contacts"),
         (GalleryTab::Identicons, "Identicons"),
@@ -4412,37 +4417,39 @@ impl WalletPage {
                 });
             }
         }
-        let hidden = resident::resident::<BalanceDashboard>(cx)
-            .read(cx)
-            .view()
-            .hidden;
-        let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
+        let feed = self.feed_view(cx);
         contacts_live::detail(
             &view,
             self.contact,
             &feed,
             &self.strings,
             self.contact_all_activity,
-            hidden,
+            feed.hidden,
         )
     }
 
     /// The activity rows: the core's feed for a real session, the mock's
     /// otherwise.
     ///
-    /// Privacy comes from the BALANCE view, not the feed's own: every money
-    /// surface masks together, and reading two different flags is how one of
-    /// them ends up out of step.
+    /// Privacy is the feed's own flag (`FeedView.hidden`, correctness batch
+    /// item 2), told from the balance machine's before it is read
+    /// ([`Self::feed_view`]) — one flag, never two out of step.
     fn activity_models(&mut self, cx: &mut Context<Self>) -> Vec<fixtures::ActivityRowModel> {
         if self.identity.is_none() {
             return fixtures::activity_default(&self.strings);
         }
-        let hidden = resident::resident::<BalanceDashboard>(cx)
-            .read(cx)
-            .view()
-            .hidden;
-        let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
-        wallet_live::activity_rows(&feed, &self.strings, &self.flow_strings, hidden)
+        let feed = self.feed_view(cx);
+        wallet_live::activity_rows(&feed, &self.strings, &self.flow_strings, feed.hidden)
+    }
+
+    /// The activity feed's view, with the balance's privacy told to it first:
+    /// every feed surface (Activity, History, a contact's page, a transfer's
+    /// and a dApp's detail) masks on the feed's own `hidden`, which the core
+    /// keeps from `PrivacyChanged` — so it is told before anyone reads it,
+    /// and a relaunch with the balance hidden never shows a figure first.
+    fn feed_view(&mut self, cx: &mut Context<Self>) -> vela_core::app::activity_feed::FeedView {
+        self.sync_feed_privacy(cx);
+        resident::resident::<ActivityFeed>(cx).read(cx).view()
     }
 
     /// The core-list indices behind the home's asset strip, in drawn order.
@@ -4799,6 +4806,15 @@ impl WalletPage {
                 let money = self.money(cx);
                 return wallet_live::balance(
                     &fixtures::unreachable_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
+            if self.tab == GalleryTab::Dsr7 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::internal_view(),
                     &self.strings,
                     &self.locale,
                     &money,
@@ -6538,8 +6554,31 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
+        // `VELA_SEND_STATE=alert-down|alert-internal`: Continue's alert over
+        // the gallery's send mock, worded by its cause (PR 2 note 13) — there
+        // is no send machine on that route to raise it.
+        if self.gallery
+            && self.send_host.is_none()
+            && let Some(kind) = crate::gallery::send_alert_pin()
+        {
+            let (title, body) =
+                flows_live::send_alert_words(&self.loc, &kind, &flows_live::chain_name(1));
+            let card = self.send_alert_card(theme, title, body, |_, _, _| {});
+            return Some(
+                div()
+                    .id("send-alert-scrim")
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(theme.backdrop)
+                    .child(card)
+                    .into_any_element(),
+            );
+        }
         let host = self.send_host.clone()?;
-        let (touch, qr, pin, pick, alert) = {
+        let (touch, qr, pin, pick, alert, chain_id) = {
             let read = host.read(cx);
             (
                 read.touch_waiting(),
@@ -6549,6 +6588,10 @@ impl WalletPage {
                     .map(|pin| (pin.request.clone(), pin.value.clone(), pin.focus.clone())),
                 read.pick.clone(),
                 read.alert.clone(),
+                read.view
+                    .selected_token
+                    .as_ref()
+                    .map_or(1, |token| token.chain_id),
             )
         };
         let scrim = |id: &'static str| {
@@ -6638,82 +6681,71 @@ impl WalletPage {
             return Some(scrim("send-touch-scrim").child(card).into_any_element());
         }
         if let Some(kind) = alert {
-            let (title, body) = self.send_alert_words(&kind);
-            let mut card = div()
-                .w(px(400.))
-                .flex()
-                .flex_col()
-                .gap(px(12.))
-                .p(px(24.))
-                .rounded(px(20.))
-                .bg(theme.bg_raised)
-                .border_1()
-                .border_color(theme.border_card)
-                .child(
-                    div()
-                        .text_size(theme::text_panel_title())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .child(title),
-                );
-            if let Some(body) = body {
-                card = card.child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(body),
-                );
-            }
+            // Worded by its cause (PR 2 note 13), the selected token's chain
+            // named where the chain is the cause.
+            let (title, body) =
+                flows_live::send_alert_words(&self.loc, &kind, &flows_live::chain_name(chain_id));
             let dismiss = {
                 let host = host.clone();
                 move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
                     host.update(cx, |host, cx| host.acknowledge_alert(cx));
                 }
             };
-            card = card.child(
-                div()
-                    .id("send-alert-ok")
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(theme.accent)
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_inverse)
-                    .child(self.flow_strings.got_it.clone())
-                    .on_click(dismiss),
-            );
+            let card = self.send_alert_card(theme, title, body, dismiss);
             return Some(scrim("send-alert-scrim").child(card).into_any_element());
         }
         None
     }
 
-    /// The core's alert kind, in the corpus's words. Semantic keys only —
-    /// the core never hands over a sentence.
-    fn send_alert_words(&self, kind: &SendAlertKind) -> (SharedString, Option<SharedString>) {
-        let t = |key: &str| self.loc.t(key);
-        match kind {
-            SendAlertKind::InvalidAddress => (
-                t("send.alertInvalidAddressTitle"),
-                Some(t("send.alertInvalidAddressBody")),
-            ),
-            SendAlertKind::InvalidAmount => (
-                t("send.alertInvalidAmountTitle"),
-                Some(t("send.alertInvalidAmountBody")),
-            ),
-            SendAlertKind::InsufficientBalance { .. } | SendAlertKind::SplitOverBalance => (
-                t("send.alertInsufficientBalanceTitle"),
-                Some(t("send.alertInsufficientBalanceBody")),
-            ),
-            SendAlertKind::LoadTokensFailed => (t("send.alertLoadTokensError"), None),
-            SendAlertKind::EstimateFailed { .. } => (
-                t("send.alertEstimateFailedTitle"),
-                Some(t("send.alertEstimateFailedBody")),
-            ),
-            SendAlertKind::AccountUnavailable => (t("send.alertAccountUnavailableBody"), None),
+    /// The core's alert over the send flow: its title, its body and one
+    /// "Got it".
+    fn send_alert_card(
+        &self,
+        theme: &Theme,
+        title: SharedString,
+        body: Option<SharedString>,
+        dismiss: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+    ) -> Div {
+        let mut card = div()
+            .w(px(400.))
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .p(px(24.))
+            .rounded(px(20.))
+            .bg(theme.bg_raised)
+            .border_1()
+            .border_color(theme.border_card)
+            .child(
+                div()
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .child(title),
+            );
+        if let Some(body) = body {
+            card = card.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(body),
+            );
         }
+        card.child(
+            div()
+                .id("send-alert-ok")
+                .h(px(CONTACTS_BUTTON_H))
+                .rounded(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .bg(theme.accent)
+                .text_size(theme::text_row_title())
+                .text_color(theme.fg_inverse)
+                .child(self.flow_strings.got_it.clone())
+                .on_click(dismiss),
+        )
     }
 
     /// DSD2cL's total line, which reads what the importer's own view does not
@@ -6748,7 +6780,7 @@ impl WalletPage {
     /// gallery pins a hand-off (`VELA_HANDOFF`): the confirm's own fee rows
     /// above the card, the card with none.
     fn mock_flow_body(&self, panel: FlowPanel) -> flow_fixtures::FlowBody {
-        match (
+        let body = match (
             flow_fixtures::body(panel, &self.flow_strings),
             crate::gallery::handoff_pin(),
         ) {
@@ -6759,7 +6791,8 @@ impl WalletPage {
                 ))
             }
             (body, _) => body,
-        }
+        };
+        crate::gallery::send_state_pin(body, &self.flow_strings, &self.strings)
     }
 
     /// The panel's body: the cores' for a real session, the mocks' otherwise.
@@ -6788,16 +6821,16 @@ impl WalletPage {
                 ))
             }
             FlowPanel::Da1 => {
-                // Privacy comes from the BALANCE view, not the feed's own flag:
-                // every money surface masks together.
+                // Privacy is the feed's own flag, told from the balance's
+                // first (`feed_view`).
                 let balance = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-                let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
+                let feed = self.feed_view(cx);
                 flow_fixtures::FlowBody::History(flows_live::history_panel(
                     &feed,
                     balance.balance_unknown,
                     &self.flow_strings,
                     &self.strings,
-                    balance.hidden,
+                    feed.hidden,
                 ))
             }
             FlowPanel::Dr1 => flow_fixtures::FlowBody::Receive(flows_live::receive_list(
@@ -6830,11 +6863,8 @@ impl WalletPage {
             // the mock. Each is named so the next person sees a list rather
             // than a wildcard.
             FlowPanel::Da2 | FlowPanel::Da3 => {
-                let hidden = resident::resident::<BalanceDashboard>(cx)
-                    .read(cx)
-                    .view()
-                    .hidden;
-                let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
+                let feed = self.feed_view(cx);
+                let hidden = feed.hidden;
                 self.tx_detail
                     .as_ref()
                     .and_then(|id| {
@@ -7602,12 +7632,7 @@ impl WalletPage {
                         actions.add_recipient = Some(to_host(SendEvent::EnterSplitMode));
                     }
                     actions.open_batch_import = Some(to_host(SendEvent::OpenBatchImport));
-                    actions.open_fee_token = Some(Box::new(cx.listener(
-                        |this, _: &gpui::ClickEvent, _, cx| {
-                            this.send_fee_picker = true;
-                            cx.notify();
-                        },
-                    )));
+                    actions.open_fee_token = Some(send_fee_tap(host.clone(), cx));
                     // Spec 069: measure again, and the speed control — every
                     // decision behind it is the `fee_speed` core's.
                     let on_host =
@@ -7761,6 +7786,9 @@ impl WalletPage {
                 }
                 FlowPanel::Dsd3 => {
                     actions.advance = Some(to_host(SendEvent::SlideConfirm));
+                    // The confirm's fee line, when its failure answers a tap
+                    // (PR 2 polish): the form row's own tap.
+                    actions.open_fee_token = Some(send_fee_tap(host.clone(), cx));
                     // Spec 102: the hand-off's own two actions, on its page.
                     if let Some(page) = send.handoff_page.clone() {
                         let again = page.clone();
@@ -9185,27 +9213,18 @@ impl WalletPage {
         // The display currency the totals are stated in (spec 072) — the
         // web's switcher prints them the way the hero would.
         let currency = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        // "1 accounts · Total $0.75". The sum is over what is actually KNOWN —
-        // an account with no cached figure contributes nothing rather than
-        // making the sentence wait for it.
-        let known_total: f64 = session
+        // "1 accounts · Total $0.75" — and every figure masked while the
+        // balance is hidden: the core sends none then (`switcher.hidden`).
+        let addresses: Vec<&str> = session
             .accounts
             .iter()
-            .filter_map(|row| {
-                switcher
-                    .balances
-                    .iter()
-                    .find(|entry| entry.address.eq_ignore_ascii_case(&row.account.address))
-                    .map(|entry| entry.usd)
-            })
-            .sum();
+            .map(|row| row.account.address.as_str())
+            .collect();
+        let (known_total, row_totals) =
+            settings_live::switcher_figures(&switcher, &addresses, Some(&currency), &self.locale);
         let summary = gpui::SharedString::from(format!(
             "{summary_count}{}",
-            crate::wallet::fill(
-                &accounts_total,
-                "amount",
-                &settings_live::account_total(known_total, Some(&currency), &self.locale),
-            )
+            crate::wallet::fill(&accounts_total, "amount", &known_total)
         ));
         // Two copies of this list can be on screen at once — the dialog over
         // the settings panel — so each names its own rows.
@@ -9238,21 +9257,12 @@ impl WalletPage {
         let cancel_label = self.strings.sign_out_cancel.clone();
 
         let mut list = div().flex().flex_col();
-        for row in &session.accounts {
+        for (row, total) in session.accounts.iter().zip(row_totals) {
             let active = row.index == session.active_index;
-            // This account's own total, when the core has one for it. A row
-            // with no cached figure says nothing rather than $0 — the hero's
-            // invariant ② applies to every account, not just the active one.
-            let total = switcher
-                .balances
-                .iter()
-                .find(|entry| entry.address.eq_ignore_ascii_case(&row.account.address))
-                .map(|entry| {
-                    // In the chosen currency, like every other total this
-                    // shell prints: `Money` converts only when the endpoint
-                    // priced the code, and draws USD when it could not.
-                    settings_live::account_total(entry.usd, Some(&currency), &self.locale)
-                });
+            // This account's own total, when the core has one for it (in the
+            // chosen currency). A row with no cached figure says nothing
+            // rather than $0 — the hero's invariant ② applies to every
+            // account, not just the active one.
             // The core's own index, not the loop's: it survives a display
             // reorder, which is exactly what invariant ⑦ is about.
             let index = row.index;
@@ -17529,6 +17539,35 @@ impl WalletPage {
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
         let mut model = signing_fixtures::build(self.signing_state, &self.signing);
+        // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the
+        // operation (PR 2 note 9), drawn from the real core's view by the
+        // live receipt builder — there is no request on this route.
+        if self.gallery
+            && self.no_signing_host()
+            && let Some(view) = signing_fixtures::refusal_pin()
+        {
+            let summary = crate::signing::status::summary_of(&model.blocks);
+            let header = signing_components::HeaderModel::of(&model);
+            let clock = signing_clock(100, None);
+            if let Some(receipt) = crate::signing::status::approved(
+                &view,
+                true,
+                summary.as_ref(),
+                None,
+                &clock,
+                &self.signing,
+            ) {
+                return self.signing_receipt_view(
+                    theme,
+                    window,
+                    Some(&header),
+                    &receipt,
+                    100,
+                    Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {}),
+                    cx,
+                );
+            }
+        }
         // Which of the three things this column is: the request, the core's
         // refusal of it (spec 081), or the gas account it cannot pay from.
         let mut kind = signing_live::ColumnKind::Request;
@@ -17687,14 +17726,9 @@ impl WalletPage {
                     speed_tier,
                     &currency,
                 );
-                // Spec 079: the speed control's own deployment read, which the
-                // fee machine never sees.
-                signing_live::fee_row_state(
-                    &mut fee_model,
-                    host.fee_measuring(),
-                    host.fee_unanswered(),
-                    &self.signing,
-                );
+                // Spec 079: a measurement out on the speed control turns the
+                // row's refresh sign (the failure itself is the core's).
+                signing_live::fee_row_state(&mut fee_model, host.fee_measuring());
                 let state = signing_live::confirm_state(
                     &host.view,
                     &host.guard_view,
@@ -17731,9 +17765,8 @@ impl WalletPage {
                     self.signing_held = Some((id, signing_live::HeldLines::default()));
                 }
                 if let Some((_, held)) = self.signing_held.as_mut() {
-                    let measuring = fee.busy
-                        || host.fee_measuring()
-                        || signing_live::fee_of_another_tier(fee, speed_tier);
+                    let measuring =
+                        signing_live::holds_lines(fee, host.fee_measuring(), speed_tier);
                     signing_live::hold_fee_warning(
                         &mut confirm.fee,
                         held,
@@ -20912,6 +20945,30 @@ fn backup_request(
     }
 }
 
+/// A tap on Send's fee row — the form's, and the confirm's fee line when it
+/// is a control (PR 2 polish): EXACTLY what the row says it does. A failed
+/// fee does what its failure says (`FeeFailureView.tap`, only for the form's
+/// own chain): asks again at once — a real new read, as the signing sheet's
+/// row does; while the re-ask is out the tap waits for it — or opens the fee
+/// coins ("Pay with another coin"); one no tap can help does nothing. A
+/// settled fee opens the coins.
+fn send_fee_tap(host: gpui::Entity<SendHost>, cx: &mut Context<WalletPage>) -> panels::Click {
+    Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+        use crate::signing::live::{FeeTap, fee_tap};
+        let read = host.read(cx);
+        let fee = read.fee_view();
+        let failure = flows_live::form_fee_failure(fee, &read.view);
+        match fee_tap(fee, failure.as_ref()) {
+            FeeTap::Requote => host.update(cx, SendHost::refresh_fee),
+            FeeTap::Nothing if failure.is_some() => {}
+            FeeTap::Coins | FeeTap::Nothing => {
+                this.send_fee_picker = true;
+                cx.notify();
+            }
+        }
+    }))
+}
+
 /// The host of a signer page address, for its badge — the address itself is
 /// already in the field under it.
 /// The chain's clock for a signing receipt (spec 079): now, its usual
@@ -21712,6 +21769,7 @@ mod tests {
                 "DST8",
                 "DSR1",
                 "DSR6",
+                "DSR7",
                 "Components",
                 "Contacts",
                 "Identicons",

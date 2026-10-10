@@ -44,7 +44,7 @@ import {
 // classification snapshot the core asks for now comes from the rpc_pool machine,
 // with the dev fault-injection sets folded in exactly as before.
 import { getRateLimitedChains } from '$lib/services/rpc-pool';
-import { fetchTokens } from '$lib/services/wallet-api';
+import { fetchTokens, readFailedInsideApp } from '$lib/services/wallet-api';
 
 import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
@@ -111,12 +111,14 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 				// shape `useHomeController.ts:321-333` used, so a cache-served fetch
 				// (the callback never fires) still reports an empty set.
 				let failed: number[] = [];
+				let internal: number[] = [];
 				const tokens = await fetchTokens(operation.address, {
 					forceRefresh: operation.force,
 					onProgress: (partial) =>
 						stream.chainAssetsArrived(operation.address, partial.map(toBalanceToken)),
-					onFailedChains: (ids) => {
+					onFailedChains: (ids, insideApp) => {
 						failed = ids;
+						internal = insideApp;
 					}
 				});
 				stream.roundEnded?.(operation.address);
@@ -131,6 +133,11 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 					// `fetchAllChainTokens` walks — so one that answered holding
 					// nothing is "nothing when last read", not "not read yet".
 					read_chain_ids: getAllNetworksSync().map((net) => net.chainId),
+					// PR 2 note 11 (issue 483): the failed chains whose read never
+					// left the app — a request pool that faulted or never booted, a
+					// read this code threw on — which home says as Vela's own fault
+					// (`BalanceView.internal_key`), never "Can't reach Ethereum".
+					internal_chain_ids: internal,
 					now_ms: Date.now()
 				};
 			}
@@ -178,14 +185,21 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 	}
 
 	function toFailure(effect: BalanceEffect, error: unknown): BalanceShellResult {
-		void error; // classification is the core's; the twin answers by operation
 		const operation = effect.operation;
 		switch (operation.type) {
 			case 'fetch_tokens':
 				// `catch { /* keep last-known tokens + total */ }` — the skeleton
 				// closes, nothing else moves (`useHomeController.ts:367-369`).
+				// What the core is told is only WHERE it failed (PR 2 note 11):
+				// the whole fetch threw inside the app — nothing the network did —
+				// or a read that did leave it.
 				stream.roundEnded?.(operation.address);
-				return { type: 'fetch_errored', address: operation.address, pull: operation.pull };
+				return {
+					type: 'fetch_errored',
+					address: operation.address,
+					pull: operation.pull,
+					internal: readFailedInsideApp(error)
+				};
 			case 'fetch_account_assets':
 				// Per-account best effort: the row keeps its cached value
 				// (`useHomeController.ts:463`).

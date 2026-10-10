@@ -341,6 +341,7 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
                 Ok(status) => ShellResult::RegistryKeyStatus {
                     registered: status.registered,
                     unit_ids: status.unit_ids,
+                    verified_by: status.verified_by,
                 },
                 Err(error) => index_failed(error),
             }

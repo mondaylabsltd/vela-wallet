@@ -17,6 +17,18 @@
 //  allowlist and its tokens stay unverified. That is the safe direction, and
 //  it is why a failed fetch here is silence rather than an invented list.
 //
+//  ## Three outcomes, not two (PR 2 polish)
+//
+//  The document is `doc` (a 2xx, parsed), `absent` (a server that answered
+//  404 — there is no such document) or `unread` (no answer, a timeout, a 5xx,
+//  a 429 or any other non-2xx, or a body that is not one). The first two are
+//  facts and are kept for the TTL; `unread` is not, and is never cached — the
+//  next read asks again. The balance read needs the difference: on a chain
+//  with no native coin (Tempo) the registry's stablecoins are everything there
+//  is to read, so an unread document is a chain NOT READ, never one that
+//  answered holding nothing (`BalanceExecutor`). Other callers (token trust)
+//  take both misses as "no facts".
+//
 //  The DEX half of this file's web original is not ported — the quote path is
 //  deferred (see `Prices`), and copying a router table nothing calls would be
 //  configuration nobody maintains.
@@ -37,32 +49,100 @@ final class ChainTokens {
         var stableRefs: [(symbol: String, contract: String)] = []
     }
 
+    /// One chain's registry document, as the fetch found it.
+    enum Document {
+        /// A 2xx with a JSON object body: the chain's facts.
+        case doc(Facts)
+        /// The server answered 404: there is no document for this chain — a
+        /// definitive answer, kept like a document.
+        case absent
+        /// Nothing definitive: no answer, a timeout, a 5xx, a 429 or any other
+        /// non-2xx, or a body that is not a JSON object. Never cached.
+        case unread
+
+        /// The facts, or `nil` for both misses — the "no facts" every caller
+        /// but the balance read wants.
+        var facts: Facts? {
+            if case .doc(let facts) = self { return facts }
+            return nil
+        }
+
+        var isUnread: Bool {
+            if case .unread = self { return true }
+            return false
+        }
+    }
+
     /// The registry is master data that changes on the order of weeks.
     private static let ttlMs: Double = 30 * 60 * 1000
 
-    private let accounts: AccountStore
-    private var cache: [Int: (facts: Facts, atMs: Double)] = [:]
+    /// The registry's base URL — the person's `ethereumDataURL`, else the default.
+    ///
+    /// Both seams say `@MainActor` because this class, which is the main
+    /// actor's, is what calls them: an `async` function type with no isolation
+    /// of its own needs runtime metadata iOS 17 does not have (a call to NULL
+    /// there — `check-ios17-function-metadata.mjs`).
+    private let base: @MainActor () async -> String
+    /// One GET, classified (`CoreHTTP.getREST`): the seam a test answers.
+    private let fetch: @MainActor (String) async -> CoreHTTP.RestAnswer
+    private let now: () -> Double
+    /// Only `doc` and `absent` live here; `unread` is never kept.
+    private var cache: [Int: (document: Document, atMs: Double)] = [:]
 
-    init(accounts: AccountStore) {
-        self.accounts = accounts
+    convenience init(accounts: AccountStore) {
+        self.init(
+            base: {
+                let endpoints = await accounts.loadServiceEndpoints()
+                return (endpoints["ethereumDataURL"] as? String)
+                    .flatMap { $0.isEmpty ? nil : $0 } ?? NetDefaults.ethereumDataURL
+            },
+            fetch: { url in await CoreHTTP.getREST(url, timeout: CoreHTTP.Timeout.ethereumData) }
+        )
     }
 
-    /// One chain's registry facts, or `nil` when the registry could not be
-    /// reached — which the caller must pass on as silence, never as an empty
-    /// allowlist.
+    init(
+        base: @escaping @MainActor () async -> String,
+        fetch: @escaping @MainActor (String) async -> CoreHTTP.RestAnswer,
+        now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 }
+    ) {
+        self.base = base
+        self.fetch = fetch
+        self.now = now
+    }
+
+    /// One chain's registry facts, or `nil` when there are none to be had —
+    /// no document, or one that could not be read — which the caller must
+    /// pass on as silence, never as an empty allowlist.
     func facts(chainId: Int) async -> Facts? {
-        let now = Date().timeIntervalSince1970 * 1000
-        if let cached = cache[chainId], now - cached.atMs < Self.ttlMs { return cached.facts }
+        await document(chainId: chainId).facts
+    }
 
-        let endpoints = await accounts.loadServiceEndpoints()
-        let base = (endpoints["ethereumDataURL"] as? String)
-            .flatMap { $0.isEmpty ? nil : $0 } ?? NetDefaults.ethereumDataURL
-        let body = await CoreHTTP.getJSON(
-            "\(base)/chains/eip155-\(chainId).json",
-            timeout: CoreHTTP.Timeout.ethereumData
-        )
-        guard let object = body as? [String: Any] else { return nil }
+    /// One chain's registry document: `doc`, `absent` or `unread`.
+    func document(chainId: Int) async -> Document {
+        let at = now()
+        if let cached = cache[chainId], at - cached.atMs < Self.ttlMs { return cached.document }
+        let url = "\(await base())/chains/eip155-\(chainId).json"
+        let document = Self.classify(await fetch(url))
+        // A miss that proves nothing is asked again next time.
+        if !document.isUnread { cache[chainId] = (document, at) }
+        return document
+    }
 
+    /// The fetch's answer as a document. Only a server's 404 is `absent`; a
+    /// 2xx whose body is not a JSON object is `unread`, like any other answer
+    /// that could not be read.
+    static func classify(_ answer: CoreHTTP.RestAnswer) -> Document {
+        switch answer {
+        case .ok(let object):
+            return .doc(facts(object))
+        case .status(404):
+            return .absent
+        case .status, .failed:
+            return .unread
+        }
+    }
+
+    private static func facts(_ object: [String: Any]) -> Facts {
         let rows = object["stables"] as? [[String: Any]] ?? []
         let stables = rows.compactMap {
             ($0["contract"] as? String).flatMap { $0.isEmpty ? nil : $0 }
@@ -72,8 +152,6 @@ final class ChainTokens {
             return (row["symbol"] as? String ?? "", contract)
         }
         let wrapped = (object["wrappedNativeToken"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        let facts = Facts(stables: stables, wrappedNative: wrapped, stableRefs: refs)
-        cache[chainId] = (facts, now)
-        return facts
+        return Facts(stables: stables, wrappedNative: wrapped, stableRefs: refs)
     }
 }

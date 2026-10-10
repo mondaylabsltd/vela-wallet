@@ -146,6 +146,16 @@ enum I18nKeys {
         static let recoverCancel = "onboarding.login.recoverCancel"
         static let recoverFailedTitle = "onboarding.login.recoverFailedTitle"
         static let recoverFailedBody = "onboarding.login.recoverFailedBody"
+        /// PR 2: the registry could not be asked which wallet this passkey
+        /// opens — a free retry from the signature already made, no new
+        /// passkey (`registry_unreachable { local: false }`).
+        static let registryUnreachableTitle = "onboarding.login.registryUnreachableTitle"
+        static let registryUnreachableBody = "onboarding.login.registryUnreachableBody"
+        /// The same prompt when no lookup left the device (`local: true`).
+        static let networkTitle = "onboarding.common.networkTitle"
+        static let networkBody = "onboarding.common.networkBody"
+        static let tryAgain = "common.tryAgain"
+        static let cancel = "common.cancel"
         // The which-wallet picker for the app-owned CTAP path, shared with the desktop.
         static let pickTitle = "onboarding.login.pickTitle"
         static let pickBody = "onboarding.login.pickBody"
@@ -177,6 +187,51 @@ enum I18nKeys {
         /// Issue #459: leaving the phone's code, or "look at your phone" — the
         /// shared word, as the desktop's card says it.
         static let cancel = "common.cancel"
+    }
+
+    /// PR 2 (the integration's core round): sentences the cores hand over by
+    /// key — the fee's failure (`FeeView.failure`: its reason, figure and the
+    /// line under the held confirm), Continue's estimate by its cause
+    /// (`sendEstimateFailureBodyKey`), the home's internal fault
+    /// (`BalanceView.internal_key`) and a refusal's reason on the signing
+    /// sheet (`SignView.failure_refusal_key`). No surface spells them; they
+    /// are listed so a key the corpus loses is a failed coverage test, not a
+    /// key path drawn at a person.
+    enum CoreRound {
+        static let feeRetrying = "componentsUi.signing.confirmBlock.feeRetrying"
+        static let feeFailed = "componentsUi.signing.confirmBlock.feeFailed"
+        static let estimateFailed = "componentsUi.gas.estimateFailed"
+        static let reasonChainDown = "componentsUi.gas.reasonChainDown"
+        static let reasonInternal = "componentsUi.gas.reasonInternal"
+        static let alertEstimateFailedTitle = "send.alertEstimateFailedTitle"
+        static let alertEstimateFailedBody = "send.alertEstimateFailedBody"
+        static let alertEstimateChainDownBody = "send.alertEstimateChainDownBody"
+        static let previousPending = "componentsUi.signing.confirmBlock.previousPending"
+        static let refused = "componentsUi.signing.refused"
+        static let wentFirst = "componentsUi.signing.wentFirst"
+        static let rejectedFees = "send.txRejectedFees"
+        /// The home's line over a balance nothing could be read for
+        /// (`BalanceView.unreachable`, no `internal_key`) — Android's and the
+        /// web's own words for it.
+        static let balanceUnreachable = "onboarding.common.networkBody"
+        /// PR 2 polish: a submit the relay turned back on the previous
+        /// transaction's nonce — "Not sent yet" over its sentence, on the
+        /// signing sheet (`SignView.failure_not_sent`) and Send's confirm
+        /// (`tx_error` `previous_pending`), calmly.
+        static let notSentTitle = "componentsUi.signing.notSentTitle"
+        static let notSentBody = "componentsUi.signing.notSentBody"
+        /// A fee that would fail: the row's figure when a tap opens the coins
+        /// (`FeeFailureView.tap` `choose_coin`), and the line under the held
+        /// confirm, a fact asking for no tap.
+        static let payWithAnotherCoin = "componentsUi.gas.payWithAnotherCoin"
+        static let feeWouldFail = "componentsUi.signing.confirmBlock.feeWouldFail"
+
+        static let all = [
+            feeRetrying, feeFailed, estimateFailed, reasonChainDown, reasonInternal,
+            alertEstimateFailedTitle, alertEstimateFailedBody, alertEstimateChainDownBody,
+            previousPending, refused, wentFirst, rejectedFees, balanceUnreachable,
+            notSentTitle, notSentBody, payWithAnotherCoin, feeWouldFail,
+        ]
     }
 
     /// Spec 088 FR-004: a page another app asked to open — the host is data,
@@ -235,13 +290,15 @@ enum I18nKeys {
         Login.recoverOfferTitle, Login.recoverOfferBody,
         Login.recoverConfirm, Login.recoverCancel,
         Login.recoverFailedTitle, Login.recoverFailedBody,
+        Login.registryUnreachableTitle, Login.registryUnreachableBody,
+        Login.networkTitle, Login.networkBody, Login.tryAgain, Login.cancel,
         Flow.back, Flow.retry, Flow.close, Flow.copyAddress, Flow.copied,
         Flow.confirmInPrompt, Flow.editIndexEndpoint,
         Flow.notDiscoverableTitle, Flow.notDiscoverableBody, Flow.phoneLinkFailed,
         Flow.insertKeyTitle, Flow.insertKeyBody, Flow.keyUnavailableTitle, Flow.keyUnavailableBody,
         Settings.sectionPasskeyIndex, Settings.endpointUrlLabel, Settings.passkeyHint,
         Settings.resetToDefault, Settings.warningText,
-    ]
+    ] + CoreRound.all
 
     /// The settings SCREEN (spec 023) — distinct from `Settings` below, which
     /// is the onboarding flow's own `onboarding.settings.*` endpoint surface.

@@ -675,7 +675,9 @@ mod tests {
             // The three snapshots the balance fetch normally supplies.
             held_chains(GOLDEN, vec![100]);
             held_tokens(GOLDEN, 100, Vec::new());
-            let data = crate::executor::chain_tokens::fetch(100)
+            let data = crate::executor::chain_tokens::fetch_doc(100)
+                .data()
+                .cloned()
                 .unwrap_or_else(|| unreachable!("no chain index"));
             registry_tokens(
                 100,
@@ -741,7 +743,9 @@ mod tests {
 
             held_chains(BUSY, vec![100]);
             held_tokens(BUSY, 100, Vec::new());
-            let data = crate::executor::chain_tokens::fetch(100)
+            let data = crate::executor::chain_tokens::fetch_doc(100)
+                .data()
+                .cloned()
                 .unwrap_or_else(|| unreachable!("no chain index"));
             registry_tokens(
                 100,

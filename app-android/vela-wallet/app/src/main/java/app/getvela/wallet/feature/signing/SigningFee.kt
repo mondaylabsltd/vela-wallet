@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -130,6 +131,9 @@ private fun SigningFeeBody(
                             VelaIcons.ChevronRight, null, tint = colors.fgMuted,
                             modifier = Modifier.size(VelaIconSize.sm),
                         )
+                    } else if (fee.chevronRoom) {
+                        // Its room, unmarked: the figure stays where it was.
+                        Spacer(modifier = Modifier.size(VelaIconSize.sm))
                     }
                     fee.refreshLabel?.let { label ->
                         app.getvela.wallet.feature.flows.components.FeeRefreshButton(label = label, refreshing = fee.refreshing, onRefresh = onRefresh)

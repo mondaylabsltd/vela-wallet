@@ -4,6 +4,7 @@ import app.getvela.wallet.core.net.VelaHttp
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 
@@ -24,6 +25,28 @@ data class ChainInfo(
 )
 
 /**
+ * A chain's registry document, as one read of it came back — three outcomes,
+ * never two (PR 2 polish). "No such document" and "no answer" are different
+ * facts: a chain with no native coin (Tempo) whose document could not be read
+ * was NOT read, and saying it "answered, holds nothing" put $0.00 on a home
+ * over money nobody could see.
+ */
+sealed interface ChainDoc {
+    /** A 2xx, parsed. */
+    data class Doc(val info: ChainInfo) : ChainDoc
+
+    /** HTTP 404 from a server that answered: definitively no such document. */
+    data object Absent : ChainDoc
+
+    /**
+     * No answer to go on: the network failed, the read timed out, the server
+     * said 5xx, 429 or any other non-2xx, the body could not be read — or
+     * there was no endpoint to ask yet. Never cached.
+     */
+    data object Unread : ChainDoc
+}
+
+/**
  * What a chain holds, fetched.
  *
  * Port of `app-web/vela-wallet/src/lib/services/chain-tokens.ts`.
@@ -33,48 +56,76 @@ data class ChainInfo(
  * does. The endpoint is whatever the `network_admin` machine says it is, so a
  * person who points the app at their own service is honoured here too.
  *
- * **Everything here degrades to null.** A chain whose document cannot be
- * fetched simply has no stables and no DEX: its native balance still reads and
- * still shows, unpriced. Nothing invents a token list.
+ * **A missing document degrades; an unread one is said as unread.** A chain
+ * whose document does not exist simply has no stables and no DEX: its native
+ * balance still reads and still shows, unpriced. Nothing invents a token
+ * list. A document that could not be READ ([ChainDoc.Unread]) is not cached,
+ * so the next round asks again, and the balance read decides what it means
+ * for a chain that has nothing else to read ([read]).
  */
-class ChainData(private val endpoint: () -> String) {
+class ChainData(
+    private val endpoint: () -> String,
+    /** The HTTP client; a test hands one whose answers it chooses. */
+    private val http: () -> OkHttpClient = { VelaHttp.client },
+) {
 
-    private val cache = HashMap<Int, Pair<ChainInfo, Long>>()
+    private val cache = HashMap<Int, Pair<ChainDoc, Long>>()
     private val lock = Any()
 
-    /** The chain's document, or `null` if it cannot be had. Cached for 30 minutes. */
-    suspend fun forChain(chainId: Int): ChainInfo? {
+    /**
+     * The chain's document, classified: [ChainDoc.Doc] and [ChainDoc.Absent]
+     * are cached for 30 minutes, [ChainDoc.Unread] never — an answer that
+     * never came is asked for again next time.
+     */
+    suspend fun read(chainId: Int): ChainDoc {
         synchronized(lock) {
-            cache[chainId]?.let { (data, at) ->
-                if (System.currentTimeMillis() - at < CACHE_TTL_MS) return data
+            cache[chainId]?.let { (doc, at) ->
+                if (System.currentTimeMillis() - at < CACHE_TTL_MS) return doc
             }
         }
 
         val base = endpoint().trimEnd('/')
-        if (base.isEmpty()) return null
-        val parsed = fetch("$base/chains/eip155-$chainId.json", chainId) ?: return null
-
-        synchronized(lock) { cache[chainId] = parsed to System.currentTimeMillis() }
-        return parsed
+        // No endpoint yet (the network list not loaded): nothing was asked.
+        if (base.isEmpty()) return ChainDoc.Unread
+        val doc = fetch("$base/chains/eip155-$chainId.json", chainId)
+        if (doc != ChainDoc.Unread) {
+            synchronized(lock) { cache[chainId] = doc to System.currentTimeMillis() }
+        }
+        return doc
     }
+
+    /**
+     * The chain's document, or `null` when there is none to be had — for the
+     * callers to whom "absent" and "unread" both mean "no facts" (the trust
+     * machine's registry snapshot).
+     */
+    suspend fun forChain(chainId: Int): ChainInfo? = (read(chainId) as? ChainDoc.Doc)?.info
 
     /** Forget everything — for a person who has just changed the endpoint. */
     fun clear() {
         synchronized(lock) { cache.clear() }
     }
 
-    private suspend fun fetch(url: String, chainId: Int): ChainInfo? = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url).get().build()
-        val client = VelaHttp.client.newBuilder()
+    private suspend fun fetch(url: String, chainId: Int): ChainDoc = withContext(Dispatchers.IO) {
+        val request = runCatching { Request.Builder().url(url).get().build() }.getOrNull()
+            ?: return@withContext ChainDoc.Unread
+        val client = http().newBuilder()
             .callTimeout(TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .build()
         runCatching {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
-                val body = response.body?.string() ?: return@use null
-                parse(JSONObject(body), chainId)
+                when {
+                    response.isSuccessful -> {
+                        val body = response.body?.string() ?: return@use ChainDoc.Unread
+                        ChainDoc.Doc(parse(JSONObject(body), chainId))
+                    }
+                    // The server answered, and there is no such document.
+                    response.code == HTTP_NOT_FOUND -> ChainDoc.Absent
+                    // 5xx, 429, a redirect this client does not follow, any other answer: not read.
+                    else -> ChainDoc.Unread
+                }
             }
-        }.getOrNull()
+        }.getOrElse { ChainDoc.Unread }
     }
 
     /**
@@ -131,6 +182,7 @@ class ChainData(private val endpoint: () -> String) {
     companion object {
         private const val CACHE_TTL_MS = 30L * 60 * 1000
         private const val TIMEOUT_MS = 8_000L
+        private const val HTTP_NOT_FOUND = 404
 
         /**
          * The preferred quote token: native USDC, then any USDC, then USDT,

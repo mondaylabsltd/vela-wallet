@@ -4168,6 +4168,30 @@ export function identiconSvgCircular(seed) {
 }
 
 /**
+ * Every operation in flight on this device: the tracker's view (JSON) in, an
+ * `InFlightOp` JSON array out. Forward it on every tracker render to the send
+ * and signing machines (`InFlightOps`). An op is held until it is final or
+ * has made no progress for ten minutes (the view's `stalled`). See
+ * `vela_core::app::tx_tracker`.
+ * @param {string} track_view_json
+ * @returns {string}
+ */
+export function inFlightOps(track_view_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(track_view_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.inFlightOps(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {Uint8Array}
  */
@@ -4774,6 +4798,30 @@ export function safeProxyRuntimeCode() {
         deferred2_0 = ptr1;
         deferred2_1 = len1;
         return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * The corpus key of the body of the alert a failed Continue estimate shows
+ * (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+ * its name (`{{chain}}`), a fault inside the app as that, else the general
+ * sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+ * JSON; anything unreadable reads as the general sentence.
+ * @param {string} failure
+ * @returns {string}
+ */
+export function sendEstimateFailureBodyKey(failure) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(failure, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.sendEstimateFailureBodyKey(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }

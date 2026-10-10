@@ -968,6 +968,15 @@ export function identiconSvg(seed: string): string;
  */
 export function identiconSvgCircular(seed: string): string;
 
+/**
+ * Every operation in flight on this device: the tracker's view (JSON) in, an
+ * `InFlightOp` JSON array out. Forward it on every tracker render to the send
+ * and signing machines (`InFlightOps`). An op is held until it is final or
+ * has made no progress for ten minutes (the view's `stalled`). See
+ * `vela_core::app::tx_tracker`.
+ */
+export function inFlightOps(track_view_json: string): string;
+
 export function keccak256(data: Uint8Array): Uint8Array;
 
 /**
@@ -1169,6 +1178,15 @@ export function rpcCooldownMs(consecutive_failures: number): number;
 export function rpcReadTimeoutMs(): number;
 
 export function safeProxyRuntimeCode(): string;
+
+/**
+ * The corpus key of the body of the alert a failed Continue estimate shows
+ * (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+ * its name (`{{chain}}`), a fault inside the app as that, else the general
+ * sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+ * JSON; anything unreadable reads as the general sentence.
+ */
+export function sendEstimateFailureBodyKey(failure: string): string;
 
 export function sha256(data: Uint8Array): Uint8Array;
 
@@ -1721,6 +1739,7 @@ export interface InitOutput {
     readonly identiconParams: (a: number, b: number) => [number, number, number];
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
+    readonly inFlightOps: (a: number, b: number) => [number, number];
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];
@@ -1773,6 +1792,7 @@ export interface InitOutput {
     readonly rpcpoolcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly rpcpoolcore_view: (a: number) => [number, number, number, number];
     readonly safeProxyRuntimeCode: () => [number, number, number, number];
+    readonly sendEstimateFailureBodyKey: (a: number, b: number) => [number, number];
     readonly sendcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly sendcore_new: () => number;
     readonly sendcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

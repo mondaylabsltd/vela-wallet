@@ -167,6 +167,8 @@ struct RegistryResolverTests {
         let status = try await client.queryByPublicKey(key)
         #expect(status.registered)
         #expect(status.unitIds == [12, 10, 8])
+        // PR 2: who vouched travels to the core untouched — Gnosis here.
+        #expect(status.verifiedBy == "gnosis")
 
         let unit = try await client.queryUnit(10)
         #expect(unit.members.count == 3)
@@ -179,7 +181,11 @@ struct RegistryResolverTests {
     @Test func gnosisSilentToo_ethereumAnswersUnderItsOwnUnitIds() async throws {
         let asked = Asked()
         let client = unreachable(resolver(down: [100], asked: asked))
-        #expect(try await client.queryByPublicKey(key).unitIds == [0])
+        let status = try await client.queryByPublicKey(key)
+        #expect(status.unitIds == [0])
+        // Ethereum's backup answered: never Gnosis's verdict, so never a
+        // rebuild offer.
+        #expect(status.verifiedBy == "ethereum")
 
         asked.clear()
         let unit = try await client.queryUnit(0)
@@ -200,5 +206,26 @@ struct RegistryResolverTests {
         }
         // And with no resolver at all the client is exactly what it was.
         await #expect(throws: RegistryFailure.self) { try await unreachable(nil).queryByPublicKey(key) }
+    }
+
+    /// PR 2: an index "nothing" with no chain to check it stands as the
+    /// index's word — vouched for by nobody (`none`), which the core reads as
+    /// "no verdict": no rebuild, no one-key wallet. A Gnosis-checked
+    /// listing says `gnosis`; the index-only REST path (no resolver) `none`.
+    @Test func whoVouchedForAKeyListingReachesTheCore() async throws {
+        let nothing = #"{"entry":null,"groups":{"total":0,"unitIds":[]}}"#
+        let unchecked = try await served(IndexScript(listing: nothing, unit: nil), resolver(down: [100, 1]))
+            .queryByPublicKey(key)
+        #expect(!unchecked.registered)
+        #expect(unchecked.verifiedBy == "none")
+        let checked = try await served(IndexScript(listing: nothing, unit: nil), resolver())
+            .queryByPublicKey(key)
+        #expect(checked.unitIds == [12, 10, 8])
+        #expect(checked.verifiedBy == "gnosis")
+        let legacy = try await RegistryClient(
+            baseURL: "https://index.test", resolver: nil,
+            transport: IndexScript(listing: Self.listing, unit: nil).transport
+        ).queryByPublicKey(key)
+        #expect(legacy.verifiedBy == "none")
     }
 }

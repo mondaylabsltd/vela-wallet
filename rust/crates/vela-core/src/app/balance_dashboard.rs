@@ -716,6 +716,14 @@ pub enum BalanceShellResult {
         /// then only a chain with tokens counts as having answered.
         #[serde(default)]
         read_chain_ids: Vec<u32>,
+        /// The failed chains whose read never left the app (PR 2 note 11,
+        /// issue 483): a fault inside Vela — a request pool nobody started, a
+        /// request the app could not build — not the network. A subset of
+        /// `failed_chain_ids`, as `rate_limited_chain_ids` is: the total stays
+        /// honest about what did not answer, and none of them is ever said as
+        /// "can't reach" ([`BalanceView::internal_key`]).
+        #[serde(default)]
+        internal_chain_ids: Vec<u32>,
         now_ms: f64,
     },
     /// The fetch itself threw (`useHomeController.ts:367`) — keep last-known
@@ -723,6 +731,10 @@ pub enum BalanceShellResult {
     FetchErrored {
         address: String,
         pull: bool,
+        /// It threw inside the app before anything left it (PR 2 note 11):
+        /// said as Vela's own fault, never "can't reach".
+        #[serde(default)]
+        internal: bool,
     },
     /// A switcher row's assets; `None` = per-account best-effort failure
     /// (`useHomeController.ts:457-463`) — the row keeps its cached value.
@@ -853,6 +865,10 @@ pub struct Model {
     /// NOT cleared on account change — ported verbatim (the reset effect at
     /// `useHomeController.ts:399-416` never touches it).
     rate_limited_chain_ids: Vec<u32>,
+    /// [`BalanceShellResult::FetchSettled`]'s `internal_chain_ids`.
+    internal_chain_ids: Vec<u32>,
+    /// The last round threw inside the app ([`BalanceShellResult::FetchErrored`]).
+    errored_internally: bool,
     /// Per chain, what it held the last time it answered for this account
     /// (spec 092) — empty for one that answered holding nothing. A chain
     /// missing here has not been read since the account opened.
@@ -930,7 +946,15 @@ pub enum BalanceNotice {
 pub struct BalanceSwitcherView {
     pub open: bool,
     pub loading: bool,
+    /// Every account's figure — EMPTY while the balance is hidden: the
+    /// switcher's rows and its total are money, and they are withheld here,
+    /// not masked downstream ([`super::privacy`]). The figures are kept and
+    /// come back the moment privacy is turned off.
     pub balances: Vec<BalanceCacheEntry>,
+    /// The balance is hidden: every row and the total draw the mask. Without
+    /// it an empty `balances` would read as "still loading".
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 /// What the wallet last knew about a network it cannot reach now (spec 092).
@@ -969,18 +993,25 @@ pub struct BalanceView {
     /// The ONE number the hero may render, in USD (the display-currency
     /// machine owns conversion). `None` while the skeleton shows — never a
     /// fake $0 (invariant ②) — AND while privacy hides: the fiat value is
-    /// withheld by construction, not masked downstream (invariant ⑧).
+    /// withheld by construction, not masked downstream (invariant ⑧) — AND
+    /// while [`Self::unreachable`]: nothing was read, so there is no figure.
     pub display_total_usd: Option<f64>,
     pub balance_unknown: bool,
     pub balance_partial: bool,
-    /// Nothing could be read and nothing is known: the first fetch failed
-    /// with no cache to fall back on. A skeleton and a reason, never a zero.
+    /// Nothing could be read and nothing is known: the first fetch failed —
+    /// or settled with every chain it asked failed — with no cache to fall
+    /// back on. A skeleton and a reason, never a zero.
     pub unreachable: bool,
     /// `Some` only when partial AND the silent retries are exhausted
     /// (invariant ③).
     pub notice: Option<BalanceNotice>,
-    /// Every money surface (feed amounts, holdings, switcher, receipt toast)
-    /// masks on this together — a leak in one defeats the mask everywhere.
+    /// Balance privacy is on. Every money surface masks on this together — a
+    /// leak in one defeats the mask everywhere. The rule, and the surfaces
+    /// that stay visible on purpose (Send, the signing sheet, Receive), are
+    /// [`super::privacy`]'s. While it holds, this view WITHHOLDS the hero's
+    /// figure, `cached_total_usd`, the switcher's figures and an unreachable
+    /// network's last-seen worth; `tokens` keep their amounts, because Send
+    /// draws from them — the holdings, Assets and detail surfaces mask them.
     pub hidden: bool,
     /// A refresh the PERSON asked for is out: true from the dispatch of
     /// `RefreshRequested { pull: true }` (the pull gesture, the hero's
@@ -1011,8 +1042,22 @@ pub struct BalanceView {
     /// (`{{name}}` = the one network) or [`UNREACHABLE_MANY`] (`{{n}}` = how many);
     /// `None` when every network answered.
     pub unreachable_key: Option<String>,
+    /// The failed chains whose read never left the app (PR 2 note 11) — not
+    /// in `unreachable_networks`: nothing there is the network's doing.
+    #[serde(default)]
+    pub internal_chain_ids: Vec<u32>,
+    /// The home line when the last read failed inside Vela itself
+    /// (`fee_policy::REASON_INTERNAL_KEY`, the fee's own sentence for the same
+    /// fault): drawn where the unreachable line goes, and in place of any
+    /// "can't reach" a chain-down would say — an internal fault never reads
+    /// "Can't reach Ethereum" (issue 483). `None` otherwise.
+    #[serde(default)]
+    pub internal_key: Option<String>,
     /// `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
     pub holdings_loading: bool,
+    /// The last total this account settled on, painted under a skeleton
+    /// until the live one lands. `None` while the balance is hidden — a
+    /// figure, withheld like the hero's.
     pub cached_total_usd: Option<f64>,
     pub switcher: BalanceSwitcherView,
 }
@@ -1149,18 +1194,23 @@ impl App for BalanceDashboard {
             .filter(|t| !t.spam && token_balance_double(&t.balance) > 0.0 && t.price_usd.is_none())
             .cloned()
             .collect();
+        // Nothing could be read and nothing is known (spec 038 finding 15).
+        let unreachable =
+            model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none();
         BalanceView {
             address: model.address.clone(),
-            display_total_usd: if model.hidden || unknown {
+            // No figure while nothing is known: the skeleton, privacy — and a
+            // round that read nothing (PR 2 polish). `unreachable` is "a
+            // skeleton and a reason, never a zero"; the figure says the same
+            // rather than a 0 every shell had to know to ignore.
+            display_total_usd: if model.hidden || unknown || unreachable {
                 None
             } else {
                 Some(total)
             },
             balance_unknown: unknown,
             balance_partial: partial,
-            unreachable: model.errored_without_data
-                && model.tokens.is_empty()
-                && model.cached_total.is_none(),
+            unreachable,
             notice,
             hidden: model.hidden,
             refreshing: model.pending_pulls > 0,
@@ -1171,12 +1221,26 @@ impl App for BalanceDashboard {
             rate_limited_chain_ids: model.rate_limited_chain_ids.clone(),
             unreachable_networks,
             unreachable_key,
+            internal_chain_ids: model.internal_chain_ids.clone(),
+            internal_key: (model.errored_internally || !model.internal_chain_ids.is_empty())
+                .then(|| super::fee_policy::REASON_INTERNAL_KEY.to_owned()),
             holdings_loading: model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0,
-            cached_total_usd: model.cached_total,
+            cached_total_usd: if model.hidden {
+                None
+            } else {
+                model.cached_total
+            },
             switcher: BalanceSwitcherView {
                 open: model.switcher_open,
                 loading: model.switcher_pending > 0,
-                balances: model.switcher_balances.clone(),
+                // The active row is pinned to the hero's figure at open —
+                // which, while hidden, is a figure the hero never showed.
+                balances: if model.hidden {
+                    Vec::new()
+                } else {
+                    model.switcher_balances.clone()
+                },
+                hidden: model.hidden,
             },
         }
     }
@@ -1198,6 +1262,8 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     // switch, ported verbatim.
     model.tokens.clear();
     model.failed_chain_ids.clear();
+    model.internal_chain_ids.clear();
+    model.errored_internally = false;
     model.last_read.clear();
     model.cached_total = None;
     model.bootstrapped = false;
@@ -1343,6 +1409,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             failed_chain_ids,
             rate_limited_chain_ids,
             read_chain_ids,
+            internal_chain_ids,
             now_ms,
         } => {
             if model.address.as_deref() != Some(address.as_str()) {
@@ -1361,13 +1428,25 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 .map(with_display_symbol)
                 .collect();
             sort_by_usd_desc(&mut live);
+            // Every chain this round asked failed — down, or a fault inside
+            // the app — and nothing is known: not a settled $0.00 under the
+            // reason, but nothing at all, as for a fetch that threw (spec 038
+            // finding 15; PR 2 integration: a faulted pool painted "$0.00" and
+            // "Deposit your first asset" under Vela's own error).
+            let nothing_answered = !read_chain_ids.is_empty()
+                && read_chain_ids
+                    .iter()
+                    .all(|id| failed_chain_ids.contains(id));
             remember_reads(model, &live, &failed_chain_ids, &read_chain_ids);
             model.tokens = live;
             model.failed_chain_ids = failed_chain_ids;
             model.last_refreshed_at_ms = Some(now_ms);
             model.rate_limited_chain_ids = rate_limited_chain_ids;
+            model.internal_chain_ids = internal_chain_ids;
+            model.errored_internally = false;
             model.fetch_in_flight = false;
-            model.errored_without_data = false;
+            model.errored_without_data =
+                nothing_answered && model.tokens.is_empty() && model.cached_total.is_none();
 
             let unpriced = has_unpriced(&model.tokens);
             let partial = !model.failed_chain_ids.is_empty() || unpriced;
@@ -1433,7 +1512,11 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             requests(model, operations)
         }
 
-        BalanceShellResult::FetchErrored { address, pull } => {
+        BalanceShellResult::FetchErrored {
+            address,
+            pull,
+            internal,
+        } => {
             if model.address.as_deref() != Some(address.as_str()) {
                 return Command::done();
             }
@@ -1444,6 +1527,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // `setBootstrapped(true)` (`:367-369`).
             model.bootstrapped = true;
             model.fetch_in_flight = false;
+            model.errored_internally = internal;
             // Nothing known at all: the home must say so rather than show a
             // settled-looking $0.00 (spec 038 finding 15).
             model.errored_without_data = model.tokens.is_empty() && model.cached_total.is_none();
@@ -1628,6 +1712,8 @@ fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
         .iter()
         .copied()
         .filter(|id| !model.rate_limited_chain_ids.contains(id))
+        // A fault inside the app is not the network's (PR 2 note 11).
+        .filter(|id| !model.internal_chain_ids.contains(id))
         .collect();
     let mut rows: Vec<(f64, UnreachableNetwork)> = chains
         .into_iter()

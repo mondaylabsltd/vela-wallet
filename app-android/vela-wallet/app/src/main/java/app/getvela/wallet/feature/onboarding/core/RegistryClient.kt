@@ -210,10 +210,15 @@ class RegistryClient(
     /** `/api/query?publicKey=` — is this key registered, and which groups does it found? */
     suspend fun queryByPublicKey(publicKeyHex: String): KeyStatus {
         val path = "/api/query?publicKey=${encode(publicKeyHex)}"
+        // Who vouched for the answer — the resolver's `Done.verified_by`,
+        // passed to the core untouched: only Gnosis's word can make "no
+        // record" a verdict the two-signature rebuild may act on. The index
+        // alone vouches for nothing (`none`).
+        var verifiedBy = VERIFIED_BY_NONE
         val profile = if (resolver == null) {
             get(path, READ_TIMEOUT_MS, "Query")
         } else {
-            resolve("Query", listing = true) { answers -> resolver.keyStep(publicKeyHex, answers) }
+            resolve("Query", listing = true, verified = { verifiedBy = it }) { answers -> resolver.keyStep(publicKeyHex, answers) }
         }
         val ids = profile.optJSONObject("groups")?.optJSONArray("unitIds")
         val unitIds = buildList {
@@ -231,7 +236,7 @@ class RegistryClient(
                 add(value)
             }
         }
-        return KeyStatus(registered = !profile.isNull("entry"), unitIds = unitIds)
+        return KeyStatus(registered = !profile.isNull("entry"), unitIds = unitIds, verifiedBy = verifiedBy)
     }
 
     private suspend fun readUnit(unitId: Long): JSONObject {
@@ -253,7 +258,13 @@ class RegistryClient(
      * Only a LISTING sets [unitSource]: a unit proved on Ethereum must not make
      * the index's (Gnosis) ids be asked of Ethereum.
      */
-    private suspend fun resolve(label: String, listing: Boolean, step: (String) -> String): JSONObject {
+    private suspend fun resolve(
+        label: String,
+        listing: Boolean,
+        /** The Done step's `verified_by`, as the resolver wrote it (`gnosis` / `ethereum` / `none`). */
+        verified: (String) -> Unit = {},
+        step: (String) -> String,
+    ): JSONObject {
         val resolver = resolver ?: error("no resolver")
         val answers = JSONArray()
         var indexFailure: RegistryFailure? = null
@@ -289,6 +300,7 @@ class RegistryClient(
                 VelaLog.event("registry", label, "index_discarded" to true, "source" to next.optString("source"))
             }
             if (listing) unitSource = next.optString("source", "index")
+            verified(next.optString("verified_by").ifBlank { VERIFIED_BY_NONE })
             VelaLog.event("registry", label, "source" to next.optString("source"), "verified_by" to next.optString("verified_by"))
             return JSONObject(next.getString("body"))
         }
@@ -533,7 +545,19 @@ data class GroupChallenge(
 
 data class RegisterAck(val id: String?, val status: String)
 
-data class KeyStatus(val registered: Boolean, val unitIds: List<Long>)
+data class KeyStatus(
+    val registered: Boolean,
+    val unitIds: List<Long>,
+    /**
+     * Who vouched for this answer (`registry_resolve::VerifiedBy`): `gnosis`,
+     * `ethereum` or `none`. Absent from the core's point of view reads `none`
+     * and fails closed — no rebuild on an answer nobody checked.
+     */
+    val verifiedBy: String = VERIFIED_BY_NONE,
+)
+
+/** `VerifiedBy::None`: nobody but the index vouched for the answer. */
+const val VERIFIED_BY_NONE = "none"
 
 data class UnitDetail(val metadataHex: String, val members: List<UnitMember>)
 

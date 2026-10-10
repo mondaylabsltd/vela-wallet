@@ -205,6 +205,14 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.recoverCancel',
 	'onboarding.login.recoverFailedTitle',
 	'onboarding.login.recoverFailedBody',
+	// The registry could not be asked which wallet a passkey opens: a free
+	// retry from the signature already made (`PromptKind::RegistryUnreachable`).
+	// A lookup that never left the device takes the network's two lines.
+	'onboarding.login.registryUnreachableTitle',
+	'onboarding.login.registryUnreachableBody',
+	'onboarding.common.networkTitle',
+	'common.tryAgain',
+	'common.cancel',
 	'onboarding.login.switchDeviceBtn',
 	'onboarding.login.statusCancelledTitle',
 	'onboarding.login.statusCancelledBody',

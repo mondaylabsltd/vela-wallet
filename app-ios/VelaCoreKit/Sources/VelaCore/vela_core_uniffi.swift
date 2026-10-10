@@ -10372,6 +10372,11 @@ public struct TrackStatusAnswer: Equatable, Hashable {
      * The bundle transaction the relay names, when it has one.
      */
     public var txHash: String?
+    /**
+     * Why the relay refused it (`rejection_reason`, relay contract §2) —
+     * the tracker's `Status.rejection_reason`, passed through as it is.
+     */
+    public var rejectionReason: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -10385,10 +10390,15 @@ public struct TrackStatusAnswer: Equatable, Hashable {
          */stage: String?, 
         /**
          * The bundle transaction the relay names, when it has one.
-         */txHash: String?) {
+         */txHash: String?, 
+        /**
+         * Why the relay refused it (`rejection_reason`, relay contract §2) —
+         * the tracker's `Status.rejection_reason`, passed through as it is.
+         */rejectionReason: String?) {
         self.status = status
         self.stage = stage
         self.txHash = txHash
+        self.rejectionReason = rejectionReason
     }
 
     
@@ -10409,7 +10419,8 @@ public struct FfiConverterTypeTrackStatusAnswer: FfiConverterRustBuffer {
             try TrackStatusAnswer(
                 status: FfiConverterString.read(from: &buf), 
                 stage: FfiConverterOptionString.read(from: &buf), 
-                txHash: FfiConverterOptionString.read(from: &buf)
+                txHash: FfiConverterOptionString.read(from: &buf), 
+                rejectionReason: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -10417,6 +10428,7 @@ public struct FfiConverterTypeTrackStatusAnswer: FfiConverterRustBuffer {
         FfiConverterString.write(value.status, into: &buf)
         FfiConverterOptionString.write(value.stage, into: &buf)
         FfiConverterOptionString.write(value.txHash, into: &buf)
+        FfiConverterOptionString.write(value.rejectionReason, into: &buf)
     }
 }
 
@@ -15349,6 +15361,26 @@ public func identiconSvgCircular(seed: String)throws  -> String  {
 })
 }
 /**
+ * Every operation in flight on this device — the tracker's view (JSON) in,
+ * an `InFlightOp` JSON array out (`[]` when the view does not read). Forward
+ * it on every tracker render to the send machine and the signing machine
+ * (`Event::InFlightOps`): a second transaction of an account on a chain
+ * where it already has one in flight waits for it (the confirm is held with
+ * `componentsUi.signing.confirmBlock.previousPending`) until it is final or
+ * has made no progress for ten minutes. Pass the core's view JSON as it
+ * came: the stall is a field of it (`stalled`), and a copy re-encoded from
+ * a shell type that lacks the field holds until final. See
+ * `vela_core::app::tx_tracker::in_flight_ops`.
+ */
+public func inFlightOps(trackViewJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_in_flight_ops(
+        FfiConverterString.lower(trackViewJson),uniffiCallStatus
+    )
+})
+}
+/**
  * `parseBundlerUnderfunded`: the relay saying the per-Safe gas account is short.
  */
 public func isBundlerUnderfunded(message: String) -> Bool  {
@@ -15853,6 +15885,22 @@ public func safeProxyRuntimeCode()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_safe_proxy_runtime_code(uniffiCallStatus
+    )
+})
+}
+/**
+ * The corpus key of the body of the alert a failed Continue estimate shows
+ * (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+ * its name (`{{chain}}`), a fault inside the app as that, else the general
+ * sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+ * JSON for one that carries data (`{"chain_read":{"rate_limited":false}}`);
+ * anything unreadable reads as the general sentence.
+ */
+public func sendEstimateFailureBodyKey(failure: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_send_estimate_failure_body_key(
+        FfiConverterString.lower(failure),uniffiCallStatus
     )
 })
 }
@@ -17535,6 +17583,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_identicon_svg_circular() != 30334) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_in_flight_ops() != 22851) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_is_bundler_underfunded() != 12173) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17641,6 +17692,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_safe_proxy_runtime_code() != 4363) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_send_estimate_failure_body_key() != 25888) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_send_receipt_outcome_of() != 57773) {

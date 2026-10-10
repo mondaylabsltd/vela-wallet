@@ -1,7 +1,16 @@
 package app.getvela.wallet.feature.send.core
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * The `send` machine's wire, transcribed from
@@ -85,23 +94,61 @@ sealed class SendAddNetworkMsg {
     data object NetAddError : SendAddNetworkMsg()
 }
 
-@Serializable
-enum class SendEstimateFailure {
-    @SerialName("missing_public_key") MissingPublicKey,
+/**
+ * Why Continue's estimate failed (PR 2 note 13): every [FeeFailure], in the
+ * fee machine's own wire shape and passed through as it is ([Fee]) — never
+ * mapped to a nearer word here — plus the send side's [Timeout] and [Other].
+ * The alert's body is the core's (`sendEstimateFailureBodyKey`), from [wire].
+ */
+@Serializable(with = SendEstimateFailure.WireSerializer::class)
+sealed class SendEstimateFailure {
+    /** What the core's `sendEstimateFailureBodyKey` takes: the wire name, or the whole JSON of one that carries data. */
+    abstract val wire: String
 
-    @SerialName("fee_token_unavailable") FeeTokenUnavailable,
+    /** The fee machine's failure, verbatim. */
+    data class Fee(val failure: FeeFailure) : SendEstimateFailure() {
+        override val wire: String get() = failure.wire
+    }
 
-    @SerialName("quote_unavailable") QuoteUnavailable,
+    /** The 15 s race lost. */
+    data object Timeout : SendEstimateFailure() { override val wire = TIMEOUT }
 
-    @SerialName("calculation_failed") CalculationFailed,
+    /** Nothing the fee machine said: the question was superseded, or no estimate came. */
+    data object Other : SendEstimateFailure() { override val wire = OTHER }
 
-    @SerialName("estimate_failed") EstimateFailed,
+    object WireSerializer : KSerializer<SendEstimateFailure> {
+        override val descriptor: SerialDescriptor = JsonElement.serializer().descriptor
 
-    @SerialName("gas_quote_too_high") GasQuoteTooHigh,
+        override fun deserialize(decoder: Decoder): SendEstimateFailure {
+            val json = decoder as? JsonDecoder ?: throw SerializationException("SendEstimateFailure crosses as JSON only")
+            val element = json.decodeJsonElement()
+            if (element is JsonPrimitive && element.isString) {
+                when (element.content) {
+                    TIMEOUT -> return Timeout
+                    OTHER -> return Other
+                }
+            }
+            // Anything else is a fee failure, in its own shape — or nothing this build knows (strict).
+            return Fee(json.json.decodeFromJsonElement(FeeFailure.WireSerializer, element))
+        }
 
-    @SerialName("timeout") Timeout,
+        override fun serialize(encoder: Encoder, value: SendEstimateFailure) {
+            val json = encoder as? JsonEncoder ?: throw SerializationException("SendEstimateFailure crosses as JSON only")
+            when (value) {
+                is Fee -> json.encodeSerializableValue(FeeFailure.WireSerializer, value.failure)
+                Timeout -> json.encodeJsonElement(JsonPrimitive(TIMEOUT))
+                Other -> json.encodeJsonElement(JsonPrimitive(OTHER))
+            }
+        }
+    }
 
-    @SerialName("other") Other,
+    companion object {
+        private const val TIMEOUT = "timeout"
+        private const val OTHER = "other"
+
+        /** The two words of the send side's own — what the drift test holds beside [FeeFailure.PLAIN]. */
+        val SEND_ONLY: List<String> = listOf(TIMEOUT, OTHER)
+    }
 }
 
 @Serializable
@@ -251,6 +298,17 @@ sealed class SendSubmitFailure {
     @Serializable
     @SerialName("venue_blocked")
     data class VenueBlocked(val block: app.getvela.wallet.feature.signing.trustedsigner.VenueBlock) : SendSubmitFailure()
+
+    /**
+     * Another operation of this account still holds the nonce on this chain
+     * (the relay's `nonce_in_flight`, or an older relay's `[existingHash:…]`
+     * marker — the core's `RelayRejection::NonceHeld`). Nothing of this one
+     * went out; the confirm screen says "waiting for your last transaction"
+     * with Try again.
+     */
+    @Serializable
+    @SerialName("previous_pending")
+    data object PreviousPending : SendSubmitFailure()
 }
 
 /** Present ⇔ in-band: the fee leg to sign EXACTLY as quoted (invariant ①). */
@@ -311,6 +369,13 @@ enum class SendTxErrorKey {
 
     /** Spec 102: this account cannot sign here; [SendView.tx_venue_block] says why. */
     @SerialName("venue_blocked") VenueBlocked,
+
+    /**
+     * The relay refused it because the account's previous transaction on this
+     * network still holds the nonce: `componentsUi.signing.confirmBlock.previousPending`,
+     * with Try again.
+     */
+    @SerialName("previous_pending") PreviousPending,
 }
 
 @Serializable
@@ -577,6 +642,12 @@ data class SendReceiptCoin(
 data class SendReceiptView(
     val status: SendReceiptStatus,
     val hold_reason: SendHoldReason? = null,
+    /**
+     * A refusal's sentence, as the core keys it — the fee words only for a fee
+     * refusal, `wentFirst` for a used nonce, else the plain "refused". Drawn
+     * for every refusal; `null` otherwise.
+     */
+    val refusal_key: String? = null,
     val kind: SendReceiptKind? = null,
     val transfers: List<SendReceiptTransfer> = emptyList(),
     /** Spec 097 F (S3): every coin the operation sent, in signing order — a split's one total, a sweep's each. */
@@ -600,6 +671,8 @@ sealed class SendReceiptOutcome {
         val rejected: Boolean,
         /** Spec 082: the tracker's `NotSent` — "not sent", never the fee-rejected words. */
         val not_sent: Boolean = false,
+        /** `rejected` only: the relay's reason, carried to the send machine whole (it keys the words). */
+        val refusal: RefusalReason? = null,
     ) : SendReceiptOutcome()
 
     @Serializable
@@ -715,6 +788,13 @@ data class SendView(
     /** Spec 098 §2: the relay cannot serve this chain; the send stops here. */
     val relay_unreachable: SendRelayUnreachable? = null,
     /**
+     * The account's previous transaction on this network is still in flight
+     * (`in_flight_ops`): `can_confirm` is false, and the one line [SendPreviousPending.key]
+     * sits under the held confirm — whatever `fee_busy` says. It opens by
+     * itself once that one is final or has stalled for ten minutes.
+     */
+    val previous_pending: SendPreviousPending? = null,
+    /**
      * Issue #466: what the stop's "Report this" files — set exactly while a
      * relay stop is up on a network Vela ships. Snapshot it at the tap: the
      * stop may close (funded) while the report is being read.
@@ -820,6 +900,8 @@ sealed class SendOperation {
         val submit_block: Long? = null,
         /** Spec 082 RJ1: the relay accepted the op the write-ahead hand-off announced. */
         val admitted: Boolean = false,
+        /** The account that signed it — forwarded to the tracker's `submitted` (`in_flight_ops`). */
+        val sender: String? = null,
     ) : SendOperation()
 
     /**
@@ -1135,6 +1217,17 @@ sealed class SendEvent {
     data class FeeBusyChanged(val busy: Boolean) : SendEvent()
 
     /**
+     * The fee card's `FeeView.failure` is set — a failure, or the core's own
+     * re-ask after one — or no longer is: the fee machine holds no figure
+     * then. While true the confirm is held, and on the confirm page the
+     * figure kept from Continue is dropped, so the row draws the failure.
+     * Sent beside [FeeBusyChanged] when it changes ([FeeFailedWord]).
+     */
+    @Serializable
+    @SerialName("fee_failed_changed")
+    data class FeeFailedChanged(val failed: Boolean) : SendEvent()
+
+    /**
      * The fee card's coin in force (`FeeView.fee_token`, verbatim; `null` =
      * the chain's own coin), sent beside [FeeBusyChanged] whenever it differs
      * from what this send session was last told. It names the fee row's coin
@@ -1186,6 +1279,16 @@ sealed class SendEvent {
     @SerialName("retry_after_error")
     data object RetryAfterError : SendEvent()
 
+    /**
+     * Every operation in flight on this device, as the tracker last said —
+     * `inFlightOps` of the tracker's own view JSON, forwarded on every tracker
+     * render and after every open (the machine forgets it on open, and
+     * dedupes an identical list).
+     */
+    @Serializable
+    @SerialName("in_flight_ops")
+    data class InFlightOps(val ops: List<InFlightOp> = emptyList()) : SendEvent()
+
     @Serializable
     @SerialName("receipt_update")
     data class ReceiptUpdate(val user_op_hash: String, val outcome: SendReceiptOutcome) : SendEvent()
@@ -1194,3 +1297,26 @@ sealed class SendEvent {
     @SerialName("done")
     data object Done : SendEvent()
 }
+
+/** [SendView.previous_pending]: the transaction this send waits for, and the line under the held confirm. */
+@Serializable
+data class SendPreviousPending(
+    val chain_id: Int,
+    val user_op_hash: String,
+    /** `componentsUi.signing.confirmBlock.previousPending`. */
+    val key: String,
+)
+
+/**
+ * An operation that holds its account's nonce on a chain (`tx_tracker::InFlightOp`):
+ * accepted by the relay, not final, still followed, not stalled. Read from
+ * the tracker by the core (`inFlightOps`), forwarded to the send and signing
+ * machines as it came.
+ */
+@Serializable
+data class InFlightOp(
+    /** The account, lower-cased. */
+    val sender: String,
+    val chain_id: Int,
+    val user_op_hash: String,
+)

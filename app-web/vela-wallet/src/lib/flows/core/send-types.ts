@@ -116,22 +116,23 @@ export interface SendShellPorts {
 
 /**
  * What the fee port answers: the send core's own outcome, or a failure in the
- * fee machine's words (`FeeFailure`). The two vocabularies differ by one
- * variant — `ChainRead` (spec 082 RJ13), a chain node that did not answer the
- * deployment read, which the send core has no word for; the executor maps it
- * (`toSendFeeOutcome`).
+ * fee machine's words (`FeeFailure`) — which the send core now reads as they
+ * are (PR 2 note 13: `SendEstimateFailure` is every `FeeFailure`, in the same
+ * wire shape, plus `timeout` and `other`).
  */
 export type SendFeeQuoteOutcome = SendFeeOutcome | { type: 'failed'; kind: FeeFailure };
 
 /**
- * The fee port's answer in the send core's vocabulary: a chain read that got
- * no answer (`ChainRead`) is, for the send form, a quote it could not get.
+ * The fee port's answer in the send core's vocabulary: verbatim (PR 2 note
+ * 13). A chain out of reach (`chain_read`), a fault inside Vela (`internal`)
+ * and an operation the relay says would revert (`would_fail`) reach the send
+ * core as themselves — it words Continue's alert by the cause
+ * (`sendEstimateFailureBodyKey`) — where this used to fold them into
+ * `quote_unavailable`, `other` and `estimate_failed`, and the alert said the
+ * generic sentence for a chain that was simply down.
  */
 export function toSendFeeOutcome(outcome: SendFeeQuoteOutcome): SendFeeOutcome {
-	if (outcome.type === 'failed' && typeof outcome.kind === 'object') {
-		return { type: 'failed', kind: 'quote_unavailable' };
-	}
-	return outcome as SendFeeOutcome;
+	return outcome;
 }
 
 /** What `EstimateFee` asks for, in the shell's own vocabulary. */

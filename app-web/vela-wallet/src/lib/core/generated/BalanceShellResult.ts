@@ -16,4 +16,18 @@ export type BalanceShellResult = { "type": "fetch_settled", address: string, pul
  * rather than "not read yet". Empty from a shell that does not say:
  * then only a chain with tokens counts as having answered.
  */
-read_chain_ids: Array<number>, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, } | { "type": "account_assets_fetched", address: string, tokens: Array<BalanceToken> | null, } | { "type": "cached_total_loaded", address: string, usd: number | null, } | { "type": "cached_balances_loaded", balances: Array<BalanceCacheEntry>, } | { "type": "balance_cache_written" } | { "type": "retry_elapsed", timer_id: number, } | { "type": "privacy_written" };
+read_chain_ids: Array<number>, 
+/**
+ * The failed chains whose read never left the app (PR 2 note 11,
+ * issue 483): a fault inside Vela — a request pool nobody started, a
+ * request the app could not build — not the network. A subset of
+ * `failed_chain_ids`, as `rate_limited_chain_ids` is: the total stays
+ * honest about what did not answer, and none of them is ever said as
+ * "can't reach" ([`BalanceView::internal_key`]).
+ */
+internal_chain_ids: Array<number>, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
+/**
+ * It threw inside the app before anything left it (PR 2 note 11):
+ * said as Vela's own fault, never "can't reach".
+ */
+internal: boolean, } | { "type": "account_assets_fetched", address: string, tokens: Array<BalanceToken> | null, } | { "type": "cached_total_loaded", address: string, usd: number | null, } | { "type": "cached_balances_loaded", balances: Array<BalanceCacheEntry>, } | { "type": "balance_cache_written" } | { "type": "retry_elapsed", timer_id: number, } | { "type": "privacy_written" };

@@ -14,6 +14,7 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 const seams = vi.hoisted(() => ({
 	invalidate: vi.fn(),
 	deployed: vi.fn(async (): Promise<boolean> => true),
+	load: vi.fn(async (): Promise<void> => {}),
 	dispatch: vi.fn(),
 	start: vi.fn(),
 	onView: null as ((view: unknown) => void) | null
@@ -23,12 +24,7 @@ vi.mock('$lib/services/safe-transaction', () => ({
 	invalidateFeeSignals: seams.invalidate,
 	accountIsDeployed: seams.deployed
 }));
-vi.mock('$lib/core/client', () => ({ loadCore: vi.fn(async () => {}) }));
-// The core's bound on a whole quote (`fee_policy::QUOTE_DEADLINE_MS`).
-vi.mock('$lib/core/kernels', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/kernels')>()),
-	feeQuoteDeadlineMs: () => 15_000
-}));
+vi.mock('$lib/core/client', () => ({ loadCore: seams.load }));
 vi.mock('./send-estimates', () => ({ resolveFee: () => null }));
 vi.mock('./fee-session', () => ({
 	createFeeSession: (options: { onView: (view: unknown) => void }) => {
@@ -68,6 +64,8 @@ beforeEach(() => {
 	seams.start.mockImplementation(() => seams.onView?.({ ...IDLE_FEE_VIEW, busy: true }));
 	seams.deployed.mockReset();
 	seams.deployed.mockResolvedValue(true);
+	seams.load.mockReset();
+	seams.load.mockResolvedValue(undefined);
 	seams.onView = null;
 });
 
@@ -83,36 +81,45 @@ describe('FeeQuote.requote — the refresh measures again (issue 212)', () => {
 		);
 	});
 
-	it('when the last ask never reached the core, it still drops them before asking again', async () => {
-		seams.deployed.mockRejectedValueOnce(new Error('eth_getCode indeterminate'));
+	it('when the core could not even be loaded, it is Vela’s fault, said, and asked again', async () => {
+		seams.load.mockRejectedValueOnce(new Error('wasm fetch failed'));
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const quote = new FeeQuote();
-		expect(await quote.requestQuote(REQUEST)).toEqual({ kind: 'context_unavailable' });
+		expect(await quote.requestQuote(REQUEST)).toEqual({ kind: 'failed', failure: 'internal' });
+		// Never an idle row over an open confirm: the fee's own failure, inside
+		// Vela — never "can't reach the chain" (issue 483).
+		expect(quote.view.failed).toBe('internal');
+		expect(quote.view.confirm_fee_ready).toBe(false);
+		expect(quote.pending).toBe(false);
 		quote.requote();
 		expect(seams.invalidate).toHaveBeenCalledExactlyOnceWith(BSC);
 		await vi.waitFor(() => expect(seams.start).toHaveBeenCalledTimes(1));
 		expect(seams.invalidate.mock.invocationCallOrder[0]).toBeLessThan(
 			seams.start.mock.invocationCallOrder[0]
 		);
+		expect(quote.view.failed).toBeNull();
+		error.mockRestore();
 	});
 });
 
-describe('FeeQuote — the deployment read is bounded by the core’s quote deadline (spec 094 S9)', () => {
-	it('a read that hangs past it is a lost context, which the retry can ask again', async () => {
-		vi.useFakeTimers();
-		try {
-			seams.deployed.mockImplementationOnce(() => new Promise<boolean>(() => {}));
-			const quote = new FeeQuote();
-			const outcome = quote.requestQuote(REQUEST);
-			await vi.advanceTimersByTimeAsync(14_999);
-			expect(seams.start).not.toHaveBeenCalled();
-			await vi.advanceTimersByTimeAsync(1);
-			expect(await outcome).toEqual({ kind: 'context_unavailable' });
-			// The lost-context path the sheet draws as a failure, and retries.
-			expect(quote.contextLost).toBe(true);
-			expect(quote.pending).toBe(false);
-		} finally {
-			vi.useRealTimers();
-		}
+describe('FeeQuote — the account read is the fee’s own (issue 483)', () => {
+	it('asks the core to read the deployment, and never reads it out here', async () => {
+		await asked();
+		expect(seams.deployed).not.toHaveBeenCalled();
+		expect(seams.start).toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'quote_requested', read_deployment: true })
+		);
+	});
+
+	it('a chain that could not be read is the core’s failure, published as it is', async () => {
+		const { quote, outcome } = await asked();
+		seams.onView?.(view({ failed: { chain_read: { rate_limited: false } } }));
+		expect(await outcome).toEqual({
+			kind: 'failed',
+			failure: { chain_read: { rate_limited: false } }
+		});
+		// Nothing laid over it: the row, the footer and the retry read this.
+		expect(quote.view.failed).toEqual({ chain_read: { rate_limited: false } });
 	});
 });
 
@@ -275,15 +282,13 @@ describe('FeeQuote.pricingChainId — the chain the fee card’s coin is a coin 
 	it('names the chain of the last question that reached the core, and nothing before or after', async () => {
 		const quote = new FeeQuote();
 		expect(quote.pricingChainId).toBeNull();
-		// Still reading the deployment: no question has reached the core yet.
-		let deployed: (value: boolean) => void = () => {};
-		seams.deployed.mockImplementationOnce(
-			() => new Promise<boolean>((resolve) => (deployed = resolve))
-		);
+		// Still loading the core: no question has reached it yet.
+		let loaded: () => void = () => {};
+		seams.load.mockImplementationOnce(() => new Promise<void>((resolve) => (loaded = resolve)));
 		void quote.requestQuote(REQUEST);
-		await vi.waitFor(() => expect(seams.deployed).toHaveBeenCalledTimes(1));
+		await vi.waitFor(() => expect(seams.load).toHaveBeenCalledTimes(1));
 		expect(quote.pricingChainId).toBeNull();
-		deployed(true);
+		loaded();
 		await vi.waitFor(() => expect(seams.start).toHaveBeenCalledTimes(1));
 		expect(quote.pricingChainId).toBe(BSC);
 		void quote.requestQuote({ ...REQUEST, chainId: 1 });

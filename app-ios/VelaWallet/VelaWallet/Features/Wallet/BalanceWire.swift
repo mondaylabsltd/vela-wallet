@@ -63,7 +63,30 @@ struct UnreachableNetworkWire: Decodable, Equatable {
 struct BalanceSwitcherViewWire: Decodable, Equatable {
     let open: Bool
     let loading: Bool
+    /// Empty while the balance is hidden — the core withholds the figures
+    /// rather than trusting each shell to mask them.
     let balances: [BalanceCacheEntryWire]
+    /// The balance is hidden (PR 2): every row and the total draw the mask.
+    /// Without it an empty `balances` read as "nothing cached" and the total
+    /// summed to $0.00. Absent on the wire reads `false`.
+    var hidden = false
+
+    private enum CodingKeys: String, CodingKey { case open, loading, balances, hidden }
+
+    init(open: Bool, loading: Bool, balances: [BalanceCacheEntryWire], hidden: Bool = false) {
+        self.open = open
+        self.loading = loading
+        self.balances = balances
+        self.hidden = hidden
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        open = try c.decode(Bool.self, forKey: .open)
+        loading = try c.decode(Bool.self, forKey: .loading)
+        balances = try c.decode([BalanceCacheEntryWire].self, forKey: .balances)
+        hidden = try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+    }
 }
 
 struct BalanceViewWire: Decodable, Equatable {
@@ -101,6 +124,15 @@ struct BalanceViewWire: Decodable, Equatable {
     /// The corpus key of the home line over them (`assets.unreachableOne` /
     /// `assets.unreachableMany`); `nil` when every network answered.
     var unreachableKey: String? = nil
+    /// The failed chains whose read never left the app (PR 2 note 11) — not
+    /// in `unreachableNetworks`: nothing there is the network's doing. The
+    /// core always sends it; absent (a hand-written view) reads as none.
+    var internalChainIds: [Int]? = nil
+    /// The home's line when a read failed INSIDE Vela
+    /// (`componentsUi.gas.reasonInternal`, the fee's own sentence for the same
+    /// fault): drawn where the unreachable line goes, in place of any "Can't
+    /// reach …" — an internal fault never reads "Can't reach Ethereum".
+    var internalKey: String? = nil
     let holdingsLoading: Bool
     let cachedTotalUsd: Double?
     let switcher: BalanceSwitcherViewWire

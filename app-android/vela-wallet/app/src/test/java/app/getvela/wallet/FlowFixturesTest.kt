@@ -1,6 +1,11 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.core.i18n.I18nKeys
+import app.getvela.wallet.core.i18n.I18nRuntime
+import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.onboarding.core.CreateStage
+import app.getvela.wallet.feature.onboarding.core.PromptKind
+import app.getvela.wallet.feature.onboarding.flow.promptCopy
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.StatusKey
 import app.getvela.wallet.feature.onboarding.flow.Fixture
@@ -30,6 +35,12 @@ import org.junit.Test
  * check the fixtures against themselves.
  */
 class FlowFixturesTest {
+    /** The corpus as the app ships it, English. */
+    private val strings: VelaStrings = run {
+        val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
+        I18nRuntime { tag -> java.io.File(root, "assets/i18n/$tag.json").readBytes() }.apply { initialize("en") }
+    }
+
 
     private fun flows() = FlowFixtures.all.mapNotNull { entry ->
         (entry.fixture as? Fixture.Flow)?.let { entry.code to it.view }
@@ -68,7 +79,7 @@ class FlowFixturesTest {
     }
 
     /**
-     * The nine prompt kinds the core can raise, all present.
+     * The ten prompt kinds the core can raise, all present.
      *
      * Spec 014's eighteen `OutcomeKind` values were not reduced so much as
      * relocated: eight of them are screens in v2 rather than sheets (the Done
@@ -89,6 +100,7 @@ class FlowFixturesTest {
                 "incompatible_login",
                 "recover_offer",
                 "recover_failed",
+                "registry_unreachable",
                 "create_failed",
                 "sign_in_failed",
             ),
@@ -96,16 +108,39 @@ class FlowFixturesTest {
         )
     }
 
-    /** Only the recovery offer is confirmable — its answer is the one that branches. */
+    /**
+     * Only the two prompts whose answer branches are confirmable: the recovery
+     * offer, and "can't look up your wallet" — whose Try again asks the
+     * registry again from the signature already made.
+     */
     @Test
-    fun onlyTheRecoveryOfferIsConfirmable() {
+    fun onlyTheRecoveryOfferAndTheLookupRetryAreConfirmable() {
         FlowFixtures.all.mapNotNull { it.fixture as? Fixture.Sheet }.forEach { sheet ->
             assertEquals(
                 "confirmable is wrong for ${sheet.kind.type}",
-                sheet.kind.type == "recover_offer",
+                sheet.kind.type == "recover_offer" || sheet.kind.type == "registry_unreachable",
                 sheet.confirmable,
             )
         }
+    }
+
+    /**
+     * Sign-in could not look the passkey up: its own words (or the
+     * connection's, when nothing left the device), "Try again" and "Cancel"
+     * — never the rebuild offer's, and never a passkey prompt.
+     */
+    @Test
+    fun theLookupPromptSaysWhatHappenedAndOffersAFreeRetry() {
+        val remote = promptCopy(PromptKind("registry_unreachable", null), strings)
+        assertEquals(strings.t(I18nKeys.Login.REGISTRY_UNREACHABLE_TITLE), remote.title)
+        assertEquals(strings.t(I18nKeys.Login.REGISTRY_UNREACHABLE_BODY), remote.message)
+        assertEquals(strings.t(I18nKeys.Common.TRY_AGAIN), remote.confirmLabel)
+        assertEquals(strings.t(I18nKeys.Common.CANCEL), remote.cancelLabel)
+        assertTrue("never the rebuild offer's words", remote.message != strings.t(I18nKeys.Login.RECOVER_OFFER_BODY))
+        val local = promptCopy(PromptKind.from(org.json.JSONObject("""{"type":"registry_unreachable","local":true}""")), strings)
+        assertEquals(strings.t(I18nKeys.Flow.NETWORK_TITLE), local.title)
+        assertEquals(strings.t(I18nKeys.Flow.NETWORK_BODY), local.message)
+        assertEquals(strings.t(I18nKeys.Common.TRY_AGAIN), local.confirmLabel)
     }
 
     /** The two prompts that carry the platform's own words must actually carry them. */

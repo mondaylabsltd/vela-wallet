@@ -149,6 +149,14 @@ data class FeeAssetQuote(
      * answer is the one Android gave before.
      */
     val native_usd_floor_price: String? = null,
+    /**
+     * The relay's own minimum for this row (`minimumAmount` on
+     * `vela_getInBandGasQuote`), passed through exactly as the relay wrote it
+     * — a hex quantity in the row's base units. The core floors the fee at
+     * THIS when present; an older relay publishes none, and today's rule
+     * stands.
+     */
+    val minimum_amount: String? = null,
 )
 
 @Serializable
@@ -223,6 +231,13 @@ sealed class FeeFailure {
     data class ChainRead(val rate_limited: Boolean) : FeeFailure() { override val name = CHAIN_READ }
 
     /**
+     * Issue #483: the account read never left the app — the shell could not
+     * ask (a fault of its own, never the chain's). Worded "internal", never
+     * "can't reach the chain", and asked again on the same schedule.
+     */
+    data object Internal : FeeFailure() { override val name = "internal" }
+
+    /**
      * What the core's `feeRequoteDelayMs` and `feeFailureReasonKey` take: the
      * wire name, or the whole `ChainRead` JSON.
      */
@@ -266,11 +281,21 @@ sealed class FeeFailure {
     companion object {
         private const val CHAIN_READ = "chain_read"
 
-        /** Every word that crosses as a plain string — what the drift test holds against the mirror. */
-        val PLAIN: List<FeeFailure> = listOf(
-            MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
-            WouldFail,
-        )
+        /**
+         * Every word that crosses as a plain string — what the drift test holds against the mirror.
+         *
+         * Lazy, not eager: these objects are this class's own subclasses, so a
+         * process whose FIRST touch is one of them (`FeeFailure.Internal`)
+         * initialises this companion while that object is still being built —
+         * an eager list then holds `null` in its place, and every later decode
+         * of a plain word throws.
+         */
+        val PLAIN: List<FeeFailure> by lazy {
+            listOf(
+                MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
+                WouldFail, Internal,
+            )
+        }
     }
 }
 
@@ -331,15 +356,114 @@ data class FeeView(
      * sheet's confirm dropped 26 pt when its first figure landed).
      */
     val nothing_to_pay_from: Boolean = false,
+    /**
+     * The figure on screen was switched to another coin and is being measured
+     * again with that coin's fee leg: drawn as it is, with the measuring
+     * sign, and never confirmable until the new figure lands (`busy` holds
+     * meanwhile too; the gate is the core's).
+     */
+    val provisional: Boolean = false,
+    /**
+     * PR 2 note 1: the failure, said ONCE for the fee row and the line under
+     * the held confirm — the row's reason, whether the core asks again by
+     * itself, whether that re-ask is out now, the row's figure and the
+     * footer's line. Present while [failed] is, and through the re-ask that
+     * follows it ([failed] `null` then, [busy] true), so nothing on screen
+     * flips to "Estimating…" and back while the core retries. The retry is
+     * the core's own (`StartTtl` after a failure that can pass, answered by
+     * [FeeExecutor]); this shell schedules nothing.
+     */
+    val failure: FeeFailureView? = null,
 )
+
+/**
+ * [FeeView.failure]: what failed and how the row and the footer say it, each
+ * word the core's (`fee_policy::FeeFailureView`).
+ */
+@Serializable
+data class FeeFailureView(
+    /** What failed — the run on screen's, or, while [retrying], the run before the one out now. */
+    val failure: FeeFailure,
+    /** The line under the row; `{{chain}}` is the chain's name. `null`: no line. */
+    val reason_key: String? = null,
+    /** The core asks again by itself: nothing may ask for a tap. */
+    val auto_retry: Boolean = false,
+    /** A re-ask is out now: the reason stays, beside the row's measuring sign. */
+    val retrying: Boolean = false,
+    /**
+     * The row's figure, saying what a tap does: "Tap to retry"
+     * (`componentsUi.gas.estimateFailed`) when only a tap asks again, "Pay
+     * with another coin" (`componentsUi.gas.payWithAnotherCoin`) when the tap
+     * opens the coins; `null` = the dash. Drawn by [FeeFailureRow.figure],
+     * which draws the dash for a key it does not know.
+     */
+    val figure_key: String? = null,
+    /**
+     * The line under the held confirm: "Retrying…" while the core retries,
+     * "This would fail if sent as it is." when the relay answered that it
+     * fails (a fact, asking for no tap), else "Tap it to retry".
+     */
+    val footer_key: String,
+    /**
+     * PR 2 polish: what a tap on the row does — and the row does exactly
+     * this, on the send form, its confirm and the signing sheet alike
+     * ([FeeFailureRow.tap]). A core that predates it sends none: `retry`.
+     */
+    val tap: FeeFailureTap = FeeFailureTap.Retry,
+    /**
+     * The chain the failed run priced. A surface draws the failure only for
+     * its own chain ([isForChain]): right after a token switch the send form
+     * names another chain before the fee machine has been asked about it, and
+     * the old chain's failure must not flash there. `null` only from a view
+     * built without a run.
+     */
+    val chain_id: Int? = null,
+    /** The coin the failed run priced the fee in (`null` = the chain's own), beside [chain_id]. */
+    val fee_token: String? = null,
+) {
+    /**
+     * The core's `FeeFailureView::is_for_chain`: whether this failure answers
+     * [chainId]'s question — the one a surface asking about that chain may
+     * draw. A failure built without a run (no chain) is taken as it is.
+     */
+    fun isForChain(chainId: Int?): Boolean = chain_id == null || chain_id == chainId
+}
+
+/**
+ * [FeeFailureView.tap]: what a tap on a failed fee row does (the core's
+ * `FeeFailureTap`). A row that says "Tap to retry" and opens the coin list —
+ * or the reverse — is a control that lies.
+ */
+@Serializable
+enum class FeeFailureTap {
+    /** Asks again at once (the fee machine's `Requote`); while a re-ask is out a second tap asks nothing. */
+    @SerialName("retry") Retry,
+
+    /** Opens the fee coins — the list the coin opener opens; a pick is the existing `select_fee_asset` path. */
+    @SerialName("choose_coin") ChooseCoin,
+
+    /** Nothing: the row is no control (no tap target, no chevron) and keeps its dash. */
+    @SerialName("nothing") None,
+}
 
 // -- what the machine asks for -----------------------------------------------
 
 @Serializable
 sealed class FeeOperation {
+    /** `fresh`: a run after a failure — read the chain again, past the held 15 s reading. */
     @Serializable
     @SerialName("fetch_gas_price")
-    data class FetchGasPrice(val chain_id: Int, val want_tip: Boolean) : FeeOperation()
+    data class FetchGasPrice(val chain_id: Int, val want_tip: Boolean, val fresh: Boolean = false) : FeeOperation()
+
+    /**
+     * Issue #483: the account's deployment, read as the fee's own first step
+     * (`QuoteRequested.read_deployment`) — `eth_getCode` through the pool.
+     * Answered [FeeShellResult.Deployment]; its failure is the fee's, with the
+     * fee's words and retry. `fresh`: past any held reading.
+     */
+    @Serializable
+    @SerialName("read_deployment")
+    data class ReadDeployment(val chain_id: Int, val account: String, val fresh: Boolean = false) : FeeOperation()
 
     @Serializable
     @SerialName("fetch_bundler_quote")
@@ -375,6 +499,12 @@ sealed class FeeOperation {
         val calls: List<FeeCall> = emptyList(),
     ) : FeeOperation()
 
+    /**
+     * The machine's timer: the block-time re-pricing of a quote on screen,
+     * and — PR 2 note 1 — its own re-ask after a failure that can pass (3 s,
+     * 6 s, then every 8 s). Answered [FeeShellResult.TtlElapsed] after `ms`;
+     * cancelled with the attempt it belongs to, or the session.
+     */
     @Serializable
     @SerialName("start_ttl")
     data class StartTtl(val ms: Int) : FeeOperation()
@@ -427,6 +557,29 @@ sealed class FeeShellResult {
     @Serializable
     @SerialName("deadline_elapsed")
     data object DeadlineElapsed : FeeShellResult()
+
+    /** The answer to [FeeOperation.ReadDeployment]. */
+    @Serializable
+    @SerialName("deployment")
+    data class Deployment(val read: DeploymentRead) : FeeShellResult()
+}
+
+/** What the account read came back with ([FeeOperation.ReadDeployment]). */
+@Serializable
+sealed class DeploymentRead {
+    @Serializable
+    @SerialName("read")
+    data class Read(val deployed: Boolean) : DeploymentRead()
+
+    /** The chain's nodes did not answer — [rate_limited] when they only rate-limited. */
+    @Serializable
+    @SerialName("unreachable")
+    data class Unreachable(val rate_limited: Boolean) : DeploymentRead()
+
+    /** The read never left the app (a fault of the shell's own); [kind] is diagnostics only. */
+    @Serializable
+    @SerialName("internal")
+    data class Internal(val kind: String) : DeploymentRead()
 }
 
 // -- what the shell tells it -------------------------------------------------
@@ -457,6 +610,12 @@ sealed class FeeEvent {
          * amounts it states in — a coin's shortfall (issue #408).
          */
         val number: String = "comma_dot",
+        /**
+         * Issue #483: the core reads the account's deployment itself, first
+         * ([FeeOperation.ReadDeployment]), instead of trusting [deployed] —
+         * the read's failure is then the fee's row, footer and retry.
+         */
+        val read_deployment: Boolean? = null,
     ) : FeeEvent()
 
     @Serializable

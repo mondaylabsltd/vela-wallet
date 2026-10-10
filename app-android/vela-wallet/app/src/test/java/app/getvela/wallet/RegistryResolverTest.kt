@@ -135,6 +135,36 @@ class RegistryResolverTest {
         assertEquals(setOf("chain:1"), asked.toSet())
     }
 
+    /**
+     * The correctness batch, item 1: who vouched for a key's answer reaches the
+     * core untouched (`registry_key_status.verified_by`) — the two-signature
+     * rebuild is offered only on Gnosis's word, so an answer only the index
+     * gave, or only Ethereum's backup, must never read as Gnosis's.
+     */
+    @Test
+    fun `who vouched for the answer is the resolver's own word`() = runBlocking {
+        // The index alone listed the groups: nobody on chain vouched for THIS answer.
+        listing = """{"entry":{},"groups":{"total":1,"unitIds":[10]}}"""
+        unit = honestUnit().toString()
+        assertEquals("none", client(serve = true).queryByPublicKey(key).verifiedBy)
+        server?.stop(0)
+        // The index silent: Gnosis — the record's home — answered.
+        assertEquals("gnosis", client(serve = false).queryByPublicKey(key).verifiedBy)
+        // Gnosis silent too: Ethereum's backup answered, which is no Gnosis verdict.
+        assertEquals("ethereum", client(serve = false, 100).queryByPublicKey(key).verifiedBy)
+    }
+
+    /** A client with no resolver believes the index alone: `none`, which fails closed in the core. */
+    @Test
+    fun `an index-only client vouches for nothing`() = runBlocking {
+        listing = """{"entry":null,"groups":{"total":0,"unitIds":[]}}"""
+        client(serve = true)
+        val port = server!!.address.port
+        val status = RegistryClient("http://127.0.0.1:$port", null).queryByPublicKey(key)
+        assertFalse(status.registered)
+        assertEquals("none", status.verifiedBy)
+    }
+
     @Test
     fun `nobody at all - the index's own failure is what is reported`() {
         val gone = assertThrows(RegistryFailure::class.java) { runBlocking { client(serve = false, 100, 1).queryByPublicKey(key) } }

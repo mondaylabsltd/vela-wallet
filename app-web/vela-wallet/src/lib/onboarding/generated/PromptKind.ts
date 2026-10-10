@@ -11,7 +11,7 @@ export type PromptKind = { "type": "not_supported_create", security_key: boolean
  * again (issue #446). `#[serde(default)]`: a reader that predates it
  * reads `false`.
  */
-phone_link: boolean, } | { "type": "recover_offer" } | { "type": "recover_failed" } | { "type": "sign_in_failed", detail: string, 
+phone_link: boolean, } | { "type": "recover_offer" } | { "type": "recover_failed" } | { "type": "registry_unreachable", local: boolean, } | { "type": "sign_in_failed", detail: string, 
 /**
  * As [`PromptKind::CreateFailed`]'s.
  */

@@ -39,4 +39,10 @@ maybe_sent: boolean, submit_block: number | null,
  * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RJ1): the
  * relay accepted the op the write-ahead hand-off announced.
  */
-admitted: boolean, } | { "type": "clear_to_post", user_op_hash: string, } | { "type": "mark_admitted", record_ids: Array<string>, } | { "type": "delete_tx_records", ids: Array<string>, } | { "type": "track_withdrawn", user_op_hash: string, record_ids: Array<string>, } | { "type": "resolve_identity", address: string, } | { "type": "resolve_risk", chain_id: number, address: string, } | { "type": "simulate_calls", chain_id: number, account: string, calls: Array<FeeCall>, } | { "type": "start_timer", ms: number, tag: SendTimerTag, } | { "type": "haptic", kind: SendHapticKind, } | { "type": "show_alert", kind: SendAlertKind, } | { "type": "close" };
+admitted: boolean, 
+/**
+ * The account that signed it, forwarded to
+ * `tx_tracker::Event::Submitted` — what makes it an op this account
+ * must wait for on this chain (`tx_tracker::in_flight_ops`).
+ */
+sender: string | null, } | { "type": "clear_to_post", user_op_hash: string, } | { "type": "mark_admitted", record_ids: Array<string>, } | { "type": "delete_tx_records", ids: Array<string>, } | { "type": "track_withdrawn", user_op_hash: string, record_ids: Array<string>, } | { "type": "resolve_identity", address: string, } | { "type": "resolve_risk", chain_id: number, address: string, } | { "type": "simulate_calls", chain_id: number, account: string, calls: Array<FeeCall>, } | { "type": "start_timer", ms: number, tag: SendTimerTag, } | { "type": "haptic", kind: SendHapticKind, } | { "type": "show_alert", kind: SendAlertKind, } | { "type": "close" };

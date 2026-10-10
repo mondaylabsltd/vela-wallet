@@ -4,7 +4,7 @@
 //
 //  The only place the `fee_policy` core touches the outside world.
 //
-//  Seven operations, every one of them a read. Ported from
+//  Eight operations, every one of them a read. Ported from
 //  `app-android/.../feature/send/core/FeeExecutor.kt` (spec 043), which is the
 //  desktop's `executor/fee.rs`.
 //
@@ -26,6 +26,7 @@ final class FeeExecutor {
     /// Every operation this executor is required to handle.
     static let operations = [
         "fetch_gas_price",
+        "read_deployment",
         "fetch_bundler_quote",
         "fetch_in_band_quotes",
         "fetch_fee_recipient",
@@ -84,7 +85,8 @@ final class FeeExecutor {
             // meaningless there and asking corrupts the stablecoin
             // reimbursement. The core decides; this obeys.
             let signals = await relay.gasSignals(
-                chainId: chainId, wantTip: operation["want_tip"] as? Bool ?? true
+                chainId: chainId, wantTip: operation["want_tip"] as? Bool ?? true,
+                fresh: operation["fresh"] as? Bool ?? false
             )
             return CoreJSON.string([
                 "type": "gas_price",
@@ -92,6 +94,16 @@ final class FeeExecutor {
                 "base_fee": signals.baseFee.map { $0 as Any } ?? NSNull(),
                 "priority_fee": signals.priorityFee.map { $0 as Any } ?? NSNull(),
             ])
+
+        case "read_deployment":
+            // The account read is the fee's own (issue #483): the chain's
+            // answer, the chain out of reach, or a read that never left the
+            // app — three different sentences, the core's to choose.
+            let account = operation["account"] as? String ?? ""
+            let read = await relay.deploymentRead(
+                chainId: chainId, address: account, fresh: operation["fresh"] as? Bool ?? false
+            )
+            return CoreJSON.string(["type": "deployment", "read": read.wire])
 
         case "fetch_bundler_quote":
             let tier = operation["tier"] as? String ?? "standard"
@@ -264,6 +276,11 @@ final class FeeExecutor {
             return CoreJSON.string([
                 "type": "gas_price", "eth_gas_price": NSNull(),
                 "base_fee": NSNull(), "priority_fee": NSNull(),
+            ])
+        case "read_deployment":
+            // An arm that threw sent nothing: the app's fault, not the chain's.
+            return CoreJSON.string([
+                "type": "deployment", "read": ["type": "internal", "kind": "deployment: executor_fault"],
             ])
         case "fetch_bundler_quote":
             return CoreJSON.string(["type": "bundler_quote", "quote": NSNull()])

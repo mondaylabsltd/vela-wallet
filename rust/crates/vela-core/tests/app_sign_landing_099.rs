@@ -177,6 +177,7 @@ const HEAD: u64 = 1_010;
 fn submitted() -> Tracker {
     let mut sut = Tracker::new();
     sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -207,6 +208,7 @@ fn drain(sut: &mut Tracker, now: f64, status: TrackLifecycle, tx_hash: Option<&s
                 now_ms: now,
             },
             Op::PollStatus { .. } => Res::Status {
+                rejection_reason: None,
                 user_op_hash: HASH.to_owned(),
                 status,
                 stage: None,
@@ -361,4 +363,93 @@ fn the_ladder_and_the_ring() {
         5,
         "a clock behind the send counts from zero"
     );
+}
+
+/// The fee-coin switch: a figure switched to another coin is measured again
+/// with that coin's leg, and the gate holds it as "measuring" — even a view
+/// whose other flags read ready (the gate's own second line), and the hand-off
+/// card draws no fee row for it.
+#[test]
+fn a_figure_switched_to_another_coin_is_still_measuring() {
+    let mut input = ready();
+    input.fee.as_mut().unwrap().provisional = true;
+    assert_eq!(block(&input), Some(ConfirmBlock::FeeMeasuring));
+    assert_eq!(
+        vela_core::app::sign_confirm::handoff_fee(input.fee.as_ref(), None),
+        None
+    );
+    input.fee.as_mut().unwrap().provisional = false;
+    assert_eq!(block(&input), None);
+}
+
+/// The account's previous transaction on this network still going through
+/// holds the confirm, with its own line.
+#[test]
+fn a_previous_transaction_in_flight_holds_the_confirm_with_its_line() {
+    let mut input = ready();
+    input.sign.confirm_gate_open = false;
+    input.sign.confirm_block = Some(ConfirmBlock::PreviousPending);
+    let state = confirm_state(&input);
+    assert!(!state.enabled);
+    assert_eq!(state.block, Some(ConfirmBlock::PreviousPending));
+    assert_eq!(
+        state.key.as_deref(),
+        Some("componentsUi.signing.confirmBlock.previousPending")
+    );
+}
+
+/// The held line is one line: a fee being measured again under it does not
+/// swap it for "measuring the fee" and back — the hold sits ahead of every
+/// fee block until the tracker lets it go.
+#[test]
+fn the_previous_transaction_s_line_holds_through_a_re_measure() {
+    let mut input = ready();
+    input.sign.confirm_gate_open = false;
+    input.sign.confirm_block = Some(ConfirmBlock::PreviousPending);
+    for busy in [true, false, true] {
+        input.fee.as_mut().unwrap().busy = busy;
+        let state = confirm_state(&input);
+        assert_eq!(
+            state.block,
+            Some(ConfirmBlock::PreviousPending),
+            "busy {busy}"
+        );
+        assert_eq!(
+            state.key.as_deref(),
+            Some("componentsUi.signing.confirmBlock.previousPending")
+        );
+    }
+}
+
+/// PR 2 note 1: the line under the confirm says what the fee row says — the
+/// core is retrying (never "tap it" then), through the re-ask too, so the
+/// line does not flip to "working out the fee" and back; "tap it" is left for
+/// a failure only a tap retries.
+#[test]
+fn the_footer_says_what_the_fee_row_says() {
+    use vela_core::app::fee_policy::{FeeFailureView, FEE_FAILED_KEY, FEE_RETRYING_KEY};
+    let mut input = ready();
+    let fee = input.fee.as_mut().unwrap();
+    fee.failed = Some(FeeFailure::QuoteUnavailable);
+    fee.confirm_fee_ready = false;
+    fee.failure = Some(FeeFailureView::of(FeeFailure::QuoteUnavailable, false));
+    let state = confirm_state(&input);
+    assert_eq!(state.block, Some(ConfirmBlock::FeeFailed));
+    assert_eq!(state.key.as_deref(), Some(FEE_RETRYING_KEY));
+
+    // The re-ask is out: busy, `failed` gone — still the same line.
+    let fee = input.fee.as_mut().unwrap();
+    fee.failed = None;
+    fee.busy = true;
+    fee.failure = Some(FeeFailureView::of(FeeFailure::QuoteUnavailable, true));
+    let state = confirm_state(&input);
+    assert_eq!(state.block, Some(ConfirmBlock::FeeFailed));
+    assert_eq!(state.key.as_deref(), Some(FEE_RETRYING_KEY));
+
+    // Only a tap retries it.
+    let fee = input.fee.as_mut().unwrap();
+    fee.busy = false;
+    fee.failed = Some(FeeFailure::MissingPublicKey);
+    fee.failure = Some(FeeFailureView::of(FeeFailure::MissingPublicKey, false));
+    assert_eq!(confirm_state(&input).key.as_deref(), Some(FEE_FAILED_KEY));
 }

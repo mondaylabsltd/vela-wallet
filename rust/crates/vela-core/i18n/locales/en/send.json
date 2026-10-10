@@ -20,6 +20,7 @@
     "continueBtn": "Continue",
     "alertEstimateFailedTitle": "Could not prepare transaction",
     "alertEstimateFailedBody": "Could not build a valid transaction estimate. Please try again.",
+    "alertEstimateChainDownBody": "Can't reach {{chain}} to price this transaction. Try again in a moment.",
     "alertAccountUnavailableBody": "Could not load the account key required to prepare this transaction. Please try again.",
     "alertInvalidAddressTitle": "Invalid Address",
     "alertInvalidAddressBody": "Please enter a valid Ethereum address (0x...).",

@@ -44,6 +44,10 @@ pub fn gallery_enabled() -> bool {
     crate::dev_env::flag!("VELA_GALLERY")
 }
 
+/// How tall the stage is for a failure sheet: room for the tallest card (a
+/// confirmable one with the endpoint affordance) and its own scrim.
+const GALLERY_SHEET_STAGE_H: f32 = 640.;
+
 /// The address every Done fixture shows — full 42 chars; display truncates,
 /// copy does not.
 const FIXTURE_ADDRESS: &str = "0x44EEC06897ff7ab8C7f16819511A64bA168A6D33";
@@ -95,6 +99,188 @@ enum Fixture {
             vela_core::trusted_signer::launch::IntegrityLine,
         )>,
     ),
+}
+
+/// `VELA_SEND_STATE=held|went-first|fees|refused` — with `VELA_PAGE=gallery`
+/// and the send's mock confirm or receipt (`VELA_FLOW=DSD3` / `DSD4`): the
+/// confirm held for the account's previous transaction on this network (the
+/// one line under it), or the receipt of a payment the relay refused, told by
+/// its reason — another transaction went first, the fee, or the plain refusal
+/// (correctness batch item 3). The receipt is the live builder's
+/// (`flows::live::send_receipt`) over a refused send. Same env-pin family as
+/// `VELA_HANDOFF`.
+///
+/// `fee-down|fee-internal|fee-retrying|fee-tap` (PR 2 note 1) — with the
+/// send's mock form or confirm (`VELA_FLOW=DSD2` / `DSD3`): the fee failed,
+/// through the real fee core (`signing::fixtures::fee_failures`) and Send's
+/// live builders — the form's row (its figure, its reason, its measuring
+/// sign) and the confirm's fee line and the one line under its confirm.
+/// `fee-would-fail|fee-would-fail-none` (PR 2 polish): the relay answered
+/// that it fails (`signing::fixtures::fee_would_fail`) — "Pay with another
+/// coin" while a coin is left, the dash and no control when none is.
+///
+/// `not-sent` (PR 2 polish) — with the mock confirm (`VELA_FLOW=DSD3`): the
+/// relay turned the submit back because the account's previous transaction
+/// still holds the nonce — "Not sent yet", calmly, over what to do, and
+/// "Try again" — through the real send core's error and the live notice.
+pub fn send_state_pin(
+    body: crate::flows::fixtures::FlowBody,
+    s: &crate::flows::FlowStrings,
+    wallet: &crate::wallet::WalletStrings,
+) -> crate::flows::fixtures::FlowBody {
+    use crate::flows::fixtures::{CtaState, FlowBody};
+    use vela_core::app::tx_tracker::{RefusalReason, refusal_key};
+    let Some(want) = crate::dev_env::var!("VELA_SEND_STATE") else {
+        return body;
+    };
+    let failures = || crate::signing::fixtures::fee_failures();
+    let failed_fee = match want.trim() {
+        // Continue's alert stands over the row that failed the same way.
+        "fee-down" | "alert-down" => Some(failures().down),
+        "fee-internal" | "alert-internal" => Some(failures().internal),
+        "fee-retrying" => Some(failures().retrying),
+        "fee-tap" => Some(failures().tap),
+        "fee-would-fail" => Some(crate::signing::fixtures::fee_would_fail()[0].clone()),
+        "fee-would-fail-none" => Some(crate::signing::fixtures::fee_would_fail()[1].clone()),
+        _ => None,
+    };
+    if let Some(fee) = failed_fee {
+        // The mock's USDT on Ethereum: the chain the failure is for — a
+        // failure for another chain than the form's is not drawn at all.
+        let mut send = crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+        send.selected_token = Some(vela_core::app::send::SendToken {
+            network: "ethereum".to_owned(),
+            chain_id: 1,
+            symbol: "USDT".to_owned(),
+            balance: "53.4836".to_owned(),
+            decimals: 6,
+            token_address: Some("0xdAC17F958D2ee523a2206206994597C13D831ec7".to_owned()),
+            price_usd: Some(1.0),
+            logo_urls: Vec::new(),
+            spam: false,
+        });
+        let inputs = crate::flows::live::SendInputs {
+            send: &send,
+            fee: &fee,
+            s,
+            wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: crate::wallet::fixtures::WALLET_NAME,
+            identity_address: crate::wallet::fixtures::ADDRESS_FULL,
+            speed: None,
+            relay_sent_at_ms: None,
+        };
+        return match body {
+            FlowBody::SendForm(mut form) => {
+                // The live row's words and sign over the mock's coin mark
+                // and refresh control.
+                let row = crate::flows::live::send_fee_row(&inputs);
+                form.fee.value = row.value;
+                form.fee.refreshing = row.refreshing;
+                form.fee.stale_note = row.stale_note;
+                form.fee.reason = row.reason;
+                form.fee.control = row.control;
+                form.fee.room = row.room;
+                FlowBody::SendForm(form)
+            }
+            FlowBody::SendConfirm(mut confirm) => {
+                let control = crate::flows::live::confirm_fee_control(&inputs);
+                for (at, fact) in confirm.facts.iter_mut().enumerate() {
+                    if fact.label == s.est_fee {
+                        *fact = crate::flows::live::confirm_fee_fact(&inputs);
+                        confirm.fee_fact = control.then_some(at);
+                    }
+                }
+                confirm.held = crate::flows::live::confirm_held_line(&inputs);
+                confirm.cta_state = CtaState::Disabled;
+                FlowBody::SendConfirm(confirm)
+            }
+            other => other,
+        };
+    }
+    if want.trim() == "not-sent" {
+        return match body {
+            FlowBody::SendConfirm(mut confirm) => {
+                let mut send =
+                    crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+                send.tx_status = vela_core::app::send::SendTxStatus::Error;
+                send.tx_error = Some(vela_core::app::send::SendTxErrorKey::PreviousPending);
+                confirm.notice = crate::flows::live::tx_error_notice(&send, s);
+                confirm.cta = s.try_again.clone();
+                FlowBody::SendConfirm(confirm)
+            }
+            other => other,
+        };
+    }
+    let reason = match want.trim() {
+        "held" => {
+            return match body {
+                FlowBody::SendConfirm(mut confirm) => {
+                    confirm.held = Some(s.previous_pending.clone());
+                    confirm.cta_state = CtaState::Disabled;
+                    FlowBody::SendConfirm(confirm)
+                }
+                other => other,
+            };
+        }
+        "went-first" => Some(RefusalReason::NonceUsed),
+        "fees" => Some(RefusalReason::FeeBelowMarket),
+        "refused" => Some(RefusalReason::SimulationFailed),
+        _ => return body,
+    };
+    let FlowBody::SendReceipt(_) = body else {
+        return body;
+    };
+    let mut send = crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+    send.receipt = Some(vela_core::app::send::SendReceiptView {
+        status: vela_core::app::send::SendReceiptStatus::Failed,
+        hold_reason: (reason == Some(RefusalReason::FeeBelowMarket))
+            .then_some(vela_core::app::send::SendHoldReason::FeeRejected),
+        refusal_key: Some(refusal_key(reason).to_owned()),
+        kind: None,
+        transfers: Vec::new(),
+        coins: Vec::new(),
+        amount: "120".to_owned(),
+        usd_value: 120.0,
+        submitted_at_ms: None,
+        typical_inclusion_s: None,
+    });
+    let fee = crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+    FlowBody::SendReceipt(crate::flows::live::send_receipt(
+        &crate::flows::live::SendInputs {
+            send: &send,
+            fee: &fee,
+            s,
+            wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: crate::wallet::fixtures::WALLET_NAME,
+            identity_address: crate::wallet::fixtures::ADDRESS_FULL,
+            speed: None,
+            relay_sent_at_ms: None,
+        },
+    ))
+}
+
+/// `VELA_SEND_STATE=alert-down|alert-internal|alert-other` — with
+/// `VELA_PAGE=gallery`: Continue's alert when its estimate failed, worded by
+/// its cause (PR 2 note 13) — the chain out of reach (the mock's Ethereum by
+/// name), a fault inside Vela, or any other failure's general sentence. Over
+/// the form (`VELA_FLOW=DSD2`) the first two stand over the fee row failed
+/// the same way ([`send_state_pin`]).
+pub fn send_alert_pin() -> Option<vela_core::app::send::SendAlertKind> {
+    use vela_core::app::send::SendEstimateFailure;
+    let want = crate::dev_env::var!("VELA_SEND_STATE")?;
+    let kind = match want.trim() {
+        "alert-down" => SendEstimateFailure::ChainRead {
+            rate_limited: false,
+        },
+        "alert-internal" => SendEstimateFailure::Internal,
+        "alert-other" => SendEstimateFailure::EstimateFailed,
+        _ => return None,
+    };
+    Some(vela_core::app::send::SendAlertKind::EstimateFailed { kind })
 }
 
 /// `VELA_HANDOFF=checking|matches|asks|refused|named` — with `VELA_PAGE=gallery`
@@ -723,6 +909,16 @@ fn entries() -> Vec<Entry> {
     sheet("incompatible", PromptKind::IncompatibleCreate, false);
     sheet("incompatible · login", PromptKind::IncompatibleLogin, false);
     sheet("recover offer", PromptKind::RecoverOffer, true);
+    sheet(
+        "registry unreachable",
+        PromptKind::RegistryUnreachable { local: false },
+        true,
+    );
+    sheet(
+        "registry unreachable · local",
+        PromptKind::RegistryUnreachable { local: true },
+        true,
+    );
     sheet("recover failed", PromptKind::RecoverFailed, false);
     sheet(
         "create failed · unknown",
@@ -1168,10 +1364,16 @@ impl GalleryView {
             Fixture::Sheet { kind, confirmable } => {
                 let mut prompt = Prompt::new(kind.clone(), *confirmable, 0);
                 prompt.details_expanded = self.details_expanded;
-                // Rendered inline rather than over a scrim: the gallery IS the
-                // backdrop, and a full-bleed dim would cover the sidebar.
+                // Rendered in the stage rather than over the window: the
+                // gallery IS the backdrop, and a full-bleed dim would cover
+                // the sidebar. The sheet centres itself in an absolute scrim,
+                // so the column it sits in needs a height of its own — with
+                // none, every card was centred on the stage's top edge and
+                // drawn with its upper half cut off.
                 div()
+                    .relative()
                     .w(px(FLOW_COLUMN_W))
+                    .h(px(GALLERY_SHEET_STAGE_H))
                     .flex()
                     .justify_center()
                     .child(outcome_sheet(
@@ -1250,6 +1452,14 @@ mod tests {
             ("create failed · no key", OutcomeKind::Unsupported),
             ("create failed · unknown", OutcomeKind::Unknown),
             ("sign-in failed", OutcomeKind::SignInFailed),
+            (
+                "registry unreachable",
+                OutcomeKind::RegistryUnreachable { local: false },
+            ),
+            (
+                "registry unreachable · local",
+                OutcomeKind::RegistryUnreachable { local: true },
+            ),
         ];
         for entry in entries() {
             let Fixture::Sheet { kind, .. } = &entry.fixture else {

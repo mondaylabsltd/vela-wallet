@@ -252,9 +252,12 @@ object FlowLive {
             .firstOrNull { it.id == id }
             ?: return null
         // Spec 093: a dApp's transaction or signature opens to the core's facts.
-        item.dapp?.let { dapp -> return dappDetail(fallback, item, dapp, strings, chainNames, explorers, money, nativeSymbols) }
+        item.dapp?.let { dapp -> return dappDetail(fallback, item, dapp, strings, chainNames, explorers, money, nativeSymbols, feed.hidden) }
 
         val received = item.direction == FeedDirection.In
+        // Balance privacy (`app::privacy`): every figure of a detail masks on
+        // the feed's own flag — the amount and its worth.
+        val hidden = feed.hidden
         val amount = Formats.current.plain(
             item.value?.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString().orEmpty(),
         )
@@ -318,16 +321,20 @@ object FlowLive {
             // looks like a transaction's. A failed dApp row can say so now.
             status = statusChip(item.status, strings),
             // A dApp's call that moved no coin of ours has no amount (RG2).
-            amount = if (amount.isBlank()) "" else "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim(),
+            amount = when {
+                amount.isBlank() -> ""
+                hidden -> WalletLive.MASK
+                else -> "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim()
+            },
             positive = received,
             // The fiat line is the core's own `usd_value`, which is 0 when
             // nothing could price it — and a confident "$0.00" on a detail
             // screen is the same lie the hero told once.
             // Spec 049: the chosen currency and preset (the web's `moneyText`), never a bare `$`.
-            fiat = if (item.priced) {
-                "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
-            } else {
-                ""
+            fiat = when {
+                !item.priced -> ""
+                hidden -> WalletLive.MASK
+                else -> "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
             },
             facts = facts,
             // The chain keeps the transaction; this is the wallet forgetting
@@ -357,17 +364,28 @@ object FlowLive {
         explorers: Map<Int, String>,
         money: WalletLive.Money?,
         nativeSymbols: Map<Int, String>,
+        /**
+         * Balance privacy (`app::privacy`): every figure of a dApp's detail
+         * masks — the amount, what came back, the balance changes, a capped
+         * allowance and the worth. An unlimited allowance stays: it is a risk
+         * to see, not a balance.
+         */
+        hidden: Boolean = false,
     ): TxDetailModel {
         val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
         val allowance = dapp.allowance?.takeIf { item.value == null }
-        val back = dapp.received?.let { change -> listOf(WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ") }
+        val back = dapp.received?.let { change ->
+            listOf(if (hidden) WalletLive.MASK else WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
+        }
         // Spec 097 N5: nothing left and something came back (a borrow) — what
         // came back is the figure.
         val leadsWithBack = allowance == null && item.value == null && back != null
         val amount = when {
+            allowance != null && hidden && !allowance.unlimited && allowance.value != null -> WalletLive.MASK
             allowance != null -> listOf(WalletLive.allowanceFigure(allowance, strings), allowance.symbol).filter { it.isNotBlank() }.joinToString(" ")
             leadsWithBack -> back.orEmpty()
             item.value == null -> ""
+            hidden -> WalletLive.MASK
             else -> {
                 val digits = Formats.current.plain(item.value.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString() ?: item.value)
                 // 083 F1: the simulation's figure says so.
@@ -388,8 +406,12 @@ object FlowLive {
             positive = leadsWithBack && dapp.received?.direction == FeedDirection.In,
             received = if (leadsWithBack) null else back,
             // Spec 097 N7: only a price the core knows — unknown is not "$0.00".
-            fiat = if (item.priced && !leadsWithBack) "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value))) else "",
-            facts = dapp.facts.mapNotNull { dappFact(it, item, dapp, strings, chainNames, nativeSymbols) },
+            fiat = when {
+                !item.priced || leadsWithBack -> ""
+                hidden -> WalletLive.MASK
+                else -> "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
+            },
+            facts = dapp.facts.mapNotNull { dappFact(it, item, dapp, strings, chainNames, nativeSymbols, hidden) },
             technical = TxTechnicalModel(
                 title = strings.t(I18nKeys.Flows.TECHNICAL),
                 lines = dapp.technical.mapNotNull { technicalLine(it, item, strings) },
@@ -432,7 +454,7 @@ object FlowLive {
     }
 
     /** One of the core's detail facts, labelled and formatted. */
-    private fun dappFact(fact: FeedFact, item: FeedItem, dapp: FeedDapp, strings: VelaStrings, chainNames: Map<Int, String>, nativeSymbols: Map<Int, String>): FactRowModel? = when (fact) {
+    private fun dappFact(fact: FeedFact, item: FeedItem, dapp: FeedDapp, strings: VelaStrings, chainNames: Map<Int, String>, nativeSymbols: Map<Int, String>, hidden: Boolean = false): FactRowModel? = when (fact) {
         is FeedFact.Site -> FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_APP), value = fact.site)
         is FeedFact.Network -> networkFact(fact.chain_id, strings, chainNames, nativeSymbols)
         // 083 F3 review: the noun "Contract" — the call's target is not somebody it paid.
@@ -441,14 +463,19 @@ object FlowLive {
         is FeedFact.Spender -> party(strings.t(I18nKeys.Flows.DETAIL_SPENDER), fact.address, fact.name, strings)
         is FeedFact.SpendingCap -> FactRowModel(
             label = strings.t(I18nKeys.Flows.SPENDING_CAP),
-            value = listOf(WalletLive.allowanceFigure(fact.allowance, strings), fact.allowance.symbol).filter { it.isNotBlank() }.joinToString(" "),
+            // A capped allowance is money (masked while hidden); "Unlimited" is a risk to see.
+            value = if (hidden && !fact.allowance.unlimited && fact.allowance.value != null) {
+                WalletLive.MASK
+            } else {
+                listOf(WalletLive.allowanceFigure(fact.allowance, strings), fact.allowance.symbol).filter { it.isNotBlank() }.joinToString(" ")
+            },
             danger = fact.allowance.unlimited,
         )
         is FeedFact.Expires -> FactRowModel(
             label = strings.t(I18nKeys.Flows.EXPIRES),
             value = fact.at?.let { detailDate(it, strings) } ?: strings.t(I18nKeys.Flows.NO_EXPIRY),
         )
-        is FeedFact.BalanceChanges -> dapp.changes.map(::changeLine).takeIf { it.isNotEmpty() }?.let { lines ->
+        is FeedFact.BalanceChanges -> dapp.changes.map { changeLine(it, hidden) }.takeIf { it.isNotEmpty() }?.let { lines ->
             FactRowModel(label = strings.t(I18nKeys.Flows.BALANCE_CHANGES), value = lines.first().resolve(strings), lines = lines.drop(1).map { it.resolve(strings) })
         }
         is FeedFact.Date -> FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_DATE), value = detailDate(fact.timestamp, strings))
@@ -522,8 +549,10 @@ object FlowLive {
     )
 
     /** A balance-change line: the figure and the coin, or "Unverified token" with its direction only (083 F1). */
-    private fun changeLine(change: FeedDappChange): ChangeLine = ChangeLine(
-        figure = WalletLive.changeFigure(change),
+    private fun changeLine(change: FeedDappChange, hidden: Boolean = false): ChangeLine = ChangeLine(
+        // A verified figure masks while hidden; an unverified token's change
+        // has no number to hide (its direction alone).
+        figure = if (hidden && change.verified && change.value != null) WalletLive.MASK else WalletLive.changeFigure(change),
         symbol = change.symbol.takeIf { change.verified && it.isNotBlank() },
         unverified = !change.verified,
     )
@@ -650,8 +679,10 @@ object FlowLive {
             .firstOrNull { WalletLive.holdingId(it.chain_id, it.token_address) == id }
             ?: return null
 
+        // Balance privacy: the holding's row masks on the balance's flag, its
+        // activity on the feed's — the same rule the home and Assets draw.
         val row = WalletLive.assetRows(
-            BalanceView(tokens = listOf(token)),
+            BalanceView(tokens = listOf(token), hidden = view.hidden),
             chainNames,
             currency,
         ).single()
@@ -661,6 +692,7 @@ object FlowLive {
                 entry !is FeedRow.Item ||
                     (entry.item.chain_id == token.chain_id && entry.item.symbol == token.symbol)
             },
+            hidden = feed.hidden,
         )
         return fallback.copy(
             explorerUrl = explorers[token.chain_id]?.let { base -> token.token_address?.let { "${base.trimEnd('/')}/token/$it" } ?: "${base.trimEnd('/')}/address/${row.id.substringAfter(':')}" },
@@ -673,6 +705,8 @@ object FlowLive {
                 // "—", not "$0.00": an unpriced holding has no fiat figure, and
                 // a zero here would say it is worthless.
                 is AssetFiatModel.NoPrice -> fiat.text
+                // Hidden: the worth is a figure, and it draws the mask.
+                AssetFiatModel.Masked -> WalletLive.MASK
                 else -> ""
             },
             // Issue #269: the facts are this token's. They were the fixture's —

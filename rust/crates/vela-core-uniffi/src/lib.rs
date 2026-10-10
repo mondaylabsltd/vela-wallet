@@ -686,6 +686,22 @@ pub fn handoff_fee_row(fee_json: Option<String>, speed_json: Option<String>) -> 
     vela_core::app::sign_confirm::handoff_fee_json(fee_json.as_deref(), speed_json.as_deref())
 }
 
+/// Every operation in flight on this device — the tracker's view (JSON) in,
+/// an `InFlightOp` JSON array out (`[]` when the view does not read). Forward
+/// it on every tracker render to the send machine and the signing machine
+/// (`Event::InFlightOps`): a second transaction of an account on a chain
+/// where it already has one in flight waits for it (the confirm is held with
+/// `componentsUi.signing.confirmBlock.previousPending`) until it is final or
+/// has made no progress for ten minutes. Pass the core's view JSON as it
+/// came: the stall is a field of it (`stalled`), and a copy re-encoded from
+/// a shell type that lacks the field holds until final. See
+/// `vela_core::app::tx_tracker::in_flight_ops`.
+#[uniffi::export]
+#[must_use]
+pub fn in_flight_ops(track_view_json: String) -> String {
+    vela_core::app::tx_tracker::in_flight_ops_json(&track_view_json)
+}
+
 /// The landing's countdown (spec 099 R6), counted from when the relay put the
 /// bundle on the network (`TrackEntryView.relay_sent_at_ms`): a `LandingPace`
 /// JSON — `{line, seconds, progress}`. See `vela_core::app::tx_tracker`.
@@ -2139,6 +2155,9 @@ pub struct TrackStatusAnswer {
     pub stage: Option<String>,
     /// The bundle transaction the relay names, when it has one.
     pub tx_hash: Option<String>,
+    /// Why the relay refused it (`rejection_reason`, relay contract §2) —
+    /// the tracker's `Status.rejection_reason`, passed through as it is.
+    pub rejection_reason: Option<String>,
 }
 
 /// The relay's status answer — its `result`, or the whole JSON-RPC body — or
@@ -2150,6 +2169,7 @@ pub fn parse_user_op_status(json: String) -> Option<TrackStatusAnswer> {
         status: snake_name(&answer.status),
         stage: answer.stage,
         tx_hash: answer.tx_hash,
+        rejection_reason: answer.rejection_reason,
     })
 }
 
@@ -2790,6 +2810,22 @@ pub fn fee_failure_reason_key(failure: String) -> Option<String> {
     vela_core::app::fee_policy::failure_reason_key(fee_failure_of(&failure)?).map(str::to_owned)
 }
 
+/// The corpus key of the body of the alert a failed Continue estimate shows
+/// (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+/// its name (`{{chain}}`), a fault inside the app as that, else the general
+/// sentence. `failure` is a `SendEstimateFailure` — its wire name, or its
+/// JSON for one that carries data (`{"chain_read":{"rate_limited":false}}`);
+/// anything unreadable reads as the general sentence.
+#[uniffi::export]
+pub fn send_estimate_failure_body_key(failure: String) -> String {
+    use vela_core::app::send::SendEstimateFailure;
+    snake::<SendEstimateFailure>(&failure)
+        .or_else(|| serde_json::from_str(&failure).ok())
+        .unwrap_or(SendEstimateFailure::Other)
+        .body_key()
+        .to_owned()
+}
+
 /// A signed balance change from signed base units (`"-1000"`, `"+2100…"`):
 /// the token ladder, a dust figure written exactly (never `−0`), U+2212 for
 /// a minus, `+` for a plus; `None` for zero or unreadable text (spec 082
@@ -3168,6 +3204,46 @@ mod tests_082 {
         assert_eq!(answer.tx_hash.as_deref(), Some(RELAY));
         assert!(parse_user_op_status(r#"{"status":"pending"}"#.into()).is_none());
         assert!(parse_user_op_status(r#"{"error":{"code":-32601}}"#.into()).is_none());
+        assert_eq!(answer.rejection_reason, None, "only on a refusal");
+    }
+
+    /// PR 2 note 5: the relay's `rejection_reason` reaches the phones through
+    /// the one parser, so no shell reads the raw body beside it.
+    #[test]
+    fn the_status_parser_carries_the_rejection_reason() {
+        let answer = parse_user_op_status(
+            json!({"jsonrpc": "2.0", "id": 1, "result": {
+                "status": "rejected",
+                "last_executor_stage": "nonce",
+                "rejection_reason": "nonce_used",
+            }})
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(answer.status, "rejected");
+        assert_eq!(answer.rejection_reason.as_deref(), Some("nonce_used"));
+    }
+
+    /// PR 2 note 13: the alert's body by the failure's cause, the fee's own
+    /// wire shape read as it is.
+    #[test]
+    fn the_estimate_alert_is_worded_by_its_cause() {
+        assert_eq!(
+            send_estimate_failure_body_key(r#"{"chain_read":{"rate_limited":false}}"#.into()),
+            "send.alertEstimateChainDownBody"
+        );
+        assert_eq!(
+            send_estimate_failure_body_key("internal".into()),
+            "componentsUi.gas.reasonInternal"
+        );
+        assert_eq!(
+            send_estimate_failure_body_key("timeout".into()),
+            "send.alertEstimateFailedBody"
+        );
+        assert_eq!(
+            send_estimate_failure_body_key("nonsense".into()),
+            "send.alertEstimateFailedBody"
+        );
     }
 
     fn entry(status: &str, outcome: &str, tx_hash: Option<&str>) -> String {
@@ -3427,9 +3503,10 @@ mod tests_082 {
         );
         let chain = r#"{"chain_read":{"rate_limited":false}}"#;
         assert_eq!(fee_requote_delay_ms(chain.into(), 1), Some(3_000));
+        // Issue #483: the fee row's own sentence, not the browser's.
         assert_eq!(
             fee_failure_reason_key(chain.into()).as_deref(),
-            Some("explore.chainDown")
+            Some("componentsUi.gas.reasonChainDown")
         );
         assert_eq!(
             fee_failure_reason_key("quote_unavailable".into()).as_deref(),

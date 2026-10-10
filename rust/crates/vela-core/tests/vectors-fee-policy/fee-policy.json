@@ -130,15 +130,15 @@
       "name": "in-band stable fee ceils the conversion (never undercharges)",
       "fn": "in_band_fee",
       "input": {
-        "total_gas": "1",
+        "total_gas": "10000000000000",
         "gas_price": "1",
         "fee_asset": { "is_native": false, "decimals": 6, "usd_price": "1" },
         "native_asset": { "is_native": true, "decimals": 18, "usd_price": "1868.71" }
       },
-      "expect": { "amount": "18688" }
+      "expect": { "amount": "56062" }
     },
     {
-      "name": "in-band stable fee at the native floor, above one cent",
+      "name": "in-band stable fee is the charge converted, never the native floor converted",
       "fn": "in_band_fee",
       "input": {
         "total_gas": "1",
@@ -146,7 +146,7 @@
         "fee_asset": { "is_native": false, "decimals": 6, "usd_price": "1" },
         "native_asset": { "is_native": true, "decimals": 18, "usd_price": "1868.70000000" }
       },
-      "expect": { "amount": "18687" }
+      "expect": { "amount": "10000" }
     },
     {
       "name": "in-band stable fee floors at $0.01",
@@ -163,23 +163,23 @@
       "name": "in-band conversion rounds the NATIVE price up past 8 dp",
       "fn": "in_band_fee",
       "input": {
-        "total_gas": "1",
+        "total_gas": "10000000000000",
         "gas_price": "1",
         "fee_asset": { "is_native": false, "decimals": 6, "usd_price": "1" },
         "native_asset": { "is_native": true, "decimals": 18, "usd_price": "1868.700000005" }
       },
-      "expect": { "amount": "18688" }
+      "expect": { "amount": "56062" }
     },
     {
       "name": "in-band conversion truncates the FEE TOKEN price past 8 dp",
       "fn": "in_band_fee",
       "input": {
-        "total_gas": "1",
+        "total_gas": "10000000000000",
         "gas_price": "1",
         "fee_asset": { "is_native": false, "decimals": 6, "usd_price": "1.000000005" },
         "native_asset": { "is_native": true, "decimals": 18, "usd_price": "1868.70000000" }
       },
-      "expect": { "amount": "18687" }
+      "expect": { "amount": "56061" }
     },
     {
       "name": "in-band 18-DECIMAL fee asset (DAI): 700k gas at 30 gwei, ETH $2000",
@@ -232,12 +232,12 @@
       "name": "in-band 8-decimal fee asset ceils a fractional unit up",
       "fn": "in_band_fee",
       "input": {
-        "total_gas": "1",
+        "total_gas": "10000000000000",
         "gas_price": "1",
         "fee_asset": { "is_native": false, "decimals": 8, "usd_price": "60000" },
         "native_asset": { "is_native": true, "decimals": 18, "usd_price": "1868.71" }
       },
-      "expect": { "amount": "32" }
+      "expect": { "amount": "94" }
     },
     {
       "name": "in-band 0-DECIMAL fee asset prices in whole units",

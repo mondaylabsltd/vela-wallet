@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
 import { FeeSpeedCore } from '$lib/core/client';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendView } from '$lib/core/generated/SendView';
@@ -16,6 +17,7 @@ import { fill } from '$lib/wallet/messages';
 import { liveAssetRow } from '$lib/wallet/live';
 import { buildFlowState } from './fixtures';
 import { tokenMarkFor } from './marks';
+import { wouldFailView } from './testing/fee-core';
 import {
 	liveFeeTokenPick,
 	liveSendConfirm,
@@ -106,6 +108,7 @@ const EMPTY_SEND: SendView = {
 	same_asset_fee_issue: null,
 	can_continue: false,
 	can_confirm: false,
+	previous_pending: null,
 	sending: false,
 	tx_status: 'idle',
 	tx_error: null,
@@ -131,7 +134,9 @@ const IDLE_FEE: FeeView = {
 	options: [],
 	confirm_fee_ready: false,
 	no_coin_pays: false,
-	nothing_to_pay_from: false
+	nothing_to_pay_from: false,
+	provisional: false,
+	failure: null
 };
 
 const QUOTE = {
@@ -653,6 +658,7 @@ describe('one figure for one balance (spec 078)', () => {
 				receipt: {
 					status: 'confirmed',
 					hold_reason: null,
+					refusal_key: null,
 					kind: null,
 					transfers: [],
 					coins: [
@@ -764,6 +770,185 @@ describe('the confirm screen', () => {
 			})
 		);
 		expect(token.recipientTag).toBe(m['send.recipientTokenContract']);
+	});
+});
+
+/**
+ * PR 2 notes 1, 10 and 13: the send form said no reason under a failed fee and
+ * never asked again, and its footer (the sheet's) said "Tap it to retry" under
+ * a row that said "Retrying automatically". The core says the failure once
+ * (`FeeView.failure`) and retries it itself; the row, the confirm's fee and
+ * the line under the held confirm draw that one state.
+ */
+describe('a failed fee on Send, in the core’s one state', () => {
+	const alice = '0x' + 'ab'.repeat(20);
+	const down = { chain_read: { rate_limited: false } } as const;
+	const auto = (retrying = false): FeeFailureView => ({
+		failure: down,
+		reason_key: 'componentsUi.gas.reasonChainDown',
+		auto_retry: true,
+		retrying,
+		figure_key: null,
+		footer_key: 'componentsUi.signing.confirmBlock.feeRetrying',
+		tap: 'retry',
+		chain_id: 1,
+		fee_token: null
+	});
+	const tapOnly: FeeFailureView = {
+		failure: 'missing_public_key',
+		reason_key: null,
+		auto_retry: false,
+		retrying: false,
+		figure_key: 'componentsUi.gas.estimateFailed',
+		footer_key: 'componentsUi.signing.confirmBlock.feeFailed',
+		tap: 'retry',
+		chain_id: 1,
+		fee_token: null
+	};
+	const CHAIN_DOWN = m['componentsUi.gas.reasonChainDown'].replace('{{chain}}', 'Ethereum');
+
+	it('the row says why, in the line it keeps — the dash, never a tap while the core retries', () => {
+		// The send machine still holds the last figure: it is not drawn over the failure.
+		const row = liveSendForm(
+			formModel(),
+			inputs(
+				{ selected_token: ETH, recipient: alice, amount: '1', fee: QUOTE },
+				{
+					failed: down,
+					failure: auto()
+				}
+			)
+		).fee;
+		expect(row).toMatchObject({
+			value: '—',
+			valueFiat: undefined,
+			reason: CHAIN_DOWN,
+			tap: 'retry',
+			refreshing: false
+		});
+		expect(row.staleNote).toBeUndefined();
+		expect(row.value).not.toBe(m['componentsUi.gas.estimateFailed']);
+	});
+
+	it('the re-ask keeps the reason beside the turning sign — nothing flips to "…"', () => {
+		const row = liveSendForm(
+			formModel(),
+			inputs(
+				{ selected_token: ETH, recipient: alice, amount: '1', fee_busy: true },
+				{
+					busy: true,
+					failure: auto(true)
+				}
+			)
+		).fee;
+		expect(row).toMatchObject({ value: '—', reason: CHAIN_DOWN, refreshing: true });
+	});
+
+	it('only a tap asks again: "Tap to retry", and no reason the network did not cause', () => {
+		const row = liveSendForm(
+			formModel(),
+			inputs({ selected_token: ETH }, { failed: 'missing_public_key', failure: tapOnly })
+		).fee;
+		expect(row).toMatchObject({ value: m['componentsUi.gas.estimateFailed'], tap: 'retry' });
+		expect(row.reason).toBeUndefined();
+	});
+
+	it('a fault inside Vela is said as that, never as the chain', () => {
+		const row = liveSendForm(
+			formModel(),
+			inputs(
+				{ selected_token: ETH },
+				{
+					failed: 'internal',
+					failure: {
+						...auto(),
+						failure: 'internal',
+						reason_key: 'componentsUi.gas.reasonInternal'
+					}
+				}
+			)
+		).fee;
+		expect(row.reason).toBe(m['componentsUi.gas.reasonInternal']);
+		expect(row.reason).not.toContain('Ethereum');
+	});
+
+	it('the confirm: the fee row says it, and ONE line under the held confirm — the sheet’s', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs(
+				{ selected_token: ETH, recipient: alice, confirm_amount: '1', fee: QUOTE },
+				{
+					failed: down,
+					failure: auto()
+				}
+			)
+		);
+		const fee = confirm.facts.find((fact) => fact.label === m['send.estFeeLabel']);
+		expect(fee).toMatchObject({ value: '—', note: CHAIN_DOWN });
+		// The core retries by itself, and a tap still asks at once — as the
+		// form's row does (PR 2 polish).
+		expect(fee?.tap).toEqual({ does: 'retry', label: m['send.feeRefresh'], busy: false });
+		expect(confirm.held).toBe(m['componentsUi.signing.confirmBlock.feeRetrying']);
+		// Tap-only (PR 2 polish): the footer says "Tap it to retry", and the
+		// line it points at says "Tap to retry" and is the control that does.
+		const tap = liveSendConfirm(
+			confirmModel(),
+			inputs(
+				{ selected_token: ETH, recipient: alice, confirm_amount: '1' },
+				{
+					failed: 'missing_public_key',
+					failure: tapOnly
+				}
+			)
+		);
+		expect(tap.held).toBe(m['componentsUi.signing.confirmBlock.feeFailed']);
+		const line = tap.facts.find((fact) => fact.label === m['send.estFeeLabel']);
+		expect(line?.value).toBe(m['componentsUi.gas.estimateFailed']);
+		expect(line?.tap).toEqual({ does: 'retry', label: m['send.feeRefresh'], busy: false });
+	});
+
+	it('the previous transaction in flight is the one line, ahead of the fee', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs(
+				{
+					selected_token: ETH,
+					recipient: alice,
+					confirm_amount: '1',
+					previous_pending: {
+						chain_id: 1,
+						user_op_hash: '0xop',
+						key: 'componentsUi.signing.confirmBlock.previousPending'
+					}
+				},
+				{ failed: down, failure: auto() }
+			)
+		);
+		expect(confirm.held).toBe(m['componentsUi.signing.confirmBlock.previousPending']);
+		// …and nothing new under a confirm the fee does not hold.
+		expect(
+			liveSendConfirm(confirmModel(), inputs({ selected_token: ETH, confirm_amount: '1' })).held
+		).toBeUndefined();
+	});
+
+	it('Continue’s alert is worded by its cause, the chain named (note 13)', () => {
+		const said = (kind: Parameters<typeof alertWords>[0]) => alertWords(kind, m, 1);
+		expect(said({ type: 'estimate_failed', kind: down })).toBe(
+			`${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateChainDownBody'].replace('{{chain}}', 'Ethereum')}`
+		);
+		expect(said({ type: 'estimate_failed', kind: 'internal' })).toBe(
+			`${m['send.alertEstimateFailedTitle']} · ${m['componentsUi.gas.reasonInternal']}`
+		);
+		expect(said({ type: 'estimate_failed', kind: 'would_fail' })).toBe(
+			`${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateFailedBody']}`
+		);
+		// On the form, the chain is the selected token's.
+		const form = liveSendForm(formModel(), {
+			...inputs({ selected_token: ETH, recipient: alice, amount: '1' }),
+			alert: { type: 'estimate_failed', kind: down }
+		});
+		expect(form.alert).toContain('Ethereum');
+		expect(form.alert).not.toContain('{{chain}}');
 	});
 });
 
@@ -1051,6 +1236,7 @@ describe('the receipt', () => {
 	const receipt = (status: 'submitted' | 'confirmed' | 'failed' | 'maybe_sent' | 'not_sent') => ({
 		status,
 		hold_reason: null,
+		refusal_key: null,
 		kind: null,
 		transfers: [],
 		coins: [{ amount: '0.5', symbol: 'ETH', logo_urls: [], token_address: null, usd_value: 1500 }],
@@ -2422,5 +2608,339 @@ describe('the folded speed control (spec 068)', () => {
 			expect(model.speed?.singleNote).toBeUndefined();
 			expect(model.speed?.options).toHaveLength(3);
 		});
+	});
+});
+
+/**
+ * Correctness batch item 3 — the confirm waits for the account's previous
+ * transaction on this network, and a submit that did not go says why.
+ */
+describe('the held confirm and the failed submit', () => {
+	const HELD = {
+		chain_id: 1,
+		user_op_hash: '0x' + 'ab'.repeat(32),
+		key: 'componentsUi.signing.confirmBlock.previousPending'
+	};
+
+	it('a held confirm draws its one line — the core’s key, in the corpus’s words', () => {
+		const model = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, previous_pending: HELD })
+		);
+		expect(model.held).toBe(m['componentsUi.signing.confirmBlock.previousPending']);
+		expect(model.held).toContain('Waiting for your last transaction');
+		expect(model.error).toBeUndefined();
+		// Released: no line, nothing in its place.
+		const open = liveSendConfirm(confirmModel(), inputs({ stage: 'confirm', selected_token: ETH }));
+		expect(open.held).toBeUndefined();
+	});
+
+	it('the line stays the same whatever the fee is doing — it does not move with `fee_busy`', () => {
+		const busy = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, previous_pending: HELD, fee_busy: true })
+		);
+		const settled = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, previous_pending: HELD })
+		);
+		expect(busy.held).toBe(settled.held);
+	});
+
+	it('a submit refused because the previous one holds the nonce is "Not sent yet", calmly, with Try again (PR 2 polish)', () => {
+		const model = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				stage: 'confirm',
+				selected_token: ETH,
+				tx_status: 'error',
+				tx_error: 'previous_pending',
+				previous_pending: HELD
+			})
+		);
+		expect(model.error).toEqual({
+			title: m['componentsUi.signing.notSentTitle'],
+			text: m['componentsUi.signing.notSentBody'],
+			retry: m['send.txRetryBtn'],
+			calm: true
+		});
+		expect(model.error?.title).toBe('Not sent yet');
+		expect(model.error?.text).toContain('still being processed');
+		// Said once: the held line does not repeat it underneath.
+		expect(model.held).toBeUndefined();
+		// Every other failed submit is no calm notice.
+		const generic = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, tx_status: 'error', tx_error: 'generic' })
+		);
+		expect(generic.error?.calm).toBeUndefined();
+		expect(generic.error?.title).toBeUndefined();
+	});
+
+	it('every other failed submit says its own words; a venue block offers no retry', () => {
+		const said = (tx_error: SendView['tx_error']) =>
+			liveSendConfirm(
+				confirmModel(),
+				inputs({ stage: 'confirm', selected_token: ETH, tx_status: 'error', tx_error })
+			).error;
+		expect(said('generic')).toEqual({
+			text: m['send.txErrorGeneric'],
+			retry: m['send.txRetryBtn']
+		});
+		expect(said('bundler_fund')).toEqual({
+			text: m['send.txErrorBundlerFund'],
+			retry: m['send.txRetryBtn']
+		});
+		expect(said('venue_blocked')?.retry).toBeUndefined();
+	});
+});
+
+describe('a refusal told by its reason (correctness batch item 3)', () => {
+	const refused = (refusal_key: string | null) =>
+		liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				selected_token: ETH,
+				user_op_hash: '0xop',
+				receipt: {
+					status: 'failed',
+					hold_reason: null,
+					refusal_key,
+					kind: null,
+					transfers: [],
+					coins: [],
+					amount: '0.5',
+					usd_value: 1500,
+					submitted_at_ms: null,
+					typical_inclusion_s: null
+				}
+			})
+		);
+
+	it('the fee sentence only for a fee refusal; "went first" for a spent nonce; else the plain one', () => {
+		expect(refused('send.txRejectedFees').captions).toEqual([m['send.txRejectedFees']]);
+		expect(refused('componentsUi.signing.wentFirst').captions).toEqual([
+			m['componentsUi.signing.wentFirst']
+		]);
+		expect(refused('componentsUi.signing.refused').captions).toEqual([
+			m['componentsUi.signing.refused']
+		]);
+		for (const key of [
+			'send.txRejectedFees',
+			'componentsUi.signing.wentFirst',
+			'componentsUi.signing.refused'
+		]) {
+			const model = refused(key);
+			expect(model.stage).toBe('failed');
+			expect(model.title).toBe(m['componentsTx.receipt.statusFailed']);
+			// Nothing was sent: never "please try again" over a refusal.
+			expect(model.captions.join(' ')).not.toContain(m['send.txErrorGeneric']);
+		}
+	});
+
+	it('a failure that was no refusal keeps its own words', () => {
+		expect(refused(null).title).toBe(m['send.txErrorGeneric']);
+	});
+});
+
+/**
+ * Correctness batch item 2, the visible side of the shared fixture: Send is
+ * where a person picks an amount, so its picker keeps the figures while the
+ * balance is hidden (`MoneySurface::VISIBLE`). Its builder takes no privacy
+ * flag at all — the hidden fixture's holdings reach it as they are.
+ */
+describe('hidden balance: Send keeps its figures', () => {
+	it('the picker shows every holding of the hidden fixture', async () => {
+		const { readFileSync } = await import('node:fs');
+		const { toApiToken } = await import('$lib/wallet/core/balance-executor');
+		const { toSendToken } = await import('./core/send-types');
+		const fixture = JSON.parse(
+			readFileSync('../../rust/crates/vela-core/tests/fixtures/privacy-hidden.json', 'utf8')
+		) as {
+			visible_surfaces: string[];
+			hidden: { balance: { hidden: boolean; tokens: Parameters<typeof toApiToken>[0][] } };
+		};
+		expect(fixture.visible_surfaces).toContain('send');
+		expect(fixture.hidden.balance.hidden).toBe(true);
+		const tokens = fixture.hidden.balance.tokens.map((token) => toSendToken(toApiToken(token)));
+		const text = JSON.stringify(liveSendPick(pickModel(), inputs({ tokens })));
+		// The picker trims to its own budget (376.54321 → 376.5432); the digits stay.
+		for (const figure of ['418.25', '376.543']) expect(text).toContain(figure);
+		expect(text).not.toContain('••••');
+	});
+});
+
+/**
+ * PR 2 polish: a failed fee's row says what a tap does, and does exactly
+ * that — on the form's row and on the confirm's fee line. The fee views are
+ * the REAL fee core's (`testing/fee-core.ts`): the relay refused to simulate
+ * the operation (`would_fail`).
+ */
+describe('a fee that would fail, and the tap that says so (PR 2 polish)', () => {
+	const alice = '0x' + 'ab'.repeat(20);
+	const WOULD_FAIL = m['componentsUi.signing.confirmBlock.feeWouldFail'];
+	const ANOTHER_COIN = m['componentsUi.gas.payWithAnotherCoin'];
+
+	it('the core’s words resolve, never a dotted path', () => {
+		expect(ANOTHER_COIN).toBe('Pay with another coin');
+		expect(WOULD_FAIL).toBe('This would fail if sent as it is.');
+	});
+
+	it('another coin on offer: "Pay with another coin" opens the coins — on the form and the confirm', () => {
+		const fee = wouldFailView(1, true);
+		expect(fee.failure).toMatchObject({ failure: 'would_fail', tap: 'choose_coin', chain_id: 1 });
+		const row = liveSendForm(
+			formModel(),
+			inputs({ selected_token: ETH, recipient: alice, amount: '1' }, fee)
+		).fee;
+		// The figure says the tap; the tap opens the list, behind its chevron.
+		// The form has no held confirm: the failure's sentence is the row's
+		// own line (as on Android).
+		expect(row).toMatchObject({ value: ANOTHER_COIN, tap: 'open', reason: WOULD_FAIL });
+
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, recipient: alice, confirm_amount: '1' }, fee)
+		);
+		const line = confirm.facts.find((fact) => fact.label === m['send.estFeeLabel']);
+		expect(line?.value).toBe(ANOTHER_COIN);
+		// Said once there: under the confirm, not again under its fee line.
+		expect(line?.note).toBeUndefined();
+		expect(line?.tap).toEqual({
+			does: 'choose_coin',
+			label: m['send.feeTokenLabel'],
+			busy: false
+		});
+		// The line under the held confirm is the fact — it asks for no tap.
+		expect(confirm.held).toBe(WOULD_FAIL);
+		expect(confirm.held).not.toBe(m['componentsUi.signing.confirmBlock.feeFailed']);
+	});
+
+	it('no coin left to try: the dash, stated — no control anywhere, and the fact under the confirm', () => {
+		const fee = wouldFailView(1, false);
+		expect(fee.failure).toMatchObject({ failure: 'would_fail', tap: 'nothing', figure_key: null });
+		const row = liveSendForm(
+			formModel(),
+			inputs({ selected_token: ETH, recipient: alice, amount: '1' }, fee)
+		).fee;
+		expect(row).toMatchObject({ value: '—', tap: 'none', reason: WOULD_FAIL });
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({ stage: 'confirm', selected_token: ETH, recipient: alice, confirm_amount: '1' }, fee)
+		);
+		const line = confirm.facts.find((fact) => fact.label === m['send.estFeeLabel']);
+		expect(line?.value).toBe('—');
+		expect(line?.tap).toBeUndefined();
+		expect(confirm.held).toBe(WOULD_FAIL);
+	});
+
+	it('a re-ask out: the retry line is the same control, and its tap asks nothing', () => {
+		const failure: FeeFailureView = {
+			failure: { chain_read: { rate_limited: false } },
+			reason_key: 'componentsUi.gas.reasonChainDown',
+			auto_retry: true,
+			retrying: true,
+			figure_key: null,
+			footer_key: 'componentsUi.signing.confirmBlock.feeRetrying',
+			tap: 'retry',
+			chain_id: 1,
+			fee_token: null
+		};
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs(
+				{ stage: 'confirm', selected_token: ETH, recipient: alice, confirm_amount: '1' },
+				{
+					busy: true,
+					failure
+				}
+			)
+		);
+		const line = confirm.facts.find((fact) => fact.label === m['send.estFeeLabel']);
+		expect(line?.tap).toEqual({ does: 'retry', label: m['send.feeRefresh'], busy: true });
+	});
+});
+
+/**
+ * PR 2 polish: a failure is for one question (`FeeFailureView.chain_id`).
+ * Right after a token switch the form names another chain before the fee
+ * machine has been asked about it — the old chain's failure flashed there.
+ */
+describe('another chain’s fee failure is not drawn on this form (PR 2 polish)', () => {
+	const alice = '0x' + 'ab'.repeat(20);
+	const POLYGON_USDT: SendToken = { ...USDT, chain_id: 137, network: 'polygon' };
+	const onEthereum: FeeFailureView = {
+		failure: 'missing_public_key',
+		reason_key: null,
+		auto_retry: false,
+		retrying: false,
+		figure_key: 'componentsUi.gas.estimateFailed',
+		footer_key: 'componentsUi.signing.confirmBlock.feeFailed',
+		tap: 'retry',
+		chain_id: 1,
+		fee_token: null
+	};
+
+	it('the form: no figure, no reason, no tap of its own — the row as if nothing failed', () => {
+		const row = liveSendForm(
+			formModel(),
+			inputs(
+				{ selected_token: POLYGON_USDT, recipient: alice, amount: '1' },
+				{ failed: 'missing_public_key', failure: onEthereum }
+			)
+		).fee;
+		expect(row.value).not.toBe(m['componentsUi.gas.estimateFailed']);
+		expect(row.reason).toBeUndefined();
+		expect(row.tap).toBeUndefined();
+		// The same failure on its own chain is drawn.
+		const own = liveSendForm(
+			formModel(),
+			inputs(
+				{ selected_token: ETH, recipient: alice, amount: '1' },
+				{ failed: 'missing_public_key', failure: onEthereum }
+			)
+		).fee;
+		expect(own).toMatchObject({ value: m['componentsUi.gas.estimateFailed'], tap: 'retry' });
+	});
+
+	it('the confirm: no failed fee line, and no footer for it', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs(
+				{
+					stage: 'confirm',
+					selected_token: POLYGON_USDT,
+					recipient: alice,
+					confirm_amount: '1'
+				},
+				{ failed: 'missing_public_key', failure: onEthereum }
+			)
+		);
+		const line = confirm.facts.find((fact) => fact.label === m['send.estFeeLabel']);
+		expect(line?.value).not.toBe(m['componentsUi.gas.estimateFailed']);
+		expect(line?.tap).toBeUndefined();
+		expect(line?.note).toBeUndefined();
+		expect(confirm.held).toBeUndefined();
+	});
+
+	it('the sweep’s chain is the form’s chain when no token is selected', () => {
+		const row = liveSendForm(
+			formModel(),
+			inputs(
+				{ selected_token: null, multi_chain_id: 137, multi_select_mode: true },
+				{ failed: 'missing_public_key', failure: onEthereum }
+			)
+		).fee;
+		expect(row.reason).toBeUndefined();
+		expect(row.tap).toBeUndefined();
+		const own = liveSendForm(
+			formModel(),
+			inputs(
+				{ selected_token: null, multi_chain_id: 1, multi_select_mode: true },
+				{ failed: 'missing_public_key', failure: onEthereum }
+			)
+		).fee;
+		expect(own.tap).toBe('retry');
 	});
 });

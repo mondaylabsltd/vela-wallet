@@ -30,6 +30,33 @@ enum class FlowState {
     SD1, SD1B, SD2, SD2B, SD2C, SD2D, SD2E, SD2F,
     SD3, SD3B, SD3C,
     SD4A, SD4B, SD4C,
+
+    /**
+     * The correctness batch's boards, drawn through the live builders and
+     * never on the live flow stack: the confirm held while the account's
+     * previous transaction on this network is in flight, with its one line
+     * (SD3D); and a refused send told by its reason — another of the
+     * account's transactions went first (SD4D).
+     *
+     * The integration round (PR 2 notes 1, 10, 13), each fee view written by
+     * the real fee machine: the form's fee failed because the chain's nodes
+     * did not answer — the dash, the reason in the row's kept line, the core
+     * retrying by itself (SD2G); Continue's alert worded by that cause, the
+     * chain by its name (SD2H), and by a fault inside the app (SD2I); the
+     * core's re-ask out, the reason kept beside the turning sign (SD2J); and
+     * the confirm held by a failed fee, its one line "Retrying…" (SD3E).
+     *
+     * The polish round: the confirm with the fee coins over it — the live
+     * state where the confirm's fee line opens them (SD3F); a submit the
+     * relay turned back because the previous transaction holds the nonce,
+     * "Not sent yet", calmly (SD3G); a failure only a tap fixes, its fee line
+     * a control under "Tap it to retry" (SD3H); and a fee the relay answered
+     * would fail — on the confirm (SD3I) and the form (SD2K), "Pay with
+     * another coin", the coins its tap opens (SD2M), and the dash when no
+     * other coin is left, no control (SD2L).
+     */
+    SD3D, SD4D, SD2G, SD2H, SD2I, SD2J, SD3E,
+    SD3F, SD3G, SD3H, SD3I, SD2K, SD2L, SD2M,
 }
 
 /* ------------------------------------------------------------------ chrome */
@@ -104,6 +131,13 @@ data class FactRowModel(
      * the body face, not mono.
      */
     val detail: String? = null,
+    /**
+     * PR 2 polish: the row is a control — the send confirm's fee line over a
+     * failure a tap answers ("Tap to retry" asks again, "Pay with another
+     * coin" opens the coins), so the line under the held confirm never asks
+     * for a tap the page cannot take.
+     */
+    val tap: Boolean = false,
 )
 
 enum class StatusTone { Success, Warning, Error, Info }
@@ -492,6 +526,19 @@ data class FeeRowModel(
     val refreshing: Boolean = false,
     /** The quote's 30 s TTL ran out — calm, never a fault. Its line is kept either way. */
     val staleNote: String? = null,
+    /**
+     * PR 2 note 1: why the fee failed, in the core's words — drawn in the
+     * line [staleNote] keeps, so nothing moves when it comes and goes, and
+     * kept while the core asks again by itself.
+     */
+    val reason: String? = null,
+    /**
+     * PR 2 polish: the row is a control — its tap opens the coins, or over a
+     * failure does what the figure says. `false` when the core says a tap
+     * does nothing (a fee that would fail with no other coin to pay in): no
+     * tap target and no chevron promising one.
+     */
+    val opens: Boolean = true,
 )
 
 /** One option of the speed control (spec 068). */
@@ -770,8 +817,26 @@ data class SendConfirmModel(
     val cta: String,
     /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
     val ctaEnabled: Boolean = true,
+    /**
+     * The one line under a confirm held while the account's previous
+     * transaction on this network is in flight (`SendView.previous_pending`):
+     * "Waiting for your last transaction on this network…". `null` otherwise.
+     */
+    val ctaHold: String? = null,
     /** Spec 043 phase 5: the core's refusal on this page (treasury low, submit failed) and the action it offers. */
     val notice: String? = null,
+    /**
+     * PR 2 polish: the notice's own title, over [notice] — "Not sent yet"
+     * when the relay turned the submit back because the account's previous
+     * transaction on this network still holds the nonce. `null`: no title.
+     */
+    val noticeTitle: String? = null,
+    /**
+     * The notice is no failure (PR 2 polish, "Not sent yet"): said calmly,
+     * in the page's quiet voice with a waiting mark — never the warning tone
+     * a refusal or a stop is said in.
+     */
+    val noticeCalm: Boolean = false,
     /** Spec 098 §4: the treasury stop's address, drawn under [notice]. */
     val noticeFund: FundAddressModel? = null,
     /** Issue #466: the stop's "Report this", as on the form ([SendFormModel.report]). */
@@ -781,7 +846,13 @@ data class SendConfirmModel(
     val noticeSecondary: String? = null,
 )
 
-enum class ReceiptStage { Submitting, Submitted, Confirmed, Failed }
+/**
+ * The receipt's stage. [NotSent] (PR 2 polish) is no failure: the relay
+ * turned the submit back because the account's previous transaction on this
+ * network still holds the nonce — nothing was sent and nothing went wrong, so
+ * it is drawn calmly (a waiting mark, never the failure's red), with Try again.
+ */
+enum class ReceiptStage { Submitting, Submitted, Confirmed, Failed, NotSent }
 
 @Immutable
 data class ReceiptHashModel(val label: String, val value: String, val copyLabel: String, val copyValue: String? = null)

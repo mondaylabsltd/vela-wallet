@@ -418,7 +418,11 @@ struct FlowHost: View {
                     model: m,
                     onNoticeAction: { onNoticeAction?() },
                     onNoticeSecondary: { onNoticeSecondary?() },
-                    onNoticeReport: { onRelayReport?() }
+                    onNoticeReport: { onRelayReport?() },
+                    onRefreshFee: onRefreshFee,
+                    // "Pay with another coin" (PR 2 polish): the coin list the
+                    // form's row opens, over the confirm.
+                    onOpenFee: { onNavigate(.feeToken) }
                 )
             } footer: {
                 // A hairline over the pinned hand-off: figures that run past
@@ -444,6 +448,11 @@ struct FlowHost: View {
                         }
                         .disabled(sendCtaDisabled)
                         .opacity(sendCtaDisabled ? Tokens.Opacity.disabled : 1)
+                        // PR 2 §3: why the confirm is held — the previous
+                        // transaction on this network — one plain line under it.
+                        if let held = m.heldNote {
+                            HeldConfirmNote(text: held)
+                        }
                     }
                 }
             }
@@ -474,6 +483,24 @@ struct FlowHost: View {
                 }
             }
         }
+    }
+}
+
+/// The line under a held confirm (PR 2 §3): the core's words, muted, centred
+/// — no countdown, no timer, nothing that moves while it holds.
+struct HeldConfirmNote: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+    let text: String
+
+    var body: some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .foregroundStyle(theme.fgMuted)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("send.confirm.held")
     }
 }
 

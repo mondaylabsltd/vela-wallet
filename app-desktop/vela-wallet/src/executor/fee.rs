@@ -1,6 +1,6 @@
 //! The only place the `fee_policy` machine touches the outside world.
 //!
-//! Seven operations, seven reads. Every rule that used to live in `GasFeeCard`,
+//! Eight operations, eight reads. Every rule that used to live in `GasFeeCard`,
 //! `useSendController` and `estimateTransactionFee` — the bundler-quote
 //! acceptance, the gas-price fallback, the ×1.5 padding, the 1 KiB calldata
 //! cliff, the in-band pricing, the balance<fee gate — is `fee_policy.rs`'s.
@@ -21,7 +21,7 @@ use gpui::App;
 
 use vela_core::app::fee_policy::{Event, FeeOperation, FeePolicy, FeeShellResult};
 
-use crate::executor::{fee_signals, relay, storage, user_op};
+use crate::executor::{chain, fee_signals, relay, storage, user_op};
 use crate::resident::{Answer, Machine};
 
 impl Machine for FeePolicy {
@@ -35,15 +35,36 @@ impl Machine for FeePolicy {
 
     fn perform(operation: &FeeOperation) -> Answer<FeeShellResult, Self::Event> {
         match operation {
-            FeeOperation::FetchGasPrice { chain_id, want_tip } => {
-                let (chain_id, want_tip) = (*chain_id, *want_tip);
+            FeeOperation::FetchGasPrice {
+                chain_id,
+                want_tip,
+                fresh,
+            } => {
+                let (chain_id, want_tip, fresh) = (*chain_id, *want_tip, *fresh);
                 Answer::Blocking(Box::new(move || {
-                    let signals = fee_signals::gas_signals(chain_id, want_tip);
+                    // A run after a failure reads the chain again, past the
+                    // 15 s reading this shell holds (issue #483).
+                    let signals = fee_signals::gas_signals(chain_id, want_tip, fresh);
                     FeeShellResult::GasPrice {
                         eth_gas_price: signals.eth_gas_price,
                         base_fee: signals.base_fee,
                         priority_fee: signals.priority_fee,
                     }
+                }))
+            }
+
+            // Issue #483: the account read is the fee's own, so its failure is
+            // said on the row, the footer and the retry alike. Through the
+            // pool; a pool that cannot take the read is `internal`, never the
+            // chain's doing.
+            FeeOperation::ReadDeployment {
+                chain_id,
+                account,
+                fresh,
+            } => {
+                let (chain_id, account, fresh) = (*chain_id, account.clone(), *fresh);
+                Answer::Blocking(Box::new(move || FeeShellResult::Deployment {
+                    read: chain::read_deployment(&account, chain_id, fresh),
                 }))
             }
 
@@ -165,6 +186,12 @@ mod tests {
             FeeOperation::FetchGasPrice {
                 chain_id: 100,
                 want_tip: true,
+                fresh: false,
+            },
+            FeeOperation::ReadDeployment {
+                chain_id: 100,
+                account: "0x0".to_owned(),
+                fresh: true,
             },
             FeeOperation::FetchBundlerQuote {
                 chain_id: 100,

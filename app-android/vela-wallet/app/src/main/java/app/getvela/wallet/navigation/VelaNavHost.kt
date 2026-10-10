@@ -980,6 +980,11 @@ fun VelaNavHost(
                 val batchView by send.batch.collectAsStateWithLifecycle()
                 val importReplaces by send.importReplaces.collectAsStateWithLifecycle()
                 val sendOpen = flows.top in SEND_STATES
+                // Send left, however it was left: its fee sessions stop
+                // answering — the block-time re-pricing and the core's own
+                // re-ask after a failure (PR 2 note 1) belong to a form or a
+                // confirm on screen. The next open asks afresh.
+                LaunchedEffect(sendOpen) { if (!sendOpen) send.left() }
                 LaunchedEffect(sendOpen, session.address) {
                     if (sendOpen && session.address.isNotEmpty()) {
                         feeSheetOpen = false
@@ -1035,7 +1040,9 @@ fun VelaNavHost(
                     }
                 }
                 sendAlert?.let { kind ->
-                    SendAlertDialog(kind = kind, strings = strings, onDismiss = send::dismissAlert)
+                    // The selected token's chain, by name: a chain out of reach is said as that one (PR 2 note 13).
+                    val alertChain = sendView.selected_token?.let { chainNames[it.chain_id] ?: it.network }.orEmpty()
+                    SendAlertDialog(kind = kind, strings = strings, chainName = alertChain, onDismiss = send::dismissAlert)
                 }
                 // Issue #466: the app's own report sheet, over the flow, seeded with the
                 // core's report — ONE sheet (the stop's button is on the page, so no
@@ -1219,7 +1226,11 @@ fun VelaNavHost(
                         onOpenUrl = { context.openUrl(it) },
                         onNavigate = { step ->
                             when (step) {
-                                FlowStep.FeeToken -> feeSheetOpen = true
+                                // The row does exactly what its words say (PR 2 polish): a
+                                // failed fee's "Tap to retry" asks again at once, "Pay with
+                                // another coin" opens the coins, a dash nothing; no failure,
+                                // the coins.
+                                FlowStep.FeeToken -> if (send.feeTapped() == app.getvela.wallet.feature.send.core.FeeFailureRow.Tap.OpenCoins) feeSheetOpen = true
                                 FlowStep.ContactPick -> send.openContactPicker()
                                 FlowStep.Chains -> chainSheetOpen = true
                                 else -> Unit
@@ -2920,7 +2931,7 @@ private val RECEIVE_STATES = setOf(FlowState.R1, FlowState.R2)
 private val SEND_STATES = setOf(
     FlowState.S1,
     FlowState.SD1, FlowState.SD1B, FlowState.SD2, FlowState.SD2B, FlowState.SD2C, FlowState.SD2D,
-    FlowState.SD2E, FlowState.SD2F, FlowState.SD3, FlowState.SD3B, FlowState.SD3C,
+    FlowState.SD2E, FlowState.SD2F, FlowState.SD3, FlowState.SD3B, FlowState.SD3C, FlowState.SD3F,
     FlowState.SD4A, FlowState.SD4B, FlowState.SD4C,
 )
 
@@ -2929,8 +2940,8 @@ private val SEND_STATES = setOf(
  * every kind its own sentence). Never a spinner: the machine already stopped.
  */
 @Composable
-private fun SendAlertDialog(kind: SendAlertKind, strings: VelaStrings, onDismiss: () -> Unit) {
-    val (title, body) = SendLive.alertText(kind, strings)
+internal fun SendAlertDialog(kind: SendAlertKind, strings: VelaStrings, chainName: String, onDismiss: () -> Unit) {
+    val (title, body) = SendLive.alertText(kind, strings, chainName)
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {

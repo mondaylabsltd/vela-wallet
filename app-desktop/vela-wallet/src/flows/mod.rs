@@ -492,6 +492,24 @@ pub struct FlowStrings {
     pub tx_maybe_sent: SharedString,
     pub tx_error_generic: SharedString,
     pub tx_error_bundler_fund: SharedString,
+    /// The account's previous transaction on this network still holds its
+    /// nonce: the one line under a held confirm (`SendView.previous_pending`),
+    /// and the relay's own refusal of a second one
+    /// (`SendTxErrorKey::PreviousPending`).
+    pub previous_pending: SharedString,
+    /// "Try again" — the confirm after that refusal, which waits for the
+    /// first like any held confirm.
+    pub try_again: SharedString,
+    /// "Not sent yet" over "Your previous transaction on this network is
+    /// still being processed…" — the confirm's notice after the relay turned
+    /// a submit back because the account's previous operation holds the
+    /// nonce (`SendTxErrorKey::PreviousPending`, PR 2 polish). Nothing was
+    /// sent and nothing went wrong: said calmly, never in the failure's red.
+    pub not_sent_title: SharedString,
+    pub not_sent_body: SharedString,
+    /// Every sentence a refusal can be told in (`TrackEntryView.refusal_key`,
+    /// `SendReceiptView.refusal_key`), by corpus key — the core chooses.
+    pub refusals: Vec<(&'static str, SharedString)>,
     /// Spec 102: why this account cannot sign here (`SendTxErrorKey::
     /// VenueBlocked`), the core's reason filled with its domains.
     pub venue_blocks: crate::signing::trusted_signer::VenueBlockWords,
@@ -506,6 +524,9 @@ pub struct FlowStrings {
     // be able to name it.
     pub fee_refresh: SharedString,
     pub fee_stale: SharedString,
+    /// The fee's failure in the core's words (PR 2 note 1): the row's reason
+    /// and figure, and the line under the held confirm.
+    pub fee_failure: FeeFailureWords,
     pub fee_speed_label: SharedString,
     pub fee_speed_once: SharedString,
     pub fee_speed_free: SharedString,
@@ -615,7 +636,214 @@ pub struct FlowStrings {
     pub batch_import_failed_encoding: SharedString,
 }
 
+/// Every sentence the core may tell a relay's refusal in, by its key
+/// (`tx_tracker::RefusalReason::key`): the fee sentence only for a fee
+/// refusal, "another transaction went first" for a nonce already used, and
+/// the plain "the network refused it" for every other reason.
+#[must_use]
+pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
+    use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
+    use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
+    // The held nonce at submit (`SignView.failure_refusal_key`, PR 2 note 9)
+    // is "not sent yet" — its sentence says what to do (PR 2 polish); read
+    // as the plain refusal it would say the network refused it.
+    [
+        REFUSED_KEY,
+        REFUSED_FEES_KEY,
+        REFUSED_NONCE_KEY,
+        NOT_SENT_BODY_KEY,
+    ]
+    .into_iter()
+    .map(|key| (key, loc.t(key)))
+    .collect()
+}
+
+/// Every way a fee can fail, so the words for whichever the core names are
+/// resolved once — the core picks the key, a surface only reads it.
+pub const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 10] = {
+    use vela_core::app::fee_policy::FeeFailure as F;
+    [
+        F::MissingPublicKey,
+        F::FeeTokenUnavailable,
+        F::QuoteUnavailable,
+        F::CalculationFailed,
+        F::EstimateFailed,
+        F::GasQuoteTooHigh,
+        F::WouldFail,
+        F::ChainRead { rate_limited: true },
+        F::ChainRead {
+            rate_limited: false,
+        },
+        // Issue 483: a fault inside the app — never "can't reach the chain".
+        F::Internal,
+    ]
+};
+
+/// The fee's failure as a fee row and the confirm under it say it (PR 2
+/// note 1) — Send's form, its confirm, and the signing sheet alike, so the
+/// three can never word one failure three ways. Every key the core's
+/// `FeeFailureView` can name, resolved once.
+#[derive(Clone, Debug, Default)]
+pub struct FeeFailureWords(Vec<(&'static str, SharedString)>);
+
+/// [`FeeFailureWords::row`]: one failure, drawn.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FeeFailureLines {
+    /// The row's figure, saying what a tap does: "Tap to retry" when only a
+    /// tap asks again, "Pay with another coin" when the tap opens the coins,
+    /// else the dash.
+    pub figure: SharedString,
+    /// The line under the row (`{{chain}}` filled), or none.
+    pub reason: Option<SharedString>,
+    /// The line under the held confirm: "Retrying…" while the core asks
+    /// again by itself (and through the re-ask), "This would fail if sent as
+    /// it is." when the relay answered that it fails, else "Tap it to retry".
+    pub footer: SharedString,
+    /// A re-ask is out now: the row's measuring sign turns beside the
+    /// reason it keeps.
+    pub retrying: bool,
+    /// The core asks again by itself — nothing may ask for a tap.
+    pub auto_retry: bool,
+    /// What a tap on the row does (`FeeFailureView.tap`): the row is a
+    /// control only when this is not `Nothing`, and does exactly this.
+    pub tap: vela_core::app::fee_policy::FeeFailureTap,
+}
+
+impl FeeFailureWords {
+    #[must_use]
+    pub fn resolve(loc: &Loc) -> Self {
+        use vela_core::app::fee_policy::{
+            ESTIMATE_FAILED_KEY, FEE_FAILED_KEY, FEE_RETRYING_KEY, FEE_WOULD_FAIL_KEY,
+            PAY_WITH_ANOTHER_COIN_KEY,
+        };
+        let mut keys: Vec<&'static str> = reason_keys().collect();
+        keys.extend([
+            ESTIMATE_FAILED_KEY,
+            PAY_WITH_ANOTHER_COIN_KEY,
+            FEE_RETRYING_KEY,
+            FEE_FAILED_KEY,
+            FEE_WOULD_FAIL_KEY,
+        ]);
+        let mut words: Vec<(&'static str, SharedString)> = Vec::new();
+        for key in keys {
+            if !words.iter().any(|(known, _)| *known == key) {
+                words.push((key, loc.t(key)));
+            }
+        }
+        Self(words)
+    }
+
+    /// The words for `key`, `{{chain}}` filled — `None` for a key this build
+    /// does not know.
+    #[must_use]
+    pub fn text(&self, key: &str, chain: &str) -> Option<SharedString> {
+        self.0
+            .iter()
+            .find(|(known, _)| *known == key)
+            .map(|(_, text)| SharedString::from(crate::wallet::fill(text, "chain", chain)))
+    }
+
+    /// Every sentence the line under the Send form's fee row can come to say
+    /// for `chain` — each failure's reason, and "This would fail if sent as
+    /// it is." for the one with none (`would_fail`, said there for want of a
+    /// held confirm). The form keeps room for the tallest of them, so
+    /// whichever lands moves nothing under it.
+    #[must_use]
+    pub fn reasons(&self, chain: &str) -> Vec<SharedString> {
+        let mut out: Vec<SharedString> = Vec::new();
+        for key in reason_keys().chain([vela_core::app::fee_policy::FEE_WOULD_FAIL_KEY]) {
+            if let Some(text) = self.text(key, chain)
+                && !out.contains(&text)
+            {
+                out.push(text);
+            }
+        }
+        out
+    }
+
+    /// The core's failure view, drawn: the figure, the reason under the row
+    /// and the footer line. `chain` is the name of the chain the fee is for.
+    #[must_use]
+    pub fn row(
+        &self,
+        failure: &vela_core::app::fee_policy::FeeFailureView,
+        chain: &str,
+    ) -> FeeFailureLines {
+        let footer = self
+            .text(&failure.footer_key, chain)
+            .or_else(|| self.text(vela_core::app::fee_policy::FEE_FAILED_KEY, chain))
+            .unwrap_or_default();
+        FeeFailureLines {
+            figure: failure
+                .figure_key
+                .as_deref()
+                .and_then(|key| self.text(key, chain))
+                .unwrap_or_else(|| SharedString::from("—")),
+            reason: failure
+                .reason_key
+                .as_deref()
+                .and_then(|key| self.text(key, chain)),
+            footer,
+            retrying: failure.retrying,
+            auto_retry: failure.auto_retry,
+            tap: failure.tap,
+        }
+    }
+}
+
+/// The reason key of every failure the core can name, in [`FEE_FAILURES`]'
+/// order.
+fn reason_keys() -> impl Iterator<Item = &'static str> {
+    FEE_FAILURES
+        .iter()
+        .filter_map(|failure| vela_core::app::fee_policy::failure_reason_key(*failure))
+}
+
+/// The fee's failure as the core says it once for the row and the footer
+/// (`FeeView.failure`) — for `chain`'s question only (PR 2 polish): right
+/// after a token switch the form names another chain before the fee machine
+/// has been asked about it, and the old chain's failure must not flash
+/// there. A failure built without a run (no chain) is taken as it is.
+///
+/// Never rebuilt from `FeeView.failed`: the core leaves `failure` out on
+/// purpose for another chain's run, and a failure rebuilt here could not
+/// know what a tap on it does (`FeeFailureView.tap` needs the coins the run
+/// tried).
+#[must_use]
+pub fn fee_failure_of(
+    fee: &vela_core::app::fee_policy::FeeView,
+    chain: Option<u32>,
+) -> Option<vela_core::app::fee_policy::FeeFailureView> {
+    fee.failure
+        .clone()
+        .filter(|failure| failure.is_for_chain(chain))
+}
+
+/// The sentence for the refusal key the core chose, from `sentences`
+/// ([`refusal_sentences`]); a key this build does not know reads as the
+/// plain refusal — never the fee sentence.
+#[must_use]
+pub fn refusal_of(sentences: &[(&'static str, SharedString)], key: Option<&str>) -> SharedString {
+    let key = key.unwrap_or(vela_core::app::tx_tracker::REFUSED_KEY);
+    sentences
+        .iter()
+        .find(|(known, _)| *known == key)
+        .or_else(|| {
+            sentences
+                .iter()
+                .find(|(known, _)| *known == vela_core::app::tx_tracker::REFUSED_KEY)
+        })
+        .map(|(_, text)| text.clone())
+        .unwrap_or_default()
+}
+
 impl FlowStrings {
+    /// The sentence for a refusal, by the key the core chose.
+    #[must_use]
+    pub fn refusal(&self, key: Option<&str>) -> SharedString {
+        refusal_of(&self.refusals, key)
+    }
+
     /// The words for the History empty line the core chose
     /// (`FeedView.history_empty_key`, spec 082 RG5). The choice is the core's;
     /// this only looks the key up among the two it hands out.
@@ -861,6 +1089,11 @@ impl FlowStrings {
             tx_maybe_sent: s("componentsUi.signing.maybeSent"),
             tx_error_generic: s("send.txErrorGeneric"),
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
+            previous_pending: s(vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY),
+            try_again: s("common.tryAgain"),
+            not_sent_title: s(vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY),
+            not_sent_body: s(vela_core::app::sign_confirm::NOT_SENT_BODY_KEY),
+            refusals: refusal_sentences(loc),
             venue_blocks: crate::signing::trusted_signer::VenueBlockWords::resolve(loc),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
             recipient_token_contract: s("send.recipientTokenContract"),
@@ -868,6 +1101,7 @@ impl FlowStrings {
 
             fee_refresh: s("send.feeRefresh"),
             fee_stale: s("send.feeStale"),
+            fee_failure: FeeFailureWords::resolve(loc),
             fee_speed_label: s("send.feeSpeedLabel"),
             fee_speed_once: s("send.feeSpeedOnce"),
             fee_speed_free: s("send.feeSpeedFree"),
@@ -977,6 +1211,14 @@ mod tests {
             (s.pick_contact_title.as_ref(), "send.pickContactTitle"),
             (s.tx_submitted_title.as_ref(), "send.txSubmittedTitle"),
             (s.tx_maybe_sent.as_ref(), "componentsUi.signing.maybeSent"),
+            (
+                s.not_sent_title.as_ref(),
+                vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY,
+            ),
+            (
+                s.not_sent_body.as_ref(),
+                vela_core::app::sign_confirm::NOT_SENT_BODY_KEY,
+            ),
             (s.vela_user.as_ref(), "send.velaUser"),
             (s.tx_sent.as_ref(), "componentsTx.detail.sent"),
             (s.multi_send_title.as_ref(), "send.multiSendTitle"),
@@ -1014,6 +1256,59 @@ mod tests {
             (&s.denom_toggle_no_rate, "{{code}}"),
         ] {
             assert!(template.contains(var), "`{template}` must carry {var}");
+        }
+    }
+
+    /// PR 2 polish: every figure and footer the core's failure view can name
+    /// is in the words — "Pay with another coin" and "This would fail if
+    /// sent as it is." among them — so no fee row ever draws a dotted key,
+    /// and a row's figure promises exactly its tap.
+    #[test]
+    fn every_failure_the_core_can_name_is_worded() {
+        use vela_core::app::fee_policy::{
+            ESTIMATE_FAILED_KEY, FeeFailureTap, FeeFailureView, PAY_WITH_ANOTHER_COIN_KEY,
+        };
+        for tag in ["en", "zh"] {
+            let loc = Loc::for_tag(tag);
+            let words = FeeFailureWords::resolve(&loc);
+            for failure in FEE_FAILURES {
+                for another_coin in [false, true] {
+                    for retrying in [false, true] {
+                        let view =
+                            FeeFailureView::of_run(failure, retrying, another_coin, Some(1), None);
+                        let lines = words.row(&view, "Ethereum");
+                        let case = format!("{tag} {failure:?} {another_coin} {retrying}");
+                        assert_eq!(
+                            words.text(&view.footer_key, "Ethereum").as_ref(),
+                            Some(&lines.footer),
+                            "{case}: the footer's own words"
+                        );
+                        if let Some(key) = view.figure_key.as_deref() {
+                            assert!(words.text(key, "x").is_some(), "{case}: {key}");
+                        }
+                        assert!(!lines.figure.contains("componentsUi"), "{case}");
+                        assert!(!lines.footer.contains("componentsUi"), "{case}");
+                        assert_eq!(lines.tap, view.tap, "{case}");
+                        // The figure says what the tap does.
+                        if lines.figure == loc.t(PAY_WITH_ANOTHER_COIN_KEY) {
+                            assert_eq!(lines.tap, FeeFailureTap::ChooseCoin, "{case}");
+                        }
+                        if lines.figure == loc.t(ESTIMATE_FAILED_KEY) {
+                            assert_eq!(lines.tap, FeeFailureTap::Retry, "{case}");
+                        }
+                    }
+                }
+            }
+            // Every reason is in the room the Send form keeps for it.
+            let reasons = words.reasons("Ethereum");
+            assert!(reasons.contains(&loc.t_text(
+                vela_core::app::fee_policy::REASON_CHAIN_DOWN_KEY,
+                "chain",
+                "Ethereum"
+            )));
+            assert!(reasons.contains(&loc.t(vela_core::app::fee_policy::REASON_INTERNAL_KEY)));
+            assert!(reasons.contains(&loc.t(vela_core::app::fee_policy::FEE_WOULD_FAIL_KEY)));
+            assert!(reasons.iter().all(|line| !line.contains("{{")), "{tag}");
         }
     }
 

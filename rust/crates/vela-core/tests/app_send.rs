@@ -4491,6 +4491,7 @@ fn a_single_send_persists_one_record_then_hands_off_to_the_tracker() {
     assert_eq!(
         op,
         Op::TrackSubmitted {
+            sender: Some(ACCOUNT.to_owned()),
             user_op_hash: HASH.to_owned(),
             record_ids: vec![HASH.to_owned()],
             chain_id: 1,
@@ -4628,6 +4629,7 @@ fn a_definitive_failure_stamps_the_receipt_but_never_unsubmits_the_payment() {
     sut.dispatch(Event::ReceiptUpdate {
         user_op_hash: "0xother".to_owned(),
         outcome: SendReceiptOutcome::Failed {
+            refusal: None,
             rejected: false,
             not_sent: false,
         },
@@ -4641,6 +4643,7 @@ fn a_definitive_failure_stamps_the_receipt_but_never_unsubmits_the_payment() {
     sut.dispatch(Event::ReceiptUpdate {
         user_op_hash: HASH.to_owned(),
         outcome: SendReceiptOutcome::Failed {
+            refusal: None,
             rejected: false,
             not_sent: false,
         },
@@ -6201,6 +6204,9 @@ fn track_entry(
     tx_hash: Option<&str>,
 ) -> vela_core::app::tx_tracker::TrackEntryView {
     vela_core::app::tx_tracker::TrackEntryView {
+        refusal: None,
+        refusal_key: None,
+        sender: None,
         user_op_hash: HASH.to_owned(),
         chain_id: 1,
         record_ids: vec![HASH.to_owned()],
@@ -6211,6 +6217,7 @@ fn track_entry(
         outcome,
         relay_tx_hash: None,
         relay_sent_at_ms: None,
+        stalled: false,
     }
 }
 
@@ -6251,6 +6258,7 @@ fn a_maybe_sent_send_reads_maybe_sent_and_plays_no_success_haptic() {
     assert_eq!(
         ops,
         vec![Op::TrackSubmitted {
+            sender: Some(ACCOUNT.to_owned()),
             user_op_hash: HASH.to_owned(),
             record_ids: vec![HASH.to_owned()],
             chain_id: 1,
@@ -6359,7 +6367,11 @@ fn a_fee_hold_is_the_relay_acknowledging_a_maybe_sent_send() {
 #[test]
 fn receipt_outcome_of_maps_every_tracker_status() {
     use vela_core::app::tx_tracker::{TrackOutcome, TrackStatus};
-    let failed = |rejected, not_sent| SendReceiptOutcome::Failed { rejected, not_sent };
+    let failed = |rejected, not_sent| SendReceiptOutcome::Failed {
+        rejected,
+        not_sent,
+        refusal: None,
+    };
     let rows = [
         (
             track_entry(TrackStatus::Confirmed, TrackOutcome::Final, Some("0xtx")),
@@ -6441,6 +6453,7 @@ fn old_send_json_without_the_new_fields_still_decodes() {
     assert_eq!(
         failed,
         Some(SendReceiptOutcome::Failed {
+            refusal: None,
             rejected: true,
             not_sent: false
         })
@@ -6524,6 +6537,7 @@ fn signed_and_cleared(sut: &mut Sut) -> Vec<SendTxRecord> {
         ops,
         vec![
             Op::TrackSubmitted {
+                sender: Some(ACCOUNT.to_owned()),
                 user_op_hash: LOCAL_HASH.to_owned(),
                 record_ids: vec![],
                 chain_id: 1,
@@ -6597,6 +6611,7 @@ fn accepted_marks_the_written_records_admitted() {
         record_ids: split_ids(LOCAL_HASH)
     }));
     assert!(ops.contains(&Op::TrackSubmitted {
+        sender: Some(ACCOUNT.to_owned()),
         user_op_hash: LOCAL_HASH.to_owned(),
         record_ids: split_ids(LOCAL_HASH),
         chain_id: 1,
@@ -6647,6 +6662,7 @@ fn a_lost_reply_after_the_write_ahead_writes_nothing_new() {
     assert_eq!(
         handoffs,
         vec![&Op::TrackSubmitted {
+            sender: Some(ACCOUNT.to_owned()),
             user_op_hash: LOCAL_HASH.to_owned(),
             record_ids: split_ids(LOCAL_HASH),
             chain_id: 1,
@@ -6811,6 +6827,7 @@ fn a_not_sent_verdict_never_stamps_an_accepted_send() {
     let not_sent = || Event::ReceiptUpdate {
         user_op_hash: LOCAL_HASH.to_owned(),
         outcome: SendReceiptOutcome::Failed {
+            refusal: None,
             rejected: false,
             not_sent: true,
         },
@@ -8410,4 +8427,306 @@ fn a_refused_submit_shuts_the_slide_until_its_retry() {
     assert!(sut.dispatch(Event::SlideConfirm).is_empty());
     sut.dispatch(Event::RetryAfterError);
     assert!(sut.view().can_confirm);
+}
+
+// ===========================================================================
+// One transaction in flight per account and network: wait for the first
+// ===========================================================================
+
+fn in_flight(sender: &str, chain_id: u32, hash: &str) -> vela_core::app::tx_tracker::InFlightOp {
+    vela_core::app::tx_tracker::InFlightOp {
+        sender: sender.to_owned(),
+        chain_id,
+        user_op_hash: hash.to_owned(),
+    }
+}
+
+/// A second send while the account's first on this chain is still going
+/// through would take the same nonce — so the confirm is held, says why, and
+/// opens by itself once the first is final. A stale slide asks for nothing.
+#[test]
+fn the_confirm_waits_for_the_account_s_previous_transaction() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.view().can_confirm);
+
+    sut.dispatch(Event::InFlightOps {
+        ops: vec![in_flight(ACCOUNT, 1, "0xfirst")],
+    });
+    let view = sut.view();
+    assert!(!view.can_confirm, "held while the first is in flight");
+    let held = view.previous_pending.expect("the hold says why");
+    assert_eq!(held.chain_id, 1);
+    assert_eq!(held.user_op_hash, "0xfirst");
+    assert_eq!(
+        held.key,
+        "componentsUi.signing.confirmBlock.previousPending"
+    );
+    assert!(
+        sut.dispatch(Event::SlideConfirm).is_empty(),
+        "a slide from a stale frame signs nothing"
+    );
+
+    // The first is final: the tracker no longer lists it.
+    sut.dispatch(Event::InFlightOps { ops: vec![] });
+    let view = sut.view();
+    assert!(view.can_confirm, "opens by itself");
+    assert_eq!(view.previous_pending, None);
+    assert!(matches!(slide_to_submit(&mut sut), Op::SubmitUserOp { .. }));
+}
+
+/// While held, the line is one line and stays put: a fee re-measure, the
+/// tracker's list sent again unchanged, its end — the hold says the same
+/// sentence about the same transaction until the list lets it go (final, or
+/// ten minutes with no progress: `tx_tracker::IN_FLIGHT_STALL_MS`).
+#[test]
+fn the_held_line_stays_one_line_until_the_hold_is_released() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    let ops = vec![in_flight(ACCOUNT, 1, "0xfirst")];
+    sut.dispatch(Event::InFlightOps { ops: ops.clone() });
+    let held = sut.view().previous_pending.expect("held");
+
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    assert_eq!(
+        sut.view().previous_pending.as_ref(),
+        Some(&held),
+        "re-measuring"
+    );
+    sut.dispatch(Event::FeeBusyChanged { busy: false });
+    assert_eq!(sut.view().previous_pending.as_ref(), Some(&held));
+    sut.dispatch(Event::InFlightOps { ops });
+    assert_eq!(
+        sut.view().previous_pending.as_ref(),
+        Some(&held),
+        "the same list again"
+    );
+    assert!(!sut.view().can_confirm);
+
+    // The tracker released it (final, or stalled): the list no longer has it.
+    sut.dispatch(Event::InFlightOps { ops: vec![] });
+    assert_eq!(sut.view().previous_pending, None);
+    assert!(sut.view().can_confirm);
+}
+
+/// Only the same account on the same chain waits: another chain, another
+/// account (any casing aside) or this journey's own op hold nothing.
+#[test]
+fn only_the_same_account_on_the_same_chain_waits() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    sut.dispatch(Event::InFlightOps {
+        ops: vec![
+            in_flight(ACCOUNT, 8453, "0xbase"),
+            in_flight("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 1, "0xother"),
+        ],
+    });
+    assert!(sut.view().can_confirm);
+    sut.dispatch(Event::InFlightOps {
+        ops: vec![in_flight(
+            &ACCOUNT.to_uppercase().replace("0X", "0x"),
+            1,
+            "0xfirst",
+        )],
+    });
+    assert!(
+        !sut.view().can_confirm,
+        "the address is matched in any case"
+    );
+}
+
+/// The relay refused the submit because another transaction of the account
+/// holds the nonce (another device, one this device could not follow):
+/// nothing was sent, and it says so — not the generic failure, and calmly:
+/// no error buzz for something that did not go wrong.
+#[test]
+fn a_held_nonce_refusal_says_the_previous_transaction_is_pending() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let ops = sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::PreviousPending,
+    });
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::Haptic { .. })),
+        "not sent yet is no failure: {ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Error);
+    assert_eq!(view.tx_error, Some(SendTxErrorKey::PreviousPending));
+}
+
+/// A refusal is told by its reason: the fee words only when fees were the
+/// reason (they were every refusal's words before — a spent nonce read as
+/// "network fees stayed above the amount you approved").
+#[test]
+fn a_refused_send_is_told_by_its_reason() {
+    use vela_core::app::tx_tracker::RefusalReason;
+    for (refusal, key, fee_words) in [
+        (
+            Some(RefusalReason::FeeBelowMarket),
+            "send.txRejectedFees",
+            true,
+        ),
+        (
+            Some(RefusalReason::NonceUsed),
+            "componentsUi.signing.wentFirst",
+            false,
+        ),
+        (
+            Some(RefusalReason::SimulationFailed),
+            "componentsUi.signing.refused",
+            false,
+        ),
+        (None, "componentsUi.signing.refused", false),
+    ] {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.resolve(submitted(HASH));
+        settle_persistence(&mut sut);
+        sut.resolve(Res::TrackHandedOff);
+        sut.dispatch(Event::ReceiptUpdate {
+            user_op_hash: HASH.to_owned(),
+            outcome: SendReceiptOutcome::Failed {
+                rejected: true,
+                not_sent: false,
+                refusal,
+            },
+        });
+        let receipt = sut.view().receipt.expect("receipt");
+        assert_eq!(receipt.status, SendReceiptStatus::Failed, "{refusal:?}");
+        assert_eq!(receipt.refusal_key.as_deref(), Some(key), "{refusal:?}");
+        assert_eq!(
+            receipt.hold_reason == Some(SendHoldReason::FeeRejected),
+            fee_words,
+            "{refusal:?}"
+        );
+    }
+}
+
+/// The tracker's refusal reaches the receipt outcome.
+#[test]
+fn the_tracker_s_reason_rides_the_receipt_outcome() {
+    use vela_core::app::tx_tracker::{RefusalReason, TrackOutcome, TrackStatus};
+    let mut entry = track_entry(TrackStatus::Rejected, TrackOutcome::Final, None);
+    entry.refusal = Some(RefusalReason::NonceUsed);
+    assert_eq!(
+        vela_core::app::send::receipt_outcome_of(&entry),
+        Some(SendReceiptOutcome::Failed {
+            rejected: true,
+            not_sent: false,
+            refusal: Some(RefusalReason::NonceUsed),
+        })
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PR 2 integration: notes 6 and 13
+// ---------------------------------------------------------------------------
+
+/// What the tracker last said is in flight is the device's, not the form's:
+/// a form opened between two tracker renders is held from its first frame
+/// (note 6). Open used to rebuild the model and forget it.
+#[test]
+fn open_keeps_what_is_in_flight() {
+    let mut sut = boot(vec![eth("2")]);
+    sut.dispatch(Event::InFlightOps {
+        ops: vec![in_flight(ACCOUNT, 1, "0xfirst")],
+    });
+    // The form is opened again (another send), and nothing is re-told.
+    sut.dispatch(open_event(SendOpenParams::default()));
+    let ops = sut.resolve(loaded(vec![eth("2")]));
+    for _ in &ops {
+        sut.resolve(Res::FeesPrewarmed);
+    }
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    let view = sut.view();
+    assert!(view.previous_pending.is_some(), "held from the first frame");
+    assert!(!view.can_confirm);
+}
+
+/// The send vocabulary is the fee vocabulary (note 13): every fee failure
+/// passes through as it is, in the same wire shape, and the alert says the
+/// chain out of reach by its name and a fault inside the app as that — never
+/// "can't reach the chain" for the second.
+#[test]
+fn every_fee_failure_passes_through_and_is_worded_by_its_cause() {
+    use vela_core::app::fee_policy::{FeeFailure, REASON_INTERNAL_KEY};
+    use vela_core::app::send::{
+        ESTIMATE_CHAIN_DOWN_BODY_KEY, ESTIMATE_FAILED_BODY_KEY, ESTIMATE_FAILED_TITLE_KEY,
+    };
+    for failure in [
+        FeeFailure::MissingPublicKey,
+        FeeFailure::FeeTokenUnavailable,
+        FeeFailure::QuoteUnavailable,
+        FeeFailure::CalculationFailed,
+        FeeFailure::EstimateFailed,
+        FeeFailure::GasQuoteTooHigh,
+        FeeFailure::ChainRead { rate_limited: true },
+        FeeFailure::ChainRead {
+            rate_limited: false,
+        },
+        FeeFailure::WouldFail,
+        FeeFailure::Internal,
+    ] {
+        let fee_json = serde_json::to_value(failure).unwrap();
+        let send: SendEstimateFailure = serde_json::from_value(fee_json.clone())
+            .unwrap_or_else(|e| panic!("{failure:?} does not pass through: {e}"));
+        assert_eq!(send, SendEstimateFailure::from(failure));
+        assert_eq!(serde_json::to_value(send).unwrap(), fee_json, "same shape");
+    }
+    assert_eq!(
+        SendEstimateFailure::ChainRead {
+            rate_limited: false
+        }
+        .body_key(),
+        ESTIMATE_CHAIN_DOWN_BODY_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::Internal.body_key(),
+        REASON_INTERNAL_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::WouldFail.body_key(),
+        ESTIMATE_FAILED_BODY_KEY
+    );
+    assert_eq!(
+        SendEstimateFailure::Timeout.body_key(),
+        ESTIMATE_FAILED_BODY_KEY
+    );
+    assert_eq!(ESTIMATE_FAILED_TITLE_KEY, "send.alertEstimateFailedTitle");
+}
+
+/// The fee card failed on the confirm page (a catch-up that could not price
+/// again, or the core's re-ask after a failure): the confirm is held, and
+/// the figure kept from Continue is dropped — it never opens on a figure the
+/// fee machine discarded, between two re-asks. A settled quote opens it.
+#[test]
+fn a_failed_fee_card_holds_the_confirm_and_drops_its_figure() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.view().can_confirm);
+
+    sut.dispatch(Event::FeeFailedChanged { failed: true });
+    let view = sut.view();
+    assert!(!view.can_confirm, "held while the fee card has failed");
+    assert_eq!(view.fee, None, "the discarded figure is not drawn");
+    // Between two re-asks the busy flag drops: still held.
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    sut.dispatch(Event::FeeBusyChanged { busy: false });
+    assert!(!sut.view().can_confirm);
+    assert!(sut
+        .dispatch(Event::SlideConfirm)
+        .iter()
+        .all(|op| !matches!(op, Op::SubmitUserOp { .. })));
+
+    // The re-ask lands.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 1_200),
+    });
+    sut.dispatch(Event::FeeFailedChanged { failed: false });
+    let view = sut.view();
+    assert!(view.can_confirm);
+    assert_eq!(view.fee.map(|fee| fee.total_wei), Some("1200".to_owned()));
 }

@@ -8,6 +8,7 @@ import type { SendFeeIssueView } from "./SendFeeIssueView";
 import type { SendLockError } from "./SendLockError";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
 import type { SendPayee } from "./SendPayee";
+import type { SendPreviousPending } from "./SendPreviousPending";
 import type { SendReceiptView } from "./SendReceiptView";
 import type { SendRecipientDraft } from "./SendRecipientDraft";
 import type { SendRecipientIdentity } from "./SendRecipientIdentity";
@@ -215,7 +216,17 @@ can_continue: boolean,
  * refused submit ∧ no relay stop up. [`Event::SlideConfirm`] refuses on
  * the same predicate; a shell adds nothing to it (issue 424).
  */
-can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, 
+can_confirm: boolean, 
+/**
+ * The account's previous transaction on this network is still going
+ * through, so the confirm is held (part of `can_confirm`): this one
+ * would take the same nonce. Drawn as its `key` under the confirm — the
+ * one line for as long as it holds, unchanged while the fee re-measures,
+ * no countdown; the confirm opens by itself once the first is final or
+ * has made no progress for ten minutes
+ * ([`super::tx_tracker::IN_FLIGHT_STALL_MS`]). `None` otherwise.
+ */
+previous_pending: SendPreviousPending | null, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, 
 /**
  * Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
  * account cannot sign here — drawn as `VenueBlock::key()` with its

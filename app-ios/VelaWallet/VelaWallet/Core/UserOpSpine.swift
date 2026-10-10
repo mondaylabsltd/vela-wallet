@@ -140,6 +140,13 @@ final class UserOpSpine {
         /// spec 082 RJ3): nothing was sent, and trying the same op again will
         /// not help — the page is answered "the network refused this".
         case rejected(String?)
+        /// The relay refused it because another operation of this account
+        /// holds the nonce (`RelayRejection::NonceHeld` — the relay's
+        /// `nonce_in_flight`, or an older relay's `[existingHash:…]` marker;
+        /// PR 2 §3). Nothing of this one went out. Send says "waiting for your
+        /// last transaction on this network" with Try again; a page is told
+        /// `PREVIOUS_PENDING_DETAIL`.
+        case previousPending
     }
 
     /// What a submit came to when it did not fail (spec 082 RA1, RA4).
@@ -511,7 +518,8 @@ final class UserOpSpine {
         case .notSent(.nonceHeld?):
             // 083: another operation of the account holds the nonce — its
             // hash is never this request's; nothing of this one went out.
-            throw Refused(failure: .other(userOpPreviousPendingDetail()))
+            // PR 2: its own failure, so Send can say so (`previous_pending`).
+            throw Refused(failure: .previousPending)
         }
     }
 

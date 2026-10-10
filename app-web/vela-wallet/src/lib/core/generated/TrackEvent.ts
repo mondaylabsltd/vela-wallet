@@ -18,4 +18,10 @@ submit_block: number | null,
  * never reads [`TrackOutcome::MaybeSent`], and a relay `not_found`
  * no longer counts against it.
  */
-admitted: boolean, } | { "type": "withdrawn", user_op_hash: string, record_ids: Array<string>, } | { "type": "tick" } | { "type": "app_resumed" } | { "type": "home_focused" } | { "type": "abort", user_op_hash: string, };
+admitted: boolean, 
+/**
+ * The account that signed it — `SendOperation::TrackSubmitted` /
+ * `SignTrackerHandoff`'s `sender`, forwarded. What makes the op one
+ * this account must wait for ([`in_flight_ops`]).
+ */
+sender?: string, } | { "type": "withdrawn", user_op_hash: string, record_ids: Array<string>, } | { "type": "tick" } | { "type": "app_resumed" } | { "type": "home_focused" } | { "type": "abort", user_op_hash: string, };

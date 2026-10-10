@@ -207,6 +207,17 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
             confirmLabel: loc.t(I18nKeys.Login.recoverConfirm),
             cancelLabel: loc.t(I18nKeys.Login.recoverCancel)
         )
+    // PR 2: the registry could not be asked which wallet this passkey opens.
+    // "Try again" re-asks from the signature already made — no new passkey —
+    // and Cancel saves nothing. Never the rebuild offer: only Gnosis's "no
+    // record" may offer that.
+    case "registry_unreachable":
+        PromptCopy(
+            title: loc.t(kind.local ? I18nKeys.Login.networkTitle : I18nKeys.Login.registryUnreachableTitle),
+            message: loc.t(kind.local ? I18nKeys.Login.networkBody : I18nKeys.Login.registryUnreachableBody),
+            confirmLabel: loc.t(I18nKeys.Login.tryAgain),
+            cancelLabel: loc.t(I18nKeys.Login.cancel)
+        )
     case "recover_failed":
         PromptCopy(
             title: loc.t(I18nKeys.Login.recoverFailedTitle),

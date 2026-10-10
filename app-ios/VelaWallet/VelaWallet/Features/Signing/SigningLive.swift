@@ -65,10 +65,6 @@ enum SigningLive {
         var handoffLine: SignerIntegrityLine?
         /// The person's own label for that page, when they gave it one.
         var handoffPageName: String?
-        /// Spec 082 RF5: the quote could not even start (the account's
-        /// deployment could not be read) — the core's failure name for it,
-        /// drawn as a failed quote is.
-        var feeStartFailure: String?
         /// The clock the landing's pace is read at (spec 099 R6); the screen
         /// counts the seconds itself once a countdown runs.
         var nowMs: Double = Date().timeIntervalSince1970 * 1000
@@ -372,7 +368,14 @@ enum SigningLive {
         }
         if !refused {
             model.feeRefresh = feeRefresh(clear: clear, fee: fee, loc: loc)
-            model.feeChevron = (fee?.options.count ?? 0) > 1
+            // The chevron promises the coin list (`feeTapped`): a settled
+            // fee's with more than one coin, or a fee that would fail with
+            // another coin to pay in ("Pay with another coin", PR 2 polish).
+            // A failure a tap asks again, or one with no coin left, has none.
+            model.feeChevron = fee.map {
+                let tap = SigningController.feeTap($0)
+                return tap == .open || tap == .chooseCoin
+            } ?? false
             model.feeReserve = feeReserve(fee, loc: loc)
         }
         return model
@@ -455,11 +458,20 @@ enum SigningLive {
                 error.kind.signerReasonKey.map { loc.t($0) } ?? loc.t("send.txErrorGeneric")
             // Spec 102: this account cannot sign here — the venue's reason.
             case .venueBlocked: error.venueReason(loc) ?? loc.t("send.txErrorGeneric")
-            // The relay refused it (spec 082 RJ3): nothing was sent, and
-            // "try again" would send the same refusal.
-            default: sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric")
+            // The relay refused it (spec 082 RJ3): nothing was sent — said
+            // by its reason (PR 2 note 9, `failure_refusal_key`): the account's
+            // previous op holding the nonce, another that went first, the
+            // fee — else the plain refusal.
+            default: refusalReason(sign, loc: loc) ?? loc.t("send.txErrorGeneric")
             }
-            if !text.isEmpty { blocks.append(.warning(tone: .danger, text: text)) }
+            if sign.notSent {
+                // "Not sent yet" (PR 2 polish): the previous transaction on
+                // this network still holds the nonce — nothing was sent and
+                // nothing went wrong. A calm sentence, never the danger card.
+                if !text.isEmpty { blocks.append(.sentence(text: text, tone: .neutral)) }
+            } else if !text.isEmpty {
+                blocks.append(.warning(tone: .danger, text: text))
+            }
         }
         if sign.pendingOpHash != nil {
             blocks.append(.positive(s(loc, "submitted")))
@@ -469,6 +481,15 @@ enum SigningLive {
             blocks.append(.sentence(text: words.title, tone: .neutral))
         }
         return blocks
+    }
+
+    /// The sentence under a refusal: the core's `failure_refusal_key` — why
+    /// the relay did not take it, at submit or by the tracker's verdict (PR 2
+    /// note 9) — else, for a refusal from a core that does not say, the
+    /// plain one. `nil` for a failure that was no refusal.
+    static func refusalReason(_ sign: SignViewWire, loc: Loc) -> String? {
+        if let key = sign.failureRefusalKey { return loc.t(key) }
+        return sign.failureRefused ? s(loc, "refused") : nil
     }
 
     /// What the sheet says while a request is in flight — from the core's
@@ -519,6 +540,21 @@ enum SigningLive {
                 cta: loc.t("onboarding.common.close"), ctaAccent: false
             )
         }
+        // "Not sent yet" (PR 2 polish): the relay turned it back at submit
+        // because the account's previous operation on this network still
+        // holds the nonce. Nothing was sent and nothing went wrong — its own
+        // calm state, never "Failed": the core's title over its sentence, the
+        // still clock, Try again where the core says a retry can help.
+        if let error = sign.error, error.kind != .userRejected, sign.notSent {
+            return SendReceiptModel(
+                header: header, stage: .notSent,
+                title: loc.t(I18nKeys.CoreRound.notSentTitle),
+                captions: [summary, refusalReason(sign, loc: loc) ?? loc.t(I18nKeys.CoreRound.notSentBody)]
+                    .compactMap { $0 },
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: !sign.failureRetryable,
+                retry: sign.failureRetryable ? loc.t("send.txRetryBtn") : nil
+            )
+        }
         // A refusal after the approval (the submission failed): the core's
         // reason, the sheet's own sentence for it. After spec 082 this is a
         // TRUE "not sent": a lost reply never reaches here (RA1). A relay's
@@ -535,7 +571,8 @@ enum SigningLive {
             // core never offers a retry for it).
             let reason = error.venueReason(loc)
                 ?? error.kind.signerReasonKey.map { loc.t($0) }
-                ?? (sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"))
+                ?? refusalReason(sign, loc: loc)
+                ?? loc.t("send.txErrorGeneric")
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),
@@ -702,11 +739,14 @@ enum SigningLive {
             )
         // The relay refused it (spec 082 RJ3): nothing was sent, and the
         // same op would be refused again — no "try again", no explorer.
+        // PR 2 §3: told by its REASON — the tracker entry's `refusal_key`
+        // ("another transaction went first", the fee words only for a fee
+        // refusal, else the plain refusal), never one sentence for all.
         case .refused:
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),
-                captions: [summary, s(loc, "refused")].compactMap { $0 },
+                captions: [summary, track?.refusalKey.map { loc.t($0) } ?? s(loc, "refused")].compactMap { $0 },
                 cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
             )
         case .following(let op, let outcome, let feeHeld, let relayFunding):
@@ -1352,8 +1392,12 @@ enum SigningLive {
             // explicit that these two surfaces must not drift.
             value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
                                            networks: context.networks)
-        } else if fee?.failed != nil || (fee == nil && context.feeStartFailure != nil) {
-            value = context.loc.t("componentsUi.gas.estimateFailed")
+        } else if let failure = fee?.failure {
+            // The core's one state for the row and the footer (PR 2 note 1):
+            // "Tap to retry" only when a tap is the one way, else the dash —
+            // kept through the core's own re-ask, so the row never flips to
+            // "Estimating…" and back every few seconds.
+            value = failure.figure(context.loc)
         } else {
             value = context.loc.t("componentsUi.gas.estimating")
         }
@@ -1406,21 +1450,22 @@ enum SigningLive {
             // spends (the PancakeSwap USDC swap, fee in USDC). The core
             // flags it; said under the fee while that coin is the one paying.
             warning = context.loc.t("componentsUi.gas.feeCoinSpent", vars: ["sym": selected.symbol])
-        } else if let failed = fee?.failed ?? (fee == nil ? context.feeStartFailure : nil),
-                  let key = feeFailureReasonKey(failure: failed) {
-            // Spec 079: why there is no fee, and that it will be asked again
-            // (the row said "点击重试" with the relay down and stayed so).
-            // Which words is the core's (spec 082 RJ13): the relay for a
+        } else if let reason = fee?.failure?.reason(context.loc, chain: context.chainName) {
+            // Spec 079: why there is no fee. Which words is the core's
+            // (`FeeView.failure.reason_key`, PR 2 note 1): the relay for a
             // relay's failure, the chain's node — rate-limited, or named
             // unreachable — for a chain read, and none for a failure that is
             // not the network's (G48: a public node's rate limit read "Can't
-            // reach Vela").
-            warning = context.loc.t(key, vars: ["chain": context.chainName])
+            // reach Vela"). A read that never left the app is Vela's own
+            // fault, said as that (issue #483) — never "Can't reach <chain>".
+            // Kept while the core asks again, the measuring sign beside it.
+            warning = reason
         }
         // The same condition `SigningController.feeTapped` acts on, decided
-        // once here so the chevron and the handler cannot disagree.
-        let tappable = fee?.failed != nil || (fee == nil && context.feeStartFailure != nil)
-            || options.count > 1
+        // once here so the chevron and the handler cannot disagree: a
+        // failure's row does exactly its `tap` (PR 2 polish) — asks again,
+        // opens the coins, or, with no coin left, is no control at all.
+        let tappable = fee.map { SigningController.feeTap($0) != .nothing } ?? false
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
     }
@@ -1435,7 +1480,11 @@ enum SigningLive {
     /// while a measurement is out. None where there is no network fee.
     static func feeRefresh(clear: ClearSigningViewWire, fee: FeeViewWire?, loc: Loc) -> FeeRefreshModel? {
         guard !isOffChain(clear) else { return nil }
-        return FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: fee?.busy ?? false)
+        // A figure switched to another coin is measured again before it can
+        // be confirmed (PR 2 §4): the measuring sign stays on until it has.
+        return FeeRefreshModel(
+            label: loc.t("send.feeRefresh"), refreshing: (fee?.busy ?? false) || (fee?.provisional ?? false)
+        )
     }
 
     /// The confirm's label (issue #461: the action alone, no "slide to"

@@ -129,6 +129,12 @@ export interface SendTrackerHandoff {
 	submitBlock: number | null;
 	/** The bundler's own receipt promise, or `null` if this process never had it. */
 	submitted: SubmitResult | null;
+	/**
+	 * The account that signed it (`TrackSubmitted.sender`): the tracker's way
+	 * of knowing this account has an operation in flight on this chain, so its
+	 * next confirm waits (correctness batch item 3).
+	 */
+	sender: string | null;
 }
 
 /**
@@ -595,7 +601,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 								: undefined,
 							false,
 							operation.submit_block,
-							true
+							true,
+							operation.sender
 						);
 						submitted.delete(operation.user_op_hash);
 						return { type: 'track_handed_off' };
@@ -607,7 +614,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					chainId: operation.chain_id,
 					maybeSent: operation.maybe_sent,
 					submitBlock: operation.submit_block,
-					submitted: submitted.get(operation.user_op_hash) ?? null
+					submitted: submitted.get(operation.user_op_hash) ?? null,
+					sender: operation.sender
 				};
 				submitted.delete(operation.user_op_hash);
 				if (trackerSink) trackerSink(handoff);
@@ -738,6 +746,14 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 		if (error instanceof UserOpNotSentError) {
 			if (error.rejection === 'relayer_unavailable') return { type: 'relayer_unavailable' };
 			if (error.rejection === 'bundler_underfunded') return { type: 'bundler_underfunded' };
+			// Another operation of this account still holds the nonce (the
+			// relay's `nonce_in_flight`, or an older relay's `[existingHash:…]`
+			// marker — both read by the core as `NonceHeld`): not a failure of
+			// the network. Said as "waiting for your last transaction", and Try
+			// again waits for it like any held confirm (correctness batch item 3).
+			if (typeof error.rejection === 'object' && error.rejection !== null) {
+				if ('nonce_held' in error.rejection) return { type: 'previous_pending' };
+			}
 			console.warn('[send] submit not sent:', message);
 			return { type: 'other', message: message || null };
 		}

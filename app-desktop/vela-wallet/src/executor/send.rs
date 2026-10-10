@@ -349,7 +349,7 @@ fn prewarm_fees(account: &str, chain_ids: &[u32]) {
                 let _ = chain::is_deployed(account, chain_id);
             });
             scope.spawn(move || {
-                let _ = fee_signals::gas_signals(chain_id, !tempo);
+                let _ = fee_signals::gas_signals(chain_id, !tempo, false);
             });
             scope.spawn(move || {
                 if tempo {
@@ -1321,6 +1321,7 @@ mod tests {
                 maybe_sent: false,
                 submit_block: None,
                 admitted: false,
+                sender: None,
             },
             SendOperation::ShowAlert {
                 kind: vela_core::app::send::SendAlertKind::InvalidAddress,

@@ -6,6 +6,12 @@
  */
 export type SignTrackerHandoff = { user_op_hash: string, 
 /**
+ * The account that signed it, forwarded to `tx_tracker::Event::Submitted`
+ * — what makes it an op this account must wait for on this chain
+ * (`tx_tracker::in_flight_ops`).
+ */
+sender: string | null, 
+/**
  * The records the tracker patches. EMPTY on the write-ahead hand-off
  * (spec 082 RJ1, second review): a POST of the op is about to leave and
  * the tracker holds it off "not sent" until the POST's verdict, whose

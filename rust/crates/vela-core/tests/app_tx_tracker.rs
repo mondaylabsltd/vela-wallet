@@ -102,6 +102,7 @@ fn holdings_moved() -> Op {
 /// leaving the shared receipt request answered `pending` at `T0 + 300`.
 fn submitted(sut: &mut Sut) {
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -216,6 +217,7 @@ fn the_relay_topping_up_its_gas_is_said_while_it_lasts() {
     assert!(sut.resolve(receipt_pending(T0 + 12_700.0)).is_empty());
     assert!(sut
         .resolve(Res::Status {
+            rejection_reason: None,
             user_op_hash: HASH.to_owned(),
             status: TrackLifecycle::Queued,
             stage: Some(RELAY_FUNDING_STAGE.to_owned()),
@@ -231,6 +233,7 @@ fn the_relay_topping_up_its_gas_is_said_while_it_lasts() {
     assert!(ops.contains(&poll_status()), "{ops:?}");
     assert!(sut
         .resolve(Res::Status {
+            rejection_reason: None,
             user_op_hash: HASH.to_owned(),
             status: TrackLifecycle::Submitted,
             stage: None,
@@ -259,6 +262,7 @@ fn fee_hold_stays_pending_and_later_confirms() {
     assert!(sut.resolve(receipt_pending(T0 + 12_700.0)).is_empty());
     assert!(sut
         .resolve(Res::Status {
+            rejection_reason: None,
             user_op_hash: HASH.to_owned(),
             status: TrackLifecycle::Queued,
             stage: Some(FEE_HOLD_STAGE.to_owned()),
@@ -306,6 +310,7 @@ fn rejected_marks_failed_and_terminates_immediately() {
     assert!(sut.resolve(receipt_pending(T0 + 12_400.0)).is_empty());
 
     let ops = sut.resolve(Res::Status {
+        rejection_reason: None,
         user_op_hash: HASH.to_owned(),
         status: TrackLifecycle::Rejected,
         stage: None,
@@ -363,6 +368,7 @@ fn non_rejected_status_answers_never_fail_records() {
     assert!(sut.resolve(receipt_pending(T0 + 12_400.0)).is_empty());
     assert!(sut
         .resolve(Res::Status {
+            rejection_reason: None,
             user_op_hash: HASH.to_owned(),
             status: TrackLifecycle::Failed,
             stage: None,
@@ -408,6 +414,7 @@ fn reconcile_skips_records_older_than_24h() {
     assert_eq!(ops, vec![Op::LoadPendingTxs]);
     let ops = sut.resolve(Res::RecordsLoaded {
         records: vec![TrackPendingRecord {
+            sender: None,
             record_id: "rec-old".to_owned(),
             user_op_hash: HASH.to_owned(),
             chain_id: CHAIN,
@@ -432,6 +439,7 @@ fn reconcile_skips_records_older_than_24h() {
 fn same_hash_shares_one_throttled_receipt_request() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -447,6 +455,7 @@ fn same_hash_shares_one_throttled_receipt_request() {
 
     // A second consumer of the same hash joins — no duplicate poll.
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-2".to_owned()],
         chain_id: CHAIN,
@@ -582,6 +591,7 @@ fn pending_records_survive_restart_and_resolve() {
     // A record submitted 10 minutes before this launch.
     let ops = sut.resolve(Res::RecordsLoaded {
         records: vec![TrackPendingRecord {
+            sender: None,
             record_id: "rec-1".to_owned(),
             user_op_hash: HASH.to_owned(),
             chain_id: CHAIN,
@@ -634,6 +644,7 @@ fn recovery_merges_into_the_live_entry_never_a_second_one() {
     // with different hash casing, which must not fork a second entry.
     let ops = sut.resolve(Res::RecordsLoaded {
         records: vec![TrackPendingRecord {
+            sender: None,
             record_id: "rec-1".to_owned(),
             user_op_hash: HASH.to_uppercase().replace("0X", "0x"),
             chain_id: CHAIN,
@@ -681,6 +692,7 @@ fn sweep_never_resurrects_a_confirmed_entry() {
     assert_eq!(ops, vec![Op::LoadPendingTxs]);
     let ops = sut.resolve(Res::RecordsLoaded {
         records: vec![TrackPendingRecord {
+            sender: None,
             record_id: "rec-1".to_owned(),
             user_op_hash: HASH.to_owned(),
             chain_id: CHAIN,
@@ -706,6 +718,7 @@ fn sweep_never_resurrects_a_confirmed_entry() {
 fn all_unreachable_window_is_reported_as_unknown_not_pending() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -809,6 +822,7 @@ fn late_rejected_status_never_unconfirms_a_receipt() {
 
     // …then the status poll comes back "rejected", too late to matter.
     let ops = sut.resolve(Res::Status {
+        rejection_reason: None,
         user_op_hash: HASH.to_owned(),
         status: TrackLifecycle::Rejected,
         stage: None,
@@ -1025,6 +1039,7 @@ fn the_live_probe_s_answers_parse() {
     assert_eq!(
         parse_user_op_status(r#"{"status":"not_found","transactionHash":null}"#),
         Some(TrackStatusAnswer {
+            rejection_reason: None,
             status: TrackLifecycle::NotFound,
             stage: None,
             tx_hash: None,
@@ -1035,6 +1050,7 @@ fn the_live_probe_s_answers_parse() {
             r#"{{"status":"included","transactionHash":"{TX}","last_executor_stage":"bundled"}}"#
         )),
         Some(TrackStatusAnswer {
+            rejection_reason: None,
             status: TrackLifecycle::Included,
             stage: Some("bundled".to_owned()),
             tx_hash: Some(TX.to_owned()),
@@ -1046,6 +1062,7 @@ fn the_live_probe_s_answers_parse() {
             r#"{"jsonrpc":"2.0","id":1,"result":{"status":"queued","last_executor_stage":"in_band_settlement_hold"}}"#
         ),
         Some(TrackStatusAnswer {
+            rejection_reason: None,
             status: TrackLifecycle::Queued,
             stage: Some(FEE_HOLD_STAGE.to_owned()),
             tx_hash: None,
@@ -1083,6 +1100,7 @@ fn the_relay_s_tx_hash_is_a_link_not_a_verdict() {
     // receipt of that tx, not a verdict of its own.
     assert_eq!(
         sut.resolve(Res::Status {
+            rejection_reason: None,
             user_op_hash: HASH.to_owned(),
             status: TrackLifecycle::Submitted,
             stage: None,
@@ -1149,6 +1167,7 @@ fn is_receipt(op: &Op) -> bool {
 
 fn status(lifecycle: TrackLifecycle, now_ms: f64) -> Res {
     Res::Status {
+        rejection_reason: None,
         user_op_hash: HASH.to_owned(),
         status: lifecycle,
         stage: None,
@@ -1215,6 +1234,7 @@ fn event_confirmed() -> Vec<Op> {
 /// not), settling the immediate Now and the first receipt poll as `pending`.
 fn submitted_maybe(sut: &mut Sut, submit_block: Option<u64>) {
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -1437,6 +1457,7 @@ fn a_reload_restores_maybe_sent_and_the_submit_block() {
     );
     let ops = sut.resolve(Res::RecordsLoaded {
         records: vec![TrackPendingRecord {
+            sender: None,
             record_id: "rec-1".to_owned(),
             user_op_hash: HASH.to_owned(),
             chain_id: CHAIN,
@@ -1784,6 +1805,7 @@ fn a_reloaded_op_is_found_by_its_event() {
     let _ = sut.resolve(Res::Clock { now_ms: T0 });
     let _ = sut.resolve(Res::RecordsLoaded {
         records: vec![TrackPendingRecord {
+            sender: None,
             record_id: "rec-1".to_owned(),
             user_op_hash: HASH.to_owned(),
             chain_id: CHAIN,
@@ -1875,6 +1897,7 @@ fn a_new_submit_of_a_never_sent_op_is_tracked_again() {
 
     // The old hand-off again: an echo, nothing restarts.
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -1893,6 +1916,7 @@ fn a_new_submit_of_a_never_sent_op_is_tracked_again() {
 
     // The person sends it again and the relay accepts the identical op.
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-2".to_owned()],
         chain_id: CHAIN,
@@ -1948,6 +1972,7 @@ fn a_new_submit_of_a_rejected_op_is_tracked_again() {
     assert_eq!(entry_status(&sut), TrackStatus::Rejected);
 
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-2".to_owned()],
         chain_id: CHAIN,
@@ -2037,6 +2062,7 @@ fn included_with_tx(sut: &mut Sut) -> Vec<Op> {
     assert_eq!(ops, vec![poll_receipt(), poll_status()]);
     assert!(sut.resolve(receipt_pending(T0 + 12_700.0)).is_empty());
     sut.resolve(Res::Status {
+        rejection_reason: None,
         user_op_hash: HASH.to_owned(),
         status: TrackLifecycle::Included,
         stage: None,
@@ -2179,6 +2205,7 @@ fn an_admitted_hand_off_is_never_maybe_sent() {
     submitted_maybe(&mut sut, Some(SUBMIT_BLOCK));
     assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent, "before the POST");
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -2248,6 +2275,7 @@ fn a_withdrawn_op_is_forgotten_and_a_resubmit_starts_fresh() {
         Res::RecordsLoaded {
             records: [0, 1]
                 .map(|i| TrackPendingRecord {
+                    sender: None,
                     record_id: format!("{HASH}-{i}"),
                     user_op_hash: HASH.to_owned(),
                     chain_id: CHAIN,
@@ -2305,6 +2333,7 @@ fn a_not_sent_reached_while_the_post_was_out_yields_to_the_relay_taking_it() {
 
     // The POST that was still out comes back Accepted.
     let admitted = Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -2336,6 +2365,7 @@ fn a_not_sent_reached_while_the_post_was_out_yields_to_the_relay_taking_it() {
     // the refusal is an echo, not a new life.
     let mut refused = Sut::new();
     refused.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -2351,6 +2381,7 @@ fn a_not_sent_reached_while_the_post_was_out_yields_to_the_relay_taking_it() {
     }
     assert_eq!(entry_status(&refused), TrackStatus::Rejected);
     let ops = refused.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -2370,6 +2401,7 @@ fn a_not_sent_reached_while_the_post_was_out_yields_to_the_relay_taking_it() {
 /// attached yet — its records come with the POST's verdict.
 fn posting_hand_off() -> Event {
     Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec![],
         chain_id: CHAIN,
@@ -2382,6 +2414,7 @@ fn posting_hand_off() -> Event {
 /// The POST's verdict "may have been sent", naming the op's record.
 fn maybe_sent_verdict() -> Event {
     Event::Submitted {
+        sender: None,
         user_op_hash: HASH.to_owned(),
         record_ids: vec!["rec-1".to_owned()],
         chain_id: CHAIN,
@@ -2572,6 +2605,7 @@ fn a_post_after_not_sent_is_tracked_again() {
 /// (`mark_bundle_confirmed`, both relay shells), and names the bundle tx.
 fn rejected_on_chain(now_ms: f64) -> Res {
     Res::Status {
+        rejection_reason: None,
         user_op_hash: HASH.to_owned(),
         status: TrackLifecycle::Rejected,
         stage: None,
@@ -2681,6 +2715,7 @@ fn resumed_without_a_submit_block(sut: &mut Sut, age_ms: f64, head: u64) {
     );
     let ops = sut.resolve(Res::RecordsLoaded {
         records: vec![TrackPendingRecord {
+            sender: None,
             record_id: "rec-1".to_owned(),
             user_op_hash: HASH.to_owned(),
             chain_id: CHAIN,
@@ -2820,6 +2855,7 @@ fn a_dapp_operation_lands_on_the_record_the_sign_path_persisted() {
 
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: handoff.user_op_hash,
         record_ids: handoff.record_ids,
         chain_id: handoff.chain_id,
@@ -2850,6 +2886,7 @@ fn a_dropped_dapp_operation_fails_the_record_the_sign_path_persisted() {
 
     let mut sut = Sut::new();
     sut.dispatch(Event::Submitted {
+        sender: None,
         user_op_hash: handoff.user_op_hash,
         record_ids: handoff.record_ids,
         chain_id: handoff.chain_id,
@@ -2881,4 +2918,494 @@ fn a_dropped_dapp_operation_fails_the_record_the_sign_path_persisted() {
             Op::HoldingsMoved { chain_id: CHAIN },
         ]
     );
+}
+
+// ---------------------------------------------------------------------------
+// A refusal's reason (relay `fix/held-nonce-and-floor` §2), and the one
+// operation in flight per account and network
+// ---------------------------------------------------------------------------
+
+const SENDER: &str = "0xAbCdEf0000000000000000000000000000000001";
+
+/// Submitted by `SENDER`, polled to the first status question.
+fn submitted_by(sut: &mut Sut, sender: Option<&str>, maybe_sent: bool) {
+    sut.dispatch(Event::Submitted {
+        sender: sender.map(str::to_owned),
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent,
+        submit_block: None,
+        admitted: false,
+    });
+    sut.resolve(Res::Clock { now_ms: T0 });
+    sut.resolve(receipt_pending(T0 + 300.0));
+}
+
+fn refused(sut: &mut Sut, rejection_reason: Option<&str>, stage: Option<&str>) {
+    tick(sut, T0 + 12_100.0);
+    sut.resolve(receipt_pending(T0 + 12_400.0));
+    sut.resolve(Res::Status {
+        user_op_hash: HASH.to_owned(),
+        status: TrackLifecycle::Rejected,
+        stage: stage.map(str::to_owned),
+        now_ms: T0 + 12_500.0,
+        tx_hash: None,
+        rejection_reason: rejection_reason.map(str::to_owned),
+    });
+}
+
+/// The relay's reason decides the sentence: the fee words only for a fee
+/// refusal. An older relay names no reason; its stage does (the relay
+/// contract's own derivation). Neither: the plain "refused".
+#[test]
+fn a_refusal_carries_its_reason_and_its_sentence() {
+    use vela_core::app::tx_tracker::RefusalReason as R;
+    for (reason, stage, want, key) in [
+        (
+            Some("nonce_used"),
+            None,
+            Some(R::NonceUsed),
+            "componentsUi.signing.wentFirst",
+        ),
+        (
+            Some("fee_below_market"),
+            Some("in_band_settlement"),
+            Some(R::FeeBelowMarket),
+            "send.txRejectedFees",
+        ),
+        (
+            Some("simulation_failed"),
+            None,
+            Some(R::SimulationFailed),
+            "componentsUi.signing.refused",
+        ),
+        // A reason this core does not know yet.
+        (
+            Some("relay_learned_a_new_word"),
+            None,
+            Some(R::Unknown),
+            "componentsUi.signing.refused",
+        ),
+        // An older relay: the stage says it.
+        (
+            None,
+            Some("nonce"),
+            Some(R::NonceUsed),
+            "componentsUi.signing.wentFirst",
+        ),
+        (
+            None,
+            Some("in_band_settlement"),
+            Some(R::FeeBelowMarket),
+            "send.txRejectedFees",
+        ),
+        (
+            None,
+            Some(FEE_HOLD_STAGE),
+            Some(R::FeeBelowMarket),
+            "send.txRejectedFees",
+        ),
+        (
+            None,
+            Some("dead_letter"),
+            Some(R::RelayGaveUp),
+            "componentsUi.signing.refused",
+        ),
+        (None, None, None, "componentsUi.signing.refused"),
+    ] {
+        let mut sut = Sut::new();
+        submitted_by(&mut sut, Some(SENDER), false);
+        refused(&mut sut, reason, stage);
+        let entry = &sut.view().entries[0];
+        assert_eq!(entry.status, TrackStatus::Rejected);
+        assert_eq!(entry.refusal, want, "{reason:?} / {stage:?}");
+        assert_eq!(
+            entry.refusal_key.as_deref(),
+            Some(key),
+            "{reason:?} / {stage:?}"
+        );
+    }
+}
+
+/// Only a refusal has a reason and a sentence.
+#[test]
+fn a_live_op_has_no_refusal() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    let entry = &sut.view().entries[0];
+    assert_eq!((entry.refusal, entry.refusal_key.as_deref()), (None, None));
+}
+
+/// The status method's `rejection_reason` is read, and an older relay's
+/// absence of it is no answer.
+#[test]
+fn the_status_parser_reads_the_rejection_reason() {
+    let parsed = parse_user_op_status(
+        r#"{"status":"rejected","last_executor_stage":"nonce","rejection_reason":"nonce_used"}"#,
+    )
+    .unwrap();
+    assert_eq!(parsed.rejection_reason.as_deref(), Some("nonce_used"));
+    let older =
+        parse_user_op_status(r#"{"status":"rejected","last_executor_stage":"nonce"}"#).unwrap();
+    assert_eq!(older.rejection_reason, None);
+}
+
+/// An accepted op of an account, not final, holds its nonce on its chain:
+/// the second of that account's sends waits for it. Lower-cased, so any
+/// casing matches.
+#[test]
+fn an_accepted_op_in_flight_holds_its_account_s_nonce() {
+    use vela_core::app::tx_tracker::{in_flight_ops, in_flight_ops_json, previous_in_flight};
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    let ops = in_flight_ops(&sut.view());
+    assert_eq!(ops.len(), 1);
+    assert_eq!(ops[0].sender, SENDER.to_lowercase());
+    assert_eq!(ops[0].chain_id, CHAIN);
+    assert!(previous_in_flight(&ops, SENDER, CHAIN, None).is_some());
+    assert!(previous_in_flight(
+        &ops,
+        &SENDER.to_uppercase().replace("0X", "0x"),
+        CHAIN,
+        None
+    )
+    .is_some());
+    assert!(
+        previous_in_flight(&ops, SENDER, 1, None).is_none(),
+        "another chain"
+    );
+    assert!(
+        previous_in_flight(&ops, SENDER, CHAIN, Some(HASH)).is_none(),
+        "never the asking surface's own op"
+    );
+    // The JSON bridge says the same.
+    let json = serde_json::to_string(&sut.view()).unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&in_flight_ops_json(&json)).unwrap(),
+        serde_json::to_value(&ops).unwrap()
+    );
+    assert_eq!(in_flight_ops_json("not json"), "[]");
+
+    // Final: it holds nothing.
+    let ops = tick(&mut sut, T0 + 3_500.0);
+    assert!(ops.contains(&poll_receipt()), "{ops:?}");
+    sut.resolve_matching(
+        |op| matches!(op, Op::PollReceipt { .. }),
+        receipt_confirmed(T0 + 3_800.0),
+    );
+    assert!(in_flight_ops(&sut.view()).is_empty());
+}
+
+/// A refused op, one whose reply was lost and the relay has not shown it
+/// holds, and one no shell named a sender for, hold nothing.
+#[test]
+fn only_an_op_the_relay_holds_and_whose_sender_is_known_waits() {
+    use vela_core::app::tx_tracker::in_flight_ops;
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    refused(&mut sut, Some("simulation_failed"), None);
+    assert!(in_flight_ops(&sut.view()).is_empty(), "refused");
+
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), true);
+    assert_eq!(sut.view().entries[0].outcome, TrackOutcome::MaybeSent);
+    assert!(in_flight_ops(&sut.view()).is_empty(), "may have been sent");
+
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, None, false);
+    assert!(in_flight_ops(&sut.view()).is_empty(), "no sender");
+}
+
+/// After a restart the device still knows: the reloaded pending record
+/// carries its sender.
+#[test]
+fn a_restart_still_knows_the_op_in_flight() {
+    use vela_core::app::tx_tracker::in_flight_ops;
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::AppResumed);
+    assert_eq!(ops, vec![Op::Now]);
+    let ops = sut.resolve(Res::Clock { now_ms: T0 });
+    assert_eq!(ops, vec![Op::LoadPendingTxs]);
+    sut.resolve(Res::RecordsLoaded {
+        records: vec![TrackPendingRecord {
+            record_id: "rec-1".to_owned(),
+            user_op_hash: HASH.to_owned(),
+            chain_id: CHAIN,
+            submitted_at_ms: T0 - 30_000.0,
+            maybe_sent: false,
+            submit_block: None,
+            sender: Some(SENDER.to_owned()),
+        }],
+        now_ms: T0,
+    });
+    let ops = in_flight_ops(&sut.view());
+    assert_eq!(ops.len(), 1, "{:?}", sut.view());
+    assert_eq!(ops[0].sender, SENDER.to_lowercase());
+}
+
+// ---------------------------------------------------------------------------
+// The hold's time limit: final, or ten minutes without progress
+// ---------------------------------------------------------------------------
+
+const MIN: f64 = 60_000.0;
+
+/// One tick at `now_ms`, answering every receipt and status poll it (or an
+/// earlier tick) left out: receipts `pending`; statuses with `word`, the
+/// relay's `(lifecycle, stage)` — `None` = the relay could not be reached.
+fn advance(sut: &mut Sut, now_ms: f64, word: Option<(TrackLifecycle, Option<&str>)>) {
+    tick(sut, now_ms);
+    while sut.outstanding().iter().any(is_receipt) {
+        let answer = match word {
+            Some(_) => receipt_pending(now_ms),
+            None => Res::ReceiptUnreachable {
+                user_op_hash: HASH.to_owned(),
+                now_ms,
+            },
+        };
+        sut.resolve_matching(is_receipt, answer);
+    }
+    while sut.outstanding().iter().any(is_status) {
+        let answer = match word {
+            Some((status, stage)) => Res::Status {
+                user_op_hash: HASH.to_owned(),
+                status,
+                stage: stage.map(str::to_owned),
+                now_ms,
+                tx_hash: None,
+                rejection_reason: None,
+            },
+            None => Res::StatusUnavailable {
+                user_op_hash: HASH.to_owned(),
+                now_ms,
+            },
+        };
+        sut.resolve_matching(is_status, answer);
+    }
+}
+
+fn holds(sut: &Sut) -> bool {
+    !vela_core::app::tx_tracker::in_flight_ops(&sut.view()).is_empty()
+}
+
+const QUEUED: Option<(TrackLifecycle, Option<&str>)> = Some((TrackLifecycle::Queued, None));
+
+/// The limit is ten minutes, and the rule's boundary is inclusive.
+#[test]
+fn the_hold_s_time_limit_is_ten_minutes() {
+    use vela_core::app::tx_tracker::{in_flight_stalled, IN_FLIGHT_STALL_MS};
+    assert_eq!(IN_FLIGHT_STALL_MS, 600_000.0);
+    assert!(!in_flight_stalled(T0, T0 + IN_FLIGHT_STALL_MS - 1.0));
+    assert!(in_flight_stalled(T0, T0 + IN_FLIGHT_STALL_MS));
+}
+
+/// The relay unreachable after its first answer: no progress, so the hold
+/// is released ten minutes after the submission — not at the 24 h line. The
+/// tracker keeps following the op; only the nonce is no longer held. While
+/// it holds, what the send and signing machines are handed does not change
+/// from one render to the next: one line, nothing to flicker.
+#[test]
+fn ten_minutes_without_progress_releases_the_hold() {
+    use vela_core::app::tx_tracker::{in_flight_ops, in_flight_ops_json};
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    advance(&mut sut, T0 + 3_100.0, QUEUED);
+    let first = in_flight_ops(&sut.view());
+    assert_eq!(first.len(), 1);
+    for minute in 1..10 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, None);
+        assert_eq!(in_flight_ops(&sut.view()), first, "minute {minute}");
+    }
+    advance(&mut sut, T0 + 10.0 * MIN - 1_000.0, None);
+    assert!(holds(&sut), "not yet");
+    assert!(!sut.view().entries[0].stalled);
+
+    advance(&mut sut, T0 + 10.0 * MIN, None);
+    assert!(!holds(&sut), "ten minutes without progress");
+    let entry = &sut.view().entries[0];
+    assert!(entry.stalled);
+    assert!(entry.polling, "still followed");
+    assert_eq!(entry.outcome, TrackOutcome::StillConfirming);
+    let json = serde_json::to_string(&sut.view()).unwrap();
+    assert_eq!(
+        in_flight_ops_json(&json),
+        "[]",
+        "the JSON bridge says the same"
+    );
+
+    // The relay answering the same thing again is not progress.
+    advance(&mut sut, T0 + 11.0 * MIN, QUEUED);
+    assert!(!holds(&sut));
+}
+
+/// Every move of the relay's word restarts the ten minutes: a stage, a new
+/// lifecycle. Once released, a move takes the hold up again — the op is
+/// moving, its nonce is spoken for.
+#[test]
+fn progress_keeps_the_hold() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    advance(&mut sut, T0 + 3_100.0, QUEUED);
+    for minute in 1..=5 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, QUEUED);
+    }
+    // 6 min: the relay is topping up its gas — a move.
+    let funding = Some((TrackLifecycle::Queued, Some(RELAY_FUNDING_STAGE)));
+    advance(&mut sut, T0 + 6.0 * MIN, funding);
+    for minute in 7..=14 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, funding);
+        assert!(holds(&sut), "minute {minute}: 6 + 10 not reached");
+    }
+    // 15 min: on the network — a move. (Past ten minutes of age the relay is
+    // asked once a minute: a move is heard on the minute.)
+    let submitted = Some((TrackLifecycle::Submitted, None));
+    for minute in 15..=24 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, submitted);
+        assert!(holds(&sut), "minute {minute}: it moved at six and fifteen");
+    }
+    advance(&mut sut, T0 + 25.0 * MIN, submitted);
+    assert!(!holds(&sut), "ten minutes since the last move");
+
+    // It moves again: held again.
+    advance(
+        &mut sut,
+        T0 + 26.0 * MIN,
+        Some((TrackLifecycle::Included, None)),
+    );
+    assert!(holds(&sut));
+    assert!(!sut.view().entries[0].stalled);
+}
+
+/// An op seen submitted starts where the relay takes one, queued: when the
+/// relay's first word after a silence says it is on the network, that is a
+/// move, and the ten minutes start again from it.
+#[test]
+fn a_first_answer_past_queued_is_a_move_for_an_op_seen_submitted() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    for minute in 1..=8 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, None);
+    }
+    let submitted = Some((TrackLifecycle::Submitted, None));
+    for minute in 9..=18 {
+        advance(&mut sut, T0 + f64::from(minute) * MIN, submitted);
+        assert!(holds(&sut), "minute {minute}: it moved at nine");
+    }
+    advance(&mut sut, T0 + 19.0 * MIN, submitted);
+    assert!(!holds(&sut), "ten minutes since the move");
+}
+
+/// Final releases at once, long before the ten minutes: confirmed, or
+/// refused.
+#[test]
+fn final_releases_the_hold_at_once() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    advance(&mut sut, T0 + 3_100.0, QUEUED);
+    advance(&mut sut, T0 + MIN, QUEUED);
+    assert!(holds(&sut));
+    tick(&mut sut, T0 + 2.0 * MIN);
+    sut.resolve_matching(is_receipt, receipt_confirmed(T0 + 2.0 * MIN + 200.0));
+    assert_eq!(sut.view().entries[0].outcome, TrackOutcome::Final);
+    assert!(!holds(&sut), "confirmed");
+    assert!(!sut.view().entries[0].stalled, "final, not stalled");
+
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    assert!(holds(&sut));
+    refused(&mut sut, Some("simulation_failed"), None);
+    assert!(!holds(&sut), "refused");
+}
+
+/// After a restart the tracker knows of no progress since the submission:
+/// an op submitted more than ten minutes ago is released at once, and the
+/// relay's first answer — where the op is, not a move — leaves it so, so
+/// the confirm does not shut again seconds after it opened. A real move
+/// holds it again. One submitted five minutes ago holds for five more.
+#[test]
+fn a_restart_counts_from_the_submission_and_its_first_answer_is_no_move() {
+    let reload = |sut: &mut Sut, age_ms: f64| {
+        sut.dispatch(Event::AppResumed);
+        sut.resolve(Res::Clock { now_ms: T0 });
+        sut.resolve(Res::RecordsLoaded {
+            records: vec![TrackPendingRecord {
+                record_id: "rec-1".to_owned(),
+                user_op_hash: HASH.to_owned(),
+                chain_id: CHAIN,
+                submitted_at_ms: T0 - age_ms,
+                maybe_sent: false,
+                submit_block: None,
+                sender: Some(SENDER.to_owned()),
+            }],
+            now_ms: T0,
+        });
+    };
+
+    let mut sut = Sut::new();
+    reload(&mut sut, 30.0 * MIN);
+    assert!(!holds(&sut), "half an hour with no progress known");
+    let submitted = Some((TrackLifecycle::Submitted, None));
+    advance(&mut sut, T0 + 3_000.0, submitted);
+    advance(&mut sut, T0 + MIN, submitted);
+    assert!(!holds(&sut), "the first answer is where it is, not a move");
+    advance(
+        &mut sut,
+        T0 + 2.0 * MIN,
+        Some((TrackLifecycle::Included, None)),
+    );
+    assert!(holds(&sut), "a move");
+
+    let mut sut = Sut::new();
+    reload(&mut sut, 5.0 * MIN);
+    assert!(holds(&sut));
+    advance(&mut sut, T0 + 5.0 * MIN - 1_000.0, None);
+    assert!(holds(&sut));
+    advance(&mut sut, T0 + 5.0 * MIN, None);
+    assert!(!holds(&sut), "ten minutes from the submission");
+}
+
+/// A released hold stays released when the device's clock steps back: only
+/// progress takes it up again.
+#[test]
+fn a_clock_that_steps_back_never_re_holds() {
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    advance(&mut sut, T0 + 3_100.0, None);
+    advance(&mut sut, T0 + 10.0 * MIN, None);
+    assert!(!holds(&sut));
+    advance(&mut sut, T0 + 9.0 * MIN, None);
+    assert!(!holds(&sut));
+}
+
+/// A shell that predates the fields still decodes.
+#[test]
+fn the_sender_and_reason_default_on_the_wire() {
+    let event: Event = serde_json::from_str(
+        r#"{"type":"submitted","user_op_hash":"0x1","record_ids":[],"chain_id":1}"#,
+    )
+    .unwrap();
+    assert!(matches!(event, Event::Submitted { sender: None, .. }));
+    let record: TrackPendingRecord = serde_json::from_str(
+        r#"{"record_id":"r","user_op_hash":"0x1","chain_id":1,"submitted_at_ms":1}"#,
+    )
+    .unwrap();
+    assert_eq!(record.sender, None);
+    let status: Res = serde_json::from_str(
+        r#"{"type":"status","user_op_hash":"0x1","status":"rejected","stage":"nonce","now_ms":1}"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        status,
+        Res::Status {
+            rejection_reason: None,
+            ..
+        }
+    ));
+    // A live op's view says nothing of the stall until it has one.
+    let mut sut = Sut::new();
+    submitted_by(&mut sut, Some(SENDER), false);
+    let wire = serde_json::to_value(&sut.view().entries[0]).unwrap();
+    assert!(wire.get("stalled").is_none(), "{wire}");
+    let entry: vela_core::app::tx_tracker::TrackEntryView = serde_json::from_value(wire).unwrap();
+    assert!(!entry.stalled);
 }

@@ -108,6 +108,7 @@
 	import type { MtokView } from '$lib/core/generated/MtokView';
 	import { getAllNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
 	import {
+		formChainOf,
 		makeRecipientId,
 		sendTokenId,
 		visibleSendTokens,
@@ -119,11 +120,15 @@
 	import type { FeeView } from '$lib/core/generated/FeeView';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { feeKey, FeeTokenWord } from '$lib/flows/core/send-estimates';
+	import { feeKey, FeeStateWord, FeeTokenWord } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
-	import { startTxTracker, trackSubmitted } from '$lib/wallet/core/tracker-resident';
+	import {
+		startTxTracker,
+		subscribeInFlightOps,
+		trackSubmitted
+	} from '$lib/wallet/core/tracker-resident';
 	import { track } from '$lib/analytics';
 	import { watchSendOutcome } from '$lib/analytics/send-outcome';
 	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
@@ -223,7 +228,9 @@
 					m: data.flowMessages,
 					wm: data.walletMessages,
 					currency: currency.view,
-					hidden: balance.view.hidden,
+					// The feed's own flag: a transfer's and a dApp row's detail mask
+					// on it (`FeedView.hidden`, `app::privacy`).
+					hidden: feed.view.hidden,
 					identicon: identiconSvgForClient,
 					// Spec 093: a dApp record's stored request, read from the store's
 					// rows by id when its "Technical details" open — never before.
@@ -630,6 +637,9 @@
 	/** What Send last heard of the holdings, so an unchanged list is not re-sent. */
 	let sentHoldingsKey: string | null = null;
 
+	/** Stops telling the send machine what is in flight; set while a send is open. */
+	let stopInFlightOps: (() => void) | null = null;
+
 	async function openSend(prefill?: Partial<SendOpenParams>): Promise<void> {
 		if (sendSession || !identity) return;
 		await loadCore();
@@ -651,7 +661,11 @@
 						outcome
 					}),
 				handoff.maybeSent,
-				handoff.submitBlock
+				handoff.submitBlock,
+				false,
+				// Who signed it: the tracker holds this account's next confirm
+				// on this network until it lands (correctness batch item 3).
+				handoff.sender
 			);
 			// Usage statistics: the op is with the relay; the tracker says how it ends.
 			track('send_submitted', { chain: handoff.chainId });
@@ -700,9 +714,9 @@
 					const outcome = await feeQuote.requestQuote({ ...request, tier: sendSpeedTier });
 					if (outcome.kind === 'ok') return { type: 'ok', estimate: outcome.estimate };
 					if (outcome.kind === 'failed') return { type: 'failed', kind: outcome.failure };
-					// The shell could not obtain an input the question requires, or
-					// the surface moved on. Neither is a verdict about a fee — the
-					// core hears the same "not estimated" either way.
+					// The surface moved on under the question. Not a verdict about a
+					// fee — the core hears "not estimated". (An account the chain
+					// could not be read for is the fee's own `failed` now, issue 483.)
 					return { type: 'failed', kind: 'estimate_failed' };
 				}
 			}
@@ -725,6 +739,14 @@
 			},
 			display: { code: currency.view.code, rate: currency.view.rate, fiat_decimals: 2 }
 		});
+		// The account's operations still holding their nonce, on every tracker
+		// render (correctness batch item 3): while one is in flight on the
+		// form's network, the core holds this send's confirm with one line —
+		// a second operation signed now would take the same nonce.
+		stopInFlightOps?.();
+		stopInFlightOps = subscribeInFlightOps((ops) =>
+			sendSession?.dispatch({ type: 'in_flight_ops', ops })
+		);
 		track('send_opened');
 	}
 
@@ -750,6 +772,8 @@
 
 	function closeSend(): void {
 		closeBatch();
+		stopInFlightOps?.();
+		stopInFlightOps = null;
 		sendSession?.dispose();
 		sendSession = null;
 		sendView = null;
@@ -764,7 +788,7 @@
 		// The mirror below memoizes what it last told the send machine. A new
 		// session has heard nothing.
 		lastFeeStamp = null;
-		lastFeeBusy = false;
+		feeStateWord.forget();
 		feeTokenWord.forget();
 		resyncedFee = null;
 		nav.close();
@@ -825,7 +849,10 @@
 		// recipient row dispatches, and a pick — or `close_contact_picker` —
 		// is what takes it down.
 		if (view.show_contact_picker) return 'sd2e' as const;
-		if (feeSheetOpen) return 'sd2f' as const;
+		// The fee coins opened from the confirm's failed fee line (PR 2 polish:
+		// "Pay with another coin") rise over the confirm, not over the form
+		// two steps back — see `mobileFlowModel`.
+		if (feeSheetOpen && view.stage !== 'confirm') return 'sd2f' as const;
 		if (batchView) return 'sd2c' as const;
 		switch (view.stage) {
 			case 'select_token':
@@ -996,7 +1023,16 @@
 					openScanner: () => sendSession?.dispatch({ type: 'open_scanner' }),
 					continueDisabled: !sendView.can_continue,
 					continueBusy: sendView.estimating_gas,
-					confirmDisabled: !sendView.can_confirm
+					confirmDisabled: !sendView.can_confirm,
+					confirmBusy:
+						sendView.sending ||
+						sendView.tx_status === 'preparing' ||
+						sendView.tx_status === 'signing' ||
+						sendView.tx_status === 'submitting',
+					// The failed submit's Try again: the core goes back to a confirm
+					// it can open — or holds it, with its one line, while the
+					// previous transaction is still in flight.
+					retryAfterError: () => sendSession?.dispatch({ type: 'retry_after_error' })
 				}
 	);
 
@@ -1033,6 +1069,19 @@
 	});
 
 	/**
+	 * The phone's screen for a state: the prerendered model — and, on the
+	 * confirm, the fee-coin sheet over it while it is open (PR 2 polish: the
+	 * failed fee line's "Pay with another coin" opens the coins there). The
+	 * sheet is SD2f's own; only the screen under it is the confirm's.
+	 */
+	function mobileFlowBase(state: NonNullable<typeof shownFlowState>) {
+		const base = data.flows[state];
+		if (!feeSheetOpen || sendView?.stage !== 'confirm') return base;
+		const sheet = data.flows.sd2f.sheet;
+		return sheet?.kind === 'fee-token' ? { ...base, sheet } : base;
+	}
+
+	/**
 	 * The fee session's later word, mirrored into the send machine — the
 	 * `sync_fee_to_send` the desktop has had since it was wired, and Android's
 	 * `SendController.init` collector. This shell never had it: the send
@@ -1047,7 +1096,8 @@
 	 * core schedules afterwards only refines what is already on screen.
 	 */
 	let lastFeeStamp: string | null = null;
-	let lastFeeBusy = false;
+	/** What this send journey was last told of the card's busy and failed (`FeeStateWord`). */
+	const feeStateWord = new FeeStateWord();
 	/**
 	 * What this send journey was last told of the fee card's coin, and on
 	 * which chain. The coin names the form's fee row while no estimate is in
@@ -1063,13 +1113,15 @@
 		// Read so a late answer landing in the send machine re-runs this.
 		const held = sendView?.fee ?? null;
 		if (!sendSession || !view) return;
-		if (view.busy !== lastFeeBusy) {
-			lastFeeBusy = view.busy;
-			sendSession.dispatch({ type: 'fee_busy_changed', busy: view.busy });
-		}
 		// The form's chain: the selected token's, else the sweep's (the core's
 		// `form_chain`).
-		const formChain = sendView?.selected_token?.chain_id ?? sendView?.multi_chain_id ?? null;
+		const formChain = sendView ? formChainOf(sendView) : null;
+		// A measurement out, and the card's failure (PR 2 integration:
+		// `fee_failed_changed`) — the send machine holds its confirm on either,
+		// and drops the figure it kept on the confirm page when the card fails.
+		// Only a failure for the form's own chain counts (PR 2 polish): right
+		// after a token switch the old chain's is not this form's.
+		for (const event of feeStateWord.news(view, formChain)) sendSession.dispatch(event);
 		const coinNews = feeTokenWord.news(view.fee_token, feeQuote.pricingChainId, formChain);
 		if (coinNews !== null) sendSession.dispatch(coinNews);
 		const estimate = view.fee;
@@ -2175,7 +2227,7 @@
 			{#if shownFlowState !== undefined}
 				<FlowsMobile
 					model={withLiveTxDetailMobile(
-						withLiveFlow(data.flows[shownFlowState], flowInputs),
+						withLiveFlow(mobileFlowBase(shownFlowState), flowInputs),
 						txDetail
 					)}
 					onback={() => {

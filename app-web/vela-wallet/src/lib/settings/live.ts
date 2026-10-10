@@ -994,8 +994,37 @@ export interface LiveAccountsInput {
 	activeIndex: number;
 	/** Per-account totals in USD by lowercased address — the balance core's switcher cache. */
 	balances: ReadonlyMap<string, number>;
+	/**
+	 * The balance is hidden (`BalanceSwitcherView.hidden`): the core sends no
+	 * figure at all, and every row and the total draw the mask (`app::privacy`).
+	 */
+	hidden: boolean;
 	currency: CurrencyView;
 	identicon: (address: string) => string;
+}
+
+/**
+ * The switcher's totals, by lowercased address: the balance core's cached
+ * figure per account, with the live total standing in for the active
+ * account's — only while it is a figure. Hidden, the core withholds every
+ * switcher figure (`app::privacy`) and the rows and the total draw the mask;
+ * and a home that read nothing (`unreachable`) has no figure either
+ * (`display_total_usd` is null, PR 2 polish) — the active row keeps what was
+ * cached for it, never a $0.00 nobody read.
+ */
+export function switcherBalances(
+	view: Pick<BalanceView, 'switcher' | 'display_total_usd'>,
+	activeAddress: string
+): Map<string, number> {
+	const balances = new Map<string, number>();
+	for (const entry of view.switcher.balances) {
+		balances.set(entry.address.toLowerCase(), entry.usd);
+	}
+	const live = view.display_total_usd;
+	if (!view.switcher.hidden && live !== null && activeAddress !== '') {
+		balances.set(activeAddress.toLowerCase(), live);
+	}
+	return balances;
 }
 
 function liveAccountRows(input: LiveAccountsInput) {
@@ -1006,8 +1035,9 @@ function liveAccountRows(input: LiveAccountsInput) {
 			addressDisplay: shortenAddress(row.account.address),
 			addressFull: row.account.address,
 			identiconSvg: input.identicon(row.account.address),
-			// No cached total yet: an empty cell, never a mocked figure.
-			amount: usd === undefined ? '' : moneyText(usd, input.currency),
+			// Hidden: the mask, whatever is known. No cached total yet: an empty
+			// cell, never a mocked figure.
+			amount: input.hidden ? MASK : usd === undefined ? '' : moneyText(usd, input.currency),
 			selected: position === input.activeIndex
 		};
 	});
@@ -1018,7 +1048,8 @@ function liveAccountsSummary(input: LiveAccountsInput, m: SettingsMessages['acco
 	let total = 0;
 	for (const row of input.rows) total += input.balances.get(row.account.address.toLowerCase()) ?? 0;
 	return `${fill(m.countPrefix, { count: input.rows.length })}${fill(m.total, {
-		amount: moneyText(total, input.currency)
+		// Hidden: the total masks with the rows — it IS their sum.
+		amount: input.hidden ? MASK : moneyText(total, input.currency)
 	})}`;
 }
 

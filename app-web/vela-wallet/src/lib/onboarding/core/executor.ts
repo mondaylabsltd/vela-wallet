@@ -188,7 +188,10 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				return {
 					type: 'registry_key_status',
 					registered: status.registered,
-					unit_ids: status.unitIds
+					unit_ids: status.unitIds,
+					// Who vouched for it, untouched: only Gnosis's "no record" may
+					// offer the rebuild (the core reads anything else as unverified).
+					verified_by: status.verifiedBy
 				};
 			}
 

@@ -506,6 +506,18 @@ pub struct FeeAssetQuote {
     /// gets exactly the answer it got before issue 682.
     #[serde(default)]
     pub native_usd_floor_price: Option<String>,
+    /// The relay's own minimum for this row, in base units (`minimumAmount`
+    /// on `vela_getInBandGasQuote`, relay `fix/held-nonce-and-floor` §3) —
+    /// passed through as the relay wrote it, a hex quantity (a decimal
+    /// string reads too). Native: exactly $0.01 of the coin at the relay's
+    /// price, or its 0.000001-coin safety floor when it has none; a
+    /// stablecoin: 0.01 of it. When present, the wallet floors at THIS, not
+    /// at its own 0.00001-coin rule, which on a coin dearer than $1,000 was
+    /// more than a cent. `#[serde(default)]`: an older (or self-hosted) relay
+    /// publishes none, and today's rule stands — it is what such a relay
+    /// admits.
+    #[serde(default)]
+    pub minimum_amount: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -604,7 +616,28 @@ pub enum FeeOperation {
     /// The three chain price signals (`safe-transaction.ts:1949-1985`).
     /// `want_tip` is false on Tempo, where `eth_maxPriorityFeePerGas` is
     /// meaningless and would corrupt the stablecoin reimbursement.
-    FetchGasPrice { chain_id: u32, want_tip: bool },
+    FetchGasPrice {
+        chain_id: u32,
+        want_tip: bool,
+        /// A retry after a failure: read the chain again, past any reading
+        /// the shell holds (its fee-signal cache) — a retry is a real new
+        /// read, never the answer that just failed. `#[serde(default)]`.
+        #[serde(default)]
+        fresh: bool,
+    },
+    /// Is the account deployed on this chain (`eth_getCode` through the
+    /// chain's pool)? Asked first when the request named
+    /// `Event::QuoteRequested::read_deployment`, so a read that fails is the
+    /// fee's own failure — said on the fee row, the footer and the retry the
+    /// same way on every shell (issue 483) — and asked again on every retry.
+    /// Answered [`FeeShellResult::Deployment`]. `fresh`: as
+    /// [`Self::FetchGasPrice`]'s.
+    ReadDeployment {
+        chain_id: u32,
+        account: String,
+        #[serde(default)]
+        fresh: bool,
+    },
     /// `pimlico_getUserOperationGasPrice` for one tier.
     FetchBundlerQuote { chain_id: u32, tier: FeeTier },
     /// `vela_getInBandGasQuote` — every fee asset in one address-only call.
@@ -644,7 +677,9 @@ pub enum FeeOperation {
     },
     /// The re-pricing timer: answer [`FeeShellResult::TtlElapsed`] after `ms`
     /// ([`requote_interval_ms`], the chain's block time) and the machine
-    /// prices the quote on screen again.
+    /// prices the quote on screen again. After a failure that can pass it is
+    /// the machine's own re-ask, `ms` = [`requote_delay_ms`] (PR 2 note 1):
+    /// the shell runs it like any other wait and schedules nothing itself.
     StartTtl { ms: u32 },
     /// The bound on this whole run ([`QUOTE_DEADLINE_MS`], spec 094 S9):
     /// answer [`FeeShellResult::DeadlineElapsed`] after `ms`. A run still
@@ -689,6 +724,26 @@ pub enum FeeShellResult {
     TtlElapsed,
     /// [`FeeOperation::StartDeadline`]'s time ran out.
     DeadlineElapsed,
+    /// The answer to [`FeeOperation::ReadDeployment`].
+    Deployment {
+        read: DeploymentRead,
+    },
+}
+
+/// What the account read came back with ([`FeeOperation::ReadDeployment`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum DeploymentRead {
+    /// The chain answered.
+    Read { deployed: bool },
+    /// The chain's nodes did not answer — or answered only with rate limits
+    /// (`rate_limited`). The chain is out of reach, not Vela.
+    Unreachable { rate_limited: bool },
+    /// The read never left the app: something inside it failed (issue
+    /// 483 — a request pool nobody started). Never told as "can't reach
+    /// the chain". `kind` is diagnostics for the report, never shown.
+    Internal { kind: String },
 }
 
 impl Operation for FeeOperation {
@@ -754,6 +809,14 @@ pub enum Event {
         /// shell that does not send it reads `1,234.56`.
         #[serde(default)]
         number: NumberPreset,
+        /// Read the account's deployment here, first
+        /// ([`FeeOperation::ReadDeployment`]), instead of trusting `deployed`
+        /// — the read's failure is then the fee's, with the fee's words and
+        /// retry (issue 483). Absent (or `false`): the shell reads the
+        /// deployment itself and passes `deployed`, as before.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        read_deployment: Option<bool>,
     },
     /// A fee-asset chip tap. `None` = native.
     SelectFeeAsset { token: Option<String> },
@@ -830,6 +893,11 @@ pub enum FeeFailure {
     /// ANSWER, where [`FeeGasOutcome::SimulationFailed`] is no answer at all
     /// (and becomes [`FeeFailure::EstimateFailed`]).
     WouldFail,
+    /// Something inside the app failed before a read could leave it
+    /// ([`DeploymentRead::Internal`], issue 483). Never "can't reach the
+    /// chain": the chain was never asked. Retried on the usual schedule — a
+    /// shell that heals itself (a late-started pool) recovers without a tap.
+    Internal,
 }
 
 /// The bound on one whole quote (spec 094 S9, 089 F06). Offline, a run's
@@ -845,7 +913,8 @@ pub const QUOTE_DEADLINE_MS: u32 = 15_000;
 /// Bound on each automatic re-quote (spec 082 RJ12): a re-ask that has not
 /// answered in this time is a failure again, and the schedule goes on. With
 /// the 8 s step this puts the fee back within 8 + 6 = 14 s of the relay
-/// returning (SC-003).
+/// returning (SC-003). The machine's own re-asks ask for it as their
+/// [`FeeOperation::StartDeadline`]; a tap gets [`QUOTE_DEADLINE_MS`].
 pub const REQUOTE_TIMEOUT_MS: u32 = 6_000;
 
 /// The wait before automatic re-quote `attempt` (1-based) after a failure a
@@ -863,7 +932,8 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
         | FeeFailure::FeeTokenUnavailable
         | FeeFailure::EstimateFailed
         | FeeFailure::GasQuoteTooHigh
-        | FeeFailure::ChainRead { .. } => Some(match attempt {
+        | FeeFailure::ChainRead { .. }
+        | FeeFailure::Internal => Some(match attempt {
             0 | 1 => 3_000,
             2 => 6_000,
             _ => 8_000,
@@ -873,6 +943,15 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
         }
     }
 }
+
+/// The fee row's reason when the chain's nodes cannot be reached
+/// (`{{chain}}` = the chain's name): "Can't reach {{chain}} to price this.
+/// Trying again…" — the fee's own words, never the browser's.
+pub const REASON_CHAIN_DOWN_KEY: &str = "componentsUi.gas.reasonChainDown";
+
+/// The fee row's reason when the read never left the app
+/// ([`FeeFailure::Internal`]).
+pub const REASON_INTERNAL_KEY: &str = "componentsUi.gas.reasonInternal";
 
 /// The line under a refused fee coin's row: `{{need}}` and `{{have}}` are its
 /// [`FeeShortfall`]'s, written by the core (issue #408).
@@ -895,8 +974,9 @@ pub const NO_COIN_PAYS_KEY: &str = "componentsUi.gas.noCoinPays";
 /// - the relay's gas price is past the chain's by more than
 ///   `MAX_QUOTE_VS_CHAIN_MULTIPLE` → `componentsUi.gas.reasonQuoteHigh`;
 /// - a chain node rate-limits the read → `home.balanceDetailStatusRetrying`;
-/// - a chain node cannot be reached → `explore.chainDown`, whose `{{chain}}`
-///   the shell fills with the chain's name.
+/// - a chain node cannot be reached → [`REASON_CHAIN_DOWN_KEY`], whose
+///   `{{chain}}` the shell fills with the chain's name;
+/// - the read never left the app → [`REASON_INTERNAL_KEY`].
 ///
 /// G48: a public node's `eth_getCode` rate limit on Ethereum read "无法连接
 /// Vela 服务" with no fault anywhere near Vela. The four relay failures used to
@@ -910,9 +990,12 @@ pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
         FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulation"),
         FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHigh"),
         FeeFailure::ChainRead { rate_limited: true } => Some("home.balanceDetailStatusRetrying"),
+        // The fee row's own sentence (issue 483): the browser's "page data
+        // may be incomplete" meant nothing under a fee.
         FeeFailure::ChainRead {
             rate_limited: false,
-        } => Some("explore.chainDown"),
+        } => Some(REASON_CHAIN_DOWN_KEY),
+        FeeFailure::Internal => Some(REASON_INTERNAL_KEY),
         // Not the network's doing (083): the shell draws the relay's answer
         // as the operation's own warning, never as a fee that failed to load.
         FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed | FeeFailure::WouldFail => {
@@ -1023,21 +1106,60 @@ pub fn published_in_band_fee_amount(
     in_band_amount(mul_wide(total_gas, per_gas), fee_asset, native_asset)
 }
 
-/// The fee for a native charge of `charged` wei: floored at the native
-/// minimum, then — for a stablecoin fee — converted at the two USD prices and
-/// floored at a cent of the coin. Exact in 256 bits; `None` refuses.
+/// The minimums a relay published on its quote rows (`minimumAmount`, relay
+/// `fix/held-nonce-and-floor` §3), base units. `None`: the relay published
+/// none (an older or self-hosted one), and the wallet's own rule stands.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Minimums {
+    native: Option<u128>,
+    fee: Option<u128>,
+}
+
+/// The fee for a native charge of `charged` wei with no published minimum —
+/// [`in_band_amount_with`] under today's rule.
 fn in_band_amount(
     charged: U256,
     fee_asset: &AssetPricing,
     native_asset: &AssetPricing,
 ) -> Option<u128> {
+    in_band_amount_with(charged, fee_asset, native_asset, Minimums::default())
+}
+
+/// The fee for a native charge of `charged` wei.
+///
+/// - **Native:** floored at the native minimum. Today's rule: $0.01 of the
+///   coin, never under the older relay's 0.00001-coin admission floor (more
+///   than a cent on any coin dearer than $1,000 — 2.5¢ on ETH at $2,500). A
+///   relay that publishes its minimum (`minimumAmount`) admits and settles
+///   at that — exactly $0.01 of the coin at its price, or its 0.000001-coin
+///   dust floor without one, raised to the wallet's own cent when only the
+///   shell can price the coin — so the wallet floors at that instead.
+/// - **Stablecoin:** the CHARGE converted at the two USD prices — never the
+///   native minimum converted: a stablecoin fee is admitted at 0.01 of the
+///   coin and the relay's stable settlement asks no native floor, so the
+///   converted native floor charged ~2.5¢ on every ETH L2 for a rule that
+///   was never the stablecoin's. Floored at $0.01 of the coin, at 0.01 of the
+///   coin (what any relay admits) and at the relay's published minimum.
+///
+/// **A published minimum only ever LOWERS what today's rule charges, never
+/// raises it**: a relay that raised its floor past today's rule is a change
+/// to the two-repo contract, not something a quote row may impose — a
+/// compromised or broken relay must not be able to name the fee through it.
+///
+/// Exact in 256 bits; `None` refuses.
+fn in_band_amount_with(
+    charged: U256,
+    fee_asset: &AssetPricing,
+    native_asset: &AssetPricing,
+    minimums: Minimums,
+) -> Option<u128> {
     if !native_asset.is_native {
         return None;
     }
     let native_unit = pow10_wide(native_asset.decimals)?;
-    // 0.00001 native coin — the relay's admission floor (`admission.rs`); the
-    // client never reimburses below it. Below 5 decimals it collapses to one
-    // base unit.
+    // 0.00001 native coin — the older relay's admission floor (`admission.rs`
+    // before `fix/held-nonce-and-floor`); today's rule never reimburses below
+    // it. Below 5 decimals it collapses to one base unit.
     let admission_floor = if native_asset.decimals >= 5 {
         pow10_wide(native_asset.decimals - 5)?
     } else {
@@ -1061,7 +1183,7 @@ fn in_band_amount(
     // the same. Priced by the relay stays first and unchanged, so nothing about
     // a priced send moves.
     //
-    // FLOOR ONLY. The stablecoin conversion below reads `native_usd` — this
+    // FLOOR ONLY. The stablecoin conversion reads `native_usd` alone — this
     // value is deliberately not merged into it, because its absence there is a
     // refusal we mean to keep, and a shell-derived price must never quietly
     // become a conversion rate.
@@ -1076,7 +1198,7 @@ fn in_band_amount(
     let cent_worth = |price: u128| -> Option<U256> {
         ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(native_unit)?, w(price))
     };
-    let native_minimum = match (native_usd, shell_usd) {
+    let today = match (native_usd, shell_usd) {
         // The relay priced it: unchanged, and this arm is the only one a priced
         // send ever reaches.
         (Some(price), _) => cent_worth(price)?.max(admission_floor),
@@ -1098,24 +1220,59 @@ fn in_band_amount(
         // Nobody can value the coin: the blind floor is the last resort.
         (None, None) => blind_minimum,
     };
-    let native_amount = charged.max(native_minimum);
+    // The relay published its minimum: what it admits and settles at. Plus
+    // the wallet's own cent when the relay could not price the coin and the
+    // shell can (the published one is then the relay's dust floor), and
+    // never above today's rule.
+    let native_minimum = match minimums.native {
+        Some(published) => {
+            let shell_cent = match (native_usd, shell_usd) {
+                (None, Some(price)) => cent_worth(price)?.min(blind_minimum),
+                _ => U256::ZERO,
+            };
+            U256::from(published).max(shell_cent).min(today)
+        }
+        None => today,
+    };
     if fee_asset.is_native {
-        return narrow(native_amount);
+        return narrow(charged.max(native_minimum));
     }
     // Stablecoin path needs the native USD price (parsed above) and the fee
     // token's; either absent/zero is "cannot quote", never rate 1.
     let native_usd = native_usd?;
     let fee_usd = usd_price_scaled(fee_asset.usd_price.as_deref(), false).filter(|v| *v != 0)?;
     let fee_unit = pow10_wide(fee_asset.decimals)?;
-    let converted = ceil_div_wide(
-        native_amount
-            .checked_mul(w(native_usd))?
-            .checked_mul(fee_unit)?,
-        native_unit.checked_mul(w(fee_usd))?,
-    )?;
-    let stable_minimum =
-        ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(fee_unit)?, w(fee_usd))?;
-    narrow(converted.max(stable_minimum))
+    let convert = |native: U256| -> Option<U256> {
+        ceil_div_wide(
+            native.checked_mul(w(native_usd))?.checked_mul(fee_unit)?,
+            native_unit.checked_mul(w(fee_usd))?,
+        )
+    };
+    let cent_of_coin = ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(fee_unit)?, w(fee_usd))?;
+    // 0.01 of the coin: what every relay's admission takes for a stablecoin,
+    // whatever its price says — so a dollar coin priced a hair above $1 is
+    // not quoted a hair under it. Only for a dollar-like coin (0.01 of it
+    // worth at most two cents): on anything dearer it would not be a cent.
+    let hundredth = if fee_asset.decimals >= 2 {
+        pow10_wide(fee_asset.decimals - 2)?
+    } else {
+        U256::from(1u64)
+    };
+    let hundredth = if hundredth <= cent_of_coin.checked_mul(U256::from(2u64))? {
+        hundredth
+    } else {
+        U256::ZERO
+    };
+    // What today's rule charged in this coin — the ceiling a published
+    // minimum may not lift the fee past.
+    let today_stable = convert(charged.max(today))?.max(cent_of_coin);
+    let published = U256::from(minimums.fee.unwrap_or(0)).min(today_stable);
+    narrow(
+        convert(charged)?
+            .max(cent_of_coin)
+            .max(hundredth)
+            .max(published),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1792,21 +1949,24 @@ enum Charge {
 }
 
 impl Charge {
-    /// The fee in `fee_asset` for `gas`.
-    fn amount(
-        self,
-        gas: u128,
-        fee_asset: &AssetPricing,
-        native_asset: &AssetPricing,
-    ) -> Option<u128> {
-        match self {
-            Charge::Marked { basis } => {
-                calculate_in_band_fee_amount(gas, basis, fee_asset, native_asset)
-            }
-            Charge::Published { per_gas } => {
-                published_in_band_fee_amount(gas, per_gas, fee_asset, native_asset)
-            }
-        }
+    /// The fee in `fee_row`'s coin for `gas`, floored at the minimums the
+    /// relay published on the two rows (when it did).
+    fn amount(self, gas: u128, fee_row: &ParsedQuote, native_row: &ParsedQuote) -> Option<u128> {
+        let charged = match self {
+            Charge::Marked { basis } => mul_wide(gas, basis).checked_mul(w(INBAND_MARKUP))?,
+            Charge::Published { per_gas } => mul_wide(gas, per_gas),
+        };
+        in_band_amount_with(
+            charged,
+            &fee_row.pricing(),
+            &native_row.pricing(),
+            Minimums {
+                native: native_row.minimum_amount,
+                fee: (!fee_row.is_native)
+                    .then_some(fee_row.minimum_amount)
+                    .flatten(),
+            },
+        )
     }
 
     /// The per-gas figure, as [`FeeEstimate::in_band_gas_basis`] reports it.
@@ -1840,6 +2000,8 @@ struct ParsedQuote {
     usd_balance: String,
     usd_price: Option<String>,
     native_usd_floor_price: Option<String>,
+    /// The relay's published minimum for this row, base units.
+    minimum_amount: Option<u128>,
 }
 
 impl ParsedQuote {
@@ -1876,6 +2038,12 @@ struct RequestCtx {
     chain_id: u32,
     account: String,
     deployed: bool,
+    /// The request asked this machine to read the deployment
+    /// (`read_deployment`).
+    reads_deployment: bool,
+    /// …and it has not been read yet, or the last read failed. Cleared by a
+    /// read that answers.
+    needs_deployment_read: bool,
     public_key_available: bool,
     tier: FeeTier,
     calls: Vec<FeeCall>,
@@ -1907,6 +2075,29 @@ enum Origin {
     /// The figure on screen is older than a block: priced again before
     /// anything signs it.
     Catchup,
+    /// The coin in force changed after the gas was measured with ANOTHER
+    /// coin's fee leg (a chip tap, or the machine's own re-pick once the
+    /// operation's balance changes are known): the switched figure stays on
+    /// screen, `provisional`, and the operation is measured again at once
+    /// with the new leg — before anything may sign it. A stablecoin leg is
+    /// an ERC-20 `transfer`, one SSTORE heavier than a native one (~9% of a
+    /// mainnet send's gas), and USDC↔USDT is another contract: only the
+    /// identical leg keeps its measurement.
+    Remeasure,
+}
+
+/// The fee leg a gas measurement simulated: the chain's coin, or a token's
+/// `transfer` (lower-cased contract).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum FeeLeg {
+    Native,
+    Token(String),
+}
+
+impl FeeLeg {
+    fn of(fee_token: Option<&str>) -> Self {
+        fee_token.map_or(Self::Native, |token| Self::Token(token.to_lowercase()))
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1932,6 +2123,11 @@ struct Pending {
     /// nothing was asked). Pricing waits for both.
     user_op_gas: Option<FeeGasOutcome>,
     inner_floor: Option<Option<u128>>,
+    /// The fee leg the simulation in flight carries.
+    measured_leg: Option<FeeLeg>,
+    /// This run already simulated again for a coin it re-picked on the real
+    /// gas ([`price_generic`]): it settles now, whatever it picks.
+    relegged: bool,
 }
 
 /// What the pricing step needs once the simulation answers.
@@ -1973,6 +2169,8 @@ enum PricePlan {
 enum Phase {
     #[default]
     Idle,
+    /// Waiting for the account read ([`FeeOperation::ReadDeployment`]).
+    ReadingAccount,
     /// Waiting for the parallel context reads.
     Gathering,
     /// Waiting for the UserOp gas simulation.
@@ -1983,6 +2181,9 @@ enum Phase {
 
 #[derive(Default)]
 pub struct Model {
+    /// The next run follows a failure: its reads go past anything the shell
+    /// holds ([`FeeOperation::FetchGasPrice::fresh`]).
+    fresh_reads: bool,
     /// The chain the form currently targets — the estimate is exposed only
     /// while its own `chain_id` matches (invariant ①,
     /// `useSendController.ts:119-121`).
@@ -2003,6 +2204,9 @@ pub struct Model {
     /// coin can pay, so the refusal is the one the caller would have had.
     requested_fee_token: Option<String>,
     estimate: Option<FeeEstimate>,
+    /// The fee leg the estimate in force was measured with. `None` on Tempo,
+    /// whose fee is no leg, and before any estimate.
+    measured_leg: Option<FeeLeg>,
     stale: bool,
     attempt: u64,
     /// What the operation itself does to each asset, as the shell's
@@ -2025,6 +2229,20 @@ pub struct Model {
     /// The number preset the request was asked in — what the view writes a
     /// shortfall's amounts in ([`FeeShortfall`]).
     number: NumberPreset,
+    /// Re-asks this machine fired by itself since the fee last stood
+    /// ([`requote_delay_ms`]'s `attempt` is this plus one).
+    retries: u32,
+    /// The run out now is a re-ask after this failure — the machine's own
+    /// ([`FeeShellResult::TtlElapsed`] in [`Phase::Failed`]) or a tap
+    /// ([`Event::Requote`]): the row keeps saying why while it runs
+    /// ([`FeeFailureView::retrying`]). Cleared when the run ends.
+    retrying_after: Option<FeeFailure>,
+    /// The run out now is the machine's own re-ask after a failure: bounded
+    /// by [`REQUOTE_TIMEOUT_MS`], not [`QUOTE_DEADLINE_MS`] (spec 082 RJ12) —
+    /// a re-ask that hangs (a black-holed relay) is a failure again in 6 s and
+    /// the schedule goes on, so the fee is back within 8 + 6 s of the relay
+    /// returning. A tap gets the whole bound.
+    auto_reask: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2188,6 +2406,185 @@ pub struct FeeView {
     /// `false`.
     #[serde(default)]
     pub nothing_to_pay_from: bool,
+    /// The figure on screen was switched to another coin and is being
+    /// measured again with that coin's fee leg ([`Origin::Remeasure`]): drawn
+    /// as it is, with the measuring sign, and never confirmable until the
+    /// new figure lands (`busy` holds meanwhile too). `#[serde(default)]`: a
+    /// reader that predates it reads `false`.
+    #[serde(default)]
+    pub provisional: bool,
+    /// The failure, said once for the fee row AND the line under the held
+    /// confirm (PR 2 note 1): the row's reason, whether the core is asking
+    /// again by itself, whether that ask is out now, the row's figure and the
+    /// footer's line — one state, so the two can never disagree ("Retrying
+    /// automatically" over "Tap it to retry"). Present while `failed` is, and
+    /// through the re-ask that follows it (`failed` is `None` then and `busy`
+    /// true). `#[serde(default)]`: a reader that predates it reads `None`.
+    #[serde(default)]
+    pub failure: Option<FeeFailureView>,
+}
+
+/// What a tap on a failed fee row does ([`FeeFailureView::tap`]) — and so
+/// what the row's figure may promise. A row that says "Tap to retry" and
+/// opens the coin list (or the reverse) is a control that lies (PR 2 polish).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeeFailureTap {
+    /// Asks again at once ([`Event::Requote`]) — a real new read. Every
+    /// failure but [`FeeFailure::WouldFail`]; while a re-ask is out
+    /// ([`FeeFailureView::retrying`]) a second tap asks nothing.
+    #[default]
+    Retry,
+    /// Opens the fee coins: the relay answered that the operation fails with
+    /// the coin in force ([`FeeFailure::WouldFail`]) and asking again gets
+    /// the same answer, so the way on is another coin — one the run has not
+    /// already tried, with something to pay from. The figure says so
+    /// ([`PAY_WITH_ANOTHER_COIN_KEY`]); a pick is [`Event::SelectFeeAsset`].
+    ChooseCoin,
+    /// Nothing: the relay answered that it fails, and no other coin is left
+    /// to pay with. The row keeps its dash and is no control; the line under
+    /// the confirm says what happened ([`FEE_WOULD_FAIL_KEY`]).
+    Nothing,
+}
+
+/// The fee's failure as the row and the footer draw it ([`FeeView::failure`]).
+///
+/// The core owns the retry: a failure [`requote_delay_ms`] says can pass is
+/// asked again by the machine itself, on that schedule, through the timer
+/// every shell already runs ([`FeeOperation::StartTtl`]) — on the send form
+/// and the signing sheet alike, with no scheduler of the shell's own. So the
+/// words are the machine's to choose: while it retries, nothing asks for a
+/// tap; a tap on the row still asks at once ([`Event::Requote`]), a real new
+/// read — except where asking again cannot help ([`Self::tap`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeeFailureView {
+    /// What failed: the run on screen's, or — while [`Self::retrying`] — the
+    /// run before the one out now.
+    pub failure: FeeFailure,
+    /// The line under the row ([`failure_reason_key`]); for
+    /// [`REASON_CHAIN_DOWN_KEY`] the shell fills `{{chain}}` with the chain's
+    /// name. `None`: no line (not the network's doing), the row keeps its
+    /// dash.
+    pub reason_key: Option<String>,
+    /// The machine asks again by itself ([`requote_delay_ms`] is `Some`): the
+    /// row and the footer both say it is retrying, and nothing asks for a
+    /// tap.
+    pub auto_retry: bool,
+    /// A re-ask after this failure is out now: the row keeps its reason and
+    /// draws its measuring sign beside it — never "Estimating…" in its place
+    /// — so nothing on screen flips while it retries.
+    pub retrying: bool,
+    /// The row's figure, saying what a tap does: [`ESTIMATE_FAILED_KEY`]
+    /// ("Tap to retry") when only a tap asks again, [`PAY_WITH_ANOTHER_COIN_KEY`]
+    /// ("Pay with another coin") when the tap opens the coins
+    /// ([`FeeFailureTap::ChooseCoin`]), else `None` — the dash.
+    pub figure_key: Option<String>,
+    /// The line under the held confirm, the signing sheet's and Send's:
+    /// [`FEE_RETRYING_KEY`] while the machine retries (or a re-ask is out),
+    /// [`FEE_WOULD_FAIL_KEY`] when the relay answered that it fails (a fact,
+    /// asking for no tap), else [`FEE_FAILED_KEY`] — tap the row.
+    pub footer_key: String,
+    /// What a tap on the row does. The row is a control only when this is
+    /// not [`FeeFailureTap::Nothing`], and does exactly this — on the send
+    /// form, its confirm page and the signing sheet alike. `#[serde(default)]`:
+    /// a reader that predates it reads `retry`.
+    #[serde(default)]
+    pub tap: FeeFailureTap,
+    /// The chain the failed run priced (PR 2 polish: a failure carries what
+    /// it was for). A surface draws the failure only for its own chain: right
+    /// after a token switch the form names another chain before the fee
+    /// machine has been asked about it, and the old chain's failure must not
+    /// flash there — a mismatched failure is dropped, as a mismatched
+    /// estimate is ([`FeeEstimateView::chain_id`]). `None` only from a view
+    /// built without a run ([`Self::of`]).
+    #[serde(default)]
+    pub chain_id: Option<u32>,
+    /// The coin the failed run priced the fee in (`None` = the chain's own),
+    /// beside [`Self::chain_id`].
+    #[serde(default)]
+    pub fee_token: Option<String>,
+}
+
+/// The row's figure when only a tap asks again: "Tap to retry".
+pub const ESTIMATE_FAILED_KEY: &str = "componentsUi.gas.estimateFailed";
+/// The row's figure when the tap opens the fee coins
+/// ([`FeeFailureTap::ChooseCoin`]): "Pay with another coin".
+pub const PAY_WITH_ANOTHER_COIN_KEY: &str = "componentsUi.gas.payWithAnotherCoin";
+/// The line under the held confirm while the machine asks again by itself:
+/// "Couldn't work out the fee yet. Retrying…".
+pub const FEE_RETRYING_KEY: &str = "componentsUi.signing.confirmBlock.feeRetrying";
+/// The line under the held confirm when only a tap asks again: "Couldn't
+/// work out the fee. Tap it to retry".
+pub const FEE_FAILED_KEY: &str = "componentsUi.signing.confirmBlock.feeFailed";
+/// The line under the held confirm when the relay answered that the
+/// operation fails ([`FeeFailure::WouldFail`]): "This would fail if sent as
+/// it is." — a fact, asking for no tap; the row says what a tap does.
+pub const FEE_WOULD_FAIL_KEY: &str = "componentsUi.signing.confirmBlock.feeWouldFail";
+
+impl FeeFailureView {
+    /// The failure as the row and the footer say it, built without a run:
+    /// no chain, and no other coin known to pay with. `retrying` — a re-ask
+    /// after it is out now.
+    #[must_use]
+    pub fn of(failure: FeeFailure, retrying: bool) -> Self {
+        Self::of_run(failure, retrying, false, None, None)
+    }
+
+    /// The failure of a run on `chain_id` priced in `fee_token`;
+    /// `another_coin` — a coin the run has not tried, with something to pay
+    /// from, is on offer (what [`FeeFailureTap::ChooseCoin`] needs).
+    #[must_use]
+    pub fn of_run(
+        failure: FeeFailure,
+        retrying: bool,
+        another_coin: bool,
+        chain_id: Option<u32>,
+        fee_token: Option<String>,
+    ) -> Self {
+        let auto_retry = requote_delay_ms(failure, 1).is_some();
+        let would_fail = failure == FeeFailure::WouldFail;
+        let tap = match (would_fail, another_coin) {
+            (false, _) => FeeFailureTap::Retry,
+            (true, true) => FeeFailureTap::ChooseCoin,
+            (true, false) => FeeFailureTap::Nothing,
+        };
+        let figure_key = if retrying {
+            // The measuring sign stands beside the dash while it asks.
+            None
+        } else if would_fail {
+            (tap == FeeFailureTap::ChooseCoin).then_some(PAY_WITH_ANOTHER_COIN_KEY)
+        } else {
+            (!auto_retry).then_some(ESTIMATE_FAILED_KEY)
+        };
+        let footer_key = if would_fail {
+            FEE_WOULD_FAIL_KEY
+        } else if auto_retry || retrying {
+            FEE_RETRYING_KEY
+        } else {
+            FEE_FAILED_KEY
+        };
+        Self {
+            failure,
+            reason_key: failure_reason_key(failure).map(str::to_owned),
+            auto_retry,
+            retrying,
+            figure_key: figure_key.map(str::to_owned),
+            footer_key: footer_key.to_owned(),
+            tap,
+            chain_id,
+            fee_token,
+        }
+    }
+
+    /// Whether this failure is for `chain_id`'s question — the one a surface
+    /// asking about that chain may draw. A failure built without a run
+    /// (`chain_id` `None`) is taken as it is.
+    #[must_use]
+    pub fn is_for_chain(&self, chain_id: Option<u32>) -> bool {
+        self.chain_id.is_none() || self.chain_id == chain_id
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2215,6 +2612,7 @@ impl App for FeePolicy {
                 fee_token,
                 auto_fee_token,
                 number,
+                read_deployment,
             } => {
                 model.attempt += 1;
                 model.number = number;
@@ -2223,6 +2621,8 @@ impl App for FeePolicy {
                     chain_id,
                     account,
                     deployed,
+                    reads_deployment: read_deployment == Some(true),
+                    needs_deployment_read: read_deployment == Some(true),
                     public_key_available,
                     tier,
                     calls,
@@ -2244,6 +2644,10 @@ impl App for FeePolicy {
                 // again right after asking it.
                 model.measured = None;
                 model.origin = Origin::Initial;
+                // A new question: no failure of the last one is retried here.
+                model.retries = 0;
+                model.retrying_after = None;
+                model.auto_reask = false;
                 begin_pipeline(model)
             }
             Event::BalanceChangesMeasured { changes } => balance_changes_measured(model, &changes),
@@ -2265,6 +2669,14 @@ impl App for FeePolicy {
                 if is_busy(&model.phase) {
                     return Command::done();
                 }
+                // A tap on a failed row is a retry at once: the row keeps
+                // saying why while it runs, and the machine's own timer for
+                // the next one is dropped with the attempt below.
+                if let Phase::Failed(failure) = model.phase {
+                    model.retrying_after = Some(failure);
+                }
+                // A person asked: the run gets the whole bound.
+                model.auto_reask = false;
                 model.attempt += 1;
                 // A figure already older than a block is not kept on a
                 // failed refresh ([`Origin::Catchup`]).
@@ -2284,6 +2696,9 @@ impl App for FeePolicy {
                 model.attempt += 1; // in-flight card work is abandoned
                 model.pending = Pending::default();
                 model.origin = Origin::Initial;
+                model.retries = 0;
+                model.retrying_after = None;
+                model.auto_reask = false;
                 model.fee_token = None;
                 if matches!(
                     model.estimate.as_ref().map(|e| &e.fee_asset),
@@ -2307,6 +2722,9 @@ impl App for FeePolicy {
                 model.form_chain_id = Some(chain_id);
                 model.pending = Pending::default();
                 model.origin = Origin::Initial;
+                model.retries = 0;
+                model.retrying_after = None;
+                model.auto_reask = false;
                 model.quotes.clear();
                 model.fee_token = None;
                 model.phase = if model.estimate.is_some() {
@@ -2352,6 +2770,26 @@ impl App for FeePolicy {
             Phase::Failed(kind) => Some(*kind),
             _ => None,
         };
+        let options = option_views(model);
+        // One state for the row and the footer (PR 2 note 1): the failure on
+        // screen, or the one the run out now is retrying — tagged with the
+        // question it answered (chain and coin), and said only for the
+        // chain the machine is asked about now, as the estimate is.
+        let tag = |kind: FeeFailure, retrying: bool| {
+            FeeFailureView::of_run(
+                kind,
+                retrying,
+                another_coin_on_offer(model, &options),
+                model.ctx.as_ref().map(|ctx| ctx.chain_id),
+                model.fee_token.clone(),
+            )
+        };
+        let failure = match (failed, model.retrying_after) {
+            (Some(kind), _) => Some(tag(kind, false)),
+            (None, Some(kind)) if is_busy(&model.phase) => Some(tag(kind, true)),
+            _ => None,
+        }
+        .filter(|failure| failure.is_for_chain(model.form_chain_id));
         // A quote is valid only for the network it was calculated on
         // (`useSendController.ts:119-121`; `TransactionFeeEstimate.chainId`).
         let fee = model
@@ -2366,9 +2804,13 @@ impl App for FeePolicy {
         // whose fee leg moves a coin that is not there. Only a PROVABLE
         // shortfall refuses — an amount known and the balance under it — so
         // an unpriceable row (Tempo's native) is not mistaken for an empty one.
-        let confirm_fee_ready =
-            !busy && failed.is_none() && fee.is_some() && !selected_fee_is_short(model);
-        let options = option_views(model);
+        // A figure switched to another coin and not yet measured for it.
+        let provisional = fee.is_some() && failed.is_none() && leg_is_stale(model);
+        let confirm_fee_ready = !busy
+            && !provisional
+            && failed.is_none()
+            && fee.is_some()
+            && !selected_fee_is_short(model);
         // Issue #408: said only of a settled figure, and only when every coin
         // on offer is PROVABLY short of it.
         let no_coin_pays = !busy
@@ -2393,12 +2835,17 @@ impl App for FeePolicy {
             confirm_fee_ready,
             no_coin_pays,
             nothing_to_pay_from,
+            provisional,
+            failure,
         }
     }
 }
 
 fn is_busy(phase: &Phase) -> bool {
-    matches!(phase, Phase::Gathering | Phase::Estimating(_))
+    matches!(
+        phase,
+        Phase::ReadingAccount | Phase::Gathering | Phase::Estimating(_)
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -2409,7 +2856,44 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
     let Some(ctx) = model.ctx.clone() else {
         return Command::done();
     };
+    // A retry after a failure reads again, past anything the shell holds.
+    let fresh = std::mem::take(&mut model.fresh_reads);
+    // Issue 483: the account read is the fee's own — its failure is said on
+    // the fee row, the footer and the retry the same way on every shell, and
+    // every retry reads it again. An account read as not deployed is read on
+    // every run: its first operation may land while the sheet is open (the
+    // one this request waited for), and its initCode is then no longer this
+    // one's to pay for.
+    if ctx.reads_deployment && (ctx.needs_deployment_read || !ctx.deployed) {
+        model.pending = Pending::default();
+        model.refused.clear();
+        model.phase = Phase::ReadingAccount;
+        model.fresh_reads = fresh;
+        return requests(
+            model,
+            vec![
+                FeeOperation::ReadDeployment {
+                    chain_id: ctx.chain_id,
+                    account: ctx.account.clone(),
+                    fresh,
+                },
+                FeeOperation::StartDeadline {
+                    ms: run_deadline_ms(model),
+                },
+            ],
+        );
+    }
+    model.fresh_reads = fresh;
+    begin_gathering(model)
+}
+
+/// The run past the account read: the context reads, in parallel.
+fn begin_gathering(model: &mut Model) -> Command<FeeEffect, Event> {
+    let Some(ctx) = model.ctx.clone() else {
+        return Command::done();
+    };
     let tempo = is_tempo_chain(ctx.chain_id);
+    let fresh = std::mem::take(&mut model.fresh_reads);
     // Invariant ⑤ (`safe-transaction.ts:634-642`): an undeployed account
     // without its public key cannot build the real initCode — a draft that
     // cannot match the final operation must never be estimated.
@@ -2431,6 +2915,7 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
         // Tempo is excluded from the tip query — attodollar gas makes
         // eth_maxPriorityFeePerGas meaningless (`safe-transaction.ts:1943`).
         want_tip: !tempo,
+        fresh,
     }];
     if tempo {
         operations.push(FeeOperation::FetchFeeRecipient {
@@ -2448,13 +2933,54 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
         account: ctx.account.clone(),
     });
     operations.push(FeeOperation::StartDeadline {
-        ms: QUOTE_DEADLINE_MS,
+        ms: run_deadline_ms(model),
     });
     requests(model, operations)
 }
 
+/// The bound on the run starting now: [`REQUOTE_TIMEOUT_MS`] for the
+/// machine's own re-ask after a failure (spec 082 RJ12: a hung re-ask is a
+/// failure again soon, and the schedule goes on), else [`QUOTE_DEADLINE_MS`].
+fn run_deadline_ms(model: &Model) -> u32 {
+    if model.auto_reask {
+        REQUOTE_TIMEOUT_MS
+    } else {
+        QUOTE_DEADLINE_MS
+    }
+}
+
 fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event> {
     match (&model.phase, result) {
+        // -- the account read (issue 483) -----------------------------------
+        (Phase::ReadingAccount, FeeShellResult::Deployment { read }) => match read {
+            DeploymentRead::Read { deployed } => {
+                if let Some(ctx) = model.ctx.as_mut() {
+                    ctx.deployed = deployed;
+                    ctx.needs_deployment_read = false;
+                }
+                // The read's own deadline is spent: anything still out for it
+                // belongs to the read, not to the run that follows.
+                model.attempt += 1;
+                begin_gathering(model)
+            }
+            DeploymentRead::Unreachable { rate_limited } => {
+                model.attempt += 1;
+                fail(model, FeeFailure::ChainRead { rate_limited })
+            }
+            DeploymentRead::Internal { .. } => {
+                model.attempt += 1;
+                fail(model, FeeFailure::Internal)
+            }
+        },
+        (Phase::ReadingAccount, FeeShellResult::DeadlineElapsed) => {
+            model.attempt += 1;
+            fail(
+                model,
+                FeeFailure::ChainRead {
+                    rate_limited: false,
+                },
+            )
+        }
         (
             Phase::Gathering,
             FeeShellResult::GasPrice {
@@ -2526,6 +3052,25 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
             model.origin = Origin::Tick;
             begin_pipeline(model)
         }
+        // The machine's own re-ask after a failure that can pass (PR 2 note
+        // 1): the timer [`after_failure`] set ran out. A tap since has moved
+        // the attempt on, so its answer never gets here.
+        (Phase::Failed(failure), FeeShellResult::TtlElapsed) => {
+            let failure = *failure;
+            if model.ctx.is_none() || requote_delay_ms(failure, 1).is_none() {
+                return Command::done();
+            }
+            model.attempt += 1;
+            model.retries = model.retries.saturating_add(1);
+            model.retrying_after = Some(failure);
+            model.auto_reask = true;
+            model.origin = if model.stale {
+                Origin::Catchup
+            } else {
+                Origin::Initial
+            };
+            begin_pipeline(model)
+        }
         // The run did not price in time (spec 094 S9): it ends here, and
         // whatever it was still waiting for is dropped when it comes.
         (Phase::Gathering | Phase::Estimating(_), FeeShellResult::DeadlineElapsed) => {
@@ -2587,7 +3132,23 @@ fn parse_quote_row(row: &FeeAssetQuote) -> ParsedQuote {
         usd_balance: row.usd_balance.clone(),
         usd_price: row.usd_price.clone(),
         native_usd_floor_price: row.native_usd_floor_price.clone(),
+        minimum_amount: row
+            .minimum_amount
+            .as_deref()
+            .and_then(parse_published_minimum),
     }
+}
+
+/// A relay's `minimumAmount`: a hex quantity (`0x…`, as the relay writes it)
+/// or a decimal string. Zero or unreadable is no minimum at all — today's
+/// rule then stands, never a floor of nothing.
+fn parse_published_minimum(text: &str) -> Option<u128> {
+    let text = text.trim();
+    let value = match text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+        Some(hex) => u128::from_str_radix(hex, 16).ok()?,
+        None => text.parse::<u128>().ok()?,
+    };
+    (value > 0).then_some(value)
 }
 
 fn try_advance(model: &mut Model) -> Command<FeeEffect, Event> {
@@ -2886,6 +3447,7 @@ fn advance_generic(
         return fail(model, FeeFailure::EstimateFailed);
     };
     est_calls.push(leg);
+    model.pending.measured_leg = Some(FeeLeg::of(model.fee_token.as_deref()));
     let est_calldata_len = multisend_execute_calldata_len(&est_calls);
     // The inner calls' own gas, measured beside the simulation so the quote
     // prices the `callGasLimit` the submit will carry (see
@@ -3358,7 +3920,7 @@ fn static_auto_pick(
 ) -> Option<Option<String>> {
     let provisional = static_total_gas(ctx, None);
     let native = find_quote(rows, None)?;
-    let fee_for = |row: &ParsedQuote| charge.amount(provisional, &row.pricing(), &native.pricing());
+    let fee_for = |row: &ParsedQuote| charge.amount(provisional, row, native);
     pick_coin(rows, &ctx.calls, measured, fee_for, excluded)
 }
 
@@ -3647,13 +4209,14 @@ fn price_generic(
     let Some(native) = find_quote(&model.quotes, None).cloned() else {
         return fail(model, FeeFailure::CalculationFailed);
     };
-    if picks_coin(model) {
+    // Once simulated again for a re-picked coin, the run keeps that coin: a
+    // second pick could only bounce between two legs.
+    if picks_coin(model) && !model.pending.relegged {
         // The real gas is in: the coin picked on the static model must still
         // pay. When it does not, pick again on this figure — and when nothing
         // can, the requested coin stands and says so, as it would have.
         let measured = measured_for(ctx, model.measured.as_deref());
-        let fee_for =
-            |row: &ParsedQuote| charge.amount(total_gas, &row.pricing(), &native.pricing());
+        let fee_for = |row: &ParsedQuote| charge.amount(total_gas, row, &native);
         let next = if measured.is_some() {
             // Measured (spec 083 fee): the coin that pays from what the
             // operation leaves — the same answer whether the simulation
@@ -3684,11 +4247,20 @@ fn price_generic(
         if let Some(next) = next {
             model.fee_token = next.unwrap_or_else(|| when_no_coin_pays(model));
         }
+        // The coin picked on the real gas is not the one simulated: its leg
+        // is another call, so the gas is measured again with it — once per
+        // run, and then the run settles on what it has.
+        let leg = FeeLeg::of(model.fee_token.as_deref());
+        if !model.pending.relegged && model.pending.measured_leg.as_ref() != Some(&leg) {
+            model.pending.relegged = true;
+            let coin = model.fee_token.clone();
+            return estimate_in(model, ctx, plan, coin);
+        }
     }
     let Some(selected) = find_quote(&model.quotes, model.fee_token.as_deref()).cloned() else {
         return fail(model, FeeFailure::CalculationFailed);
     };
-    let Some(fee_amount) = charge.amount(total_gas, &selected.pricing(), &native.pricing()) else {
+    let Some(fee_amount) = charge.amount(total_gas, &selected, &native) else {
         return fail(model, FeeFailure::CalculationFailed);
     };
     // Invariant ⑧ (`FeeTokenSelector.tsx:74`), applied to a REQUESTED fee
@@ -3752,6 +4324,7 @@ fn price_generic(
         fee_asset,
         fee_recipient: Some(selected.recipient),
     });
+    model.measured_leg = model.pending.measured_leg.clone();
     model.charge = Some(charge);
     settle_quoted(model)
 }
@@ -3841,6 +4414,8 @@ fn price_tempo(
         fee_recipient: recipient.clone().filter(|r| is_hex_address(r)),
     });
     model.charge = None;
+    // Tempo's fee is no leg of the batch; nothing to measure again.
+    model.measured_leg = None;
     settle_quoted(model)
 }
 
@@ -3848,7 +4423,32 @@ fn settle_quoted(model: &mut Model) -> Command<FeeEffect, Event> {
     model.phase = Phase::Quoted;
     model.stale = false;
     model.origin = Origin::Initial;
+    model.retries = 0;
+    model.retrying_after = None;
+    model.auto_reask = false;
     resume_ticking(model)
+}
+
+/// The figure on screen is priced in a coin whose fee leg the gas was NOT
+/// measured with ([`Origin::Remeasure`]).
+fn leg_is_stale(model: &Model) -> bool {
+    model.estimate.is_some()
+        && model
+            .measured_leg
+            .as_ref()
+            .is_some_and(|leg| *leg != FeeLeg::of(model.fee_token.as_deref()))
+}
+
+/// The coin in force is no longer the one the gas was measured with: measure
+/// again now, the switched figure staying on screen and unconfirmable until
+/// the new one lands. Nothing to do when the legs match.
+fn remeasure_if_stale(model: &mut Model) -> Option<Command<FeeEffect, Event>> {
+    if !leg_is_stale(model) {
+        return None;
+    }
+    model.attempt += 1;
+    model.origin = Origin::Remeasure;
+    Some(begin_pipeline(model))
 }
 
 /// Wait one [`requote_interval_ms`] before pricing the quote on screen again.
@@ -3897,6 +4497,35 @@ fn cancel_tick(model: &mut Model) -> bool {
 /// A quote that stays on screen keeps its own coin too ([`keep_quote_coin`]):
 /// the run may have moved the coin in force before it failed.
 fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
+    // The run that retried ends here, whichever way.
+    model.retrying_after = None;
+    model.auto_reask = false;
+    let command = fail_now(model, kind);
+    match after_failure(model) {
+        Some(retry) => Command::all([command, retry]),
+        None => command,
+    }
+}
+
+/// The machine's own re-ask (PR 2 note 1): a run that ended on a failure
+/// [`requote_delay_ms`] says can pass is asked again after that wait, on the
+/// timer every shell already runs for this machine ([`FeeOperation::StartTtl`],
+/// answered [`FeeShellResult::TtlElapsed`] in [`Phase::Failed`]). So the send
+/// form and the signing sheet retry alike, on every shell, and the row and
+/// the footer can say so ([`FeeFailureView`]). `None` while nothing failed, or
+/// for a failure no retry fixes.
+fn after_failure(model: &Model) -> Option<Command<FeeEffect, Event>> {
+    let Phase::Failed(failure) = model.phase else {
+        return None;
+    };
+    model.ctx.as_ref()?;
+    let ms = requote_delay_ms(failure, model.retries.saturating_add(1))?;
+    Some(requests(model, vec![FeeOperation::StartTtl { ms }]))
+}
+
+fn fail_now(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
+    // Whatever runs next — a catch-up now, the retry later — reads afresh.
+    model.fresh_reads = true;
     match std::mem::take(&mut model.origin) {
         Origin::Initial => {
             model.phase = Phase::Failed(kind);
@@ -3938,6 +4567,16 @@ fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
         // shell's retry asks again.
         Origin::Catchup => {
             model.estimate = None;
+            model.charge = None;
+            model.stale = false;
+            model.phase = Phase::Failed(kind);
+        }
+        // The switched figure was never measured for its coin, and now it
+        // cannot be: nothing on screen may be signed. The failure is said,
+        // and the shell's retry asks again in the coin in force.
+        Origin::Remeasure => {
+            model.estimate = None;
+            model.measured_leg = None;
             model.charge = None;
             model.stale = false;
             model.phase = Phase::Failed(kind);
@@ -4085,6 +4724,7 @@ fn estimate_in(
         return fail(model, FeeFailure::EstimateFailed);
     };
     est_calls.push(leg);
+    model.pending.measured_leg = Some(FeeLeg::of(model.fee_token.as_deref()));
     let mut plan = plan.clone();
     if let PricePlan::Generic {
         est_calldata_len, ..
@@ -4151,6 +4791,12 @@ fn balance_changes_measured_now(
     match model.phase.clone() {
         Phase::Quoted => {
             repick_quoted(model, &ctx);
+            // The machine's own re-pick is a coin switch like a tap: the gas
+            // was measured with the coin it left, so it is measured again,
+            // and the confirm waits (the dApp sheet's automatic switch).
+            if let Some(command) = remeasure_if_stale(model) {
+                return command;
+            }
             render()
         }
         Phase::Failed(FeeFailure::WouldFail | FeeFailure::EstimateFailed) => {
@@ -4178,7 +4824,7 @@ fn repick_quoted(model: &mut Model, ctx: &RequestCtx) {
     let Some(native) = find_quote(&model.quotes, None).cloned() else {
         return;
     };
-    let fee_for = |row: &ParsedQuote| charge.amount(total_gas, &row.pricing(), &native.pricing());
+    let fee_for = |row: &ParsedQuote| charge.amount(total_gas, row, &native);
     let target = pick_coin(
         &model.quotes,
         &ctx.calls,
@@ -4328,6 +4974,12 @@ fn select_fee_asset_now(model: &mut Model, token: Option<String>) -> Command<Fee
         if !tempo && amount.is_some() && switch_estimate(model, option) {
             model.fee_token = token;
             model.auto_fee_token = false;
+            // The figure switched at once; the gas behind it was measured
+            // with the other coin's leg. Measured again now, and the confirm
+            // waits for it.
+            if let Some(command) = remeasure_if_stale(model) {
+                return command;
+            }
             return render();
         }
     }
@@ -4380,9 +5032,7 @@ fn fee_amount_for_option(model: &Model, option: &ParsedQuote) -> Option<u128> {
         ));
     }
     let native = find_quote(&model.quotes, None)?;
-    model
-        .charge?
-        .amount(estimate.total_gas, &option.pricing(), &native.pricing())
+    model.charge?.amount(estimate.total_gas, option, native)
 }
 
 // ---------------------------------------------------------------------------
@@ -4443,6 +5093,22 @@ fn payable_balance(model: &Model, row: &ParsedQuote) -> u128 {
         Some(changes) => after_change(row.balance, measured_change(changes, row)),
         None => row.balance,
     }
+}
+
+/// After [`FeeFailure::WouldFail`]: a coin other than the one in force that
+/// the failed run did not already try, with something to pay from — what
+/// "Pay with another coin" promises ([`FeeFailureTap::ChooseCoin`]).
+fn another_coin_on_offer(model: &Model, options: &[FeeOptionView]) -> bool {
+    let tried = |contract: &Option<String>| {
+        model.refused.iter().any(|coin| match (coin, contract) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+            _ => false,
+        })
+    };
+    options
+        .iter()
+        .any(|option| !option.selected && !option.insufficient && !tried(&option.contract))
 }
 
 fn option_views(model: &Model) -> Vec<FeeOptionView> {

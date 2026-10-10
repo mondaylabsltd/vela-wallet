@@ -154,7 +154,16 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         };
     }
 
-    let Some(usd) = view.display_total_usd.or(view.cached_total_usd) else {
+    // Nothing could be read and nothing is known (`unreachable`: a fetch that
+    // threw, or a round where every chain it asked failed, with no cache):
+    // a skeleton and the reason, never a settled-looking $0.00. The core's
+    // figure is `None` then too (PR 2 polish); `unreachable` is still read
+    // here, so a cached total can never stand in for a round that read
+    // nothing.
+    let known = (!view.unreachable)
+        .then(|| view.display_total_usd.or(view.cached_total_usd))
+        .flatten();
+    let Some(usd) = known else {
         return BalanceModel {
             label: s.total_balance.clone(),
             currency: SharedString::from(money.code().to_owned()),
@@ -167,9 +176,9 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             // A first launch with no network says so over the skeleton rather
             // than show a settled-looking zero (spec 038 finding 15) — and a
             // skeleton says nothing else: it is already "still counting".
-            status: view
-                .unreachable
-                .then(|| (StatusKind::Warning, s.balance_unreachable.clone())),
+            status: internal_line(view, s)
+                .or_else(|| view.unreachable.then(|| s.balance_unreachable.clone()))
+                .map(|line| (StatusKind::Warning, line)),
             updated: None,
             refreshing: view.refreshing,
             updating: s.updating.clone(),
@@ -187,7 +196,10 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     // says that itself, turning in place. As a line here it landed ABOVE the
     // control, pushing it a row down under the pointer mid-press — and a
     // figure being re-read on request is not "still updating", it is current.
-    let status = match unreachable_line(view, s) {
+    // A read that failed inside Vela comes first and stands in place of any
+    // "Can't reach …" (PR 2 note 11): the app's own fault is the one that
+    // matters, and the chains it failed on were never asked.
+    let status = match internal_line(view, s).or_else(|| unreachable_line(view, s)) {
         Some(line) => Some((StatusKind::Warning, line)),
         None if on_cache || view.notice == Some(BalanceNotice::StillUpdating) => {
             Some((StatusKind::Refreshing, s.balance_stale.clone()))
@@ -231,6 +243,17 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         refreshing: view.refreshing,
         updating: s.updating.clone(),
     }
+}
+
+/// The hero's line when the last read failed inside Vela (PR 2 note 11,
+/// `BalanceView.internal_key`): the core's sentence for its own fault, never
+/// "Can't reach Ethereum". `None` when nothing failed inside the app.
+#[must_use]
+pub fn internal_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
+    // The core names one key for it today; one this build does not know is
+    // still that fault, said in the words it has.
+    view.internal_key.as_ref()?;
+    Some(s.balance_internal.clone())
 }
 
 /// The line over the networks the wallet cannot reach (spec 092) — the
@@ -401,8 +424,13 @@ pub fn balance_detail(
         &s.detail_total,
         "amount",
         &match total {
-            Some(usd) if !view.hidden => money.text(usd, locale),
-            _ => crate::wallet::fixtures::MASK.to_owned(),
+            _ if view.hidden => crate::wallet::fixtures::MASK.to_owned(),
+            Some(usd) => money.text(usd, locale),
+            // Nothing read and nothing kept — the core hands no figure while
+            // `unreachable` (PR 2 polish), where it used to hand a zero this
+            // line printed as "$0.00": the dash, which is no amount, and not
+            // the privacy mask, which hides one.
+            None => "—".to_owned(),
         },
     );
 
@@ -441,8 +469,9 @@ pub fn balance_detail(
 /// FR-017, owner: "需要能看到这个网络上的余额吧") — the home screen's own
 /// figures, never fetched for the picker. A network gets no figure at all
 /// rather than a made-up zero when its balance is not known (it failed, or
-/// only rate-limited), when nothing priced is held there, and when balances
-/// are hidden: the privacy mask covers every money surface.
+/// only rate-limited), and when nothing priced is held there. While balances
+/// are hidden every figure is the mask (`app::privacy`: the network picker is
+/// a masked surface, and a masked figure reads "••••" on every surface).
 #[must_use]
 pub fn network_balances(
     view: &BalanceView,
@@ -450,9 +479,6 @@ pub fn network_balances(
     money: &Money,
 ) -> std::collections::HashMap<u32, SharedString> {
     let mut sums: std::collections::HashMap<u32, f64> = std::collections::HashMap::new();
-    if view.hidden {
-        return std::collections::HashMap::new();
-    }
     for token in view.tokens.iter().filter(|token| {
         !token.spam
             && !view.failed_chain_ids.contains(&token.chain_id)
@@ -469,7 +495,14 @@ pub fn network_balances(
     sums.into_iter()
         // Half a cent is the smallest figure a person reads as money.
         .filter(|(_, usd)| *usd >= 0.005)
-        .map(|(chain_id, usd)| (chain_id, SharedString::from(money.text(usd, locale))))
+        .map(|(chain_id, usd)| {
+            let figure = if view.hidden {
+                crate::wallet::fixtures::MASK.to_owned()
+            } else {
+                money.text(usd, locale)
+            };
+            (chain_id, SharedString::from(figure))
+        })
         .collect()
 }
 
@@ -591,7 +624,13 @@ mod tests {
             );
         }
         shown.hidden = true;
-        assert!(network_balances(&shown, "en", money).is_empty());
+        let masked = network_balances(&shown, "en", money);
+        assert!(!masked.is_empty());
+        assert!(
+            masked
+                .values()
+                .all(|figure| figure.as_ref() == crate::wallet::fixtures::MASK)
+        );
     }
 
     /// A real `BalanceView` with the total substituted.
@@ -602,6 +641,131 @@ mod tests {
     /// two of my guessed field names did not exist.)
     /// The core's list for these networks (spec 092), none read yet — the
     /// order is the core's, so it is the order given.
+    /// PR 2 note 11: a balance read that failed inside Vela — through the
+    /// real core, as the executor reports it (`internal_chain_ids`, or a
+    /// fetch that threw inside the app) — puts the core's sentence for its
+    /// own fault where the "can't reach" line goes, never "Can't reach
+    /// Ethereum"; a real chain-down beside it is still counted, behind it.
+    #[test]
+    fn an_internal_fault_never_reads_cant_reach() {
+        use vela_core::app::balance_dashboard::{
+            BalanceOperation, BalanceShellResult as Res, UNREACHABLE_ONE,
+        };
+        const ADDR: &str = "0x88cca0eedbf2c4426110bbfc998f048689266894";
+        let s = strings();
+        let money = Money::usd();
+        let ethereum = crate::wallet::fill(&s.unreachable_one, "name", "Ethereum");
+        // Boot an account and answer its first fetch with `settle`, over a
+        // cached total of $12.
+        let run_cached = |cached: Option<f64>, settle: &dyn Fn(bool) -> Res| {
+            let mut host = CoreHost::<BalanceDashboard>::new();
+            let mut pending = host.dispatch(BalanceEvent::AccountChanged {
+                address: ADDR.to_owned(),
+            });
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                        address: address.clone(),
+                        usd: cached,
+                    },
+                    BalanceOperation::FetchTokens { pull, .. } => settle(*pull),
+                    _ => continue,
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+            host.view()
+        };
+        let run = |settle: &dyn Fn(bool) -> Res| run_cached(Some(12.0), settle);
+        let settled = |failed: Vec<u32>, internal: Vec<u32>| {
+            move |pull: bool| Res::FetchSettled {
+                address: ADDR.to_owned(),
+                pull,
+                tokens: Vec::new(),
+                failed_chain_ids: failed.clone(),
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 56],
+                internal_chain_ids: internal.clone(),
+                now_ms: 1.0,
+            }
+        };
+
+        // Ethereum's read never left the app: Vela's own words, no "Ethereum".
+        let view = run(&settled(vec![1], vec![1]));
+        assert!(view.internal_key.is_some());
+        assert!(view.unreachable_networks.is_empty());
+        let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
+        assert_eq!(line, Some(s.balance_internal.clone()));
+        assert!(!s.balance_internal.contains("Ethereum"));
+
+        // Ethereum really down: the network's own line, as before.
+        let view = run(&settled(vec![1], Vec::new()));
+        assert_eq!(view.internal_key, None);
+        assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
+        let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
+        assert_eq!(line.as_deref(), Some(ethereum.as_str()));
+
+        // Both at once: the app's fault is the line; the chain that is down
+        // is still listed behind it (the list the line opens).
+        let view = run(&settled(vec![1, 56], vec![1]));
+        assert_eq!(
+            view.unreachable_networks
+                .iter()
+                .map(|n| n.chain_id)
+                .collect::<Vec<_>>(),
+            vec![56]
+        );
+        let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
+        assert_eq!(line, Some(s.balance_internal.clone()));
+
+        // Every chain asked failed inside Vela and nothing is cached: nothing
+        // is known — the skeleton and Vela's own line, never "$0.00", and no
+        // "Deposit your first asset" under it.
+        let nothing = run_cached(None, &settled(vec![1, 56], vec![1, 56]));
+        assert!(nothing.unreachable, "the core says nothing is known");
+        assert_eq!(nothing.display_total_usd, None, "no figure, not a zero");
+        let detail = balance_detail(&nothing, &s, "en", money);
+        assert!(!detail.summary.contains('0'), "{}", detail.summary);
+        assert!(detail.summary.contains('—'), "{}", detail.summary);
+        let hero = balance(&nothing, &s, "en", money);
+        assert_eq!(hero.state, crate::wallet::fixtures::BalanceState::Loading);
+        assert!(hero.integer.is_empty(), "no figure: {}", hero.integer);
+        assert_eq!(
+            hero.status.map(|(_, line)| line),
+            Some(s.balance_internal.clone())
+        );
+        assert!(
+            !assets_strip_empty(&nothing, None),
+            "nothing read, not nothing held"
+        );
+        // A chain down beside it instead: still nothing known, the network's line.
+        let down = run_cached(None, &settled(vec![1, 56], Vec::new()));
+        assert!(down.unreachable);
+        assert_eq!(down.display_total_usd, None);
+        assert!(balance(&down, &s, "en", money).integer.is_empty());
+        assert!(!assets_strip_empty(&down, None));
+        // One chain answered with nothing: a real zero, and the empty strip.
+        let zero = run_cached(None, &settled(vec![1], Vec::new()));
+        assert!(!zero.unreachable);
+        assert!(assets_strip_empty(&zero, None));
+
+        // The gallery's DSR7 is the same state through the same core.
+        let gallery = balance(&crate::wallet::fixtures::internal_view(), &s, "en", money);
+        assert_eq!(
+            gallery.status.map(|(_, line)| line),
+            Some(s.balance_internal.clone())
+        );
+        assert_eq!(gallery.integer.as_ref(), "$4,500", "the total stands");
+
+        // The whole fetch threw inside the app.
+        let view = run(&|pull| Res::FetchErrored {
+            address: ADDR.to_owned(),
+            pull,
+            internal: true,
+        });
+        let line = balance(&view, &s, "en", money).status.map(|(_, line)| line);
+        assert_eq!(line, Some(s.balance_internal.clone()));
+    }
+
     fn set_unreachable(view: &mut BalanceView, chain_ids: &[u32]) {
         use vela_core::app::balance_dashboard::{LastKnown, NOT_READ_YET, UnreachableNetwork};
         view.unreachable_networks = chain_ids
@@ -867,6 +1031,7 @@ mod tests {
             dapp: None,
             subtitle: Vec::new(),
             priced: false,
+            figure_maskable: value.is_some(),
         }
     }
 
@@ -2037,6 +2202,7 @@ mod tests {
                         dapp: None,
                         subtitle: Vec::new(),
                         priced: true,
+                        figure_maskable: true,
                     },
                 }],
                 ..host.view()
@@ -2523,13 +2689,16 @@ pub fn chain_rows(
 
 /// Whether the home's asset strip says "nothing here" — the web's
 /// `assetsMode(..) === 'empty'`: once the core has actually looked and there
-/// is nothing held, or when the sidebar's chain holds nothing while others do.
+/// is nothing held, or when the sidebar's chain holds nothing while others do
+/// — never when nothing could be read (`unreachable`).
 /// A blank strip under a pill reads as a list that failed to load; while the
 /// core is still counting it stays blank, because the hero says "counting".
 #[must_use]
 pub fn assets_strip_empty(view: &BalanceView, filter: Option<u32>) -> bool {
     if view.tokens.is_empty() {
-        return !view.holdings_loading && !view.balance_unknown;
+        // Nothing read at all is not "nothing held": no "Deposit your first
+        // asset" under a hero that says the read failed.
+        return !view.holdings_loading && !view.balance_unknown && !view.unreachable;
     }
     filter.is_some() && visible_token_indices(view, filter).is_empty()
 }
@@ -2844,16 +3013,18 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
     // A grant states its allowance where a figure would be (spec 093) — the
     // core sends one only on a row that moved no money of its own.
     let allowance = item.dapp.as_ref().and_then(|dapp| dapp.allowance.as_ref());
+    // Whether this row's own figure masks is the core's one rule
+    // (`FeedItem.figure_maskable`, `app::privacy`): an amount, a batch, a
+    // capped allowance — yes; an unlimited allowance (a risk to see) or a
+    // signature with no figure (four dots would claim one) — no.
+    let masked = hidden && item.figure_maskable;
     let (amount, unit) = match allowance {
-        Some(allowance) => allowance_figure(allowance, s, hidden),
+        Some(allowance) => allowance_figure(allowance, s, masked),
         // Privacy masks the FIGURE and keeps the unit — H5's rule, and the
         // same mask the hero uses, because a leak in one surface defeats it
-        // everywhere (the core's invariant ④ on the balance side). A row with
-        // no figure has nothing to mask, and "••••" would claim one.
+        // everywhere.
         None => (
-            if moved_nothing(item) {
-                SharedString::from("")
-            } else if hidden {
+            if masked {
                 SharedString::from(crate::wallet::fixtures::MASK)
             } else {
                 amount_text(item, incoming)
@@ -3110,12 +3281,10 @@ pub(crate) fn with_decimal_mark(figure: String) -> String {
 }
 
 pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> SharedString {
-    // A dApp call that moved no coin has no figure (083 H2) — and nothing to
-    // mask either: "••••" would say there is one (083 H2 review).
-    if moved_nothing(item) {
-        return SharedString::from("");
-    }
-    if hidden {
+    // The core's one rule (`FeedItem.figure_maskable`): a dApp call that moved
+    // no coin has no figure (083 H2) — and nothing to mask either: "••••"
+    // would say there is one (083 H2 review).
+    if hidden && item.figure_maskable {
         return SharedString::from(crate::wallet::fixtures::MASK);
     }
     let amount = amount_text(item, incoming);
@@ -3124,14 +3293,6 @@ pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> S
         return amount;
     }
     SharedString::from(format!("{amount} {}", item.symbol))
-}
-
-/// A dApp's transaction that moved no coin (083 H2): the core sends no
-/// figure for it, and no surface draws one — or masks one. A multi-token
-/// batch also has no single figure, but it has a total, and privacy keeps
-/// masking that.
-pub(crate) fn moved_nothing(item: &FeedItem) -> bool {
-    item.dapp.is_some() && item.value.is_none()
 }
 
 pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {

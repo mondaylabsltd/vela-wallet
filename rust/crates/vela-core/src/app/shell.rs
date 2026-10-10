@@ -359,6 +359,14 @@ pub enum ShellResult {
         /// ascending. Empty for a registered key predating groups.
         #[serde(default)]
         unit_ids: Vec<u32>,
+        /// Who vouched for this answer — the resolver's `Done.verified_by`,
+        /// passed through untouched. Only `gnosis` (the record's home) can
+        /// make a "no record" or a "registered, no groups" answer a verdict;
+        /// anything else is "nobody could say". Absent reads `none`: a shell
+        /// that predates the field fails closed (no rebuild is offered on an
+        /// answer nobody checked).
+        #[serde(default)]
+        verified_by: crate::registry_resolve::VerifiedBy,
     },
     /// The registry's answer to `RegistryQueryUnit`: the group's frozen
     /// metadata blob plus its founding members in canonical founding order

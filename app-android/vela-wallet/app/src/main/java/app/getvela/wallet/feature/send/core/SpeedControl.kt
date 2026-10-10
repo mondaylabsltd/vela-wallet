@@ -11,7 +11,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -58,7 +57,6 @@ class SpeedControl(
     private val sessionLock = Any()
     private var nextSessionKey = 0L
     private var generation = 0L
-    private var askSeq = 0L
     private val previews = mutableListOf<FeeSession>()
 
     /**
@@ -88,17 +86,26 @@ class SpeedControl(
     ) {
         fun sameOperation(other: QuoteAsk): Boolean = copy(tier = other.tier) == other
 
-        /** `number`: the resolved preset the core writes a shortfall's amounts in (issue #408). */
-        fun event(deployed: Boolean, number: String) = FeeEvent.QuoteRequested(
+        /**
+         * `number`: the resolved preset the core writes a shortfall's amounts in (issue #408).
+         *
+         * Issue #483: the account's deployment is the fee machine's own first
+         * read (`read_deployment`) — its failure is the fee's row, footer and
+         * retry, worded by the core ("can't reach the chain" vs "internal"),
+         * and every retry reads it again. `deployed` is then only the core's
+         * starting assumption, never trusted.
+         */
+        fun event(number: String) = FeeEvent.QuoteRequested(
             chain_id = chainId,
             account = account,
-            deployed = deployed,
+            deployed = false,
             public_key_available = publicKeyAvailable,
             tier = tier,
             calls = calls,
             fee_token = feeToken,
             auto_fee_token = autoFeeToken,
             number = number,
+            read_deployment = true,
         )
     }
 
@@ -106,9 +113,6 @@ class SpeedControl(
     sealed class Quoted {
         /** Settled: a new estimate, or the core's failure. */
         data class Settled(val view: FeeView) : Quoted()
-
-        /** A newer question took this one's place before it was asked. */
-        data object Superseded : Quoted()
 
         data object TimedOut : Quoted()
     }
@@ -129,18 +133,12 @@ class SpeedControl(
             ),
             onFault = { error -> VelaLog.failure("$area.fee.fault", "core fault", error) },
         )
-        @Volatile var ask: QuoteAsk? = null
-        @Volatile var deployed: Boolean? = null
-
         /**
-         * Spec 082 RJ13: the deployment read got no answer from the chain's
-         * nodes, so no question reached the core — the fee row says it is the
-         * chain node (rate-limited, or out of reach), not Vela's relay. The
-         * shell's failure; the fee machine never produces it.
+         * The question this session's core was last asked — set and dispatched
+         * under [sessionLock] in one step: the deployment read is the core's
+         * own (issue #483), so there is no shell read between the two.
          */
-        val chainRead = MutableStateFlow<FeeFailure.ChainRead?>(null)
-        /** The deployment read before the dispatch — as much "measuring" as the core's `busy`. */
-        @Volatile var reading = false
+        @Volatile var ask: QuoteAsk? = null
 
         /**
          * The chain of the last question this session's core has APPLIED —
@@ -194,10 +192,8 @@ class SpeedControl(
             return this
         }
 
+        /** The core's view — what the surface shows, failure and all (issue #483: no shell overlay). */
         val view: FeeView get() = host.view.value
-
-        /** What the surface shows: the core's view, or the chain read's failure over it. */
-        val shown: FeeView get() = withChainRead(host.view.value, chainRead.value)
 
         fun dispose() {
             watch?.cancel()
@@ -230,7 +226,7 @@ class SpeedControl(
      */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val fee: StateFlow<FeeView> = inForce
-        .flatMapLatest { session -> combine(session.host.view, session.chainRead, ::withChainRead) }
+        .flatMapLatest { session -> session.host.view }
         .stateIn(scope, SharingStarted.Eagerly, FeeView())
 
     /**
@@ -245,14 +241,15 @@ class SpeedControl(
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     /**
-     * [fee] exactly as the session in force wrote it, with the shell's own
-     * chain-read failure over it the way [fee] has it ([withChainReadJson]) —
-     * for a core function that reads the whole view back (spec 099:
-     * `signConfirmState`). `null` before the session first commits.
+     * [fee] exactly as the session in force wrote it — for a core function
+     * that reads the whole view back (spec 099: `signConfirmState`). The
+     * account read's failure is in it (issue #483), so the footer the core
+     * words from it names the same cause as the row. `null` before the
+     * session first commits.
      */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val feeJson: StateFlow<String?> = inForce
-        .flatMapLatest { session -> combine(session.host.viewJson, session.chainRead, ::withChainReadJson) }
+        .flatMapLatest { session -> session.host.viewJson }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     /**
@@ -264,8 +261,8 @@ class SpeedControl(
 
     /** The fee view of the session pricing `tier` — for formatting that option's fee. */
     fun feeViewOf(tier: FeeTier): FeeView? = synchronized(sessionLock) {
-        inForce.value.takeIf { it.ask?.tier == tier }?.shown
-            ?: previews.firstOrNull { it.ask?.tier == tier }?.shown
+        inForce.value.takeIf { it.ask?.tier == tier }?.view
+            ?: previews.firstOrNull { it.ask?.tier == tier }?.view
     }
 
     /** A question is out that somebody awaits; nothing may re-price over it. */
@@ -284,6 +281,26 @@ class SpeedControl(
         // previews in line — the other way round would dispose the very
         // session somebody tapped.
         scope.launch { speedHost.view.collect { speedPass() } }
+        // The device log's `fee:` lines (spec 082 RJ12): the core retries a
+        // failure itself now (PR 2 note 1), so the shell only says what it
+        // sees — each failure, each re-ask, and the fee back.
+        scope.launch {
+            var last: FeeFailureView? = null
+            fee.collect { view ->
+                val failure = view.failure
+                if (failure == last) return@collect
+                val chain = synchronized(sessionLock) { inForce.value.ask?.chainId }
+                when {
+                    failure == null && last != null -> VelaLog.event("fee", "quote back chain=$chain")
+                    failure != null && failure.retrying -> VelaLog.event("fee", "re-ask out chain=$chain cause=${failure.failure.wire}")
+                    failure != null -> VelaLog.event(
+                        "fee", "quote failed chain=$chain cause=${failure.failure.wire}",
+                        "auto" to failure.auto_retry,
+                    )
+                }
+                last = failure
+            }
+        }
         return this
     }
 
@@ -311,26 +328,10 @@ class SpeedControl(
         return askAndWait(ask, QUOTE_TIMEOUT_MS)
     }
 
-    /**
-     * Spec 082 RJ12: ask the question in force again — the held readings
-     * dropped first, the deployment read again, a fresh `QuoteRequested` that
-     * abandons whatever pipeline is still out — and wait at most [timeoutMs]
-     * for its answer. `TimedOut` is a failure again, and the caller's schedule
-     * goes on; the next ask replaces the one that hung.
-     */
-    suspend fun requote(timeoutMs: Long): Quoted {
-        val ask = inForce.value.ask ?: return Quoted.Superseded
-        relay.invalidateFeeSignals(ask.chainId)
-        return askAndWait(ask.copy(tier = speed.value.tier), timeoutMs)
-    }
-
     private suspend fun askAndWait(ask: QuoteAsk, timeoutMs: Long): Quoted {
         answering = true
         try {
-            val asked = askInForce(ask) ?: return Quoted.Superseded
-            // No question reached the core: the chain's nodes did not answer
-            // the deployment read (RJ13). That IS the answer.
-            asked.chainRead?.let { return Quoted.Settled(asked.session.shown) }
+            val asked = askInForce(ask)
             val before = asked.before
             // Woken by `commits`, NOT by `view`: a re-quote at the same price is
             // a view that `equals` the one before the request, and a StateFlow
@@ -360,8 +361,8 @@ class SpeedControl(
                         val ours = s !== asked.session || s.host.applied(asked.event)
                         Triple(s, ours, s.view)
                     }
-                    .first { (s, ours, view) ->
-                        ours && !s.reading && !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
+                    .first { (_, ours, view) ->
+                        ours && !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
                     }.third
             } ?: return Quoted.TimedOut
             return Quoted.Settled(settled)
@@ -408,68 +409,32 @@ class SpeedControl(
         scope.launch { askInForce(next) }
     }
 
-    /**
-     * A question dispatched: to which session, the estimate it held before, and
-     * the question's event number there (`CoreHost.dispatchNumbered`) — or,
-     * [chainRead], the deployment read that kept it from being dispatched at
-     * all (no event: `0`).
-     */
+    /** A question dispatched: to which session, the estimate it held before, and the question's event number there (`CoreHost.dispatchNumbered`). */
     private class Asked(
         val session: FeeSession,
         val before: FeeEstimateView?,
         val event: Long,
-        val chainRead: FeeFailure.ChainRead? = null,
     )
 
     /**
-     * Price `ask` on the session in force: the deployment read first, then the
-     * question. The ask is recorded NOW, before the read, so a preview of the
-     * previous operation can never be promoted over a question still out.
-     * Returns what was asked of whom, or `null` when a newer ask superseded
-     * this one during the read.
+     * Price `ask` on the session in force: one `QuoteRequested`, recorded and
+     * dispatched in one step. The account's deployment is the core's own first
+     * read (issue #483 — `read_deployment`): a read the chain's nodes did not
+     * answer is the fee's `chain_read`, one that never left the app its
+     * `internal`, each with the fee's words, footer and retry — no shell
+     * overlay, and no shell read a stale object could answer.
      */
-    private suspend fun askInForce(ask: QuoteAsk): Asked? {
-        val (session, seq) = synchronized(sessionLock) {
+    private fun askInForce(ask: QuoteAsk): Asked {
+        val asked = synchronized(sessionLock) {
             val session = inForce.value
-            askSeq += 1
             generation += 1
             session.ask = ask
-            session.deployed = null
-            session.reading = true
-            // Measuring again: the last chain read's failure is not the answer.
-            session.chainRead.value = null
             session.generation = generation
-            session to askSeq
-        }
-        reportQuotes()
-        // Spec 082 RJ13: a deployment read nobody answered is not "not
-        // deployed" (a first-send quote for a Safe that exists) and not the
-        // relay's failure: it is the chain node's, said as such, and asked
-        // again on the relay's schedule.
-        val read = relay.deployedRead(ask.chainId, ask.account)
-        val asked = synchronized(sessionLock) {
-            if (seq != askSeq || inForce.value !== session) return null
-            session.reading = false
-            when (read) {
-                is RelayClient.DeployedRead.Unanswered -> {
-                    session.deployed = null
-                    val failure = FeeFailure.ChainRead(rate_limited = read.rateLimited)
-                    session.chainRead.value = failure
-                    Asked(session, session.view.fee, event = 0, chainRead = failure)
-                }
-                is RelayClient.DeployedRead.Known -> {
-                    session.chainRead.value = null
-                    session.deployed = read.deployed
-                    val before = session.view.fee
-                    val event = session.host.dispatchNumbered(ask.event(read.deployed, numberPreset()), FeeEvent.serializer())
-                    session.asked(event, ask.chainId)
-                    tellMeasured(session)
-                    Asked(session, before, event)
-                }
-            }
-        }
-        asked.chainRead?.let { failure ->
-            VelaLog.event("$area.fee", "deployment read unanswered", "chain" to ask.chainId, "rateLimited" to failure.rate_limited)
+            val before = session.view.fee
+            val event = session.host.dispatchNumbered(ask.event(numberPreset()), FeeEvent.serializer())
+            session.asked(event, ask.chainId)
+            tellMeasured(session)
+            Asked(session, before, event)
         }
         speedPass()
         return asked
@@ -482,10 +447,10 @@ class SpeedControl(
         val main = inForce.value
         val event = FeeSpeedEvent.QuotesChanged(
             chain_id = main.ask?.chainId,
-            in_force = TierQuote(busy = main.reading || main.view.busy, fee = main.shown.fee),
+            in_force = TierQuote(busy = main.view.busy, fee = main.view.fee),
             previews = previews.mapNotNull { session ->
                 val tier = session.ask?.tier ?: return@mapNotNull null
-                TierPreviewQuote(tier = tier, busy = session.reading || session.view.busy, fee = session.view.fee)
+                TierPreviewQuote(tier = tier, busy = session.view.busy, fee = session.view.fee)
             },
         )
         speedHost.dispatch(event, FeeSpeedEvent.serializer())
@@ -501,7 +466,7 @@ class SpeedControl(
             if (ask != null && ask.tier != view.tier) {
                 if (promote(view.tier)) {
                     // Promoted: the quotes moved, say so.
-                } else if (!main.reading && !main.view.busy && !answering) {
+                } else if (!main.view.busy && !answering) {
                     reprice = ask.copy(tier = view.tier)
                 }
             }
@@ -526,16 +491,12 @@ class SpeedControl(
         val mainAsk = main.ask ?: return false
         val index = previews.indexOfFirst { session ->
             val ask = session.ask
-            ask != null && ask.tier == tier && ask.sameOperation(mainAsk) && !session.reading &&
+            ask != null && ask.tier == tier && ask.sameOperation(mainAsk) &&
                 !session.view.busy && session.view.fee?.tier == tier
         }
         if (index < 0) return false
         val promoted = previews.removeAt(index)
-        // A deployment read still out for the demoted session must not
-        // dispatch onto the one now in force.
-        askSeq += 1
-        main.reading = false
-        if (main.ask != null && main.deployed != null) previews.add(main) else main.dispose()
+        previews.add(main)
         inForce.value = promoted
         VelaLog.event("$area.speed", "promoted", "tier" to tier.name)
         return true
@@ -544,13 +505,11 @@ class SpeedControl(
     /**
      * Rule 2: a preview for every tier the core names, pricing the same
      * operation as the session in force at the same generation; every other
-     * preview disposed. Nothing is created while the session in force is
-     * still reading — its question is not settled enough to replay.
+     * preview disposed.
      */
     private fun syncPreviews(wanted: List<FeeTier>) {
         val main = inForce.value
-        val base = main.ask?.takeIf { !main.reading && main.deployed != null }
-        val deployed = main.deployed
+        val base = main.ask
         val iterator = previews.iterator()
         while (iterator.hasNext()) {
             val session = iterator.next()
@@ -562,16 +521,15 @@ class SpeedControl(
                 session.dispose()
             }
         }
-        if (base == null || deployed == null) return
+        if (base == null) return
         for (tier in wanted) {
             if (previews.any { it.ask?.tier == tier }) continue
             val session = newSession()
             val ask = base.copy(tier = tier)
             session.ask = ask
-            session.deployed = deployed
             session.generation = generation
             previews.add(session.start())
-            session.asked(session.host.dispatchNumbered(ask.event(deployed, numberPreset()), FeeEvent.serializer()), ask.chainId)
+            session.asked(session.host.dispatchNumbered(ask.event(numberPreset()), FeeEvent.serializer()), ask.chainId)
             tellMeasured(session)
         }
     }
@@ -588,15 +546,14 @@ class SpeedControl(
      *
      * Kept for every question about [calls], and told now to each session that
      * was already asked one — the session in force and every speed preview
-     * pricing those very calls. A session still reading its deployment hears
-     * it right after its question instead. Never call this for a simulation
+     * pricing those very calls. Never call this for a simulation
      * that could not check or that reverted: that is no measurement.
      */
     fun balanceChanges(calls: List<FeeCall>, changes: List<FeeBalanceChange>) {
         val told = synchronized(sessionLock) {
             measured = calls to changes
             (listOf(inForce.value) + previews).count { session ->
-                !session.reading && session.deployed != null && tellMeasured(session)
+                session.ask != null && tellMeasured(session)
             }
         }
         VelaLog.event("$area.fee", "balance changes measured", "changes" to changes.size, "told" to told)
@@ -652,25 +609,42 @@ class SpeedControl(
     /**
      * The refresh control: measure again. The held readings go FIRST (issue
      * 212), so this is a new measurement rather than the number on screen,
-     * and the other tiers are re-priced with it.
+     * and the other tiers are re-priced with it. After a failure the core
+     * reads the account again too, past what it held (issue #483: `fresh`).
      */
     fun refresh() {
         val session = inForce.value
         val ask = session.ask ?: return
         relay.invalidateFeeSignals(ask.chainId)
-        if (session.reading) return
-        if (session.deployed == null) {
-            // The last attempt never reached the core, so `Requote` would be a
-            // no-op and the control a dead button: ask again for real.
-            scope.launch { askInForce(ask) }
-            return
-        }
         synchronized(sessionLock) {
             generation += 1
             session.generation = generation
         }
         session.host.dispatch(FeeEvent.Requote, FeeEvent.serializer())
         speedPass()
+    }
+
+    /**
+     * The surface was left but this control lives on (the send form, one per
+     * process): every session stops — its block-time re-pricing and the
+     * core's own re-ask after a failure (PR 2 note 1) are cancelled with it —
+     * and a fresh session, asked nothing, takes the one in force's place. The
+     * next question starts there. Nothing to do when nothing was asked.
+     */
+    fun end() {
+        val gone = synchronized(sessionLock) {
+            val current = inForce.value
+            if (current.ask == null && previews.isEmpty()) return
+            generation += 1
+            measured = null
+            val stopped = previews.toList() + current
+            previews.clear()
+            inForce.value = newSession().start()
+            stopped
+        }
+        gone.forEach { it.dispose() }
+        VelaLog.event("$area.fee", "sessions ended", "sessions" to gone.size)
+        reportQuotes()
     }
 
     /** The surface is gone: every session, and every watcher, with it. */
@@ -687,28 +661,5 @@ class SpeedControl(
     private companion object {
         /** Well above the core's own 15 s estimate timeout; a guard, not a policy. */
         const val QUOTE_TIMEOUT_MS = 30_000L
-
-        /**
-         * The chain read's failure over the core's view (spec 082 RJ13): no
-         * estimate, nothing measuring, nothing to confirm — the row names the
-         * chain's node and the schedule asks again.
-         */
-        fun withChainRead(view: FeeView, failure: FeeFailure.ChainRead?): FeeView =
-            if (failure == null) view else view.copy(busy = false, failed = failure, fee = null, stale = false, confirm_fee_ready = false)
-
-        /** [withChainRead] over the session's raw view JSON — the same five fields, nothing else touched. */
-        fun withChainReadJson(json: String?, failure: FeeFailure.ChainRead?): String? {
-            if (json == null || failure == null) return json
-            val failed = org.json.JSONObject(app.getvela.wallet.core.crux.Wire.json.encodeToString(FeeFailure.WireSerializer, failure))
-            return runCatching {
-                org.json.JSONObject(json)
-                    .put("busy", false)
-                    .put("failed", failed)
-                    .put("fee", org.json.JSONObject.NULL)
-                    .put("stale", false)
-                    .put("confirm_fee_ready", false)
-                    .toString()
-            }.getOrNull()
-        }
     }
 }

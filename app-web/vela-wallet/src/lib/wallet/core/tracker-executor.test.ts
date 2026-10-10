@@ -201,11 +201,55 @@ describe('a may-have-been-sent op survives a reload (T182)', () => {
 					chain_id: 100,
 					submitted_at_ms: 1_700_000_000_000,
 					maybe_sent: true,
-					submit_block: 48_478_700
+					submit_block: 48_478_700,
+					// Who signed it: after a reload the device still knows this
+					// account has an op in flight here (correctness batch item 3).
+					sender: '0x' + 'a1'.repeat(20)
 				},
 				{ record_id: 'send-2', maybe_sent: false, submit_block: null }
 			]
 		});
+	});
+
+	it('a record with no signer on file names none, never a guess', async () => {
+		store.txs = [row({ id: 'old', from: '' })];
+		const answer = await createTxTrackerExecutor(ports()).execute({
+			id: 1,
+			operation: { type: 'load_pending_txs' }
+		});
+		expect(answer).toMatchObject({ records: [{ record_id: 'old', sender: null }] });
+	});
+});
+
+/**
+ * Correctness batch item 3: a refusal is told by its reason. The relay's
+ * `rejection_reason` (parsed by the core) is passed through to the tracker as
+ * it came; an older relay says none, and the core then reads the stage.
+ */
+describe('the relay’s reason for a refusal reaches the core', () => {
+	it('passes `rejection_reason` through, and leaves it off when the relay said none', async () => {
+		vi.mocked(pollUserOpStatus).mockResolvedValueOnce({
+			status: 'rejected',
+			stage: 'nonce_check',
+			rejectionReason: 'nonce_used'
+		});
+		const said = await createTxTrackerExecutor(ports()).execute({
+			id: 1,
+			operation: { type: 'poll_status', user_op_hash: OP, chain_id: 100 }
+		});
+		expect(said).toMatchObject({
+			type: 'status',
+			status: 'rejected',
+			rejection_reason: 'nonce_used'
+		});
+
+		vi.mocked(pollUserOpStatus).mockResolvedValueOnce({ status: 'rejected' });
+		const silent = await createTxTrackerExecutor(ports()).execute({
+			id: 2,
+			operation: { type: 'poll_status', user_op_hash: OP, chain_id: 100 }
+		});
+		expect(silent).toMatchObject({ type: 'status', status: 'rejected' });
+		expect(silent).not.toHaveProperty('rejection_reason');
 	});
 });
 

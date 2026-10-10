@@ -42,7 +42,9 @@ const IDLE_FEE: FeeView = {
 	options: [],
 	confirm_fee_ready: false,
 	no_coin_pays: false,
-	nothing_to_pay_from: false
+	nothing_to_pay_from: false,
+	provisional: false,
+	failure: null
 };
 
 const BSC_USDT_CONTRACT = '0x55d398326f99059ff775485246999027b3197955';

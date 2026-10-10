@@ -106,6 +106,14 @@ enum class ConfirmBlock {
 
     @SerialName("answered") Answered,
 
+    /**
+     * The account's previous transaction on this network is still in flight
+     * (`in_flight_ops`): a transaction signed now would take the same nonce.
+     * Ahead of every fee block, so a re-quote never swaps its line out;
+     * signatures never wait.
+     */
+    @SerialName("previous_pending") PreviousPending,
+
     @SerialName("reading") Reading,
 
     @SerialName("approval_choice") ApprovalChoice,
@@ -418,6 +426,8 @@ data class SignTrackerHandoff(
     val submit_block: Long? = null,
     /** Spec 082 RJ1: the relay accepted the op the write-ahead hand-off announced. */
     val admitted: Boolean = false,
+    /** The account that signed it — forwarded to the tracker's `submitted` (`in_flight_ops`). */
+    val sender: String? = null,
 )
 
 /**
@@ -544,6 +554,24 @@ data class SignView(
      * Done, which answers the page.
      */
     val failure_retryable: Boolean = false,
+    /**
+     * PR 2 note 9: why the relay did not take it, drawn under the failure —
+     * at submit (another operation of the account holds the nonce:
+     * `componentsUi.signing.notSentBody`, under [failure_not_sent]'s calm
+     * title, with Try again; else the plain refusal), or after it, the
+     * tracker's reason ([SignEvent.OpTracked]'s `refusal`). `null` for a
+     * failure that was no refusal.
+     */
+    val failure_refusal_key: String? = null,
+    /**
+     * PR 2 polish: the failure on the sheet is no failure — the relay turned
+     * the operation back at submit because the account's previous one on this
+     * network still holds the nonce. Nothing was sent and nothing went wrong:
+     * the sheet says "Not sent yet" (`componentsUi.signing.notSentTitle`) over
+     * [failure_refusal_key]'s sentence, with no failure styling, and offers
+     * Try again ([failure_retryable]). A core that predates it sends none: `false`.
+     */
+    val failure_not_sent: Boolean = false,
     val notice: SignNotice? = null,
     val global_chain_id: Int = 0,
     val blocked: SignBlockedView? = null,
@@ -642,6 +670,16 @@ sealed class SignShellResult {
 
 @Serializable
 sealed class SignEvent {
+    /**
+     * Every operation in flight on this device, as the tracker last said
+     * (`inFlightOps` of its own view JSON, forwarded on every tracker render):
+     * a transaction of an account with one on the request's chain waits for it
+     * ([ConfirmBlock.PreviousPending]).
+     */
+    @Serializable
+    @SerialName("in_flight_ops")
+    data class InFlightOps(val ops: List<app.getvela.wallet.feature.send.core.InFlightOp> = emptyList()) : SignEvent()
+
     @Serializable
     @SerialName("networks_changed")
     data class NetworksChanged(val chain_ids: List<Int>) : SignEvent()
@@ -750,6 +788,12 @@ sealed class SignEvent {
         val status: app.getvela.wallet.feature.send.core.TrackStatus,
         val tx_hash: String? = null,
         val now_ms: Double,
+        /**
+         * PR 2 note 9: why the relay refused it — the tracker entry's
+         * `refusal`, for [SignView.failure_refusal_key]. `null`: the plain
+         * refusal sentence.
+         */
+        val refusal: app.getvela.wallet.feature.send.core.RefusalReason? = null,
     ) : SignEvent()
 
     /** Spec 082 RA9: the passkey (or the Trusted Signer's page) is up for request [id]. */

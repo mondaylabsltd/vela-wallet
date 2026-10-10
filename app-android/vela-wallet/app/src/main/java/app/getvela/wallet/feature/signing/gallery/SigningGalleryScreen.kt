@@ -104,7 +104,9 @@ fun SigningGalleryScreen(systemDarkTheme: Boolean, initialState: String? = null)
                     )
                 } else {
                     val model = remember(state, strings) { SigningFixtures.build(state, strings) }
-                    SigningSheetContent(model = model, onConfirm = {}, onClose = {})
+                    // Every control a sink, Try again too: a board whose receipt
+                    // offers it (`retry`, CS53) draws it as the live sheet does.
+                    SigningSheetContent(model = model, onConfirm = {}, onClose = {}, onRetry = {})
                 }
             }
         }

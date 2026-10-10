@@ -8,8 +8,9 @@
 	 * centred card.
 	 *
 	 * `confirmable` is the core's word for "this answer changes the flow" — the
-	 * recovery offer is the only prompt where declining is a decision rather
-	 * than a dismissal, and it is the only one that gets two real buttons.
+	 * recovery offer and the free retry of a lookup nobody answered are the
+	 * prompts where declining is a decision rather than a dismissal, and they
+	 * are the ones that get two real buttons.
 	 */
 	import { MediaQuery } from 'svelte/reactivity';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';

@@ -322,6 +322,7 @@ type Track = DomainDriver<TxTracker>;
 fn tracking(record: &SignRecord) -> Track {
     let mut sut = Track::new();
     sut.dispatch(TrackEvent::Submitted {
+        sender: None,
         user_op_hash: record.user_op_hash.clone(),
         record_ids: vec![record.record_id.clone()],
         chain_id: BSC,
@@ -794,6 +795,7 @@ fn only_a_read_receipt_replaces_the_sheets_expectation() {
     let ops = sut.resolve_matching(
         |op| matches!(op, TOp::PollStatus { .. }),
         TRes::Status {
+            rejection_reason: None,
             user_op_hash: record.user_op_hash.clone(),
             status: TrackLifecycle::Included,
             stage: None,
@@ -851,6 +853,7 @@ fn a_failed_row_says_why() {
                 now_ms: NOW + 13_000.0,
             },
             TOp::PollStatus { .. } => TRes::Status {
+                rejection_reason: None,
                 user_op_hash: op.clone(),
                 status: TrackLifecycle::Rejected,
                 stage: None,

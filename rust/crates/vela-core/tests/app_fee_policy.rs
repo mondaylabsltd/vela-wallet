@@ -23,8 +23,8 @@ use vela_core::app::fee_policy::{
     reserve_fee_token, reserve_native_gas, same_asset_fee_limit, tempo_call_gas_limit,
     tempo_expected_gas, tempo_fee_token_units, tempo_minimum_fee_token_units, tempo_quote_is_stale,
     tempo_reimbursement, tempo_settlement_split, tempo_split_safety_gas, tier_multiplier,
-    to_base_units, usd_price_scaled, AssetPricing, Event, FeeAsset, FeeAssetKind, FeeAssetQuote,
-    FeeAssetView, FeeBundlerQuote, FeeCall, FeeEstimate, FeeFailure, FeeGasOutcome,
+    to_base_units, usd_price_scaled, AssetPricing, DeploymentRead, Event, FeeAsset, FeeAssetKind,
+    FeeAssetQuote, FeeAssetView, FeeBundlerQuote, FeeCall, FeeEstimate, FeeFailure, FeeGasOutcome,
     FeeOperation as Op, FeePolicy, FeeShellResult as Res, FeeShortfall, FeeTier, GasSignals,
     MultiTokenSpec, TEMPO_BASE_FEE_ATTO, TEMPO_CALL_GAS_PER_SUBCALL, TEMPO_COST_BUFFER_GAS,
     TEMPO_DEFAULT_FEE_TOKEN, TEMPO_DEPLOYED_GAS_EST, TEMPO_DEPLOY_GAS_EST,
@@ -94,6 +94,7 @@ const COLLECTOR: &str = "0x4444444444444444444444444444444444444444";
 
 fn native_row(balance: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: NATIVE_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Native,
         fee_token: None,
@@ -108,6 +109,7 @@ fn native_row(balance: &str) -> FeeAssetQuote {
 
 fn usdc_row(balance: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: USDC_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(USDC.to_owned()),
@@ -122,6 +124,7 @@ fn usdc_row(balance: &str) -> FeeAssetQuote {
 
 fn pathusd_row(balance: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: COLLECTOR.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(TEMPO_DEFAULT_FEE_TOKEN.to_owned()),
@@ -142,6 +145,7 @@ fn request(chain_id: u32, calls: Vec<FeeCall>) -> Event {
 /// and signing surfaces use once a chip has been tapped.
 fn request_in(chain_id: u32, calls: Vec<FeeCall>, fee_token: Option<&str>) -> Event {
     Event::QuoteRequested {
+        read_deployment: None,
         chain_id,
         account: ACCOUNT.to_owned(),
         deployed: true,
@@ -218,6 +222,7 @@ fn quoted_native(calls: Vec<FeeCall>) -> Sut {
         ops,
         vec![
             Op::FetchGasPrice {
+                fresh: false,
                 chain_id: CHAIN,
                 want_tip: true
             },
@@ -441,7 +446,8 @@ fn conversion_rounds_native_up_fee_token_down_never_undercharging() {
         Some(186_870_000_000)
     );
 
-    // And the conversion itself ceils: $18687.1 worth of fee units → 18688.
+    // And the conversion itself ceils: 3e13 wei (gas 1e13 × 1 × 3) is
+    // 0.00003 ETH × $1868.71 = $0.0560613 = 56061.3 fee units → 56062.
     let native = AssetPricing {
         is_native: true,
         decimals: 18,
@@ -455,8 +461,8 @@ fn conversion_rounds_native_up_fee_token_down_never_undercharging() {
         native_usd_floor_price: None,
     };
     assert_eq!(
-        calculate_in_band_fee_amount(1, 1, &usdc, &native),
-        Some(18_688)
+        calculate_in_band_fee_amount(10_000_000_000_000, 1, &usdc, &native),
+        Some(56_062)
     );
 }
 
@@ -676,9 +682,11 @@ fn a_relay_priced_coin_ignores_the_floor_price_entirely() {
             calculate_in_band_fee_amount(200_000, 1_000_000_000, &usdc, &native),
             Some(1_121_220)
         );
+        // A stablecoin fee is the charge converted, floored at its own cent —
+        // never the native 0.00001-coin floor converted (W-F1).
         assert_eq!(
             calculate_in_band_fee_amount(1, 1, &usdc, &native),
-            Some(18_687)
+            Some(10_000)
         );
     }
 }
@@ -826,10 +834,12 @@ fn in_band_fee_converts_to_stable_with_cent_floor() {
         calculate_in_band_fee_amount(200_000, 1_000_000_000, &usdc, &native),
         Some(1_121_220)
     );
-    // 1 wei × 3 is below the 0.00001 ETH floor; $0.018687 exceeds $0.01.
+    // 1 wei × 3 is dust: a stablecoin fee floors at its own $0.01 — not at
+    // the native 0.00001 ETH floor converted ($0.018687 here, 2.5¢ at ETH
+    // $2,500), which no relay ever asked of a stablecoin (W-F1).
     assert_eq!(
         calculate_in_band_fee_amount(1, 1, &usdc, &native),
-        Some(18_687)
+        Some(10_000)
     );
     // If the native floor converts below one cent, stablecoin payment still
     // floors at $0.01.
@@ -1588,6 +1598,10 @@ fn a_native_fee_the_account_does_not_hold_is_not_confirmable() {
     sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDC.to_owned()),
     });
+    let leg = remeasured(&mut sut, |sut| {
+        gather(sut, vec![native_row("0"), usdc_row("5000000")])
+    });
+    assert_eq!(leg.as_deref(), Some(USDC), "the USDC leg");
     assert!(sut.view().confirm_fee_ready, "USDC covers it");
 }
 
@@ -1669,6 +1683,7 @@ fn request_with_preset(number: NumberPreset) -> Event {
         unreachable!("request() builds a QuoteRequested")
     };
     Event::QuoteRequested {
+        read_deployment: None,
         chain_id,
         account,
         deployed,
@@ -1780,6 +1795,25 @@ fn issue_408_a_coin_that_can_pay_keeps_the_sheet_line_about_the_coin_in_force() 
 
     sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDT.to_owned()),
+    });
+    remeasured(&mut sut, |sut| {
+        sut.resolve(Res::GasPrice {
+            eth_gas_price: Some(ISSUE_408_GAS_PRICE.to_owned()),
+            base_fee: Some("0".to_owned()),
+            priority_fee: Some("0".to_owned()),
+        });
+        sut.resolve(Res::BundlerQuote {
+            quote: Some(FeeBundlerQuote {
+                max_fee_per_gas: "1976000000".to_owned(),
+                max_priority_fee_per_gas: None,
+                network_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
+                relayer_fee_per_gas: Some(ISSUE_408_GAS_PRICE.to_owned()),
+                in_band_fee_per_gas: None,
+            }),
+        });
+        sut.resolve(Res::InBandQuotes {
+            quotes: Some(vec![issue_408_eth_row("0"), issue_408_usdt_row("5000000")]),
+        })
     });
     let view = sut.view();
     assert!(view.confirm_fee_ready);
@@ -1992,22 +2026,27 @@ fn coin_amounts_are_written_with_their_unit_rounded_the_safe_way() {
     );
 }
 
-/// `GasFeeCard.handleFeeTokenSelect` fast path: a known option recomputes
-/// locally from the shared gas basis — no RPC round trip.
+/// `GasFeeCard.handleFeeTokenSelect` fast path: a known option switches the
+/// figure on screen at once from the shared gas basis — and because that gas
+/// was measured with the OTHER coin's fee leg (a native transfer is not a
+/// USDC `transfer`), the operation is measured again at once with the new
+/// leg. The switched figure is provisional and never confirmable until the
+/// new one lands.
 #[test]
-fn select_fee_asset_recomputes_locally_without_rpc() {
+fn select_fee_asset_switches_at_once_and_measures_the_new_leg_again() {
     let mut sut = quoted_native(vec![]);
     let ops = sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDC.to_uppercase().replace("0X", "0x")), // case-insensitive
     });
-    assert!(ops.is_empty(), "local recompute issues no operations");
+    assert_eq!(ops, gathering_reads(), "the new leg is measured at once");
     let view = sut.view();
-    assert!(view.confirm_fee_ready);
+    assert!(view.provisional, "measured with another coin's leg");
+    assert!(view.busy && !view.confirm_fee_ready, "the confirm waits");
     assert_eq!(
         view.fee_token.as_deref().map(str::to_lowercase),
         Some(USDC.to_lowercase())
     );
-    let fee = view.fee.expect("quote survives the switch");
+    let fee = view.fee.expect("the switched figure stays on screen");
     assert_eq!(
         fee.total_wei, "0",
         "erc20 fee rides in fee_asset, not totalWei"
@@ -2027,11 +2066,90 @@ fn select_fee_asset_recomputes_locally_without_rpc() {
     // what was quoted.
     assert_eq!(fee.fee_recipient.as_deref(), Some(USDC_RECIPIENT));
 
+    // The re-measure: the simulation carries the USDC `transfer` leg.
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let ops = sut.resolve(quotes_ok());
+    match ops.as_slice() {
+        [Op::EstimateUserOpGas { calls, .. }] => {
+            let leg = calls.last().expect("a fee leg");
+            assert!(leg.to.eq_ignore_ascii_case(USDC), "the USDC leg: {leg:?}");
+            assert_eq!(leg.value, "0");
+        }
+        other => panic!("one simulation with the new leg, got {other:?}"),
+    }
+    assert_eq!(sut.resolve(estimated()), vec![Op::StartTtl { ms: TICK_MS }]);
+    let view = sut.view();
+    assert!(!view.provisional && !view.busy && view.confirm_fee_ready);
+    assert_eq!(
+        view.fee.expect("measured").fee_recipient.as_deref(),
+        Some(USDC_RECIPIENT)
+    );
+
     // Selecting the already-active asset is a no-op.
     let ops = sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDC.to_owned()),
     });
     assert!(ops.is_empty());
+}
+
+/// The money of it: the amount signed in USDC is priced on the gas the USDC
+/// leg measures — an ERC-20 `transfer` is heavier than a native one — never
+/// on the native leg's figure the switch showed for a moment.
+#[test]
+fn the_usdc_fee_is_priced_on_the_usdc_leg_s_own_gas() {
+    let mut sut = quoted_native(vec![]);
+    sut.dispatch(Event::SelectFeeAsset {
+        token: Some(USDC.to_owned()),
+    });
+    let provisional = match sut.view().fee.expect("switched").fee_asset {
+        FeeAssetView::Erc20 { amount, .. } => amount,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(provisional, USDC_FEE_UNITS.to_string());
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    // The USDC leg measures 20k heavier: 470_000 gas.
+    sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::Estimated {
+            verification_gas_limit: "100000".to_owned(),
+            call_gas_limit: "330000".to_owned(),
+            pre_verification_gas: "40000".to_owned(),
+            settlement_gas: None,
+        },
+    });
+    let view = sut.view();
+    assert!(view.confirm_fee_ready);
+    let signed = match view.fee.expect("measured").fee_asset {
+        FeeAssetView::Erc20 { amount, .. } => amount.parse::<u128>().unwrap(),
+        other => panic!("{other:?}"),
+    };
+    // 470_000 / 450_000 of the native-leg figure, to the unit (rounded up).
+    assert_eq!(signed, (USDC_FEE_UNITS * 470_000).div_ceil(450_000));
+    assert!(signed > USDC_FEE_UNITS);
+}
+
+/// Switching back to the coin the gas was measured with is no new leg: the
+/// local figure is the measured one, and nothing is asked.
+#[test]
+fn switching_back_to_the_measured_coin_asks_nothing() {
+    let mut sut = quoted_native(vec![]);
+    sut.dispatch(Event::SelectFeeAsset {
+        token: Some(USDC.to_owned()),
+    });
+    // Back to the chain's coin while the USDC measure is still out.
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    // Now measured with USDC; going back to native is another leg again.
+    let ops = sut.dispatch(Event::SelectFeeAsset { token: None });
+    assert_eq!(ops, gathering_reads());
+    assert!(sut.view().provisional);
 }
 
 /// Invariant ⑧ — a fee asset whose balance is below the fee it would cost is
@@ -2259,6 +2377,7 @@ fn requote_reuses_the_same_transaction_shape() {
 fn gathering_reads() -> Vec<Op> {
     vec![
         Op::FetchGasPrice {
+            fresh: false,
             chain_id: CHAIN,
             want_tip: true,
         },
@@ -2271,6 +2390,17 @@ fn gathering_reads() -> Vec<Op> {
             account: ACCOUNT.to_owned(),
         },
     ]
+}
+
+/// [`gathering_reads`] of a run that follows a failure: it reads the chain
+/// afresh, past anything the shell holds (issue #483 — a retry is a real new
+/// read).
+fn fresh_gathering_reads() -> Vec<Op> {
+    let mut reads = gathering_reads();
+    if let Some(Op::FetchGasPrice { fresh, .. }) = reads.first_mut() {
+        *fresh = true;
+    }
+    reads
 }
 
 fn gas_at(wei: u128) -> Res {
@@ -2338,7 +2468,11 @@ fn a_failed_tick_catches_up_visibly_and_a_failed_catch_up_takes_the_figure_away(
     let mut sut = quoted_native(vec![]);
     sut.resolve(Res::TtlElapsed);
     let ops = sut.resolve(gas_unread());
-    assert_eq!(ops, gathering_reads(), "the catch-up starts at once");
+    assert_eq!(
+        ops,
+        fresh_gathering_reads(),
+        "the catch-up starts at once, reading afresh"
+    );
     // The failed tick's two other reads were superseded: drop them.
     sut.drop_oldest();
     sut.drop_oldest();
@@ -2393,17 +2527,18 @@ fn a_requote_during_a_tick_makes_it_the_visible_refresh() {
 }
 
 /// A chip tap acts on the figure on screen: a background pricing stops for
-/// it, the switch is the local recompute it always was, and ticking resumes.
+/// it, the figure switches at once, and the new leg is measured — the tick's
+/// late answers are dropped, and the confirm waits for the measure.
 #[test]
-fn a_chip_tap_during_a_tick_switches_the_figure_on_screen_and_resumes_ticking() {
+fn a_chip_tap_during_a_tick_switches_the_figure_on_screen_and_measures_it() {
     let mut sut = quoted_native(vec![]);
     sut.resolve(Res::TtlElapsed);
     let ops = sut.dispatch(Event::SelectFeeAsset {
         token: Some(USDC.to_owned()),
     });
-    assert_eq!(ops, vec![Op::StartTtl { ms: TICK_MS }]);
+    assert_eq!(ops, gathering_reads(), "the new leg is measured at once");
     let view = sut.view();
-    assert!(!view.busy && view.confirm_fee_ready);
+    assert!(view.busy && view.provisional && !view.confirm_fee_ready);
     assert_eq!(
         view.fee.expect("quoted").fee_asset,
         FeeAssetView::Erc20 {
@@ -2415,8 +2550,17 @@ fn a_chip_tap_during_a_tick_switches_the_figure_on_screen_and_resumes_ticking() 
     );
     // The stopped tick's answers are dropped.
     assert!(sut.resolve(gas_at(5 * NETWORK_FEE)).is_empty());
+    sut.drop_oldest();
+    sut.drop_oldest();
+    // The measure lands: confirmable again, in USDC.
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    assert_eq!(sut.resolve(estimated()), vec![Op::StartTtl { ms: TICK_MS }]);
+    let view = sut.view();
+    assert!(!view.busy && !view.provisional && view.confirm_fee_ready);
     assert_eq!(
-        sut.view().fee.expect("quoted").fee_asset,
+        view.fee.expect("quoted").fee_asset,
         FeeAssetView::Erc20 {
             token: USDC.to_owned(),
             decimals: 6,
@@ -2454,7 +2598,7 @@ fn a_tick_keeps_the_coin_on_screen_and_the_catch_up_picks_again() {
     assert_eq!(sut.view().fee_token, picked);
     assert!(!sut.view().busy);
     // Priced: the USDC cannot pay → the tick fails → a visible catch-up.
-    assert_eq!(sut.resolve(estimated()), gathering_reads());
+    assert_eq!(sut.resolve(estimated()), fresh_gathering_reads());
     assert!(sut.view().busy);
     sut.resolve(gas_ok());
     sut.resolve(bundler_ok());
@@ -2799,6 +2943,7 @@ fn a_bundler_under_report_is_floored_at_the_chain_measurement() {
 fn undeployed_without_public_key_never_estimates() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
+        read_deployment: None,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -2817,6 +2962,7 @@ fn undeployed_without_public_key_never_estimates() {
     // With the key available, the undeployed account estimates normally.
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
+        read_deployment: None,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -2835,6 +2981,7 @@ fn undeployed_without_public_key_never_estimates() {
     // Tempo send on web while native quoted it.
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::QuoteRequested {
+        read_deployment: None,
         chain_id: TEMPO_CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -3142,6 +3289,7 @@ fn tempo_transfer_prices_the_stablecoin_reimbursement_statically() {
         vec![
             // attodollar gas makes eth_maxPriorityFeePerGas meaningless.
             Op::FetchGasPrice {
+                fresh: false,
                 chain_id: TEMPO_CHAIN,
                 want_tip: false
             },
@@ -3301,6 +3449,7 @@ fn tempo_undeployed_contract_call_keeps_the_static_model() {
     };
     let mut sut = Sut::new();
     sut.dispatch(Event::QuoteRequested {
+        read_deployment: None,
         chain_id: TEMPO_CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -3379,6 +3528,7 @@ fn tempo_fee_asset_switch_reprices_through_the_tempo_model() {
         ops,
         vec![
             Op::FetchGasPrice {
+                fresh: false,
                 chain_id: TEMPO_CHAIN,
                 want_tip: false
             },
@@ -3839,6 +3989,7 @@ fn erc20_transfer_call() -> FeeCall {
 
 fn request_undeployed(calls: Vec<FeeCall>) -> Event {
     Event::QuoteRequested {
+        read_deployment: None,
         chain_id: CHAIN,
         account: ACCOUNT.to_owned(),
         deployed: false,
@@ -4207,6 +4358,7 @@ const USDT: &str = "0x5555555555555555555555555555555555555555";
 
 fn usdt_row(balance: &str, usd: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: USDC_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(USDT.to_owned()),
@@ -4221,6 +4373,7 @@ fn usdt_row(balance: &str, usd: &str) -> FeeAssetQuote {
 
 fn auto_request(chain_id: u32, calls: Vec<FeeCall>) -> Event {
     Event::QuoteRequested {
+        read_deployment: None,
         chain_id,
         account: ACCOUNT.to_owned(),
         deployed: true,
@@ -4441,6 +4594,21 @@ fn a_pick_the_real_gas_outgrows_is_made_again() {
         Some(USDC),
         "picked first"
     );
+    // Moved to ETH on the real gas — and that leg is simulated, in the same
+    // run, before it settles: the gas behind a figure is its own coin's.
+    let again = sut.outstanding();
+    assert_eq!(simulated_leg(&again), None, "the ETH leg: {again:?}");
+    sut.resolve_matching(
+        is_estimate,
+        Res::UserOpGas {
+            outcome: FeeGasOutcome::Estimated {
+                verification_gas_limit: "400000".to_owned(),
+                call_gas_limit: "310000".to_owned(),
+                pre_verification_gas: "40000".to_owned(),
+                settlement_gas: None,
+            },
+        },
+    );
     let view = sut.view();
     assert_eq!(view.fee_token, None, "…and moved to ETH on the real gas");
     assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
@@ -4569,11 +4737,18 @@ fn the_fee_row_s_reason_is_the_core_s_key() {
         failure_reason_key(FeeFailure::ChainRead { rate_limited: true }),
         Some("home.balanceDetailStatusRetrying")
     );
+    // Issue #483: the fee row's own sentence, never the browser's "page
+    // data may be incomplete" — and an internal fault is never "can't reach
+    // the chain".
     assert_eq!(
         failure_reason_key(FeeFailure::ChainRead {
             rate_limited: false
         }),
-        Some("explore.chainDown")
+        Some("componentsUi.gas.reasonChainDown")
+    );
+    assert_eq!(
+        failure_reason_key(FeeFailure::Internal),
+        Some("componentsUi.gas.reasonInternal")
     );
     for failure in [FeeFailure::MissingPublicKey, FeeFailure::CalculationFailed] {
         assert_eq!(failure_reason_key(failure), None, "{failure:?}");
@@ -4804,13 +4979,26 @@ fn balance_changes_that_land_after_the_quote_move_the_fee_off_a_drained_coin() {
             change(None, "1000000000000000000"),
         ],
     });
-    assert!(ops.is_empty(), "a local switch, nothing asked: {ops:?}");
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::FetchGasPrice { .. })),
+        "switched at once, and the native leg is measured: {ops:?}"
+    );
     let view = sut.view();
     assert_eq!(view.fee_token, None);
     let fee = view.fee.expect("still quoted");
     assert_eq!(fee.fee_asset, FeeAssetView::Native);
     assert_eq!(fee.total_wei, NATIVE_FEE_WEI.to_string());
     assert_eq!(fee.fee_recipient.as_deref(), Some(NATIVE_RECIPIENT));
+    assert!(
+        !view.confirm_fee_ready,
+        "the dApp sheet's own switch can no longer be confirmed on the old leg's gas"
+    );
+    let leg = remeasured(&mut sut, |sut| {
+        gather(sut, vec![native_row("0"), usdc_row("5000000")])
+    });
+    assert_eq!(leg, None, "the native leg");
+    let view = sut.view();
+    assert_eq!(view.fee_token, None);
     assert!(view.confirm_fee_ready);
 }
 
@@ -4941,6 +5129,7 @@ fn a_refusal_of_a_chosen_coin_fails_as_itself_and_the_picker_still_works() {
     assert_eq!(
         ops.first(),
         Some(&Op::FetchGasPrice {
+            fresh: true,
             chain_id: CHAIN,
             want_tip: true
         }),
@@ -4966,7 +5155,8 @@ fn an_unanswered_simulation_is_still_the_estimate_failure() {
             outcome: FeeGasOutcome::SimulationFailed,
         },
     );
-    assert!(ops.is_empty(), "{ops:?}");
+    // Only the machine's own re-ask, on the schedule (PR 2 note 1).
+    assert_eq!(ops, vec![Op::StartTtl { ms: 3_000 }], "{ops:?}");
     assert_eq!(sut.view().failed, Some(FeeFailure::EstimateFailed));
 }
 
@@ -5036,6 +5226,7 @@ fn balance_changes_that_land_on_a_failed_quote_price_it_again_in_a_coin_that_pay
     assert_eq!(
         ops.first(),
         Some(&Op::FetchGasPrice {
+            fresh: true,
             chain_id: CHAIN,
             want_tip: true
         }),
@@ -5384,6 +5575,7 @@ fn bnb_row(balance: &str) -> FeeAssetQuote {
 /// A BNB Chain stablecoin row: 18 decimals, $1.
 fn bsc_stable_row(token: &str, symbol: &str, balance: &str, usd: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: USDC_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(token.to_owned()),
@@ -5411,6 +5603,27 @@ fn ask_pancakeswap(sut: &mut Sut, rows: Vec<FeeAssetQuote>) -> Vec<Op> {
 fn settle(sut: &mut Sut) {
     sut.resolve_matching(is_estimate, estimated());
     sut.resolve_matching(is_measure, unmeasured());
+}
+
+/// A coin switch (a tap, or the machine's own re-pick) measures the new leg
+/// again at once: the switched figure is provisional and the confirm waits.
+/// Answer that run with `gather` (the chain's own answers) and the same gas;
+/// returns the leg it simulated (`None` = native).
+fn remeasured(sut: &mut Sut, gather: impl FnOnce(&mut Sut) -> Vec<Op>) -> Option<String> {
+    let view = sut.view();
+    assert!(
+        view.provisional && view.busy && !view.confirm_fee_ready,
+        "switched, and measured again before it is confirmable: {view:?}"
+    );
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    let ops = gather(sut);
+    let leg = simulated_leg(&ops);
+    sut.resolve_matching(is_estimate, estimated());
+    if sut.outstanding().iter().any(is_measure) {
+        sut.resolve_matching(is_measure, unmeasured());
+    }
+    assert!(!sut.view().provisional);
+    leg
 }
 
 fn option<'a>(
@@ -5494,6 +5707,9 @@ fn with_nothing_else_the_machine_says_so_and_a_usdc_pick_is_warned() {
 
     sut.dispatch(Event::SelectFeeAsset {
         token: Some(BSC_USDC.to_owned()),
+    });
+    remeasured(&mut sut, |sut| {
+        gather(sut, vec![bnb_row("0"), bsc_usdc_row()])
     });
     let view = sut.view();
     assert_eq!(
@@ -5644,6 +5860,7 @@ fn pol_row(balance: &str) -> FeeAssetQuote {
 
 fn polygon_stable_row(token: &str, symbol: &str, balance: &str, usd: &str) -> FeeAssetQuote {
     FeeAssetQuote {
+        minimum_amount: None,
         recipient: USDC_RECIPIENT.to_owned(),
         asset: FeeAssetKind::Erc20,
         fee_token: Some(token.to_owned()),
@@ -5742,7 +5959,12 @@ fn issue_411_a_swap_the_simulation_measured_pays_in_a_coin_that_can() {
     }
 
     let ops = sut.dispatch(issue_411_swap());
-    assert!(ops.is_empty(), "a local switch, nothing asked: {ops:?}");
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::FetchGasPrice { .. })),
+        "switched at once, and the pUSD leg is measured: {ops:?}"
+    );
+    let leg = remeasured(&mut sut, polygon_gather);
+    assert_eq!(leg.as_deref(), Some(PUSD.to_ascii_lowercase().as_str()));
     let view = sut.view();
     assert_eq!(view.fee_token.as_deref(), Some(PUSD), "{view:?}");
     assert!(view.confirm_fee_ready, "{view:?}");
@@ -5807,6 +6029,7 @@ fn issue_411_a_swap_of_all_the_pusd_pays_in_the_usdc() {
             change(Some(&POLYGON_USDC.to_ascii_lowercase()), "256990000"),
         ],
     });
+    remeasured(&mut sut, polygon_gather);
     let view = sut.view();
     assert_eq!(view.fee_token.as_deref(), Some(POLYGON_USDC), "{view:?}");
     assert!(view.confirm_fee_ready);
@@ -5865,6 +6088,7 @@ fn issue_411_a_coin_the_swap_funds_is_quoted_never_refused() {
     settle(&mut sut);
     assert_eq!(sut.view().fee_token, None, "unmeasured: the fallback");
     sut.dispatch(all_the_pusd());
+    remeasured(&mut sut, |sut| polygon_gather_with(sut, rows()));
     in_usdc(&sut.view());
 }
 
@@ -5957,9 +6181,10 @@ fn a_run_with_no_chain_price_by_the_deadline_is_a_chain_read_failure() {
     sut.dispatch(request(CHAIN, vec![]));
     assert!(sut.view().busy);
     let ops = sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
-    assert!(
-        ops.is_empty(),
-        "nothing more is asked by the deadline itself"
+    assert_eq!(
+        ops,
+        vec![Op::StartTtl { ms: 3_000 }],
+        "nothing more is asked by the deadline itself than the machine's own re-ask"
     );
     let view = sut.view();
     assert!(!view.busy, "no longer Estimating…");
@@ -6025,4 +6250,678 @@ fn a_priced_quote_ignores_its_deadline_and_a_refresh_keeps_the_one_on_screen() {
         view.fee.is_some(),
         "the quote on screen survives a hung refresh"
     );
+}
+
+// ===========================================================================
+// The floor (relay `fix/held-nonce-and-floor` §3): $0.01, not 0.00001 ETH
+// ===========================================================================
+
+/// ETH at $2,500, dust gas: a USDC fee is exactly $0.01 — not the 0.00001 ETH
+/// native floor converted ($0.025), which no relay ever asked of a
+/// stablecoin (W-F1).
+#[test]
+fn a_usdc_fee_on_an_eth_l2_floors_at_one_cent_not_at_the_native_floor() {
+    let eth = AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: Some("2500".to_owned()),
+        native_usd_floor_price: None,
+    };
+    let usdc = AssetPricing {
+        is_native: false,
+        decimals: 6,
+        usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
+    };
+    assert_eq!(
+        calculate_in_band_fee_amount(1, 1, &usdc, &eth),
+        Some(10_000)
+    );
+    // A dollar coin priced a hair over $1 still pays 0.01 of it — what every
+    // relay admits for a stablecoin — never a hair under.
+    let dear_usdc = AssetPricing {
+        usd_price: Some("1.0001".to_owned()),
+        ..usdc.clone()
+    };
+    assert_eq!(
+        calculate_in_band_fee_amount(1, 1, &dear_usdc, &eth),
+        Some(10_000)
+    );
+    // The native fee keeps today's rule with no published minimum: an older
+    // relay admits nothing under 0.00001 ETH.
+    assert_eq!(
+        calculate_in_band_fee_amount(1, 1, &eth, &eth),
+        Some(10_000_000_000_000)
+    );
+}
+
+/// The quote machine on dust gas, with rows as `rows` say.
+fn dust_quote(rows: Vec<FeeAssetQuote>, fee_token: Option<&str>) -> Sut {
+    let mut sut = Sut::new();
+    sut.dispatch(request_in(CHAIN, vec![], fee_token));
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some("1".to_owned()),
+        base_fee: Some("0".to_owned()),
+        priority_fee: Some("0".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote {
+        quote: Some(FeeBundlerQuote {
+            max_fee_per_gas: "2".to_owned(),
+            max_priority_fee_per_gas: None,
+            network_fee_per_gas: Some("1".to_owned()),
+            relayer_fee_per_gas: Some("1".to_owned()),
+            in_band_fee_per_gas: None,
+        }),
+    });
+    sut.resolve(Res::InBandQuotes { quotes: Some(rows) });
+    sut.resolve(estimated());
+    sut
+}
+
+fn priced_at(mut row: FeeAssetQuote, usd: &str, minimum: Option<&str>) -> FeeAssetQuote {
+    row.usd_price = Some(usd.to_owned());
+    row.minimum_amount = minimum.map(str::to_owned);
+    row
+}
+
+fn amount_of(sut: &Sut) -> String {
+    let fee = sut.view().fee.expect("quoted");
+    match fee.fee_asset {
+        FeeAssetView::Native => fee.total_wei,
+        FeeAssetView::Erc20 { amount, .. } => amount,
+    }
+}
+
+/// A relay that publishes its minimum is floored at THAT — $0.01 of ETH at
+/// its price, 0.000004 ETH at $2,500 — not at the 0.00001 ETH an older relay
+/// needed. An older relay (no field) keeps today's rule, which it admits.
+#[test]
+fn a_published_native_minimum_is_the_floor() {
+    let rich = || native_row("1000000000000000000");
+    // $0.01 at $2,500 is 4e12 wei = 0x3a352944000, as the relay writes it.
+    let sut = dust_quote(
+        vec![
+            priced_at(rich(), "2500", Some("0x3a352944000")),
+            usdc_row("5000000"),
+        ],
+        None,
+    );
+    assert_eq!(amount_of(&sut), "4000000000000", "$0.01 of ETH");
+    // A decimal string reads too.
+    let sut = dust_quote(
+        vec![
+            priced_at(rich(), "2500", Some("4000000000000")),
+            usdc_row("5000000"),
+        ],
+        None,
+    );
+    assert_eq!(amount_of(&sut), "4000000000000");
+    // An older relay: no minimum published, today's 0.00001 ETH.
+    let sut = dust_quote(
+        vec![priced_at(rich(), "2500", None), usdc_row("5000000")],
+        None,
+    );
+    assert_eq!(amount_of(&sut), "10000000000000");
+    // Zero or garbage is no minimum at all.
+    for nothing in ["0x0", "0", "lots"] {
+        let sut = dust_quote(
+            vec![
+                priced_at(rich(), "2500", Some(nothing)),
+                usdc_row("5000000"),
+            ],
+            None,
+        );
+        assert_eq!(amount_of(&sut), "10000000000000", "{nothing}");
+    }
+}
+
+/// A published minimum only ever LOWERS today's rule: a relay naming 1 ETH as
+/// its minimum does not get 1 ETH.
+#[test]
+fn a_published_minimum_never_raises_the_fee() {
+    let sut = dust_quote(
+        vec![
+            priced_at(
+                native_row("1000000000000000000"),
+                "2500",
+                Some("0xde0b6b3a7640000"),
+            ),
+            usdc_row("5000000"),
+        ],
+        None,
+    );
+    assert_eq!(amount_of(&sut), "10000000000000", "today's rule, no more");
+
+    let mut usdc = usdc_row("5000000");
+    usdc.minimum_amount = Some("0x3b9aca00".to_owned()); // 1,000 USDC
+    let sut = dust_quote(
+        vec![
+            priced_at(native_row("1000000000000000000"), "2500", None),
+            usdc,
+        ],
+        Some(USDC),
+    );
+    // Today's rule in USDC was the 0.00001 ETH floor converted: $0.025.
+    assert_eq!(amount_of(&sut), "25000", "never past today's rule");
+}
+
+/// The stablecoin's own published minimum floors it (0.01 USDC as the relay
+/// publishes it), and the native one does not touch it.
+#[test]
+fn a_published_stable_minimum_floors_the_stable_fee() {
+    let mut usdc = usdc_row("5000000");
+    usdc.minimum_amount = Some("0x2710".to_owned()); // 0.01 USDC
+    let sut = dust_quote(
+        vec![
+            priced_at(
+                native_row("1000000000000000000"),
+                "2500",
+                Some("0x3a352944000"),
+            ),
+            usdc,
+        ],
+        Some(USDC),
+    );
+    assert_eq!(amount_of(&sut), "10000", "$0.01 of USDC");
+}
+
+/// Unpriced by the relay, priced by the shell: the published dust floor is
+/// raised to the wallet's own cent (issue 682's price), and capped as before.
+#[test]
+fn an_unpriced_coin_with_a_published_dust_floor_still_pays_a_cent() {
+    let mut okb = native_row("1000000000000000000");
+    okb.usd_price = None;
+    okb.native_usd_floor_price = Some("125".to_owned());
+    okb.minimum_amount = Some("0xe8d4a51000".to_owned()); // 1e12 = 0.000001 OKB
+    let sut = dust_quote(vec![okb], None);
+    // $0.01 at $125 = 0.00008 OKB.
+    assert_eq!(amount_of(&sut), "80000000000000");
+}
+
+// ===========================================================================
+// Issue #483: the account read is the fee's own
+// ===========================================================================
+
+fn reading_request() -> Event {
+    let Event::QuoteRequested {
+        chain_id,
+        account,
+        deployed,
+        public_key_available,
+        tier,
+        calls,
+        fee_token,
+        auto_fee_token,
+        number,
+        ..
+    } = request(CHAIN, vec![])
+    else {
+        unreachable!()
+    };
+    Event::QuoteRequested {
+        chain_id,
+        account,
+        deployed,
+        public_key_available,
+        tier,
+        calls,
+        fee_token,
+        auto_fee_token,
+        number,
+        read_deployment: Some(true),
+    }
+}
+
+fn read_deployment(fresh: bool) -> Vec<Op> {
+    vec![Op::ReadDeployment {
+        chain_id: CHAIN,
+        account: ACCOUNT.to_owned(),
+        fresh,
+    }]
+}
+
+/// Asked to, the machine reads the account first, then prices on what it
+/// read — the read is part of the quote, not the shell's prelude to it.
+#[test]
+fn the_account_read_comes_first_and_the_quote_follows_it() {
+    let mut sut = Sut::new();
+    assert_eq!(sut.dispatch(reading_request()), read_deployment(false));
+    assert!(sut.view().busy, "the fee is being worked out");
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(ops, gathering_reads());
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let ops = sut.resolve(quotes_ok());
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::EstimateUserOpGas { deployed: true, .. }]
+        ),
+        "priced on the deployment read: {ops:?}"
+    );
+    assert_eq!(sut.resolve(estimated()), vec![Op::StartTtl { ms: TICK_MS }]);
+    assert!(sut.view().confirm_fee_ready);
+    // A deployed account is not read again by the tick.
+    assert_eq!(sut.resolve(Res::TtlElapsed), gathering_reads());
+}
+
+/// The chain's nodes do not answer the account read: the fee says so, on the
+/// fee row, in the fee's own words — the same failure, footer and retry on
+/// every shell — and the retry reads the account again, afresh.
+#[test]
+fn an_unanswered_account_read_is_the_fee_s_failure_and_every_retry_reads_again() {
+    use vela_core::app::fee_policy::{failure_reason_key, requote_delay_ms};
+    for rate_limited in [false, true] {
+        let mut sut = Sut::new();
+        sut.dispatch(reading_request());
+        assert_eq!(
+            sut.resolve(Res::Deployment {
+                read: DeploymentRead::Unreachable { rate_limited },
+            }),
+            vec![Op::StartTtl { ms: 3_000 }],
+            "the machine's own re-ask is set"
+        );
+        // A tap asks before the timer runs out (it is dropped with the
+        // attempt the tap moves on).
+        sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+        let view = sut.view();
+        assert_eq!(view.failed, Some(FeeFailure::ChainRead { rate_limited }));
+        assert!(!view.busy && !view.confirm_fee_ready && view.fee.is_none());
+        assert!(failure_reason_key(FeeFailure::ChainRead { rate_limited }).is_some());
+        assert!(requote_delay_ms(FeeFailure::ChainRead { rate_limited }, 1).is_some());
+        // The retry (a tap, or the schedule's own) is a real new read.
+        assert_eq!(sut.dispatch(Event::Requote), read_deployment(true));
+        let ops = sut.resolve(Res::Deployment {
+            read: DeploymentRead::Read { deployed: true },
+        });
+        assert_eq!(ops, fresh_gathering_reads(), "and the chain is read afresh");
+    }
+}
+
+/// A read that never left the app is an internal fault — never "can't reach
+/// the chain" — with its own sentence, and it is retried like the rest.
+#[test]
+fn an_internal_fault_is_never_told_as_the_chain_being_down() {
+    use vela_core::app::fee_policy::{failure_reason_key, requote_delay_ms};
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Internal {
+            kind: "rpc: before_boot".to_owned(),
+        },
+    });
+    let view = sut.view();
+    assert_eq!(view.failed, Some(FeeFailure::Internal));
+    assert_eq!(
+        failure_reason_key(FeeFailure::Internal),
+        Some("componentsUi.gas.reasonInternal")
+    );
+    assert!(requote_delay_ms(FeeFailure::Internal, 3).is_some());
+    assert_eq!(sut.dispatch(Event::Requote), read_deployment(true));
+}
+
+/// A read that never answers is bounded like the rest of the run: the chain
+/// is out of reach.
+#[test]
+fn an_account_read_that_never_answers_is_bounded() {
+    let mut sut = Timed::new();
+    let ops = sut.dispatch(reading_request());
+    assert!(ops.contains(&Op::StartDeadline {
+        ms: vela_core::app::fee_policy::QUOTE_DEADLINE_MS
+    }));
+    sut.resolve_matching(
+        |op| matches!(op, Op::StartDeadline { .. }),
+        Res::DeadlineElapsed,
+    );
+    assert_eq!(
+        sut.view().failed,
+        Some(FeeFailure::ChainRead {
+            rate_limited: false
+        })
+    );
+    // The read's late answer changes nothing.
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert!(sut.view().failed.is_some());
+}
+
+/// An account read as not deployed is read again on every run: its first
+/// operation may land while the sheet is open.
+#[test]
+fn an_undeployed_account_is_read_again_on_every_run() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: false },
+    });
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let ops = sut.resolve(quotes_ok());
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::EstimateUserOpGas {
+                deployed: false,
+                ..
+            }]
+        ),
+        "{ops:?}"
+    );
+    sut.resolve(estimated());
+    assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(false));
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(ops, gathering_reads(), "now deployed");
+}
+
+/// A shell that predates the field reads the deployment itself, as before.
+#[test]
+fn a_request_without_the_field_reads_nothing_itself() {
+    let event: Event = serde_json::from_value(serde_json::json!({
+        "type": "quote_requested",
+        "chain_id": CHAIN,
+        "account": ACCOUNT,
+        "deployed": true,
+        "public_key_available": true,
+        "tier": "fast",
+        "calls": [],
+        "fee_token": null,
+    }))
+    .unwrap();
+    let mut sut = Sut::new();
+    assert_eq!(sut.dispatch(event), gathering_reads());
+}
+
+// ===========================================================================
+// PR 2 note 1: the core retries a failed fee itself, and says so once
+// ===========================================================================
+
+fn is_ttl(op: &Op) -> bool {
+    matches!(op, Op::StartTtl { .. })
+}
+
+/// A failure that can pass is asked again by the machine itself, on the
+/// schedule (3 s, 6 s, then every 8 s), through the timer every shell already
+/// runs — so the send form and the signing sheet retry alike, with nothing
+/// scheduled by a shell. Each re-ask is a real new read.
+#[test]
+fn a_failure_that_can_pass_is_retried_by_the_machine_itself() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    let unreachable = || Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    };
+    assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: 3_000 }]);
+    for wait in [6_000, 8_000, 8_000] {
+        // The timer runs out: the account is read again, afresh.
+        assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(true));
+        assert!(sut.view().busy);
+        assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: wait }]);
+    }
+    // It comes back: the fee lands, and the schedule starts over next time.
+    assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(true));
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(ops, fresh_gathering_reads());
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let view = sut.view();
+    assert!(view.confirm_fee_ready);
+    assert_eq!(view.failure, None);
+}
+
+/// The row and the footer say ONE truth (the owner's rule): while the
+/// machine retries by itself the footer never asks for a tap, and through
+/// the re-ask the row keeps its reason — nothing flips to "Estimating…" and
+/// back every few seconds.
+#[test]
+fn the_row_and_the_footer_say_the_same_thing_through_the_retry() {
+    use vela_core::app::fee_policy::{
+        FeeFailureTap, FeeFailureView, FEE_RETRYING_KEY, REASON_CHAIN_DOWN_KEY,
+    };
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    });
+    let failed = sut.view();
+    let failure = failed.failure.clone().expect("the failure is said");
+    assert_eq!(
+        failure,
+        FeeFailureView {
+            failure: FeeFailure::ChainRead {
+                rate_limited: false
+            },
+            reason_key: Some(REASON_CHAIN_DOWN_KEY.to_owned()),
+            auto_retry: true,
+            retrying: false,
+            figure_key: None,
+            footer_key: FEE_RETRYING_KEY.to_owned(),
+            tap: FeeFailureTap::Retry,
+            chain_id: Some(CHAIN),
+            fee_token: None,
+        }
+    );
+    // The re-ask is out: `failed` is gone and `busy` is up, as before — but
+    // the failure stays said, now marked as being retried.
+    sut.resolve(Res::TtlElapsed);
+    let retrying = sut.view();
+    assert!(retrying.busy && retrying.failed.is_none());
+    let during = retrying.failure.expect("still said while it retries");
+    assert!(during.retrying);
+    assert_eq!(during.reason_key, failure.reason_key);
+    assert_eq!(during.footer_key, failure.footer_key);
+    assert_eq!(during.figure_key, None);
+}
+
+/// A tap on a failed row asks at once, and the machine's own timer for the
+/// next ask is dropped with the attempt the tap moved on — never a second run
+/// on top.
+#[test]
+fn a_tap_asks_at_once_and_the_pending_timer_is_dropped() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Internal {
+            kind: "rpc: before_boot".to_owned(),
+        },
+    });
+    assert_eq!(sut.dispatch(Event::Requote), read_deployment(true));
+    let view = sut.view();
+    assert!(view.failure.is_some_and(|failure| failure.retrying));
+    // The old timer runs out late: its attempt is over, nothing starts.
+    assert!(sut.resolve_matching(is_ttl, Res::TtlElapsed).is_empty());
+    assert!(sut.view().busy);
+}
+
+/// A failure no retry fixes is not retried, and only then does the footer ask
+/// for the tap — and the row's figure says "Tap to retry".
+#[test]
+fn a_failure_only_a_tap_retries_asks_for_the_tap() {
+    use vela_core::app::fee_policy::{ESTIMATE_FAILED_KEY, FEE_FAILED_KEY};
+    let mut sut = Sut::new();
+    let Event::QuoteRequested {
+        chain_id,
+        account,
+        tier,
+        calls,
+        fee_token,
+        auto_fee_token,
+        number,
+        read_deployment,
+        ..
+    } = request(CHAIN, vec![])
+    else {
+        unreachable!()
+    };
+    // An undeployed account without its public key can never be estimated.
+    let ops = sut.dispatch(Event::QuoteRequested {
+        chain_id,
+        account,
+        deployed: false,
+        public_key_available: false,
+        tier,
+        calls,
+        fee_token,
+        auto_fee_token,
+        number,
+        read_deployment,
+    });
+    assert!(!ops.iter().any(is_ttl), "{ops:?}");
+    let view = sut.view();
+    assert_eq!(view.failed, Some(FeeFailure::MissingPublicKey));
+    let failure = view.failure.expect("said");
+    assert!(!failure.auto_retry && !failure.retrying);
+    assert_eq!(failure.reason_key, None);
+    assert_eq!(failure.figure_key.as_deref(), Some(ESTIMATE_FAILED_KEY));
+    assert_eq!(failure.footer_key, FEE_FAILED_KEY);
+}
+
+/// PR 2 polish: a fee the relay answered would fail says what a tap on its
+/// row does. Asking again gets the same answer, so the tap opens the coins —
+/// "Pay with another coin" — while one the run has not tried is on offer;
+/// with none left the row is no control. The line under the held confirm is
+/// the fact, asking for no tap ("Tap it to retry" was untrue there).
+#[test]
+fn a_fee_that_would_fail_says_what_a_tap_does() {
+    use vela_core::app::fee_policy::{
+        FeeFailureTap, FEE_WOULD_FAIL_KEY, PAY_WITH_ANOTHER_COIN_KEY,
+    };
+    // The person chose USDC and the relay refused it: ETH is untried.
+    let mut sut = Sut::new();
+    sut.dispatch(request_in(CHAIN, vec![router_call()], Some(USDC)));
+    gather(
+        &mut sut,
+        vec![native_row("1000000000000000000"), usdc_row("5000000")],
+    );
+    sut.resolve_matching(is_estimate, refused());
+    let failure = sut.view().failure.expect("said");
+    assert_eq!(failure.failure, FeeFailure::WouldFail);
+    assert_eq!(failure.tap, FeeFailureTap::ChooseCoin);
+    assert_eq!(
+        failure.figure_key.as_deref(),
+        Some(PAY_WITH_ANOTHER_COIN_KEY)
+    );
+    assert_eq!(failure.footer_key, FEE_WOULD_FAIL_KEY);
+    assert_eq!(failure.chain_id, Some(CHAIN));
+    assert_eq!(failure.fee_token.as_deref(), Some(USDC), "what it was for");
+
+    // Every coin refused this run: nothing else to pay with, and the row
+    // promises nothing.
+    let mut sut = quoted_in_usdc_after_eth_was_refused();
+    sut.dispatch(Event::Requote);
+    gather(&mut sut, two_coins());
+    sut.resolve_matching(is_estimate, refused());
+    sut.resolve_matching(is_estimate, refused());
+    sut.drop_matching(is_measure);
+    let failure = sut.view().failure.expect("said");
+    assert_eq!(failure.failure, FeeFailure::WouldFail);
+    assert_eq!(failure.tap, FeeFailureTap::Nothing);
+    assert_eq!(failure.figure_key, None, "the dash");
+    assert_eq!(failure.footer_key, FEE_WOULD_FAIL_KEY);
+
+    // Any other failure: a tap asks again.
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    });
+    assert_eq!(sut.view().failure.expect("said").tap, FeeFailureTap::Retry);
+}
+
+/// PR 2 polish: a failure carries the question it answered — the chain and
+/// the coin — so a surface that has moved to another chain draws none, as it
+/// draws no other chain's estimate.
+#[test]
+fn a_failure_is_only_ever_said_for_its_own_chain() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    });
+    let failure = sut.view().failure.expect("said");
+    assert_eq!(failure.chain_id, Some(CHAIN));
+    assert!(failure.is_for_chain(Some(CHAIN)));
+    assert!(
+        !failure.is_for_chain(Some(CHAIN + 1)),
+        "another chain's form"
+    );
+    sut.drop_matching(is_ttl);
+    // The form names another chain: the old chain's failure is gone.
+    sut.dispatch(Event::ChainChanged {
+        chain_id: CHAIN + 1,
+    });
+    assert_eq!(sut.view().failure, None);
+}
+
+/// A new question forgets the old one's failure and its schedule.
+#[test]
+fn a_new_request_starts_the_schedule_over() {
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    let unreachable = || Res::Deployment {
+        read: DeploymentRead::Unreachable { rate_limited: true },
+    };
+    sut.resolve(unreachable());
+    sut.resolve(Res::TtlElapsed);
+    assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: 6_000 }]);
+    sut.drop_matching(is_ttl);
+    // Read afresh, as anything after a failure is.
+    assert_eq!(sut.dispatch(reading_request()), read_deployment(true));
+    assert!(sut.view().failure.is_none(), "nothing retried here");
+    assert_eq!(sut.resolve(unreachable()), vec![Op::StartTtl { ms: 3_000 }]);
+}
+
+/// The machine's own re-ask is bounded by `REQUOTE_TIMEOUT_MS` (spec 082
+/// RJ12): one that hangs — a black-holed relay — is a failure again in 6 s
+/// and the schedule goes on, so the fee is back within 8 + 6 s of the relay
+/// returning. A tap gets the whole bound.
+#[test]
+fn the_machine_s_own_re_ask_is_bounded_by_the_re_quote_timeout() {
+    use vela_core::app::fee_policy::{QUOTE_DEADLINE_MS, REQUOTE_TIMEOUT_MS};
+    let deadline = |ops: &[Op]| {
+        ops.iter().find_map(|op| match op {
+            Op::StartDeadline { ms } => Some(*ms),
+            _ => None,
+        })
+    };
+    let mut sut = Timed::new();
+    let ops = sut.dispatch(reading_request());
+    assert_eq!(deadline(&ops), Some(QUOTE_DEADLINE_MS));
+    sut.drop_matching(is_deadline);
+    sut.resolve(Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    });
+    // The re-ask: the account read, then the run past it, each on 6 s.
+    let ops = sut.resolve_matching(is_ttl, Res::TtlElapsed);
+    assert_eq!(deadline(&ops), Some(REQUOTE_TIMEOUT_MS));
+    sut.drop_matching(is_deadline);
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(deadline(&ops), Some(REQUOTE_TIMEOUT_MS));
+    // It hangs: a failure again, and the schedule goes on.
+    let ops = sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    assert_eq!(ops, vec![Op::StartTtl { ms: 6_000 }]);
+    // A tap asks with the whole bound.
+    sut.drop_matching(|_| true);
+    let ops = sut.dispatch(Event::Requote);
+    assert_eq!(deadline(&ops), Some(QUOTE_DEADLINE_MS));
 }

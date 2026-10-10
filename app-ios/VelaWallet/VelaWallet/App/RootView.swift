@@ -24,46 +24,48 @@ struct RootView: View {
     /// would be reading back. See `deviceScheme`.
     @Environment(\.colorScheme) private var windowScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Every resident machine, the pool and the money path — built once by
+    /// the App, never here (issue #483; `AppGraph`).
+    let graph: AppGraph
     let loc: Loc
     /// The `vela.*` shelf, for the reads that are not a machine's — the
     /// explorer bases of custom networks.
-    private let shelf: VelaStore
+    private var shelf: VelaStore { graph.shelf }
     /// The money path, shared with 053's dApp transactions: one relay client,
     /// one account port, one submit spine. A second spine would be a second
     /// set of rules about the same Safe.
-    private let relayClient: RelayClient
-    private let sendAccountPort: SendAccountPort
-    private let userOpSpine: UserOpSpine
-    /// The account list, kept rather than passed and forgotten: the parallel
-    /// space's door needs it at `.task` time, after `init` has finished.
-    private let accounts: AccountStore
-    /// A completed erase (spec 072). The app answers with a NEW root — every
-    /// machine built again from the emptied store, which is the first run,
-    /// as the web's reload is. Nothing that held the erased wallet in memory
-    /// survives to write it back.
+    private var relayClient: RelayClient { graph.relay }
+    private var sendAccountPort: SendAccountPort { graph.accountPort }
+    private var userOpSpine: UserOpSpine { graph.spine }
+    /// The account list.
+    private var accounts: AccountStore { graph.accounts }
+    /// A completed erase (spec 072). The app answers with a NEW graph and a
+    /// new root — every machine built again from the emptied store, which is
+    /// the first run, as the web's reload is. Nothing that held the erased
+    /// wallet in memory survives to write it back.
     private let onErased: () -> Void
-    @State private var router: Router
-    @State private var model: WelcomeModel
-    @State private var session: SessionController
-    @State private var onboarding: OnboardingModel
+    private var router: Router { graph.router }
+    private var model: WelcomeModel { graph.welcome }
+    private var session: SessionController { graph.session }
+    private var onboarding: OnboardingModel { graph.onboarding }
     /// The routing authority (spec 051). One session, app-wide: a ban is a fact
     /// about the network, and two callers with their own endpoint lists is how
     /// the Expo client got a ban map that disagreed with itself.
-    @State private var pool: RpcPool
+    private var pool: RpcPool { graph.pool }
     /// The home screen's money (spec 051), app-resident: it holds the fetched
     /// holdings, the cached total and a retry timer, and one that died with the
     /// screen would re-read twelve chains on every visit.
-    @State private var wallet: WalletStore
+    private var wallet: WalletStore { graph.wallet }
     /// The home header's account switcher (spec 047's rule, reached here at
     /// last). A flag rather than a route: it is a sheet over the wallet, the
     /// way the rescue overlays are.
     @State private var homeSwitcherOpen = false
     /// The anti-scam core behind the receipt scan — resident, because the
     /// trusted-token set it builds is shared by everything that reads a chain.
-    @State private var trust: TokenTrustStore
-    @State private var activity: ActivityStore
-    @State private var tokens: ManageTokensStore
-    @State private var deposits: ReceiveWatchStore
+    private var trust: TokenTrustStore { graph.trust }
+    private var activity: ActivityStore { graph.activity }
+    private var tokens: ManageTokensStore { graph.tokens }
+    private var deposits: ReceiveWatchStore { graph.deposits }
     /// Which network row opened the receive code.
     @State private var receiveNetwork = 0
     /// The identicon viewer, hosted once for the whole app.
@@ -116,14 +118,14 @@ struct RootView: View {
     /// The networks machine (spec 050), app-resident: it probes endpoints and
     /// holds a search debounce, and one that died with the settings route would
     /// re-probe every chain on each visit.
-    @State private var settings: SettingsStore
+    private var settings: SettingsStore { graph.settings }
     /// The address book's machine (spec 050), app-resident like the session's.
     ///
     /// Constructed here rather than inside the contacts section because a Crux
     /// core's model IS the app's state for that surface: rebuilding it whenever
     /// somebody switches tabs would re-read storage on every visit and throw
     /// away the identity and classification caches the core keeps.
-    @State private var contacts: ContactsStore
+    private var contacts: ContactsStore { graph.contacts }
 
     // Spec 012. `true` only for the first construction in this process — a
     // cold start (FR-008); SwiftUI never rebuilds `RootView`'s State on a
@@ -132,24 +134,24 @@ struct RootView: View {
     /// it survives the wallet body's own re-renders.
     /// The money machines. Resident, because a send that died with its screen
     /// would lose a submitted operation the moment somebody swiped back.
-    @State private var fees: FeeStore
-    @State private var send: SendStore
+    private var fees: FeeStore { graph.fees }
+    private var send: SendStore { graph.send }
     /// The payroll importer (spec 054 US3). Its own machine, beside the send
     /// rather than inside it: parsing and pricing a file is 1,698 lines that
     /// have nothing to do with the send journey, and the two meet at one point
     /// — the applied list of recipients.
-    @State private var batch: BatchStore
+    private var batch: BatchStore { graph.batch }
     /// Money in flight, followed for as long as the app exists.
-    @State private var tracker: TrackerStore
-    @State private var notifier: TrackerNotifier
+    private var tracker: TrackerStore { graph.tracker }
+    private var notifier: TrackerNotifier { graph.notifier }
     /// The browser (spec 053). App-resident like every other wallet-state
     /// machine, and for a sharper reason than most: a page keeps running, a
     /// request stays in flight, and a dApp that reloaded every time somebody
     /// glanced at their balance would lose a half-finished swap.
-    @State private var browser: BrowserController
+    private var browser: BrowserController { graph.browser }
     /// Whether the network came back (spec 082 RE3): the pool's calls and
     /// the system path, through the core's `netHealthStep`.
-    @State private var netWatch: NetWatch
+    private var netWatch: NetWatch { graph.netWatch }
     /// The chain notice's Retry is out (spec 082 RF4): busy until its one
     /// read settles.
     @State private var chainRetrying = false
@@ -219,7 +221,7 @@ struct RootView: View {
     /// every holding and which subset is on screen is a render decision.
     @State private var sendClassFilter = "all"
     @State private var sendAlert: (title: String, body: String)?
-    @State private var flows: FlowNav
+    private var flows: FlowNav { graph.flows }
     /// Which section of the signed-in shell is showing (spec 050). A debug
     /// launch that names a page (`VELA_URL`) starts where that page opens, so
     /// a device pass can reach it through Web Inspector without a tap.
@@ -258,18 +260,18 @@ struct RootView: View {
     /// The one document layer: pickers, save panels and the share sheet. Shared
     /// by the payroll importer and the address book, because they are the same
     /// platform affordance asked for twice.
-    @State private var documents: UIKitDocumentPorts
+    private var documents: UIKitDocumentPorts { graph.documents }
     /// The `/pay` link machine (spec 056). Resident: a link can arrive before
     /// the wallet has finished opening, and the verdict has to survive that.
-    @State private var paymentRequest: PaymentRequestStore
+    private var paymentRequest: PaymentRequestStore { graph.paymentRequest }
     /// What this person chose about how the app looks and counts (spec 056).
     /// No machine owns it — storage keys with a reader, on the same spellings
     /// every client writes.
-    @State private var preferences: Preferences
+    private var preferences: Preferences { graph.preferences }
     /// The camera behind the scanner (spec 055). App-resident so the session
     /// survives the surface's own rebuilds — reconfiguring it drops frames for
     /// a beat, which on a viewfinder reads as the camera stuttering.
-    @State private var camera = CameraScanner()
+    private var camera: CameraScanner { graph.camera }
     /// What the photo library had to say, when it had nothing.
     @State private var scanNotice: (title: String, body: String)?
     /// Whether the app is inside the parallel space, for the badge.
@@ -284,327 +286,17 @@ struct RootView: View {
     /// Welcome content fades IN as the launch lockup fades OUT (FR-012).
     @State private var pageOpacity: Double
 
-    /// `firstLaunch` is `false` for the root an erase rebuilt: no launch
-    /// lockup, and no DEBUG account seed writing a wallet back into the store
-    /// the person just emptied.
-    init(loc: Loc, firstLaunch: Bool = true, onErased: @escaping () -> Void = {}) {
-        self.loc = loc
+    /// `graph.firstLaunch` is `false` for the root an erase rebuilt: no
+    /// launch lockup.
+    init(graph: AppGraph, onErased: @escaping () -> Void = {}) {
+        // Nothing is built here and no observable state is read (issue #483):
+        // SwiftUI runs this again whenever the scene's content is evaluated,
+        // and every object the root works with is the graph's, by reference.
+        self.graph = graph
+        self.loc = graph.loc
         self.onErased = onErased
-        let router = Router()
-        _router = State(initialValue: router)
-        let flowNav = FlowNav()
-        _flows = State(initialValue: flowNav)
-        let store = AccountStore()
-        self.accounts = store
-        let session = SessionController(store: store)
-        _session = State(initialValue: session)
-        let shelf = VelaStore()
-        self.shelf = shelf
-        // Before the session machine boots: it reads `vela.accounts` on its
-        // first event, and a record written after that is not seen until a
-        // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
-        if firstLaunch { DevAccountSeed.applyIfRequested(store: shelf) }
-        // An older shell's spellings of the five preferences, brought to the
-        // shared record before anything reads them (spec 072). Nothing to do
-        // for a store that already agrees, so this is safe every launch.
-        Preferences.migrate(shelf)
-        // One pool, built before anything that reads a chain — the settings
-        // machines included, since spec 051 put the fiat feeds behind it.
-        let pool = RpcPool(store: shelf, accounts: store)
-        _pool = State(initialValue: pool)
-        // Through the three layers (067): the index's answers are PROVED against
-        // the registry contract, and the contract answers when the index cannot.
-        let onboarding = OnboardingModel(
-            session: session, store: store,
-            registry: RegistryClient(resolver: RegistryResolver(ethCall: { [pool] chainId, to, data in
-                let outcome = await pool.call(
-                    chainId: chainId, method: "eth_call",
-                    params: [["to": to, "data": data], "latest"]
-                )
-                guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
-                else { return nil }
-                return hex
-            }))
-        )
-        _onboarding = State(initialValue: onboarding)
-        // ONE name resolver for the whole app: the address book and the
-        // activity feed ask the same question about the same addresses, and two
-        // resolvers would mean two caches and two names for one person.
-        let identity = RecipientIdentity(store: shelf, pool: pool, accounts: store)
-        // The money path. One relay client, one spine, one fee session — the
-        // spine is shared with 053's dApp transactions, which is why it is
-        // built here rather than inside the send store.
-        let relay = RelayClient(
-            port: PoolRelayPort(pool: pool),
-            builtinBase: { await RpcEndpoints.builtinBundlerBase(accounts: store) }
-        )
-        self.relayClient = relay
-        let port = SendAccountPort(accounts: store)
-        self.sendAccountPort = port
-        let spine = UserOpSpine(
-            relay: relay,
-            accounts: port,
-            signer: { ParallelSpaceHook.signer(passkey: PasskeyExecutor()) },
-            measureCall: FeeExecutor.measuring(with: pool)
-        )
-        self.userOpSpine = spine
-        // The quote measures the inner calls the way the spine does at submit,
-        // so the fee prices the `callGasLimit` the op will carry.
-        let feeStore = FeeStore(relay: relay, accounts: port, measureCall: FeeExecutor.measuring(with: pool))
-        _fees = State(initialValue: feeStore)
-        _contacts = State(initialValue: ContactsStore(
-            store: shelf, identity: identity, pool: pool
-        ))
-        // `vela.serviceEndpoints` has two writers; the executor reaches it
-        // through this same `AccountStore` so onboarding's endpoint override
-        // survives a settings write (data-model §5).
-        let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
-        // The logos come from the person's chain-data endpoint, and follow it
-        // the moment Settings saves a new one — it used to take a relaunch.
-        settingsStore.onEndpointsWritten = { endpoints in Marks.adopt(endpoints) }
-        _settings = State(initialValue: settingsStore)
-        // ONE trusted page for the whole app (specs 075, 102): an account's
-        // signatures whose venue is a page, and the ceremonies of a wallet on
-        // its own domain, go through the same object — which is what keeps
-        // "one page, one session, one sheet" true; two instances would be two
-        // sheets racing to present over each other. It opens nothing this
-        // phone did not check first (`SignerPageChecks`, R6).
-        let trustedSigner = TrustedSigner(loc: loc, checks: .shared)
-        // "Trust this version" — on Settings → Signing pages, the hand-off
-        // card or the page's own sheet — is stored on that page by the one
-        // signing pages machine (D-15), never in a list of the checker's own.
-        SignerPageChecks.shared.recordTrust = { [settingsStore] url, version in
-            await settingsStore.trustSigningPage(url: url, version: version)
-        }
-        spine.trustedSigner = trustedSigner
-        onboarding.trustedSigner = trustedSigner
-        onboarding.words = { [loc] key in loc.t(key) }
-        // Spec 102: the choosers' "Use a trusted signing page" lists the pages
-        // Settings keeps — read by the same machine, so the two never differ.
-        onboarding.signingPages = { [settingsStore] in settingsStore.signingPages }
-        onboarding.openSigningPages = { [settingsStore] in settingsStore.openSigningPages() }
-        onboarding.addSigningPage = { [settingsStore] url in settingsStore.addSigningPage(url: url) }
-        // The balance read publishes what it found here, and the receipt scan
-        // reads it: which chains this account uses, which tokens it holds, and
-        // what they were worth. Web gets the same three facts from its
-        // `fetchTokens` cache; there is no such cache here, so it is explicit.
-        let held = HeldTokens()
-        let trust = TokenTrustStore(store: shelf, pool: pool, accounts: store, held: held)
-        _trust = State(initialValue: trust)
-        let activityStore = ActivityStore(
-            store: shelf, accounts: store, held: held, trust: trust, identity: identity
-        )
-        _activity = State(initialValue: activityStore)
-        // A saved token has to reach the balances, so the core's
-        // "invalidate the token cache" becomes a re-read here — there is no
-        // cache on this client, only a fetch.
-        // The registry's stablecoins and wrapped coin join every balance
-        // read (spec 082 RE9, G24): USDC on Base is counted, as on the other
-        // clients.
-        let wallet = WalletStore(store: shelf, pool: pool, held: held, registry: ChainTokens(accounts: store))
-        _wallet = State(initialValue: wallet)
-        // An incoming transfer the feed just found: the hero follows (#188).
-        activityStore.onNewItem = { [weak wallet] in wallet?.refresh(pull: false) }
-        _tokens = State(initialValue: ManageTokensStore(
-            store: shelf, pool: pool,
-            onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
-        ))
-        // The tracker, before the send machine that hands off to it.
-        let notify = TrackerNotifier(loc: loc)
-        _notifier = State(initialValue: notify)
-        let trackerExecutor = TrackerExecutor(
-            store: shelf, relay: relay,
-            ports: TrackerExecutor.Ports(
-                notifyConfirmed: { [weak notify] hash, chain, tx in
-                    notify?.confirmed(userOpHash: hash, chainId: chain, txHash: tx)
-                },
-                // The authentic receipt logs, to the ONE entry point that may
-                // admit a token. A sign-time simulation never may.
-                receiptLogs: { [weak trust] from, chain, logs in
-                    trust?.receiptLogsConfirmed(from: from, chainId: chain, logs: logs)
-                },
-                recordsPatched: { [weak activityStore] in activityStore?.reconciled() },
-                // An op of ours landed — a send or a page's — so the figure on
-                // the home is read again, without a pull (spec 082 RE8, G26).
-                holdingsMoved: { [weak wallet] _ in wallet?.refresh(pull: false) }
-            )
-        )
-        let trackerStore = TrackerStore(executor: trackerExecutor)
-        _tracker = State(initialValue: trackerStore)
-        // The browser. Its reads go through the SAME pool the wallet uses, so
-        // a page asking a chain something gets this person's endpoints, their
-        // bans and their cooldowns — never an endpoint the page named.
-        let browserController = BrowserController(store: shelf)
-        browserController.ports = BrowserController.Ports(
-            poolCall: { [weak pool] chainId, method, params, bundler in
-                guard let pool else { return .unanswered(rateLimited: false) }
-                switch await pool.call(
-                    chainId: chainId, method: method, params: params,
-                    kind: bundler ? "bundler" : "rpc"
-                ) {
-                case .ok(let body):
-                    return .answered(["result": body ?? NSNull()])
-                case .rpcError(let code, let message):
-                    // The node's own sentence, verbatim. A page that shows its
-                    // user "execution reverted: insufficient allowance" is a
-                    // page that can be debugged; one that shows "-32603" is not.
-                    return .answered(["error": ["code": code ?? -32603, "message": message]])
-                // Spec 099 FR-009: the pool's word on why nobody answered —
-                // every endpoint throttling is not the network being down.
-                case .failed(let rateLimited):
-                    return .unanswered(rateLimited: rateLimited)
-                case .rangeCap:
-                    return .unanswered(rateLimited: false)
-                }
-            },
-            // A page answered with a user-operation hash polls for its receipt
-            // by that hash; the core asks here which transaction carried it —
-            // the relay's own `eth_getUserOperationReceipt`, the lookup the
-            // tracker and Android's `RelayClient.userOpReceipt` use.
-            resolveUserOp: { [relay] chainId, userOpHash in
-                guard case .resolved(_, let txHash, _, _) = await relay.userOpReceipt(
-                    chainId: chainId, userOpHash: userOpHash
-                ), !txHash.isEmpty else { return nil }
-                return txHash
-            },
-            writeRecords: { [weak activityStore] rows in
-                TxRecords.writeRecords(rows, store: shelf)
-                activityStore?.reconciled()
-            }
-        )
-        _browser = State(initialValue: browserController)
-        // The network came back (spec 082 RE3): every failed page starts its
-        // count again and the one in front is asked for again, the logos a
-        // dead network kept away are asked for again, and the balance is
-        // read — nobody has to tap anything.
-        let netWatch = NetWatch()
-        // Health per source (spec 082 RJ14): each call names its chain.
-        pool.onOutcome = { [weak netWatch] outcome, chainId in
-            netWatch?.observe(outcome, chainId: chainId)
-        }
-        netWatch.onCameBack = { [weak browserController, weak wallet] in
-            browserController?.networkCameBack()
-            LogoStore.networkCameBack()
-            wallet?.refresh(pull: false)
-        }
-        netWatch.watchPath()
-        _netWatch = State(initialValue: netWatch)
-        // The send machine, last: it reads the holdings the balance machine
-        // found and asks the fee session for a quote, so both must exist.
-        let metadata = TokenMetadata(store: shelf, pool: pool)
-        let sendExecutor = SendExecutor(
-            store: shelf, relay: relay, pool: pool, spine: spine, accounts: port,
-            fees: feeStore, identity: identity, metadata: metadata, accountStore: store,
-            balances: { [weak wallet] in wallet?.balance },
-            networks: { [weak settingsStore] in settingsStore?.networkAdmin },
-            // The asset list's own rounds (spec 078): a flow opened before the
-            // dashboard settled for this account waits for its first round —
-            // booting it if nothing has — instead of answering "could not load";
-            // a round that reached nothing is read once more first.
-            holdingsRound: { [weak wallet] address in wallet?.settledRound(for: address) },
-            openHoldings: { [weak wallet] address in wallet?.open(address: address) },
-            ports: SendExecutor.Ports(
-                // A send the relay accepted is the tracker's from that moment.
-                // The permission is asked HERE — at the first submit, never at
-                // launch — because this is the first time there is anything to
-                // notify about.
-                trackSubmitted: { [weak trackerStore, weak notify] submission in
-                    notify?.askOnceIfNeeded()
-                    trackerStore?.submitted(submission)
-                },
-                // A write-ahead op proven never sent (spec 082 RJ1): the
-                // tracker drops it, as the store already has.
-                trackWithdrawn: { [weak trackerStore] hash, ids in
-                    trackerStore?.withdrawn(userOpHash: hash, recordIds: ids)
-                },
-                // The core's `haptic { kind }`: money left, or a refusal the
-                // person should feel. Unwired until 074, so an iPhone sent in
-                // silence where Android buzzed.
-                haptic: { kind in VelaHaptic(sendKind: kind).play() },
-                // The core's own exit. `Done` on a receipt, and `close` on any
-                // refusal that ends the attempt, both land here.
-                closed: { [weak flowNav] in flowNav?.close() },
-                // Leaving is what re-arms `Open`. Without it a second visit to
-                // 转账 would render the machine's last state instead of a
-                // fresh picker.
-                refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) },
-                // The rows changed on disk — written ahead, admitted or taken
-                // back (spec 082 RJ1): the feed reads the store again.
-                recordsPersisted: { [weak activityStore] in activityStore?.reconciled() }
-            )
-        )
-        let sendStore = SendStore(executor: sendExecutor)
-        _send = State(initialValue: sendStore)
-        // The tracker's verdict, back to the SEND machine — the other half of
-        // this wallet watching the same operation.
-        //
-        // Installed here rather than in the tracker's own initialiser because
-        // the tracker is built FIRST (the send machine hands off to it), which
-        // is the same ordering `SendStore` solves for its own two ports.
-        //
-        // Without this the receipt screen sat on "submitted" while the
-        // notification said "confirmed": two answers about one payment, on one
-        // phone.
-        trackerExecutor.ports.notifyConfirmed = { [weak notify] hash, chain, tx in
-            notify?.confirmed(userOpHash: hash, chainId: chain, txHash: tx)
-        }
-        // Every verdict — confirmed, failed, not sent, held, acknowledged —
-        // reaches the receipt through the core's one mapping (spec 082), once.
-        trackerStore.onView = { [weak sendStore] view in sendStore?.trackerChanged(view) }
-        // The payroll importer. Its fiat column is priced through the DISPLAY
-        // machine's own waterfall — chain feed, then endpoint, then nothing —
-        // so a currency the wallet cannot price stays unpriced here too. A
-        // fallback of 1 would pay out the fiat figure in tokens.
-        let documentPorts = UIKitDocumentPorts()
-        _documents = State(initialValue: documentPorts)
-        // Read before the first frame: a theme or a text size adopted one
-        // render late is a visible flash of the wrong one.
-        _paymentRequest = State(initialValue: PaymentRequestStore(
-            executor: PaymentRequestExecutor(store: shelf)
-        ))
-        _launching = State(initialValue: firstLaunch && !LaunchAnimation.isDisabled)
-        _pageOpacity = State(initialValue: firstLaunch && !LaunchAnimation.isDisabled ? 0 : 1)
-        let prefs = Preferences(store: shelf)
-        prefs.boot()
-        // Before the first frame, and before the welcome model is built from
-        // it: the stored language decides which words this launch uses. Until
-        // 058 nothing read `vela.language` at all.
-        loc.apply(prefs.language)
-        // Which chain-data endpoint the logos come from (058). The person's
-        // own endpoint wins; an empty one is the built-in endpoint, as the
-        // core reads it. Settings' saves re-adopt it (`onEndpointsWritten`).
-        Marks.adopt(accounts.loadServiceEndpoints())
-        Formats.apply(prefs)
-        UiScale.apply(prefs)
-        // Settings' debug mode (spec 091), before the browser boots: its core
-        // hears it right behind `start`, and every tab's script follows it.
-        // An erase builds a new root over the emptied store, so this reads
-        // hidden — off — again.
-        browserController.setDebugMode(prefs.debugMode.isOn)
-        _preferences = State(initialValue: prefs)
-        _batch = State(initialValue: BatchStore(executor: BatchExecutor(
-            fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
-            documents: { documentPorts }
-        )))
-        // The receive screen's watcher. A detected deposit buzzes and re-reads
-        // the balances, so the figure behind the code is the new one.
-        _deposits = State(initialValue: ReceiveWatchStore(
-            store: shelf, pool: pool, held: held,
-            onDeposit: { [weak wallet] in wallet?.refresh(pull: false) }
-        ))
-        _model = State(initialValue: WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
-            switch intent {
-            case .createWallet:
-                router.path.append(.create)
-            case .openSignIn:
-                // Open the sign-in method picker — the person then chooses the
-                // authenticator, and the login machine runs the "who are you?"
-                // ceremony on that route. The picker rides the ONE onboarding
-                // sheet, so its choice can hand straight to the PIN/touch prompts
-                // without a sheet dismissing between them.
-                onboarding.showSignInMethods = true
-            }
-        })
+        _launching = State(initialValue: graph.firstLaunch && !LaunchAnimation.isDisabled)
+        _pageOpacity = State(initialValue: graph.firstLaunch && !LaunchAnimation.isDisabled ? 0 : 1)
     }
 
     private var scheme: ColorScheme {
@@ -949,6 +641,12 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .correctness:
+            #if DEBUG
+            CorrectnessGalleryScreen(loc: loc, state: PageOverride.state ?? "held-sheet")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -1037,24 +735,11 @@ struct RootView: View {
                 .themed(scheme)
             }
             .task {
-                // Before the session machine's first event, which is when it
-                // reads `vela.accounts`: a record written after that is not
-                // seen until a relaunch. The space upserts ONE record and
-                // removes exactly that one on the way out (FR-003) — this door
-                // is opened on a phone that holds the founder's real wallet.
-                await ParallelSpaceHook.applyIfRequested(store: shelf, accounts: accounts)
+                // The graph's launch sequence — the parallel space's door, the
+                // session, the pool, the tracker — once per graph, whichever
+                // root gets here first (`AppGraph.launch`).
+                await graph.launch()
                 parallelSpace = ParallelSpaceHook.isActive
-                session.boot()
-                // The endpoint pool too: the wallet is not the only screen that
-                // reads a chain. A launch that opens on 探索 (a link, a restored
-                // tab) and booted the pool with the wallet screen answered every
-                // page read "No endpoint answered" — device-found (spec 070).
-                pool.boot()
-                // At LAUNCH, not with a screen: what the tracker follows
-                // outlives every screen. The pending set is derived from the
-                // transaction store, so a force-quit mid-send loses nothing —
-                // the next launch picks it up here.
-                tracker.boot()
             }
             // D-14: every signing page in use is re-checked in the background
             // when the core says it is due — on start, and hourly while the
@@ -1160,6 +845,21 @@ struct RootView: View {
                 .onChange(of: fees.view?.busy) { _, busy in
                     if let busy { send.feeBusyChanged(busy) }
                 }
+                // …and whether the fee failed (`FeeView.failure`, a re-ask after
+                // one included): the send machine holds the confirm on it and
+                // drops the figure it kept, so the confirm never opens between
+                // the core's re-asks on a figure the fee machine discarded.
+                // Said again to every new journey.
+                // Only a failure of the form's own question counts (PR 2
+                // polish): right after a token switch the old chain's failure
+                // is no reason to hold this chain's confirm.
+                .modifier(FeeFailedBridge(
+                    said: FeeFailedBridge.Said(
+                        failed: SendLive.formFailure(fees.view, view: send.view) != nil,
+                        journey: send.journey
+                    ),
+                    tell: { failed in send.feeFailedChanged(failed) }
+                ))
                 // …and the card's coin in force, which names the fee row's coin
                 // while no estimate is in hand (`SendView.fee_coin`).
                 .modifier(FeeTokenBridge(
@@ -1831,6 +1531,13 @@ struct RootView: View {
 
         // The next request takes the sheet; the last one's ending goes.
         signingEnding = nil
+        // One pool under every read this sheet makes (issue #483): the relay
+        // and spine are the graph's, built over the graph's pool, so this
+        // holds by construction — and says so loudly if a change ever breaks it.
+        if relayClient.boundPool !== pool {
+            VelaLog.failure(.sign, kind: "orphan_pool", "the signing relay is not on the app's pool")
+            assertionFailure("the signing sheet's relay reads through another request pool (#483)")
+        }
         let controller = SigningController(
             wallet: (address: session.view.address, credentialId: credentialId),
             relay: relayClient,
@@ -1888,7 +1595,12 @@ struct RootView: View {
         // The answer follows what the tracker knows (spec 082 RJ4): every
         // view reaches this request for as long as it lives — a sheet closed
         // mid-submit included (`retiredSigning`), whose page still waits.
-        tracker.follow(controller) { [weak controller] view in controller?.trackerChanged(view) }
+        tracker.follow(controller) { [weak controller, tracker] view in
+            controller?.trackerChanged(view)
+            // The ops holding a nonce (PR 2 §3): the sheet's confirm waits
+            // for this account's previous op on the request's chain.
+            controller?.inFlightChanged(tracker.inFlightOpsJson)
+        }
     }
 
     // MARK: - Split (spec 054)
@@ -2003,7 +1715,7 @@ struct RootView: View {
                                 // rows, narrowed by the core to this address
                                 // (`contact_filter_changed`, spec 093).
                                 rows: activity.feed?.contactRows ?? [],
-                                hidden: wallet.balance?.hidden ?? false, loc: loc,
+                                hidden: activity.feed?.hidden ?? (wallet.balance?.hidden ?? false), loc: loc,
                                 form: contactForm(), groupPick: groupPick,
                                 networks: walletNetworks
                             ),
@@ -2507,6 +2219,12 @@ struct RootView: View {
     /// visibly so.
     private func flowModel(_ state: FlowStateId) -> FlowScreenModel {
         var model = WalletFlowFixtures.build(state, loc: loc)
+        // The fee coins opened from the confirm — a fee that would fail,
+        // "Pay with another coin" (PR 2 polish) — sit over the confirm the
+        // person is on, never over the form they already left.
+        if state == .sd2f, let view = send.view, view.stage == .confirm {
+            model.base = WalletFlowFixtures.build(SendLive.flowState(view, feeSheetOpen: false), loc: loc).base
+        }
         let address = session.view.address
         // The receive screens first, because they are the ones where a fixture
         // is not embarrassing but dangerous: money sent to the drawn address is
@@ -2540,7 +2258,9 @@ struct RootView: View {
         if case .history(let history) = model.base, let feed = activity.feed {
             model.base = .history(FlowsLive.history(
                 feed, selected: chainFilter, on: history, loc: loc,
-                hidden: wallet.balance?.hidden ?? false, networks: walletNetworks
+                // The feed's own flag (PR 2), not one threaded from the
+                // balance machine.
+                hidden: feed.hidden, networks: walletNetworks
             ))
         }
         if case .txDetail(let detail)? = model.sheet, let feed = activity.feed,
@@ -2549,6 +2269,7 @@ struct RootView: View {
                 item,
                 record: feed.transactions.first { $0.id == item.id },
                 on: detail, loc: loc,
+                hidden: feed.hidden,
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
@@ -2561,7 +2282,9 @@ struct RootView: View {
                 balance.tokens[assetRow],
                 feed: activity.feed,
                 display: WalletLive.Display.from(settings.currency),
-                on: detail, loc: loc, networks: walletNetworks
+                on: detail, loc: loc,
+                hidden: balance.hidden || (activity.feed?.hidden ?? false),
+                networks: walletNetworks
             ))
         }
         // The send journey. SD1's rows are the holdings the balance machine
@@ -3074,7 +2797,6 @@ struct RootView: View {
             handoffKeyLabel: live?.venueKeyLabel,
             handoffLine: live?.venuePage.map { SignerPageChecks.shared.line(for: $0) },
             handoffPageName: live?.venuePage.flatMap(savedPageName),
-            feeStartFailure: live?.quoteStartFailure,
             networks: walletNetworks
         )
     }
@@ -3418,7 +3140,11 @@ struct RootView: View {
     /// The refusal the core raised, in the core's words.
     private var sendRefusal: FlowAlertModel? {
         guard let kind = send.alert else { return nil }
-        let text = SendLive.alertText(kind, loc: loc)
+        // The network the estimate was for, by the wallet's own name for it —
+        // the body may say it could not be reached (PR 2 note 13).
+        let chain = (send.view?.selectedToken?.chainId ?? send.view?.multiChainId)
+            .flatMap { walletNetworks.meta($0)?.displayName } ?? ""
+        let text = SendLive.alertText(kind, loc: loc, chain: chain)
         return FlowAlertModel(title: text.title, message: text.body, dismiss: loc.t("common.gotIt"))
     }
 
@@ -3758,6 +3484,9 @@ struct RootView: View {
         model = SettingsLive.withAccounts(
             session: session.view,
             balances: wallet.balance?.switcher.balances ?? [],
+            // PR 2: hidden, the core withholds the figures — every row and
+            // the total draw the mask instead of summing nothing to $0.00.
+            hidden: wallet.balance?.switcher.hidden ?? false,
             display: WalletLive.Display.from(settings.currency),
             on: model,
             loc: loc
@@ -4267,6 +3996,8 @@ enum PageOverride {
         case settings, settingsLive, settingsGallery, explore, signing
         /// Spec 102's hand-off boards (`HandoffGalleryScreen`).
         case handoff
+        /// PR 2's boards (`CorrectnessGalleryScreen`).
+        case correctness
     }
 
     static let page: Page? = {
@@ -4290,6 +4021,7 @@ enum PageOverride {
         case "explore": .explore
         case "signing": .signing
         case "handoff": .handoff
+        case "pr2": .correctness
         default: nil
         }
     }()
@@ -4363,6 +4095,22 @@ private struct FeeTokenBridge: ViewModifier {
 
     func body(content: Content) -> some View {
         content.onChange(of: said, initial: true) { _, said in tell(said.token, said.pricing) }
+    }
+}
+
+/// Whether the fee session's fee failed, into the send machine
+/// (`fee_failed_changed`) — on every change, and to every new journey.
+private struct FeeFailedBridge: ViewModifier {
+    struct Said: Equatable {
+        let failed: Bool
+        let journey: Int
+    }
+
+    let said: Said
+    let tell: (Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChange(of: said, initial: true) { _, said in tell(said.failed) }
     }
 }
 

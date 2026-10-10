@@ -18,7 +18,6 @@ import uniffi.vela_core_uniffi.NativeQuoteGroup
 import uniffi.vela_core_uniffi.bestNativeDexPrice
 import uniffi.vela_core_uniffi.firstGroupedQuotePrice
 import uniffi.vela_core_uniffi.chooseNativePrice
-import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
 import uniffi.vela_core_uniffi.BalanceReadSlot
 import uniffi.vela_core_uniffi.balanceReadPlan
 import uniffi.vela_core_uniffi.balanceChainReadDeadlineMs
@@ -53,8 +52,12 @@ class BalanceExecutor(
     private val pool: RpcPool,
     private val networks: StateFlow<NetView>,
     private val store: KeyValueStore,
-    /** What a chain holds and how to price it; `null` = its document is unavailable. */
-    private val chainInfo: suspend (Int) -> ChainInfo? = { null },
+    /**
+     * What a chain holds and how to price it — its registry document, read
+     * ([ChainData.read]): there, absent (no such document), or unread (no
+     * answer to go on). Absent by default: nothing to add to the plan.
+     */
+    private val chainInfo: suspend (Int) -> ChainDoc = { ChainDoc.Absent },
     /** Chainlink's mainnet feeds, the last rung of the ladder. */
     private val mainnetPrices: suspend () -> Map<String, Double> = { emptyMap() },
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
@@ -122,8 +125,11 @@ class BalanceExecutor(
         // NOT "settled with nothing": the core keeps the last-known tokens and
         // total on an error, so a person watching the screen loses a skeleton
         // rather than their balances.
+        //
+        // It threw inside this shell (PR 2 note 11): the fetch never got as far
+        // as a chain to blame — Vela's own fault, never "can't reach".
         is BalanceOperation.FetchTokens ->
-            BalanceShellResult.FetchErrored(operation.address, operation.pull)
+            BalanceShellResult.FetchErrored(operation.address, operation.pull, internal = true)
         is BalanceOperation.FetchAccountAssets ->
             BalanceShellResult.AccountAssetsFetched(operation.address, null)
         is BalanceOperation.ReadBalanceCache ->
@@ -155,6 +161,7 @@ class BalanceExecutor(
             "chains" to networks.value.networks.size,
             "held" to holdings.tokens.size,
             "failed" to holdings.failed.size,
+            "internal" to holdings.internal.size,
             "rateLimited" to pool.view.value.rate_limited_chains.size,
         )
         return BalanceShellResult.FetchSettled(
@@ -166,6 +173,7 @@ class BalanceExecutor(
             // one look identical from here without it.
             rate_limited_chain_ids = pool.view.value.rate_limited_chains,
             read_chain_ids = holdings.read,
+            internal_chain_ids = holdings.internal,
             now_ms = now(),
         )
     }
@@ -175,6 +183,8 @@ class BalanceExecutor(
         val failed: List<Int>,
         /** Every chain asked (spec 092): answered empty is not "not read yet". */
         val read: List<Int> = emptyList(),
+        /** The failed chains whose read never left the app (PR 2 note 11) — a subset of [failed]. */
+        val internal: List<Int> = emptyList(),
     )
 
     /**
@@ -191,6 +201,11 @@ class BalanceExecutor(
         val chainId: Int,
         val answered: Boolean,
         val tokens: List<BalanceToken>,
+        /**
+         * The read threw inside this shell before anything was sent (PR 2
+         * note 11): not answered, and not the network's doing either.
+         */
+        val internal: Boolean = false,
     )
 
     /** What a slot in the batch is, which decides how it gets priced. */
@@ -254,14 +269,15 @@ class BalanceExecutor(
         address: String,
         streaming: Boolean = false,
     ): Holdings = coroutineScope {
-        val rows = networks.value.networks.filter { row ->
-            // Tempo has no native coin — its gas is a TIP-20 stablecoin — and
-            // its RPC answers the SAME constant for every address while calling
-            // it `USD`. Querying it and letting a peg price that constant puts
-            // ~4×10^57 dollars into somebody's total. The predicate is the
-            // core's; this is not a "that looks too big" threshold.
-            !isChainWithoutNativeCoin(row.chain_id.toUInt())
-        }
+        // Every network, Tempo included (PR 2 polish): a chain with no native
+        // coin — its gas is a TIP-20 stablecoin, and its RPC answers the SAME
+        // constant for every address to `eth_getBalance` while calling it
+        // `USD`, ~4×10^57 dollars if a peg priced it — is read by the core's
+        // plan, which has NO native slot for it (`balanceReadPlan`), so its
+        // stablecoins are counted and that constant is never asked for (nor by
+        // the native-only fallback, [readChain]). It used to be skipped whole,
+        // and its holdings never reached the home.
+        val rows = networks.value.networks
 
         val chainlinkUsd = runCatching { mainnetPrices() }.getOrDefault(emptyMap())
 
@@ -273,7 +289,17 @@ class BalanceExecutor(
                 // deadline it is a chain that did not answer this round (it
                 // joins the unreachable list), and the others land regardless.
                 val answer = withTimeoutOrNull(chainDeadlineMs) {
-                    readChain(address, row.chain_id.toInt(), row, chainlinkUsd)
+                    // A read that threw HERE never reached the chain (PR 2
+                    // note 11): the chain is not "unreachable" — Vela failed
+                    // before it asked. Said as that, never "Can't reach …".
+                    try {
+                        readChain(address, row.chain_id.toInt(), row, chainlinkUsd)
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (fault: Throwable) {
+                        VelaLog.failure("balance.read", "the read failed inside the app", fault)
+                        ChainAnswer(row.chain_id.toInt(), answered = false, tokens = emptyList(), internal = true)
+                    }
                 } ?: ChainAnswer(row.chain_id.toInt(), answered = false, tokens = emptyList())
                 if (streaming && answer.tokens.isNotEmpty()) {
                     stream(BalanceEvent.ChainAssetsArrived(address, answer.tokens))
@@ -286,6 +312,7 @@ class BalanceExecutor(
             tokens = results.flatMap { it.tokens },
             failed = results.filterNot { it.answered }.map { it.chainId },
             read = results.map { it.chainId },
+            internal = results.filter { it.internal }.map { it.chainId },
         )
     }
 
@@ -304,7 +331,8 @@ class BalanceExecutor(
         row: NetNetworkRow,
         mainnetPrices: Map<String, Double>,
     ): ChainAnswer {
-        val chain = chainInfo(chainId)
+        val doc = chainInfo(chainId)
+        val chain = (doc as? ChainDoc.Doc)?.info
         val nativeSymbol = chain?.native?.symbol ?: row.native_symbol
         val nativeName = chain?.native?.name ?: row.display_name
         val nativeDecimals = chain?.native?.decimals ?: NATIVE_DECIMALS
@@ -321,6 +349,20 @@ class BalanceExecutor(
         // turns each slot into its calls.
         val stables = chain?.stables.orEmpty()
         val plan = readPlan(chainId, stables, chain?.wrappedNative, customTokens(chainId))
+        // The core's plan reads no native coin on a chain that has none (Tempo).
+        val readsNative = plan.any { it.kind == "native" }
+        // PR 2 polish: such a chain's money is all in its registry's
+        // stablecoins. With its document UNREAD (no answer — not "no such
+        // document"), there is nothing honest to read: the chain was not
+        // read this round. It fails like a chain that did not answer — its
+        // last holdings carried, on the failed list — never "answered,
+        // holds nothing", a $0.00 over money nobody could see. An ABSENT
+        // document is an answer (nothing listed), and a chain with a coin of
+        // its own keeps today's degrade: its coin is still read.
+        if (!readsNative && doc == ChainDoc.Unread) {
+            VelaLog.event("balance.plan", "registry unread, chain not read", "chain" to chainId)
+            return ChainAnswer(chainId, answered = false, tokens = emptyList())
+        }
         plan.forEach { slot ->
             val contract = slot.contract
             when (slot.kind) {
@@ -416,8 +458,15 @@ class BalanceExecutor(
             calls.add(Abi.Call(feed, Abi.encodeLatestRound()))
         }
 
+        // The batch failed: the native coin the plain way — only where the plan
+        // reads one. A chain with none is not asked `eth_getBalance` (its
+        // answer is a constant, not a balance): it did not answer this round.
         val results = batch(chainId, calls)
-            ?: return nativeOnlyFallback(address, chainId, nativeSymbol, nativeName, nativeDecimals)
+            ?: return if (readsNative) {
+                nativeOnlyFallback(address, chainId, nativeSymbol, nativeName, nativeDecimals)
+            } else {
+                ChainAnswer(chainId, answered = false, tokens = emptyList())
+            }
 
         // -- what the chain answered --
 

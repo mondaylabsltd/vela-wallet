@@ -294,12 +294,42 @@ pub fn approved(
             return Some(out);
         }
         let mut captions = lead();
+        // PR 2 polish: the relay turned it back because the account's
+        // previous operation on this network still holds the nonce. Nothing
+        // was sent and nothing went wrong: "Not sent yet", calmly — the
+        // waiting disc, never the failure's red — over the core's sentence
+        // for what to do, with Try again beside the close.
+        if sign.failure_not_sent {
+            captions.push(crate::flows::refusal_of(
+                &s.refusals,
+                sign.failure_refusal_key.as_deref(),
+            ));
+            let mut out = receipt(
+                ReceiptStage::NotSent,
+                s.not_sent_title.clone(),
+                captions,
+                s.receipt_done.clone(),
+                !sign.failure_retryable,
+            );
+            out.retry = sign.failure_retryable.then(|| s.retry.clone());
+            return Some(out);
+        }
         // Spec 082 RJ3: the relay refused it — nothing was sent and sending
         // again meets the same refusal, so no "try again". A message goes
         // nowhere: "the transaction couldn't be submitted" is not what failed
         // (083 H4), and nothing went on chain.
-        captions.push(if sign.failure_refused {
-            s.refused.clone()
+        //
+        // PR 2 note 9: why the relay did not take it is the core's one
+        // sentence for both ways a refusal arrives (`failure_refusal_key`) —
+        // at submit (another operation of the account holds the nonce, which
+        // may be tried again, or a plain refusal) and after it (the tracker
+        // entry's reason, forwarded with `OpTracked`: a nonce another
+        // operation used is "went first", only a fee refusal is the fee
+        // sentence). One source, never a second reading of the tracker here.
+        captions.push(if let Some(key) = sign.failure_refusal_key.as_deref() {
+            crate::flows::refusal_of(&s.refusals, Some(key))
+        } else if sign.failure_refused {
+            crate::flows::refusal_of(&s.refusals, None)
         } else if on_chain {
             s.error_generic.clone()
         } else {
@@ -454,7 +484,14 @@ fn drawn(
         // "try again".
         SignEndingState::NotSent | SignEndingState::Refused => {
             captions.push(if *state == SignEndingState::Refused {
-                s.refused.clone()
+                // The refusal by its reason (the tracker's entry for this
+                // operation), never every one as the fee's.
+                crate::flows::refusal_of(
+                    &s.refusals,
+                    op.filter(|op| tracked(op, track))
+                        .and(track)
+                        .and_then(|entry| entry.refusal_key.as_deref()),
+                )
             } else {
                 s.error_generic.clone()
             });
@@ -697,6 +734,10 @@ mod tests {
             relay_tx_hash: None,
             // The relay sent it as it took it — the countdown's start.
             relay_sent_at_ms: Some(1_000.),
+            sender: None,
+            refusal: None,
+            refusal_key: None,
+            stalled: false,
         }
     }
 
@@ -1498,6 +1539,51 @@ mod tests {
         assert_eq!(refused.title, s.receipt_failed);
         assert_eq!(refused.captions, vec![s.refused.clone()]);
         assert!(refused.explorer_tx.is_none());
+
+        // The correctness batch, item 3: a refusal is told by its reason —
+        // the tracker's `refusal_key` for THIS operation. A nonce another
+        // operation used is "went first", only a fee refusal is the fee
+        // sentence, and anything else is the plain refusal.
+        use vela_core::app::tx_tracker::{RefusalReason, refusal_key};
+        let loc = crate::loc::Loc::from_env();
+        for reason in [
+            RefusalReason::NonceUsed,
+            RefusalReason::FeeBelowMarket,
+            RefusalReason::SimulationFailed,
+            RefusalReason::Unknown,
+        ] {
+            let mut refused_entry = entry(TrackStatus::Rejected, TrackOutcome::Final, None);
+            refused_entry.refusal = Some(reason);
+            refused_entry.refusal_key = Some(refusal_key(Some(reason)).to_owned());
+            let told = drawn(
+                &SignEndingState::Refused,
+                Some(OP),
+                Some(&refused_entry),
+                Vec::new(),
+                &clock(0.),
+                &s,
+            );
+            assert_eq!(
+                told.captions,
+                vec![loc.t(refusal_key(Some(reason)))],
+                "{reason:?}"
+            );
+        }
+        let went_first = loc.t("componentsUi.signing.wentFirst");
+        assert_ne!(went_first, s.refused);
+        // Another operation's entry says nothing about this one.
+        let mut other = entry(TrackStatus::Rejected, TrackOutcome::Final, None);
+        other.user_op_hash = "0xother".to_owned();
+        other.refusal_key = Some("componentsUi.signing.wentFirst".to_owned());
+        let told = drawn(
+            &SignEndingState::Refused,
+            Some(OP),
+            Some(&other),
+            Vec::new(),
+            &clock(0.),
+            &s,
+        );
+        assert_eq!(told.captions, vec![s.refused.clone()]);
 
         let following = |outcome, fee_held| {
             draw(SignEndingState::Following {

@@ -20,8 +20,8 @@
 //!
 //! ## What the screen owns
 //!
-//! - `EstimateFee` → a deployment read, then `QuoteRequested` on the fee
-//!   session, answered when that session's view settles (`busy` false, a fee
+//! - `EstimateFee` → `QuoteRequested` on the fee session (whose machine
+//!   reads the account first, issue #483), answered when that view settles (`busy` false, a fee
 //!   or a failure). The web's `FeeQuote.requestQuote`, without the promise.
 //! - `TrackSubmitted` → the app-resident tracker, whose view this host
 //!   observes and forwards as `ReceiptUpdate` — only the three verdicts the
@@ -49,9 +49,7 @@ use vela_core::app::balance_dashboard::{BalanceDashboard, BalanceView, Event as 
 use vela_core::app::batch_import::{
     BatchImport, BatchOperation, BatchShellResult, BatchToken, BatchView, Event as BatchEvent,
 };
-use vela_core::app::fee_policy::{
-    Event as FeeEvent, FeeCall, FeeEstimateView, FeeFailure, FeeTier, FeeView,
-};
+use vela_core::app::fee_policy::{Event as FeeEvent, FeeCall, FeeEstimateView, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::send::{
@@ -59,7 +57,7 @@ use vela_core::app::send::{
     SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation, SendReceiptOutcome,
     SendRecipientDraft, SendShellResult, SendStage, SendView,
 };
-use vela_core::app::tx_tracker::TxTracker;
+use vela_core::app::tx_tracker::{InFlightOp, TxTracker};
 
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
@@ -68,6 +66,7 @@ use crate::executor::passkey::{CredentialChoice, PinRequest, WindowHandle};
 use crate::executor::send::{self as send_executor, SendAnswer, SendContext};
 use crate::executor::trusted_signer;
 use crate::executor::{balance_dashboard, batch, storage, tracker};
+use crate::flows::live::form_chain;
 use crate::resident::{self, ResidentCore};
 use vela_core::app::network_admin::{
     Event as NetEvent, NetView, NetWizardErrorKind, NetWizardPhase, NetworkAdmin,
@@ -140,13 +139,22 @@ impl FeeTokenTold {
     }
 }
 
-/// The chain the send form is on: the selected token's, else the sweep's
-/// (the core's `form_chain`).
-fn form_chain(view: &SendView) -> Option<u32> {
-    view.selected_token
-        .as_ref()
-        .map(|token| token.chain_id)
-        .or(view.multi_chain_id)
+/// Whether the fee card has failed (`FeeView.failure` set — a failure, or the
+/// core's own re-ask after one), as this journey last told the send machine
+/// (`Event::FeeFailedChanged`, the bridge beside `FeeBusyChanged`). Told when
+/// it changes; a fresh journey (a new `SendHost`) has been told nothing, so
+/// its first word always goes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct FeeFailedTold(Option<bool>);
+
+impl FeeFailedTold {
+    /// The word to tell for `failed`, or `None` when it is no news.
+    fn news(&mut self, failed: bool) -> Option<bool> {
+        (self.0 != Some(failed)).then(|| {
+            self.0 = Some(failed);
+            failed
+        })
+    }
 }
 
 pub struct SendHost {
@@ -189,6 +197,8 @@ pub struct SendHost {
     /// The `EstimateFee` effect the fee session is answering.
     pending_fee: Option<u64>,
     last_fee_busy: bool,
+    /// The fee card's failure as this journey last told it ([`FeeFailedTold`]).
+    fee_failed_told: FeeFailedTold,
     /// The fee card's coin in force (`FeeView.fee_token`) as this send was
     /// last told it, with its chain ([`FeeTokenTold`]).
     fee_token_told: FeeTokenTold,
@@ -212,6 +222,10 @@ pub struct SendHost {
     /// relay then acknowledges changes its outcome while its status stays
     /// `pending` (spec 082 RA10).
     last_receipt: Option<SendReceiptOutcome>,
+    /// The operations holding their account's nonce, as last told to the send
+    /// machine (`tx_tracker::in_flight_ops` of the tracker's own view) — told
+    /// again only when the list changes.
+    in_flight_fed: Option<Vec<InFlightOp>>,
     /// When the tracker learned the relay put this send on the network
     /// (spec 099 R6): what the landing's countdown counts from.
     pub relay_sent_at_ms: Option<f64>,
@@ -312,6 +326,7 @@ impl SendHost {
             window_handle,
             pending_fee: None,
             last_fee_busy: false,
+            fee_failed_told: FeeFailedTold::default(),
             fee_token_told: FeeTokenTold::default(),
             last_fee: None,
             alert: None,
@@ -325,6 +340,7 @@ impl SendHost {
             relay_sent_at_ms: None,
             tracked_hash: None,
             last_receipt: None,
+            in_flight_fed: None,
             submits: Submits::default(),
         };
 
@@ -349,6 +365,9 @@ impl SendHost {
         let tracked = resident::resident::<TxTracker>(cx);
         cx.observe(&tracked, |host, tracked, cx| host.on_tracker(&tracked, cx))
             .detach();
+        // What is in flight already holds its nonce for the first confirm,
+        // not only from the tracker's next render.
+        host.forward_in_flight(&tracked, cx);
 
         // The stored default speed, read once now and again whenever Settings
         // changes it — a send already open follows the new default until the
@@ -412,7 +431,9 @@ impl SendHost {
         self.sync_stage(cx);
         self.sync_batch(cx);
         self.ensure_watcher(cx);
-        // The form may have just reached the chain the fee session prices.
+        // The form may have just reached the chain the fee session prices —
+        // or left the chain its failure was for.
+        self.sync_fee_failed(cx);
         self.sync_fee_token(cx);
         // Back on the picker from the form: a round that settled meanwhile
         // was held back (`on_holdings`), and is due now.
@@ -804,6 +825,7 @@ impl SendHost {
                 maybe_sent,
                 submit_block,
                 admitted,
+                sender,
             } => {
                 self.tracked_hash = Some(user_op_hash.to_lowercase());
                 self.last_receipt = None;
@@ -815,6 +837,7 @@ impl SendHost {
                         maybe_sent: *maybe_sent,
                         submit_block: *submit_block,
                         admitted: *admitted,
+                        sender: sender.clone(),
                     },
                     cx,
                 );
@@ -937,8 +960,9 @@ impl SendHost {
 
     // -- the fee session ------------------------------------------------------
 
-    /// `FeeQuote.requestQuote`: read the deployment status (never guessed),
-    /// then ask the session; the answer arrives when its view settles.
+    /// `FeeQuote.requestQuote`: ask the session — its machine reads the
+    /// account first, never guessed (issue #483); the answer arrives when its
+    /// view settles.
     ///
     /// HOW FAST is the speed control's to say (spec 068): the tier the speed
     /// core has in force — the stored default, a one-shot pick, or a free
@@ -989,7 +1013,7 @@ impl SendHost {
             }
         } else if let Some(failure) = fee_view.failed {
             SendFeeOutcome::Failed {
-                kind: map_failure(failure),
+                kind: SendEstimateFailure::from(failure),
             }
         } else {
             // The session moved on under the question — the web's "abandoned".
@@ -1009,12 +1033,34 @@ impl SendHost {
             self.last_fee_busy = busy;
             self.dispatch(SendEvent::FeeBusyChanged { busy }, cx);
         }
+        self.sync_fee_failed(cx);
         self.sync_fee_token(cx);
         if let Some(fee) = self.speed.fee_view().fee.clone()
             && self.last_fee.as_ref() != Some(&fee)
         {
             self.last_fee = Some(fee.clone());
             self.dispatch(SendEvent::FeeUpdated { estimate: fee }, cx);
+        }
+    }
+
+    /// The card failed (or is re-asking after a failure) and holds no
+    /// figure: the send machine holds its confirm and, on the confirm page,
+    /// drops the figure it kept from Continue — never a confirm open on a
+    /// discarded figure between two of the core's re-asks. Only a failure
+    /// for the form's own chain counts (PR 2 polish): right after a token
+    /// switch the old chain's failure is no failure of this form. Run when
+    /// the fee session moves AND when the send form does — a switch to
+    /// another chain clears it before the card is asked anything.
+    fn sync_fee_failed(&mut self, cx: &mut Context<Self>) {
+        let failed =
+            crate::flows::live::form_fee_failure(self.speed.fee_view(), &self.view).is_some();
+        if let Some(failed) = self.fee_failed_told.news(failed) {
+            if failed {
+                // The figure the machine just dropped is told again when it
+                // comes back, even the same one.
+                self.last_fee = None;
+            }
+            self.dispatch(SendEvent::FeeFailedChanged { failed }, cx);
         }
     }
 
@@ -1079,7 +1125,25 @@ impl SendHost {
 
     // -- the tracker ----------------------------------------------------------
 
+    /// Every operation in flight on this device, from the tracker's own view
+    /// (`tx_tracker::in_flight_ops`, which reads `sender` and `stalled`), to
+    /// the send machine: while the account has one on the form's chain, the
+    /// confirm is held (`SendView.previous_pending`) — a second send signed
+    /// now would take the same nonce. The machine dedupes too; this only
+    /// keeps an unchanged list from being dispatched on every render.
+    fn forward_in_flight(
+        &mut self,
+        tracked: &Entity<ResidentCore<TxTracker>>,
+        cx: &mut Context<Self>,
+    ) {
+        let view = tracked.read(cx).view();
+        if let Some(ops) = tracker::in_flight_news(&view, &mut self.in_flight_fed) {
+            self.dispatch(SendEvent::InFlightOps { ops }, cx);
+        }
+    }
+
     fn on_tracker(&mut self, tracked: &Entity<ResidentCore<TxTracker>>, cx: &mut Context<Self>) {
+        self.forward_in_flight(tracked, cx);
         let Some(hash) = self.tracked_hash.clone() else {
             return;
         };
@@ -1286,12 +1350,6 @@ impl SpeedHost for SendHost {
         self.pending_fee.is_some()
     }
 
-    fn unreadable(&mut self, cx: &mut Context<Self>) {
-        if let Some(id) = self.pending_fee.take() {
-            self.resolve_send(id, estimate_failed(), cx);
-        }
-    }
-
     fn fees_moved(&mut self, cx: &mut Context<Self>) {
         self.ensure_watcher(cx);
     }
@@ -1302,25 +1360,6 @@ fn estimate_failed() -> SendShellResult {
         outcome: SendFeeOutcome::Failed {
             kind: SendEstimateFailure::EstimateFailed,
         },
-    }
-}
-
-/// The fee vocabulary IS the send vocabulary, one name at a time.
-fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
-    match failure {
-        FeeFailure::MissingPublicKey => SendEstimateFailure::MissingPublicKey,
-        FeeFailure::FeeTokenUnavailable => SendEstimateFailure::FeeTokenUnavailable,
-        FeeFailure::QuoteUnavailable => SendEstimateFailure::QuoteUnavailable,
-        FeeFailure::CalculationFailed => SendEstimateFailure::CalculationFailed,
-        FeeFailure::EstimateFailed => SendEstimateFailure::EstimateFailed,
-        FeeFailure::GasQuoteTooHigh => SendEstimateFailure::GasQuoteTooHigh,
-        // A chain read the quote needed got no answer (spec 082 RJ13): to the
-        // send machine, a quote that could not be had.
-        FeeFailure::ChainRead { .. } => SendEstimateFailure::QuoteUnavailable,
-        // Spec 083 fee: the relay answered that the operation fails. The send
-        // screen has no sentence of its own for it and says what it said for
-        // this refusal before the fee machine could tell it apart.
-        FeeFailure::WouldFail => SendEstimateFailure::EstimateFailed,
     }
 }
 
@@ -1471,6 +1510,178 @@ mod tests {
             });
             Some(news)
         }
+    }
+
+    /// PR 2 polish: the bridge counts the card's failure only for the chain
+    /// the form is on (`SendHost::sync_fee_failed`). Right after a token
+    /// switch the form names BNB Chain while the card still holds
+    /// Ethereum's failure — the send machine hears "not failed" then, not a
+    /// failure that was never this form's; back on Ethereum it hears it
+    /// again. Through the real send core and the real fee core's failure.
+    #[test]
+    fn another_chains_fee_failure_is_not_told_as_this_forms() {
+        let failures = crate::signing::fixtures::fee_failures();
+        let failed_here =
+            |view: &SendView| crate::flows::live::form_fee_failure(&failures.down, view).is_some();
+        let mut told = FeeFailedTold::default();
+        let mut journey = Journey::open();
+        journey.pick(&Journey::eth());
+        assert_eq!(told.news(failed_here(&journey.view())), Some(true));
+        journey.drive(SendEvent::ChangeToken);
+        journey.pick(&Journey::bnb());
+        assert_eq!(form_chain(&journey.view()), Some(56));
+        assert_eq!(
+            told.news(failed_here(&journey.view())),
+            Some(false),
+            "Ethereum's failure is not BNB Chain's"
+        );
+        journey.drive(SendEvent::ChangeToken);
+        journey.pick(&Journey::eth());
+        assert_eq!(told.news(failed_here(&journey.view())), Some(true));
+    }
+
+    /// The card's failure reaches the send machine once per change, and a
+    /// fresh journey's first word always goes (`FeeFailedChanged`, PR 2
+    /// integration): on the confirm page a failure holds the confirm and
+    /// drops the figure kept from Continue — the row draws the failure in
+    /// its place — and a settled quote brings both back. Through the real
+    /// send core, with the real fee core's own failure and quote.
+    #[test]
+    fn a_failed_fee_card_holds_the_confirm_and_drops_its_figure() {
+        let mut told = FeeFailedTold::default();
+        assert_eq!(
+            told.news(false),
+            Some(false),
+            "a fresh journey's first word"
+        );
+        assert_eq!(told.news(false), None, "no news");
+        assert_eq!(told.news(true), Some(true));
+        assert_eq!(told.news(true), None);
+        assert_eq!(told.news(false), Some(false));
+
+        let [quoted, ..] = crate::signing::fixtures::fee_coin_switch();
+        let estimate = quoted
+            .fee
+            .clone()
+            .unwrap_or_else(|| unreachable!("the real fee core priced it"));
+        let failures = crate::signing::fixtures::fee_failures();
+        let mut send = CoreHost::<Send>::new();
+        let drive = |send: &mut CoreHost<Send>, event: SendEvent| {
+            let mut pending = send.dispatch(event);
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                        tokens: Some(vec![Journey::eth()]),
+                        chains: vec![SendChainInfo {
+                            chain_id: 1,
+                            network: "ethereum".to_owned(),
+                            native_symbol: "ETH".to_owned(),
+                        }],
+                    },
+                    SendOperation::LoadAccountCredential { .. } => {
+                        SendShellResult::AccountCredential {
+                            public_key_hex: Some("04aa".to_owned()),
+                        }
+                    }
+                    SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                    SendOperation::ProbeTreasury { .. } => SendShellResult::TreasuryProbed {
+                        probe: vela_core::app::send::SendTreasuryProbe::Covered,
+                    },
+                    SendOperation::ResolveIdentity { .. } => {
+                        SendShellResult::IdentityResolved { identity: None }
+                    }
+                    SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
+                        outcome: SendFeeOutcome::Ok {
+                            estimate: estimate.clone(),
+                        },
+                    },
+                    // Timers stay out: nothing here waits on a clock.
+                    _ => continue,
+                };
+                pending.extend(send.resolve(effect.id, result));
+            }
+        };
+        drive(
+            &mut send,
+            SendEvent::Open {
+                account: Some(SendAccountRef {
+                    id: "cred0".to_owned(),
+                    address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                    name: None,
+                }),
+                params: SendOpenParams::default(),
+                display: SendDisplayContext::default(),
+            },
+        );
+        drive(
+            &mut send,
+            SendEvent::SelectToken {
+                token_id: Journey::eth().id(),
+            },
+        );
+        drive(
+            &mut send,
+            SendEvent::SetRecipient {
+                recipient: "0x2222222222222222222222222222222222222222".to_owned(),
+            },
+        );
+        drive(
+            &mut send,
+            SendEvent::SetAmount {
+                amount: "0.001".to_owned(),
+            },
+        );
+        drive(&mut send, SendEvent::Continue);
+        let view = send.view();
+        assert_eq!(view.stage, SendStage::Confirm);
+        assert!(view.fee.is_some(), "Continue's figure");
+        let armed = view.can_confirm;
+
+        // The card failed: the bridge tells it, the confirm is held, and the
+        // figure the fee machine discarded is gone from the confirm too.
+        let mut told = FeeFailedTold::default();
+        let failed = told
+            .news(failures.down.failure.is_some())
+            .unwrap_or_else(|| unreachable!("a first word"));
+        drive(&mut send, SendEvent::FeeFailedChanged { failed });
+        let held = send.view();
+        assert!(!held.can_confirm, "held while the card has failed");
+        assert!(held.fee.is_none(), "no figure the fee machine discarded");
+        // …and so, the row draws the failure in its place.
+        let s = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
+        let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+        let inputs = crate::flows::live::SendInputs {
+            send: &held,
+            fee: &failures.down,
+            s: &s,
+            wallet: &wallet,
+            locale: "en",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: "Golden",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
+            relay_sent_at_ms: None,
+        };
+        assert_eq!(
+            crate::flows::live::confirm_fee_fact(&inputs).value.as_ref(),
+            "—"
+        );
+        // Through the core's re-ask it stays held: no news for the bridge.
+        assert_eq!(told.news(failures.retrying.failure.is_some()), None);
+
+        // The quote settles again: the figure and the confirm are back.
+        assert_eq!(told.news(false), Some(false));
+        drive(&mut send, SendEvent::FeeFailedChanged { failed: false });
+        drive(
+            &mut send,
+            SendEvent::FeeUpdated {
+                estimate: estimate.clone(),
+            },
+        );
+        let back = send.view();
+        assert!(back.fee.is_some(), "the figure is back");
+        assert_eq!(back.can_confirm, armed, "the gate as it was before");
+        assert!(armed, "the confirm was armed on a settled figure");
     }
 
     /// The bridge beside `FeeBusyChanged` (the core's rule, iOS
@@ -1705,7 +1916,7 @@ mod tests {
                                 estimate: estimate.clone(),
                             },
                             (None, Some(failure)) => SendFeeOutcome::Failed {
-                                kind: map_failure(failure),
+                                kind: SendEstimateFailure::from(failure),
                             },
                             (None, None) => {
                                 unreachable!("a settled session has a fee or a failure")
@@ -2509,21 +2720,31 @@ mod tests {
         assert!(total.over.is_some());
     }
 
+    /// PR 2 note 13: Continue's estimate passes the fee machine's failure
+    /// through as it is (the core's `From<FeeFailure>`, the same wire shape),
+    /// so its alert is worded by the cause — the chain out of reach by name,
+    /// a fault inside the app as that — never mapped to a general one here.
     #[test]
-    fn the_fee_vocabulary_maps_one_to_one() {
+    fn the_fee_failure_passes_through_as_it_is() {
+        use vela_core::app::fee_policy::FeeFailure;
+        for failure in crate::flows::FEE_FAILURES {
+            let kind = SendEstimateFailure::from(failure);
+            assert_eq!(
+                serde_json::to_value(kind).ok(),
+                serde_json::to_value(failure).ok(),
+                "{failure:?} keeps its name"
+            );
+        }
         assert_eq!(
-            map_failure(FeeFailure::GasQuoteTooHigh),
-            SendEstimateFailure::GasQuoteTooHigh
+            SendEstimateFailure::from(FeeFailure::ChainRead {
+                rate_limited: false
+            })
+            .body_key(),
+            "send.alertEstimateChainDownBody"
         );
         assert_eq!(
-            map_failure(FeeFailure::MissingPublicKey),
-            SendEstimateFailure::MissingPublicKey
-        );
-        // Spec 083 fee: the relay's "this operation fails" reads on the send
-        // screen as that refusal always did.
-        assert_eq!(
-            map_failure(FeeFailure::WouldFail),
-            SendEstimateFailure::EstimateFailed
+            SendEstimateFailure::from(FeeFailure::Internal).body_key(),
+            vela_core::app::fee_policy::REASON_INTERNAL_KEY
         );
         assert!(matches!(
             estimate_failed(),

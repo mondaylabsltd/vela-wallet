@@ -14,4 +14,11 @@ stage: string | null,
  * The bundle transaction the relay names, when it has one — an explorer
  * link for an op that is still pending (079 D2).
  */
-tx_hash: string | null, };
+tx_hash: string | null, 
+/**
+ * Why the relay refused or failed it (`rejection_reason`, relay
+ * `fix/held-nonce-and-floor`): present on `rejected` / `failed` from a
+ * relay that says. Older relays send none; [`RefusalReason::of`] then
+ * reads the stage.
+ */
+rejection_reason?: string | null, };

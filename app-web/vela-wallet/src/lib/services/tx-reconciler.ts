@@ -83,6 +83,11 @@ export interface UserOpStatus {
 	detail?: string;
 	/** The relay's bundle tx, when it names one (079 D2's explorer link). */
 	txHash?: string;
+	/**
+	 * Why the relay refused or failed it (`rejection_reason`, relay contract
+	 * §2), as the core parsed it — passed through, never read here.
+	 */
+	rejectionReason?: string;
 }
 
 /**
@@ -111,7 +116,8 @@ export async function pollUserOpStatus(
 			status: answer.status,
 			stage: answer.stage ?? undefined,
 			detail: typeof detail === 'string' ? detail : undefined,
-			txHash: answer.tx_hash ?? undefined
+			txHash: answer.tx_hash ?? undefined,
+			rejectionReason: answer.rejection_reason ?? undefined
 		};
 	} catch {
 		return null;

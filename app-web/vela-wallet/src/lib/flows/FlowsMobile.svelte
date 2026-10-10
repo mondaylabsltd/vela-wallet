@@ -101,6 +101,10 @@
 		/** One amount into every split row that has none. */
 		fillEmptyAmounts?(amount: string): void;
 		confirmDisabled: boolean;
+		/** Signing or submitting: the confirm is what the person waits on. */
+		confirmBusy?: boolean;
+		/** A failed submit's "Try again" — back to a confirm the core can open. */
+		retryAfterError?: () => void;
 	}
 
 	/** The add-token sheet's handlers, when the `manage_tokens` core is live. */
@@ -297,6 +301,11 @@
 			<SendConfirm
 				model={base.model}
 				onconfirm={() => (send ? send.confirm() : go('send-receipt'))}
+				ctaDisabled={send?.confirmDisabled ?? false}
+				ctaBusy={send?.confirmBusy ?? false}
+				onretry={send?.retryAfterError ? () => send.retryAfterError?.() : undefined}
+				onfeeretry={send?.refreshFee ? () => send.refreshFee?.() : undefined}
+				onfeecoins={send ? () => go('fee-token') : undefined}
 			/>
 		</FlowScreen>
 	{:else}

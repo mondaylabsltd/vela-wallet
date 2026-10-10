@@ -151,15 +151,10 @@ fn cadence(elapsed: Duration) -> Duration {
     Duration::from_secs_f64(receipt_interval_ms(age_ms < WAIT_WINDOW_MS, age_ms) / 1000.0)
 }
 
-/// Wait for `user_op_hash` to land, for at most `cap`. `None` when the cap
-/// went by with no outcome.
-pub fn await_landing(user_op_hash: &str, chain_id: u32, cap: Duration) -> Option<Landing> {
-    await_landing_until(user_op_hash, chain_id, cap, &|| false)
-}
-
-/// [`await_landing`], ending early — `None` — the moment `stop` says the
-/// answer is no longer wanted (spec 082 RJ4: the core has answered the page
-/// from the tracker), looked at a few times a second.
+/// Wait for `user_op_hash` to land, for at most `cap` — `None` when the cap
+/// went by with no outcome — ending early, also `None`, the moment `stop`
+/// says the answer is no longer wanted (spec 082 RJ4: the core has answered
+/// the page from the tracker), looked at a few times a second.
 pub fn await_landing_until(
     user_op_hash: &str,
     chain_id: u32,

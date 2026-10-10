@@ -243,6 +243,9 @@ struct SignTrackerHandoffWire: Decodable, Equatable {
     /// reads "may have been sent". Same hash and ids as the write-ahead
     /// hand-off — which is why the shell's de-duplication key carries it.
     var admitted: Bool = false
+    /// The account that signed it (PR 2 §3), forwarded to the tracker's
+    /// `submitted`: what makes the op one this account must wait for.
+    var sender: String? = nil
 }
 
 /// A write-ahead record proven never sent (spec 082 RJ1): fed to the
@@ -346,6 +349,22 @@ struct SignViewWire: Decodable, Equatable {
     /// `error` is the relay refusing the op (spec 082 RJ3): the sheet says
     /// `componentsUi.signing.refused` under `statusFailed`, never "try again".
     var failureRefused: Bool = false
+    /// WHY the relay did not take it (PR 2 note 9), the one sentence under
+    /// the sheet's failure for both ways a refusal arrives: at submit (the
+    /// account's previous op holds the nonce → `componentsUi.signing.notSentBody`,
+    /// under `failureNotSent`'s calm title, retryable; any other refusal →
+    /// `componentsUi.signing.refused`) and after it (the tracker's verdict,
+    /// forwarded with `op_tracked.refusal` — the entry's own `refusal_key`).
+    /// `nil` for a failure that was no refusal.
+    var failureRefusalKey: String? = nil
+    /// The failure on the sheet is no failure (PR 2 polish): the relay turned
+    /// the operation back at submit because the account's previous one on
+    /// this network still holds the nonce. Nothing was sent and nothing went
+    /// wrong — the sheet says "Not sent yet" over `failureRefusalKey`'s
+    /// sentence, calmly (no red mark, no error tint), with Try again
+    /// (`failureRetryable`). Optional so a view without it (an older core, a
+    /// hand-written fixture) decodes; read it through `notSent`.
+    var failureNotSent: Bool? = nil
     /// Spec 096 F8: the failure on the sheet sent nothing and was no refusal,
     /// and its answer is still held — the receipt offers Try again
     /// (`retry_tapped`) beside Done, which answers the page.
@@ -359,4 +378,7 @@ struct SignViewWire: Decodable, Equatable {
     )
 
     var isVisible: Bool { surface != .hidden }
+
+    /// `failureNotSent`, absent read as `false`.
+    var notSent: Bool { failureNotSent == true }
 }

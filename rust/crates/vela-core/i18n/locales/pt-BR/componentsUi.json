@@ -220,6 +220,9 @@
       "stillConfirming": "Ainda não está na rede. O Vela continua verificando — não envie de novo.",
       "maybeSent": "Talvez já tenha sido enviada. O Vela continua verificando — não envie de novo.",
       "refused": "A rede recusou — nada foi enviado.",
+      "wentFirst": "Outra transação desta conta passou antes — nada foi enviado.",
+      "notSentTitle": "Ainda não enviada",
+      "notSentBody": "Sua transação anterior nesta rede ainda está sendo processada. Tente de novo quando ela terminar.",
       "unknownOutcome": "Ainda sem confirmação após 24 horas.",
       "openSigner": "Confirmar na página de assinatura",
       "signerDown": "A página de assinatura não abriu. Verifique sua conexão.",
@@ -243,7 +246,10 @@
         "approvalChoice": "Escolha primeiro um valor de aprovação",
         "batchUnsettled": "Verificando cada chamada do lote…",
         "feeMeasuring": "Calculando a taxa de rede…",
-        "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo"
+        "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo",
+        "feeRetrying": "Ainda não foi possível calcular a taxa. Tentando de novo automaticamente…",
+        "feeWouldFail": "Falharia se fosse enviada assim.",
+        "previousPending": "Aguardando sua transação anterior nesta rede terminar…"
       }
     },
     "signingApprove": {
@@ -324,6 +330,7 @@
       "deployedNo": "Não (primeira tx)",
       "estimating": "Estimando...",
       "estimateFailed": "Toque para tentar de novo",
+      "payWithAnotherCoin": "Pagar com outra moeda",
       "feeToken": "Token da taxa",
       "paidWith": "Pago com {{symbol}}",
       "rowBalance": "Saldo",
@@ -333,6 +340,8 @@
       "reasonFeeToken": "O relay não consegue cotar esta moeda agora. Tentando de novo — ou pague a taxa com outra moeda.",
       "reasonSimulation": "O relay ainda não conseguiu simular esta transação. Tentando de novo automaticamente.",
       "reasonQuoteHigh": "O preço do gas do relay está bem acima do preço da rede agora. Tentando de novo automaticamente.",
+      "reasonChainDown": "Não foi possível conectar à {{chain}} para calcular a taxa. Tentando de novo automaticamente.",
+      "reasonInternal": "Algo deu errado dentro do Vela. Se continuar, reabra o app.",
       "rowShort": "Precisa de ~{{need}}, tem {{have}}",
       "noCoinPays": "Nenhum token cobre esta taxa"
     },

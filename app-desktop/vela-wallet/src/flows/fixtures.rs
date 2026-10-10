@@ -539,6 +539,22 @@ pub struct FeeRow {
     /// The quote's 30 s TTL elapsed (`FeeView.stale`) — calm wording, never
     /// a fault. `None` keeps the line's room empty so nothing jumps.
     pub stale_note: Option<SharedString>,
+    /// Why there is no fee, in the core's words (`FeeView.failure`, PR 2
+    /// note 1): "Can't reach Ethereum to price this…", "Something went wrong
+    /// inside Vela…". Drawn in the stale line's own room, in its place —
+    /// kept through the re-ask, so nothing jumps while it retries.
+    pub reason: Option<SharedString>,
+    /// The row is a control — a tap opens the fee coins or, on a failed fee,
+    /// does what the failure says (`FeeFailureView.tap`). `false` only for a
+    /// failure a tap cannot help (the relay answered that it fails, and no
+    /// other coin is left): no chevron, no click (PR 2 polish).
+    pub control: bool,
+    /// Every sentence the line under the row can come to say here (each
+    /// failure's reason on this chain, the stale note): the line keeps the
+    /// room of the tallest, so a reason that wraps moves nothing under it
+    /// (PR 2 polish — the English internal reason is two lines in the
+    /// desktop's column, and Continue dropped a line when it landed).
+    pub room: Vec<SharedString>,
 }
 
 /// One option of the speed control (spec 068).
@@ -604,6 +620,11 @@ pub struct SendNotice {
     pub report: Option<SharedString>,
     /// Red rather than amber: the person cannot proceed as things stand.
     pub error: bool,
+    /// Neither red nor amber — the calm tone: nothing went wrong and
+    /// nothing was sent, as after the relay turned a submit back because the
+    /// account's previous transaction holds the nonce ("Not sent yet", PR 2
+    /// polish). Never set with `error`.
+    pub calm: bool,
 }
 
 /// A CTA's three states — the founder's rule: busy is not disabled, and a
@@ -831,6 +852,17 @@ pub struct SendConfirm {
     pub cta: SharedString,
     /// The core's `can_confirm`, plus signing / submitting.
     pub cta_state: CtaState,
+    /// The account's previous transaction on this network is still going
+    /// through (`SendView.previous_pending`): the confirm is held, and this
+    /// one line says why, under it — plainly, for as long as it holds, with
+    /// no countdown and nothing else in its place.
+    pub held: Option<SharedString>,
+    /// The fee line's place in `facts` when it is a control (PR 2 polish):
+    /// a failed fee whose tap does something (`FeeFailureView.tap` — ask
+    /// again, or open the fee coins). Drawn with the form row's chevron and
+    /// bound to the same tap, so "Tap it to retry" under the confirm names a
+    /// line that answers a tap. `None` — a plain fact.
+    pub fee_fact: Option<usize>,
     /// Spec 102 D4: the account reviews and signs on a trusted page — the
     /// page, the key and the integrity line, drawn above the CTA, which then
     /// says where it goes and opens only when the page may. `None` in Vela.
@@ -888,13 +920,19 @@ pub struct SweepRow {
     pub amount: SharedString,
 }
 
-/// The receipt's four states (`ReceiptStage` on the web).
+/// The receipt's four states (`ReceiptStage` on the web), and the sheet's calm
+/// "Not sent yet".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReceiptStage {
     Submitting,
     Submitted,
     Confirmed,
     Failed,
+    /// The relay turned the operation back because the account's previous
+    /// one on this network still holds the nonce (`SignView.failure_not_sent`,
+    /// PR 2 polish): nothing was sent and nothing went wrong — the waiting
+    /// disc with no ring, never the failure's red.
+    NotSent,
 }
 
 /// Everything a flow panel can hold. The page matches on this, so a panel body
@@ -1365,6 +1403,14 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         refresh: Some(s.fee_refresh.clone()),
         refreshing: false,
         stale_note: None,
+        reason: None,
+        control: true,
+        // The room the live row keeps on the mock's Ethereum.
+        room: {
+            let mut room = s.fee_failure.reasons("Ethereum");
+            room.push(s.fee_stale.clone());
+            room
+        },
     };
     // Folded, as every send starts: the word and the tier in force.
     let speed = FeeSpeedModel {
@@ -1675,6 +1721,8 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
         notice: None,
         cta: s.confirm_send.clone(),
         cta_state: CtaState::Enabled,
+        held: None,
+        fee_fact: None,
         handoff: None,
     }
 }

@@ -5,7 +5,15 @@ import type { SendReceiptKind } from "./SendReceiptKind";
 import type { SendReceiptStatus } from "./SendReceiptStatus";
 import type { SendReceiptTransfer } from "./SendReceiptTransfer";
 
-export type SendReceiptView = { status: SendReceiptStatus, hold_reason: SendHoldReason | null, kind: SendReceiptKind | null, transfers: Array<SendReceiptTransfer>, 
+export type SendReceiptView = { status: SendReceiptStatus, hold_reason: SendHoldReason | null, 
+/**
+ * The relay refused it: the corpus key of the sentence that says why
+ * (`tx_tracker::RefusalReason::key` — the fee words only for a fee
+ * refusal, "another transaction from this account went first" for a
+ * spent nonce, else the plain "refused, nothing was sent"). Drawn in
+ * place of `hold_reason`'s words. `None` unless refused.
+ */
+refusal_key: string | null, kind: SendReceiptKind | null, transfers: Array<SendReceiptTransfer>, 
 /**
  * Every coin the operation sent, in the order signed (spec 097 F, S3).
  * One for a single send or a split (its total); one per coin for a

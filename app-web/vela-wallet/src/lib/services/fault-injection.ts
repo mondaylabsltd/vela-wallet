@@ -24,6 +24,8 @@ type FaultState = {
 	emptyTreasuryChains: Set<number>;
 	rejectSubmitChains: Set<number>;
 	silentReceiptChains: Set<number>;
+	faultPoolChains: Set<number>;
+	forgetPublicKey: boolean;
 };
 
 const state: FaultState = {
@@ -36,7 +38,9 @@ const state: FaultState = {
 	failRelayChains: new Set(),
 	emptyTreasuryChains: new Set(),
 	rejectSubmitChains: new Set(),
-	silentReceiptChains: new Set()
+	silentReceiptChains: new Set(),
+	faultPoolChains: new Set(),
+	forgetPublicKey: false
 };
 
 export function rpcShouldFail(chainId: number): boolean {
@@ -89,6 +93,28 @@ export function receiptShouldStaySilent(chainId: number): boolean {
 	return state.silentReceiptChains.has(chainId);
 }
 
+/**
+ * The request pool fails INSIDE the app for this chain — its core faulted, or
+ * it never booted — so a read never leaves the device (issue 483). The fee
+ * says that as Vela's own fault (`FeeFailure::Internal`), never "can't reach
+ * the chain"; without this switch that state is reachable only by breaking
+ * the app itself.
+ */
+export function poolShouldFault(chainId: number): boolean {
+	return state.faultPoolChains.has(chainId);
+}
+
+/**
+ * The fee is asked with no passkey public key to build an undeployed account's
+ * initCode — the one fee failure only a TAP can clear (`missing_public_key`,
+ * PR 2 note 1: "Tap to retry" on the row, "Tap it to retry" under the
+ * confirm). A passkey wallet always has its key, so without this switch that
+ * state is unreachable on the web.
+ */
+export function publicKeyShouldVanish(): boolean {
+	return state.forgetPublicKey;
+}
+
 /** Every verb, in one object: the console publishes it, the seam below plants into it. */
 const api = {
 	failRpc: (chainId: number) => state.failRpcChains.add(chainId),
@@ -101,6 +127,8 @@ const api = {
 	emptyTreasury: (chainId: number) => state.emptyTreasuryChains.add(chainId),
 	rejectSubmit: (chainId: number) => state.rejectSubmitChains.add(chainId),
 	silentReceipt: (chainId: number) => state.silentReceiptChains.add(chainId),
+	faultPool: (chainId: number) => state.faultPoolChains.add(chainId),
+	forgetPublicKey: () => (state.forgetPublicKey = true),
 	clearFaults: () => {
 		state.failRpcChains.clear();
 		state.rateLimitRpcChains.clear();
@@ -111,6 +139,8 @@ const api = {
 		state.emptyTreasuryChains.clear();
 		state.rejectSubmitChains.clear();
 		state.silentReceiptChains.clear();
+		state.faultPoolChains.clear();
+		state.forgetPublicKey = false;
 		state.rpcLatencyMs = 0;
 	},
 	faults: () => ({
@@ -123,6 +153,8 @@ const api = {
 		emptyTreasury: [...state.emptyTreasuryChains],
 		rejectSubmit: [...state.rejectSubmitChains],
 		silentReceipt: [...state.silentReceiptChains],
+		faultPool: [...state.faultPoolChains],
+		forgetPublicKey: state.forgetPublicKey,
 		slowRpc: state.rpcLatencyMs
 	})
 };

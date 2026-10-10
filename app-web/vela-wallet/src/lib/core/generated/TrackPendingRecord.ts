@@ -14,4 +14,10 @@ maybe_sent: boolean,
  * The chain head read before the first submit POST, persisted with the
  * record: where the relay-independent landing check starts (ruling 8).
  */
-submit_block: number | null, };
+submit_block: number | null, 
+/**
+ * The account that signed it (the stored record's `from`) — so after a
+ * restart the device still knows this account has an operation in
+ * flight on this chain ([`in_flight_ops`]). `None` from an older shell.
+ */
+sender: string | null, };

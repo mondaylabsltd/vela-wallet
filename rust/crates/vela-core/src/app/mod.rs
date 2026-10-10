@@ -68,6 +68,7 @@ pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;
 pub mod payment_request;
+pub mod privacy;
 pub mod receive_watch;
 pub mod remote_mark;
 pub mod rpc_pool;
@@ -1110,8 +1111,21 @@ pub enum PromptKind {
         #[serde(default)]
         phone_link: bool,
     },
+    /// Only on Gnosis's verdict that the passkey has no record: the rebuild
+    /// makes a ONE-key wallet, and nobody else's "no record" can rule out a
+    /// multi-key one.
     RecoverOffer,
     RecoverFailed,
+    /// Sign-in could not find out whether this passkey has a wallet record:
+    /// a lookup failed, or nobody but the index vouched for its answer.
+    /// Nothing was saved. Confirmable — "Try again" asks again from the
+    /// signature already made (no new passkey prompt); "Cancel" ends it.
+    /// `local`: every failed lookup never left this device, so the sheet says
+    /// "check your connection" rather than blame the registry.
+    RegistryUnreachable {
+        #[serde(default)]
+        local: bool,
+    },
     SignInFailed {
         detail: String,
         /// As [`PromptKind::CreateFailed`]'s.

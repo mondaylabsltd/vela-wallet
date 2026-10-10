@@ -12,14 +12,46 @@
 	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
-	import type { SendConfirmModel } from '../model';
+	import type { FactRowModel, SendConfirmModel } from '../model';
 
 	interface Props {
 		model: SendConfirmModel;
 		onconfirm?: () => void;
+		/**
+		 * The core's gate is shut (`SendView.can_confirm`): a fee being
+		 * measured, the previous transaction on this network in flight, a
+		 * submit that did not go. A disabled control, not a dead one — a tap
+		 * the core would refuse is not offered.
+		 */
+		ctaDisabled?: boolean;
+		/** Signing or submitting: the button is what the person waits on. */
+		ctaBusy?: boolean;
+		/** The failed submit's "Try again" (`retry_after_error`). */
+		onretry?: () => void;
+		/**
+		 * PR 2 polish: the failed fee line's two actions, as its words promise
+		 * (`FactRowModel.tap`) — ask the fee again at once (`requote`), or open
+		 * the fee coins. Absent ⇒ the line stays a fact.
+		 */
+		onfeeretry?: () => void;
+		onfeecoins?: () => void;
 	}
 
-	let { model, onconfirm }: Props = $props();
+	let {
+		model,
+		onconfirm,
+		ctaDisabled = false,
+		ctaBusy = false,
+		onretry,
+		onfeeretry,
+		onfeecoins
+	}: Props = $props();
+
+	/** The action a pressable fact's tap names, if this screen was given it. */
+	function tapOf(fact: FactRowModel): (() => void) | undefined {
+		if (fact.tap === undefined) return undefined;
+		return fact.tap.does === 'retry' ? onfeeretry : onfeecoins;
+	}
 </script>
 
 <div class="confirm">
@@ -50,7 +82,7 @@
 	<ul class="facts">
 		{#each model.facts as fact (fact.label)}
 			<li>
-				<FactRow {fact} />
+				<FactRow {fact} ontap={tapOf(fact)} />
 				{#if fact.note !== undefined}
 					<p class="note">{fact.note}</p>
 				{/if}
@@ -71,7 +103,40 @@
 	{/if}
 
 	<div class="cta">
-		<Button variant="primary" shape="rounded" onclick={onconfirm}>{model.cta}</Button>
+		{#if model.error !== undefined}
+			<!-- The last submit did not go: why, and the retry that clears it.
+			     Above the confirm it unblocks, so the eye meets the cause first.
+			     "Not sent yet" (`calm`, PR 2 polish) is no failure: its title over
+			     the sentence, in the quiet ink, announced politely. -->
+			<div
+				class="error"
+				class:calm={model.error.calm === true}
+				role={model.error.calm === true ? 'status' : 'alert'}
+				data-testid="send-confirm-error"
+			>
+				{#if model.error.title !== undefined}
+					<p class="title">{model.error.title}</p>
+				{/if}
+				<p>{model.error.text}</p>
+				{#if model.error.retry !== undefined && onretry !== undefined}
+					<Button variant="secondary" shape="rounded" onclick={onretry}>{model.error.retry}</Button>
+				{/if}
+			</div>
+		{/if}
+		<Button
+			variant="primary"
+			shape="rounded"
+			disabled={ctaDisabled && !ctaBusy}
+			loading={ctaBusy}
+			testid="send-confirm"
+			onclick={onconfirm}>{model.cta}</Button
+		>
+		<!-- One plain line under the held confirm while the account's last
+		     transaction on this network is in flight — no countdown, nothing in
+		     its place; it goes when the core lets the confirm open. -->
+		{#if model.held !== undefined}
+			<p class="held" role="status">{model.held}</p>
+		{/if}
 	</div>
 </div>
 
@@ -147,8 +212,50 @@
 	   and the mocks leave the space between the facts and the button empty
 	   rather than filling it. */
 	.cta {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
 		margin-top: auto;
 		padding-block: var(--space-3xl) var(--space-xl);
+	}
+	/* The held confirm's one line: quiet and centred under the button it
+	   explains — a wait, not an error. */
+	.held {
+		margin: 0;
+		text-align: center;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
+	}
+	/* A submit that did not go: the reason in the error colour, its retry
+	   right under it. */
+	.error {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
+	}
+	.error p {
+		margin: 0;
+		text-align: center;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-error-base);
+	}
+	/* Held back, not failed: the held line's quiet ink, its title in the
+	   body's own colour — nothing here is in the error colour. */
+	.error.calm {
+		gap: var(--space-xs);
+	}
+	.error.calm p {
+		color: var(--color-fg-muted);
+	}
+	.error.calm .title {
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+	.error.calm :global(button) {
+		margin-top: var(--space-sm);
 	}
 	/* Why a fact reads as it does (issue 686: a speed taken because it was
 	   free). Quiet, under its row and inside the same card, so the reason is

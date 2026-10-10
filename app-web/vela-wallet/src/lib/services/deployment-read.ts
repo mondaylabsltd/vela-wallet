@@ -16,3 +16,17 @@ export class DeploymentReadError extends Error {
 		this.name = 'DeploymentReadError';
 	}
 }
+
+/**
+ * The account read never left the app: something inside it failed — the
+ * request pool could not boot, or its core faulted — before any chain node
+ * was asked (issue 483). Never told as "can't reach the chain": the fee says
+ * it is Vela's own fault (`DeploymentRead::Internal`). `kind` is diagnostics
+ * for the report, never shown.
+ */
+export class DeploymentInternalError extends Error {
+	constructor(readonly kind: string) {
+		super(`The account read never left the app (${kind}).`);
+		this.name = 'DeploymentInternalError';
+	}
+}

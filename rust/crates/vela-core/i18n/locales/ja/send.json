@@ -80,6 +80,7 @@
     "recipientCount_other": "{{count}} 名の受取人",
     "removeRecipient": "削除",
     "alertInsufficientBalanceBody": "合計が残高を超えています。",
+    "alertEstimateChainDownBody": "{{chain}} に接続できず、この取引の手数料を計算できません。しばらくしてからもう一度お試しください。",
     "recipientPickAria": "連絡先から選ぶ",
     "multiSendNoFundsAfterGas": "ガス予約後の残高が不足しています。",
     "gasReserved": "ガス確保済み",

@@ -131,21 +131,30 @@ final class SigningController {
     /// ETH was quoted in ETH with no way to choose the coin it has).
     private(set) var feeOpen = false
 
-    /// A tap on the fee row: a failed quote is asked again; with more than one
-    /// coin, the list opens or closes.
+    /// A tap on the fee row — exactly what its words say (PR 2 polish). A
+    /// failed quote's `tap`: `retry` asks again at once (the core's `requote`
+    /// — it drops its own timer for the next re-ask; while a re-ask is out
+    /// the core asks nothing more), `choose_coin` opens the coin list ("Pay
+    /// with another coin" after `would_fail`), `nothing` does nothing. With
+    /// no failure and more than one coin, the list opens or closes.
     func feeTapped() {
-        guard let fee else {
-            // The quote never started (the account's deployment could not be
-            // read): the row said so, and a tap asks again.
-            if quoteStartFailure != nil { refreshFee() }
-            return
-        }
-        if fee.failed != nil {
+        guard let fee else { return }
+        switch Self.feeTap(fee) {
+        case .retry:
             // Measured again for real — the held readings dropped first.
             fees.refresh()
-        } else if fee.options.count > 1 {
+        case .open, .chooseCoin:
             feeOpen.toggle()
+        case .nothing:
+            break
         }
+    }
+
+    /// What a tap on the sheet's fee row does over `fee`: its failure's
+    /// `tap`, else the coin list when there is more than one coin to choose.
+    static func feeTap(_ fee: FeeViewWire) -> FeeRowTap {
+        if let failure = fee.failure { return failure.rowTap }
+        return fee.options.count > 1 ? .open : .nothing
     }
 
     /// A coin from the list, by its row id (`SigningLive.nativeFeeId` = the
@@ -266,9 +275,8 @@ final class SigningController {
         preferredTier: @escaping () -> String = { "standard" },
         numberPreset: @escaping () -> String = { "comma_dot" },
         ports: Ports,
-        firstDeploymentReadMs: UInt32 = SigningController.firstDeploymentReadMs
+        feeTimers: FeeStore.Timers = .wallClock
     ) {
-        self.firstReadMs = firstDeploymentReadMs
         self.wallet = wallet
         self.relay = relay
         self.pool = pool
@@ -276,7 +284,8 @@ final class SigningController {
         self.preferredTier = preferredTier
         self.numberPreset = numberPreset
         self.fees = FeeStore(
-            relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool)
+            relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool),
+            timers: feeTimers
         )
 
         self.spine = spine
@@ -318,7 +327,6 @@ final class SigningController {
         signJson = signCore.json
         clearJson = clearCore.json
         guardJson = guardCore.json
-        fees.onInForce = { [weak self] view in self?.commitFee(view) }
 
         signExecutor.ports = SignExecutor.Ports(
             respond: { [weak self] transportId, id, payload in
@@ -539,83 +547,36 @@ final class SigningController {
     private let preferredTier: () -> String
     private let numberPreset: () -> String
 
-    /// Why the quote could not even start: the account's deployment could not
-    /// be read, so there is no fee session to fail (spec 082 RF5, W10). It is
-    /// the core's failure for a fee blocked by a chain read — `ChainRead`,
-    /// rate-limited or not (RJ13, G48), as its JSON text — so the row names
-    /// the chain's node, never Vela's relay, and it is asked again on the
-    /// core's schedule. `nil` once a quote starts.
-    private(set) var quoteStartFailure: String?
-    /// The one loop that asks again for a quote that could not start.
-    private var startRetry: Task<Void, Never>?
-    /// How many such loops are alive — a refresh tap cancels the running
-    /// one before it starts another, so this is never more than one (the
-    /// test seam for that).
-    private(set) var startLoopsAlive = 0
-
-    /// The bound on the FIRST deployment read (082 iPhone pass, IX6). It was
-    /// unbounded: with every node of the chain black-holed the pool walked
-    /// ~20 endpoints × 8 s, three passes, and the fee row said 估算中… for
-    /// 4 min 35 s with no reason. Bounded like a wait and its re-ask (RJ12's
-    /// 15 s), the row names the chain read, and the core's schedule asks
-    /// again with each re-ask bounded by `feeRequoteTimeoutMs`.
-    static let firstDeploymentReadMs: UInt32 = 15_000
-    private let firstReadMs: UInt32
-
-    private func requestQuote(chainId: Int, attempt: UInt32 = 1) {
+    /// Price the request. The account's deployment is read by the fee machine
+    /// itself (`read_deployment`, issue #483): a read that fails is the fee's
+    /// own failure — on the row, the footer (the core's gate sees it) and the
+    /// retry alike — worded "can't reach the chain" only when the chain did not
+    /// answer, and read again by every retry (`fresh`). The shell's own read
+    /// and its "quote could not start" state are gone with it: the footer used
+    /// to say "Working out the network fee…" under a row that said "Tap to
+    /// retry", because the core's gate never saw a failure the shell kept.
+    ///
+    /// HOW FAST is the speed core's to say: the store asks at its tier. WHICH
+    /// COIN is the fee machine's until the person taps one (spec 078): it pays
+    /// in a coin that can, and the approve carries the fee view's `fee_token`
+    /// — the very coin it picked — beside the amount from the same estimate
+    /// (`approveOpts`), so what the sheet shows is what is signed. A tap
+    /// re-asks with the pick turned off (`FeeStore.chooseFeeToken`).
+    private func requestQuote(chainId: Int) {
         guard !feeCalls.isEmpty else { return }
-        // One loop: whatever was waiting to ask again is superseded.
-        startRetry?.cancel()
-        startRetry = Task { [weak self] in
-            guard let self else { return }
-            startLoopsAlive += 1
-            defer { startLoopsAlive -= 1 }
-            let relay = self.relay
-            let address = wallet.address
-            // An automatic re-ask is bounded (RJ12): a read not answered in
-            // `feeRequoteTimeoutMs` is a failure again, and the schedule goes
-            // on — the fee is back within 8 + 6 s of the chain answering.
-            // The first read is bounded too (IX6): a chain that never answers
-            // is said within `firstReadMs`, not after the pool's every pass.
-            let boundMs = attempt > 1 ? feeRequoteTimeoutMs() : firstReadMs
-            let read: RelayClient.DeploymentRead = await SignExecutor.within(seconds: Double(boundMs) / 1000) {
-                await relay.deploymentRead(chainId: chainId, address: address)
-            } ?? .unread(rateLimited: false)
-            guard !Task.isCancelled else { return }
-            guard case .deployed(let deployed) = read else {
-                // The chain could not say: nothing was quoted. Say why — the
-                // chain's node, rate-limited or unreachable (RJ13) — and ask
-                // on the core's schedule while the sheet waits.
-                var rateLimited = false
-                if case .unread(let limited) = read { rateLimited = limited }
-                let failure = FeeFailureText.chainRead(rateLimited: rateLimited)
-                quoteStartFailure = failure.text
-                let wait = feeRequoteDelayMs(failure: failure.text, attempt: attempt)
-                VelaLog.feeQuoteFailed(chain: chainId, cause: failure.cause, requote: attempt, inMs: wait)
-                guard let wait else { return }
-                try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
-                guard !Task.isCancelled, fees.view == nil, requoteAllowed else { return }
-                requestQuote(chainId: chainId, attempt: attempt + 1)
-                return
-            }
-            if quoteStartFailure != nil {
-                VelaLog.feeQuoteBack(chain: chainId, after: attempt - 1)
-            }
-            quoteStartFailure = nil
-            // HOW FAST is the speed core's to say: the store asks at its tier.
-            // WHICH COIN is the fee machine's until the person taps one (spec
-            // 078): it pays in a coin that can, and the approve carries the
-            // fee view's `fee_token` — the very coin it picked — beside the
-            // amount from the same estimate (`approveOpts`), so what the sheet
-            // shows is what is signed. A tap re-asks with the pick turned off
-            // (`FeeStore.chooseFeeToken`).
-            fees.ask(
-                chainId: chainId, account: wallet.address, deployed: deployed,
-                publicKeyAvailable: true, calls: feeCalls, feeToken: nil,
-                autoFeeToken: true
-            )
-        }
+        fees.ask(
+            chainId: chainId, account: wallet.address, deployed: false,
+            publicKeyAvailable: true, calls: feeCalls, feeToken: nil,
+            autoFeeToken: true, readDeployment: true
+        )
     }
+
+    /// A test's clock moving, for a controller built with `feeTimers:
+    /// .stopped`: every held `timer` of the fee sessions runs out now.
+    func elapseFeeTimer(_ timer: String) { fees.elapse(timer) }
+
+    /// No fee read is out — only timers a stopped clock holds (tests).
+    var feeIdle: Bool { fees.isIdle }
 
     // MARK: - The speed control (spec 069)
 
@@ -630,12 +591,10 @@ final class SigningController {
     }
 
     /// The refresh control (spec 079 — it had no caller until then): measure
-    /// again, the held readings dropped first. A quote that never started
-    /// (the chain could not say whether the account is deployed) is started.
+    /// again, the held readings dropped first — the account's deployment
+    /// included (issue #483). Before any view (nothing asked yet), it asks.
     func refreshFee() {
         guard fees.view != nil else {
-            // `requestQuote` cancels the loop already waiting first: a tap
-            // never leaves two loops asking (RF5).
             if let request { requestQuote(chainId: request.chainId) }
             return
         }
@@ -646,7 +605,6 @@ final class SigningController {
 
     /// The confirm was tapped.
     func approve() {
-        cancelRequote()
         trustedSignerNotice = nil
         approvedAtMs = Date().timeIntervalSince1970 * 1000
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
@@ -817,6 +775,7 @@ final class SigningController {
         }
         if view.surface == .hidden, view.request == nil, request != nil, answered {
             closed = true
+            endFees()
         }
         // The page left and the pipeline has stopped with nothing sent
         // (`asker_gone`, RB2): nobody will be answered, so nothing keeps this
@@ -824,130 +783,23 @@ final class SigningController {
         if askerGone, view.phase == .idle, !view.isSigning, !view.isSubmitting,
            submittedHash == nil, request != nil {
             closed = true
+            endFees()
         }
     }
 
-    private func commitFee(_ view: FeeViewWire) {
-        // A quote on the sheet is priced again by the fee core itself, once a
-        // block (`requote_interval_ms`) and at once when that fails — `stale`
-        // is only ever up while it does — so nothing here re-asks it. What is
-        // asked again is a quote that FAILED, on the core's schedule.
-        scheduleRequote(view)
+    /// The sheet is over (the page has its answer, or the controller is
+    /// closed): its fee stops asking and answering — the core's own re-ask
+    /// after a failure and its block-time tick both run on `start_ttl`, and a
+    /// sheet nobody looks at must not keep reading the chain (PR 2 note 1).
+    /// The last fee view stays drawn: the sheet turning into its ending keeps
+    /// its row as it stood.
+    private func endFees() {
+        guard !feesEnded else { return }
+        feesEnded = true
+        fees.end(keepingView: true)
     }
 
-    // MARK: - Asking again (spec 079)
-
-    /// Automatic re-quotes made for the failure on screen; reset by a quote.
-    private var requoteAttempt: UInt32 = 0
-    private var requoteTask: Task<Void, Never>?
-    /// The bound on the automatic re-quote in flight (RJ12).
-    private var requoteWatch: Task<Void, Never>?
-    /// The failure the schedule is for — the core's text, whole.
-    private var requoteFailure: String?
-
-    /// Whether a re-quote may still go out: the sheet is up, nothing is
-    /// signing or submitting, and the page has no answer yet.
-    private var requoteAllowed: Bool {
-        !answered && sign.surface == .sheet && !sign.isSigning && !sign.isSubmitting
-    }
-
-    /// A quote that failed for a reason that can pass (the relay unreachable,
-    /// a busy estimate, a chain read) is asked again on the core's schedule —
-    /// 3 s, 6 s, then every 8 s (`feeRequoteDelayMs`, spec 082 RJ12) — while
-    /// the sheet is up and nothing is signing. Android's pass: the row said
-    /// "点击重试" with the relay down and stayed that way after it came back.
-    ///
-    /// A measurement still out is not a verdict: the schedule neither resets
-    /// nor advances on it (a busy view has no `failed`, and reading that as a
-    /// success kept every re-quote at 3 s). Each automatic re-quote is bounded
-    /// by `feeRequoteTimeoutMs`; one that does not answer in time is a
-    /// failure again (`watchRequote`).
-    private func scheduleRequote(_ view: FeeViewWire) {
-        guard !view.busy else { return }
-        let chain = request?.chainId ?? 0
-        guard let failure = view.failed else {
-            if requoteAttempt > 0, view.fee != nil {
-                VelaLog.feeQuoteBack(chain: chain, after: requoteAttempt)
-            }
-            requoteAttempt = 0
-            requoteFailure = nil
-            cancelRequote()
-            return
-        }
-        requoteWatch?.cancel()
-        requoteWatch = nil
-        guard requoteTask == nil else { return }
-        let wait = Self.requoteDelay(view, attempt: requoteAttempt + 1, allowed: requoteAllowed)
-        // A failure no re-quote follows is said once, however often the view
-        // is drawn again.
-        if wait == nil, requoteFailure == failure { return }
-        requoteFailure = failure
-        VelaLog.feeQuoteFailed(
-            chain: chain, cause: FeeFailureText(failure).cause, requote: requoteAttempt + 1, inMs: wait
-        )
-        guard let wait else { return }
-        requoteAttempt += 1
-        requoteTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
-            guard let self, !Task.isCancelled else { return }
-            requoteTask = nil
-            guard fee?.failed != nil, requoteAllowed else { return }
-            fees.refresh()
-            watchRequote()
-        }
-    }
-
-    /// The bound on one automatic re-quote (spec 082 RJ12): not answered in
-    /// `feeRequoteTimeoutMs` is a failure again — the next re-quote goes out
-    /// on the schedule, asked from the start (the core abandons the run that
-    /// hung), instead of waiting out a pool's whole sweep.
-    private func watchRequote() {
-        requoteWatch?.cancel()
-        let attempt = requoteAttempt
-        requoteWatch = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(feeRequoteTimeoutMs()) * 1_000_000)
-            guard let self, !Task.isCancelled, requoteAttempt == attempt,
-                  fee?.busy == true, requoteAllowed, requoteTask == nil
-            else { return }
-            requoteWatch = nil
-            let failure = requoteFailure ?? "quote_unavailable"
-            let wait = feeRequoteDelayMs(failure: failure, attempt: attempt + 1)
-            VelaLog.feeQuoteFailed(
-                chain: request?.chainId ?? 0, cause: "timeout", requote: attempt + 1, inMs: wait
-            )
-            guard let wait else { return }
-            requoteAttempt += 1
-            requoteTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
-                guard let self, !Task.isCancelled else { return }
-                requoteTask = nil
-                guard fee?.busy == true || fee?.failed != nil, requoteAllowed else { return }
-                fees.reask()
-                watchRequote()
-            }
-        }
-    }
-
-    /// The wait before automatic re-quote `attempt` of the quote on screen,
-    /// or `nil` for none: no failure, one still being measured, a failure no
-    /// retry can fix (the core's schedule says so), or a sheet that can no
-    /// longer use a fee (approved, answered, closed).
-    static func requoteDelay(_ view: FeeViewWire, attempt: UInt32, allowed: Bool) -> UInt32? {
-        guard allowed, !view.busy, let failure = view.failed else { return nil }
-        return feeRequoteDelayMs(failure: failure, attempt: attempt)
-    }
-
-    /// A re-quote is scheduled (tests read it; the sheet does not).
-    var requotePending: Bool { requoteTask != nil }
-
-    private func cancelRequote() {
-        requoteTask?.cancel()
-        requoteTask = nil
-        requoteWatch?.cancel()
-        requoteWatch = nil
-        startRetry?.cancel()
-        startRetry = nil
-    }
+    private var feesEnded = false
 
     /// `persist_record` wrote `recordId`: a hand-off naming it may go.
     private func recordLanded(_ recordId: String) {
@@ -963,7 +815,7 @@ final class SigningController {
         ports.trackSubmitted(TrackSubmission(
             userOpHash: handoff.userOpHash, recordIds: handoff.recordIds, chainId: handoff.chainId,
             maybeSent: handoff.maybeSent, submitBlock: handoff.submitBlock,
-            admitted: handoff.admitted
+            admitted: handoff.admitted, sender: handoff.sender
         ))
     }
 
@@ -996,27 +848,48 @@ final class SigningController {
         forwardTracked()
     }
 
+    /// The tracker's `in_flight_ops` (PR 2 §3), as the core computed it from
+    /// its own view: the sheet's confirm is held — `previous_pending`, one
+    /// line ahead of every fee block — while this account's previous op on
+    /// the request's chain is in flight. Signatures never wait. Forwarded on
+    /// every render; the machine dedupes an identical list.
+    func inFlightChanged(_ opsJson: String) {
+        guard let ops = (try? JSONSerialization.jsonObject(with: Data(opsJson.utf8))) as? [Any] else { return }
+        dispatchSign(["type": "in_flight_ops", "ops": ops])
+    }
+
     /// Only past `op_submitted` (the core takes it no earlier) and only while
     /// the page has no answer; once per entry state.
     private func forwardTracked() {
         guard !answered, let op = submittedHash,
               let entry = trackerView?.entry(userOpHash: op)
         else { return }
-        let state = "\(entry.userOpHash.lowercased())|\(entry.status)|\(entry.txHash ?? "")"
+        let state = "\(entry.userOpHash.lowercased())|\(entry.status)|\(entry.txHash ?? "")|\(entry.refusal ?? "")"
         guard state != lastTracked else { return }
         lastTracked = state
-        dispatchSign([
+        dispatchSign(Self.opTracked(entry, nowMs: Date().timeIntervalSince1970 * 1000))
+    }
+
+    /// The tracker entry as `op_tracked`: its status, the bundle it names,
+    /// and — for a refusal — WHY, the entry's own `refusal` (PR 2 note 9).
+    /// The sheet's failure then says the sentence the entry's `refusal_key`
+    /// says (`SignView.failure_refusal_key`): one source, the core's
+    /// `refusal_key(reason)`, for the sheet and its ending alike.
+    static func opTracked(_ entry: TrackEntryWire, nowMs: Double) -> [String: Any] {
+        var event: [String: Any] = [
             "type": "op_tracked",
             "user_op_hash": entry.userOpHash,
             "status": entry.status,
             "tx_hash": entry.txHash.map { $0 as Any } ?? NSNull(),
-            "now_ms": Date().timeIntervalSince1970 * 1000,
-        ])
+            "now_ms": nowMs,
+        ]
+        if let refusal = entry.refusal { event["refusal"] = refusal }
+        return event
     }
 
     private func markAnswered() {
         answered = true
-        cancelRequote()
+        endFees()
         if sign.surface == .hidden { closed = true }
     }
 

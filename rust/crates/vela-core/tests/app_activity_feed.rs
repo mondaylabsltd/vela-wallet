@@ -3027,3 +3027,119 @@ fn a_contacts_rows_are_the_feeds_items_for_that_address() {
     sut.dispatch(Event::ContactFilterChanged { address: None });
     assert!(sut.view().contact_rows.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// Balance privacy (invariant ⑧, `app::privacy`): one rule, decided here
+// ---------------------------------------------------------------------------
+
+/// The feed carries its own `hidden`, so History, a contact's page and the
+/// detail sheets mask on the feed's word — not on a flag each shell threads
+/// from the balance machine.
+#[test]
+fn the_feed_says_when_the_balance_is_hidden() {
+    let mut sut = boot(vec![recv("r1", "0xBob", "5", "USDT", 100_000.0)]);
+    assert!(!sut.view().hidden);
+    sut.dispatch(Event::PrivacyChanged { hidden: true });
+    assert!(sut.view().hidden);
+    sut.dispatch(Event::PrivacyChanged { hidden: false });
+    assert!(!sut.view().hidden);
+}
+
+/// Which row figures are money: an amount, a mixed batch's count and a capped
+/// allowance mask; an unlimited allowance (a risk to see) and a signature with
+/// no figure (nothing to hide) do not. The same rule on a contact's page.
+#[test]
+fn each_row_says_whether_its_figure_is_money() {
+    let mut a = send("m-0", "0xM", "0xSameGuy", "10", 400_000.0);
+    let mut b = send("m-1", "0xM", "0xSameGuy", "3", 400_000.0);
+    a.symbol = "USDC".to_owned();
+    b.symbol = "DAI".to_owned();
+    let mut msg = base("sig", 300_000.0);
+    msg.kind = Some(FeedTxKind::SignMessage);
+    msg.from = ADDR.to_owned();
+    msg.value = "0".to_owned();
+    msg.symbol = String::new();
+    msg.dapp_url = Some("https://app.test".to_owned());
+    let permit = |id: &str, unlimited: bool, ts: f64| {
+        signed(
+            id,
+            FeedTxKind::SignTypedData,
+            "https://app.uniswap.org",
+            DappSummary {
+                action: DappAction::Permit,
+                contract: Some(USDC_MAINNET.to_owned()),
+                spender: Some(UNIVERSAL_ROUTER.to_owned()),
+                token: Some(USDC_MAINNET.to_owned()),
+                symbol: Some("USDC".to_owned()),
+                decimals: Some(6),
+                amount: (!unlimited).then(|| "100000000".to_owned()),
+                unlimited,
+                primary_type: Some("Permit".to_owned()),
+                ..DappSummary::default()
+            },
+            ts,
+        )
+    };
+    let mut sut = boot(vec![
+        send("s", "", "0xBob", "7", 600_000.0),
+        recv("r", "0xBob", "5", "USDT", 500_000.0),
+        a,
+        b,
+        msg,
+        permit("capped", false, 200_000.0),
+        permit("unlimited", true, 100_000.0),
+        dapp_tx(
+            "native",
+            "https://a.test",
+            "0xR",
+            "0xde0b6b3a7640000",
+            50_000.0,
+        ),
+    ]);
+    let maskable: Vec<(String, bool)> = items(&sut)
+        .into_iter()
+        .map(|row| (row.id, row.figure_maskable))
+        .collect();
+    assert_eq!(
+        maskable,
+        vec![
+            ("s".to_owned(), true),
+            ("r".to_owned(), true),
+            ("0xM".to_owned(), true),
+            ("sig".to_owned(), false),
+            ("capped".to_owned(), true),
+            ("unlimited".to_owned(), false),
+            ("native".to_owned(), true),
+        ]
+    );
+    // A contact's page draws the same items, decided the same way.
+    sut.dispatch(Event::ContactFilterChanged {
+        address: Some("0xBob".to_owned()),
+    });
+    let contact: Vec<(String, bool)> = sut
+        .view()
+        .contact_rows
+        .into_iter()
+        .map(|row| (row.id, row.figure_maskable))
+        .collect();
+    assert_eq!(
+        contact,
+        vec![("s".to_owned(), true), ("r".to_owned(), true)]
+    );
+}
+
+/// A shell that predates the fields still decodes the view.
+#[test]
+fn the_privacy_fields_default_on_the_wire() {
+    let mut sut = boot(vec![recv("r1", "0xBob", "5", "USDT", 100_000.0)]);
+    sut.dispatch(Event::PrivacyChanged { hidden: true });
+    let mut json = serde_json::to_value(sut.view()).unwrap();
+    json.as_object_mut().unwrap().remove("hidden");
+    for row in json["rows"].as_array_mut().unwrap() {
+        if let Some(item) = row.get_mut("item") {
+            item.as_object_mut().unwrap().remove("figure_maskable");
+        }
+    }
+    let view: FeedView = serde_json::from_value(json).unwrap();
+    assert!(!view.hidden);
+}

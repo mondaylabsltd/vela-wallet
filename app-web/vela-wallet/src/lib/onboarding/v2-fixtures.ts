@@ -283,7 +283,8 @@ export const CREATE_FIXTURES: CreateFixture[] = [
 /**
  * Every prompt the two machines can raise.
  *
- * Nine, not spec 014's eighteen. The other nine — network, timeout, server,
+ * Eleven (nine, plus the unreachable registry's two), not spec 014's
+ * eighteen. The other nine — network, timeout, server,
  * account-not-found and the rest — were drawn as separate outcome cards, but
  * the core never says which of them happened: a transport failure and a 503
  * both arrive as `CreateFailed { detail }` or `SignInFailed { detail }` with
@@ -321,6 +322,16 @@ export const PROMPT_FIXTURES: { code: string; label: string; kind: PromptKind }[
 		kind: { type: 'recover_offer' }
 	},
 	{ code: 'E8', label: 'Recovery did not pin one key', kind: { type: 'recover_failed' } },
+	{
+		code: 'E10',
+		label: 'Can’t look up your wallet — a free retry, no new passkey',
+		kind: { type: 'registry_unreachable', local: false }
+	},
+	{
+		code: 'E11',
+		label: 'The lookup never left this device',
+		kind: { type: 'registry_unreachable', local: true }
+	},
 	{
 		code: 'E9',
 		label: 'Sign-in failed',

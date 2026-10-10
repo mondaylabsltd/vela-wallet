@@ -123,7 +123,7 @@ class WalletController(
         pool = pool,
         networks = networks,
         store = store,
-        chainInfo = chains::forChain,
+        chainInfo = chains::read,
         mainnetPrices = ChainlinkPrices(pool)::prices,
     )
 
@@ -478,6 +478,29 @@ class WalletController(
     /** Every hash the core is following, with its verdict. */
     val tracker: StateFlow<TrackView> = trackerHost?.view ?: MutableStateFlow(TrackView())
 
+    private val _inFlightOps = MutableStateFlow<List<app.getvela.wallet.feature.send.core.InFlightOp>>(emptyList())
+
+    /**
+     * The operations holding their account's nonce (one in flight per
+     * account and network), as the core reads them — `inFlightOps` of the
+     * tracker's view JSON EXACTLY as the core wrote it ([CoreHost.viewJson]).
+     * Never of a re-encoded [TrackView]: a mirror that dropped `sender` would
+     * hold nothing, one that dropped `stalled` would hold forever. Updated on
+     * every tracker render; the send and signing machines are told each new
+     * list (they dedupe an identical one).
+     */
+    val inFlightOps: StateFlow<List<app.getvela.wallet.feature.send.core.InFlightOp>> = _inFlightOps
+
+    /** `inFlightOps` of one tracker view JSON; `[]` when the core reads nothing from it. */
+    private fun inFlightOf(viewJson: String): List<app.getvela.wallet.feature.send.core.InFlightOp> =
+        runCatching {
+            app.getvela.wallet.core.crux.Wire.json.decodeFromString(
+                kotlinx.serialization.builtins.ListSerializer(app.getvela.wallet.feature.send.core.InFlightOp.serializer()),
+                uniffi.vela_core_uniffi.inFlightOps(viewJson),
+            )
+        }.onFailure { VelaLog.failure("tracker.inflight", "could not read the ops in flight", it) }
+            .getOrDefault(emptyList())
+
     /**
      * A tracked op whose standing changed — its status OR its outcome (spec
      * 082: a lost reply the relay then acknowledges changes only the outcome).
@@ -503,6 +526,7 @@ class WalletController(
             "tracker", "handed",
             "op" to handoff.userOpHash.take(12), "chain" to handoff.chainId,
             "maybeSent" to handoff.maybeSent, "admitted" to handoff.admitted, "submitBlock" to handoff.submitBlock,
+            "sender" to handoff.sender?.take(10),
         )
         host.dispatch(handoff.event(), TrackEvent.serializer())
         // Device-found (spec 043 phase 4): a person taps confirm and leaves
@@ -559,6 +583,18 @@ class WalletController(
         // Issue 188: an incoming transfer moves the total too.
         refreshOnArrival(scope, feedHost.view) { refresh(force = true) }
         trackerHost?.let { host ->
+            // One in flight per account and network: every render's ops, read
+            // by the core from its own view JSON (never the mirror).
+            scope.launch {
+                host.viewJson.collect { json ->
+                    if (json == null) return@collect
+                    val ops = inFlightOf(json)
+                    if (ops != _inFlightOps.value) {
+                        VelaLog.event("tracker.inflight", "ops", "n" to ops.size, "chains" to ops.joinToString(",") { it.chain_id.toString() })
+                    }
+                    _inFlightOps.value = ops
+                }
+            }
             scope.launch {
                 host.view.collect { view ->
                     view.entries.forEach { entry ->

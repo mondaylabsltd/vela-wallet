@@ -80,14 +80,21 @@ function variantsOf(rawSource) {
 		const name = body.match(/"type":\s*"([a-z0-9_]+)"/)?.[1];
 		if (!name) continue;
 		// Top-level keys only: anything inside a nested brace belongs to a field.
+		// A field ts-rs writes as `name?:` is one the Rust side reads with a
+		// serde default (`#[ts(optional)]` beside `#[serde(default)]`): a shell
+		// may send it, and omitting it is not a mismatch.
 		const fields = [];
+		const optional = new Set();
 		let nest = 0;
-		for (const m of body.matchAll(/[{}]|(?:^|[,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) {
+		for (const m of body.matchAll(/[{}]|(?:^|[,{]\s*)([A-Za-z_][A-Za-z0-9_]*)(\?)?\s*:/g)) {
 			if (m[0] === '{') nest++;
 			else if (m[0] === '}') nest--;
-			else if (nest === 1 && m[1] !== 'type') fields.push(m[1]);
+			else if (nest === 1 && m[1] !== 'type') {
+				fields.push(m[1]);
+				if (m[2]) optional.add(m[1]);
+			}
 		}
-		out.set(name, fields);
+		out.set(name, { fields, optional });
 	}
 	return out;
 }
@@ -105,8 +112,8 @@ const declared = new Map();
 for (const file of readdirSync(GEN).filter((f) => f.endsWith('.ts'))) {
 	const machine = basename(file, '.ts');
 	if (onlyMachine && machine !== onlyMachine) continue;
-	for (const [name, fields] of variantsOf(readFileSync(join(GEN, file), 'utf8'))) {
-		declared.set(name, [...(declared.get(name) ?? []), { machine, fields }]);
+	for (const [name, { fields, optional }] of variantsOf(readFileSync(join(GEN, file), 'utf8'))) {
+		declared.set(name, [...(declared.get(name) ?? []), { machine, fields, optional }]);
 	}
 }
 
@@ -192,7 +199,7 @@ for (const shell of SHELLS) {
 					machine: o.machine,
 					fields: o.fields,
 					unknown: keys.filter((k) => !o.fields.includes(k)),
-					missing: o.fields.filter((f) => !keys.includes(f))
+					missing: o.fields.filter((f) => !keys.includes(f) && !o.optional.has(f))
 				}))
 				.sort((a, b) => a.unknown.length + a.missing.length - (b.unknown.length + b.missing.length));
 			const best = scored[0];

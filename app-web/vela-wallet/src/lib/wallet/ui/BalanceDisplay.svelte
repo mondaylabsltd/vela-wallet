@@ -222,6 +222,10 @@
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		/* A line that wraps reads from its start, beside its glyph — a button
+		   centres its text by default, and Vela's own-fault sentence (PR 2
+		   note 11) is the first status long enough to wrap. */
+		text-align: start;
 		cursor: pointer;
 		border-radius: var(--radius-sm);
 	}

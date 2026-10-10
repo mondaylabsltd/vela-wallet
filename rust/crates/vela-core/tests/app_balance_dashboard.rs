@@ -52,6 +52,7 @@ fn settled(address: &str, tokens: Vec<BalanceToken>, failed: Vec<u32>, limited: 
         failed_chain_ids: failed,
         rate_limited_chain_ids: limited,
         read_chain_ids: vec![],
+        internal_chain_ids: vec![],
         now_ms: NOW,
     }
 }
@@ -65,6 +66,7 @@ fn settled_read(tokens: Vec<BalanceToken>, failed: Vec<u32>, read: Vec<u32>) -> 
         failed_chain_ids: failed,
         rate_limited_chain_ids: vec![],
         read_chain_ids: read,
+        internal_chain_ids: vec![],
         now_ms: NOW,
     }
 }
@@ -738,6 +740,7 @@ fn an_errored_first_load_is_unreachable_not_zero() {
     sut.resolve(Res::FetchErrored {
         address: ADDR_A.to_owned(),
         pull: false,
+        internal: false,
     });
     let view = sut.view();
     assert!(view.unreachable);
@@ -746,6 +749,7 @@ fn an_errored_first_load_is_unreachable_not_zero() {
         "the skeleton closed; the reason is different"
     );
     assert_eq!(view.tokens.len(), 0);
+    assert_eq!(view.display_total_usd, None, "no figure, not a 0 to ignore");
     // A later successful fetch clears it.
     sut.dispatch(Event::RefreshRequested {
         force: true,
@@ -993,6 +997,7 @@ fn fetch_error_closes_the_skeleton_but_keeps_last_known() {
     sut.resolve(Res::FetchErrored {
         address: ADDR_A.to_owned(),
         pull: false,
+        internal: false,
     });
     let view = sut.view();
     assert!(!view.balance_unknown);
@@ -1143,6 +1148,80 @@ fn hidden_survives_restart_via_hydrate() {
     assert!(!sut.view().hidden);
 }
 
+/// The switcher is money too: while hidden it carries no figure — not the
+/// hero's total pinned at open (which the hero never showed), not a cached
+/// row, not a live refresh — and the cached total is withheld like the hero's.
+/// They are kept, and come back the moment privacy is turned off.
+#[test]
+fn hidden_withholds_the_switcher_and_the_cached_total() {
+    let mut sut = booted(
+        ADDR_A,
+        Some(90.0),
+        settled(
+            ADDR_A,
+            vec![token(1, "ETH", "100", Some(1.0))],
+            vec![],
+            vec![],
+        ),
+    );
+    sut.resolve(Res::BalanceCacheWritten);
+    sut.dispatch(Event::PrivacyToggled);
+    let view = sut.view();
+    assert_eq!(view.cached_total_usd, None, "a figure, withheld");
+    assert_eq!(view.display_total_usd, None);
+
+    sut.dispatch(Event::SwitcherOpened {
+        addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()],
+    });
+    sut.resolve(Res::BalanceCacheWritten);
+    sut.resolve(Res::CachedBalancesLoaded {
+        balances: vec![BalanceCacheEntry {
+            address: ADDR_B.to_owned(),
+            usd: 55.0,
+        }],
+    });
+    sut.resolve(Res::AccountAssetsFetched {
+        address: ADDR_B.to_owned(),
+        tokens: Some(vec![token(1, "ETH", "56", Some(1.0))]),
+    });
+    let view = sut.view();
+    assert!(view.switcher.open, "the switcher still opens, rows and all");
+    assert!(view.switcher.hidden);
+    assert!(
+        view.switcher.balances.is_empty(),
+        "no row, and no total, carries a figure: {:?}",
+        view.switcher.balances
+    );
+    assert!(
+        !serde_json::to_string(&view).unwrap().contains("56"),
+        "no switcher figure leaves the core"
+    );
+
+    // Shown again: everything the switcher learned meanwhile is there.
+    sut.dispatch(Event::PrivacyToggled);
+    let view = sut.view();
+    assert!(!view.switcher.hidden);
+    assert_eq!(view.cached_total_usd, Some(100.0), "the settled total");
+    assert!(view.switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 100.0
+    }));
+    assert!(view.switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_B.to_owned(),
+        usd: 56.0
+    }));
+}
+
+/// A shell that predates `switcher.hidden` still decodes the view.
+#[test]
+fn the_switcher_hidden_flag_defaults_on_the_wire() {
+    let sut = booted(ADDR_A, None, settled(ADDR_A, vec![], vec![], vec![]));
+    let mut json = serde_json::to_value(sut.view()).unwrap();
+    json["switcher"].as_object_mut().unwrap().remove("hidden");
+    let view: BalanceView = serde_json::from_value(json).unwrap();
+    assert!(!view.switcher.hidden);
+}
+
 // ===========================================================================
 // Machine — invariant ⑨: refresh cadence rules
 // ===========================================================================
@@ -1181,6 +1260,7 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
         failed_chain_ids: vec![],
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![],
+        internal_chain_ids: vec![],
         now_ms: NOW + 1.0,
     });
     assert!(!sut.view().refreshing);
@@ -1224,6 +1304,7 @@ fn the_refresh_control_spins_until_its_own_round_ends() {
         failed_chain_ids: vec![],
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![],
+        internal_chain_ids: vec![],
         now_ms: NOW + 1.0,
     });
     assert!(sut.view().refreshing, "the person's own round is still out");
@@ -1233,6 +1314,7 @@ fn the_refresh_control_spins_until_its_own_round_ends() {
     sut.resolve(Res::FetchErrored {
         address: ADDR_A.to_owned(),
         pull: true,
+        internal: false,
     });
     assert!(!sut.view().refreshing);
     assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW + 1.0));
@@ -1650,6 +1732,7 @@ fn an_account_switch_forgets_the_last_reads() {
         failed_chain_ids: vec![56],
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![56],
+        internal_chain_ids: vec![],
         now_ms: NOW,
     });
     assert_eq!(unreachable_rows(&sut.view()), vec![(56, NOT_READ_YET)]);
@@ -2197,4 +2280,119 @@ mod read_plan {
         assert_eq!(slot["kind"], "stable");
         assert_eq!(slot["peg_usd"], 1.0);
     }
+}
+
+// ===========================================================================
+// PR 2 note 11: a fault inside Vela is never "can't reach" a network
+// ===========================================================================
+
+/// The balance read never left the app on a chain (issue 483: a request pool
+/// nobody started): the home says Vela's own fault, in the fee's sentence
+/// for it, and that chain is not counted as a network out of reach — while
+/// a real chain-down beside it still is. The total stays honest either way.
+#[test]
+fn an_internal_fault_is_not_a_network_out_of_reach() {
+    use vela_core::app::fee_policy::REASON_INTERNAL_KEY;
+    let settle = |failed: Vec<u32>, internal: Vec<u32>| Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: failed,
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 56, 137],
+        internal_chain_ids: internal,
+        now_ms: NOW,
+    };
+    // Every failure is internal: no "Can't reach Ethereum".
+    let sut = booted(ADDR_A, None, settle(vec![1], vec![1]));
+    let view = sut.view();
+    assert_eq!(view.unreachable_key, None);
+    assert!(view.unreachable_networks.is_empty());
+    assert_eq!(view.internal_key.as_deref(), Some(REASON_INTERNAL_KEY));
+    assert_eq!(view.internal_chain_ids, vec![1]);
+    assert!(view.balance_partial, "a chain did not answer");
+
+    // One internal, one really down: each said as what it is.
+    let sut = booted(ADDR_A, None, settle(vec![1, 56], vec![1]));
+    let view = sut.view();
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
+    assert_eq!(unreachable_rows(&view).first().map(|row| row.0), Some(56));
+    assert_eq!(view.internal_key.as_deref(), Some(REASON_INTERNAL_KEY));
+
+    // The next round answers: the line goes.
+    let mut sut = booted(ADDR_A, None, settle(vec![1], vec![1]));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settle(vec![], vec![]));
+    assert_eq!(sut.view().internal_key, None);
+}
+
+/// The whole fetch threw inside the app: said as that too, never "can't
+/// reach".
+#[test]
+fn a_fetch_that_threw_inside_the_app_says_so() {
+    use vela_core::app::fee_policy::REASON_INTERNAL_KEY;
+    let sut = booted(
+        ADDR_A,
+        None,
+        Res::FetchErrored {
+            address: ADDR_A.to_owned(),
+            pull: false,
+            internal: true,
+        },
+    );
+    assert_eq!(
+        sut.view().internal_key.as_deref(),
+        Some(REASON_INTERNAL_KEY)
+    );
+    let sut = booted(
+        ADDR_A,
+        None,
+        Res::FetchErrored {
+            address: ADDR_A.to_owned(),
+            pull: false,
+            internal: false,
+        },
+    );
+    assert_eq!(sut.view().internal_key, None);
+}
+
+/// Every chain a round asked failed and nothing is known: no settled $0.00
+/// (and no "Deposit your first asset" under it) — nothing at all, as for a
+/// fetch that threw. A round where one chain answered, even with nothing,
+/// is a real zero.
+#[test]
+fn a_round_where_every_chain_failed_is_no_zero() {
+    let all_failed = Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![1, 56],
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 56],
+        internal_chain_ids: vec![1, 56],
+        now_ms: NOW,
+    };
+    let view = booted(ADDR_A, None, all_failed).view();
+    assert!(view.unreachable, "nothing known: no figure");
+    assert_eq!(view.display_total_usd, None, "unreachable is no $0.00");
+    assert!(view.internal_key.is_some());
+
+    let one_answered = booted(ADDR_A, None, settled_read(vec![], vec![56], vec![1, 56])).view();
+    assert!(
+        !one_answered.unreachable,
+        "Ethereum answered: it holds nothing"
+    );
+    assert_eq!(one_answered.display_total_usd, Some(0.0));
+
+    // With a cache, the cache stands.
+    let cached = booted(
+        ADDR_A,
+        Some(12.0),
+        settled_read(vec![], vec![1, 56], vec![1, 56]),
+    )
+    .view();
+    assert!(!cached.unreachable);
 }

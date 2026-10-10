@@ -21,10 +21,10 @@ use crate::wallet::components::{
 
 use super::components::{
     CopyButton, GhostPill, accent_button, address_card, danger_button, disabled_accent_button,
-    fact_row, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option, fee_speed_summary,
-    fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row, max_chip, mono_field,
-    network_pill, network_row, qr_card, quiet_button, recipient_card, search_empty, search_matches,
-    segmented_toggle, status_chip, token_header_card,
+    fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option,
+    fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row,
+    max_chip, mono_field, network_pill, network_row, qr_card, quiet_button, recipient_card,
+    search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -491,6 +491,8 @@ pub fn render(
                 report: actions.notice_report,
             },
             (actions.handoff_recheck, actions.handoff_trust),
+            // The fee line's tap is the form row's (PR 2 polish).
+            actions.open_fee_token,
         ),
         FlowBody::SendReceipt(model) => send_receipt(
             model,
@@ -1548,10 +1550,15 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
         dismiss,
         report,
     } = clicks;
-    let (tint, border) = if notice.error {
-        (theme.error_soft, theme.error_base)
+    // Three tones: red when the person cannot proceed, amber for a stop
+    // with a way on, and the calm info tone when nothing went wrong ("Not
+    // sent yet", PR 2 polish) — the settings callout's own info pair.
+    let (tint, border, ink) = if notice.calm {
+        (theme.info_soft, theme.info_base.opacity(0.3), theme.fg_base)
+    } else if notice.error {
+        (theme.error_soft, theme.error_base, theme.error_base)
     } else {
-        (theme.warning_soft, theme.warning_border)
+        (theme.warning_soft, theme.warning_border, theme.warning_base)
     };
     let mut card = div()
         .flex()
@@ -1567,11 +1574,7 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
             div()
                 .text_size(theme::text_row_title())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(if notice.error {
-                    theme.error_base
-                } else {
-                    theme.warning_base
-                })
+                .text_color(ink)
                 .child(title.clone()),
         );
     }
@@ -2528,6 +2531,9 @@ fn send_form_parts(
     // the fee-coin sheet, and the refresh at its end — two controls side by
     // side, not one inside the other, so measuring again never opens the
     // sheet.
+    // A failed fee a tap cannot help (PR 2 polish) is no control: no
+    // chevron, and no click to bind.
+    let open_fee = actions.open_fee_token.take().filter(|_| model.fee.control);
     let mut fee_line = div()
         .flex()
         .items_center()
@@ -2535,7 +2541,7 @@ fn send_form_parts(
         .bg(theme.bg_raised)
         .child(div().flex_1().min_w(px(0.)).child(clickable(
             "flow-fee-row",
-            actions.open_fee_token.take(),
+            open_fee,
             fee_row(theme, icons, &model.fee),
         )));
     if model.fee.refresh.is_some() {
@@ -2546,11 +2552,17 @@ fn send_form_parts(
         ));
     }
     let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee_line);
-    if model.fee.refresh.is_some() {
+    let stale_line = model.fee.refresh.is_some() || model.fee.reason.is_some();
+    if stale_line {
         fee_block = fee_block.child(fee_stale_line(theme, &model.fee));
     }
     if let Some(speed) = &model.speed {
         fee_block = fee_block.child(speed_control(theme, icons, speed, toggle_speed, pick_speed));
+    }
+    // The room a longer reason may yet take, under the speed control, so
+    // Continue stays where it is when one lands (PR 2 polish).
+    if stale_line {
+        fee_block = fee_block.child(fee_line_spare(window, &model.fee));
     }
     let foot = foot.child(div().pt(px(8.)).pb(px(16.)).child(cta_button(
         "flow-form-cta",
@@ -2566,7 +2578,9 @@ fn send_form_parts(
 /// 11 on 1.4 — red when nothing can proceed, amber while still typing (the
 /// desktop's own two tones, which the core's `error` flag carries).
 fn alert_line(theme: &Theme, icons: &mut IconCache, notice: &SendNotice) -> Div {
-    let color = if notice.error {
+    let color = if notice.calm {
+        theme.fg_muted
+    } else if notice.error {
         theme.error_base
     } else {
         theme.warning
@@ -3438,6 +3452,7 @@ fn batch_total_line(
         })
 }
 
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 fn send_confirm(
     model: &SendConfirm,
     theme: &Theme,
@@ -3446,6 +3461,7 @@ fn send_confirm(
     advance: Option<Click>,
     notice_clicks: NoticeClicks,
     (handoff_recheck, handoff_trust): (Option<Click>, Option<Click>),
+    mut fee_tap: Option<Click>,
 ) -> Div {
     let mut hero = div()
         .flex()
@@ -3501,6 +3517,23 @@ fn send_confirm(
     for (i, fact) in model.facts.iter().enumerate() {
         if i > 0 {
             card = card.child(divider(theme));
+        }
+        // The fee line, when a tap on it does something (PR 2 polish): the
+        // form row's chevron and the form row's tap — "Tap it to retry"
+        // under the confirm names a line that answers it.
+        if model.fee_fact == Some(i) {
+            card = card.child(clickable(
+                "flow-confirm-fee",
+                fee_tap.take(),
+                fact_row(theme, icons, identicons, fact, None).child(icon_img(
+                    icons,
+                    Icon::ChevronRight,
+                    false,
+                    theme.fg_muted,
+                    12.,
+                )),
+            ));
+            continue;
         }
         card = card.child(fact_row(theme, icons, identicons, fact, None));
     }
@@ -3559,13 +3592,26 @@ fn send_confirm(
         );
     }
     // Per the SPEC sheet this is the ONE accent CTA in the whole send journey.
-    col.child(cta_button(
+    col = col.child(cta_button(
         "flow-confirm-cta",
         theme,
         model.cta.clone(),
         model.cta_state,
         advance,
-    ))
+    ));
+    // Held for the account's previous transaction: the one line, under the
+    // confirm it holds — no spinner, no countdown (correctness batch item 3)
+    // — set as the signing sheet sets its own held line, so the two
+    // surfaces holding the same nonce say it the same way.
+    if let Some(held) = &model.held {
+        col = col.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(held.clone()),
+        );
+    }
+    col
 }
 
 fn send_receipt(
@@ -3684,7 +3730,7 @@ fn hero_icon(stage: crate::flows::fixtures::ReceiptStage) -> Option<Icon> {
     use crate::flows::fixtures::ReceiptStage;
     match stage {
         ReceiptStage::Submitting => None,
-        ReceiptStage::Submitted => Some(Icon::Clock),
+        ReceiptStage::Submitted | ReceiptStage::NotSent => Some(Icon::Clock),
         ReceiptStage::Confirmed => Some(Icon::Check),
         ReceiptStage::Failed => Some(Icon::Exclamation),
     }
@@ -3711,7 +3757,9 @@ pub fn status_hero(
 
     let (bg, fg) = match stage {
         ReceiptStage::Submitting => (theme.bg_sunken, theme.accent),
-        ReceiptStage::Submitted => (theme.bg_sunken, theme.fg_muted),
+        // "Not sent yet" (PR 2 polish): the waiting disc with no ring —
+        // nothing is on its way, and nothing went wrong.
+        ReceiptStage::Submitted | ReceiptStage::NotSent => (theme.bg_sunken, theme.fg_muted),
         ReceiptStage::Confirmed => (theme.success_soft, theme.success_base),
         ReceiptStage::Failed => (theme.error_soft, theme.error_base),
     };
@@ -4108,9 +4156,13 @@ mod tests {
             ReceiptStage::Submitted,
             ReceiptStage::Confirmed,
             ReceiptStage::Failed,
+            ReceiptStage::NotSent,
         ] {
             assert_ne!(hero_icon(stage), Some(Icon::X), "{stage:?}");
         }
+        // "Not sent yet" is a wait, not a failure: the clock, never the
+        // exclamation.
+        assert_eq!(hero_icon(ReceiptStage::NotSent), Some(Icon::Clock));
     }
 
     fn detail(tone: StatusTone, explorer_url: Option<&str>) -> TxDetail {

@@ -19,6 +19,7 @@ import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
 import type { FeeCall } from '$lib/core/generated/FeeCall';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
+import type { SendEstimateFailure } from '$lib/core/generated/SendEstimateFailure';
 import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
 import type { ReadSlot } from '$lib/core/generated/ReadSlot';
 import type { SignEnding } from '$lib/core/generated/SignEnding';
@@ -29,6 +30,8 @@ import type { StableRef } from '$lib/core/generated/StableRef';
 import type { TokenRef } from '$lib/core/generated/TokenRef';
 import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 import type { TrackStatusAnswer } from '$lib/core/generated/TrackStatusAnswer';
+import type { TrackView } from '$lib/core/generated/TrackView';
+import type { InFlightOp } from '$lib/core/generated/InFlightOp';
 import type { ConfirmState } from '$lib/core/generated/ConfirmState';
 import type { LandingPace } from '$lib/core/generated/LandingPace';
 import type { DappChainAsk } from '$lib/core/generated/DappChainAsk';
@@ -865,6 +868,18 @@ export function signConfirmState(
 }
 
 /**
+ * The operations holding their account's nonce (correctness batch item 3,
+ * `tx_tracker::in_flight_ops`): accepted by the relay, not yet final, still
+ * followed, and not stalled for ten minutes. Read from the tracker's OWN view
+ * as it arrived — `JSON.stringify` keeps every field, `sender` and `stalled`
+ * included; a view re-built from a narrower shape would hold nothing, or hold
+ * forever. Forwarded to the send and signing machines on every tracker render.
+ */
+export function inFlightOps(view: TrackView): InFlightOp[] {
+	return JSON.parse(wasm.inFlightOps(JSON.stringify(view))) as InFlightOp[];
+}
+
+/**
  * Spec 099 R6: the landing's countdown and ring, counted from when the relay
  * put the bundle on the network (`TrackEntryView.relay_sent_at_ms`) — the
  * core's one ladder. `typicalS` `0` = no usual time for this chain.
@@ -906,11 +921,26 @@ export function feeRequoteTimeoutMs(): number {
 /**
  * The corpus key of the reason line under a failed fee, or `null` for none
  * (`fee_policy::failure_reason_key`, spec 082 RJ13): the relay out of reach,
- * a rate-limited chain node, or a chain node out of reach (`explore.chainDown`,
- * whose `{{chain}}` the shell fills). The shell never picks these words itself.
+ * a rate-limited chain node, a chain node out of reach
+ * (`componentsUi.gas.reasonChainDown`, whose `{{chain}}` the shell fills), or
+ * a fault inside Vela (`componentsUi.gas.reasonInternal`, issue 483). The
+ * shell never picks these words itself.
  */
 export function feeFailureReasonKey(failure: FeeFailure): string | null {
 	return wasm.feeFailureReasonKey(feeFailureWire(failure)) ?? null;
+}
+
+/**
+ * The corpus key of the body of the alert a failed Continue estimate shows
+ * (`SendAlertKind::EstimateFailed`, PR 2 note 13): the chain out of reach by
+ * its name (`send.alertEstimateChainDownBody`, `{{chain}}`), a fault inside
+ * Vela as that (`componentsUi.gas.reasonInternal`), else the general
+ * sentence (`send.alertEstimateFailedBody`). The shell never picks it.
+ */
+export function sendEstimateFailureBodyKey(failure: SendEstimateFailure): string {
+	return wasm.sendEstimateFailureBodyKey(
+		typeof failure === 'string' ? failure : JSON.stringify(failure)
+	);
 }
 
 /**

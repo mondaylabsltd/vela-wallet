@@ -283,6 +283,9 @@ class OnboardingExecutor(
                 result("registry_key_status") {
                     put("registered", status.registered)
                     put("unit_ids", JSONArray().apply { status.unitIds.forEach { put(it) } })
+                    // Untouched from the resolver: the rebuild is offered only
+                    // on Gnosis's "no record" (the core's rule).
+                    put("verified_by", status.verifiedBy)
                 }
             }
 

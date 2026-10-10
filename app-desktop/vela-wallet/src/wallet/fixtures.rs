@@ -147,8 +147,10 @@ pub struct BalanceModel {
     pub updating: SharedString,
 }
 
-pub const MASK: &str = "••••";
-pub const BALANCE_MASK: &str = "••••••";
+/// The masks are the core's (`app::privacy`): the same glyphs on every
+/// surface and every shell.
+pub const MASK: &str = vela_core::app::privacy::MASK;
+pub const BALANCE_MASK: &str = vela_core::app::privacy::BALANCE_MASK;
 
 /// The default balance every D-state shows.
 pub fn balance_default(s: &WalletStrings) -> BalanceModel {
@@ -202,14 +204,64 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
             row(137, LastKnown::NotRead, None, NOT_READ_YET),
         ],
         unreachable_key: Some(UNREACHABLE_MANY.to_owned()),
+        internal_chain_ids: Vec::new(),
+        internal_key: None,
         holdings_loading: false,
         cached_total_usd: Some(4_500.0),
         switcher: BalanceSwitcherView {
             open: false,
             loading: false,
             balances: Vec::new(),
+            hidden: false,
         },
     }
+}
+
+/// PR 2 note 11's gallery state (DSR7), through the real balance core: the
+/// account holds $4,500 on Gnosis and its Ethereum read never left the app
+/// (`internal_chain_ids`, as the executor reports a request pool that is
+/// gone). The hero keeps the total and says Vela's own fault where the
+/// "can't reach" line goes — never "Can't reach Ethereum".
+#[must_use]
+pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![BalanceToken {
+                    chain_id: 100,
+                    symbol: "XDAI".to_owned(),
+                    name: "xDAI".to_owned(),
+                    balance: "4500".to_owned(),
+                    decimals: 18,
+                    token_address: None,
+                    price_usd: Some(1.0),
+                    spam: false,
+                }],
+                failed_chain_ids: vec![1],
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 100],
+                internal_chain_ids: vec![1],
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
 }
 
 /// Component-board balance variants (gallery Components tab).

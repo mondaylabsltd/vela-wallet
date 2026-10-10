@@ -14,10 +14,12 @@
  * surface that asks about the fee asks THIS session, and the number it settles
  * on is the number displayed, gated and signed.
  *
- * What the shell owns is I/O and arithmetic-free bookkeeping: which account is
- * deployed, which passkey builds its initCode, and the promise plumbing that
- * lets the `send` core's `estimate_fee` operation be answered by a live
- * machine instead of a one-shot call.
+ * What the shell owns is I/O and arithmetic-free bookkeeping: which passkey
+ * builds its initCode, and the promise plumbing that lets the `send` core's
+ * `estimate_fee` operation be answered by a live machine instead of a one-shot
+ * call. Whether the account is deployed is the core's question now (issue
+ * 483, `read_deployment`): its read is the fee's own, so its failure is the
+ * fee's failure — on the row, the footer and the retry alike.
  */
 import { loadCore } from '$lib/core/client';
 import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
@@ -27,16 +29,11 @@ import type { FeeEvent } from '$lib/core/generated/FeeEvent';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { FeeView } from '$lib/core/generated/FeeView';
-import {
-	accountIsDeployed,
-	invalidateFeeSignals,
-	type TransactionFeeEstimate
-} from '$lib/services/safe-transaction';
-import { DeploymentReadError } from '$lib/services/deployment-read';
-import { feeQuoteDeadlineMs } from '$lib/core/kernels';
+import { invalidateFeeSignals, type TransactionFeeEstimate } from '$lib/services/safe-transaction';
 import { resolvedFormatKeys } from '$lib/services/locale-format';
 import { createFeeSession, type FeeSession } from './fee-session';
 import { resolveFee } from './send-estimates';
+import { publicKeyShouldVanish } from '$lib/services/fault-injection';
 
 /**
  * The tier a request that names none is priced at: the core's own factory
@@ -57,7 +54,9 @@ export const IDLE_FEE_VIEW: FeeView = {
 	options: [],
 	confirm_fee_ready: false,
 	no_coin_pays: false,
-	nothing_to_pay_from: false
+	nothing_to_pay_from: false,
+	provisional: false,
+	failure: null
 };
 
 export interface FeeQuoteRequest {
@@ -103,20 +102,50 @@ export interface FeeQuoteRequest {
 /**
  * How a quote request ended.
  *
- * `context_unavailable` is not a verdict about a fee — it says the shell could
- * not obtain an input the question requires (an indeterminate `eth_getCode`),
- * so the core was never asked. Guessing a deployment status is the one thing
- * that must not happen here: guessing "deployed" ships an op with empty
- * initCode for a fresh account, guessing "undeployed" attaches initCode to a
- * live one, and both are rejected at submit.
+ * An account whose deployment could not be read is a `failed` quote like any
+ * other (`chain_read`, or `internal` when the read never left the app — issue
+ * 483): the core asked, the core failed it, and the core retries it. Guessing
+ * a deployment status is still the one thing that must not happen: guessing
+ * "deployed" ships an op with empty initCode for a fresh account, guessing
+ * "undeployed" attaches initCode to a live one, and both are rejected at
+ * submit — which is why the core waits for the read rather than assume.
  *
  * `abandoned` is the surface moving on under an in-flight request.
  */
 export type FeeQuoteOutcome =
 	| { kind: 'ok'; estimate: FeeEstimateView }
 	| { kind: 'failed'; failure: FeeFailure }
-	| { kind: 'context_unavailable' }
 	| { kind: 'abandoned' };
+
+/**
+ * The core could not be loaded for this request: nothing was priced, and the
+ * reason is Vela's own (`FeeFailure::Internal`) — said in the fee's words,
+ * the confirm shut, the retry wired.
+ *
+ * The one failure the core cannot say itself (PR 2 note 1): with no core
+ * there is no machine to ask again on its schedule, so nothing here claims
+ * it is retrying — a tap is the one way (`requote` loads the core again).
+ * The words are the core's own for that case (`FeeFailureView::of` with no
+ * automatic retry): "Tap to retry" on the row, "Tap it to retry" under the
+ * confirm, and the internal reason line.
+ */
+const CORE_LOST_VIEW: FeeView = {
+	...IDLE_FEE_VIEW,
+	failed: 'internal',
+	failure: {
+		failure: 'internal',
+		reason_key: 'componentsUi.gas.reasonInternal',
+		auto_retry: false,
+		retrying: false,
+		figure_key: 'componentsUi.gas.estimateFailed',
+		footer_key: 'componentsUi.signing.confirmBlock.feeFailed',
+		// A tap loads the core again and asks (`requote`). No run, so no chain
+		// or coin it answered: every surface takes it as its own.
+		tap: 'retry',
+		chain_id: null,
+		fee_token: null
+	}
+};
 
 /**
  * Which sessions have had `start` called. The shared effect loop draws a real
@@ -152,8 +181,8 @@ export class FeeQuote {
 	/** The session's view, masked to idle while a superseded question is live. */
 	view = $state<FeeView>(IDLE_FEE_VIEW);
 	/**
-	 * Covers the account-context read too, so no surface renders "estimate
-	 * failed" in the frame between deciding to quote and the machine starting.
+	 * Covers the core's loading too, so no surface renders "estimate failed"
+	 * in the frame between deciding to quote and the machine starting.
 	 */
 	pending = $state(false);
 	/** Distinguishes an idle machine from a failed one — both project `fee: null`. */
@@ -177,19 +206,19 @@ export class FeeQuote {
 	#raw: FeeView = IDLE_FEE_VIEW;
 	#latest: FeeView = IDLE_FEE_VIEW;
 	/**
-	 * The last request never reached the core, so the core's view answers a
-	 * DIFFERENT question and must not be published as this one's. Without this
-	 * the surface renders the previous request's quote — on a signing sheet
-	 * that is "displayed = signed" broken in the most direct way available.
+	 * The last request never reached the core — the core itself could not be
+	 * loaded — so the core's view answers a DIFFERENT question and must not be
+	 * published as this one's. The surface is told the one true thing instead:
+	 * Vela failed inside, not the chain (`internal`). Without the mask the
+	 * surface renders the previous request's quote — on a signing sheet that is
+	 * "displayed = signed" broken in the most direct way available.
 	 */
-	#contextLost = $state(false);
-	/** The lost context was a chain node refusing for load (spec 082 RJ13). */
-	#contextRateLimited = $state(false);
+	#coreLost = $state(false);
 	/** The key the LIVE request carries, read when the core asks for a simulation. */
 	#publicKey: string | undefined = undefined;
 	/** At most one caller awaits settlement: a new request supersedes the last inside the core. */
 	#settle: ((outcome: FeeQuoteOutcome) => void) | null = null;
-	/** Guards the await inside `requestQuote`: a slower deployment read must not dispatch. */
+	/** Guards the await inside `requestQuote`: a slower core load must not dispatch. */
 	#seq = 0;
 	/**
 	 * What a `requestQuote` that was superseded by a PROMOTION returns.
@@ -202,8 +231,8 @@ export class FeeQuote {
 	 * person only tapped a speed on.
 	 *
 	 * Keyed by the `#seq` the parked caller holds, because the caller can be
-	 * anywhere: inside `await accountIsDeployed`, inside `await loadCore()`, or
-	 * already waiting on {@link #settle}. Only that one caller can claim it.
+	 * anywhere: inside `await loadCore()`, or already waiting on
+	 * {@link #settle}. Only that one caller can claim it.
 	 */
 	#supersededBy: { seq: number; outcome: FeeQuoteOutcome } | null = null;
 	/**
@@ -267,26 +296,6 @@ export class FeeQuote {
 	}
 
 	/**
-	 * The last request never reached the core: an input it needs (the
-	 * account's deployment, an `eth_getCode` read) could not be obtained — the
-	 * chain did not answer. The published view is then idle, which says "no
-	 * quote" and nothing about why; a surface that must say why, and ask again
-	 * (the signing sheet, spec 079), reads this.
-	 */
-	get contextLost(): boolean {
-		return this.#contextLost;
-	}
-
-	/**
-	 * The lost context's read was refused for load (a public node's rate
-	 * limit), not unanswered — the fee row then says "rate-limited, retrying",
-	 * never "can't reach Vela" (spec 082 RJ13, G48).
-	 */
-	get contextRateLimited(): boolean {
-		return this.#contextRateLimited;
-	}
-
-	/**
 	 * Bumped every time this session is asked to price again.
 	 *
 	 * The speed picker's other rows are priced by separate sessions
@@ -309,7 +318,9 @@ export class FeeQuote {
 		const seq = ++this.#seq;
 		this.#lastRequest = request;
 		this.#generation += 1;
-		this.#publicKey = request.publicKeyHex;
+		// The dev/e2e fault switch (`vela.forgetPublicKey()`): asked as if no
+		// key were known — the tap-only failure, reachable for a screenshot.
+		this.#publicKey = publicKeyShouldVanish() ? undefined : request.publicKeyHex;
 		this.asked = true;
 		// Settle the previous caller BEFORE anything else: the dispatch below
 		// supersedes its run inside the core, so its promise can never be
@@ -317,31 +328,27 @@ export class FeeQuote {
 		this.#resolve({ kind: 'abandoned' });
 		this.pending = true;
 
-		// Deployment status decides whether the priced op carries initCode, and
-		// `accountIsDeployed` throws rather than answer an indeterminate read —
-		// or a read that outlives the core's bound on a whole quote (spec 094
-		// S9): offline it hung, and the row read "Estimating…" with nothing
-		// scheduled to ask again.
-		let deployed: boolean;
+		// Whether the account is deployed decides whether the priced op carries
+		// initCode — and it is the CORE's read now (issue 483,
+		// `read_deployment`): asked first, bounded by the core's deadline on a
+		// whole quote (spec 094 S9), failed as the fee's own failure with the
+		// fee's words and retry, and asked again on every retry. The shell's
+		// read used to sit out here, where its failure reached no row, no
+		// footer and no retry the core knew of.
 		try {
 			await loadCore();
-			deployed = await withinQuoteDeadline(accountIsDeployed(request.account, request.chainId));
 		} catch (error) {
-			if (seq !== this.#seq) return this.#supersededOutcome(seq, { kind: 'context_unavailable' });
+			if (seq !== this.#seq) return this.#supersededOutcome(seq, { kind: 'abandoned' });
+			console.error('[fee-policy] core did not load:', error);
 			this.#neverReachedCore = true;
-			this.#contextLost = true;
-			this.#contextRateLimited = error instanceof DeploymentReadError && error.rateLimited;
+			this.#coreLost = true;
 			this.#publish();
 			this.pending = false;
-			return { kind: 'context_unavailable' };
+			return { kind: 'failed', failure: 'internal' };
 		}
 		if (seq !== this.#seq) return this.#supersededOutcome(seq, { kind: 'abandoned' });
 		this.#neverReachedCore = false;
-		this.#contextLost = false;
-		this.#publish();
-
-		await loadCore();
-		if (seq !== this.#seq) return this.#supersededOutcome(seq, { kind: 'abandoned' });
+		this.#coreLost = false;
 		const session = this.#ensure();
 		return new Promise<FeeQuoteOutcome>((resolve) => {
 			this.#settle = resolve;
@@ -349,7 +356,9 @@ export class FeeQuote {
 				type: 'quote_requested' as const,
 				chain_id: request.chainId,
 				account: request.account,
-				deployed,
+				// Not trusted: `read_deployment` has the core read it first.
+				deployed: false,
+				read_deployment: true,
 				public_key_available: this.#publicKey != null,
 				tier: request.tier ?? DEFAULT_TIER,
 				calls: request.calls,
@@ -407,9 +416,10 @@ export class FeeQuote {
 		// A refresh re-prices the other tiers too: the person asked for a fresh
 		// answer, not a fresh answer for one row out of three.
 		this.#generation += 1;
-		// The core holds the request context and re-runs its own pipeline —
-		// unless the last attempt never reached it, in which case `requote`
-		// would be a no-op and the retry affordance a dead button.
+		// The core holds the request context and re-runs its own pipeline — the
+		// account read included (issue 483) — unless the last attempt never
+		// reached it, in which case `requote` would be a no-op and the retry
+		// affordance a dead button.
 		if (this.#neverReachedCore && this.#lastRequest) {
 			void this.requestQuote(this.#lastRequest);
 			return;
@@ -436,7 +446,7 @@ export class FeeQuote {
 		const request = this.#lastRequest;
 		const session = this.#session;
 		if (!request || !session || !started.has(session) || this.#neverReachedCore) return;
-		// A question still on its way in (the deployment read) is told after it.
+		// A question still on its way in (the core's load) is told after it.
 		if (this.pending && this.#settle === null) return;
 		const measured = this.#measuredFor(request);
 		if (measured) session.dispatch(measured);
@@ -534,8 +544,8 @@ export class FeeQuote {
 		this.#seq += 1;
 		this.#resolve(adopted);
 		// A caller with no `#settle` registered has not reached the core yet — it
-		// is inside `accountIsDeployed` or `loadCore` — so it collects its answer
-		// by seq on the way out instead.
+		// is inside `loadCore` — so it collects its answer by seq on the way out
+		// instead.
 		if (measuring && parked) this.#supersededBy = { seq: superseded, outcome: adopted };
 		this.#port.owner = null;
 		this.#session?.dispose();
@@ -555,8 +565,7 @@ export class FeeQuote {
 		this.#publicKey = donor.#publicKey;
 		// The donor priced the same operation and was told the same measurement.
 		this.#measured = donor.#measured ?? this.#measured;
-		this.#contextLost = donor.#contextLost;
-		this.#contextRateLimited = donor.#contextRateLimited;
+		this.#coreLost = donor.#coreLost;
 		this.#neverReachedCore = donor.#neverReachedCore;
 		this.#dispatching = false;
 		this.asked = true;
@@ -582,8 +591,7 @@ export class FeeQuote {
 		donor.#raw = IDLE_FEE_VIEW;
 		donor.#latest = IDLE_FEE_VIEW;
 		donor.#publicKey = undefined;
-		donor.#contextLost = false;
-		donor.#contextRateLimited = false;
+		donor.#coreLost = false;
 		donor.#neverReachedCore = false;
 		donor.#dispatching = false;
 		donor.asked = false;
@@ -643,11 +651,13 @@ export class FeeQuote {
 
 	/**
 	 * One masking point, so no consumer has to remember: a view that answers a
-	 * superseded question is not published at all. Every derived value then
-	 * falls to "no quote", which is the truth.
+	 * superseded question is not published at all. A request the core could
+	 * not even be loaded for is Vela's own failure (`internal`) — said, and
+	 * asked again by a tap (there is no machine to retry it by itself) —
+	 * never an idle row over an open confirm.
 	 */
 	#publish(): void {
-		this.view = this.#contextLost ? IDLE_FEE_VIEW : this.#raw;
+		this.view = this.#coreLost ? CORE_LOST_VIEW : this.#raw;
 	}
 
 	/**
@@ -670,25 +680,4 @@ export class FeeQuote {
 			settle(outcome);
 		}
 	}
-}
-
-/**
- * `read`, or a failed deployment read once the core's bound on a whole quote
- * has passed (`fee_policy::QUOTE_DEADLINE_MS`) — the same lost-context path,
- * and the same retry, as a read that failed on its own.
- */
-function withinQuoteDeadline<T>(read: Promise<T>): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const timer = setTimeout(() => reject(new DeploymentReadError(false)), feeQuoteDeadlineMs());
-		read.then(
-			(value) => {
-				clearTimeout(timer);
-				resolve(value);
-			},
-			(error: unknown) => {
-				clearTimeout(timer);
-				reject(error);
-			}
-		);
-	});
 }

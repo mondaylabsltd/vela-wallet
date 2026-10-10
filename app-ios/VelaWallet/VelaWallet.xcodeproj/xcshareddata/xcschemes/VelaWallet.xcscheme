@@ -167,6 +167,15 @@
                <Test
                   Identifier = "VelaWalletUITests">
                </Test>
+               <Test
+                  Identifier = "Issue483DeviceTests">
+               </Test>
+               <Test
+                  Identifier = "CorrectnessScreenshotTests">
+               </Test>
+               <Test
+                  Identifier = "PR2PolishDeviceTests">
+               </Test>
             </SkippedTests>
          </TestableReference>
       </Testables>

@@ -49,8 +49,23 @@ import java.util.Date
  *   as `$0.00`.
  * - **Busy is not broken.** A rate-limited chain is transient; the core keeps
  *   the two lists apart and so does this.
+ *
+ * **Hidden is hidden everywhere** (`app::privacy`, one rule): while the
+ * balance is hidden, every money figure these builders draw — the hero, a
+ * holding's amount AND its worth, an activity row's figure (by the core's
+ * `figure_maskable`) and a dApp row's "received", the account switcher's rows
+ * and total — reads [MASK] (the hero [BALANCE_MASK]). The holdings mask on
+ * `BalanceView.hidden`; everything drawn from the feed masks on the feed's
+ * own `FeedView.hidden`. Send, the signing sheet and Receive keep their
+ * figures on purpose and do not come through here.
  */
 object WalletLive {
+
+    /** A masked figure: the same four dots on every surface, every shell (`privacy::MASK`). */
+    const val MASK = "••••"
+
+    /** The hero's mask, one glyph wider (`privacy::BALANCE_MASK`). */
+    const val BALANCE_MASK = "••••••"
 
     /**
      * The home screen, from the person's own holdings.
@@ -105,7 +120,11 @@ object WalletLive {
                     // out, and not while the balance cannot be read at all —
                     // the web's `assetsMode`, the desktop's and the iPhone's
                     // (087 F03).
-                    view.holdings_loading || view.balance_unknown -> SectionMode.Loading
+                    // Nor while nothing could be read at all — every chain
+                    // failed, or the fetch threw, with nothing cached
+                    // (`unreachable`): "Deposit your first asset" under the
+                    // reason would be a claim nobody made (PR 2 integration).
+                    view.holdings_loading || view.balance_unknown || view.unreachable -> SectionMode.Loading
                     else -> SectionMode.Empty
                 },
             ),
@@ -133,7 +152,7 @@ object WalletLive {
             when (row) {
                 is FeedRow.Header -> groups += ActivityGroupModel(dayLabel(row.day_start_ms, strings, now), emptyList())
                 is FeedRow.Item -> {
-                    val model = activityRow(row.item, strings, chainNames, now)
+                    val model = activityRow(row.item, strings, chainNames, now, feed.hidden)
                     val last = groups.lastOrNull()
                     if (last == null) {
                         // An item before any header cannot happen — but if the
@@ -161,7 +180,9 @@ object WalletLive {
         strings: VelaStrings,
         chainNames: Map<Int, String> = emptyMap(),
         now: Long = System.currentTimeMillis(),
-    ): List<ActivityRowModel> = items.map { activityRow(it, strings, chainNames, now) }
+        /** The feed's `hidden` — a contact's page masks as Activity does. */
+        hidden: Boolean = false,
+    ): List<ActivityRowModel> = items.map { activityRow(it, strings, chainNames, now, hidden) }
 
     /**
      * "Today", "Yesterday", or the date.
@@ -186,7 +207,7 @@ object WalletLive {
         }
     }
 
-    private fun activityRow(item: FeedItem, strings: VelaStrings, chainNames: Map<Int, String>, now: Long): ActivityRowModel {
+    private fun activityRow(item: FeedItem, strings: VelaStrings, chainNames: Map<Int, String>, now: Long, hidden: Boolean): ActivityRowModel {
         val received = item.direction == FeedDirection.In
         val batch = item.batch
         // What the row is and where its record stands are the core's (spec
@@ -197,6 +218,10 @@ object WalletLive {
         val dappRow = dapp != null || item.kind in DAPP_KINDS
         // The right column: the money as before; else a grant's allowance.
         val allowance = dapp?.allowance?.takeIf { item.value == null }
+        // Privacy (`app::privacy`): the row's own figure masks exactly when the
+        // core says it is money — never an unlimited allowance (a risk to see)
+        // nor a row with no figure (dots there would claim one).
+        val masked = hidden && item.figure_maskable
         return ActivityRowModel(
             id = item.id,
             kind = when {
@@ -214,6 +239,7 @@ object WalletLive {
             },
             subtitle = subtitle(item.subtitle, strings, chainNames, now),
             amount = when {
+                masked -> MASK
                 allowance != null -> allowanceFigure(allowance, strings)
                 // 083 F1: the simulation's figure, not one the wallet can vouch for.
                 dapp?.estimated == true && item.value != null -> "≈ " + signedAmount(item, received)
@@ -221,11 +247,15 @@ object WalletLive {
             },
             unit = allowance?.symbol ?: item.symbol.ifBlank { batch?.symbol.orEmpty() },
             positive = received,
-            masked = false,
+            masked = masked,
             badgeColor = badgeColour(item.chain_id),
             badgeLogoUrl = Marks.chainLogoUrl(item.chain_id),
             danger = allowance?.unlimited == true,
-            received = dapp?.received?.let { change -> listOf(changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ") },
+            // What came back masks whenever the balance is hidden, whatever
+            // the row's own figure is (`privacy`).
+            received = dapp?.received?.let { change ->
+                listOf(if (hidden) MASK else changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
+            },
         )
     }
 
@@ -347,7 +377,7 @@ object WalletLive {
         currency: CurrencyView,
     ): List<AssetRowModel> {
         val money = Money.of(currency)
-        return view.tokens.map { token -> assetRow(token, chainNames, money) }
+        return view.tokens.map { token -> assetRow(token, chainNames, money, view.hidden) }
     }
 
     /**
@@ -369,7 +399,9 @@ object WalletLive {
         // the figures masked.
         // The currency is the person's own even while hidden: with the total withheld the
         // visible builder falls back to the drawn "USD".
-        return if (view.hidden) live.copy(state = BalanceStateKind.Hidden, integer = "••••", decimals = null, currency = money.code) else live
+        // The hero's mask is the wider one (`privacy::BALANCE_MASK`), as the
+        // gallery's hidden state always drew it.
+        return if (view.hidden) live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null, currency = money.code) else live
     }
 
     private fun balanceVisible(
@@ -388,11 +420,11 @@ object WalletLive {
         val total = view.display_total_usd ?: view.cached_total_usd
 
         // **Unreachable is not zero.** A first launch that could read nothing,
-        // with nothing cached: the core's figure here is 0.0 — `total` is not
-        // null — and rendering it was spec 038 finding 15, a settled-looking
-        // "$0.00" over an unreadable chain. The flag exists to keep that number
-        // off the hero. A skeleton and a reason, the same reason the web and
-        // desktop heroes give.
+        // with nothing cached: rendering a figure here was spec 038 finding 15,
+        // a settled-looking "$0.00" over an unreadable chain. The core's figure
+        // is null in this state now (PR 2 polish; it was 0.0), and the flag
+        // still decides first: a skeleton and a reason, the same reason the
+        // web and desktop heroes give.
         if (view.unreachable) {
             return fallback.copy(
                 state = BalanceStateKind.Loading,
@@ -400,7 +432,9 @@ object WalletLive {
                 decimals = null,
                 status = BalanceStatusModel(
                     kind = BalanceStatusKind.Warning,
-                    text = strings.t(I18nKeys.Wallet.BALANCE_UNREACHABLE),
+                    // A read that failed inside Vela (PR 2 note 11) is said as
+                    // that — never "the request never arrived".
+                    text = strings.t(view.internal_key ?: I18nKeys.Wallet.BALANCE_UNREACHABLE),
                 ),
             )
         }
@@ -486,6 +520,10 @@ object WalletLive {
         val onCache = view.display_total_usd == null && view.cached_total_usd != null
         val unreachable = unreachableLine(view, strings, chainNames)
         return when {
+            // PR 2 note 11 (issue 483): a read that never left the app is
+            // Vela's own fault — the core's sentence for it, where the
+            // unreachable line goes and in place of any "Can't reach …".
+            view.internal_key != null -> BalanceStatusModel(BalanceStatusKind.Warning, strings.t(view.internal_key))
             unreachable != null -> BalanceStatusModel(BalanceStatusKind.Warning, unreachable)
             onCache || view.notice == BalanceNotice.StillUpdating ->
                 BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))
@@ -546,6 +584,8 @@ object WalletLive {
         token: BalanceToken,
         chainNames: Map<Int, String>,
         money: Money,
+        /** Balance privacy: the amount AND its worth draw the mask (`privacy`). */
+        hidden: Boolean,
     ): AssetRowModel {
         val mark = mark(token.chain_id, token.symbol, token.token_address)
         return AssetRowModel(
@@ -560,12 +600,15 @@ object WalletLive {
             badgeHidden = mark.badgeHidden,
             // The ONE token-amount rule (spec 078): Send's picker, token card,
             // confirm and receipt call the same function on the same holding.
-            balance = "${tokenAmountText(token.balance)} ${token.symbol}",
-            fiat = token.price_usd?.let { price ->
-                val value = money.convert(amountAsDouble(token.balance) * price)
-                AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
-            } ?: AssetFiatModel.NoPrice("—"),
-            masked = false,
+            balance = if (hidden) MASK else "${tokenAmountText(token.balance)} ${token.symbol}",
+            fiat = when {
+                hidden -> AssetFiatModel.Masked
+                else -> token.price_usd?.let { price ->
+                    val value = money.convert(amountAsDouble(token.balance) * price)
+                    AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
+                } ?: AssetFiatModel.NoPrice("—")
+            },
+            masked = hidden,
         )
     }
 
@@ -586,6 +629,10 @@ object WalletLive {
      * with the total the balance machine keeps for it (`switcher.balances`,
      * filled after `SwitcherOpened`), the active one ticked. A total not yet
      * known is blank rather than a zero the person does not have.
+     *
+     * While the balance is hidden (`switcher.hidden`) the core withholds every
+     * figure, and each row and the total draw [MASK] — never an overlay of the
+     * total the hero is hiding.
      */
     fun accountSwitcher(
         accounts: List<Pair<String, String>>,
@@ -599,10 +646,15 @@ object WalletLive {
         // separator so the total follows it, the way the web's sheet reads.
         val total = switcher.balances.sumOf { it.usd }
         val known = switcher.balances.isNotEmpty()
+        val hidden = switcher.hidden
         val count = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString()))
         return AccountsSheetModel(
             title = strings.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
-            summary = if (known) count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to money.fiat(total))) else count.trimEnd(' ', '·'),
+            summary = when {
+                hidden -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to MASK))
+                known -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to money.fiat(total)))
+                else -> count.trimEnd(' ', '·')
+            },
             rows = accounts.mapIndexed { i, (name, address) ->
                 val short = ExploreLive.shortAddress(address)
                 val usd = switcher.balances.firstOrNull { it.address.equals(address, ignoreCase = true) }?.usd
@@ -610,7 +662,7 @@ object WalletLive {
                     name = name.ifBlank { short },
                     addressDisplay = short,
                     addressFull = address,
-                    amount = usd?.let { money.fiat(it) } ?: "",
+                    amount = if (hidden) MASK else usd?.let { money.fiat(it) } ?: "",
                     selected = i == activeIndex,
                 )
             },

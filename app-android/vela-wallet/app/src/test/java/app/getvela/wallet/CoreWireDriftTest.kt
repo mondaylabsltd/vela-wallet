@@ -362,13 +362,18 @@ class CoreWireDriftTest {
         assertFieldsExist<BalanceView>("BalanceView")
         assertFieldsExist<BalanceToken>("BalanceToken")
         assertFieldsExist<BalanceCacheEntry>("BalanceCacheEntry")
-        assertFieldsExist<BalanceSwitcherView>("BalanceSwitcherView")
+        // Every field: `hidden` is what masks the switcher's rows and total.
+        assertFieldsExhaustive<BalanceSwitcherView>("BalanceSwitcherView")
     }
 
     @Test
     fun balanceOperationsAndResultsAreExhaustive() {
         assertVariantsExhaustive<BalanceOperation>("BalanceOperation")
         assertVariantsExhaustive<BalanceShellResult>("BalanceShellResult")
+        // PR 2 note 11: a read that never left the app, told as that.
+        assertVariantFieldsExhaustive(BalanceShellResult.serializer(), "BalanceShellResult")
+        assertTrue("internal_chain_ids" in serializer<BalanceView>().descriptor.elementNames)
+        assertTrue("internal_key" in serializer<BalanceView>().descriptor.elementNames)
     }
 
     @Test
@@ -410,6 +415,9 @@ class CoreWireDriftTest {
     @Test
     fun feedViewsMatchTheGeneratedMirrors() {
         assertFieldsExist<FeedView>("FeedView")
+        // Balance privacy: the feed's own flag, and each row's own word on its figure.
+        assertTrue("hidden" in serializer<FeedView>().descriptor.elementNames)
+        assertTrue("figure_maskable" in serializer<FeedItem>().descriptor.elementNames)
         assertFieldsExist<FeedItem>("FeedItem")
         assertFieldsExist<FeedTxRecord>("FeedTxRecord")
         assertFieldsExist<FeedBatch>("FeedBatch")
@@ -768,6 +776,10 @@ class CoreWireDriftTest {
         assertFieldsExist<SendRecipientDraft>("SendRecipientDraft")
         assertFieldsExist<SendMultiSpecView>("SendMultiSpecView")
         assertFieldsExist<SendReceiptView>("SendReceiptView")
+        // A refusal told by its reason, and the hold's one line.
+        assertTrue("refusal_key" in serializer<SendReceiptView>().descriptor.elementNames)
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.SendPreviousPending>("SendPreviousPending")
+        assertTrue("previous_pending" in serializer<app.getvela.wallet.feature.send.core.SendView>().descriptor.elementNames)
         assertFieldsExist<SendReceiptTransfer>("SendReceiptTransfer")
         assertFieldsExist<SendAccountRef>("SendAccountRef")
         assertFieldsExist<SendOpenParams>("SendOpenParams")
@@ -836,7 +848,7 @@ class CoreWireDriftTest {
 
     @Test
     fun sendStringUnionsMatch() {
-        assertStringUnion<SendEstimateFailure>("SendEstimateFailure")
+        assertSendEstimateFailureMatchesTheMirror()
         assertStringUnion<SendTreasuryAsset>("SendTreasuryAsset")
         assertStringUnion<SendTxStatus>("SendTxStatus")
         assertStringUnion<SendTxErrorKey>("SendTxErrorKey")
@@ -859,6 +871,15 @@ class CoreWireDriftTest {
         assertFieldsExist<FeeCall>("FeeCall")
         // Issue #411: the sheet's simulation, told to the fee machine.
         assertFieldsExist<app.getvela.wallet.feature.send.core.FeeBalanceChange>("FeeBalanceChange")
+        // The correctness batch: `provisional` (a switched coin re-measured)
+        // and the relay's `minimum_amount` — every field, so the gate the
+        // core reads back (`signConfirmState`) is never handed less.
+        assertFieldsExhaustive<FeeView>("FeeView")
+        assertTrue("minimum_amount" in serializer<FeeAssetQuote>().descriptor.elementNames)
+        // PR 2 note 1: the failure said once for the row and the footer — every field.
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.FeeFailureView>("FeeFailureView")
+        // PR 2 polish: what a tap on the failed row does — every word.
+        assertStringUnion<app.getvela.wallet.feature.send.core.FeeFailureTap>("FeeFailureTap")
     }
 
     @Test
@@ -867,6 +888,8 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<FeeShellResult>("FeeShellResult")
         assertVariantsExhaustive<FeeGasOutcome>("FeeGasOutcome")
         assertVariantsExhaustive<FeeAssetView>("FeeAssetView")
+        // Issue #483: the account read is the fee's own — every answer it can take.
+        assertVariantsExhaustive<app.getvela.wallet.feature.send.core.DeploymentRead>("DeploymentRead")
         assertVariantsExist<FeeEvent>("FeeEvent")
         assertStringUnion<FeeTier>("FeeTier")
         assertFeeFailureMatchesTheMirror()
@@ -901,8 +924,13 @@ class CoreWireDriftTest {
     @Test
     fun trackerViewsOperationsAndResultsMatch() {
         assertFieldsExist<TrackView>("TrackView")
-        assertFieldsExist<TrackEntryView>("TrackEntryView")
-        assertFieldsExist<TrackPendingRecord>("TrackPendingRecord")
+        // Every field: an entry is re-encoded into `sendReceiptOutcomeOf`, and
+        // a dropped `refusal` would tell every refusal as the plain one.
+        assertFieldsExhaustive<TrackEntryView>("TrackEntryView")
+        assertFieldsExhaustive<TrackPendingRecord>("TrackPendingRecord")
+        // One in flight per account and network, and a refusal told by its reason.
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.InFlightOp>("InFlightOp")
+        assertStringUnion<app.getvela.wallet.feature.send.core.RefusalReason>("RefusalReason")
         assertFieldsExist<TrackRecordPatch>("TrackRecordPatch")
         assertVariantsExhaustive<TrackOperation>("TrackOperation")
         assertVariantsExhaustive<TrackShellResult>("TrackShellResult")
@@ -1094,6 +1122,18 @@ class CoreWireDriftTest {
         assertEquals(42L, (signed as SignEvent.OpSigned).submit_block)
         val tracked = roundTrip<SignEvent>("""{"type":"op_tracked","user_op_hash":"0xop","status":"rejected","tx_hash":null,"now_ms":1.0}""")
         assertEquals(TrackStatus.Rejected, (tracked as SignEvent.OpTracked).status)
+        assertNull("absent: the plain refusal", tracked.refusal)
+        // PR 2 note 9: the tracker entry's reason rides the event, in the core's spelling.
+        val why = roundTrip<SignEvent>("""{"type":"op_tracked","user_op_hash":"0xop","status":"rejected","now_ms":1.0,"refusal":"nonce_used"}""")
+        assertEquals(app.getvela.wallet.feature.send.core.RefusalReason.NonceUsed, (why as SignEvent.OpTracked).refusal)
+        assertTrue(
+            "never sent as an explicit null",
+            !Wire.json.encodeToString(SignEvent.serializer(), tracked).contains("refusal"),
+        )
+        assertEquals(
+            "componentsUi.signing.wentFirst",
+            roundTrip<SignView>("""{"surface":"sheet","failure_refused":true,"failure_refusal_key":"componentsUi.signing.wentFirst"}""").failure_refusal_key,
+        )
         assertEquals(SignEndingState.Refused, roundTrip<SignEndingState>("""{"type":"refused"}"""))
         val view = roundTrip<SignView>(
             """{"surface":"sheet","error":{"kind":"submit_failed","detail":"x"},"failure_refused":true,
@@ -1184,6 +1224,44 @@ class CoreWireDriftTest {
             """{"id":"0xaa","direction":"out","counterparty":"0xc","usd_value":0.0,"chain_id":100,"timestamp":1.0,"day_start_ms":0.0,"counterparty_role":"contract"}""",
         )
         assertEquals(app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole.Contract, item.counterparty_role)
+    }
+
+    /**
+     * `SendEstimateFailure` since PR 2 note 13: every `FeeFailure`, in its own
+     * wire shape, plus the send side's `timeout` and `other` — the plain words
+     * are FeeFailure's and those two, and its one object arm is chain_read.
+     */
+    private fun assertSendEstimateFailureMatchesTheMirror() {
+        val arms = splitTopLevel(
+            mirror("SendEstimateFailure")
+                .replace(Regex("/\\*\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), " ")
+                .substringAfter("export type SendEstimateFailure =")
+                .substringBeforeLast(";"),
+            '|',
+        ).map { it.trim() }
+        val plain = arms.filter { it.startsWith("\"") }.map { it.trim('"') }
+        assertEquals(
+            "SendEstimateFailure's plain words must be FeeFailure's and the send side's own",
+            plain.sorted(),
+            (FeeFailure.PLAIN.map { it.name } + SendEstimateFailure.SEND_ONLY).sorted(),
+        )
+        val objects = arms.filter { it.startsWith("{") }
+        assertEquals("SendEstimateFailure has exactly one object arm, chain_read: $objects", 1, objects.size)
+        assertTrue(objects.single(), objects.single().contains("\"chain_read\"") && objects.single().contains("rate_limited: boolean"))
+        // Each passes through in the fee machine's own shape, both ways.
+        assertEquals(
+            SendEstimateFailure.Fee(FeeFailure.ChainRead(rate_limited = false)),
+            Wire.json.decodeFromString(SendEstimateFailure.serializer(), """{"chain_read":{"rate_limited":false}}"""),
+        )
+        for (failure in listOf(SendEstimateFailure.Fee(FeeFailure.Internal), SendEstimateFailure.Fee(FeeFailure.WouldFail), SendEstimateFailure.Timeout, SendEstimateFailure.Other, SendEstimateFailure.Fee(FeeFailure.ChainRead(true)))) {
+            val json = Wire.json.encodeToString(SendEstimateFailure.serializer(), failure)
+            assertEquals(failure, Wire.json.decodeFromString(SendEstimateFailure.serializer(), json))
+            assertEquals(json.trim('"'), failure.wire.trim('"'))
+        }
+        assertTrue(
+            "an unknown word fails, never reads as a default",
+            runCatching { Wire.json.decodeFromString(SendEstimateFailure.serializer(), "\"no_such_word\"") }.isFailure,
+        )
     }
 
     /**

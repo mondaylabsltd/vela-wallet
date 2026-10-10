@@ -92,13 +92,45 @@ struct FlowFixturesTests {
             "recover_failed",
             "create_failed",
             "sign_in_failed",
+            "registry_unreachable",
         ])
     }
 
-    /// Only the recovery offer is confirmable — its answer is the one that branches.
-    @Test func onlyTheRecoveryOfferIsConfirmable() {
+    /// Only the recovery offer and the registry's free retry are confirmable —
+    /// their answers are the ones that branch.
+    @Test func onlyTheRecoveryOfferAndTheRegistryRetryAreConfirmable() {
         for (_, kind, confirmable) in sheets {
-            #expect(confirmable == (kind.type == "recover_offer"))
+            #expect(confirmable == (kind.type == "recover_offer" || kind.type == "registry_unreachable"))
+        }
+    }
+
+    /// PR 2: "can't look up your wallet" — its own words, Try again and
+    /// Cancel, a warning (not the offer's info), and the network's words when
+    /// nothing left the device. Never the rebuild offer's.
+    @Test func theRegistryUnreachablePromptSaysWhatHappenedAndOffersAFreeRetry() {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let remote = promptCopy(PromptKind(type: "registry_unreachable"), loc: loc)
+        #expect(remote.title == loc.t("onboarding.login.registryUnreachableTitle"))
+        #expect(remote.title == "Can't Look Up Your Wallet")
+        #expect(remote.message == loc.t("onboarding.login.registryUnreachableBody"))
+        #expect(remote.confirmLabel == loc.t("common.tryAgain"))
+        #expect(remote.cancelLabel == loc.t("common.cancel"))
+        #expect(remote.title != loc.t("onboarding.login.recoverOfferTitle"))
+        let local = promptCopy(PromptKind(type: "registry_unreachable", local: true), loc: loc)
+        #expect(local.title == loc.t("onboarding.common.networkTitle"))
+        #expect(local.message == loc.t("onboarding.common.networkBody"))
+        #expect(local.confirmLabel == loc.t("common.tryAgain"))
+        #expect(FlowSheet.badge(for: "registry_unreachable") == .warning)
+        #expect(FlowSheet.badge(for: "recover_offer") == .info)
+        // The wire's `local` reaches the kind.
+        #expect(PromptKind(json: ["type": "registry_unreachable", "local": true]).local)
+        #expect(!PromptKind(json: ["type": "registry_unreachable", "local": false]).local)
+        for key in [
+            "onboarding.login.registryUnreachableTitle", "onboarding.login.registryUnreachableBody",
+            "onboarding.common.networkTitle", "onboarding.common.networkBody",
+        ] {
+            #expect(loc.t(key) != key, "\(key) resolves")
+            #expect(I18nKeys.all.contains(key))
         }
     }
 

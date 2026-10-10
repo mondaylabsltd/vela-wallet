@@ -585,6 +585,7 @@ enum SettingsLive {
     static func withAccounts(
         session: SessionView,
         balances: [BalanceCacheEntryWire],
+        hidden: Bool = false,
         display: WalletLive.Display,
         on model: SettingsScreenModel,
         loc: Loc
@@ -615,7 +616,9 @@ enum SettingsLive {
                 name: row.account.name,
                 addressDisplay: shortenAddress(address),
                 addressFull: address,
-                amount: usd.map(money) ?? "",
+                // Hidden (PR 2, `switcher.hidden`): the mask on every row —
+                // never a figure, never a blank that reads as "unknown".
+                amount: hidden ? WalletFixtures.mask : (usd.map(money) ?? ""),
                 selected: index == session.activeIndex
             )
         }
@@ -627,7 +630,9 @@ enum SettingsLive {
         copy.accountsSheet.summary =
             loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
             + loc.t(k.accountsTotal, vars: [
-                "amount": money(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
+                "amount": hidden
+                    ? WalletFixtures.mask
+                    : money(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
             ])
         return copy
     }
@@ -1071,6 +1076,19 @@ enum SettingsLive {
                 status: loc.t(k.balanceDetailFailed), tone: .error,
                 action: loc.t(k.balanceDetailRetry)
             ))
+        }
+        // PR 2 note 11: a chain whose read never left the app is listed with
+        // the core's own sentence for that fault — never "RPC unavailable",
+        // which would send somebody to fix an endpoint nobody asked.
+        if let key = balance.internalKey {
+            for id in balance.internalChainIds ?? []
+            where !pending.contains(where: { $0.id == String(id) }) {
+                pending.append(BalanceDetailRowModel(
+                    id: String(id), mark: row(id), name: chainName(id),
+                    status: loc.t(key), tone: .error,
+                    action: loc.t(k.balanceDetailRetry)
+                ))
+            }
         }
 
         var perChain: [Int: Double] = [:]

@@ -46,8 +46,8 @@ final class FeeStore {
     /// R7); `nil` while `view` is.
     private(set) var viewJson: String?
     /// Told every view of the session in force — for an owner that reacts to
-    /// one (the signing sheet asks a failed quote again on the core's
-    /// schedule). Promotions included.
+    /// one. Promotions included. Nothing re-asks a failed quote from here:
+    /// the core does that itself, on `start_ttl` (PR 2 note 1).
     @ObservationIgnored var onInForce: ((FeeViewWire) -> Void)?
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     private(set) var speed: FeeSpeedViewWire?
@@ -69,20 +69,25 @@ final class FeeStore {
         /// one that can, and `feeToken` is only where it falls back to. Part
         /// of the operation, so every preview replays it.
         let autoFeeToken: Bool
+        /// The fee machine reads the account's deployment itself, first
+        /// (issue #483): its failure is the fee's own, said on the row, the
+        /// footer and the retry, and read again on every retry. `deployed` is
+        /// then only a placeholder.
+        var readDeployment = false
 
         /// The operation, tier aside — `calls` compared as the JSON the core
         /// reads, which is exact.
         func sameOperation(_ other: Ask) -> Bool {
             chainId == other.chainId && account == other.account && deployed == other.deployed
                 && publicKeyAvailable == other.publicKeyAvailable && feeToken == other.feeToken
-                && autoFeeToken == other.autoFeeToken
+                && autoFeeToken == other.autoFeeToken && readDeployment == other.readDeployment
                 && CoreJSON.string(["c": calls]) == CoreJSON.string(["c": other.calls])
         }
 
         func at(_ tier: String) -> Ask {
             Ask(chainId: chainId, account: account, deployed: deployed,
                 publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls,
-                feeToken: feeToken, autoFeeToken: autoFeeToken)
+                feeToken: feeToken, autoFeeToken: autoFeeToken, readDeployment: readDeployment)
         }
 
         /// The same operation in the coin the person tapped: from here on it
@@ -90,13 +95,13 @@ final class FeeStore {
         func paying(_ token: String?) -> Ask {
             Ask(chainId: chainId, account: account, deployed: deployed,
                 publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls,
-                feeToken: token, autoFeeToken: false)
+                feeToken: token, autoFeeToken: false, readDeployment: readDeployment)
         }
 
         /// `number`: the resolved preset the core writes a coin's shortfall
         /// in (issue #408) — the one `configureSpeed` was last given.
         func event(number: String) -> String {
-            CoreJSON.string([
+            var event: [String: Any] = [
                 "type": "quote_requested",
                 "chain_id": chainId,
                 "account": account,
@@ -107,13 +112,17 @@ final class FeeStore {
                 "fee_token": feeToken.map { $0 as Any } ?? NSNull(),
                 "auto_fee_token": autoFeeToken,
                 "number": number,
-            ])
+            ]
+            if readDeployment { event["read_deployment"] = true }
+            return CoreJSON.string(event)
         }
     }
 
     /// How the timers the fee machine asks for run out: `start_ttl` (the
-    /// quote on screen priced again a block later, `requote_interval_ms`) and
-    /// `start_deadline` (the bound on a whole run, spec 094 S9 — 15 s).
+    /// quote on screen priced again a block later, `requote_interval_ms`, and
+    /// — PR 2 note 1 — the core's own re-ask after a failure that can pass,
+    /// 3 s, 6 s, then every 8 s: the whole of the retry, this shell schedules
+    /// none) and `start_deadline` (the bound on a whole run, spec 094 S9 — 15 s).
     enum Timers {
         /// The app's: each runs out on the wall clock, after its `ms`.
         case wallClock
@@ -186,6 +195,11 @@ final class FeeStore {
         func send(_ json: String) {
             if !core.boot(json) { core.dispatch(json) }
         }
+
+        /// Asks and answers nothing more: its effects — a read out, the
+        /// block-time tick, the core's own re-ask after a failure — are
+        /// cancelled and their late answers dropped.
+        func end() { core.dispose() }
 
         nonisolated deinit {}
     }
@@ -307,7 +321,10 @@ final class FeeStore {
     private func inForceChanged() {
         view = inForce.view
         viewJson = inForce.view == nil ? nil : inForce.core.json
-        if let view { onInForce?(view) }
+        if let view {
+            onInForce?(view)
+            logQuote(view)
+        }
         guard let view, !view.busy else { return }
         if view.failed != nil, let ask = inForce.ask {
             relay.invalidateFeeSignals(chainId: ask.chainId)
@@ -339,7 +356,8 @@ final class FeeStore {
         publicKeyAvailable: Bool,
         calls: [[String: Any]],
         feeToken: String?,
-        autoFeeToken: Bool = false
+        autoFeeToken: Bool = false,
+        readDeployment: Bool = false
     ) async -> FeeViewWire? {
         generation += 1
         let mine = generation
@@ -366,7 +384,8 @@ final class FeeStore {
         let ask = Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "standard",
-            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
+            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken,
+            readDeployment: readDeployment
         )
         return await withCheckedContinuation { continuation in
             var resumed = false
@@ -389,12 +408,14 @@ final class FeeStore {
         publicKeyAvailable: Bool,
         calls: [[String: Any]],
         feeToken: String?,
-        autoFeeToken: Bool = false
+        autoFeeToken: Bool = false,
+        readDeployment: Bool = false
     ) {
         askInForce(Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "standard",
-            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
+            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken,
+            readDeployment: readDeployment
         ))
     }
 
@@ -514,14 +535,60 @@ final class FeeStore {
         settleSpeed()
     }
 
-    /// Ask the operation in force again FROM THE START (spec 082 RJ12): an
-    /// automatic re-quote that did not answer in time. `requote` is ignored
-    /// while a run is out; a fresh request makes the core abandon whatever the
-    /// hung run was still waiting on, and measure again.
-    func reask() {
-        guard let ask = inForce.ask else { return }
-        relay.invalidateFeeSignals(chainId: ask.chainId)
-        askInForce(ask)
+    /// The surface the fee was for has gone — the send journey closed or was
+    /// left, the signing sheet's page has its answer (PR 2 note 1). The core
+    /// asks again by itself on `start_ttl` — after a failure that can pass,
+    /// and once a block over a figure on screen — so a session nobody looks
+    /// at would keep reading the chain for the life of the app. From here no
+    /// session asks or answers anything: every effect is cancelled and its
+    /// late answer dropped (`CoreStore.dispose`), the previews go, a caller
+    /// still waiting on a quote hears `nil`, and the next question starts on
+    /// a fresh session. `keepingView`: the last view stays drawn — a sheet
+    /// turning into its ending keeps its fee row as it stood.
+    func end(keepingView: Bool = false) {
+        for session in [inForce!] + previews { session.end() }
+        previews.removeAll()
+        inForce = newSession()
+        measured = nil
+        failures = 0
+        loggedFailure = false
+        requested = false
+        let abandoned = waiting
+        waiting.removeAll()
+        for entry in abandoned { entry.resume(nil) }
+        if !keepingView {
+            view = nil
+            viewJson = nil
+        }
+    }
+
+    // MARK: - The fee's two log lines (spec 082 G47)
+
+    /// Failures in a row of the session in force, since a figure last stood.
+    private var failures: UInt32 = 0
+    /// The failure on screen was logged; cleared when a run goes out again.
+    private var loggedFailure = false
+
+    /// `fee: quote failed …` once per failure that lands, `fee: quote back …`
+    /// when a figure stands again. Words only: the retry itself is the core's
+    /// (`start_ttl`), and `inMs` is its own schedule, read for the line.
+    private func logQuote(_ view: FeeViewWire) {
+        let chain = inForce.ask?.chainId ?? 0
+        if let failure = view.failure, view.failed != nil {
+            guard !loggedFailure else { return }
+            loggedFailure = true
+            failures += 1
+            VelaLog.feeQuoteFailed(
+                chain: chain, cause: FeeFailureText(failure.failure).cause, requote: failures,
+                inMs: failure.autoRetry ? feeRequoteDelayMs(failure: failure.failure, attempt: failures) : nil
+            )
+            return
+        }
+        loggedFailure = false
+        if view.fee != nil, !view.busy, failures > 0 {
+            VelaLog.feeQuoteBack(chain: chain, after: failures)
+            failures = 0
+        }
     }
 
     /// Leaving the confirm step.
@@ -657,12 +724,19 @@ final class FeeStore {
     /// preview dropped.
     private func syncPreviews(_ wanted: [String]) {
         guard let base = inForce.ask else {
+            for session in previews { session.end() }
             previews.removeAll()
             return
         }
+        // A preview dropped stops asking and answering: it would otherwise
+        // keep its tick, or the core's re-ask after a failure, going for a
+        // tier nobody shows (PR 2 note 1).
         previews.removeAll { session in
-            guard let ask = session.ask else { return true }
-            return !(wanted.contains(ask.tier) && ask.sameOperation(base) && session.generation == askGeneration)
+            let keep = session.ask.map {
+                wanted.contains($0.tier) && $0.sameOperation(base) && session.generation == askGeneration
+            } ?? false
+            if !keep { session.end() }
+            return !keep
         }
         for tier in wanted where !previews.contains(where: { $0.ask?.tier == tier }) {
             let session = newSession()

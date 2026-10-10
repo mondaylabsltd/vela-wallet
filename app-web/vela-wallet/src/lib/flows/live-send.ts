@@ -39,6 +39,9 @@ import {
 } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
+import { sendEstimateFailureBodyKey } from '$lib/core/kernels';
+import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
+import { failureForChain } from './fee-failure';
 import type { WalletFlowMessages } from './messages';
 import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
@@ -282,8 +285,85 @@ function feeRowMark(coin: SendFeeCoin | null, template: FeeRowModel): TokenMarkM
 	return tokenMarkFor(coin.chain_id, coin.symbol, coin.contract);
 }
 
+/**
+ * A failed fee's words, as the core says them (`FeeView.failure`, PR 2 note
+ * 1): the row's figure, saying what a tap does (`figure_key`) — "Tap to
+ * retry" only when a tap is the one way, "Pay with another coin" when the tap
+ * opens the coins (PR 2 polish), else the dash — and the reason under it, by
+ * the core's key (`{{chain}}`: the form's chain). Copy is the corpus's only: a
+ * key this build does not carry draws the dash, or no line, never a dotted
+ * path.
+ */
+export function feeFailureWords(
+	failure: FeeFailureView,
+	chainId: number | null,
+	m: WalletFlowMessages
+): { figure: string; reason: string | undefined } {
+	const words = m as Readonly<Record<string, string | undefined>>;
+	const figure = failure.figure_key === null ? '—' : (words[failure.figure_key] ?? '—');
+	const reasonWords = failure.reason_key === null ? undefined : words[failure.reason_key];
+	const reason =
+		reasonWords === undefined
+			? undefined
+			: fill(reasonWords, { chain: chainId === null ? '' : chainName(chainId) });
+	return { figure, reason };
+}
+
+/** The form's chain: the selected token's, else the sweep's (the core's `form_chain`). */
+export function formChainOf(
+	send: Pick<SendView, 'selected_token' | 'multi_chain_id'>
+): number | null {
+	return send.selected_token?.chain_id ?? send.multi_chain_id ?? null;
+}
+
+/**
+ * The fee's failure, as the send form and its confirm may draw it (PR 2
+ * polish): only when it answered the form's own chain. Right after a token
+ * switch the form names another chain before the fee machine has been asked
+ * about it — the old chain's failure is not this form's, and is not drawn.
+ */
+function sendFeeFailure(inputs: Pick<SendLiveInputs, 'send' | 'fee'>): FeeFailureView | null {
+	return failureForChain(inputs.fee.failure, formChainOf(inputs.send));
+}
+
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const { send, fee, m } = inputs;
+	// PR 2 note 1: the fee failed — said once by the core for this row and
+	// the line under the confirm, and kept through the re-ask it makes by
+	// itself. Nothing in hand is drawn over it: the send machine may still
+	// hold the last figure, and a figure the fee machine could not stand by
+	// is not one to show beside a reason it failed.
+	const failure = sendFeeFailure(inputs);
+	if (failure) {
+		const words = feeFailureWords(failure, formChainOf(send), m);
+		// PR 2 polish: the relay answered that it would fail. That is no
+		// network's doing, so the core gives it no reason line; the form has no
+		// held confirm to carry the failure's own sentence (`footer_key`, "This
+		// would fail if sent as it is."), so it is said here, in the row's
+		// line — as Android's form says it. The confirm and the sheet keep it
+		// under their confirm.
+		const wouldFail =
+			failure.failure === 'would_fail' && failure.reason_key === null
+				? (m as Readonly<Record<string, string | undefined>>)[failure.footer_key]
+				: undefined;
+		return {
+			label: m['componentsUi.gas.networkFee'],
+			mark: feeRowMark(send.fee_coin, template),
+			value: words.figure,
+			valueFiat: undefined,
+			openLabel: template.openLabel,
+			refreshLabel: m['send.feeRefresh'],
+			// The measuring sign turns while a re-ask is out — the core's own,
+			// or a tap's — beside the reason it keeps.
+			refreshing: fee.busy || failure.retrying,
+			// In the line the row keeps for its note, so nothing below moves.
+			reason: words.reason ?? wouldFail,
+			// PR 2 polish: the tap does exactly what the figure says — asks
+			// again at once (`requote`), opens the fee coins (after the relay
+			// answered that it would fail), or nothing at all.
+			tap: failure.tap === 'retry' ? 'retry' : failure.tap === 'choose_coin' ? 'open' : 'none'
+		};
+	}
 	const inHand = send.fee ?? fee.fee;
 	// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
 	//
@@ -333,7 +413,11 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		// only supersede a run already in flight, whoever started it. The cost
 		// is that the icon also turns for the form's own re-quotes; that is the
 		// truth about the row, and a still icon over a moving number would not be.
-		refreshing: send.fee_busy || fee.busy,
+		// …and a figure switched to another coin, drawn as it is while that
+		// coin's fee leg is measured (`provisional`, correctness batch item 4):
+		// the measuring sign stays on it until the new figure lands, and the
+		// send machine's `fee_busy` mirror holds the confirm meanwhile.
+		refreshing: send.fee_busy || fee.busy || fee.provisional,
 		// `FeeView.stale` had NO consumer in this shell (spec 068): the 30s TTL
 		// elapsed and nothing on screen said so, while the person spent their
 		// drift budget on think-time. Not said while a fresh measurement is out,
@@ -341,7 +425,9 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		// no figure on it: "from a while ago" is a fact about a number, and the
 		// tier just changed under this one (issue 681).
 		staleNote:
-			fee.stale && !fee.busy && !send.fee_busy && !ofAnotherTier ? m['send.feeStale'] : undefined
+			fee.stale && !fee.busy && !fee.provisional && !send.fee_busy && !ofAnotherTier
+				? m['send.feeStale']
+				: undefined
 	};
 }
 
@@ -855,7 +941,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// the most that can be sent, where "exceeds your balance" does not. The
 		// order is the other three shells': ceiling, then the mode's own verdict.
 		alert:
-			alertWords(inputs.alert, m) ??
+			alertWords(inputs.alert, m, formChainOf(send)) ??
 			sameFeeWords(send, m) ??
 			(split
 				? send.split_over_balance
@@ -1001,7 +1087,9 @@ export function warningWords(
  */
 export function alertWords(
 	kind: SendAlertKind | null | undefined,
-	m: WalletFlowMessages
+	m: WalletFlowMessages,
+	/** The selected token's chain — the estimate alert names it (`{{chain}}`). */
+	chainId: number | null = null
 ): string | undefined {
 	if (!kind) return undefined;
 	switch (kind.type) {
@@ -1022,8 +1110,17 @@ export function alertWords(
 			return `${m['send.alertInsufficientBalanceTitle']} · ${m['send.alertInsufficientBalanceBody']}`;
 		case 'load_tokens_failed':
 			return m['send.alertLoadTokensError'];
-		case 'estimate_failed':
-			return `${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateFailedBody']}`;
+		case 'estimate_failed': {
+			// PR 2 note 13: worded by its cause — the core picks the sentence
+			// (`sendEstimateFailureBodyKey`): the chain out of reach by name, a
+			// fault inside Vela as that, else the general sentence.
+			const key = sendEstimateFailureBodyKey(kind.kind);
+			const body = (m as Readonly<Record<string, string | undefined>>)[key];
+			return `${m['send.alertEstimateFailedTitle']} · ${fill(
+				body ?? m['send.alertEstimateFailedBody'],
+				{ chain: chainId === null ? '' : chainName(chainId) }
+			)}`;
+		}
 		case 'account_unavailable':
 			return m['send.alertAccountUnavailableBody'];
 	}
@@ -1069,9 +1166,88 @@ function recipientLine(send: SendView, m: WalletFlowMessages): string | undefine
 	return recipientNote(send, m);
 }
 
+/**
+ * The confirm's two states the core holds it in, worded (correctness batch
+ * item 3): a submit that did not go — why, and Try again — and, otherwise,
+ * the account's previous transaction on this network still in flight, as its
+ * one line. Never both: a submit refused for that same reason says it once.
+ */
+function confirmHolds(
+	send: SendView,
+	m: WalletFlowMessages,
+	fee: FeeView
+): Pick<SendConfirmModel, 'held' | 'error'> {
+	if (send.tx_status === 'error' && send.tx_error !== null) {
+		switch (send.tx_error) {
+			case 'previous_pending':
+				// Another operation of this account holds the nonce: nothing was
+				// sent and nothing went wrong (PR 2 polish) — "Not sent yet",
+				// calmly, as the signing sheet says it, and Try again waits for it
+				// like any held confirm. Said once: the held line is not drawn
+				// beside it.
+				return {
+					error: {
+						title: m['componentsUi.signing.notSentTitle'],
+						text: m['componentsUi.signing.notSentBody'],
+						retry: m['send.txRetryBtn'],
+						calm: true
+					}
+				};
+			case 'bundler_fund':
+				return { error: { text: m['send.txErrorBundlerFund'], retry: m['send.txRetryBtn'] } };
+			case 'venue_blocked':
+				// Spec 102: trying again would meet the same refusal — no retry.
+				return {
+					error: {
+						text: send.tx_venue_block
+							? venueBlockText(send.tx_venue_block, m)
+							: m['send.txErrorGeneric']
+					}
+				};
+			case 'generic':
+				return { error: { text: m['send.txErrorGeneric'], retry: m['send.txRetryBtn'] } };
+		}
+	}
+	const held = send.previous_pending;
+	if (held === null || held === undefined) {
+		// PR 2 note 1: else the fee's failure, in the line the signing sheet
+		// draws under its held confirm (`FeeView.failure.footer_key`) —
+		// "Retrying…" while the core asks again by itself (through the re-ask
+		// too), "Tap it to retry" only when a tap is the one way, "This would
+		// fail if sent as it is." when the relay answered so (PR 2 polish) —
+		// and only for the form's own chain.
+		const footer = failureForChain(fee.failure, formChainOf(send))?.footer_key;
+		const words =
+			footer === undefined ? undefined : (m as Readonly<Record<string, string>>)[footer];
+		return words === undefined ? {} : { held: words };
+	}
+	// The core names the line (`SendPreviousPending.key`); a key this build
+	// does not carry falls back to the same sentence rather than a dotted key.
+	const words = (m as Readonly<Record<string, string>>)[held.key];
+	return { held: words ?? m['componentsUi.signing.confirmBlock.previousPending'] };
+}
+
 /** SD3 — the confirm screen: what is about to be signed. */
 export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
 	const { send, m, currency, identity, identicon } = inputs;
+	const holds = confirmHolds(send, m, inputs.fee);
+	// PR 2 note 1: a failed fee on the last screen says so in its own row —
+	// the core's figure and reason — never the last figure the send machine
+	// still holds. PR 2 polish: and the line is the control its words and the
+	// line under the confirm promise — "Tap to retry" over "Tap it to retry"
+	// asks again, "Pay with another coin" opens the fee coins, and a dash
+	// with nothing behind it is a fact. Only the form's own chain's failure.
+	const failure = sendFeeFailure(inputs);
+	const feeFailure = failure ? feeFailureWords(failure, formChainOf(send), m) : null;
+	const feeTap: FactRowModel['tap'] =
+		failure === null || failure.tap === 'nothing'
+			? undefined
+			: {
+					does: failure.tap,
+					label: failure.tap === 'retry' ? m['send.feeRefresh'] : m['send.feeTokenLabel'],
+					// A re-ask is out: it is the answer awaited — a tap asks nothing.
+					busy: failure.tap === 'retry' && (inputs.fee.busy || failure.retrying)
+				};
 	const token = send.selected_token;
 	const usd =
 		token?.price_usd != null ? (parseFloat(send.confirm_amount) || 0) * token.price_usd : null;
@@ -1110,10 +1286,12 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		},
 		{
 			label:
-				(send.fee ?? inputs.fee.fee)?.quoted === false
+				!feeFailure && (send.fee ?? inputs.fee.fee)?.quoted === false
 					? m['send.feeTokenEstimate']
 					: m['send.estFeeLabel'],
-			value: feeText(send.fee ?? inputs.fee.fee, inputs)
+			value: feeFailure ? feeFailure.figure : feeText(send.fee ?? inputs.fee.fee, inputs),
+			note: feeFailure?.reason,
+			tap: feeTap
 		}
 	];
 
@@ -1169,7 +1347,8 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			facts,
 			breakdown,
 			recipientTag,
-			alert: alertWords(inputs.alert, m),
+			alert: alertWords(inputs.alert, m, formChainOf(send)),
+			...holds,
 			cta: m['send.confirmSendBtn']
 		};
 	}
@@ -1209,7 +1388,8 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
-			alert: alertWords(inputs.alert, m),
+			alert: alertWords(inputs.alert, m, formChainOf(send)),
+			...holds,
 			cta: m['send.confirmSendBtn']
 		};
 	}
@@ -1226,7 +1406,8 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		facts,
 		breakdown: undefined,
 		recipientTag,
-		alert: alertWords(inputs.alert, m),
+		alert: alertWords(inputs.alert, m, formChainOf(send)),
+		...holds,
 		cta: m['send.confirmSendBtn']
 	};
 }
@@ -1319,6 +1500,25 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				// is looked up in them as it is named.
 				venueBlockText(send.tx_venue_block, m)
 			],
+			hash: undefined,
+			cta: m['componentsTx.receipt.done'],
+			ctaAccent: false
+		};
+	}
+
+	// The relay refused it (correctness batch item 3): said by its reason —
+	// the fee sentence only for a fee refusal, "another transaction from this
+	// account went first" for a spent nonce, else the plain refusal. Nothing
+	// was sent, so no "try again" sentence over it.
+	const refusal = send.receipt?.refusal_key ?? null;
+	if (status === 'failed' && refusal !== null) {
+		const words = (m as Readonly<Record<string, string>>)[refusal];
+		return {
+			...model,
+			header,
+			stage: 'failed',
+			title: m['componentsTx.receipt.statusFailed'],
+			captions: [words ?? m['componentsUi.signing.refused']],
 			hash: undefined,
 			cta: m['componentsTx.receipt.done'],
 			ctaAccent: false

@@ -183,6 +183,45 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 		await refused.screen.unmount();
 	});
 
+	it('not sent yet (PR 2 polish): the waiting disc, never the failure’s — with Close and Try again', async () => {
+		const onretry = vi.fn();
+		const view = await drawn({
+			model: model({
+				status: {
+					stage: 'not_sent',
+					title: 'Not sent yet',
+					captions: [
+						'Send · −1 USDC',
+						'Your previous transaction on this network is still being processed. Try again once it’s done.'
+					],
+					closable: true,
+					actions: { close: 'Done', retry: 'Try Again' }
+				}
+			}),
+			onretry
+		});
+		const status = view.sheet.querySelector<HTMLElement>('[data-testid="signing-status"]')!;
+		expect(status.textContent).toContain('Not sent yet');
+		expect(status.textContent).not.toContain('Failed');
+		const disc = status.querySelector<HTMLElement>('.disc')!;
+		expect(disc.classList.contains('not_sent')).toBe(true);
+		expect(disc.classList.contains('failed')).toBe(false);
+		const probe = document.createElement('span');
+		probe.style.color = 'var(--color-error-base)';
+		document.body.appendChild(probe);
+		expect(getComputedStyle(disc).color).not.toBe(getComputedStyle(probe).color);
+		probe.remove();
+		const buttons = [
+			...view.sheet.querySelectorAll<HTMLButtonElement>(
+				'[data-testid="signing-status-actions"] button'
+			)
+		];
+		expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Done', 'Try Again']);
+		buttons[1].click();
+		expect(onretry).toHaveBeenCalledOnce();
+		await view.screen.unmount();
+	});
+
 	it('closable: the ✕ is live and closes (the host makes it a plain close)', async () => {
 		const view = await drawn({ model: model({ status: submitting }) });
 		expect(view.close!.disabled).toBe(false);

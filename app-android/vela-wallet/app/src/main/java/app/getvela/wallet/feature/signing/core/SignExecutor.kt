@@ -303,7 +303,7 @@ class SignExecutor(
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled, is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer,
-                is UserOpSpine.Failure.VenueBlocked -> outcomeOf(failure)
+                is UserOpSpine.Failure.VenueBlocked, UserOpSpine.Failure.PreviousPending -> outcomeOf(failure)
                 else -> SignSubmitOutcome.Failed("Signing failed")
             }
         }
@@ -392,6 +392,9 @@ class SignExecutor(
             is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
             // Spec 102: this account cannot sign here — the core says why, translated.
             is UserOpSpine.Failure.VenueBlocked -> SignSubmitOutcome.VenueBlocked(failure.block)
+            // 083: another operation of the account holds the nonce — the page
+            // is told the core's fixed detail, as before.
+            UserOpSpine.Failure.PreviousPending -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpPreviousPendingDetail())
         }
 
         /**

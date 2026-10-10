@@ -175,7 +175,8 @@ object ContactsLive {
         } else {
             feed.contact_rows
                 .takeIf { rows -> rows.all { it.counterparty.equals(contact.address, ignoreCase = true) } }
-                ?.let { rows -> WalletLive.rows(rows, strings, chainNames, now) }
+                // Balance privacy: a contact's page masks on the feed's own flag, as Activity does.
+                ?.let { rows -> WalletLive.rows(rows, strings, chainNames, now, hidden = feed.hidden) }
                 .orEmpty()
         }
         return fallback.copy(

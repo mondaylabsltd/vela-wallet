@@ -299,6 +299,11 @@ data class PromptKind(
     val phoneLink: Boolean = false,
     /** The core's verdict that a not-supported ceremony was a security key's (issue #450). */
     val securityKey: Boolean = false,
+    /**
+     * `registry_unreachable` only: every failed lookup never left this device,
+     * so the sheet says "check your connection" rather than blame the registry.
+     */
+    val local: Boolean = false,
 ) {
     companion object {
         fun from(json: JSONObject): PromptKind =
@@ -307,6 +312,7 @@ data class PromptKind(
                 json.nullableString("detail"),
                 json.optBoolean("phone_link", false),
                 json.optBoolean("security_key", false),
+                json.optBoolean("local", false),
             )
     }
 }

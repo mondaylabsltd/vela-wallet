@@ -101,6 +101,36 @@ fn builtin_dex(chain_id: u32) -> Option<DexInfo> {
 // Cache
 // ---------------------------------------------------------------------------
 
+/// What the index said about one chain's document — three answers, not two
+/// (PR 2 polish). "No such document" and "could not ask" were one `None`,
+/// and a chain whose money lives only in the registry's stablecoins (Tempo:
+/// no native coin) read as "answered, holds nothing" — $0.00 — when the
+/// index was simply out of reach.
+#[derive(Clone, Debug, PartialEq)]
+pub enum IndexDoc {
+    /// A 2xx with a body that parses.
+    Doc(ChainTokenData),
+    /// HTTP 404 from a server that answered: definitively no document for
+    /// this chain.
+    Absent,
+    /// Not read: no answer (network, timeout, TLS), a 5xx, a 429 or any
+    /// other non-2xx, or a body that does not parse. Says nothing about the
+    /// chain — never cached.
+    Unread,
+}
+
+impl IndexDoc {
+    /// The document's data, when there is one.
+    #[must_use]
+    pub fn data(&self) -> Option<&ChainTokenData> {
+        match self {
+            Self::Doc(data) => Some(data),
+            Self::Absent | Self::Unread => None,
+        }
+    }
+}
+
+/// Only an answer is cached: a document, or the index saying it has none.
 type Cache = Mutex<HashMap<u32, (Option<ChainTokenData>, Instant)>>;
 
 fn cache() -> &'static Cache {
@@ -116,41 +146,84 @@ pub fn invalidate() {
     }
 }
 
-/// This chain's token data, from cache or from the index.
+/// This chain's document as the index answered, from cache or from the
+/// index. A document and a 404 are cached for [`CACHE_TTL`] — a chain the
+/// index does not carry would otherwise re-fetch on every refresh, forever;
+/// an unread one never is: the next read asks again.
 ///
-/// `None` when the chain is not in the index or the fetch failed. That is not
-/// a reason to skip the chain: the caller still reads the native coin, it just
-/// reads no ERC-20s and prices nothing from a DEX.
+/// Neither a 404 nor an unread index is a reason to skip the chain: the
+/// balance read still reads the native coin, it just reads no ERC-20s and
+/// prices nothing from a DEX — except on a chain with no native coin, where
+/// an unread index means nothing was read (`balances::not_read`).
 #[must_use]
-pub fn fetch(chain_id: u32) -> Option<ChainTokenData> {
-    if let Ok(cache) = cache().lock() {
-        if let Some((data, at)) = cache.get(&chain_id) {
-            if at.elapsed() < CACHE_TTL {
-                return data.clone();
-            }
-        }
+pub fn fetch_doc(chain_id: u32) -> IndexDoc {
+    fetch_doc_with(chain_id, || fetch_uncached(chain_id))
+}
+
+/// [`fetch_doc`] with the request supplied — the seam the tests use.
+fn fetch_doc_with(chain_id: u32, ask: impl FnOnce() -> IndexDoc) -> IndexDoc {
+    if let Some(data) = cached_answer(chain_id) {
+        return data.map_or(IndexDoc::Absent, IndexDoc::Doc);
     }
-    let fetched = fetch_uncached(chain_id);
-    if let Ok(mut cache) = cache().lock() {
-        // A miss is cached too. A chain the index does not carry would
-        // otherwise re-fetch on every refresh, forever.
-        cache.insert(chain_id, (fetched.clone(), Instant::now()));
+    let fetched = ask();
+    let answer = match &fetched {
+        IndexDoc::Doc(data) => Some(Some(data.clone())),
+        IndexDoc::Absent => Some(None),
+        IndexDoc::Unread => None,
+    };
+    if let Some(answer) = answer
+        && let Ok(mut cache) = cache().lock()
+    {
+        cache.insert(chain_id, (answer, Instant::now()));
     }
     fetched
 }
 
-fn fetch_uncached(chain_id: u32) -> Option<ChainTokenData> {
+/// The index's cached answer for `chain_id` while it is fresh: `Some(Some)`
+/// a document, `Some(None)` the index has none, `None` nothing cached.
+fn cached_answer(chain_id: u32) -> Option<Option<ChainTokenData>> {
+    let cache = cache().lock().ok()?;
+    let (data, at) = cache.get(&chain_id)?;
+    (at.elapsed() < CACHE_TTL).then(|| data.clone())
+}
+
+/// The cached document for `chain_id`, if a read this half hour found one —
+/// never a request. For what is told after a balance round, which has
+/// just asked for every chain it read: a chain whose index was unread then
+/// has no facts now, rather than another wait for the same index.
+#[must_use]
+pub fn cached(chain_id: u32) -> Option<ChainTokenData> {
+    cached_answer(chain_id).flatten()
+}
+
+fn fetch_uncached(chain_id: u32) -> IndexDoc {
     let url = format!("{}/chains/eip155-{chain_id}.json", data_base());
-    let mut response =
-        proxy::with_routes(&url, FETCH_TIMEOUT, |agent| agent.get(&url).call()).ok()?;
-    let mut body = String::new();
-    response
-        .body_mut()
-        .as_reader()
-        .read_to_string(&mut body)
-        .ok()?;
-    let raw: Value = serde_json::from_str(&body).ok()?;
-    Some(parse(chain_id, &raw))
+    let answer = proxy::with_routes(&url, FETCH_TIMEOUT, |agent| agent.get(&url).call())
+        .map_err(|failure| failure.error)
+        .and_then(|mut response| {
+            let mut body = String::new();
+            response
+                .body_mut()
+                .as_reader()
+                .read_to_string(&mut body)
+                .map(|_| body)
+                .map_err(ureq::Error::Io)
+        });
+    classify(chain_id, answer)
+}
+
+/// The index's answer, as one of the three (PR 2 polish). `StatusCode` is
+/// the only error that means the server answered (`registry::classify`), and
+/// of those only a 404 says the document does not exist; a 5xx or a 429 is a
+/// server that could not say, and a timeout or a refused connection never
+/// reached one.
+fn classify(chain_id: u32, answer: Result<String, ureq::Error>) -> IndexDoc {
+    match answer {
+        Ok(body) => serde_json::from_str::<Value>(&body)
+            .map_or(IndexDoc::Unread, |raw| IndexDoc::Doc(parse(chain_id, &raw))),
+        Err(ureq::Error::StatusCode(404)) => IndexDoc::Absent,
+        Err(_) => IndexDoc::Unread,
+    }
 }
 
 /// Where the index lives: the configured endpoint, or its default. The same
@@ -392,13 +465,96 @@ mod tests {
         );
     }
 
+    /// PR 2 polish: the index's answer is one of three. A document; a 404
+    /// from a server that answered — no document for this chain; and
+    /// everything else — a 5xx, a 429, a timeout, a refused connection, a
+    /// body that does not parse — is unread, which says nothing about the
+    /// chain.
+    #[test]
+    fn the_index_answer_is_a_document_absent_or_unread() {
+        let doc = classify(
+            100,
+            Ok(r#"{"nativeCurrency":{"symbol":"xDAI"}}"#.to_owned()),
+        );
+        assert!(matches!(&doc, IndexDoc::Doc(data) if data.native_symbol == "xDAI"));
+        assert_eq!(
+            classify(4217, Err(ureq::Error::StatusCode(404))),
+            IndexDoc::Absent
+        );
+        for unread in [
+            Err(ureq::Error::StatusCode(500)),
+            Err(ureq::Error::StatusCode(503)),
+            Err(ureq::Error::StatusCode(429)),
+            Err(ureq::Error::StatusCode(403)),
+            Err(ureq::Error::Timeout(ureq::Timeout::Global)),
+            Err(ureq::Error::ConnectionFailed),
+            Err(ureq::Error::Io(std::io::Error::other("reset"))),
+            Ok("<html>gateway</html>".to_owned()),
+        ] {
+            let case = format!("{unread:?}");
+            assert_eq!(classify(4217, unread), IndexDoc::Unread, "{case}");
+        }
+    }
+
+    /// PR 2 polish: a document and a 404 are answers, kept for the half
+    /// hour; an unread index is asked again on the next read — cached, it
+    /// held a chain at "not read" for thirty minutes after the network came
+    /// back. Answered without the network, on chain ids no other test uses.
+    #[test]
+    fn only_an_answer_is_cached() {
+        let asked = &std::cell::Cell::new(0);
+        let ask = |answer: IndexDoc| {
+            move || {
+                asked.set(asked.get() + 1);
+                answer
+            }
+        };
+        // Unread, twice: asked twice — and then the answer is kept.
+        assert_eq!(
+            fetch_doc_with(990_001, ask(IndexDoc::Unread)),
+            IndexDoc::Unread
+        );
+        assert_eq!(
+            fetch_doc_with(990_001, ask(IndexDoc::Unread)),
+            IndexDoc::Unread
+        );
+        assert_eq!(asked.get(), 2, "an unread index is asked again");
+        assert_eq!(cached(990_001), None);
+        let data = parse(990_001, &json!({}));
+        assert_eq!(
+            fetch_doc_with(990_001, ask(IndexDoc::Doc(data.clone()))),
+            IndexDoc::Doc(data.clone())
+        );
+        assert_eq!(
+            fetch_doc_with(990_001, ask(IndexDoc::Unread)),
+            IndexDoc::Doc(data.clone()),
+            "the document stands"
+        );
+        assert_eq!(asked.get(), 3);
+        assert_eq!(cached(990_001), Some(data));
+        // A 404 is kept too: the index has no such document.
+        assert_eq!(
+            fetch_doc_with(990_002, ask(IndexDoc::Absent)),
+            IndexDoc::Absent
+        );
+        assert_eq!(
+            fetch_doc_with(990_002, ask(IndexDoc::Unread)),
+            IndexDoc::Absent
+        );
+        assert_eq!(asked.get(), 4);
+        assert_eq!(cached(990_002), None, "no document to tell");
+    }
+
     /// The live index, for one chain.
     #[test]
     #[ignore = "reaches the ethereum-data index"]
     fn gnosis_answers_with_stablecoins_and_a_wrapped_coin() {
         crate::executor::storage::tests::with_temp_state("chain-tokens-live", || {
             invalidate();
-            let data = fetch(100).unwrap_or_else(|| unreachable!("no index document"));
+            let data = fetch_doc(100)
+                .data()
+                .cloned()
+                .unwrap_or_else(|| unreachable!("no index document"));
             println!(
                 "  chain 100: {} / {} stables / wrapped {:?}",
                 data.native_symbol,
@@ -411,7 +567,7 @@ mod tests {
             assert!(!data.stables.is_empty(), "Gnosis has stablecoins");
             assert!(data.wrapped_native.is_some(), "Gnosis wraps xDAI");
             // A second read must not go out again.
-            let again = fetch(100);
+            let again = fetch_doc(100).data().cloned();
             assert_eq!(again.as_ref(), Some(&data));
         });
     }

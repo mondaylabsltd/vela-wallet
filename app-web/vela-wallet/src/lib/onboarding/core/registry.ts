@@ -16,6 +16,7 @@ import { getPasskeyIndexURL } from '$lib/services/endpoints';
 import { PUBLIC_RPCS } from '$lib/services/rpc-pool-endpoints';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
+import type { VerifiedBy } from '../generated/VerifiedBy';
 
 /** The v2 registry. Overridable so a self-hosted stack is a setting, not a fork. */
 export const DEFAULT_REGISTRY_URL = 'https://p256-index-v2.getvela.app';
@@ -52,7 +53,13 @@ export type GroupChallenge = {
 	members: (ChallengeValue & { publicKey: string })[];
 };
 
-export type KeyStatus = { registered: boolean; unitIds: number[] };
+/**
+ * `verifiedBy`: who vouched for the answer — the resolver's `Done.verified_by`,
+ * passed to the sign-in machine untouched. Only a Gnosis verdict may say a
+ * key has no record; anything else is "nobody vouched", and the core offers
+ * no rebuild on it (`ShellResult::RegistryKeyStatus.verified_by`).
+ */
+export type KeyStatus = { registered: boolean; unitIds: number[]; verifiedBy: VerifiedBy };
 
 export type UnitDetail = { metadataHex: string; members: RegistryUnitMember[] };
 
@@ -233,7 +240,7 @@ type ResolveStep =
 			type: 'done';
 			body: string | null;
 			source: string;
-			verified_by: 'gnosis' | 'ethereum' | 'none';
+			verified_by: VerifiedBy;
 			index_discarded: boolean;
 	  };
 
@@ -283,7 +290,7 @@ async function resolve<T>(
 	/** Only a LISTING names who its unit ids belong to. A unit's own source may
 	 *  be a chain the index's ids mean nothing on. */
 	listing: boolean
-): Promise<T> {
+): Promise<{ body: T; verifiedBy: VerifiedBy }> {
 	await loadCore();
 	const answers: ResolveAnswer[] = [];
 	let indexFailure: RegistryError | null = null;
@@ -327,12 +334,12 @@ async function resolve<T>(
 			console.warn(`[registry] the index's answer did not match the chain — discarded`);
 		}
 		if (listing) unitSource = next.source;
-		return JSON.parse(next.body) as T;
+		return { body: JSON.parse(next.body) as T, verifiedBy: next.verified_by };
 	}
 	throw indexFailure ?? new RegistryError(`${label} failed: nobody answered`, true);
 }
 
-function readKeyProfile(publicKey: string): Promise<KeyProfile> {
+function readKeyProfile(publicKey: string): Promise<{ body: KeyProfile; verifiedBy: VerifiedBy }> {
 	return resolve<KeyProfile>(
 		'Query',
 		(answers) => registryResolveKeyStep(publicKey, answers),
@@ -340,14 +347,15 @@ function readKeyProfile(publicKey: string): Promise<KeyProfile> {
 	);
 }
 
-function readUnit(unitId: number): Promise<UnitResponse> {
+async function readUnit(unitId: number): Promise<UnitResponse> {
 	// The token is read NOW: the listing that set it is the one these ids belong to.
 	const source = unitSource;
-	return resolve<UnitResponse>(
+	const { body } = await resolve<UnitResponse>(
 		'Query',
 		(answers) => registryResolveUnitStep(unitId, source, answers),
 		false
 	);
+	return body;
 }
 
 /** Test seam: forget which source listed the last key's units. */
@@ -358,7 +366,7 @@ export function _resetUnitSource(): void {
 /** `/api/query?publicKey=` — is this key registered, and which groups does it
  *  found? */
 export async function queryByPublicKey(publicKey: string): Promise<KeyStatus> {
-	const profile = await readKeyProfile(publicKey);
+	const { body: profile, verifiedBy } = await readKeyProfile(publicKey);
 	const unitIds = profile.groups?.unitIds ?? [];
 	// The core speaks u32 unit ids because the wire is JSON. An id past 2^32
 	// would truncate into a DIFFERENT group, so this fails the query instead of
@@ -369,7 +377,7 @@ export async function queryByPublicKey(publicKey: string): Promise<KeyStatus> {
 			false
 		);
 	}
-	return { registered: profile.entry !== null, unitIds };
+	return { registered: profile.entry !== null, unitIds, verifiedBy };
 }
 
 /**

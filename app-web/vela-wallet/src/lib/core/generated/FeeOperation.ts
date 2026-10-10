@@ -8,4 +8,10 @@ import type { FeeTier } from "./FeeTier";
  * (a timeout answers with the failure variant). The bound on a whole run is
  * the core's: [`FeeOperation::StartDeadline`].
  */
-export type FeeOperation = { "type": "fetch_gas_price", chain_id: number, want_tip: boolean, } | { "type": "fetch_bundler_quote", chain_id: number, tier: FeeTier, } | { "type": "fetch_in_band_quotes", chain_id: number, account: string, } | { "type": "fetch_fee_recipient", chain_id: number, account: string, } | { "type": "estimate_user_op_gas", chain_id: number, account: string, deployed: boolean, calls: Array<FeeCall>, } | { "type": "measure_inner_calls", chain_id: number, from: string, calls: Array<FeeCall>, } | { "type": "start_ttl", ms: number, } | { "type": "start_deadline", ms: number, };
+export type FeeOperation = { "type": "fetch_gas_price", chain_id: number, want_tip: boolean, 
+/**
+ * A retry after a failure: read the chain again, past any reading
+ * the shell holds (its fee-signal cache) — a retry is a real new
+ * read, never the answer that just failed. `#[serde(default)]`.
+ */
+fresh: boolean, } | { "type": "read_deployment", chain_id: number, account: string, fresh: boolean, } | { "type": "fetch_bundler_quote", chain_id: number, tier: FeeTier, } | { "type": "fetch_in_band_quotes", chain_id: number, account: string, } | { "type": "fetch_fee_recipient", chain_id: number, account: string, } | { "type": "estimate_user_op_gas", chain_id: number, account: string, deployed: boolean, calls: Array<FeeCall>, } | { "type": "measure_inner_calls", chain_id: number, from: string, calls: Array<FeeCall>, } | { "type": "start_ttl", ms: number, } | { "type": "start_deadline", ms: number, };

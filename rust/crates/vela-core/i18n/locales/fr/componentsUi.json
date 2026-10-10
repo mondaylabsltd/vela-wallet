@@ -220,6 +220,9 @@
       "stillConfirming": "Pas encore sur la chaîne. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
       "maybeSent": "Elle a peut-être été envoyée. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
       "refused": "Le réseau l’a refusée — rien n’a été envoyé.",
+      "wentFirst": "Une autre transaction de ce compte est passée avant — rien n’a été envoyé.",
+      "notSentTitle": "Pas encore envoyée",
+      "notSentBody": "Votre transaction précédente sur ce réseau est encore en cours de traitement. Réessayez une fois qu’elle sera terminée.",
       "unknownOutcome": "Toujours non confirmée après 24 heures.",
       "openSigner": "Confirmer sur la page de signature",
       "signerDown": "Impossible d’ouvrir la page de signature. Vérifiez votre connexion.",
@@ -243,7 +246,10 @@
         "approvalChoice": "Choisissez d'abord un montant d'approbation",
         "batchUnsettled": "Vérification de chaque appel du lot…",
         "feeMeasuring": "Calcul des frais de réseau…",
-        "feeFailed": "Frais incalculables — touchez-les pour réessayer"
+        "feeFailed": "Frais incalculables — touchez-les pour réessayer",
+        "feeRetrying": "Frais pas encore calculés. Nouvelle tentative automatique…",
+        "feeWouldFail": "Elle échouerait si elle était envoyée telle quelle.",
+        "previousPending": "En attente de votre transaction précédente sur ce réseau…"
       }
     },
     "signingApprove": {
@@ -324,6 +330,7 @@
       "deployedNo": "Non (1re tx)",
       "estimating": "Estimation...",
       "estimateFailed": "Appuyez pour réessayer",
+      "payWithAnotherCoin": "Payer avec une autre monnaie",
       "feeToken": "Token de frais",
       "paidWith": "Payé en {{symbol}}",
       "rowBalance": "Solde",
@@ -333,6 +340,8 @@
       "reasonFeeToken": "Le relais ne peut pas coter cette monnaie pour le moment. Nouvelle tentative — ou payez les frais avec une autre monnaie.",
       "reasonSimulation": "Le relais n'a pas encore pu simuler cette transaction. Nouvelle tentative automatique.",
       "reasonQuoteHigh": "Le prix du gas du relais est en ce moment bien au-dessus de celui du réseau. Nouvelle tentative automatique.",
+      "reasonChainDown": "Impossible de joindre {{chain}} pour calculer les frais. Nouvelle tentative automatique.",
+      "reasonInternal": "Un problème est survenu dans Vela. Si cela continue, rouvrez l'app.",
       "rowShort": "Il faut ~{{need}}, vous avez {{have}}",
       "noCoinPays": "Aucun jeton ne couvre ces frais"
     },

@@ -273,6 +273,8 @@ private fun FlowHostContent(
                     onNoticeSecondary = { send?.onNoticeSecondary?.invoke() },
                     onReport = { send?.onRelayReport?.invoke() },
                     handoff = sendHandoff,
+                    // The fee line over a failure: the form row's own tap (PR 2 polish).
+                    onFee = { onNavigate(FlowStep.FeeToken) },
                 )
             }
             is FlowBase.SendReceipt -> FlowScaffold(header = base.model.header, onBack = onBack) {

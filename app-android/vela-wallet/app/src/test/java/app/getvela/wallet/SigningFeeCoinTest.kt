@@ -194,6 +194,59 @@ class SigningFeeCoinTest {
         assertTrue("both stablecoins stay unmeasured", fee.coin(PUSD).spent_by_operation && fee.coin(USDC).spent_by_operation)
     }
 
+    /**
+     * The correctness batch, item 4: the machine's own re-pick after the
+     * simulation lands (the dApp sheet's automatic switch) moves the figure to
+     * another coin — whose fee leg costs other gas. Until it is measured again
+     * with that leg the figure is PROVISIONAL: drawn as it is, with the
+     * measuring sign, and the confirm is shut (`fee_measuring`). Then it
+     * settles and opens.
+     */
+    @Test
+    fun `a coin switched by the machine is measured again before it can be confirmed`() = runBlocking<Unit> {
+        scriptRelay()
+        val simulation = java.util.concurrent.CountDownLatch(1)
+        val remeasure = java.util.concurrent.CountDownLatch(1)
+        val holdEstimates = java.util.concurrent.atomic.AtomicBoolean(false)
+        port.always("eth_estimateUserOperationGas") {
+            if (holdEstimates.get()) remeasure.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            FakeRelayPort.body(JSONObject().put("verificationGasLimit", "0x186a0").put("callGasLimit", "0x30d40").put("preVerificationGas", "0xc350"))
+        }
+        val c = controller({ simulation.await(10, java.util.concurrent.TimeUnit.SECONDS); swapSimulated() })
+        c.open(swap())
+        // Priced before the simulation answered: the native fallback, which cannot pay.
+        val first = withTimeout(20_000) { c.fee.first { !it.busy && it.fee != null } }
+        assertNull(first.fee_token)
+        assertFalse(first.provisional)
+
+        // The simulation lands: the machine re-picks pUSD — re-measured with ITS leg.
+        holdEstimates.set(true)
+        simulation.countDown()
+        val provisional = withTimeout(20_000) { c.fee.first { it.provisional } }
+        assertTrue("the switched coin: $provisional", provisional.fee_token.equals(PUSD, ignoreCase = true))
+        assertTrue("measuring, so the confirm holds", provisional.busy && !provisional.confirm_fee_ready)
+        // The sheet draws the switched figure with the measuring sign — never a blank or "estimating".
+        val strings = run {
+            val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
+            app.getvela.wallet.core.i18n.I18nRuntime { tag -> java.io.File(root, "assets/i18n/$tag.json").readBytes() }.apply { initialize("en") }
+        }
+        val ctx = app.getvela.wallet.feature.signing.SigningLive.Context(strings, "Polygon", androidx.compose.ui.graphics.Color.Red, "POL", "Me", SAFE)
+        val row = app.getvela.wallet.feature.signing.SigningLive.feeModel(app.getvela.wallet.feature.signing.core.ClearSigningView(), provisional, ctx)
+            as app.getvela.wallet.feature.signing.FeeModel.OnChain
+        assertTrue("the switched figure is drawn as it is: $provisional", provisional.fee != null)
+        assertTrue("the figure stays on screen: ${row.value}", row.value.startsWith("~") && row.value.contains("pUSD"))
+        assertTrue("with the measuring sign", row.measuring && row.refreshing)
+        val gate = app.getvela.wallet.feature.signing.SigningLive.confirmState(
+            c.signJson.value!!, c.guardJson.value!!, c.clearJson.value!!, c.feeJson.value, null,
+        )
+        assertFalse(gate.enabled)
+
+        // Measured again: it settles in pUSD and the confirm opens.
+        remeasure.countDown()
+        val settled = withTimeout(20_000) { c.fee.first { !it.busy && !it.provisional && it.fee_token.equals(PUSD, ignoreCase = true) } }
+        assertTrue("settled: $settled", settled.confirm_fee_ready)
+    }
+
     // -- the sessions: told after every question about the measured calls ----------------
 
     private fun speedControl(): SpeedControl {
@@ -214,8 +267,8 @@ class SigningFeeCoinTest {
         speed.balanceChanges(swapCalls, swapChanges)
         val first = speed.ask() as SpeedControl.Quoted.Settled
         assertTrue("pUSD from the start: ${first.view}", first.view.fee_token.equals(PUSD, ignoreCase = true))
-        // A stale quote's re-ask, a refresh's: the machine forgot it, and was told again.
-        val again = runBlocking { withTimeout(15_000) { speed.requote(10_000) } } as SpeedControl.Quoted.Settled
+        // The same question asked again: the machine forgot it, and was told again.
+        val again = speed.ask() as SpeedControl.Quoted.Settled
         assertTrue("still pUSD: ${again.view}", again.view.fee_token.equals(PUSD, ignoreCase = true))
         assertTrue(again.view.confirm_fee_ready)
     }

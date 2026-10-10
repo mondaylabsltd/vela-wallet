@@ -46,7 +46,7 @@ class TrackerExecutor(
             if (answer == null) {
                 TrackShellResult.StatusUnavailable(operation.user_op_hash, now())
             } else {
-                TrackShellResult.Status(operation.user_op_hash, answer.status, answer.stage, now(), answer.txHash)
+                TrackShellResult.Status(operation.user_op_hash, answer.status, answer.stage, now(), answer.txHash, answer.rejectionReason)
             }
         }
         TrackOperation.LoadPendingTxs -> TrackShellResult.RecordsLoaded(
@@ -173,6 +173,10 @@ class TrackerExecutor(
                 } else {
                     null
                 },
+                // The account that signed it, so a restart still holds its
+                // nonce for it (`in_flight_ops`). A dApp row's `from` is the
+                // account too; a row with none holds nothing.
+                sender = row.optString("from").takeIf { it.startsWith("0x") && it.length == 42 }?.lowercase(),
             )
         }
     }

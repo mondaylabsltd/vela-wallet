@@ -611,6 +611,84 @@ class SendLiveTest {
     }
 
     /**
+     * A refusal is told by its reason (the core's `refusal_key`), never every
+     * refusal as "fees stayed above the amount you approved": another of the
+     * account's transactions going first is its own sentence, and a refusal
+     * the core has no word for is the plain "refused, nothing was sent".
+     */
+    @Test
+    fun `a refused send is told by its reason`() {
+        val model = (FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model
+        val base = SendView(stage = SendStage.Receipt, selected_token = xdai, tx_status = SendTxStatus.Idle, user_op_hash = "0xop")
+        fun refused(key: String?) = SendLive.receipt(
+            model,
+            base.copy(receipt = SendReceiptView(status = SendReceiptStatus.Failed, amount = "0.001", usd_value = 0.0, refusal_key = key)),
+            ctx(),
+        )
+        val wentFirst = refused(I18nKeys.Flows.SIGN_WENT_FIRST)
+        assertEquals(ReceiptStage.Failed, wentFirst.stage)
+        assertEquals(listOf(strings.t(I18nKeys.Flows.SIGN_WENT_FIRST)), wentFirst.captions)
+        assertFalse("never the fee sentence for a used nonce", wentFirst.captions.contains(strings.t(I18nKeys.Flows.TX_REJECTED_FEES)))
+        assertEquals(listOf(strings.t(I18nKeys.Flows.SIGN_REFUSED)), refused(I18nKeys.Flows.SIGN_REFUSED).captions)
+        assertEquals(listOf(strings.t(I18nKeys.Flows.TX_REJECTED_FEES)), refused(I18nKeys.Flows.TX_REJECTED_FEES).captions)
+        // No refusal (it landed and reverted): the failed hint, as before.
+        assertEquals(listOf(strings.t(I18nKeys.Flows.TX_FAILED_HINT)), refused(null).captions)
+        // The core's word reaches the view whole.
+        val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(
+            SendReceiptView.serializer(),
+            """{"status":"failed","hold_reason":null,"refusal_key":"componentsUi.signing.wentFirst","kind":null,"transfers":[],"coins":[],"amount":"1","usd_value":0.0,"submitted_at_ms":null,"typical_inclusion_s":null}""",
+        )
+        assertEquals(I18nKeys.Flows.SIGN_WENT_FIRST, wire.refusal_key)
+    }
+
+    /**
+     * One transaction in flight per account and network: while the account's
+     * previous one on this chain is in flight the confirm is held, and the one
+     * line the core names sits under it — whatever the fee is doing, with no
+     * timer. The relay's own "previous transaction pending" refusal is the
+     * notice, with Try again, and the line is not said twice.
+     */
+    @Test
+    fun `the confirm waits for the account's last transaction on the network, in one line`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val pending = app.getvela.wallet.feature.send.core.SendPreviousPending(chain_id = 100, user_op_hash = "0xfirst", key = I18nKeys.Flows.PREVIOUS_PENDING)
+        val held = SendView(
+            stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(),
+            can_confirm = false, previous_pending = pending,
+        )
+        val live = SendLive.confirm(drawn, held, ctx())
+        assertFalse(live.ctaEnabled)
+        assertEquals(strings.t(I18nKeys.Flows.PREVIOUS_PENDING), live.ctaHold)
+        assertNull("no notice card over a hold", live.notice)
+        // The fee re-measuring does not swap the line out.
+        assertEquals(live.ctaHold, SendLive.confirm(drawn, held.copy(fee_busy = true), ctx()).ctaHold)
+        // Released: the confirm opens and the line goes.
+        assertNull(SendLive.confirm(drawn, held.copy(previous_pending = null, can_confirm = true), ctx()).ctaHold)
+
+        // The relay turned it back at submit: the previous one still holds the
+        // nonce. "Not sent yet", calmly (PR 2 polish) — its title over the
+        // signing sheet's sentence, no warning tone — with Try again.
+        val refused = SendLive.confirm(drawn, held.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.PreviousPending), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.NOT_SENT_TITLE), refused.noticeTitle)
+        assertEquals(strings.t(I18nKeys.Flows.NOT_SENT_BODY), refused.notice)
+        assertTrue("calm, never the warning tone", refused.noticeCalm)
+        assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), refused.noticeAction)
+        assertNull("said once", refused.ctaHold)
+        // Any other refusal keeps its own words and tone, untitled.
+        val generic = SendLive.confirm(drawn, held.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.Generic), ctx())
+        assertNull(generic.noticeTitle)
+        assertFalse(generic.noticeCalm)
+
+        // The core's view decodes it.
+        val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(
+            SendView.serializer(),
+            """{"previous_pending":{"chain_id":100,"user_op_hash":"0xfirst","key":"componentsUi.signing.confirmBlock.previousPending"},"tx_error":"previous_pending"}""",
+        )
+        assertEquals(pending, wire.previous_pending)
+        assertEquals(SendTxErrorKey.PreviousPending, wire.tx_error)
+    }
+
+    /**
      * Spec 097 F (S3): a two-coin sweep's success screen said "Send ETH |
      * Sent 0.000418 ETH | To Wallet · Base" although 0.034929 USDC moved in
      * the same operation (Android captioned it "2 recipients" besides — a

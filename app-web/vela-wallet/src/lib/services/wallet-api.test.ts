@@ -54,12 +54,17 @@ vi.mock('./chain-tokens', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./chain-tokens')>();
 	return {
 		...actual,
-		fetchChainTokens: async (chainId: number) => ({
-			chainId,
-			nativeCurrency: { name: 'Coin', symbol: chainId === CELO ? 'CELO' : 'ETH', decimals: 18 },
-			stables: chainId === BASE ? [{ symbol: 'USDC', contract: USDC_BASE, type: 'native' }] : [],
-			wrappedNativeToken: chainId === BASE ? WETH_BASE : chainId === CELO ? GOLD_TOKEN : null,
-			dex: null
+		// The balance read asks for the document's outcome (PR 2 polish):
+		// here it is always there.
+		readChainTokens: async (chainId: number) => ({
+			kind: 'doc' as const,
+			data: {
+				chainId,
+				nativeCurrency: { name: 'Coin', symbol: chainId === CELO ? 'CELO' : 'ETH', decimals: 18 },
+				stables: chainId === BASE ? [{ symbol: 'USDC', contract: USDC_BASE, type: 'native' }] : [],
+				wrappedNativeToken: chainId === BASE ? WETH_BASE : chainId === CELO ? GOLD_TOKEN : null,
+				dex: null
+			}
 		})
 	};
 });

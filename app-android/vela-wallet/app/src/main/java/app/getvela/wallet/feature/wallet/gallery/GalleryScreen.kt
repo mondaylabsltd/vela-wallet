@@ -63,6 +63,9 @@ private enum class GalleryEntry(val label: String) {
     H7X("H7x 1.35×"),
     H8("H8"),
     H9("H9"),
+    H10("H10"),
+    H11("H11"),
+    H12("H12"),
     Components("Components"),
     Identicons("Identicon"),
     ;
@@ -80,6 +83,9 @@ private enum class GalleryEntry(val label: String) {
             H7X -> WalletScreenState.H7X
             H8 -> WalletScreenState.H8
             H9 -> WalletScreenState.H9
+            H10 -> WalletScreenState.H10
+            H11 -> WalletScreenState.H11
+            H12 -> WalletScreenState.H12
             Components, Identicons -> null
         }
 }

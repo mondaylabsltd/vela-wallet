@@ -36,9 +36,11 @@ const VIEW: BalanceView = {
 	rate_limited_chain_ids: [],
 	unreachable_networks: [],
 	unreachable_key: null,
+	internal_chain_ids: [],
+	internal_key: null,
 	holdings_loading: false,
 	cached_total_usd: null,
-	switcher: { open: false, loading: false, balances: [] }
+	switcher: { open: false, loading: false, balances: [], hidden: false }
 };
 /** A launch-time blip: every chain failed, nothing was known before. */
 const BLIP: Partial<BalanceView> = { tokens: [], failed_chain_ids: [1, 56, 8453] };

@@ -198,6 +198,7 @@ fn tracking(sign: &DomainDriver<SignRequest>) -> DomainDriver<TxTracker> {
     let handoff = sign.view().tracker_handoff.expect("the hand-off");
     let mut tracker = DomainDriver::<TxTracker>::new();
     tracker.dispatch(TrackEvent::Submitted {
+        sender: None,
         user_op_hash: handoff.user_op_hash,
         record_ids: handoff.record_ids,
         chain_id: handoff.chain_id,
@@ -252,6 +253,7 @@ fn not_found_round(tracker: &mut DomainDriver<TxTracker>, at: f64, head: u64) ->
                 now_ms: at + 200.0,
             },
             _ => TrackRes::Status {
+                rejection_reason: None,
                 user_op_hash: LOCAL_OP.to_owned(),
                 status: TrackLifecycle::NotFound,
                 stage: None,
@@ -492,6 +494,7 @@ fn feed_handoff(
 ) -> Vec<TrackOp> {
     let handoff = sign.view().tracker_handoff.expect("the hand-off");
     tracker.dispatch(TrackEvent::Submitted {
+        sender: None,
         user_op_hash: handoff.user_op_hash,
         record_ids: handoff.record_ids,
         chain_id: handoff.chain_id,
@@ -514,6 +517,7 @@ fn forward(
         status: entry.status,
         tx_hash: entry.tx_hash,
         now_ms,
+        refusal: None,
     })
 }
 
@@ -585,6 +589,7 @@ fn an_on_chain_revert_the_relay_calls_rejected_is_answered_the_revert() {
     tracker.resolve_matching(
         |op| matches!(op, TrackOp::PollStatus { .. }),
         TrackRes::Status {
+            rejection_reason: None,
             user_op_hash: LOCAL_OP.to_owned(),
             status: TrackLifecycle::Rejected,
             stage: None,

@@ -57,7 +57,7 @@ struct Probes083Sheet {
             accounts: accounts,
             spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
             store: store,
-            pool: RpcPool(store: store, accounts: AccountStore()),
+            pool: RpcPool(store: store, accounts: AccountStore(), offline: true),
             ports: SigningController.Ports(
                 respond: { _, _, payload, _ in answers.append(payload) },
                 nativeSymbol: { _ in symbol },

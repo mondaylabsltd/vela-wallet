@@ -24,6 +24,15 @@ new_item_id: string | null,
  */
 toast: FeedToast | null, 
 /**
+ * Balance privacy is on ([`Event::PrivacyChanged`]) — the same flag as
+ * `BalanceView::hidden`, carried here so every surface drawn from this
+ * view (home Activity, History, a contact's page, a transfer's and a dApp
+ * row's detail) masks on the feed's own word. The rule is
+ * [`super::privacy`]'s: each row's figure by `figure_maskable`, a dApp
+ * row's "received" and every detail figure always.
+ */
+hidden: boolean, 
+/**
  * The corpus key of History's empty line (spec 082 RG5):
  * [`HISTORY_EMPTY_ALL`] with no chain filter, [`HISTORY_EMPTY_FILTERED`]
  * with one. Whether the list is loading or empty stays the shell's.

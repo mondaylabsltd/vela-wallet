@@ -46,6 +46,14 @@ pub enum ConfirmBlock {
     /// This request was answered, or its failure is held: Try again (when
     /// `SignView.failure_retryable`) or close.
     Answered,
+    /// The account's previous transaction on this network is still going
+    /// through ([`super::tx_tracker::InFlightOp`]): this one would take the
+    /// same nonce, so it waits, and the confirm opens by itself once the
+    /// first is final or has made no progress for ten minutes
+    /// ([`super::tx_tracker::IN_FLIGHT_STALL_MS`]). One plain line for as long
+    /// as it holds — it sits ahead of every fee block, so a re-quote never
+    /// swaps it out. The send confirm says the same line.
+    PreviousPending,
     /// The request is still being read.
     Reading,
     /// An approval needs its amount chosen.
@@ -54,7 +62,10 @@ pub enum ConfirmBlock {
     BatchUnsettled,
     /// The fee is being worked out (or re-worked for another speed).
     FeeMeasuring,
-    /// The fee could not be worked out: retry.
+    /// The fee could not be worked out. Its line is the fee view's own
+    /// ([`super::fee_policy::FeeFailureView::footer_key`]): "Retrying…" while
+    /// the machine asks again by itself — through the re-ask too — and "Tap
+    /// it to retry" only when a tap is the one way.
     FeeFailed,
     /// The coin chosen for the fee is short. No line under the confirm: the
     /// fee section says it already, where the other coins are — "Insufficient
@@ -65,6 +76,25 @@ pub enum ConfirmBlock {
     /// only repeated it (issue #438).
     FeeShort,
 }
+
+/// The line while the account's previous transaction on this network is
+/// still going through — under a held confirm, the dApp sheet's and Send's.
+pub const PREVIOUS_PENDING_KEY: &str = "componentsUi.signing.confirmBlock.previousPending";
+
+/// The title when the relay would not take an operation because the
+/// account's previous one on this network still holds the nonce, at submit
+/// (`RelayRejection::NonceHeld`): "Not sent yet". Nothing failed and nothing
+/// was sent, so it is said calmly — never "Failed", never in the failure's
+/// colour — on the signing sheet ([`super::sign_request::SignView::failure_not_sent`])
+/// and on Send's confirm (`SendTxErrorKey::PreviousPending`), with Try again.
+pub const NOT_SENT_TITLE_KEY: &str = "componentsUi.signing.notSentTitle";
+
+/// The sentence under [`NOT_SENT_TITLE_KEY`]: "Your previous transaction on
+/// this network is still being processed. Try again once it's done." The
+/// held confirm's own line ([`PREVIOUS_PENDING_KEY`], "Waiting for your last
+/// transaction…") is a wait in progress; this one follows a submit that was
+/// turned back, and says what to do.
+pub const NOT_SENT_BODY_KEY: &str = "componentsUi.signing.notSentBody";
 
 /// What the gate decides from: the four views as the shell last had them,
 /// and the speed in force (`None` — no speed control).
@@ -104,6 +134,7 @@ impl ConfirmBlock {
             Self::AccountSwitching => "componentsUi.signing.confirmBlock.accountSwitching",
             Self::Answered if retryable => "componentsUi.signing.confirmBlock.answeredRetry",
             Self::Answered => "componentsUi.signing.confirmBlock.answered",
+            Self::PreviousPending => PREVIOUS_PENDING_KEY,
             Self::Reading => "componentsUi.signing.confirmBlock.reading",
             Self::ApprovalChoice => "componentsUi.signing.confirmBlock.approvalChoice",
             Self::BatchUnsettled => "componentsUi.signing.confirmBlock.batchUnsettled",
@@ -135,6 +166,16 @@ pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
         return false;
     };
     super::fee_speed::offered(estimate.tier) != super::fee_speed::offered(tier)
+}
+
+/// The figure on the sheet is another coin's gas (the fee-coin switch): the
+/// coin in force changed after the gas was measured with the other coin's fee
+/// leg, and the machine is measuring it again (`FeeView::provisional`). The
+/// fee machine already holds `confirm_fee_ready` meanwhile; this is the gate's
+/// own second line, as [`fee_of_another_tier`] is for a speed.
+#[must_use]
+pub fn fee_of_another_coin(fee: &FeeView) -> bool {
+    fee.provisional
 }
 
 /// The one gate (module doc).
@@ -186,11 +227,26 @@ pub fn confirm_state_of(
         let Some(fee) = fee else {
             return shut(ConfirmBlock::FeeMeasuring);
         };
-        if fee.busy || fee_of_another_tier(fee, speed_tier) {
+        // The failure says the same thing here as on the row (PR 2 note 1):
+        // "retrying" while the machine asks again by itself — through the
+        // re-ask too, so the line does not flip to "working out" and back
+        // every few seconds — and "tap it" only when a tap is the one way.
+        if let Some(failure) = fee.failure.as_ref() {
+            return ConfirmState {
+                enabled: false,
+                block: Some(ConfirmBlock::FeeFailed),
+                key: Some(failure.footer_key.clone()),
+            };
+        }
+        if fee.busy || fee_of_another_tier(fee, speed_tier) || fee_of_another_coin(fee) {
             return shut(ConfirmBlock::FeeMeasuring);
         }
-        if fee.failed.is_some() {
-            return shut(ConfirmBlock::FeeFailed);
+        if let Some(failed) = fee.failed {
+            // A view from a core that predates `failure`.
+            return ConfirmState {
+                key: Some(super::fee_policy::FeeFailureView::of(failed, false).footer_key),
+                ..shut(ConfirmBlock::FeeFailed)
+            };
         }
         if !fee.confirm_fee_ready {
             // Priced, not busy, not failed, and still not ready: the coin
@@ -288,6 +344,7 @@ pub fn handoff_fee(
         || fee.failed.is_some()
         || !fee.confirm_fee_ready
         || fee_of_another_tier(fee, speed_tier)
+        || fee_of_another_coin(fee)
     {
         return None;
     }

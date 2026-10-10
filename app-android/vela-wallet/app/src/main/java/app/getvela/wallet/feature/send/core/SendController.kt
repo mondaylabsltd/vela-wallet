@@ -83,6 +83,12 @@ class SendController(
     },
 ) {
 
+    /**
+     * What this send journey was last told of the fee card's failure; [open]
+     * forgets it. Declared before `init`, whose fee bridge reads it.
+     */
+    private val feeFailedWord = FeeFailedWord()
+
     private val _alert = MutableStateFlow<SendAlertKind?>(null)
 
     /** The core's refusal to print, until the screen dismisses it. */
@@ -347,6 +353,12 @@ class SendController(
                     lastBusy = view.busy
                     dispatch(SendEvent.FeeBusyChanged(view.busy))
                 }
+                // The fee card has failed (or is re-asking after a failure)
+                // and holds no figure: the confirm is held, and never opens
+                // on the figure the fee machine discarded (PR 2 integration).
+                // A failure for another chain's question is no failure of
+                // this form's (PR 2 polish) — read against the form as it is.
+                tellFeeFailed()
                 val estimate = view.fee
                 if (estimate != null && estimate !== lastFee) {
                     lastFee = estimate
@@ -365,10 +377,26 @@ class SendController(
             combine(fee, speedControl.pricingChainId, sendHost.commits) { view, pricing, _ -> view.fee_token to pricing }
                 .collect { (feeToken, pricing) -> tellFeeToken(feeToken, pricing) }
         }
+        // The form moving to another chain changes whether the card's failure
+        // is this form's (PR 2 polish): right after a token switch the old
+        // chain's failure stops counting before the fee machine is asked again.
+        scope.launch {
+            sendHost.commits.collect { tellFeeFailed() }
+        }
     }
 
     private fun dispatch(event: SendEvent) {
         sendHost.dispatch(event, SendEvent.serializer())
+    }
+
+    /**
+     * `FeeFailedChanged` when the word changes — under its lock with the
+     * dispatch, so it never overtakes an Open. Read from the card and the form
+     * as they are now ([FeeFailedWord.failed]): a failure for another chain's
+     * question does not count (PR 2 polish).
+     */
+    private fun tellFeeFailed() = synchronized(feeFailedWord) {
+        feeFailedWord.news(FeeFailedWord.failed(fee.value, send.value))?.let(::dispatch)
     }
 
     /** What this send journey was last told of the fee card's coin; [open] forgets it. */
@@ -400,33 +428,19 @@ class SendController(
         publicKeyAvailable: Boolean,
         autoFeeToken: Boolean,
     ): SendFeeOutcome = when (val quoted = speedControl.quote(chainId, account, publicKeyAvailable, calls, gasFeeToken, autoFeeToken)) {
-        SpeedControl.Quoted.Superseded -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
         SpeedControl.Quoted.TimedOut -> SendFeeOutcome.Failed(SendEstimateFailure.Timeout)
         is SpeedControl.Quoted.Settled -> {
             val settled = quoted.view
             val estimate = settled.fee
             when {
-                settled.failed != null -> SendFeeOutcome.Failed(failure(settled.failed))
+                // PR 2 note 13: the fee machine's failure as it is — the
+                // chain out of reach, a fault inside the app, a relay that
+                // would not price — so the alert says the real cause.
+                settled.failed != null -> SendFeeOutcome.Failed(SendEstimateFailure.Fee(settled.failed))
                 estimate != null -> SendFeeOutcome.Ok(estimate)
                 else -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
             }
         }
-    }
-
-    private fun failure(failed: FeeFailure): SendEstimateFailure = when (failed) {
-        FeeFailure.MissingPublicKey -> SendEstimateFailure.MissingPublicKey
-        FeeFailure.FeeTokenUnavailable -> SendEstimateFailure.FeeTokenUnavailable
-        FeeFailure.QuoteUnavailable -> SendEstimateFailure.QuoteUnavailable
-        FeeFailure.CalculationFailed -> SendEstimateFailure.CalculationFailed
-        FeeFailure.EstimateFailed -> SendEstimateFailure.EstimateFailed
-        FeeFailure.GasQuoteTooHigh -> SendEstimateFailure.GasQuoteTooHigh
-        // The send machine's vocabulary has no word for a chain node that did
-        // not answer (spec 082 RJ13 is the signing sheet's fee row): the quote
-        // could not be had, and asking again is right.
-        is FeeFailure.ChainRead -> SendEstimateFailure.QuoteUnavailable
-        // Spec 083 fee: the relay's "this operation fails", as the send
-        // screen has always said that refusal.
-        FeeFailure.WouldFail -> SendEstimateFailure.EstimateFailed
     }
 
     // -- intents ---------------------------------------------------------------------
@@ -458,12 +472,39 @@ class SendController(
         // once the form is on the chain the fee session prices.
         synchronized(feeTokenWord) {
             feeTokenWord.forget()
+            // What is in flight survives the Open in the core (PR 2 note 6):
+            // a second send is held from its first frame, told once.
             openEvent = sendHost.dispatchNumbered(
                 SendEvent.Open(account = account, params = params, display = display),
                 SendEvent.serializer(),
             )
         }
+        // A fresh journey has been told nothing of the fee card's failure:
+        // its first word goes, whatever it is — after the Open, never before.
+        synchronized(feeFailedWord) {
+            feeFailedWord.forget()
+            feeFailedWord.news(FeeFailedWord.failed(fee.value, send.value))?.let(::dispatch)
+        }
     }
+
+    /**
+     * The person left Send — closed, backed out of the picker or the
+     * receipt, or went elsewhere. Its fee sessions stop answering: the
+     * block-time re-pricing and the core's own re-ask after a failure (PR 2
+     * note 1) belong to a form or a confirm on screen, never to one that is
+     * gone. The next [open] asks afresh.
+     */
+    fun left() = speedControl.end()
+
+    /**
+     * Every operation in flight on this device (`inFlightOps` of the
+     * tracker's own view JSON), on every tracker render: while this account
+     * has one on the form's chain, the confirm is held with the one line
+     * `previous_pending` names, and opens once it is final or has stalled.
+     * The machine dedupes an identical list, so nothing flickers, and keeps
+     * it across [open] — the one source of what is in flight.
+     */
+    fun inFlightOps(ops: List<InFlightOp>) = dispatch(SendEvent.InFlightOps(ops))
 
     // -- the speed control (spec 069) -----------------------------------------------
 
@@ -481,6 +522,22 @@ class SendController(
 
     /** The refresh control: measure again, the held readings dropped first (issue 212). */
     fun refreshFee() = speedControl.refresh()
+
+    /**
+     * A tap on the fee row — the form's, or the confirm's fee line over a
+     * failure — doing exactly what its words say (PR 2 polish, the core's
+     * `FeeFailureView.tap`): over a failure a tap asks again, the retry — at
+     * once, a real new read, the core's own timer for the next one dropped
+     * (PR 2 note 1); after "would fail" with another coin on offer it opens
+     * the coins; when nothing helps, nothing. No failure for this form's
+     * chain: the row opens its coins. Returns what the screen still has to
+     * do — [FeeFailureRow.Tap.OpenCoins] is the coin sheet.
+     */
+    fun feeTapped(): FeeFailureRow.Tap {
+        val tap = FeeFailureRow.tap(FeeFailureRow.forChain(fee.value, formChain(send.value)))
+        if (tap == FeeFailureRow.Tap.Retry) speedControl.refresh()
+        return tap
+    }
 
     fun displayChanged(display: SendDisplayContext) = dispatch(SendEvent.DisplayChanged(display))
 
@@ -729,6 +786,38 @@ internal class FeeTokenWord {
         if (told == said) return null
         told = said
         return SendEvent.FeeTokenChanged(feeToken)
+    }
+
+    /** A new journey: nothing told yet. */
+    fun forget() {
+        told = null
+    }
+}
+
+/**
+ * What one send journey was last told of the fee card's failure
+ * (`SendEvent.FeeFailedChanged`, from `FeeView.failure` being set): said when
+ * it changes, and a fresh journey's first word always goes. Not thread-safe:
+ * the controller holds its lock.
+ */
+internal class FeeFailedWord {
+    companion object {
+        /**
+         * Whether the fee card has failed for THIS form: a failure whose
+         * `chain_id` names another chain than the form's (`formChain`) is the
+         * old chain's, said before the fee machine was asked about the new one
+         * (PR 2 polish) — it is not drawn, and it holds nothing.
+         */
+        fun failed(fee: FeeView, form: SendView): Boolean = FeeFailureRow.forChain(fee, formChain(form)) != null
+    }
+
+    private var told: Boolean? = null
+
+    /** The event that tells [failed], or `null` when this journey already knows it. */
+    fun news(failed: Boolean): SendEvent.FeeFailedChanged? {
+        if (told == failed) return null
+        told = failed
+        return SendEvent.FeeFailedChanged(failed)
     }
 
     /** A new journey: nothing told yet. */

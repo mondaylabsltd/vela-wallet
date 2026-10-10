@@ -38,7 +38,7 @@ struct ActivityTests {
     @Test func anIncomingTransferRefreshesTheBalanceOnce() {
         let (store, defaults) = freshStore()
         let accounts = AccountStore(defaults: defaults)
-        let pool = RpcPool(store: store, accounts: accounts)
+        let pool = RpcPool(store: store, accounts: accounts, offline: true)
         let held = HeldTokens()
         let activity = ActivityStore(
             store: store, accounts: accounts, held: held,

@@ -128,7 +128,7 @@ struct SendReceiptVerdictTests {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
         let accountStore = AccountStore(defaults: defaults)
-        let pool = RpcPool(store: store, accounts: accountStore)
+        let pool = RpcPool(store: store, accounts: accountStore, offline: true)
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool, spine: spine, accounts: accounts,
             fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil, timers: .stopped),
@@ -190,7 +190,7 @@ struct SendReceiptVerdictTests {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
         let accountStore = AccountStore(defaults: defaults)
-        let pool = RpcPool(store: store, accounts: accountStore)
+        let pool = RpcPool(store: store, accounts: accountStore, offline: true)
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool, spine: spine, accounts: accounts,
             fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil, timers: .stopped),

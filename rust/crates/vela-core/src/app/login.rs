@@ -7,21 +7,29 @@
 //!            local account ◄────── load accounts ──┘
 //!                  │                     │ no local match
 //!                  │                     ▼
-//!                  │             query index ──record──► save ─► enter
-//!                  │                     │ 404
-//!                  │                     ▼
-//!                  │            offer on-device recovery ─accept─► 2nd signature
-//!                  ▼                                                    │
-//!               enter ◄───────────────── save ◄─── rebuild public key ◄──┘
-//!                                          └─► re-publish to the index (background)
+//!                  │          ask the registry about each candidate key
+//!                  │            │ record          │ nobody could say  │ Gnosis: no record
+//!                  │            ▼                 ▼                   ▼
+//!                  │      save ─► enter   "can't reach the     offer on-device
+//!                  │                       registry" ─retry─►  recovery ─accept─► 2nd signature
+//!                  │                       (same signature,                           │
+//!                  │                        no new prompt)                            │
+//!                  ▼                                                                  │
+//!               enter ◄───────────────── save ◄─── rebuild public key ◄───────────────┘
+//!                                          └─► publish to the registry, then enter
 //! ```
 //!
-//! The recovery branch is what keeps the index server a **cache** rather than a
-//! single point of failure: two signatures from the same credential pin down
-//! exactly one public key, and therefore exactly one Safe address, entirely
-//! on-device. And because the wallet being recovered may already hold funds,
-//! reaching it must never block on a server — the index is healed in the
-//! background, after the user is already inside.
+//! Two signatures from the same credential pin down exactly one public key —
+//! and from it a ONE-KEY Safe address. That is the wallet only when the key
+//! founded no group: a multi-key wallet's address needs every founding key
+//! (`compute_safe_address_multi`), which no signature can supply. So the
+//! rebuild is offered only on a VERDICT that the key has no record — Gnosis,
+//! the record's home, saying so ([`VerifiedBy::Gnosis`]). An index that is
+//! behind, a chain that cannot be read, or a lookup that failed is not a
+//! verdict: the person is told the registry cannot be reached and may try
+//! again from the signature already made. A correct answer a little later,
+//! never a confident wrong one now — a rebuilt wrong address is saved on this
+//! device and every later sign-in here enters it without asking anyone.
 
 use crux_core::{command::AbortHandle, render::render, App, Command};
 use serde::{Deserialize, Serialize};
@@ -34,6 +42,7 @@ use super::{
 use crate::error::CoreError;
 use crate::primitives;
 use crate::registry_metadata::{RegistryMetadata, REGISTRY_METADATA_VERSION};
+use crate::registry_resolve::VerifiedBy;
 use crate::webauthn;
 
 #[cfg(feature = "bindings")]
@@ -111,6 +120,10 @@ pub enum Stage {
     ResolvingName,
     /// Waiting for the user to accept or decline on-device recovery.
     AwaitingConsent,
+    /// The registry could not say whether either candidate has a record;
+    /// waiting for "Try again" (re-asks from the signature already made) or
+    /// "Cancel".
+    AwaitingRetry,
     /// Waiting for the second signature that pins down the public key.
     Recovering,
     /// Running the possession-proven publish before entering (option B).
@@ -158,6 +171,15 @@ pub struct Model {
     candidates: Vec<String>,
     /// The candidate currently being queried.
     querying: Option<String>,
+    /// Some candidate's answer this round was not a verdict: the lookup
+    /// failed, or nobody but the index vouched for "no record" (or for
+    /// "registered, no groups"). Then running out of candidates means "can't
+    /// reach the registry", never the rebuild.
+    unverified: bool,
+    /// Every unverified answer this round was a lookup that never left this
+    /// device (`IndexFailed { network: true }`) — the prompt can then say
+    /// "check your connection" rather than blame the registry.
+    unverified_local: bool,
     /// Where the flow continues once the name resolution answers.
     after_name: AfterName,
     /// The authenticator the person chose on the sign-in screen. Carried so the
@@ -294,6 +316,8 @@ fn sign_in(model: &mut Model, method: KeyMethod, page: Option<String>) -> Comman
     model.pending = None;
     model.candidates = Vec::new();
     model.querying = None;
+    model.unverified = false;
+    model.unverified_local = true;
     model.entering = None;
     model.method = method;
     model.stage = Stage::CheckingSupport;
@@ -356,6 +380,18 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         }
         (Stage::LoadingAccounts, ShellResult::StorageFailed { message }) => {
             idle_with_prompt(model, PromptKind::sign_in_failed(message))
+        }
+
+        // -- the registry could not be reached --------------------------------
+        // "Try again" asks again from the signature already made: the
+        // candidates come from it, so no new passkey prompt is needed.
+        (Stage::AwaitingRetry, ShellResult::PromptAnswered { accepted }) => {
+            if accepted {
+                begin_candidate_match(model)
+            } else {
+                model.stage = Stage::Idle;
+                render()
+            }
         }
 
         // -- recovery ----------------------------------------------------------
@@ -422,36 +458,55 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             ShellResult::RegistryKeyStatus {
                 registered: true,
                 unit_ids,
+                verified_by,
             },
         ) => {
             // A key belonging to a group must be reconstructed from the FULL
             // founding set — deriving from this key alone would produce the
             // wrong address for any multi-key wallet. The lowest id is the
             // founding group (multi-unit membership is an explicit non-goal).
+            // Whoever listed the group, the unit fetch checks it: the address
+            // saved must derive from the members it returns.
             match unit_ids.iter().min().copied() {
                 Some(unit_id) => {
                     model.stage = Stage::FetchingUnit;
                     request(model, ShellOperation::RegistryQueryUnit { unit_id })
                 }
                 // A registered key predating groups: the historical
-                // single-key resolution.
-                None => match matched_account(model) {
+                // single-key resolution — on Gnosis's word only. Vela never
+                // writes an entry without a group, so "registered, no groups"
+                // from an index nobody could check (an old schema, a foreign
+                // or broken one) is not this wallet's shape; believing it
+                // would open a one-key address after ONE signature.
+                None if verified_by == VerifiedBy::Gnosis => match matched_account(model) {
                     Some(account) => resolve_name_then(model, account, AfterName::Save),
                     None => offer_recovery(model),
                 },
+                None => unverified_then_next(model, false),
             }
         }
-        // This candidate is unknown; try the next, or fall back to a second
-        // signature once both are exhausted.
+        // This candidate has no record. Only Gnosis — the record's home —
+        // can say so; anyone else's "no" is "nobody could say".
         (
             Stage::MatchingKey,
             ShellResult::RegistryKeyStatus {
-                registered: false, ..
+                registered: false,
+                verified_by,
+                ..
             },
-        ) => query_next_candidate(model),
-        // The registry could not answer, so it cannot disambiguate the two
-        // candidates — fall back to the second signature.
-        (Stage::MatchingKey, ShellResult::IndexFailed { .. }) => offer_recovery(model),
+        ) => {
+            if verified_by == VerifiedBy::Gnosis {
+                query_next_candidate(model)
+            } else {
+                unverified_then_next(model, false)
+            }
+        }
+        // The lookup failed. That is not "no record" — and the OTHER
+        // candidate may still resolve to a group, so it is asked before the
+        // round ends.
+        (Stage::MatchingKey, ShellResult::IndexFailed { network, .. }) => {
+            unverified_then_next(model, network)
+        }
 
         // -- group reconstruction ----------------------------------------------
         (
@@ -479,9 +534,13 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         }
         // The unit is known to exist but could not be read. A multi-key
         // wallet's address CANNOT be derived from one key, so entering with a
-        // single-key guess would fund the wrong Safe — surface the failure.
-        (Stage::FetchingUnit, ShellResult::IndexFailed { message, .. }) => {
-            idle_with_prompt(model, PromptKind::sign_in_failed(message))
+        // single-key guess would fund the wrong Safe. It is the registry that
+        // could not be reached, so the person is told that, and may ask again
+        // from the signature already made.
+        (Stage::FetchingUnit, ShellResult::IndexFailed { network, .. }) => {
+            model.unverified = true;
+            model.unverified_local = network;
+            registry_unreachable(model)
         }
 
         // -- name resolution (v1-era wallets) ----------------------------------
@@ -761,8 +820,13 @@ fn complete_known(model: &mut Model, active_index: usize) -> Command<Effect, Eve
 
 /// Recover the two candidate keys from the first signature and start checking
 /// them against the registry. If neither can even be recovered, fall back to
-/// the two-signature path.
+/// the two-signature path (which then fails the same way, harmlessly).
+///
+/// Also the "Try again" of [`registry_unreachable`]: a fresh round over the
+/// same signature.
 fn begin_candidate_match(model: &mut Model) -> Command<Effect, Event> {
+    model.unverified = false;
+    model.unverified_local = true;
     let candidates = model
         .assertion
         .as_ref()
@@ -776,11 +840,17 @@ fn begin_candidate_match(model: &mut Model) -> Command<Effect, Event> {
     query_next_candidate(model)
 }
 
-/// Query the next untried candidate against the registry; when both are
-/// exhausted, offer the on-device (two-signature) recovery.
+/// Query the next untried candidate against the registry. When both are
+/// exhausted: on a verdict that neither has a record, offer the on-device
+/// (two-signature) recovery; when some answer was not a verdict, say the
+/// registry cannot be reached and offer to ask again.
 fn query_next_candidate(model: &mut Model) -> Command<Effect, Event> {
     if model.candidates.is_empty() {
-        return offer_recovery(model);
+        return if model.unverified {
+            registry_unreachable(model)
+        } else {
+            offer_recovery(model)
+        };
     }
     let candidate = model.candidates.remove(0);
     model.querying = Some(candidate.clone());
@@ -789,6 +859,29 @@ fn query_next_candidate(model: &mut Model) -> Command<Effect, Event> {
         model,
         ShellOperation::RegistryQueryByPublicKey {
             public_key_hex: candidate,
+        },
+    )
+}
+
+/// This candidate's answer was not a verdict (`local`: the lookup never left
+/// this device). Note it, and ask about the next one.
+fn unverified_then_next(model: &mut Model, local: bool) -> Command<Effect, Event> {
+    model.unverified = true;
+    model.unverified_local &= local;
+    query_next_candidate(model)
+}
+
+/// Nobody could say whether this passkey has a record: no rebuild (it would
+/// be a guess at a one-key address), and nothing is saved. "Try again" asks
+/// again from the signature already made.
+fn registry_unreachable(model: &mut Model) -> Command<Effect, Event> {
+    model.stage = Stage::AwaitingRetry;
+    let local = model.unverified_local;
+    request(
+        model,
+        ShellOperation::Prompt {
+            kind: PromptKind::RegistryUnreachable { local },
+            confirmable: true,
         },
     )
 }
@@ -918,7 +1011,8 @@ fn reorder_to_address<'a>(
 }
 
 /// Offer the two-signature recovery — the second signature disambiguates the
-/// candidates the registry could not.
+/// candidates. Reached only when Gnosis said neither candidate has a record
+/// (or no candidate could be recovered at all).
 fn offer_recovery(model: &mut Model) -> Command<Effect, Event> {
     model.stage = Stage::AwaitingConsent;
     request(

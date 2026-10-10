@@ -745,6 +745,7 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
     // The shell feeds the handoff to the tracker.
     let mut tracker = support::DomainDriver::<TxTracker>::new();
     tracker.dispatch(TrackEvent::Submitted {
+        sender: None,
         user_op_hash: handoff.user_op_hash.clone(),
         record_ids: handoff.record_ids.clone(),
         chain_id: handoff.chain_id,
@@ -2556,6 +2557,9 @@ fn the_phase_of_a_message_and_of_an_accepted_op() {
 
 fn entry(status: TrackStatus, outcome: TrackOutcome, tx_hash: Option<&str>) -> TrackEntryView {
     TrackEntryView {
+        refusal: None,
+        refusal_key: None,
+        sender: None,
         user_op_hash: LOCAL_OP.to_owned(),
         chain_id: 100,
         record_ids: vec!["dapp-5000-tx".to_owned()],
@@ -2566,6 +2570,7 @@ fn entry(status: TrackStatus, outcome: TrackOutcome, tx_hash: Option<&str>) -> T
         outcome,
         relay_tx_hash: None,
         relay_sent_at_ms: None,
+        stalled: false,
     }
 }
 
@@ -2838,6 +2843,7 @@ fn a_revert_inside_the_wait_answers_the_tx_hash_and_the_tracker_fails_the_record
 
     let mut tracker = support::DomainDriver::<TxTracker>::new();
     tracker.dispatch(TrackEvent::Submitted {
+        sender: None,
         user_op_hash: handoff.user_op_hash.clone(),
         record_ids: handoff.record_ids.clone(),
         chain_id: handoff.chain_id,
@@ -3100,6 +3106,7 @@ fn op_tracked(status: TrackStatus, tx_hash: Option<&str>, now_ms: f64) -> Event 
         status,
         tx_hash: tx_hash.map(str::to_owned),
         now_ms,
+        refusal: None,
     }
 }
 
@@ -3621,6 +3628,7 @@ fn only_this_op_s_verdict_after_its_post_answers() {
         status: TrackStatus::Confirmed,
         tx_hash: Some(LANDED_TX.to_owned()),
         now_ms: 20_000.0,
+        refusal: None,
     });
     assert!(ops.is_empty(), "another op: {ops:?}");
 }
@@ -3959,6 +3967,7 @@ fn a_maybe_sent_verdict_hands_the_record_over() {
     assert_eq!(
         handoff_of(&sut),
         SignTrackerHandoff {
+            sender: Some(ACCT0.to_owned()),
             user_op_hash: LOCAL_OP.to_owned(),
             record_ids: vec![record.record_id],
             chain_id: 1,
@@ -5258,4 +5267,153 @@ fn a_failed_passkey_prompt_can_be_tried_again() {
 fn a_cancel_reported_as_a_failure_is_a_cancel() {
     let sut = passkey_failed(vela_core::app::FailureKind::Cancelled);
     assert!(sut.view().error.is_none(), "a cancel is never an error");
+}
+
+// ===========================================================================
+// One transaction in flight per account and network: wait for the first
+// ===========================================================================
+
+fn in_flight(sender: &str, chain_id: u32) -> Event {
+    Event::InFlightOps {
+        ops: vec![vela_core::app::tx_tracker::InFlightOp {
+            sender: sender.to_lowercase(),
+            chain_id,
+            user_op_hash: "0xfirst".to_owned(),
+        }],
+    }
+}
+
+/// A transaction of an account whose previous one on the request's chain is
+/// still going through waits for it: the gate is shut with its own block
+/// (and line), a stale tap signs nothing, and it opens once the first is
+/// final.
+#[test]
+fn a_transaction_waits_for_the_account_s_previous_one_on_its_chain() {
+    use vela_core::app::sign_confirm::ConfirmBlock;
+    let mut sut = boot();
+    sut.dispatch(in_flight(ACCT0, 1));
+    sut.dispatch(Arrive::global("req-wait", "eth_sendTransaction", &plain_send_params()).event());
+    let view = sut.view();
+    assert!(!view.confirm_gate_open);
+    assert_eq!(view.confirm_block, Some(ConfirmBlock::PreviousPending));
+    assert_eq!(
+        ConfirmBlock::PreviousPending.key(false),
+        Some("componentsUi.signing.confirmBlock.previousPending")
+    );
+    assert!(
+        sut.dispatch(approve(SignApproveOpts::default())).is_empty(),
+        "a tap from a stale frame starts nothing"
+    );
+
+    sut.dispatch(Event::InFlightOps { ops: vec![] });
+    let view = sut.view();
+    assert!(
+        view.confirm_gate_open,
+        "opens by itself once the first is final"
+    );
+    assert_eq!(
+        sut.dispatch(approve(SignApproveOpts::default())).len(),
+        1,
+        "and signs"
+    );
+}
+
+/// Another chain, another account, or a signature (which takes no nonce)
+/// waits for nothing.
+#[test]
+fn only_a_transaction_of_the_same_account_on_the_same_chain_waits() {
+    let mut sut = boot();
+    sut.dispatch(in_flight(ACCT0, 137));
+    sut.dispatch(Arrive::global("req-a", "eth_sendTransaction", &plain_send_params()).event());
+    assert!(sut.view().confirm_gate_open, "another chain");
+
+    let mut sut = boot();
+    sut.dispatch(in_flight(ACCT1, 1));
+    sut.dispatch(Arrive::global("req-b", "eth_sendTransaction", &plain_send_params()).event());
+    assert!(sut.view().confirm_gate_open, "another account");
+
+    let mut sut = boot();
+    sut.dispatch(in_flight(ACCT0, 1));
+    sut.dispatch(Arrive::global("req-c", "personal_sign", r#"["0x68656c6c6f","0x0"]"#).event());
+    assert!(sut.view().confirm_gate_open, "a signature takes no nonce");
+}
+
+// ===========================================================================
+// PR 2 note 9: the sheet says why the relay did not take it
+// ===========================================================================
+
+/// A submit-time refusal names its sentence on the sheet: another operation
+/// of the account holding the nonce is "not sent yet" — its own calm title
+/// over "your previous transaction is still being processed", never
+/// "Failed" over the held confirm's "waiting…" line — and retryable, as on
+/// Send; any other refusal the plain refused line; a failure that was no
+/// refusal, none.
+#[test]
+fn a_submit_time_refusal_says_why_on_the_sheet() {
+    use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
+    use vela_core::app::tx_tracker::REFUSED_KEY;
+    use vela_core::user_op::PREVIOUS_PENDING_DETAIL;
+
+    let mut sut = boot();
+    failed_before_sending(&mut sut, "rid-r1", PREVIOUS_PENDING_DETAIL);
+    let view = sut.view();
+    assert_eq!(view.failure_refusal_key.as_deref(), Some(NOT_SENT_BODY_KEY));
+    assert!(view.failure_not_sent, "said calmly, as not sent yet");
+    assert!(view.failure_retryable && !view.failure_refused);
+    // Try again clears it with the failure.
+    sut.dispatch(Event::RetryTapped);
+    assert!(!sut.view().failure_not_sent);
+
+    let mut sut = boot();
+    failed_before_sending(&mut sut, "rid-r2", "Could not estimate gas");
+    assert_eq!(sut.view().failure_refusal_key, None, "no refusal");
+    assert!(!sut.view().failure_not_sent, "a failure, said as one");
+
+    let mut sut = submitting("req-r3");
+    written_ahead(&mut sut, "req-r3");
+    sut.resolve_matching(
+        is_submit,
+        Res::Submit {
+            outcome: SignSubmitOutcome::Failed {
+                message: "AA23 reverted".to_owned(),
+                refused: true,
+                signer: None,
+            },
+            now_ms: 9_000.0,
+        },
+    );
+    let view = sut.view();
+    assert!(view.failure_refused);
+    assert_eq!(view.failure_refusal_key.as_deref(), Some(REFUSED_KEY));
+    // It goes with the error it qualifies.
+    sut.dispatch(Event::SwipeDismissed);
+    assert_eq!(sut.view().failure_refusal_key, None);
+}
+
+/// A refusal the tracker reaches after the submit is told by its reason —
+/// the fee sentence only for `fee_below_market`, "went first" for
+/// `nonce_used`, else the plain refusal (the tracker entry's `refusal`).
+#[test]
+fn a_refusal_after_the_submit_is_told_by_its_reason() {
+    use vela_core::app::tx_tracker::{
+        RefusalReason, REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY,
+    };
+    for (reason, key) in [
+        (Some(RefusalReason::NonceUsed), REFUSED_NONCE_KEY),
+        (Some(RefusalReason::FeeBelowMarket), REFUSED_FEES_KEY),
+        (Some(RefusalReason::SimulationFailed), REFUSED_KEY),
+        (None, REFUSED_KEY),
+    ] {
+        let mut sut = n4_submitted("rid-n9");
+        sut.dispatch(Event::OpTracked {
+            user_op_hash: LOCAL_OP.to_owned(),
+            status: TrackStatus::Rejected,
+            tx_hash: None,
+            now_ms: 12_000.0,
+            refusal: reason,
+        });
+        let view = sut.view();
+        assert!(view.failure_refused);
+        assert_eq!(view.failure_refusal_key.as_deref(), Some(key), "{reason:?}");
+    }
 }

@@ -7,4 +7,4 @@ import type { VenueBlock } from "./VenueBlock";
  * (`useSendController.ts:1072-1104`); the core only ever sees typed variants
  * and only ever emits semantic error keys (invariant ⑮).
  */
-export type SendSubmitFailure = { "type": "passkey_cancelled" } | { "type": "relayer_unavailable" } | { "type": "bundler_underfunded" } | { "type": "other", message: string | null, } | { "type": "venue_blocked", block: VenueBlock, };
+export type SendSubmitFailure = { "type": "passkey_cancelled" } | { "type": "relayer_unavailable" } | { "type": "bundler_underfunded" } | { "type": "other", message: string | null, } | { "type": "venue_blocked", block: VenueBlock, } | { "type": "previous_pending" };

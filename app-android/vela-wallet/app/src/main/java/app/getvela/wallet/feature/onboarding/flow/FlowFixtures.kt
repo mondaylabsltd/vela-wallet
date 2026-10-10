@@ -126,8 +126,8 @@ object FlowFixtures {
 
     val all: List<StateFixture> = buildList {
         fun flow(code: String, view: CreateView) = add(StateFixture("Create", code, Fixture.Flow(view)))
-        fun sheet(code: String, kind: String, detail: String? = null, confirmable: Boolean = false) =
-            add(StateFixture("Failures", code, Fixture.Sheet(PromptKind(kind, detail), confirmable)))
+        fun sheet(code: String, kind: String, detail: String? = null, confirmable: Boolean = false, local: Boolean = false) =
+            add(StateFixture("Failures", code, Fixture.Sheet(PromptKind(kind, detail, local = local), confirmable)))
 
         flow("name · empty", base())
         flow(
@@ -253,6 +253,9 @@ object FlowFixtures {
         sheet("incompatible · login", "incompatible_login")
         sheet("recover offer", "recover_offer", confirmable = true)
         sheet("recover failed", "recover_failed")
+        // Sign-in could not look the passkey up: a free retry, never the rebuild.
+        sheet("registry unreachable", "registry_unreachable", confirmable = true)
+        sheet("registry unreachable · local", "registry_unreachable", confirmable = true, local = true)
         // The two prompts that carry a detail string are driven THROUGH the
         // refinement rather than around it, so this list is also a check on it:
         // a `create_failed` whose message is empty renders an empty sheet, and

@@ -169,6 +169,17 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
         title = strings.t(I18nKeys.Login.RECOVER_FAILED_TITLE),
         message = strings.t(I18nKeys.Login.RECOVER_FAILED_BODY),
     )
+    // Sign-in could not find out whether this passkey has a wallet record.
+    // Never the rebuild offer: only Gnosis's "no record" is a verdict. "Try
+    // again" asks again from the signature already made (no new passkey);
+    // Cancel ends it, nothing saved. Every failed lookup that never left this
+    // device is the connection's sentence, not the registry's.
+    "registry_unreachable" -> PromptCopy(
+        title = strings.t(if (kind.local) I18nKeys.Flow.NETWORK_TITLE else I18nKeys.Login.REGISTRY_UNREACHABLE_TITLE),
+        message = strings.t(if (kind.local) I18nKeys.Flow.NETWORK_BODY else I18nKeys.Login.REGISTRY_UNREACHABLE_BODY),
+        confirmLabel = strings.t(I18nKeys.Common.TRY_AGAIN),
+        cancelLabel = strings.t(I18nKeys.Common.CANCEL),
+    )
     "sign_in_failed" -> PromptCopy(
         title = strings.t(I18nKeys.Login.SIGN_IN_FAILED_TITLE),
         // Issue #446: not "set up Face ID" when it was the phone link.

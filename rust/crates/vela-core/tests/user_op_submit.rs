@@ -375,3 +375,94 @@ mod estimate {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The relay's held-nonce refusal (relay `fix/held-nonce-and-floor`, §1)
+// ---------------------------------------------------------------------------
+
+/// The exact refusal the new relay sends: code -32602, the old bundler's
+/// message with its marker byte for byte, and the structured `data`.
+fn held_nonce(existing: &str) -> SubmitReply {
+    SubmitReply::Error(
+        serde_json::json!({
+            "code": -32602,
+            "message": format!(
+                "Already have a pending UserOperation from this sender [existingHash:{existing}]"
+            ),
+            "data": {
+                "reason": "nonce_in_flight",
+                "existingHash": existing,
+                "sender": "0x1111111111111111111111111111111111111111",
+                "nonce": "0x5",
+            }
+        })
+        .to_string(),
+    )
+}
+
+/// Another op holds the nonce: never this one's hash, nothing sent (or "may
+/// have been sent" after a lost reply) — the same verdict an old relay's
+/// marker always gave.
+#[test]
+fn the_new_relay_s_held_nonce_refusal_is_nonce_held() {
+    assert_eq!(
+        submit_step(&held_nonce(RELAY), 0, false, LOCAL),
+        done(SubmitVerdict::NotSent {
+            rejection: Some(RelayRejection::NonceHeld {
+                user_op_hash: RELAY.to_owned()
+            })
+        })
+    );
+    assert_eq!(
+        submit_step(&held_nonce(RELAY), 1, true, LOCAL),
+        maybe_sent()
+    );
+    // Naming this very op: the relay already holds it.
+    assert_eq!(
+        submit_step(&held_nonce(LOCAL), 0, false, LOCAL),
+        done(SubmitVerdict::Accepted {
+            user_op_hash: LOCAL.to_owned()
+        })
+    );
+}
+
+/// The structured form alone is enough: a relay that words its message
+/// otherwise is still read as "another op holds the nonce".
+#[test]
+fn the_structured_reason_is_read_without_the_marker() {
+    let reply = SubmitReply::Error(
+        serde_json::json!({
+            "code": -32602,
+            "message": "nonce held",
+            "data": { "reason": "nonce_in_flight", "existingHash": RELAY }
+        })
+        .to_string(),
+    );
+    assert_eq!(
+        submit_step(&reply, 0, false, LOCAL),
+        done(SubmitVerdict::NotSent {
+            rejection: Some(RelayRejection::NonceHeld {
+                user_op_hash: RELAY.to_owned()
+            })
+        })
+    );
+    // Another reason, or a malformed hash, is not this refusal.
+    for data in [
+        serde_json::json!({ "reason": "fee_below_minimum", "existingHash": RELAY }),
+        serde_json::json!({ "reason": "nonce_in_flight", "existingHash": "nothex" }),
+        serde_json::json!("nonce_in_flight"),
+    ] {
+        let reply = SubmitReply::Error(
+            serde_json::json!({ "code": -32602, "message": "refused", "data": data }).to_string(),
+        );
+        assert!(
+            !matches!(
+                submit_step(&reply, 0, false, LOCAL),
+                SubmitStep::Done(SubmitVerdict::NotSent {
+                    rejection: Some(RelayRejection::NonceHeld { .. })
+                })
+            ),
+            "{reply:?}"
+        );
+    }
+}

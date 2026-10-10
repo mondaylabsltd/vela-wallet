@@ -218,7 +218,9 @@ final class SendExecutor {
                 chainId: (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
                 maybeSent: operation["maybe_sent"] as? Bool ?? false,
                 submitBlock: (operation["submit_block"] as? NSNumber)?.intValue,
-                admitted: operation["admitted"] as? Bool ?? false
+                admitted: operation["admitted"] as? Bool ?? false,
+                // Who signed it (PR 2 §3) — what holds this account's nonce.
+                sender: operation["sender"] as? String
             ))
             return CoreJSON.string(["type": "track_handed_off"])
 
@@ -284,6 +286,7 @@ final class SendExecutor {
             return CoreJSON.string(["type": "alert_acknowledged"])
 
         case "close":
+            journeyEnded()
             ports.closed()
             return CoreJSON.string(["type": "closed"])
 
@@ -473,19 +476,23 @@ final class SendExecutor {
         let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
         let account = operation["account"] as? String ?? ""
         let publicKey = operation["public_key_hex"] as? String
-        let deployed = await relay.isDeployed(chainId: chainId, address: account) ?? false
 
+        // The account's deployment is read by the fee machine itself (issue
+        // #483): an unanswered read was `?? false` here — "not deployed", an
+        // initCode priced into a deployed account's fee — and a failed one is
+        // now the fee's own failure, with the fee's words and retry.
         let settled = await fees.quote(
             chainId: chainId,
             account: account,
-            deployed: deployed,
+            deployed: false,
             publicKeyAvailable: publicKey != nil,
             calls: calls,
             feeToken: operation["gas_fee_token"] as? String,
             // Nobody chose the coin on this form: the fee machine picks one
             // that can pay, and the estimate's `fee_asset` says which. A chip
             // tap makes the core send `false` from then on.
-            autoFeeToken: operation["auto_fee_token"] as? Bool ?? false
+            autoFeeToken: operation["auto_fee_token"] as? Bool ?? false,
+            readDeployment: true
         )
         guard let settled else {
             // Superseded by a newer request. The core still needs an answer for
@@ -503,9 +510,34 @@ final class SendExecutor {
         }
         return CoreJSON.string([
             "type": "fee_estimated",
-            "outcome": ["type": "failed", "kind": settled.failed ?? "other"],
+            "outcome": ["type": "failed", "kind": Self.estimateFailure(settled.failed)],
         ])
     }
+
+    /// The send machine's `SendEstimateFailure` for a fee failure: the fee
+    /// machine's own, AS IT IS (PR 2 note 13). The send vocabulary holds every
+    /// `FeeFailure` in the same wire shape — `"quote_unavailable"`,
+    /// `{"chain_read":{"rate_limited":false}}`, `"would_fail"`, `"internal"` —
+    /// so the alert can say its real cause (`sendEstimateFailureBodyKey`):
+    /// mapping the ones it once lacked to `other` made every one of them
+    /// "Could not build a valid transaction estimate". `other` only when no
+    /// failure was said at all.
+    static func estimateFailure(_ failed: String?) -> Any {
+        guard let failed, !failed.isEmpty else { return "other" }
+        // The object form, as an object: the core reads the wire shape, not
+        // a string holding it.
+        if failed.hasPrefix("{"),
+           let object = try? JSONSerialization.jsonObject(with: Data(failed.utf8)) as? [String: Any] {
+            return object
+        }
+        return failed
+    }
+
+    /// The journey this fee was priced for is gone (the core closed it, or
+    /// the person left it by another door): its fee sessions stop asking and
+    /// answering — the core's own re-ask after a failure and its block-time
+    /// tick both run on `start_ttl`, and nobody is looking (PR 2 note 1).
+    func journeyEnded() { fees.end() }
 
     // MARK: - Submit
 
@@ -700,6 +732,10 @@ final class SendExecutor {
             return ["type": "other", "message": userOpNotSentDetail()]
         // The wallet's own send has no page to lose; kept total.
         case .askerGone: return ["type": "passkey_cancelled"]
+        // PR 2 §3: the relay holds this account's nonce for an earlier op —
+        // the confirm says "waiting for your last transaction on this
+        // network" with Try again, never "other".
+        case .previousPending: return ["type": "previous_pending"]
         }
     }
 

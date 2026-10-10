@@ -11,6 +11,7 @@ use support::{Driver, NOW};
 use vela_core::app::login::{Event, Login};
 use vela_core::app::shell::{CompletionMode, ProofPurpose, ShellOperation, ShellResult};
 use vela_core::app::{Assertion, FailureKind, KeyMethod, PromptKind, SignInKey};
+use vela_core::registry_resolve::VerifiedBy;
 
 const CRED: &str = "credential-1";
 
@@ -202,6 +203,7 @@ fn a_registered_candidate_enters_with_one_signature() {
     let next = sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![],
+        verified_by: VerifiedBy::Gnosis,
     });
     assert!(
         matches!(next.as_slice(), [ShellOperation::SaveAccount { .. }]),
@@ -223,6 +225,7 @@ fn walk_to_recover_offer(sut: &mut Sut) {
             .resolve(ShellResult::RegistryKeyStatus {
                 registered: false,
                 unit_ids: vec![],
+                verified_by: VerifiedBy::Gnosis,
             })
             .as_slice()
         {
@@ -744,6 +747,7 @@ fn fetching_unit() -> Sut {
     let next = sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![7, 3], // the lowest id is the founding group
+        verified_by: VerifiedBy::None,
     });
     match next.as_slice() {
         [ShellOperation::RegistryQueryUnit { unit_id }] => {
@@ -831,23 +835,31 @@ fn a_group_that_does_not_derive_its_address_is_refused() {
 }
 
 /// The unit exists but could not be read: a multi-key address cannot be
-/// derived from one key, so the sign-in fails rather than guessing.
+/// derived from one key, so nothing is guessed — the registry could not be
+/// reached, and the person may ask again from the same signature.
 #[test]
-fn a_failed_unit_fetch_fails_the_sign_in_instead_of_guessing() {
+fn a_failed_unit_fetch_says_the_registry_is_unreachable_instead_of_guessing() {
     let mut sut = fetching_unit();
     let next = sut.resolve(ShellResult::IndexFailed {
         message: "offline".to_owned(),
         network: true,
     });
+    assert_eq!(
+        next,
+        vec![ShellOperation::Prompt {
+            kind: PromptKind::RegistryUnreachable { local: true },
+            confirmable: true,
+        }],
+        "no single-key fallback exists for a known group"
+    );
+    // "Try again" starts over from the signature already made.
+    let next = sut.resolve(ShellResult::PromptAnswered { accepted: true });
     assert!(
         matches!(
             next.as_slice(),
-            [ShellOperation::Prompt {
-                kind: PromptKind::SignInFailed { .. },
-                ..
-            }]
+            [ShellOperation::RegistryQueryByPublicKey { .. }]
         ),
-        "no single-key fallback exists for a known group; got {next:?}"
+        "a retry re-asks the registry, with no new ceremony; got {next:?}"
     );
 }
 
@@ -933,6 +945,7 @@ fn a_fallback_name_asks_the_legacy_index_before_entering() {
     let next = sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![],
+        verified_by: VerifiedBy::Gnosis,
     });
     match next.as_slice() {
         [ShellOperation::LookupLegacyName { credential_id }] => {
@@ -964,6 +977,7 @@ fn a_missing_legacy_name_keeps_the_fallback_and_enters() {
     sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![],
+        verified_by: VerifiedBy::Gnosis,
     });
     let next = sut.resolve(ShellResult::LegacyName { name: None });
     match next.as_slice() {
@@ -1018,6 +1032,7 @@ fn a_malformed_legacy_name_is_refused() {
     sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![],
+        verified_by: VerifiedBy::Gnosis,
     });
     let next = sut.resolve(ShellResult::LegacyName {
         name: Some("bad\u{7}name".to_owned()),
@@ -1072,6 +1087,7 @@ fn an_uppercase_uuid_handle_still_yields_its_name() {
     let next = sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![],
+        verified_by: VerifiedBy::Gnosis,
     });
     match next.as_slice() {
         [ShellOperation::SaveAccount { account }] => {
@@ -1206,6 +1222,7 @@ fn a_wallet_already_held_is_entered_not_saved_again() {
     sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![3],
+        verified_by: VerifiedBy::None,
     });
 
     let next = sut.resolve(ShellResult::RegistryUnit {
@@ -1243,6 +1260,7 @@ fn a_wallet_held_in_another_casing_is_still_the_same_wallet() {
     sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![3],
+        verified_by: VerifiedBy::None,
     });
     let next = sut.resolve(ShellResult::RegistryUnit {
         metadata_hex: unit_metadata_hex(),
@@ -1274,6 +1292,7 @@ fn an_unheld_wallet_is_still_saved_and_added() {
     sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![3],
+        verified_by: VerifiedBy::None,
     });
     let next = sut.resolve(ShellResult::RegistryUnit {
         metadata_hex: unit_metadata_hex(),
@@ -1440,6 +1459,7 @@ fn a_recovered_wallet_is_saved_naming_its_sign_in_key() {
     let next = sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![],
+        verified_by: VerifiedBy::Gnosis,
     });
     match next.as_slice() {
         [ShellOperation::SaveAccount { account }] => {
@@ -1502,6 +1522,7 @@ fn a_custom_page_sign_in_is_saved_on_its_domain() {
     let next = sut.resolve(ShellResult::RegistryKeyStatus {
         registered: true,
         unit_ids: vec![],
+        verified_by: VerifiedBy::Gnosis,
     });
     match next.as_slice() {
         [ShellOperation::SaveAccount { account }] => {
@@ -1645,4 +1666,375 @@ fn a_not_supported_prompt_without_the_flag_still_decodes() {
             security_key: false
         }
     );
+}
+
+// ---------------------------------------------------------------------------
+// The rebuild is offered only on Gnosis's verdict (two-signature rebuild of a
+// multi-key wallet's key, 2026-10-09)
+// ---------------------------------------------------------------------------
+
+/// What one candidate's lookup answered, for the walks below.
+#[derive(Clone, Copy, Debug)]
+enum Answer {
+    /// The lookup failed (`local`: it never left this device).
+    Failed { local: bool },
+    /// "No record", vouched for by `by`.
+    NoRecord(VerifiedBy),
+    /// "Registered, no groups", vouched for by `by`.
+    NoGroups(VerifiedBy),
+    /// A member of the two-key fixture wallet's group, listed by the index.
+    Grouped,
+}
+
+fn result_of(answer: Answer) -> ShellResult {
+    match answer {
+        Answer::Failed { local } => ShellResult::IndexFailed {
+            message: "registry unreachable".to_owned(),
+            network: local,
+        },
+        Answer::NoRecord(verified_by) => ShellResult::RegistryKeyStatus {
+            registered: false,
+            unit_ids: vec![],
+            verified_by,
+        },
+        Answer::NoGroups(verified_by) => ShellResult::RegistryKeyStatus {
+            registered: true,
+            unit_ids: vec![],
+            verified_by,
+        },
+        Answer::Grouped => ShellResult::RegistryKeyStatus {
+            registered: true,
+            unit_ids: vec![3],
+            verified_by: VerifiedBy::None,
+        },
+    }
+}
+
+/// Signed in on a device holding nothing; the first candidate is being asked.
+fn matching() -> Sut {
+    let mut sut = authenticated();
+    let next = sut.resolve(ShellResult::AccountsLoaded { accounts: vec![] });
+    assert!(matches!(
+        next.as_slice(),
+        [ShellOperation::RegistryQueryByPublicKey { .. }]
+    ));
+    sut
+}
+
+/// Answer both candidates in order; returns what followed the second.
+fn answer_both(sut: &mut Sut, first: Answer, second: Answer) -> Vec<ShellOperation> {
+    let next = sut.resolve(result_of(first));
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::RegistryQueryByPublicKey { .. }]
+        ),
+        "after {first:?} the other candidate is asked; got {next:?}"
+    );
+    sut.resolve(result_of(second))
+}
+
+fn unreachable_prompt(local: bool) -> Vec<ShellOperation> {
+    vec![ShellOperation::Prompt {
+        kind: PromptKind::RegistryUnreachable { local },
+        confirmable: true,
+    }]
+}
+
+/// Nothing that rebuilds, publishes or saves.
+fn assert_nothing_rebuilt(ops: &[ShellOperation]) {
+    for op in ops {
+        assert!(
+            !matches!(
+                op,
+                ShellOperation::Prompt {
+                    kind: PromptKind::RecoverOffer,
+                    ..
+                } | ShellOperation::SignProof { .. }
+                    | ShellOperation::RegistryPublish { .. }
+                    | ShellOperation::SaveAccount { .. }
+                    | ShellOperation::CompleteOnboarding { .. }
+            ),
+            "nothing may be rebuilt, published or saved on an answer nobody vouched for; got {op:?}"
+        );
+    }
+}
+
+/// The reported case: the index and both chains unreachable. Both candidates
+/// are asked, and the person is told the registry cannot be reached — never
+/// offered the rebuild, which would make a one-key address.
+#[test]
+fn an_unreachable_registry_never_offers_the_rebuild() {
+    let mut sut = matching();
+    let next = answer_both(
+        &mut sut,
+        Answer::Failed { local: false },
+        Answer::Failed { local: false },
+    );
+    assert_eq!(next, unreachable_prompt(false));
+    assert_nothing_rebuilt(&next);
+    assert!(sut.view().busy, "the flow waits on the person's answer");
+}
+
+/// Every lookup that failed never left this device: the sheet may say "check
+/// your connection".
+#[test]
+fn lookups_that_never_left_the_device_say_so() {
+    let mut sut = matching();
+    let next = answer_both(
+        &mut sut,
+        Answer::Failed { local: true },
+        Answer::Failed { local: true },
+    );
+    assert_eq!(next, unreachable_prompt(true));
+
+    // One of them reached somebody: no claim about this device.
+    let mut sut = matching();
+    let next = answer_both(
+        &mut sut,
+        Answer::Failed { local: true },
+        Answer::NoRecord(VerifiedBy::None),
+    );
+    assert_eq!(next, unreachable_prompt(false));
+}
+
+/// "No record" from the index alone (Gnosis silent), or from Ethereum (which
+/// holds only what somebody copied there), is not a verdict.
+#[test]
+fn an_unverified_no_is_not_a_verdict() {
+    for by in [VerifiedBy::None, VerifiedBy::Ethereum] {
+        let mut sut = matching();
+        let next = answer_both(&mut sut, Answer::NoRecord(by), Answer::NoRecord(by));
+        assert_eq!(next, unreachable_prompt(false), "{by:?}");
+        assert_nothing_rebuilt(&next);
+    }
+}
+
+/// Gnosis saying neither key has a record IS the verdict — the one-key wallet
+/// whose record never landed — and the rebuild is still offered.
+#[test]
+fn a_gnosis_verdict_still_offers_the_rebuild() {
+    let mut sut = matching();
+    let next = answer_both(
+        &mut sut,
+        Answer::NoRecord(VerifiedBy::Gnosis),
+        Answer::NoRecord(VerifiedBy::Gnosis),
+    );
+    assert_eq!(
+        next,
+        vec![ShellOperation::Prompt {
+            kind: PromptKind::RecoverOffer,
+            confirmable: true,
+        }]
+    );
+}
+
+/// One candidate nobody could vouch for spoils the round, in either order:
+/// it may be the real key, and it may belong to a group.
+#[test]
+fn one_unknown_candidate_poisons_the_verdict() {
+    for (first, second) in [
+        (
+            Answer::NoRecord(VerifiedBy::Gnosis),
+            Answer::Failed { local: false },
+        ),
+        (
+            Answer::Failed { local: false },
+            Answer::NoRecord(VerifiedBy::Gnosis),
+        ),
+        (
+            Answer::NoRecord(VerifiedBy::Gnosis),
+            Answer::NoRecord(VerifiedBy::None),
+        ),
+        (
+            Answer::NoRecord(VerifiedBy::None),
+            Answer::NoRecord(VerifiedBy::Gnosis),
+        ),
+    ] {
+        let mut sut = matching();
+        let next = answer_both(&mut sut, first, second);
+        assert_eq!(next, unreachable_prompt(false), "{first:?} then {second:?}");
+    }
+}
+
+/// A failed lookup on the first candidate does not end the round: the other
+/// may resolve to the wallet's group, and then the multi-key wallet opens.
+#[test]
+fn an_index_failure_still_tries_the_other_candidate() {
+    let mut sut = matching();
+    let next = answer_both(&mut sut, Answer::Failed { local: true }, Answer::Grouped);
+    assert_eq!(next, vec![ShellOperation::RegistryQueryUnit { unit_id: 3 }]);
+    let next = sut.resolve(ShellResult::RegistryUnit {
+        metadata_hex: unit_metadata_hex(),
+        members: unit_members(),
+    });
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(account.address, multi_address());
+        }
+        other => panic!("expected the multi-key wallet's save, got {other:?}"),
+    }
+}
+
+/// "Try again" re-asks the registry from the signature already made: no new
+/// passkey prompt. A verdict this time behaves as it always did.
+#[test]
+fn retry_requeries_without_a_new_signature() {
+    let mut sut = matching();
+    answer_both(
+        &mut sut,
+        Answer::Failed { local: false },
+        Answer::Failed { local: false },
+    );
+    let next = sut.resolve(ShellResult::PromptAnswered { accepted: true });
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::RegistryQueryByPublicKey { .. }]
+        ),
+        "the retry asks the registry again; got {next:?}"
+    );
+    for op in &next {
+        assert!(
+            !matches!(
+                op,
+                ShellOperation::AuthenticatePasskey { .. } | ShellOperation::SignProof { .. }
+            ),
+            "a retry never asks for a new signature"
+        );
+    }
+    // The second round reaches Gnosis: the verdict decides, as before.
+    let next = sut.resolve(result_of(Answer::NoRecord(VerifiedBy::Gnosis)));
+    assert!(matches!(
+        next.as_slice(),
+        [ShellOperation::RegistryQueryByPublicKey { .. }]
+    ));
+    let next = sut.resolve(result_of(Answer::NoRecord(VerifiedBy::Gnosis)));
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::Prompt {
+                kind: PromptKind::RecoverOffer,
+                ..
+            }]
+        ),
+        "a failure in the first round does not poison the second; got {next:?}"
+    );
+}
+
+/// "Cancel" ends the attempt with nothing saved.
+#[test]
+fn declining_the_retry_persists_nothing() {
+    let mut sut = matching();
+    answer_both(
+        &mut sut,
+        Answer::Failed { local: false },
+        Answer::Failed { local: false },
+    );
+    let next = sut.resolve(ShellResult::PromptAnswered { accepted: false });
+    assert_nothing_rebuilt(&next);
+    assert!(!sut.view().busy, "back to the welcome screen");
+    assert!(sut.outstanding().is_empty());
+}
+
+/// The sibling hole: an index answering "registered, no groups" while no chain
+/// can confirm it must not open a one-key wallet after ONE signature. Vela
+/// never writes an entry without a group, so only Gnosis may say it.
+#[test]
+fn an_unverified_entry_without_groups_does_not_enter_single_key() {
+    for by in [VerifiedBy::None, VerifiedBy::Ethereum] {
+        let mut sut = matching();
+        let next = answer_both(&mut sut, Answer::NoGroups(by), Answer::NoRecord(by));
+        assert_eq!(next, unreachable_prompt(false), "{by:?}");
+        assert_nothing_rebuilt(&next);
+    }
+    // On Gnosis's word it is the historical single-key wallet, as before.
+    let mut sut = matching();
+    let next = sut.resolve(result_of(Answer::NoGroups(VerifiedBy::Gnosis)));
+    assert!(
+        matches!(next.as_slice(), [ShellOperation::SaveAccount { .. }]),
+        "got {next:?}"
+    );
+}
+
+/// The harm the fix exists for, as a property: a member of a two-key wallet
+/// signing in on a new device while the registry is down — in any mix of
+/// failures and unvouched answers, retried as often as the person likes —
+/// never saves any address but the wallet's own.
+#[test]
+fn a_multikey_member_offline_never_saves_another_address() {
+    let degraded = [
+        Answer::Failed { local: true },
+        Answer::Failed { local: false },
+        Answer::NoRecord(VerifiedBy::None),
+        Answer::NoRecord(VerifiedBy::Ethereum),
+        Answer::NoGroups(VerifiedBy::None),
+        Answer::NoGroups(VerifiedBy::Ethereum),
+    ];
+    for first in degraded {
+        for second in degraded {
+            let mut sut = matching();
+            let mut next = answer_both(&mut sut, first, second);
+            // Retry twice more under the same outage…
+            for _ in 0..2 {
+                assert_eq!(
+                    next.len(),
+                    1,
+                    "{first:?}/{second:?}: one prompt, got {next:?}"
+                );
+                assert_nothing_rebuilt(&next);
+                let asked = sut.resolve(ShellResult::PromptAnswered { accepted: true });
+                assert!(matches!(
+                    asked.as_slice(),
+                    [ShellOperation::RegistryQueryByPublicKey { .. }]
+                ));
+                next = answer_both(&mut sut, first, second);
+            }
+            // …then the registry comes back and lists the group.
+            sut.resolve(ShellResult::PromptAnswered { accepted: true });
+            let next = sut.resolve(result_of(Answer::Grouped));
+            assert_eq!(next, vec![ShellOperation::RegistryQueryUnit { unit_id: 3 }]);
+            let next = sut.resolve(ShellResult::RegistryUnit {
+                metadata_hex: unit_metadata_hex(),
+                members: unit_members(),
+            });
+            match next.as_slice() {
+                [ShellOperation::SaveAccount { account }] => {
+                    assert_eq!(account.address, multi_address(), "{first:?}/{second:?}");
+                }
+                other => panic!("{first:?}/{second:?}: expected the save, got {other:?}"),
+            }
+        }
+    }
+}
+
+/// A shell that predates `verified_by` still decodes — and fails closed: its
+/// "no record" is nobody's verdict.
+#[test]
+fn a_key_status_without_the_verifier_reads_as_unverified() {
+    let decoded: ShellResult =
+        serde_json::from_str(r#"{"type":"registry_key_status","registered":false,"unit_ids":[]}"#)
+            .unwrap();
+    assert_eq!(
+        decoded,
+        ShellResult::RegistryKeyStatus {
+            registered: false,
+            unit_ids: vec![],
+            verified_by: VerifiedBy::None,
+        }
+    );
+    let decoded: ShellResult = serde_json::from_str(
+        r#"{"type":"registry_key_status","registered":false,"unit_ids":[],"verified_by":"gnosis"}"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        decoded,
+        ShellResult::RegistryKeyStatus {
+            verified_by: VerifiedBy::Gnosis,
+            ..
+        }
+    ));
+    // And the new prompt's wire shape, `local` defaulting for an old reader.
+    let prompt: PromptKind = serde_json::from_str(r#"{"type":"registry_unreachable"}"#).unwrap();
+    assert_eq!(prompt, PromptKind::RegistryUnreachable { local: false });
 }

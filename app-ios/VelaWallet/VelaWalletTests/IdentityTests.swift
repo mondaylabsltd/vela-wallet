@@ -17,10 +17,10 @@ struct IdentityTests {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
         let accounts = AccountStore(defaults: defaults)
-        // Unbooted on purpose: every routed call is refused, so nothing here
+        // Offline on purpose: every routed call is refused, so nothing here
         // reaches the network.
         return (store, RecipientIdentity(
-            store: store, pool: RpcPool(store: store, accounts: accounts), accounts: accounts
+            store: store, pool: RpcPool(store: store, accounts: accounts, offline: true), accounts: accounts
         ))
     }
 
