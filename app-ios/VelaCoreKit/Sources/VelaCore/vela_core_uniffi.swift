@@ -9989,6 +9989,13 @@ public struct SimOutcomeRecord: Equatable, Hashable {
      * The notice's corpus key; `None` for `deltas`.
      */
     public var noticeKey: String?
+    /**
+     * `componentsUi.signing.simResultNoChange` ("No asset changes") when the
+     * answer was a check and nothing of the user's moves — the quiet line
+     * the verdict's place says then; `None` otherwise. The judged view
+     * (`TrustSimView.no_change_key`) carries the same line.
+     */
+    public var noChangeKey: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -10012,12 +10019,19 @@ public struct SimOutcomeRecord: Equatable, Hashable {
          */noticeRisk: String?, 
         /**
          * The notice's corpus key; `None` for `deltas`.
-         */noticeKey: String?) {
+         */noticeKey: String?, 
+        /**
+         * `componentsUi.signing.simResultNoChange` ("No asset changes") when the
+         * answer was a check and nothing of the user's moves — the quiet line
+         * the verdict's place says then; `None` otherwise. The judged view
+         * (`TrustSimView.no_change_key`) carries the same line.
+         */noChangeKey: String?) {
         self.kind = kind
         self.deltasJson = deltasJson
         self.revertReason = revertReason
         self.noticeRisk = noticeRisk
         self.noticeKey = noticeKey
+        self.noChangeKey = noChangeKey
     }
 
     
@@ -10040,7 +10054,8 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
                 deltasJson: FfiConverterString.read(from: &buf), 
                 revertReason: FfiConverterOptionString.read(from: &buf), 
                 noticeRisk: FfiConverterOptionString.read(from: &buf), 
-                noticeKey: FfiConverterOptionString.read(from: &buf)
+                noticeKey: FfiConverterOptionString.read(from: &buf), 
+                noChangeKey: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -10050,6 +10065,7 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.revertReason, into: &buf)
         FfiConverterOptionString.write(value.noticeRisk, into: &buf)
         FfiConverterOptionString.write(value.noticeKey, into: &buf)
+        FfiConverterOptionString.write(value.noChangeKey, into: &buf)
     }
 }
 
