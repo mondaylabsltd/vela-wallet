@@ -57,6 +57,14 @@ enum class FlowState {
      */
     SD3D, SD4D, SD2G, SD2H, SD2I, SD2J, SD3E,
     SD3F, SD3G, SD3H, SD3I, SD2K, SD2L, SD2M,
+
+    /**
+     * A2 with the balance hidden, through the live builder: a transfer's
+     * detail whose amount is the mask WITH its unit ("•••• USDT") — how much
+     * is hidden, what kind of money is not — over History masked the same
+     * way. Never on the live flow stack.
+     */
+    A2H,
 }
 
 /* ------------------------------------------------------------------ chrome */

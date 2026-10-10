@@ -454,6 +454,7 @@ object WalletFixtures {
             WalletScreenState.H10 -> liveHidden(base, strings)
             WalletScreenState.H11 -> liveInternalFault(base, strings)
             WalletScreenState.H12 -> liveInternalFault(base, strings, everyChain = true)
+            WalletScreenState.H13 -> liveCurrencyOnItsWay(base, strings)
         }
     }
 
@@ -500,6 +501,34 @@ object WalletFixtures {
         return WalletLive.home(
             base, view, liveHiddenFeed(now), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true), strings, chains, now = now,
         ).copy(state = WalletScreenState.H10)
+    }
+
+    /**
+     * H13 — a cold start with CNY stored, through the LIVE builder: the
+     * balance has been read, the display currency has not been committed yet
+     * (the core is on its USD placeholder and names the stored choice as
+     * `pending`). The total and each holding's worth wait in their loading
+     * state — never "$794" for a few seconds, then "¥5,640" — and what is
+     * held is shown, since a token amount is not in the display currency.
+     */
+    private fun liveCurrencyOnItsWay(base: WalletHomeModel, strings: VelaStrings): WalletHomeModel {
+        val now = System.currentTimeMillis()
+        val view = app.getvela.wallet.feature.wallet.core.BalanceView(
+            address = ADDRESS_FULL,
+            display_total_usd = 794.79,
+            last_refreshed_at_ms = now - 120_000.0,
+            tokens = listOf(
+                app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                app.getvela.wallet.feature.wallet.core.BalanceToken(
+                    chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54", decimals = 6,
+                    token_address = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", price_usd = 1.0,
+                ),
+            ),
+        )
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        val waiting = app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+        return WalletLive.home(base, view, app.getvela.wallet.feature.wallet.core.FeedView(), waiting, strings, chains, now = now)
+            .copy(state = WalletScreenState.H13)
     }
 
     /**

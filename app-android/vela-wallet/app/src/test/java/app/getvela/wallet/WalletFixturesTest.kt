@@ -171,6 +171,25 @@ class WalletFixturesTest {
         assertTrue(model.assetRows.isEmpty())
     }
 
+    /**
+     * H13 (the 102 device run): a cold start with CNY stored, its rate still
+     * on the way — the core's `committed` is false. No figure is drawn in the
+     * placeholder's dollars: the total and each holding's worth wait, the
+     * label names the choice on its way, and what is held is shown.
+     */
+    @Test
+    fun h13DrawsNoFigureBeforeTheCurrencyIsThePersons() {
+        val model = WalletFixtures.buildMobileState(WalletScreenState.H13, zhStrings())
+        assertEquals(WalletScreenState.H13, model.state)
+        assertEquals(BalanceStateKind.Loading, model.balance.state)
+        assertEquals(null, model.balance.integer)
+        assertEquals("the label names the stored choice, never the placeholder", "CNY", model.balance.currency)
+        assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.fiat == AssetFiatModel.Loading })
+        assertEquals(listOf("418.25 xDAI", "376.54 USDC"), model.assetRows.map { it.balance })
+        val drawn = (listOfNotNull(model.balance.integer, model.balance.decimals) + model.assetRows.map { it.fiat.toString() }).joinToString(" ")
+        assertFalse("no dollar figure anywhere: $drawn", drawn.contains("$") || drawn.contains("794"))
+    }
+
     @Test
     fun h6IsRefreshingOnCachedTotals() {
         val model = WalletFixtures.buildMobileState(WalletScreenState.H6, zhStrings())
