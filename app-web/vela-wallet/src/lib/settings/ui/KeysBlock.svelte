@@ -1,17 +1,19 @@
 <script lang="ts">
 	/**
-	 * The keys that control this wallet, and their Ethereum backup (spec 062).
+	 * The keys that control this wallet, and their record's copy on Ethereum
+	 * (spec 062).
 	 *
 	 * One block on both layouts. A key row says three things a person can act
 	 * on: what it is called, WHO is holding it (the vault's own mark and name
 	 * when the core's catalog knows — Apple Passwords, 1Password, a security
-	 * key), and whether it is synced or lives on one device. The backup sits
-	 * under the keys it backs up, as their last row, instead of floating on the
-	 * page as a sentence about nothing in particular.
+	 * key), and whether it is synced or lives on one device. The copy's row
+	 * sits under the keys it is about, as their last row, instead of floating
+	 * on the page as a sentence about nothing in particular.
 	 *
 	 * De-containered, hairline-divided, like the rest of settings: these are
-	 * facts to read, not cards to tap. Only the backup is a button, and only
-	 * while there is something to do.
+	 * facts to read, not cards to tap. Only the copy's row is a button, and
+	 * only while a tap does something — which the core says (`action`): `copy`
+	 * opens the signing sheet, `retry` asks again, `none` is a statement.
 	 */
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -143,7 +145,8 @@
 			type="button"
 			class="row backup"
 			data-tone={backup.tone}
-			disabled={!backup.actionable}
+			data-action={backup.action}
+			disabled={backup.action === 'none'}
 			onclick={() => onbackup?.()}
 		>
 			<span class="mark-slot"><Icon icon={UTILITY_ICONS.upload} size="md" /></span>
@@ -151,9 +154,9 @@
 				<span class="name">{backup.title}</span>
 				<span class="meta state">{backup.subtitle}</span>
 			</span>
-			{#if backup.retry}
+			{#if backup.action === 'retry'}
 				<Icon icon={UTILITY_ICONS['refresh-cw']} size="sm" />
-			{:else if backup.actionable}
+			{:else if backup.action === 'copy'}
 				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 			{:else if backup.tone === 'positive'}
 				<span class="done"><Icon icon={UTILITY_ICONS.check} size="sm" /></span>
@@ -460,13 +463,12 @@
 		cursor: default;
 	}
 
+	/* The one tone that is not the row's own: copied. "Not copied yet" is a
+	   state, not a defect — it is optional and costs a fee — so it is never
+	   the warning colour (the core's `BackupTone` has no caution). */
 	.backup[data-tone='positive'] .state,
 	.done {
 		color: var(--color-success-base);
-	}
-
-	.backup[data-tone='caution'] .state {
-		color: var(--color-warning-base);
 	}
 
 	.backup:not(:disabled):hover .name {

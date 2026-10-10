@@ -85,7 +85,7 @@ import {
 	type DeviceFacts,
 	type EnvironmentLabels
 } from '$lib/services/bug-report';
-import type { EthereumBackupState } from '$lib/services/registry-backup';
+import type { EthereumBackupRow } from '$lib/services/registry-backup';
 import type { EthereumBackupRowModel, WalletKeysModel } from './model';
 import type { WalletKeys } from '$lib/services/wallet-keys';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
@@ -1538,49 +1538,27 @@ export function liveRelayReport(m: RescueMessages, facts: DeviceFacts): Feedback
 // The Ethereum backup row (spec 062 §5a)
 // ---------------------------------------------------------------------------
 
-/** The row for a state, or `undefined` when there is nothing to draw:
- *  no registry on Ethereum (the feature is dark) or no record to back up. */
+/**
+ * The row the core says to draw (`registry_backup::BackupRow`), in words —
+ * or `undefined` when it says to draw nothing: no registry on Ethereum (the
+ * feature is dark) or no record to copy.
+ *
+ * Nothing here maps a state. Which words a state says, in which tone, and
+ * what a tap does are the core's, the same on all four apps; this looks the
+ * two corpus keys up. A key the manifest does not carry draws no row rather
+ * than a dotted path — `ethereum-backup-row.test.ts` holds the manifest to
+ * every key the core can name.
+ */
 export function ethereumBackupRow(
-	state: EthereumBackupState | 'checking',
+	row: EthereumBackupRow | null,
 	m: SettingsMessages
 ): EthereumBackupRowModel | undefined {
-	switch (state) {
-		case 'checking':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.checking,
-				tone: 'neutral',
-				actionable: false
-			};
-		case 'backed_up':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.backedUp,
-				tone: 'positive',
-				actionable: false
-			};
-		case 'not_backed_up':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.notBackedUp,
-				tone: 'caution',
-				actionable: true
-			};
-		case 'could_not_check':
-			// Tappable, and what it does is ask again — the state a person is
-			// most likely to tap, and the only one where "nothing happened"
-			// was the whole experience.
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.couldNotCheck,
-				tone: 'neutral',
-				actionable: true,
-				retry: true
-			};
-		case 'unavailable':
-		case 'not_registered':
-			return undefined;
-	}
+	if (row === null) return undefined;
+	const words = m.backup.words as Record<string, string | undefined>;
+	const title = words[row.title_key];
+	const subtitle = words[row.subtitle_key];
+	if (title === undefined || subtitle === undefined) return undefined;
+	return { title, subtitle, tone: row.tone, action: row.action };
 }
 
 /**
@@ -1618,7 +1596,8 @@ function keyFingerprint(publicKeyHex: string): string {
 
 export function walletKeysModel(
 	keys: WalletKeys | null,
-	backup: EthereumBackupState | 'checking',
+	/** The core's row for where the record stands — `CHECKING_ROW` while asking. */
+	backup: EthereumBackupRow | null,
 	m: SettingsMessages,
 	/**
 	 * Spec 102 (P2-10): the account's signing domain when it is NOT the apps'

@@ -947,22 +947,27 @@ export interface DropdownModel {
 }
 
 /**
- * The Ethereum backup row (spec 062). One line, three states; the row is a
- * button only while there is something to do — a link is not a verdict, so
- * the wallet route checks again before it opens the sheet.
+ * The Ethereum copy's row (spec 062). One line; the words, the tone and the
+ * tap are the core's (`registry_backup::BackupRow`). The row is a button only
+ * while there is something to do — a link is not a verdict, so the route
+ * checks again before it opens the sheet.
  */
 export interface EthereumBackupRowModel {
 	title: string;
 	subtitle: string;
-	tone: 'neutral' | 'positive' | 'caution';
-	actionable: boolean;
 	/**
-	 * The action is "ask again", not "do the backup". Only `could_not_check`:
-	 * a person tapping there wants another attempt, which is what the founder
-	 * ruled on 2026-09-23. Android draws the same distinction with
-	 * `RowTrailing.Retry`.
+	 * The core's tone (`registry_backup::BackupTone`). Never a caution: a
+	 * copy is optional and costs a fee, so "not copied yet" is a state, not a
+	 * defect.
 	 */
-	retry?: boolean;
+	tone: 'neutral' | 'positive';
+	/**
+	 * What a tap does (`registry_backup::BackupAction`): `copy` opens the
+	 * signing sheet, `retry` asks the chain again (only "couldn't check" —
+	 * the founder's ruling of 2026-09-23), `none` is a statement and takes no
+	 * tap at all.
+	 */
+	action: 'none' | 'copy' | 'retry';
 }
 
 /**
@@ -985,9 +990,13 @@ export interface WalletKeysModel {
 	 */
 	domain?: string;
 	rows: WalletKeyRowModel[];
-	/** The founding record's standing on Ethereum; absent = nothing to draw. */
+	/** The wallet record's standing on Ethereum; absent = nothing to draw. */
 	backup?: EthereumBackupRowModel;
-	/** Under the backup: PUBLIC keys only, private keys never leave the device. */
+	/**
+	 * Under the row: what the copy makes public (the wallet's name, each key's
+	 * name, public key, credential ID and authenticator model) and that it
+	 * costs a network fee.
+	 */
 	backupExplain: string;
 	copy: { action: string; done: string };
 }

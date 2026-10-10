@@ -26,8 +26,10 @@ import type { ExtensionMessages } from '$lib/extension/messages';
 import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
+	BACKUP_ROW_KEYS,
 	UNREACHABLE_LINE_KEYS,
 	VENUE_BLOCK_KEYS,
+	type BackupRowKey,
 	type SettingsMessages,
 	type VenueBlockKey
 } from '$lib/settings/messages';
@@ -725,11 +727,11 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			retry: k('home.balanceDetailRetry')
 		},
 		backup: {
-			title: k('settingsModals.backup.title'),
-			backedUp: k('settingsModals.backup.backedUp'),
-			notBackedUp: k('settingsModals.backup.notBackedUp'),
-			couldNotCheck: k('settingsModals.backup.couldNotCheck'),
-			checking: k('componentsUi.funding.checking'),
+			// By corpus key: the core names which one each state says.
+			words: Object.fromEntries(BACKUP_ROW_KEYS.map((key) => [key, k(key)])) as Record<
+				BackupRowKey,
+				string
+			>,
 			explain: k('settingsModals.backup.explain')
 		},
 		keys: {

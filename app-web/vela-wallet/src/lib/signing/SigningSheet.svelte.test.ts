@@ -387,7 +387,7 @@ describe('the signing fee row (spec 079 US2)', () => {
 // stays in every mode; a site's sheet keeps its requester row and the eyebrow
 // its drawn scenarios were built around.
 describe('the wallet’s own request (first-party)', () => {
-	const BACKUP = 'Back up public keys';
+	const BACKUP = "Copy this wallet's record";
 	const own = (over: Partial<SigningModel> = {}) =>
 		model({
 			dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)' },

@@ -429,12 +429,18 @@ export interface SettingsMessages {
 	};
 	/** The Ethereum backup row (spec 062): the founding record's standing there. */
 	backup: {
-		title: string;
-		backedUp: string;
-		notBackedUp: string;
-		couldNotCheck: string;
-		checking: string;
-		/** What is being published, and what is not: PUBLIC keys only. */
+		/**
+		 * The row's words BY CORPUS KEY. The core names the key for each state
+		 * (`registry_backup::BackupRow`: its title, its second line); the shell
+		 * only looks the key up, so which words a state says is never decided
+		 * here. Every key the core can name is in `BACKUP_ROW_KEYS`.
+		 */
+		words: Record<BackupRowKey, string>;
+		/**
+		 * What the copy makes public — the wallet's name, and each key's name,
+		 * public key, credential ID and authenticator model — and that it costs
+		 * a network fee.
+		 */
 		explain: string;
 	};
 	/** The keys that control this wallet (spec 062). */
@@ -547,6 +553,23 @@ export const VENUE_BLOCK_KEYS = [
 export type VenueBlockKey = (typeof VENUE_BLOCK_KEYS)[number];
 
 /**
+ * Every corpus key the core's backup row can name
+ * (`vela_core::registry_backup`: `TITLE_KEY`, `CHECKING_KEY` and each
+ * `BackupState::row()` second line). `ethereum-backup-row.test.ts` reads the
+ * core's source and fails if it names one that is not here.
+ */
+export const BACKUP_ROW_KEYS = [
+	'settingsModals.backup.title',
+	'settingsModals.backup.backedUp',
+	'settingsModals.backup.notBackedUp',
+	'settingsModals.backup.couldNotCheck',
+	'settingsModals.backup.cannotCopy',
+	'componentsUi.funding.checking'
+] as const;
+
+export type BackupRowKey = (typeof BACKUP_ROW_KEYS)[number];
+
+/**
  * Every corpus key the settings screens consume, in the order the manifest
  * declares them. The parity test iterates this, so a key that stops resolving
  * fails the build rather than shipping a dotted path onto a screen.
@@ -652,6 +675,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.backup.backedUp',
 	'settingsModals.backup.notBackedUp',
 	'settingsModals.backup.couldNotCheck',
+	'settingsModals.backup.cannotCopy',
 	'componentsUi.funding.checking',
 	'settingsModals.keys.title',
 	'settingsModals.keys.subtitle',
