@@ -1460,7 +1460,7 @@ mod wizard_tests {
 
         // Checked and compatible, and checked without a verdict: optional.
         let mut checked = refused_wizard(NetBlocker::MissingContracts);
-        let mut set = |view: &mut NetWizardView, edit: &dyn Fn(&mut NetCompatibility)| {
+        let set = |view: &mut NetWizardView, edit: &dyn Fn(&mut NetCompatibility)| {
             if let Some(compat) = view.compat.as_mut() {
                 edit(compat);
             }
