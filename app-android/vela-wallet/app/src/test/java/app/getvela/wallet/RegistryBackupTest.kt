@@ -38,7 +38,7 @@ class RegistryBackupTest {
     ).toString()
 
     /** A `done` as the core writes it; [row] is the core's row for the state (`BackupState::row`), absent where it draws none. */
-    private fun done(state: String, withCall: Boolean = false, row: Triple<String, String, String>? = null) = JSONObject()
+    private fun done(state: String, withCall: Boolean = false, row: Triple<String, String, String>? = null, explained: Boolean = state != "not_copyable") = JSONObject()
         .put("type", "done").put("state", state)
         .put("call", if (withCall) JSONObject().put("chain_id", 1).put("to", "0xreg").put("value", "0").put("data", "0xcd438f9b") else JSONObject.NULL)
         .put("unit_id", 10)
@@ -47,7 +47,9 @@ class RegistryBackupTest {
                 put(
                     "row",
                     JSONObject().put("title_key", "settingsModals.backup.title").put("subtitle_key", "settingsModals.backup.${row.first}")
-                        .put("tone", row.second).put("action", row.third),
+                        .put("tone", row.second).put("action", row.third)
+                        // As the core writes it: the key is LEFT OUT where no paragraph applies.
+                        .apply { if (explained) put("explain_key", "settingsModals.backup.explain") },
                 )
             }
         }.toString()
@@ -168,7 +170,10 @@ class RegistryBackupTest {
         val silent = real { null }.check(address, key)
         assertEquals(RegistryBackup.State.CouldNotCheck, silent.state)
         assertEquals(
-            RegistryBackup.Row("settingsModals.backup.title", "settingsModals.backup.couldNotCheck", RegistryBackup.Tone.Neutral, RegistryBackup.Action.Retry),
+            RegistryBackup.Row(
+                "settingsModals.backup.title", "settingsModals.backup.couldNotCheck", RegistryBackup.Tone.Neutral, RegistryBackup.Action.Retry,
+                explainKey = "settingsModals.backup.explain",
+            ),
             silent.row,
         )
         // The transport's own give-up is that row, word for word.
@@ -177,6 +182,50 @@ class RegistryBackupTest {
         assertEquals(RegistryBackup.State.Unavailable, noRegistry.state)
         assertNull(noRegistry.row)
         assertNull(SettingsLive.ethereumBackupRow(noRegistry, strings))
+    }
+
+    /**
+     * The integration's note 6: the paragraph under the row is the core's per
+     * state (`BackupRow.explain_key`). While the walk runs, and under every
+     * state a copy can still be made or checked in, it is the explanation;
+     * under a wallet that can NEVER be copied there is none — it described
+     * making a copy the row above had just said cannot be made.
+     */
+    @Test
+    fun `the explanation under the row is the core's, and absent where a copy can never be made`() = runBlocking {
+        val keys = WalletKeys.Result(WalletKeys.Source.Registry, listOf(key("Mine")))
+        fun explain(check: RegistryBackup.Check?) = SettingsLive.withWalletKeys(model, keys, check, strings).keys!!.backupExplain
+        val words = strings.t("settingsModals.backup.explain")
+
+        assertEquals("still asking: the explanation itself", words, explain(null))
+        for ((state, row) in listOf(
+            "backed_up" to Triple("backedUp", "positive", "none"),
+            "not_backed_up" to Triple("notBackedUp", "neutral", "copy"),
+            "could_not_check" to Triple("couldNotCheck", "neutral", "retry"),
+        )) {
+            val check = backup(listOf(done(state, withCall = state == "not_backed_up", row = row))).check("0xsafe", "04ab")
+            assertEquals(state, "settingsModals.backup.explain", check.row?.explainKey)
+            assertEquals(state, words, explain(check))
+        }
+        // The transport's own give-up is the core's could-not-check row, paragraph included.
+        assertEquals(words, explain(RegistryBackup.COULD_NOT))
+
+        val never = backup(listOf(done("not_copyable", row = Triple("cannotCopy", "neutral", "none")))).check("0xsafe", "04ab")
+        assertEquals(RegistryBackup.State.NotCopyable, never.state)
+        assertNull("the core leaves the key out", never.row?.explainKey)
+        assertNull("no paragraph, and no room kept for one", explain(never))
+
+        // A JSON null reads as absent too — never the word "null" as a key.
+        val nulled = JSONObject(done("not_copyable", row = Triple("cannotCopy", "neutral", "none")))
+        nulled.getJSONObject("row").put("explain_key", JSONObject.NULL)
+        assertNull(backup(listOf(nulled.toString())).check("0xsafe", "04ab").row?.explainKey)
+
+        // The boards: SK1–SK3 explain, SK4 (the older wallet) does not.
+        assertEquals(
+            listOf(true, true, true, false),
+            listOf(SettingsScreenState.SK1, SettingsScreenState.SK2, SettingsScreenState.SK3, SettingsScreenState.SK4)
+                .map { SettingsFixtures.buildState(it, strings).keys!!.backupExplain != null },
+        )
     }
 
     /** The SK boards draw each state with the core's keys — every one in the corpus, none echoed. */
@@ -217,10 +266,11 @@ class RegistryBackupTest {
         assertEquals(listOf("Public key", "Transport"), block.rows.first().details.map { it.label })
         // The copy's own explanation: what becomes public, that it costs a fee,
         // and what a copy cannot do — never "only public keys".
-        assertTrue(block.backupExplain, block.backupExplain.contains("is public"))
-        assertTrue(block.backupExplain, block.backupExplain.contains("credential ID and authenticator model"))
-        assertTrue(block.backupExplain, block.backupExplain.contains("pay its network fee"))
-        assertTrue(block.backupExplain, block.backupExplain.contains("can't move money or bring back a lost passkey"))
+        val explain = block.backupExplain!!
+        assertTrue(explain, explain.contains("is public"))
+        assertTrue(explain, explain.contains("credential ID and authenticator model"))
+        assertTrue(explain, explain.contains("pay its network fee"))
+        assertTrue(explain, explain.contains("can't move money or bring back a lost passkey"))
         assertEquals("abab…abab", block.rows.first().fingerprint)
         assertNull(block.note)
         assertEquals(RowTrailing.Chevron, block.backup!!.trailing)

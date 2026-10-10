@@ -53,8 +53,14 @@ class RegistryBackup(
      * on the step's `done`): its title and second line (corpus keys), the
      * line's tone, and the tap. One rule for every shell — this one draws it
      * and maps nothing.
+     *
+     * [explainKey]: the paragraph under the row for this state — what a copy
+     * publishes, what it costs and how it is made — or `null` where it does
+     * not apply: under a wallet that can never be copied it described a
+     * thing the row above had just said cannot be done. No paragraph is
+     * drawn then, and no room is kept for one.
      */
-    data class Row(val titleKey: String, val subtitleKey: String, val tone: Tone, val action: Action)
+    data class Row(val titleKey: String, val subtitleKey: String, val tone: Tone, val action: Action, val explainKey: String? = null)
 
     /** [row] `null`: nothing is drawn (no registry on Ethereum, or no record to copy). */
     data class Check(val state: State, val call: Call?, val row: Row? = null)
@@ -104,6 +110,9 @@ class RegistryBackup(
             "retry" -> Action.Retry
             else -> Action.None
         },
+        // The core leaves the key out where no paragraph applies (`optString`
+        // reads an absent key as "", and a JSON null as "null").
+        explainKey = json.optString("explain_key").takeIf { it.isNotEmpty() && !json.isNull("explain_key") },
     )
 
     private suspend fun perform(request: JSONObject): JSONObject {
@@ -128,7 +137,7 @@ class RegistryBackup(
         internal val COULD_NOT = Check(
             State.CouldNotCheck,
             null,
-            Row(I18nKeys.SettingsUi.BACKUP_TITLE, I18nKeys.SettingsUi.BACKUP_COULD_NOT_CHECK, Tone.Neutral, Action.Retry),
+            Row(I18nKeys.SettingsUi.BACKUP_TITLE, I18nKeys.SettingsUi.BACKUP_COULD_NOT_CHECK, Tone.Neutral, Action.Retry, I18nKeys.SettingsUi.BACKUP_EXPLAIN),
         )
     }
 }

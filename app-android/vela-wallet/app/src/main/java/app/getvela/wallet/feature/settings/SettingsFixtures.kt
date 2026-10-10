@@ -1048,8 +1048,13 @@ object SettingsFixtures {
      * reads the row off the step and maps nothing.
      */
     fun backupCheck(state: SettingsScreenState): RegistryBackup.Check? {
-        fun row(subtitle: String, tone: RegistryBackup.Tone, action: RegistryBackup.Action) =
-            RegistryBackup.Row("settingsModals.backup.title", "settingsModals.backup.$subtitle", tone, action)
+        // The paragraph under the row rides with it, as the core sends it:
+        // every state but the one that can never be copied.
+        fun row(subtitle: String, tone: RegistryBackup.Tone, action: RegistryBackup.Action, explained: Boolean = true) =
+            RegistryBackup.Row(
+                "settingsModals.backup.title", "settingsModals.backup.$subtitle", tone, action,
+                explainKey = I18nKeys.SettingsUi.BACKUP_EXPLAIN.takeIf { explained },
+            )
         return when (state) {
             SettingsScreenState.SK1 -> RegistryBackup.Check(
                 RegistryBackup.State.NotBackedUp,
@@ -1063,7 +1068,7 @@ object SettingsFixtures {
             SettingsScreenState.SK3 -> RegistryBackup.COULD_NOT
             SettingsScreenState.SK4 -> RegistryBackup.Check(
                 RegistryBackup.State.NotCopyable, null,
-                row("cannotCopy", RegistryBackup.Tone.Neutral, RegistryBackup.Action.None),
+                row("cannotCopy", RegistryBackup.Tone.Neutral, RegistryBackup.Action.None, explained = false),
             )
             else -> null
         }

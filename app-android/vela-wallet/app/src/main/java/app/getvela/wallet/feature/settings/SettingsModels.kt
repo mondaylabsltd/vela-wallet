@@ -775,9 +775,12 @@ data class WalletKeysModel(
      * Under the copy's row, the core's words: what becomes public (the
      * address and name, each key's name, public key, credential ID and
      * authenticator model), that it costs a network fee, and that a copy
-     * moves no money and brings back no lost passkey.
+     * moves no money and brings back no lost passkey. Which state it is said
+     * under is the core's too (`BackupRow.explain_key`): `null` — under a
+     * wallet that can never be copied — draws no paragraph and keeps no room
+     * for one.
      */
-    val backupExplain: String,
+    val backupExplain: String?,
     val copyLabel: String,
     val copiedLabel: String,
 )

@@ -1255,7 +1255,11 @@ object SettingsLive {
                 domain = signingDomain.takeIf { !it.equals("getvela.app", ignoreCase = true) && it.isNotBlank() }
                     ?.let { strings.t("settings.signing.keysOn", mapOf("domain" to it)) },
                 backup = ethereumBackupRow(backup, strings),
-                backupExplain = strings.t(k.BACKUP_EXPLAIN),
+                // While the walk is still running the paragraph is the
+                // explanation itself; once it has answered, the core says
+                // whether this state has one (`explain_key`) — a wallet that
+                // can never be copied is not told how a copy is made.
+                backupExplain = if (backup == null) strings.t(k.BACKUP_EXPLAIN) else backup.row?.explainKey?.let { strings.t(it) },
                 copyLabel = strings.t(k.KEYS_COPY),
                 copiedLabel = strings.t(k.KEYS_COPIED),
             ),
