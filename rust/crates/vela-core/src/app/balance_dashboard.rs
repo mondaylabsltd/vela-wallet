@@ -129,6 +129,11 @@ pub const UNREACHABLE_RECHECK_MS: u32 = 10_000;
 pub const UNREACHABLE_ONE: &str = "assets.unreachableOne";
 /// The home line when more than one cannot (`{{n}}`, the count).
 pub const UNREACHABLE_MANY: &str = "assets.unreachableMany";
+/// The home line when the one network that could not be read has an RPC that
+/// is fine: its token list could not be loaded ([`UnreachableCause::TokenList`],
+/// `{{name}}`). "Can't reach Tempo" there named the wrong thing, and sent a
+/// person to repair an endpoint that was answering.
+pub const TOKEN_LIST_UNREACHABLE: &str = "assets.tokenListUnreachable";
 /// A row in the list: it held something worth `{{amount}}` when last read.
 pub const LAST_SEEN: &str = "assets.lastSeen";
 /// A row: it held something when last read, none of it priced.
@@ -724,6 +729,15 @@ pub enum BalanceShellResult {
         /// "can't reach" ([`BalanceView::internal_key`]).
         #[serde(default)]
         internal_chain_ids: Vec<u32>,
+        /// The failed chains whose RPC was never the problem (PR 3 note 4):
+        /// the chain's token list — the registry document that names its
+        /// stablecoins — could not be loaded, and the chain has no native
+        /// coin that could be read without it (Tempo). Nothing was read, so
+        /// it is a subset of `failed_chain_ids` like the two above; but its
+        /// row is never offered an RPC fix, and alone it is said as what it
+        /// is ([`TOKEN_LIST_UNREACHABLE`]), not as "can't reach".
+        #[serde(default)]
+        registry_chain_ids: Vec<u32>,
         now_ms: f64,
     },
     /// The fetch itself threw (`useHomeController.ts:367`) — keep last-known
@@ -867,6 +881,8 @@ pub struct Model {
     rate_limited_chain_ids: Vec<u32>,
     /// [`BalanceShellResult::FetchSettled`]'s `internal_chain_ids`.
     internal_chain_ids: Vec<u32>,
+    /// [`BalanceShellResult::FetchSettled`]'s `registry_chain_ids`.
+    registry_chain_ids: Vec<u32>,
     /// The last round threw inside the app ([`BalanceShellResult::FetchErrored`]).
     errored_internally: bool,
     /// Per chain, what it held the last time it answered for this account
@@ -984,6 +1000,32 @@ pub struct UnreachableNetwork {
     /// worth in the display currency), [`LAST_SEEN_UNPRICED`],
     /// [`LAST_SEEN_EMPTY`] or [`NOT_READ_YET`].
     pub line_key: String,
+    /// What kept it from being read.
+    #[serde(default)]
+    pub cause: UnreachableCause,
+    /// May the row offer its RPC editor ("Fix")? Only when the network
+    /// itself did not answer: for any other cause the endpoint is fine, and
+    /// a "Fix RPC" there sends a person to repair what is working.
+    #[serde(default = "rpc_fixable_by_default")]
+    pub rpc_fixable: bool,
+}
+
+/// Why a network in the unreachable list could not be read.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum UnreachableCause {
+    /// None of its RPC endpoints answered.
+    #[default]
+    Network,
+    /// Its RPC answers; the token list that names what to read there could
+    /// not be loaded, and it has no native coin to read without one.
+    TokenList,
+}
+
+/// A row from before `rpc_fixable` was said: every row was the network's.
+fn rpc_fixable_by_default() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1039,8 +1081,10 @@ pub struct BalanceView {
     /// worth, then the rest in the wallet's network order.
     pub unreachable_networks: Vec<UnreachableNetwork>,
     /// The corpus key of the home line over them: [`UNREACHABLE_ONE`]
-    /// (`{{name}}` = the one network) or [`UNREACHABLE_MANY`] (`{{n}}` = how many);
-    /// `None` when every network answered.
+    /// (`{{name}}` = the one network), [`TOKEN_LIST_UNREACHABLE`] (`{{name}}`
+    /// too — the one network's RPC is fine and its token list is what could
+    /// not be loaded) or [`UNREACHABLE_MANY`] (`{{n}}` = how many); `None`
+    /// when every network answered.
     pub unreachable_key: Option<String>,
     /// The failed chains whose read never left the app (PR 2 note 11) — not
     /// in `unreachable_networks`: nothing there is the network's doing.
@@ -1183,9 +1227,12 @@ impl App for BalanceDashboard {
             None
         };
         let unreachable_networks = unreachable_networks(model);
-        let unreachable_key = match unreachable_networks.len() {
-            0 => None,
-            1 => Some(UNREACHABLE_ONE.to_owned()),
+        let unreachable_key = match unreachable_networks.as_slice() {
+            [] => None,
+            [one] if one.cause == UnreachableCause::TokenList => {
+                Some(TOKEN_LIST_UNREACHABLE.to_owned())
+            }
+            [_] => Some(UNREACHABLE_ONE.to_owned()),
             _ => Some(UNREACHABLE_MANY.to_owned()),
         };
         let unpriced_tokens = model
@@ -1263,6 +1310,7 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     model.tokens.clear();
     model.failed_chain_ids.clear();
     model.internal_chain_ids.clear();
+    model.registry_chain_ids.clear();
     model.errored_internally = false;
     model.last_read.clear();
     model.cached_total = None;
@@ -1410,6 +1458,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             rate_limited_chain_ids,
             read_chain_ids,
             internal_chain_ids,
+            registry_chain_ids,
             now_ms,
         } => {
             if model.address.as_deref() != Some(address.as_str()) {
@@ -1443,6 +1492,11 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.last_refreshed_at_ms = Some(now_ms);
             model.rate_limited_chain_ids = rate_limited_chain_ids;
             model.internal_chain_ids = internal_chain_ids;
+            // Only a chain that failed can have failed for this reason.
+            model.registry_chain_ids = registry_chain_ids
+                .into_iter()
+                .filter(|id| model.failed_chain_ids.contains(id))
+                .collect();
             model.errored_internally = false;
             model.fetch_in_flight = false;
             model.errored_without_data =
@@ -1726,11 +1780,18 @@ fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
                 Some(_) if worth > 0.0 => (LastKnown::Held, LAST_SEEN),
                 Some(_) => (LastKnown::Held, LAST_SEEN_UNPRICED),
             };
+            let cause = if model.registry_chain_ids.contains(&chain_id) {
+                UnreachableCause::TokenList
+            } else {
+                UnreachableCause::Network
+            };
             let row = UnreachableNetwork {
                 chain_id,
                 last_known,
                 last_seen_usd: (worth > 0.0 && !model.hidden).then_some(worth),
                 line_key: line_key.to_owned(),
+                cause,
+                rpc_fixable: cause == UnreachableCause::Network,
             };
             (worth, row)
         })

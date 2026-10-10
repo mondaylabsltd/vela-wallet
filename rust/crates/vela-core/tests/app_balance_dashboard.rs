@@ -53,6 +53,7 @@ fn settled(address: &str, tokens: Vec<BalanceToken>, failed: Vec<u32>, limited: 
         rate_limited_chain_ids: limited,
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
         now_ms: NOW,
     }
 }
@@ -67,6 +68,7 @@ fn settled_read(tokens: Vec<BalanceToken>, failed: Vec<u32>, read: Vec<u32>) -> 
         rate_limited_chain_ids: vec![],
         read_chain_ids: read,
         internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
         now_ms: NOW,
     }
 }
@@ -1261,6 +1263,7 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
         now_ms: NOW + 1.0,
     });
     assert!(!sut.view().refreshing);
@@ -1305,6 +1308,7 @@ fn the_refresh_control_spins_until_its_own_round_ends() {
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
         now_ms: NOW + 1.0,
     });
     assert!(sut.view().refreshing, "the person's own round is still out");
@@ -1733,6 +1737,7 @@ fn an_account_switch_forgets_the_last_reads() {
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![56],
         internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
         now_ms: NOW,
     });
     assert_eq!(unreachable_rows(&sut.view()), vec![(56, NOT_READ_YET)]);
@@ -2301,6 +2306,7 @@ fn an_internal_fault_is_not_a_network_out_of_reach() {
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![1, 56, 137],
         internal_chain_ids: internal,
+        registry_chain_ids: vec![],
         now_ms: NOW,
     };
     // Every failure is internal: no "Can't reach Ethereum".
@@ -2327,6 +2333,87 @@ fn an_internal_fault_is_not_a_network_out_of_reach() {
     });
     sut.resolve(settle(vec![], vec![]));
     assert_eq!(sut.view().internal_key, None);
+}
+
+// ===========================================================================
+// PR 3 note 4: a token list that cannot be loaded is not a network out of reach
+// ===========================================================================
+
+/// Tempo has no native coin: its money is the stablecoins its token list
+/// names, so with that list unloaded nothing there could be read — and the
+/// chain is a failed chain. But its RPC was never asked and is fine: the
+/// home says the token list, not "Can't reach Tempo", and the row offers no
+/// RPC fix. A network that really did not answer, beside it, still does.
+#[test]
+fn an_unloaded_token_list_is_not_a_network_out_of_reach() {
+    use vela_core::app::balance_dashboard::{UnreachableCause, TOKEN_LIST_UNREACHABLE};
+    const TEMPO: u32 = 4_217;
+    let settle = |failed: Vec<u32>, registry: Vec<u32>| Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![token(1, "ETH", "1", Some(2_000.0))],
+        failed_chain_ids: failed,
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 56, TEMPO],
+        internal_chain_ids: vec![],
+        registry_chain_ids: registry,
+        now_ms: NOW,
+    };
+
+    // Alone: the line names the token list, and nothing offers an RPC fix.
+    let view = booted(ADDR_A, None, settle(vec![TEMPO], vec![TEMPO])).view();
+    assert_eq!(
+        view.unreachable_key.as_deref(),
+        Some(TOKEN_LIST_UNREACHABLE)
+    );
+    let [row] = view.unreachable_networks.as_slice() else {
+        unreachable!("one row: {:?}", view.unreachable_networks);
+    };
+    assert_eq!(row.chain_id, TEMPO);
+    assert_eq!(row.cause, UnreachableCause::TokenList);
+    assert!(!row.rpc_fixable, "its RPC is fine: nothing to fix");
+    assert!(view.balance_partial, "still a chain that was not read");
+
+    // Beside a network that is really down: counted, and only the one whose
+    // endpoints failed is offered the fix.
+    let view = booted(ADDR_A, None, settle(vec![56, TEMPO], vec![TEMPO])).view();
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_MANY));
+    let fixable: Vec<(u32, bool)> = view
+        .unreachable_networks
+        .iter()
+        .map(|row| (row.chain_id, row.rpc_fixable))
+        .collect();
+    assert!(fixable.contains(&(56, true)), "{fixable:?}");
+    assert!(fixable.contains(&(TEMPO, false)), "{fixable:?}");
+
+    // A chain that answered cannot have failed for this reason.
+    let view = booted(ADDR_A, None, settle(vec![56], vec![TEMPO])).view();
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
+    assert!(view.unreachable_networks.iter().all(|row| row.rpc_fixable));
+
+    // The list is back: the line goes, and the next account starts clean.
+    let mut sut = booted(ADDR_A, None, settle(vec![TEMPO], vec![TEMPO]));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settle(vec![], vec![]));
+    assert_eq!(sut.view().unreachable_key, None);
+}
+
+/// A row written before the cause was said is the network's, and fixable —
+/// what every row was.
+#[test]
+fn an_unreachable_row_from_before_the_cause_reads_as_the_networks() {
+    use vela_core::app::balance_dashboard::{UnreachableCause, UnreachableNetwork};
+    let old =
+        r#"{"chain_id":56,"last_known":"held","last_seen_usd":157.0,"line_key":"assets.lastSeen"}"#;
+    let row: UnreachableNetwork = serde_json::from_str(old).unwrap();
+    assert_eq!(row.cause, UnreachableCause::Network);
+    assert!(row.rpc_fixable);
+    let said = serde_json::to_value(&row).unwrap_or_default();
+    assert_eq!(said["cause"], "network");
+    assert_eq!(said["rpc_fixable"], true);
 }
 
 /// The whole fetch threw inside the app: said as that too, never "can't
@@ -2373,6 +2460,7 @@ fn a_round_where_every_chain_failed_is_no_zero() {
         rate_limited_chain_ids: vec![],
         read_chain_ids: vec![1, 56],
         internal_chain_ids: vec![1, 56],
+        registry_chain_ids: vec![],
         now_ms: NOW,
     };
     let view = booted(ADDR_A, None, all_failed).view();
