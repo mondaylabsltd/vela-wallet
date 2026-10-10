@@ -5,7 +5,25 @@ import type { NetCompatibility } from "./NetCompatibility";
 import type { NetWizardErrorKind } from "./NetWizardErrorKind";
 import type { NetWizardPhase } from "./NetWizardPhase";
 
-export type NetWizardView = { phase: NetWizardPhase, query: string, custom_rpc: string, suggestions: Array<NetChainIndexEntry>, chain_info: NetChainInfo | null, compat: NetCompatibility | null, error: NetWizardErrorKind | null, 
+export type NetWizardView = { phase: NetWizardPhase, query: string, custom_rpc: string, suggestions: Array<NetChainIndexEntry>, chain_info: NetChainInfo | null, 
+/**
+ * The check's result — in the `Checked` phase, and ALSO beside an
+ * `Error` the check itself raised (a refusal or an inconclusive probe on
+ * the path that saves without a confirm step): the reason
+ * ([`NetCompatibility::hint_key`]) and the Chain Setup link
+ * ([`NetCompatibility::setup_url`]) are drawn from it on every path a
+ * network is added by.
+ */
+compat: NetCompatibility | null, error: NetWizardErrorKind | null, 
+/**
+ * The corpus key of the sentence for [`Self::error`], so no shell words
+ * a stop itself (three of them had no words on the web and read
+ * "Incompatible"): [`WIZARD_ALREADY_ADDED`], [`WIZARD_NOT_FOUND`],
+ * [`WIZARD_NO_RPC_ENDPOINT`], [`WIZARD_CHECK_FAILED`], and for a refusal
+ * the check's own reason ([`NetCompatibility::hint_key`]) when it kept
+ * one, else [`WIZARD_NOT_COMPATIBLE`]. `None` with no error.
+ */
+error_key: string | null, 
 /**
  * The "Add network" button renders only when this is true.
  */

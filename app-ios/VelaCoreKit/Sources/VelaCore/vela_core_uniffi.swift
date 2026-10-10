@@ -15474,6 +15474,22 @@ public func markMissTtlMs(kind: String, status: UInt16?) -> UInt32?  {
     )
 })
 }
+/**
+ * A hidden amount as every shell draws it: the mask, then the unit the
+ * shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
+ * for whether a hidden amount keeps its unit: it does. An empty `unit` (a
+ * figure with no unit of its own) is the mask alone, never a trailing
+ * space. Each phone used to spell this itself, and one of them dropped the
+ * unit.
+ */
+public func maskedAmount(unit: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_masked_amount(
+        FfiConverterString.lower(unit),uniffiCallStatus
+    )
+})
+}
 public func matchSelector(sig: String, calldata: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -17616,6 +17632,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_mark_miss_ttl_ms() != 58714) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_masked_amount() != 17557) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_match_selector() != 41973) {

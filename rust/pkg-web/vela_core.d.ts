@@ -1001,6 +1001,15 @@ export function landingPace(sent_at_ms: number | null | undefined, typical_s: nu
  */
 export function markMissTtlMs(kind: string, status?: number | null): number | undefined;
 
+/**
+ * A hidden amount as every shell draws it: the mask, then the unit the
+ * shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
+ * for whether a hidden amount keeps its unit: it does. An empty `unit` (a
+ * figure with no unit of its own) is the mask alone, never a trailing
+ * space. Synchronous, so a view model can call it while it builds a row.
+ */
+export function maskedAmount(unit: string): string;
+
 export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 
 /**
@@ -1760,6 +1769,7 @@ export interface InitOutput {
     readonly managetokenscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly managetokenscore_view: (a: number) => [number, number, number, number];
     readonly markMissTtlMs: (a: number, b: number, c: number) => number;
+    readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];

@@ -439,6 +439,7 @@ export * from './TrustSimJudgment';
 export * from './TrustSimView';
 export * from './TrustTokenMeta';
 export * from './TrustView';
+export * from './UnreachableCause';
 export * from './UnreachableNetwork';
 export * from './VenueBlock';
 export * from './VenueChoice';

@@ -69,8 +69,10 @@ unpriced_tokens: Array<BalanceToken>, failed_chain_ids: Array<number>, rate_limi
 unreachable_networks: Array<UnreachableNetwork>, 
 /**
  * The corpus key of the home line over them: [`UNREACHABLE_ONE`]
- * (`{{name}}` = the one network) or [`UNREACHABLE_MANY`] (`{{n}}` = how many);
- * `None` when every network answered.
+ * (`{{name}}` = the one network), [`TOKEN_LIST_UNREACHABLE`] (`{{name}}`
+ * too — the one network's RPC is fine and its token list is what could
+ * not be loaded) or [`UNREACHABLE_MANY`] (`{{n}}` = how many); `None`
+ * when every network answered.
  */
 unreachable_key: string | null, 
 /**
