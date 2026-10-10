@@ -35,6 +35,14 @@
 //    `sheet-rich-lands` are the drawn send (cs1: a sentence, a contact,
 //    technical details) with the verdict in its place — a request with
 //    enough to say that the sheet's body has to scroll.
+//  - `sheet-held` / `sheet-waited-out` (PR 3's last fixes, C) — the confirm
+//    waiting for the simulation's verdict, and after the core's deadline for
+//    it passed: the real `sign_request` core told `sim_started` (and, for the
+//    second, its timer's answer), under the core's own gate
+//    (`SimWaitScene`). Held: the confirm shut with "Checking what this
+//    transaction does…" under it and "Checking…" in the verdict's place —
+//    for as long as the board is up, no timer runs here. Waited out: the
+//    confirm open, no line, and the could-not-check caution in that place.
 //  - `accounts-1` / `accounts-2` (F15) — "1 account · ", "2 accounts · ".
 //  - `signout-one` / `signout-many` (F26) — the sign-out sheet, as tall as
 //    what it holds.
@@ -74,6 +82,9 @@ struct FinalRoundGalleryScreen: View {
             LandingVerdictBoard(before: signing("out"), after: signing("tall"), presented: true)
         case "sheet-rich-lands":
             LandingVerdictBoard(before: rich("out"), after: rich("tall"), presented: true)
+        case "sheet-held", "sheet-waited-out":
+            let model = waiting(waitedOut: state == "sheet-waited-out")
+            LandingVerdictBoard(before: model, after: model, presented: true)
         case let board where board.hasPrefix("sheet-rich-"):
             let model = rich(String(board.dropFirst("sheet-rich-".count)))
             LandingVerdictBoard(before: model, after: model, presented: true)
@@ -198,6 +209,24 @@ struct FinalRoundGalleryScreen: View {
             clear: plainSend(to: tx["to"] as? String, value: tx["value"] as? String),
             guard: .empty, fee: HandoffFeeFixtures.feeView, context: context,
             gate: SignConfirmStateWire(enabled: true, block: nil, key: nil)
+        )
+    }
+
+    /// The same transaction while its confirm waits for the simulation's
+    /// verdict, or once the core's deadline for it has passed (PR 3, fix C):
+    /// the production builder over the real cores' views and the core's own
+    /// gate. The simulation never answers on this board.
+    private func waiting(waitedOut: Bool) -> SigningModel {
+        guard let views = SimWaitScene.views(waitedOut: waitedOut) else { return signing("out") }
+        var context = SigningLive.Context(
+            loc: loc, chainName: "Base", chainDot: SettingsLive.chainColor(8_453), nativeSymbol: "ETH",
+            walletName: "Everyday wallet", walletAddress: Self.address
+        )
+        context.chainId = 8_453
+        return SigningLive.model(
+            fallback: SigningFixtures.build(.cs1, loc: loc), request: views.request, sign: views.sign,
+            clear: views.clear, guard: views.guardView, fee: HandoffFeeFixtures.feeView, context: context,
+            gate: views.gate
         )
     }
 

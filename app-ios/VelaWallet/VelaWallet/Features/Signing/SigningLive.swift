@@ -35,8 +35,8 @@ enum SigningLive {
         var display: WalletLive.Display = .usd
         /// The page's host, for the sign-in verdict's words.
         var origin: String?
-        /// What the chain said this transaction would do (spec 055). `nil`
-        /// when nothing has been simulated for this account yet.
+        /// What the chain said THIS request would do, judged (spec 055;
+        /// `SigningController.simVerdict`). `nil` until its judgment is in.
         var sim: TrustSimViewWire?
         /// Where the simulation has got to. Three states, three sentences.
         var simulation: SigningController.Simulation = .pending
@@ -253,7 +253,9 @@ enum SigningLive {
         // Only a TRANSACTION has balances to change. A message moves nothing,
         // and a balance block on a signature would answer a question nobody
         // asked.
-        let balances = balanceBlocks(isTransaction: facts != nil, context: context)
+        let balances = balanceBlocks(
+            isTransaction: facts != nil, context: context, waitedOutKey: sign.simWaitedOutKey
+        )
         // Issue #314: on the wallet's own request a simulation that moves
         // nothing only confirms what the wallet itself wrote — a technical
         // fact, folded with the others, not a bordered card weighing as much as
@@ -882,7 +884,15 @@ enum SigningLive {
     ///
     /// Only for transactions: a message moves nothing, and a balance block on
     /// a signature would be an answer to a question nobody asked.
-    static func balanceBlocks(isTransaction: Bool, context: Context) -> [SigningBlock] {
+    ///
+    /// `waitedOutKey` (PR 3, `SignView.sim_waited_out_key`): the core's
+    /// deadline for the verdict passed and none is here. Its sentence stands
+    /// in the verdict's place then, as a caution — where "Checking…" stood,
+    /// drawn as the could-not-check notice is — and gives way to the verdict
+    /// if one still lands (the core clears the key in that step).
+    static func balanceBlocks(
+        isTransaction: Bool, context: Context, waitedOutKey: String? = nil
+    ) -> [SigningBlock] {
         let loc = context.loc
         guard isTransaction else { return [] }
 
@@ -892,10 +902,12 @@ enum SigningLive {
             let text = reason.map { loc.t(key, vars: ["reason": $0]) } ?? loc.t(key)
             return [.warning(tone: risk == "danger" ? .danger : .caution, text: text)]
         }
-        // Still running, or a verdict for a previous request. Silence, because
-        // a block that appears and then changes its mind is worse than one that
-        // arrives late.
-        guard let sim = context.sim, sim.ready, context.simulation == .answered else { return [] }
+        // Still running: no verdict, and the place keeps "Checking…" — a
+        // block that appears and then changes its mind is worse than one that
+        // arrives late. Past the core's deadline it says so instead.
+        guard let sim = context.sim, sim.ready, context.simulation == .answered else {
+            return waitedOutKey.map { [.warning(tone: .caution, text: loc.t($0))] } ?? []
+        }
         // Nothing moves — said out loud, in the card's own outline, exactly
         // when the core says so and in its sentence.
         if let line = noChangeLine(context) {

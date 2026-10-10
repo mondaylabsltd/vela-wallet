@@ -23,6 +23,13 @@
 //    confirm does not move, and the verdict is in view. Run on an iPhone SE
 //    too: there the body scrolls (for the drawn send, `sheet-rich-lands`,
 //    on any phone), and every row can be brought into view.
+//  - `testTheConfirmWaitsForTheVerdict` (the last fixes, C): `sheet-held` —
+//    the confirm shut with "Checking what this transaction does…" under it
+//    and "Checking…" in the verdict's place, and still so after the core's
+//    four seconds (no timer runs on a board) — and `sheet-waited-out` — the
+//    confirm open, no line, the could-not-check caution in that place. The
+//    confirm at ONE y on both, and where it is with no verdict (`sheet-out`)
+//    and with "No asset changes" (`sheet-nothing`).
 //  - `testTheSwitcherCountsItsAccounts` (F15).
 //  - `testTheSignOutSheetFitsWhatItHolds` (F26).
 //  - `testTheBatchImporterNamesNoPlaceholderCurrency` (F8).
@@ -430,6 +437,74 @@ final class FinalRoundScreenshotTests: XCTestCase {
                 attach(app, "04-\(board)-scrolled-\(tag)-\(Int(screen.width))pt")
                 app.terminate()
             }
+        }
+    }
+
+    // MARK: - The last fixes, C: the confirm waits for the verdict
+
+    func testTheConfirmWaitsForTheVerdict() {
+        for look in Self.looks {
+            let zh = look.lang == "zh"
+            let tag = "\(look.lang)-\(look.theme)"
+            let checkingLine = zh ? "正在检查这笔交易的结果…" : "Checking what this transaction does…"
+            let checking = zh ? "正在检查…" : "Checking…"
+            var seen: [String: Verdict] = [:]
+            for board in ["sheet-held", "sheet-waited-out", "sheet-out", "sheet-nothing"] {
+                let app = launch(board, look)
+                let what = "\(board) \(tag)"
+                settle(1.5)
+                let at = read(app, what)
+                seen[board] = at
+                let screen = app.frame
+                let confirm = app.buttons["signing.confirm"].firstMatch
+                let line = app.staticTexts["signing.confirmBlock"].firstMatch
+                log("sim-wait \(what) screen=\(Int(screen.width))x\(Int(screen.height)) confirm=\(at.confirm)"
+                    + " enabled=\(confirm.isEnabled) line=\(line.exists ? "\"\(line.label)\" \(line.frame)" : "none")"
+                    + " verdict=\(at.place)")
+                switch board {
+                case "sheet-held":
+                    XCTAssertFalse(confirm.isEnabled, "the confirm is open ahead of the verdict (\(what))")
+                    XCTAssertTrue(line.exists, "a shut confirm says nothing (\(what))")
+                    XCTAssertEqual(line.label, checkingLine, "(\(what))")
+                    XCTAssertGreaterThanOrEqual(line.frame.minY, at.confirm.maxY, "the line is not under the confirm (\(what))")
+                    XCTAssertNotNil(said(app, checking, in: at.place), "the verdict's place does not say \"\(checking)\" (\(what))")
+                    attach(app, "05-\(board)-\(tag)-\(Int(screen.width))pt")
+                    // The core's four seconds, and more: nothing on a board
+                    // runs its timer, so the board stays held.
+                    settle(5)
+                    XCTAssertFalse(confirm.isEnabled, "the board let go of the confirm by itself (\(what))")
+                    XCTAssertEqual(line.label, checkingLine, "(\(what))")
+                    XCTAssertEqual(confirm.frame, at.confirm, "the confirm moved while it waited (\(what))")
+                case "sheet-waited-out":
+                    XCTAssertTrue(confirm.isEnabled, "the confirm is still shut past the deadline (\(what))")
+                    XCTAssertTrue(confirm.isHittable, "the confirm cannot be tapped (\(what))")
+                    XCTAssertFalse(line.exists, "a line under an open confirm: \"\(line.exists ? line.label : "")\" (\(what))")
+                    let caution = app.staticTexts.matching(NSPredicate(
+                        format: "label CONTAINS %@", zh ? "未能检查这笔交易的结果" : "Review it before you sign"
+                    )).allElementsBoundByIndex.first {
+                        $0.frame.midY >= at.place.minY - 0.5 && $0.frame.midY <= at.place.maxY + 0.5
+                    }
+                    XCTAssertNotNil(caution, "the could-not-check caution is not in the verdict's place (\(what))")
+                    if let caution { log("sim-wait \(what) caution=\"\(caution.label)\" \(caution.frame)") }
+                    XCTAssertNil(said(app, checking, in: at.place), "\"\(checking)\" is still said (\(what))")
+                    attach(app, "05-\(board)-\(tag)-\(Int(screen.width))pt")
+                default:
+                    XCTAssertTrue(confirm.isEnabled, "(\(what))")
+                }
+                app.terminate()
+            }
+            guard let held = seen["sheet-held"], let waitedOut = seen["sheet-waited-out"],
+                  let out = seen["sheet-out"], let nothing = seen["sheet-nothing"]
+            else { continue }
+            log("sim-wait \(tag) confirm.y held=\(held.confirm.minY) waited-out=\(waitedOut.confirm.minY)"
+                + " out=\(out.confirm.minY) nothing=\(nothing.confirm.minY)"
+                + " | fee.y held=\(held.fee.minY) waited-out=\(waitedOut.fee.minY) out=\(out.fee.minY)"
+                + " | verdict held=\(held.place) waited-out=\(waitedOut.place)")
+            XCTAssertEqual(held.confirm, waitedOut.confirm, "the confirm is not at one place held and waited out (\(tag))")
+            XCTAssertEqual(held.confirm, out.confirm, "the hold line moved the confirm (\(tag))")
+            XCTAssertEqual(held.confirm, nothing.confirm, "the confirm is not where a verdict leaves it (\(tag))")
+            // The caution stands in the place "Checking…" kept.
+            XCTAssertEqual(held.place.minY, waitedOut.place.minY, accuracy: 0.5, "the verdict's place moved (\(tag))")
         }
     }
 

@@ -17,6 +17,11 @@
 //    verdict from, with the core's own "No asset changes" key on a check
 //    that moves nothing, and a verdict of four rows and a warning.
 //
+//  - `SimWaitScene` — the `sign_request` machine holding a transaction's
+//    confirm for its simulation's verdict, and past its deadline (PR 3, fix
+//    C), under the core's own gate (`signConfirmState`) over the request's
+//    real reading and guard.
+//
 //  The boards draw them and the tests read them, so both show what the
 //  machine itself says — never a hand-written guess at its JSON.
 //
@@ -342,6 +347,106 @@ enum TrustCoreScene {
             ["kind": "erc20", "token": usdc, "delta": "-25000000"],
             ["kind": "erc20", "token": unknown, "delta": "123456789"],
         ], chainId: chainId, named: [weth: ("WETH", 18), usdc: ("USDC", 6)])
+    }
+}
+
+/// A site's transaction whose confirm waits for the simulation's verdict
+/// (PR 3, fix C), as the real cores write it: the `sign_request` machine is
+/// told the request and that its simulation is out (`sim_started`), the
+/// `clear_signing` and `approval_guard` machines read the same request, and
+/// the gate is the core's own `signConfirmState` over those views and a
+/// quoted fee — nothing here builds a confirm state by hand.
+///
+/// No effect is run: the deadline the core asks for (`sim_verdict_timer`) is
+/// answered only when `waitedOut` says it passed, so the held scene stays
+/// held for as long as it is looked at.
+enum SimWaitScene {
+    struct Views {
+        let request: SigningController.Incoming
+        let sign: SignViewWire
+        let clear: ClearSigningViewWire
+        let guardView: GuardViewWire
+        /// `signConfirmState` over the three views above and `fee`.
+        let gate: SignConfirmStateWire
+        /// The deadline the core asked for, as it asked.
+        let timer: [String: Any]
+    }
+
+    static let recipient = "0x76875e38fc6bc2dedcaed807ce00782db5c0d141"
+
+    /// `waitedOut`: the core's deadline passed with no verdict — the confirm
+    /// is open and the view names the could-not-check line. Otherwise the
+    /// simulation is still out and the confirm is held. `fee` is the fee
+    /// view the gate reads beside them (a quoted one: only the verdict is
+    /// missing).
+    @MainActor
+    static func views(
+        waitedOut: Bool, chainId: Int = 8453, fee: String = HandoffFeeFixtures.feeJson
+    ) -> Views? {
+        let account = FeeCoreScene.account.lowercased()
+        let call: [String: Any] = ["from": account, "to": recipient, "value": "0x14d1120d7b160000", "data": "0x"]
+        guard let data = try? JSONSerialization.data(withJSONObject: [call]) else { return nil }
+        let request = SigningController.Incoming(
+            id: "pr3c-sim-wait", method: "eth_sendTransaction", paramsJson: String(decoding: data, as: UTF8.self),
+            origin: "https://app.uniswap.org", transportId: "tab-1", chainId: chainId
+        )
+        let nowMs = Date().timeIntervalSince1970 * 1000
+
+        // The request, as `SigningController.open` tells the machine of it.
+        let signCore = SignRequestCore()
+        let events: [[String: Any]] = [
+            ["type": "networks_changed", "chain_ids": [chainId]],
+            ["type": "accounts_changed",
+             "accounts": [["address": account, "credential_id": "cred-1"]], "active_index": 0],
+            ["type": "request_arrived", "id": request.id, "method": request.method,
+             "params_json": request.paramsJson, "origin": request.origin, "transport_id": request.transportId,
+             "first_party": false, "dedicated_transport": true, "per_request_chain": chainId,
+             "dapp": NSNull(), "granted_address": account, "requested_address": NSNull(),
+             "request_ts_ms": NSNull(), "now_ms": nowMs],
+        ]
+        for event in events {
+            guard (try? signCore.dispatch(eventJson: CoreJSON.string(event))) != nil else { return nil }
+        }
+        // Its simulation is out: the core holds the confirm and asks for its
+        // deadline.
+        guard var step = try? CoreJSON.object(signCore.dispatch(eventJson: CoreJSON.string([
+            "type": "sim_started", "id": request.id,
+        ]))), let timerId = FeeCoreScene.effect("sim_verdict_timer", in: step),
+            let timer = (step["effects"] as? [[String: Any]] ?? [])
+                .compactMap({ $0["operation"] as? [String: Any] })
+                .first(where: { $0["type"] as? String == "sim_verdict_timer" })
+        else { return nil }
+        if waitedOut {
+            // The deadline passed: `SignExecutor`'s own answer to the timer.
+            guard let fired = try? CoreJSON.object(signCore.resolveEffect(
+                effectId: timerId, resultJson: SignExecutor.simVerdictTimerFired(timer)
+            )) else { return nil }
+            step = fired
+        }
+
+        // What it does, and what an approval in it may be edited to.
+        guard let read = try? CoreJSON.object(ClearSigningCore().dispatch(eventJson: CoreJSON.string([
+            "type": "resolve_transaction",
+            "to": recipient, "data": "0x", "value": call["value"] as Any,
+            "chain_id": chainId, "locale": SigningController.defaultLocale,
+        ]))), let guarded = try? CoreJSON.object(ApprovalGuardCore().dispatch(eventJson: CoreJSON.string([
+            "type": "approval_detected", "method": request.method, "params_json": request.paramsJson,
+            "chain_id": chainId, "wallet_address": account, "read_only": false, "now_ms": nowMs,
+        ]))), let signView = step["view"] as? [String: Any],
+            let clearView = read["view"] as? [String: Any],
+            let guardView = guarded["view"] as? [String: Any],
+            let sign = try? CoreJSON.decode(SignViewWire.self, from: signView),
+            let clear = try? CoreJSON.decode(ClearSigningViewWire.self, from: clearView),
+            let guardWire = try? CoreJSON.decode(GuardViewWire.self, from: guardView)
+        else { return nil }
+        return Views(
+            request: request, sign: sign, clear: clear, guardView: guardWire,
+            gate: SignConfirmStateWire.of(
+                sign: CoreJSON.string(signView), guard: CoreJSON.string(guardView),
+                clear: CoreJSON.string(clearView), fee: fee, speedTier: nil
+            ),
+            timer: timer
+        )
     }
 }
 

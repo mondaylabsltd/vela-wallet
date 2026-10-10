@@ -1621,13 +1621,13 @@ struct RootView: View {
                 // The simulated deltas, to the machine that JUDGES them. The
                 // same machine the confirmed receipts go to, and it keeps the
                 // two apart: a receipt may admit a token, a simulation never
-                // may (spec 017, invariant ⑤).
-                simDeltas: { [trust] address, chainId, deltas in
-                    trust.simDeltasComputed(address: address, chainId: chainId, deltas: deltas)
-                },
-                // The same judged view the sheet draws (`signingContext`),
-                // read at the confirm for the record (spec 093).
-                simView: { [trust] in trust.trust?.sim }
+                // may (spec 017, invariant ⑤). Its judgment of THOSE deltas
+                // comes back to the request that sent them: what its sheet
+                // draws (`signingContext`), what its confirm waits for (PR 3)
+                // and what its record keeps (spec 093).
+                simJudged: { [trust] address, chainId, deltas in
+                    await trust.simJudged(address: address, chainId: chainId, deltas: deltas)
+                }
             )
         )
         signing = controller
@@ -2826,9 +2826,11 @@ struct RootView: View {
             chainId: chain,
             display: WalletLive.Display.live(settings.currency),
             origin: live?.request?.origin,
-            // What the chain said this transaction would do, and how far the
-            // asking got. The judgment is the CORE's; this only carries it.
-            sim: trust.trust?.sim,
+            // What the chain said THIS request would do, and how far the
+            // asking got. The judgment is the CORE's; this only carries it —
+            // the request's own (`SigningController.simVerdict`), never the
+            // judge's last session, which may be another transaction's.
+            sim: live?.simVerdict,
             simulation: live?.simulation ?? .pending,
             feeOpen: live?.feeOpen ?? false,
             trustedSignerNotice: live?.trustedSignerNotice,

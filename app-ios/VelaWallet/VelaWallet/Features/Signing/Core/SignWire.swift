@@ -369,6 +369,17 @@ struct SignViewWire: Decodable, Equatable {
     /// and its answer is still held — the receipt offers Try again
     /// (`retry_tapped`) beside Done, which answers the page.
     var failureRetryable: Bool = false
+    /// PR 3: the wallet's own simulation of this request is out and its
+    /// verdict is not on the sheet yet — the confirm waits. The GATE reads
+    /// this from the view as the core wrote it (`signConfirmState`, which
+    /// answers `sim_checking` and its one line); nothing here ANDs it onto
+    /// anything. Optional so a view without it decodes; read `checkingSim`.
+    var simChecking: Bool? = nil
+    /// PR 3: the simulation's deadline passed with no verdict on the sheet.
+    /// The verdict's place says THIS line, as a caution, where "Checking…"
+    /// stood — `componentsUi.signing.simUnavailableWarning` — and the confirm
+    /// is open. `nil` again once the simulation's own verdict lands.
+    var simWaitedOutKey: String? = nil
 
     static let empty = SignViewWire(
         surface: .hidden, request: nil, isSigning: false, isSubmitting: false,
@@ -381,4 +392,7 @@ struct SignViewWire: Decodable, Equatable {
 
     /// `failureNotSent`, absent read as `false`.
     var notSent: Bool { failureNotSent == true }
+
+    /// `simChecking`, absent read as `false`.
+    var checkingSim: Bool { simChecking == true }
 }

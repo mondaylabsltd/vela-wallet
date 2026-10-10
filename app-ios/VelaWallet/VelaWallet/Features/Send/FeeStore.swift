@@ -138,9 +138,10 @@ final class FeeStore {
 
     /// A session's timers under `.stopped`: held until the machine abandons
     /// them or a test runs them out (`elapse`), and counted so `isIdle` tells
-    /// them from a read.
+    /// them from a read. The sign machine's one timer runs on the same seam
+    /// (`SignExecutor`, `sim_verdict_timer`).
     @MainActor
-    private final class HeldTimers {
+    final class HeldTimers {
         private var nextId = 0
         /// The timers held now, by the operation each stands for.
         private var held: [Int: (timer: String, wake: CheckedContinuation<Void, Never>)] = [:]

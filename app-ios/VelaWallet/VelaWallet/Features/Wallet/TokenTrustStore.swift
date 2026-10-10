@@ -54,6 +54,12 @@ final class TokenTrustStore {
     private var core: CoreStore<TrustViewWire>!
     /// Callers waiting for a settled scan.
     private var waiting: [(TrustViewWire) -> Void] = []
+    /// The signing sheet waiting for the judgment of the deltas it last sent
+    /// (`simJudged`). The core keeps ONE simulation session and the latest
+    /// deltas win, so everybody here waits on the same session.
+    private var simWaiting: [(TrustSimViewWire?) -> Void] = []
+    /// Views committed so far — how `simJudged` knows its event was taken.
+    private var commits = 0
     /// One poll in flight, per the core's own single-flight rule.
     private var polling = false
 
@@ -75,6 +81,13 @@ final class TokenTrustStore {
 
     private func commit(_ view: TrustViewWire) {
         trust = view
+        commits += 1
+        // The session's judgments are in: whoever sent its deltas has them.
+        if let sim = view.sim, sim.ready, !simWaiting.isEmpty {
+            let judged = simWaiting
+            simWaiting = []
+            for resume in judged { resume(sim) }
+        }
         guard !view.scanning else { return }
         let settled = waiting
         waiting = []
@@ -175,20 +188,43 @@ final class TokenTrustStore {
         ])
     }
 
-    /// The sign sheet's simulated deltas (spec 055).
+    /// The sign sheet's simulated deltas (spec 055), and the core's judgment
+    /// of THEM.
     ///
     /// **This path can never write a token.** The core enforces it (invariant
     /// ⑤) and the reason is worth restating at the call site: a `Transfer` log
     /// in a SIMULATION is something the site being signed for controls, and
     /// admitting a token on that basis would let a page seed its own scam coin
     /// into somebody's list by asking them to look at a transaction.
-    func simDeltasComputed(address: String, chainId: Int, deltas: [[String: Any]]) {
+    ///
+    /// Answers once the judgment is `ready` — at once when no token in the
+    /// deltas needs naming, else when the names are in (the metadata arm
+    /// answers every address, so that always comes). That moment is the
+    /// signing sheet's "the verdict is on the sheet" (PR 3: the confirm waits
+    /// for it), which is why it is awaited here and not guessed at from a
+    /// node's reply. `nil` when the judgment of these deltas will never
+    /// exist: the core did not take the event, or a later simulation's deltas
+    /// replaced the session first — the core keeps one, and the latest wins.
+    func simJudged(address: String, chainId: Int, deltas: [[String: Any]]) async -> TrustSimViewWire? {
+        // Whoever waited on the session these deltas replace is answered now.
+        let replaced = simWaiting
+        simWaiting = []
+        for resume in replaced { resume(nil) }
+
+        let before = commits
         send([
             "type": "sim_deltas_computed",
             "address": address,
             "chain_id": chainId,
             "deltas": deltas,
         ])
+        // The core commits a view in the step it takes an event: none, and
+        // the view at hand is some earlier session's — never these deltas'.
+        guard commits != before else { return nil }
+        if let sim = trust?.sim, sim.ready { return sim }
+        return await withCheckedContinuation { continuation in
+            simWaiting.append { continuation.resume(returning: $0) }
+        }
     }
 
     private func send(_ event: [String: Any]) {

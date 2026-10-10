@@ -354,7 +354,7 @@ struct SigningFeeRetryTests {
             spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
             store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults), offline: true),
             ports: SigningController.Ports(knownChains: { [chainId] }),
-            feeTimers: timers
+            timers: timers
         )
         controller.open(SigningController.Incoming(
             id: "r1", method: "eth_sendTransaction",

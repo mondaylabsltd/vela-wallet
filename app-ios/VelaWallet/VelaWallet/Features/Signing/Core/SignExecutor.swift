@@ -2,8 +2,7 @@
 //  SignExecutor.swift
 //  VelaWallet
 //
-//  The `sign_request` machine's seven arms, and the shell decides none of
-//  them.
+//  The `sign_request` machine's arms, and the shell decides none of them.
 //
 //  Single-flight, "a rejected pipeline may not submit", the record-then-respond
 //  order and the account sequencing all live in the core. This answers the
@@ -53,6 +52,15 @@
 //  or a refusal — before this executor's receipt wait is over. The wait then
 //  ends: its late result is the core's to drop.
 //
+//  ## The simulation's deadline is a timer and nothing else (PR 3)
+//
+//  The confirm waits for the simulation's verdict, and the core bounds that
+//  wait: `sim_verdict_timer` asks this file to wait `ms` and say so
+//  (`sim_verdict_timer_fired`, with the same `id` and `round`). It does not
+//  look at the simulation, is never shortened, and answers when the request
+//  has gone too — the core tells a stale one apart. There is no other clock
+//  in that flow, here or in the controller.
+//
 
 import Foundation
 import VelaCore
@@ -63,7 +71,7 @@ final class SignExecutor {
     static let operations = [
         "send_response", "check_bundler_funding", "attempt_sponsorship",
         "sign_and_submit", "persist_record", "update_record", "switch_active_account",
-        "clear_to_post", "delete_record",
+        "clear_to_post", "delete_record", "sim_verdict_timer",
     ]
 
     struct Ports {
@@ -141,6 +149,21 @@ final class SignExecutor {
     /// `userOpWriteAheadWaitMs`. A test seam, and nothing else.
     private let clearanceWaitMs: Double
 
+    /// How the one timer this machine asks for runs out
+    /// (`sim_verdict_timer`): on the wall clock after its `ms`, or — a
+    /// test's — held until the test moves the clock (`elapseSimVerdictTimer`).
+    /// The fee machine's own seam (`FeeStore.Timers`).
+    private let timers: FeeStore.Timers
+    private let heldTimers = FeeStore.HeldTimers()
+    private static let simVerdictTimer = "sim_verdict_timer"
+
+    /// A test's clock moving, under `.stopped`: every simulation deadline the
+    /// stopped clock holds runs out now.
+    func elapseSimVerdictTimer() { heldTimers.elapse(Self.simVerdictTimer) }
+
+    /// How many simulation deadlines a stopped clock holds.
+    var heldSimVerdictTimers: Int { heldTimers.count }
+
     init(
         spine: UserOpSpine,
         relay: RelayClient,
@@ -148,7 +171,8 @@ final class SignExecutor {
         ports: Ports = Ports(),
         receiptWaitMs: @escaping (_ elapsedMs: Double) -> Double = { dappReceiptWaitMs(elapsedMs: $0) },
         receiptPollMs: Double = 3_000,
-        clearanceWaitMs: Double = Double(userOpWriteAheadWaitMs())
+        clearanceWaitMs: Double = Double(userOpWriteAheadWaitMs()),
+        timers: FeeStore.Timers = .wallClock
     ) {
         self.spine = spine
         self.relay = relay
@@ -157,6 +181,7 @@ final class SignExecutor {
         self.receiptWaitMs = receiptWaitMs
         self.receiptPollMs = receiptPollMs
         self.clearanceWaitMs = clearanceWaitMs
+        self.timers = timers
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -247,6 +272,18 @@ final class SignExecutor {
             _ = await ports.switchAccount((operation["index"] as? NSNumber)?.intValue ?? 0)
             return CoreJSON.string(["type": "account_switched"])
 
+        // The deadline of the wait the confirm keeps for the simulation's
+        // verdict (PR 3): the core's `ms`, whole, and then its own `id` and
+        // `round` back. Nothing here reads the simulation or the request.
+        case Self.simVerdictTimer:
+            if timers == .stopped {
+                await heldTimers.hold(Self.simVerdictTimer)
+            } else {
+                let ms = (operation["ms"] as? NSNumber)?.doubleValue ?? 0
+                try? await Task.sleep(nanoseconds: UInt64(max(0, ms) * 1_000_000))
+            }
+            return Self.simVerdictTimerFired(operation)
+
         default:
             VelaLog.failure(.sign, kind: "unhandled_operation", "\(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)
@@ -272,8 +309,18 @@ final class SignExecutor {
         // Acknowledged, never opened: an op whose clearance was lost is not
         // POSTed (RJ1).
         case "clear_to_post": return CoreJSON.string(["type": "responded"])
+        case simVerdictTimer: return simVerdictTimerFired(operation)
         default: return CoreJSON.string(["type": "account_switched"])
         }
+    }
+
+    /// `sim_verdict_timer`'s answer: the wait it names is over.
+    static func simVerdictTimerFired(_ operation: [String: Any]) -> String {
+        CoreJSON.string([
+            "type": "sim_verdict_timer_fired",
+            "id": operation["id"] as? String ?? "",
+            "round": (operation["round"] as? NSNumber)?.intValue ?? 0,
+        ])
     }
 
     // MARK: - The ceremony
