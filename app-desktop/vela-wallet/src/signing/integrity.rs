@@ -294,6 +294,34 @@ mod tests {
         assert!(older.contains("2025"), "{older}");
     }
 
+    /// PR 3 item 10: the time is one unbreakable unit and the "·" before
+    /// "checked" binds to the word before it — both the core's (U+00A0), so
+    /// a wrapped line can read neither 「检查于 下午 / 10:07」 nor open with
+    /// "·". In Chinese with a 12-hour clock, yesterday's check: the date,
+    /// the day period and the clock are joined, and nothing here re-spaces
+    /// them.
+    #[test]
+    fn a_checked_time_and_its_dot_never_break_badly() {
+        let zh = Loc::for_tag("zh");
+        let at = 1_760_000_000_000;
+        let now = at + 2 * 24 * 60 * 60 * 1000;
+        let time = checked_time(at, now, zh.language());
+        assert!(!time.is_empty());
+        assert!(
+            !time.contains(' '),
+            "a breakable space inside the time: {time:?}"
+        );
+        let line = text_at(&zh, &admitted(at), now);
+        assert!(line.contains(&time), "{line:?} carries the time whole");
+        // Every "·" in the line is glued to what comes before it.
+        for (at, _) in line.match_indices('·') {
+            assert!(
+                line[..at].ends_with('\u{a0}'),
+                "a line could open with the dot: {line:?}"
+            );
+        }
+    }
+
     /// "Matches the published list" is the only good news, and it says so in
     /// green; a refusal is never drawn as anything but a refusal.
     #[test]
