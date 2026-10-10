@@ -224,6 +224,18 @@ enum NetWizardErrorWire: Decodable, Equatable {
     }
 }
 
+/// `NetRpcField` — whether the wizard's result draws the field where a
+/// person names an RPC endpoint of their own.
+enum NetRpcFieldWire: String, Decodable {
+    /// No field, no re-check: searching and checking; already added or not
+    /// found; and a REFUSAL another endpoint would not change.
+    case none
+    /// The check passed, or could not reach a verdict.
+    case optional
+    /// The network lists no endpoint: one typed here is the only way on.
+    case required
+}
+
 struct NetWizardViewWire: Decodable, Equatable {
     let phase: NetWizardPhaseWire
     let query: String
@@ -243,10 +255,50 @@ struct NetWizardViewWire: Decodable, Equatable {
     /// and "no RPC endpoint" borrowed "unable to verify". Absent with no
     /// error (and from a hand-built view): then there is no sentence.
     var errorKey: String? = nil
+    /// The RPC field under the result, and "Re-check with this RPC" with it
+    /// (final notes F4, F14, F22) — the core's ONE rule for every surface
+    /// that draws this wizard: the field exactly when this is not `.none`,
+    /// and the re-check exactly where the field is. Absent on the wire (and
+    /// from a hand-built view) reads `.none`, the core's own default.
+    var rpcField: NetRpcFieldWire = .none
+    /// The corpus key of that field's label: "Custom RPC (optional)", or
+    /// plain "RPC URL" where it is the one thing asked for. `nil` with no
+    /// field.
+    var rpcFieldLabelKey: String? = nil
     /// **The add gate.** Never re-derived in Swift: the core owns what makes a
     /// candidate addable, and a second opinion here is how a screen offers to
     /// add a chain the core will refuse.
     let canAdd: Bool
+}
+
+/// Decoded by hand, in an extension so the memberwise initialiser stays: a
+/// view from before `rpc_field` — a stored fixture, an older core — still
+/// decodes, and reads as "no field" rather than stopping the whole settings
+/// screen hearing the core. A value this build has never heard of reads the
+/// same way: no field, no re-check.
+extension NetWizardViewWire {
+    private enum CodingKeys: String, CodingKey {
+        case phase, query, customRpc, suggestions, chainInfo, compat, error, errorKey
+        case rpcField, rpcFieldLabelKey, canAdd
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            phase: try c.decode(NetWizardPhaseWire.self, forKey: .phase),
+            query: try c.decode(String.self, forKey: .query),
+            customRpc: try c.decode(String.self, forKey: .customRpc),
+            suggestions: try c.decode([NetChainIndexEntryWire].self, forKey: .suggestions),
+            chainInfo: try c.decodeIfPresent(NetChainInfoWire.self, forKey: .chainInfo),
+            compat: try c.decodeIfPresent(NetCompatibilityWire.self, forKey: .compat),
+            error: try c.decodeIfPresent(NetWizardErrorWire.self, forKey: .error),
+            errorKey: try c.decodeIfPresent(String.self, forKey: .errorKey),
+            rpcField: try c.decodeIfPresent(String.self, forKey: .rpcField)
+                .flatMap(NetRpcFieldWire.init(rawValue:)) ?? .none,
+            rpcFieldLabelKey: try c.decodeIfPresent(String.self, forKey: .rpcFieldLabelKey),
+            canAdd: try c.decode(Bool.self, forKey: .canAdd)
+        )
+    }
 }
 
 // MARK: - Endpoints and providers
