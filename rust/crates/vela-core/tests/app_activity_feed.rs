@@ -69,6 +69,9 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         call_data: None,
         summary: None,
         settlement: None,
+        // A record as this build writes it. The records stored before the
+        // mark existed are the repair's own tests (`unmarked`).
+        time_verified: Some(true),
     }
 }
 
@@ -3325,4 +3328,349 @@ fn the_privacy_fields_default_on_the_wire() {
     }
     let view: FeedView = serde_json::from_value(json).unwrap();
     assert!(!view.hidden);
+}
+
+// ---------------------------------------------------------------------------
+// PR 3, fix A — a receipt's time is its block's time: the repair
+// ---------------------------------------------------------------------------
+
+/// A `receive` as every build before the mark stored it: no `timeVerified`,
+/// and a time that may be the clock's.
+fn unmarked(id: &str, ts: f64) -> FeedTxRecord {
+    let mut r = recv(id, "0xInterleave", "0.001", "xDAI", ts);
+    r.chain_id = 100;
+    r.time_verified = None;
+    r
+}
+
+fn read_time(id: &str) -> Op {
+    Op::ReadReceiveTime {
+        id: id.to_owned(),
+        chain_id: 100,
+        tx_hash: format!("0xtx{id}"),
+    }
+}
+
+/// The repair's reads among `ops`, in order.
+fn time_reads(ops: &[Op]) -> Vec<Op> {
+    ops.iter()
+        .filter(|op| matches!(op, Op::ReadReceiveTime { .. }))
+        .cloned()
+        .collect()
+}
+
+/// Switch to `ADDR` and commit `records` — what `boot` does, returning what
+/// the store load asked for instead of asserting a clean queue.
+fn boot_with_repair(records: Vec<FeedTxRecord>) -> (Sut, Vec<Op>) {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        address: ADDR.to_owned(),
+    });
+    let ops = sut.resolve(loaded(&sut, records, T0));
+    sut.resolve(Res::SyncCompleted { new_count: 0 });
+    drain_aliases(&mut sut);
+    (sut, ops)
+}
+
+/// One tick: the read answered with `records`, the scan with nothing new.
+/// Returns what the read's commit asked for.
+fn tick(sut: &mut Sut, records: Vec<FeedTxRecord>) -> Vec<Op> {
+    let ops = sut.dispatch(Event::FocusTick);
+    assert_eq!(shapes(ops), vec![read_op(), scan_op()]);
+    let id = oldest_read_id(sut);
+    let asked = sut.resolve_matching(
+        |op| matches!(op, Op::ReadTxStore { .. }),
+        loaded_for(id, records, T0),
+    );
+    sut.resolve_matching(
+        |op| matches!(op, Op::ScanIncomingTransfers { .. }),
+        Res::SyncCompleted { new_count: 0 },
+    );
+    asked
+}
+
+fn answer_time(sut: &mut Sut, id: &str, timestamp_sec: Option<f64>) -> Vec<Op> {
+    let wanted = id.to_owned();
+    sut.resolve_matching(
+        move |op| matches!(op, Op::ReadReceiveTime { id, .. } if *id == wanted),
+        Res::ReceiveTimeRead {
+            id: id.to_owned(),
+            timestamp_sec,
+        },
+    )
+}
+
+fn answer_write(sut: &mut Sut, id: &str, ok: bool) -> Vec<Op> {
+    let wanted = id.to_owned();
+    sut.resolve_matching(
+        move |op| matches!(op, Op::WriteReceiveTime { id, .. } if *id == wanted),
+        Res::ReceiveTimeWritten {
+            id: id.to_owned(),
+            ok,
+        },
+    )
+}
+
+/// The day headers and item ids of `rows`, in order.
+fn outline(rows: &[FeedRow]) -> Vec<String> {
+    rows.iter()
+        .map(|row| match row {
+            FeedRow::Header { day_start_ms, .. } => format!("day {}", day_start_ms / 86_400_000.0),
+            FeedRow::Item { item } => item.id.clone(),
+        })
+        .collect()
+}
+
+/// The owner's three rows. Received on 2026-09-29, found by a scan on
+/// 2026-10-10 whose block read failed, stamped with the clock and stored:
+/// 「今天 · 已收到 · +0.001 xDAI」 three times. The repair re-reads each
+/// record's block time, rewrites the record with it and the mark, and the row
+/// moves to its own day — on the home's newest three and in History.
+#[test]
+fn a_receive_stored_with_the_clocks_time_is_rewritten_with_its_blocks() {
+    const DAY: f64 = 86_400.0;
+    // Whole days, so the fixture's "local midnight" is exact.
+    let today = 20_000.0 * DAY + 3_600.0;
+    let real = today - 11.0 * DAY;
+    let sent_yesterday = send("s1", "0xop", "0xCafe", "1", today - DAY);
+    let fresh = recv("r-new", "0xPeer", "2", "USDC", today - 2.0 * DAY);
+    let store = |at: f64, marked: bool| {
+        let mut wrong: Vec<FeedTxRecord> = ["r1", "r2", "r3"]
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                let mut r = unmarked(id, at + i as f64);
+                r.time_verified = marked.then_some(true);
+                r
+            })
+            .collect();
+        wrong.extend([sent_yesterday.clone(), fresh.clone()]);
+        wrong
+    };
+
+    let (mut sut, asked) = boot_with_repair(store(today, false));
+    // Before: the three stand first, under today.
+    assert_eq!(
+        outline(&sut.view().home_rows),
+        vec!["day 20000", "r3", "r2", "r1"]
+    );
+    // Only the unmarked receives are asked about — never a send, never a
+    // receive this build wrote — newest first.
+    assert_eq!(
+        time_reads(&asked),
+        vec![read_time("r3"), read_time("r2"), read_time("r1")]
+    );
+
+    // Each block's time comes back; each record is rewritten with it.
+    for (i, id) in ["r1", "r2", "r3"].iter().enumerate() {
+        let ops = answer_time(&mut sut, id, Some(real + i as f64 + 0.9));
+        assert_eq!(
+            ops,
+            vec![Op::WriteReceiveTime {
+                id: (*id).to_owned(),
+                timestamp_sec: real + i as f64,
+            }],
+            "the block's time, in whole seconds — and the core decides the write"
+        );
+    }
+    assert!(answer_write(&mut sut, "r1", true).is_empty());
+    assert!(answer_write(&mut sut, "r2", true).is_empty());
+    // The round is in and a time moved: ONE re-read, for the three of them.
+    let ops = answer_write(&mut sut, "r3", true);
+    assert!(
+        matches!(ops.as_slice(), [Op::ReadTxStore { .. }]),
+        "one re-read once the round is in: {ops:?}"
+    );
+
+    // The shell hands back what it wrote: the block's time and the mark.
+    let after = sut.resolve(loaded(&sut, store(real, true), T0));
+    assert!(
+        time_reads(&after).is_empty() && sut.outstanding().is_empty(),
+        "the repair's own re-read starts no round: {after:?}"
+    );
+    let view = sut.view();
+    // After: the three left "today" and stand under their own day, below
+    // what really is newer — on the home's newest three and in History.
+    assert_eq!(
+        outline(&view.home_rows),
+        vec!["day 19999", "s1", "day 19998", "r-new", "day 19989", "r3"]
+    );
+    assert_eq!(
+        outline(&view.rows),
+        vec![
+            "day 19999",
+            "s1",
+            "day 19998",
+            "r-new",
+            "day 19989",
+            "r3",
+            "r2",
+            "r1"
+        ]
+    );
+    // A repair is not a receipt: no glow, no toast, no buzz.
+    assert_eq!((view.new_item_id, view.toast), (None, None));
+
+    // And it is over: the next tick asks about nothing.
+    assert!(time_reads(&tick(&mut sut, store(real, true))).is_empty());
+}
+
+/// A record whose block cannot be read yet keeps the time it has, and is
+/// asked about again later — not at once, and less and less often.
+#[test]
+fn a_time_that_cannot_be_read_keeps_the_record_and_is_asked_again_later() {
+    let ts = 20_000.0 * 86_400.0;
+    let store = || vec![unmarked("r1", ts)];
+    let (mut sut, asked) = boot_with_repair(store());
+    assert_eq!(time_reads(&asked), vec![read_time("r1")]);
+
+    // No answer: nothing is written, nothing is re-read, the row is as it was.
+    let ops = answer_time(&mut sut, "r1", None);
+    assert!(ops.is_empty(), "no write without a block's time: {ops:?}");
+    assert_eq!(outline(&sut.view().rows), vec!["day 20000", "r1"]);
+
+    // Asked again two rounds on, then four: never a loop.
+    let mut asked_at = Vec::new();
+    for round in 1..=7 {
+        if !time_reads(&tick(&mut sut, store())).is_empty() {
+            asked_at.push(round);
+            // A time that is no time is no answer either.
+            assert!(answer_time(&mut sut, "r1", Some(0.0)).is_empty());
+        }
+    }
+    assert_eq!(asked_at, vec![2, 6], "after 2 rounds, then 4 more");
+
+    // A write the store refused is a miss too: the record keeps its time.
+    let (mut sut, _) = boot_with_repair(store());
+    let ops = answer_time(&mut sut, "r1", Some(ts - 500.0));
+    assert!(matches!(ops.as_slice(), [Op::WriteReceiveTime { .. }]));
+    assert!(
+        answer_write(&mut sut, "r1", false).is_empty(),
+        "nothing moved"
+    );
+    assert!(
+        time_reads(&tick(&mut sut, store())).is_empty(),
+        "sitting one out"
+    );
+    assert_eq!(
+        time_reads(&tick(&mut sut, store())),
+        vec![read_time("r1")],
+        "then asked again"
+    );
+}
+
+/// The repair runs in the background, a few records a round: the newest
+/// first, never a second round while one is out, and never twice for a
+/// record it has already put right — whatever the store hands back.
+#[test]
+fn the_repair_checks_a_few_records_a_round() {
+    let ts = 20_000.0 * 86_400.0;
+    let ids = ["r1", "r2", "r3", "r4", "r5"];
+    let store = || -> Vec<FeedTxRecord> {
+        ids.iter()
+            .enumerate()
+            .map(|(i, id)| unmarked(id, ts + i as f64))
+            .collect()
+    };
+    let (mut sut, asked) = boot_with_repair(store());
+    assert_eq!(
+        time_reads(&asked),
+        vec![read_time("r5"), read_time("r4"), read_time("r3")],
+        "TIME_REPAIR_PER_ROUND, newest first"
+    );
+    // The feed is already drawn: the repair never held it.
+    assert_eq!(sut.view().rows.len(), 6);
+
+    // A tick while the round is out starts no second round.
+    assert!(time_reads(&tick(&mut sut, store())).is_empty());
+
+    // The three already carried their block's time: only the mark is
+    // written, nothing moves, and nothing is read again for it.
+    for (i, id) in [(4, "r5"), (3, "r4"), (2, "r3")] {
+        let ops = answer_time(&mut sut, id, Some(ts + f64::from(i)));
+        assert!(matches!(ops.as_slice(), [Op::WriteReceiveTime { .. }]));
+        assert!(answer_write(&mut sut, id, true).is_empty(), "{id}");
+    }
+    assert!(sut.outstanding().is_empty());
+
+    // The next round takes the rest — and not the three it has done, though
+    // this store still hands them back unmarked.
+    assert_eq!(
+        time_reads(&tick(&mut sut, store())),
+        vec![read_time("r2"), read_time("r1")]
+    );
+    for (i, id) in [(1, "r2"), (0, "r1")] {
+        answer_time(&mut sut, id, Some(ts + f64::from(i)));
+        answer_write(&mut sut, id, true);
+    }
+    assert!(time_reads(&tick(&mut sut, store())).is_empty());
+
+    // A record with no transaction to look up is not asked about.
+    let mut no_tx = unmarked("r-legacy", ts);
+    no_tx.tx_hash = String::new();
+    let (_, asked) = boot_with_repair(vec![no_tx]);
+    assert!(time_reads(&asked).is_empty());
+}
+
+/// The repair's answers belong to the account that asked: after a switch
+/// they are dropped, nothing is written, and the new account's own records
+/// are asked about.
+#[test]
+fn an_account_switch_drops_the_repairs_answers() {
+    let ts = 20_000.0 * 86_400.0;
+    let (mut sut, asked) = boot_with_repair(vec![unmarked("r1", ts)]);
+    assert_eq!(time_reads(&asked), vec![read_time("r1")]);
+
+    sut.dispatch(Event::AccountSwitched {
+        address: OTHER.to_owned(),
+    });
+    let ops = answer_time(&mut sut, "r1", Some(ts - 1_000.0));
+    assert!(ops.is_empty(), "a previous account's answer: {ops:?}");
+
+    // The other account's read: its own unmarked receive is asked about.
+    let mut theirs = unmarked("r9", ts);
+    theirs.to = OTHER.to_owned();
+    let id = oldest_read_id(&sut);
+    let asked = sut.resolve_matching(
+        |op| matches!(op, Op::ReadTxStore { .. }),
+        loaded_for(id, vec![unmarked("r1", ts), theirs], T0),
+    );
+    assert_eq!(time_reads(&asked), vec![read_time("r9")]);
+}
+
+/// A record from a shell that does not map the mark reads as unmarked, and a
+/// marked one round-trips.
+#[test]
+fn the_time_verified_mark_on_the_wire() {
+    let mut json =
+        serde_json::to_value(recv("r1", "0xPeer", "1", "USDC", 5.0)).expect("a record serialises");
+    assert_eq!(json["time_verified"], serde_json::json!(true));
+    if let Some(map) = json.as_object_mut() {
+        map.remove("time_verified");
+    }
+    let old: FeedTxRecord = serde_json::from_value(json).expect("an older record still reads");
+    assert_eq!(old.time_verified, None);
+    assert_eq!(
+        serde_json::to_value(Op::WriteReceiveTime {
+            id: "r1".to_owned(),
+            timestamp_sec: 1_790_000_000.0,
+        })
+        .expect("serialises"),
+        serde_json::json!({ "type": "write_receive_time", "id": "r1", "timestamp_sec": 1_790_000_000.0 })
+    );
+    assert_eq!(
+        serde_json::to_value(read_time("r1")).expect("serialises"),
+        serde_json::json!({ "type": "read_receive_time", "id": "r1", "chain_id": 100, "tx_hash": "0xtxr1" })
+    );
+    let read: Res = serde_json::from_value(serde_json::json!({
+        "type": "receive_time_read", "id": "r1", "timestamp_sec": null
+    }))
+    .expect("the shell's answer reads");
+    assert_eq!(
+        read,
+        Res::ReceiveTimeRead {
+            id: "r1".to_owned(),
+            timestamp_sec: None
+        }
+    );
 }
