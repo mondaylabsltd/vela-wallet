@@ -530,19 +530,142 @@ pub fn balance_display(
         }
     };
 
-    if let Some(live) = model.live.clone() {
-        root = root.child(
+    // Issue #443: the hero's own refresh — the glyph and when the figure was
+    // last read ("Updated 2m"). A deposit made from another device had no
+    // sign here until the ten-minute poll or a restart; now the person can
+    // ask, and can see how fresh what they are looking at is. Quiet: subtle
+    // ink, fuller on hover. Drawn without a press behind it where a board
+    // shows its states.
+    //
+    // Directly under the figure, and always in that place: the line that
+    // comes and goes ([`status_slot`]) is BELOW it, so nothing that arrives
+    // can push the control down under a pointer that is pressing it (issue
+    // 462) — and nothing can push the page (PR 3 note 26b).
+    if on_refresh.is_some() || model.updated.is_some() {
+        root = root.child(div().flex().child(refresh_control(
+            theme,
+            icons,
+            model,
+            on_refresh,
+            reduce_motion,
+        )));
+    }
+
+    root.child(status_slot(theme, icons, model, on_status))
+}
+
+/// The height of the hero's status slot: one line of its text at the body
+/// leading, and the 4 px above and below that make the line a button.
+#[must_use]
+pub fn status_slot_height() -> gpui::Pixels {
+    theme::text_row_sub() * LINE_BODY + px(8.)
+}
+
+/// What stands in the hero's one slot under the figure: the status (a
+/// network out of reach, a total still being brought up to date, a holding
+/// nobody prices), else the "listening" line of a wallet every chain
+/// answered zero for, else nothing. Never two of them — a live zero is a
+/// round with nothing wrong in it, and if both were ever set the status is
+/// the one that matters.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SlotLine {
+    Status(StatusKind, SharedString),
+    Listening(SharedString),
+    Empty,
+}
+
+impl SlotLine {
+    #[must_use]
+    pub fn of(model: &BalanceModel) -> Self {
+        match (model.status.clone(), model.live.clone()) {
+            (Some((kind, text)), _) => Self::Status(kind, text),
+            (None, Some(live)) => Self::Listening(live),
+            (None, None) => Self::Empty,
+        }
+    }
+}
+
+/// The hero's one line under the figure, IN A SLOT THAT IS ALWAYS THERE
+/// (PR 3 note 26b): [`status_slot_height`] tall whether or not anything is
+/// said in it ([`SlotLine`]). "Can't reach …", "Updating…", the zero
+/// wallet's "listening" line and the unpriced notice all arrive, change and
+/// go in this room — a cached total with its grey "still updating" line
+/// gives way to the fresh one on every launch — and the page under the hero
+/// never moves for it. The line used to be added and removed, and everything
+/// below it jumped a row each time.
+///
+/// One line, never two: it is as wide as the home column, and a sentence
+/// longer than that ends in an ellipsis rather than growing the slot.
+fn status_slot(
+    theme: &Theme,
+    icons: &mut IconCache,
+    model: &BalanceModel,
+    on_status: Option<BalanceToggle>,
+) -> Div {
+    let slot = div().h(status_slot_height()).flex().items_center();
+    let sentence = |text: SharedString| {
+        div()
+            .min_w(px(0.))
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .text_ellipsis()
+            .child(text)
+    };
+    match SlotLine::of(model) {
+        SlotLine::Status(kind, text) => {
+            let (icon, color) = match kind {
+                StatusKind::Warning => (Icon::TriangleAlert, theme.warning),
+                StatusKind::Refreshing => (Icon::RefreshCw, theme.fg_muted),
+            };
+            // The web's `.status` button (`BalanceDisplay.svelte`): gap 8,
+            // padding 4/0, 13 text, 14 glyphs either side. It opens what the
+            // line is about — the unreachable chain's RPC editor, or the
+            // breakdown — so it is drawn as the button it is (078 H-03).
+            let line = div()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .min_w(px(0.))
+                .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(LINE_BODY))
+                .text_color(color)
+                .child(
+                    div()
+                        .flex_none()
+                        .child(icon_img(icons, icon, false, color, 14.)),
+                )
+                .child(sentence(text))
+                .child(div().flex_none().child(icon_img(
+                    icons,
+                    Icon::ChevronRight,
+                    false,
+                    color,
+                    14.,
+                )));
+            slot.child(match on_status {
+                Some(on_status) => line
+                    .id("balance-status")
+                    .cursor_pointer()
+                    .on_click(on_status)
+                    .into_any_element(),
+                None => line.into_any_element(),
+            })
+        }
+        SlotLine::Listening(live) => slot.child(
             div()
                 .flex()
                 .items_center()
                 .gap(px(8.))
+                .min_w(px(0.))
                 .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(LINE_BODY))
                 .text_color(theme.fg_muted)
                 // The web's `.live-dot`: it breathes — opacity 1 to .35 and
                 // back over 800 ms — so the line reads as listening, not as
                 // a label (078 H-05).
                 .child(
                     div()
+                        .flex_none()
                         .w(px(8.))
                         .h(px(8.))
                         .rounded(px(4.))
@@ -562,59 +685,14 @@ pub fn balance_display(
                             },
                         ),
                 )
-                .child(live),
-        );
+                .child(sentence(live)),
+        ),
+        // Nothing to say: the room stays.
+        SlotLine::Empty => slot,
     }
-
-    if let Some((kind, text)) = model.status.clone() {
-        let (icon, color) = match kind {
-            StatusKind::Warning => (Icon::TriangleAlert, theme.warning),
-            StatusKind::Refreshing => (Icon::RefreshCw, theme.fg_muted),
-        };
-        // The web's `.status` button (`BalanceDisplay.svelte`): gap 8,
-        // padding 4/0, 13 text, 14 glyphs either side. It opens what the line
-        // is about — the unreachable chain's RPC editor, or the breakdown —
-        // so it is drawn as the button it is (078 H-03).
-        let line = div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .py(px(4.))
-            .text_size(theme::text_row_sub())
-            .text_color(color)
-            .child(icon_img(icons, icon, false, color, 14.))
-            .child(text)
-            .child(icon_img(icons, Icon::ChevronRight, false, color, 14.));
-        root = root.child(match on_status {
-            Some(on_status) => line
-                .id("balance-status")
-                .cursor_pointer()
-                .on_click(on_status)
-                .into_any_element(),
-            None => line.into_any_element(),
-        });
-    }
-
-    // Issue #443: the hero's own refresh — the glyph and when the figure was
-    // last read ("Updated 2m"). A deposit made from another device had no
-    // sign here until the ten-minute poll or a restart; now the person can
-    // ask, and can see how fresh what they are looking at is. Quiet, like
-    // the status line: subtle ink, fuller on hover. Drawn without a press
-    // behind it where a board shows its states.
-    if on_refresh.is_some() || model.updated.is_some() {
-        root = root.child(div().flex().child(refresh_control(
-            theme,
-            icons,
-            model,
-            on_refresh,
-            reduce_motion,
-        )));
-    }
-
-    root
 }
 
-/// How long the refresh glyph takes to turn once, and in how many frames:
+/// How long the refresh glyph takes to turn once, and in how many frames:/// How long the refresh glyph takes to turn once, and in how many frames:
 /// motion slow × 2 (`motion.durationSlow`, 400 ms) — the web's and iOS's
 /// pace, and the spinner's (`spinner.rs` REVOLUTION). At 1000 ms a quick
 /// refresh, held the 650 ms minimum, turned 0.65 of a revolution here and 0.8
@@ -1555,5 +1633,60 @@ mod tests {
         let at_rest = crate::wallet::fixtures::balance_refresh(&en, false);
         assert!(!refresh_turns(&at_rest, false), "still at rest");
         assert!(!refresh_turns(&at_rest, true));
+    }
+
+    /// PR 3 note 26b: the hero keeps ONE slot under its figure, always the same
+    /// height, and everything that arrives, changes and goes there does so
+    /// inside it — "Can't reach …", the grey "still updating" of a cached total
+    /// (on every launch), the zero wallet's "listening" line. The slot's height
+    /// does not depend on what is said in it, so the page under the hero has
+    /// one position.
+    #[test]
+    fn the_heros_status_slot_is_one_height_whatever_it_says() {
+        use crate::wallet::fixtures::BalanceState;
+        let hero = |status: Option<(StatusKind, &str)>, live: Option<&str>| BalanceModel {
+            label: SharedString::from("Total balance"),
+            currency: SharedString::from("USD"),
+            state: BalanceState::Normal,
+            integer: SharedString::from("$1"),
+            decimals: None,
+            live: live.map(SharedString::from),
+            status: status.map(|(kind, text)| (kind, SharedString::from(text))),
+            updated: None,
+            refreshing: false,
+            updating: SharedString::from("Updating…"),
+        };
+        // One line of the status text at the body leading, and the 4 px above
+        // and below that make it a button: a height that is there before any
+        // model is.
+        let height = status_slot_height();
+        assert!(
+            height > gpui::px(20.) && height < gpui::px(48.),
+            "{height:?}"
+        );
+
+        assert_eq!(SlotLine::of(&hero(None, None)), SlotLine::Empty, "kept");
+        let warning = hero(
+            Some((StatusKind::Warning, "Can't reach Tempo right now")),
+            None,
+        );
+        assert_eq!(
+            SlotLine::of(&warning),
+            SlotLine::Status(StatusKind::Warning, "Can't reach Tempo right now".into())
+        );
+        let listening = hero(None, Some("Listening for deposits"));
+        assert_eq!(
+            SlotLine::of(&listening),
+            SlotLine::Listening("Listening for deposits".into())
+        );
+        // Never two lines: a status outranks the listening line, in the one slot.
+        let both = hero(
+            Some((StatusKind::Refreshing, "Still updating")),
+            Some("Listening for deposits"),
+        );
+        assert_eq!(
+            SlotLine::of(&both),
+            SlotLine::Status(StatusKind::Refreshing, "Still updating".into())
+        );
     }
 }

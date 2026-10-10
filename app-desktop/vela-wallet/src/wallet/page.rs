@@ -588,12 +588,21 @@ enum GalleryTab {
     Dst7,
     Dst8,
     Dsr1,
+    /// SR3 — the balance by network, the sheet the hero's status line opens:
+    /// the total, a figure per network, the tokens nobody prices. Every
+    /// figure on it is in the display currency, so it is one of the boards
+    /// `VELA_CURRENCY_PENDING` holds open.
+    Dsr3,
     /// Spec 092 — the hero's "can't reach" line and the list it opens.
     Dsr6,
     /// PR 2 note 11 — a balance read that failed inside Vela: the hero says
     /// the app's own fault where the "can't reach" line goes, never "Can't
     /// reach Ethereum".
     Dsr7,
+    /// PR 3 note 4 — a network whose node answers and whose token list could
+    /// not be loaded (Tempo): the hero says the token list, the list it opens
+    /// has one row and no "Fix", and the Settings banner's chip offers none.
+    Dsr8,
     Components,
     ContactsComponents,
     Identicons,
@@ -602,7 +611,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 25] = [
+    const ALL: [(GalleryTab, &'static str); 27] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -623,8 +632,10 @@ impl GalleryTab {
         (GalleryTab::Dst7, "DST7"),
         (GalleryTab::Dst8, "DST8"),
         (GalleryTab::Dsr1, "DSR1"),
+        (GalleryTab::Dsr3, "DSR3"),
         (GalleryTab::Dsr6, "DSR6"),
         (GalleryTab::Dsr7, "DSR7"),
+        (GalleryTab::Dsr8, "DSR8"),
         (GalleryTab::Components, "Components"),
         (GalleryTab::ContactsComponents, "Contacts"),
         (GalleryTab::Identicons, "Identicons"),
@@ -1266,6 +1277,14 @@ impl WalletPage {
         let mut page = Self::with_section(Section::Wallet, gallery, window, cx);
         if gallery && let Some(tab) = GalleryTab::from_gallery_env() {
             page.select_tab(tab, window);
+            // `VELA_SECTION=settings` with a chip: that chip's state as
+            // Settings shows it — DSR8's banner, whose chip offers no "Fix".
+            // A click a screenshot pass cannot make; the list the chip opens
+            // on the home stays shut, it would cover the banner.
+            if crate::dev_env::var!("VELA_SECTION").as_deref() == Some("settings") {
+                page.section = Section::Settings;
+                page.unreachable_open = false;
+            }
         }
         // `VELA_SIGNING_STATE=cs36`: the third column on one drawn request —
         // there is no live request on this route, and no way to click to one.
@@ -1351,9 +1370,16 @@ impl WalletPage {
                 .unwrap_or_default();
             self.signer_page_rename = Some((url, name));
         }
-        // `VELA_SETTINGS_SCROLL=<px>|bottom`: the open panel scrolled that
-        // far down — a screenshot pass cannot turn a wheel, and the Keys
-        // block (with its copy-to-Ethereum row) sits below the first screen.
+        self.pin_settings_scroll();
+    }
+
+    /// `VELA_SETTINGS_SCROLL=<px>|bottom` (developer builds): the open panel
+    /// scrolled that far down — a screenshot pass cannot turn a wheel, and
+    /// the Keys block (with its copy-to-Ethereum row) sits below the first
+    /// screen. Applied when the page opens and again when the Keys block's
+    /// answer lands: an offset is clamped to the height the panel had when
+    /// it was set, and that block arrives later and makes the panel taller.
+    fn pin_settings_scroll(&mut self) {
         match crate::dev_env::var!("VELA_SETTINGS_SCROLL").as_deref() {
             Some("bottom") => self.settings_scroll.scroll_to_bottom(),
             Some(raw) => {
@@ -4609,7 +4635,7 @@ impl WalletPage {
         if self.identity.is_none() {
             // `VELA_CURRENCY_PENDING`: a held wallet through the live
             // builder, its worth waiting on the currency.
-            if let Some(money) = Self::pinned_pending_currency() {
+            if let Some(money) = Self::pinned_currency() {
                 return wallet_live::asset_rows(
                     &fixtures::held_view(),
                     &self.strings,
@@ -4675,6 +4701,25 @@ impl WalletPage {
 
     /// D3's model: the selected holding, or the mock's BNB.
     fn asset_detail_model(&mut self, cx: &mut Context<Self>) -> fixtures::AssetDetailModel {
+        // `VELA_CURRENCY_PENDING` on a design surface: the held wallet's ETH
+        // through the live builder — its worth and its price in the pinned
+        // currency, withheld or landed.
+        if self.identity.is_none()
+            && let Some(money) = Self::pinned_currency()
+        {
+            let view = fixtures::held_view();
+            let eth = view
+                .tokens
+                .iter()
+                .position(|token| token.symbol == "ETH")
+                .unwrap_or(0);
+            let feed = crate::core_host::CoreHost::<ActivityFeed>::new().view();
+            if let Some(model) =
+                wallet_live::asset_detail(&view, &feed, eth, &self.strings, &self.locale, &money)
+            {
+                return model;
+            }
+        }
         let Some(index) = self.asset_detail else {
             return fixtures::asset_detail_default(&self.strings);
         };
@@ -4730,9 +4775,27 @@ impl WalletPage {
                     &money,
                 );
             }
+            if self.tab == GalleryTab::Dsr8 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::token_list_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
+            if self.tab == GalleryTab::Dsr3 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::breakdown_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
             // `VELA_CURRENCY_PENDING`: the same held wallet, its total
             // waiting on the currency.
-            if let Some(money) = Self::pinned_pending_currency() {
+            if let Some(money) = Self::pinned_currency() {
                 return wallet_live::balance(
                     &fixtures::held_view(),
                     &self.strings,
@@ -6673,6 +6736,15 @@ impl WalletPage {
             }
             (body, _) => body,
         };
+        let body = crate::gallery::net_stop_pin(body, &self.flow_strings);
+        // `VELA_CURRENCY_PENDING`: the send's form and confirm through the
+        // live builders, in the pinned currency.
+        let body = match Self::pinned_currency() {
+            Some(money) => {
+                crate::gallery::currency_pin_flow(body, &money, &self.flow_strings, &self.strings)
+            }
+            None => body,
+        };
         crate::gallery::send_state_pin(body, &self.flow_strings, &self.strings)
     }
 
@@ -8162,7 +8234,8 @@ impl WalletPage {
         // core, because the drawing has none — and cleared by every other chip,
         // so a toast cannot leak onto the state next door.
         self.celebrating = tab == GalleryTab::D1b;
-        self.unreachable_open = tab == GalleryTab::Dsr6;
+        self.unreachable_open = matches!(tab, GalleryTab::Dsr6 | GalleryTab::Dsr8);
+        self.balance_detail_open = tab == GalleryTab::Dsr3;
         self.contact = 0;
         self.contacts_empty = tab == GalleryTab::Dc3;
         self.group = match tab {
@@ -8923,42 +8996,52 @@ impl WalletPage {
         // 092's order), and this is where the person finally sees it. A
         // correct verdict nobody is shown is, from the chair in front of the
         // screen, no verdict.
-        let live = self.identity.is_some().then(|| {
-            let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-            let ids: Vec<u32> = view
-                .unreachable_networks
-                .iter()
-                .map(|network| network.chain_id)
-                .collect();
-            (wallet_live::unreachable_chips(&view), ids)
+        //
+        // The gallery's DSR8 draws the token-list fixture through the same
+        // builders: the one banner whose chip offers nothing (PR 3 note 4).
+        let banner_view = if self.identity.is_some() {
+            Some(resident::resident::<BalanceDashboard>(cx).read(cx).view())
+        } else {
+            (self.tab == GalleryTab::Dsr8).then(fixtures::token_list_view)
+        };
+        let live_chips = banner_view.map(|view| {
+            // The headline is the home's own line, in the core's choice of
+            // sentence — "Can't load Tempo's token list" is not "Can't
+            // reach Tempo".
+            let text = wallet_live::unreachable_line(&view, &self.strings);
+            (wallet_live::unreachable_chips(&view), text)
         });
-        let banner_chain_ids = live
-            .as_ref()
-            .map(|(_, ids)| ids.clone())
-            .unwrap_or_default();
-        let live_chips = live.map(|(chips, _)| chips);
         let action = self.settings.rpc_fix_action.clone();
         let banner = match live_chips {
-            Some(chips) if !chips.is_empty() => {
-                let names: Vec<SharedString> =
-                    chips.iter().map(|(_, _, name)| name.clone()).collect();
-                let text = settings_fixtures::unavailable_text(&self.settings, &names);
+            Some((chips, text)) if !chips.is_empty() => {
+                let names: Vec<SharedString> = chips.iter().map(|chip| chip.name.clone()).collect();
+                let text = text
+                    .unwrap_or_else(|| settings_fixtures::unavailable_text(&self.settings, &names));
                 let chips = chips
                     .into_iter()
-                    .enumerate()
-                    .map(|(index, (letter, color, name))| {
+                    .map(|chip| {
                         // Each chip opens ITS chain's editor. A single "fix"
                         // button that always opened the first one would send
-                        // somebody to repair a network that is working.
-                        let chain_id = banner_chain_ids.get(index).copied();
-                        let on_click: Option<panels::Click> = chain_id.map(|chain_id| {
-                            Box::new(cx.listener(move |this: &mut Self, _, _, cx| {
-                                this.settings_fix_chain = Some(chain_id);
-                                this.settings_dialog = Some(SettingsDialog::FixRpc);
-                                cx.notify();
-                            })) as panels::Click
+                        // somebody to repair a network that is working — and
+                        // so would a chip on a network whose RPC is not what
+                        // failed: that one names the network and offers
+                        // nothing (the core's `rpc_fixable`).
+                        let chain_id = chip.chain_id;
+                        let fix = chip.rpc_fixable.then(|| {
+                            let open: panels::Click =
+                                Box::new(cx.listener(move |this: &mut Self, _, _, cx| {
+                                    this.settings_fix_chain = Some(chain_id);
+                                    this.settings_dialog = Some(SettingsDialog::FixRpc);
+                                    cx.notify();
+                                }));
+                            (action.clone(), Some(open))
                         });
-                        (letter, color, name, action.clone(), on_click)
+                        crate::settings::components::BannerChip {
+                            letter: chip.letter,
+                            color: chip.tint,
+                            name: chip.name,
+                            fix,
+                        }
                     })
                     .collect();
                 Some(rpc_banner(theme, &mut self.icons, text, chips))
@@ -8972,13 +9055,14 @@ impl WalletPage {
                     .iter()
                     .map(|id| {
                         let n = settings_fixtures::network(id);
-                        (
-                            SharedString::from(n.letter),
-                            n.color,
-                            SharedString::from(n.name),
-                            action.clone(),
-                            None,
-                        )
+                        crate::settings::components::BannerChip {
+                            letter: SharedString::from(n.letter),
+                            color: n.color,
+                            name: SharedString::from(n.name),
+                            // The mock's chips say "Fix" and open nothing:
+                            // the editor is already on screen.
+                            fix: Some((action.clone(), None)),
+                        }
                     })
                     .collect();
                 Some(rpc_banner(theme, &mut self.icons, text, chips))
@@ -9111,10 +9195,8 @@ impl WalletPage {
             .collect();
         let (known_total, row_totals) =
             settings_live::switcher_figures(&switcher, &addresses, Some(&currency), &self.locale);
-        let summary = gpui::SharedString::from(format!(
-            "{summary_count}{}",
-            crate::wallet::fill(&accounts_total, "amount", &known_total)
-        ));
+        let summary =
+            settings_live::accounts_summary(&summary_count, &accounts_total, &known_total);
         // Two copies of this list can be on screen at once — the dialog over
         // the settings panel — so each names its own rows.
         let (art_id, row_id, remove_id, confirm_id, cancel_id) = if in_dialog {
@@ -9573,6 +9655,7 @@ impl WalletPage {
             page.update(cx, |page, cx| {
                 if page.backup_for.as_deref() == Some(asked.as_str()) {
                     page.keys_check = Some(answer);
+                    page.pin_settings_scroll();
                     cx.notify();
                 }
             })
@@ -10131,7 +10214,12 @@ impl WalletPage {
         );
         let copy_label = s.keys_copy.clone();
         let copied_label = s.keys_copied.clone();
-        let explain = s.backup_explain.clone();
+        // The paragraph under the backup row, when the core names one
+        // (`BackupLine::explain_key`): none under a wallet that can never be
+        // copied (PR 3 note 6).
+        let explain = crate::executor::registry::backup_line(self.backup_check.as_ref())
+            .and_then(|line| line.explain_key)
+            .map(|key| self.loc.t(&key));
         let check = self.keys_check.clone();
 
         let mut header = div().flex().items_baseline().gap(px(8.)).child(
@@ -10511,12 +10599,12 @@ impl WalletPage {
                 }
             }
         }
-        match self.backup_row(theme, cx) {
+        match (self.backup_row(theme, cx), explain) {
             // Under the row, what the copy makes public and what it costs
             // (`registry_backup::EXPLAIN_KEY`): the wallet's name, each key's
             // name, public key, credential ID and authenticator model, for
             // one Ethereum transaction and its fee — never "only public keys".
-            Some(backup) => block.child(backup).child(
+            (Some(backup), Some(explain)) => block.child(backup).child(
                 div()
                     .pl(px(theme::KEY_ROW_MARK + 12.))
                     .pb(px(8.))
@@ -10524,7 +10612,10 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(crate::ui::prose(explain)),
             ),
-            None => block,
+            // No paragraph for this state: the row ends the block, and no
+            // empty slot is kept where the paragraph would have been.
+            (Some(backup), None) => block.child(backup),
+            (None, _) => block,
         }
     }
 
@@ -10821,7 +10912,7 @@ impl WalletPage {
     /// Signed out there is no committed pair and nothing to convert, so it is
     /// USD — the same thing every fixture board shows.
     fn money(&self, cx: &mut Context<Self>) -> wallet_live::Money {
-        if let Some(pending) = Self::pinned_pending_currency() {
+        if let Some(pending) = Self::pinned_currency() {
             return pending;
         }
         if self.identity.is_none() {
@@ -10839,10 +10930,30 @@ impl WalletPage {
     /// `fixtures::held_view` through the live builders, so the waiting hero
     /// and the holdings' bars can be looked at: the window between launch
     /// and the first rate is a second or two, and cannot be held open by
-    /// hand. The same env-pin family as `VELA_SETTINGS_STATE`.
-    fn pinned_pending_currency() -> Option<wallet_live::Money> {
+    /// hand. So do the token page (D3), the balance breakdown (DSR3), the
+    /// unreachable list (DSR6), the send's form and confirm (DSD2, DSD3)
+    /// and a drawn request's fee row — every board the core's withhold rule
+    /// has a surface on.
+    ///
+    /// `<code>:landed` is the SAME boards a moment later: that currency
+    /// committed, at a fixed rate — the frame to hold beside the waiting
+    /// one, to see that nothing but the figures arrived.
+    /// The same env-pin family as `VELA_SETTINGS_STATE`.
+    fn pinned_currency() -> Option<wallet_live::Money> {
         let want = crate::dev_env::var!("VELA_CURRENCY_PENDING")?;
         let want = want.trim();
+        if let Some(code) = want.strip_suffix(":landed") {
+            return Some(wallet_live::Money::of(
+                &vela_core::app::display_currency::CurrencyView {
+                    code: code.to_uppercase(),
+                    // A board's rate, not a quote: the figures only have to
+                    // be in that money.
+                    rate: Some(7.12),
+                    committed: true,
+                    pending: None,
+                },
+            ));
+        }
         Some(wallet_live::Money::of(
             &vela_core::app::display_currency::CurrencyView {
                 code: "USD".to_owned(),
@@ -12598,6 +12709,10 @@ impl WalletPage {
     /// `VELA_NET_REFUSAL` (developer builds), a chain checked and refused for
     /// that reason (`settings_live::pinned_refusal`).
     fn wizard_view(cx: &mut gpui::App) -> vela_core::app::network_admin::NetWizardView {
+        // … or, under `VELA_NET_STOP`, one stopped that way.
+        if let Some(stop) = settings_live::pinned_stop() {
+            return settings_fixtures::stopped_wizard(stop);
+        }
         match settings_live::pinned_refusal() {
             Some(blocker) => settings_fixtures::refused_wizard(blocker),
             None => {
@@ -12621,7 +12736,7 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
-        use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
+        use vela_core::app::network_admin::NetWizardPhase;
         let wizard = Self::wizard_view(cx);
         if matches!(
             wizard.phase,
@@ -12720,34 +12835,23 @@ impl WalletPage {
                     recheck: true,
                 },
             },
-            // The wizard stopped: why, in a warning, and the way on. A probe
-            // that failed is "unable to verify" and gets no setup tool; a chain
-            // that is already here, unknown, or endpoint-less says so.
+            // The wizard stopped: why, in the core's own sentence
+            // (`error_key`), and the way on. A refusal reached without the
+            // confirm step keeps its check beside the error, so it says the
+            // same reason and offers the same Chain Setup button as the
+            // verdict above; a probe that failed is "unable to verify" and
+            // gets neither. Where the way on is an RPC of the person's own —
+            // a chain that lists none ("Enter one, then re-check"), a check
+            // that could not be made — the field is under the sentence.
             NetWizardPhase::Error => {
-                let refusal =
-                    settings_live::wizard_notice(&wizard, s).and_then(|notice| match notice {
-                        settings_live::WizardNotice::Refusal(text) => Some(text),
-                        settings_live::WizardNotice::Progress(_) => None,
-                    });
-                // A refusal reached without the confirm step (the scan path)
-                // carries the reason only when the core kept the check; with
-                // it, the same line and button as above. Without it the
-                // verdict is said alone ("Incompatible"): which of the two
-                // reasons it was is not known here, so neither "contracts are
-                // missing" nor a deploy button is claimed.
-                let why = wizard
-                    .compat
-                    .as_ref()
-                    .filter(|_| {
-                        matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }))
-                    })
-                    .and_then(|compat| settings_live::net_refusal(compat, &self.loc));
+                let stop = settings_live::wizard_stop(&wizard, &self.loc);
                 Verdict {
-                    callout: Some(match why.as_ref() {
-                        Some(why) => why.hint.clone(),
-                        None => refusal.unwrap_or_else(|| s.wizard_unable_to_verify.clone()),
-                    }),
-                    setup_url: why.and_then(|why| why.setup_url),
+                    callout: Some(stop.as_ref().map_or_else(
+                        || s.wizard_unable_to_verify.clone(),
+                        |stop| stop.text.clone(),
+                    )),
+                    custom_rpc: settings_live::wizard_stop_wants_rpc(&wizard),
+                    setup_url: stop.and_then(|stop| stop.setup_url),
                     recheck: chain_id.is_some(),
                     ..checking()
                 }
@@ -17516,6 +17620,13 @@ impl WalletPage {
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
         let mut model = signing_fixtures::build(self.signing_state, &self.signing);
+        // `VELA_CURRENCY_PENDING`: the drawn request as the live sheet says
+        // it where money goes — the fee row through the live builder, in the
+        // pinned currency (the fee in its coin, and the money beside it only
+        // once the currency has landed), and no mock worth under an amount.
+        if self.gallery && self.no_signing_host() && Self::pinned_currency().is_some() {
+            signing_fixtures::in_display_currency(&mut model, &self.signing, &currency);
+        }
         // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the
         // operation (PR 2 note 9), drawn from the real core's view by the
         // live receipt builder — there is no request on this route.
@@ -18734,9 +18845,12 @@ impl WalletPage {
         if !self.unreachable_open {
             return None;
         }
-        // The gallery's DSR6 draws the fixture view through the same builders.
+        // The gallery's DSR6 draws the fixture view through the same builders
+        // — and DSR8 the one network whose token list could not be loaded.
         let view = if self.identity.is_some() {
             resident::resident::<BalanceDashboard>(cx).read(cx).view()
+        } else if self.tab == GalleryTab::Dsr8 {
+            fixtures::token_list_view()
         } else {
             fixtures::unreachable_view()
         };
@@ -18755,20 +18869,25 @@ impl WalletPage {
         }
         for row in &list.rows {
             let chain_id = row.chain_id;
-            let fix = div()
-                .id(("unreachable-fix", chain_id as usize))
-                .flex_none()
-                .cursor_pointer()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.info_base)
-                .active(|el| el.opacity(0.6))
-                .child(self.strings.unreachable_fix.clone())
-                .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                    // Its RPC editor opens over the list; closing it comes back.
-                    this.settings_fix_chain = Some(chain_id);
-                    this.settings_dialog = Some(SettingsDialog::FixRpc);
-                    cx.notify();
-                }));
+            // "Fix" only where the RPC is what failed (the core's
+            // `rpc_fixable`): a network whose token list could not be loaded
+            // has an endpoint that works, and nothing here would repair it.
+            let fix = row.rpc_fixable.then(|| {
+                div()
+                    .id(("unreachable-fix", chain_id as usize))
+                    .flex_none()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.info_base)
+                    .active(|el| el.opacity(0.6))
+                    .child(self.strings.unreachable_fix.clone())
+                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                        // Its RPC editor opens over the list; closing it comes back.
+                        this.settings_fix_chain = Some(chain_id);
+                        this.settings_dialog = Some(SettingsDialog::FixRpc);
+                        cx.notify();
+                    }))
+            });
             body = body.child(
                 div()
                     .flex()
@@ -18804,7 +18923,7 @@ impl WalletPage {
                                     .child(row.line.clone()),
                             ),
                     )
-                    .child(fix),
+                    .children(fix),
             );
         }
         Some(
@@ -18831,10 +18950,18 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
-        if !self.balance_detail_open || self.identity.is_none() {
+        if !self.balance_detail_open {
             return None;
         }
-        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        // The gallery's DSR3 draws the breakdown fixture through the same
+        // builders; any other design surface has no sheet to open.
+        let view = if self.identity.is_some() {
+            resident::resident::<BalanceDashboard>(cx).read(cx).view()
+        } else if self.tab == GalleryTab::Dsr3 {
+            fixtures::breakdown_view()
+        } else {
+            return None;
+        };
         let money = self.money(cx);
         let detail = wallet_live::balance_detail(&view, &self.strings, &self.locale, &money);
         let s = &self.strings;
@@ -18904,14 +19031,21 @@ impl WalletPage {
                 .text_color(theme.fg_subtle)
                 .child(crate::ui::prose(detail.summary.clone())),
         );
-        body = body.child(section(s.detail_networks_label.clone())).child(
-            div()
-                .mb(px(8.))
-                .text_size(theme::text_label())
-                .line_height(gpui::relative(1.4))
-                .text_color(theme.fg_subtle)
-                .child(crate::ui::prose(s.detail_networks_note.clone())),
-        );
+        // "Networks still updating — these networks couldn't be reached…"
+        // heads the networks that are still out, when there are any. With
+        // none it headed nothing and still said networks could not be
+        // reached: a sheet opened from "some tokens couldn't be priced" told
+        // a healthy wallet its balance was cached.
+        if !detail.pending.is_empty() {
+            body = body.child(section(s.detail_networks_label.clone())).child(
+                div()
+                    .mb(px(8.))
+                    .text_size(theme::text_label())
+                    .line_height(gpui::relative(1.4))
+                    .text_color(theme.fg_subtle)
+                    .child(crate::ui::prose(s.detail_networks_note.clone())),
+            );
+        }
         for line in &detail.pending {
             let retry = line.retry.then(|| {
                 let chain_id = line.chain_id;
@@ -19554,32 +19688,65 @@ impl WalletPage {
             // A scanner just opened: what the last one said is not true of it.
             self.scan_notice = None;
             self.scan_quiet_until = None;
-            self.scan_camera = Some(crate::executor::camera::start());
+            // The one place a scanner's frames start — and the real camera
+            // only for a signed-in person's own scanner (PR 3 note 7). The
+            // gallery, a design page and a flow stack a developer pin put up
+            // draw the fixture frame: a sweep of those states once opened
+            // the camera on the person at the machine.
+            let source = crate::executor::camera::Source::for_session(
+                self.gallery,
+                self.identity.is_some(),
+                FlowPanel::from_env().is_some(),
+            );
+            let session = crate::executor::camera::start(source);
             // The camera has its own thread and no way to reach this window;
             // this asks for a repaint at roughly the rate a preview needs one,
-            // and stops the moment the scanner is gone.
-            cx.spawn(async move |page, cx| {
-                loop {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_millis(60))
-                        .await;
-                    let alive = page
-                        .update(cx, |this, cx| {
-                            let alive = this.scan_camera.is_some();
-                            if alive {
-                                cx.notify();
-                            }
-                            alive
-                        })
-                        .unwrap_or(false);
-                    if !alive {
-                        return;
-                    }
-                }
-            })
-            .detach();
+            // and stops the moment the scanner is gone. The fixture is one
+            // drawn frame, published below: there is nothing to keep fed.
+            if !session.is_fixture() {
+                Self::pump_camera_repaints(cx);
+            }
+            self.scan_camera = Some(session);
         }
 
+        let Some(session) = self.scan_camera.as_ref() else {
+            return;
+        };
+        // The fixture's frame never changes: once it is on screen there is
+        // nothing more to publish, and no code will ever be "seen" in it.
+        if session.is_fixture() && self.scan_preview.slot.is_some() {
+            return;
+        }
+        self.publish_camera_frame(window, cx);
+    }
+
+    /// Ask for a repaint at the rate a live preview needs one, until the
+    /// scanner is gone.
+    fn pump_camera_repaints(cx: &mut Context<Self>) {
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(60))
+                    .await;
+                let alive = page
+                    .update(cx, |this, cx| {
+                        let alive = this.scan_camera.is_some();
+                        if alive {
+                            cx.notify();
+                        }
+                        alive
+                    })
+                    .unwrap_or(false);
+                if !alive {
+                    return;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Act on a code the camera saw, and put its newest frame on screen.
+    fn publish_camera_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(session) = self.scan_camera.as_ref() else {
             return;
         };
@@ -21735,8 +21902,10 @@ mod tests {
                 "DST7",
                 "DST8",
                 "DSR1",
+                "DSR3",
                 "DSR6",
                 "DSR7",
+                "DSR8",
                 "Components",
                 "Contacts",
                 "Identicons",

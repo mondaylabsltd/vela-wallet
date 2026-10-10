@@ -180,7 +180,7 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
 pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
     use vela_core::app::balance_dashboard::{
         BalanceSwitcherView, BalanceView, LAST_SEEN, LAST_SEEN_EMPTY, LastKnown, NOT_READ_YET,
-        UNREACHABLE_MANY, UnreachableNetwork,
+        UNREACHABLE_MANY, UnreachableCause, UnreachableNetwork,
     };
     let row =
         |chain_id: u32, last_known: LastKnown, usd: Option<f64>, key: &str| UnreachableNetwork {
@@ -188,6 +188,8 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
             last_known,
             last_seen_usd: usd,
             line_key: key.to_owned(),
+            cause: UnreachableCause::Network,
+            rpc_fixable: true,
         };
     BalanceView {
         address: Some(ADDRESS_FULL.to_owned()),
@@ -259,6 +261,57 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
                 rate_limited_chain_ids: Vec::new(),
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: vec![1],
+                registry_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// PR 3 note 4's gallery state (DSR8), through the real balance core: the
+/// account holds $4,500 on Gnosis, and Tempo's node answered while its token
+/// list could not be loaded (`registry_chain_ids`, as the executor reports a
+/// registry document that is unread for a chain with no native coin). The
+/// hero says the token list — never "Can't reach Tempo" — the list it opens
+/// has the one row with no "Fix", and the Settings banner's chip offers none.
+#[must_use]
+pub fn token_list_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    const TEMPO: u32 = vela_core::app::fee_policy::TEMPO_CHAIN_IDS[0];
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![BalanceToken {
+                    chain_id: 100,
+                    symbol: "XDAI".to_owned(),
+                    name: "xDAI".to_owned(),
+                    balance: "4500".to_owned(),
+                    decimals: 18,
+                    token_address: None,
+                    price_usd: Some(1.0),
+                    spam: false,
+                }],
+                failed_chain_ids: vec![TEMPO],
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![100, TEMPO],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: vec![TEMPO],
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -310,6 +363,7 @@ pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
                 rate_limited_chain_ids: Vec::new(),
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: Vec::new(),
+                registry_chain_ids: Vec::new(),
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -815,12 +869,67 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
     vec![swap, permit, sign_in]
 }
 
-/// Two transfers through the real feed core — 1.5 xDAI received, 12 USDC
-/// sent — with the feed's privacy as asked. What `VELA_ACTIVITY_FIXTURE`
-/// draws: the home's rows and a transfer's detail from the LIVE builders,
-/// shown or hidden, so the masked figure ("•••• xDAI", the core's
-/// `privacy::masked_amount`) can be looked at without a wallet that has a
-/// history.
+/// The balance breakdown's board (DSR3), through the real balance core:
+/// $4,500 on Gnosis and half an ETH read and priced, and a token on Base
+/// nobody prices — so the sheet has its total, a figure per network and its
+/// "no price" list. What every figure on it is drawn in depends only on the
+/// display currency (`VELA_CURRENCY_PENDING`).
+#[must_use]
+pub fn breakdown_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    let token = |chain_id: u32, symbol: &str, balance: &str, price: Option<f64>| BalanceToken {
+        chain_id,
+        symbol: symbol.to_owned(),
+        name: symbol.to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: (symbol == "LEAF")
+            .then(|| "0x1eAF000000000000000000000000000000001EaF".to_owned()),
+        price_usd: price,
+        spam: false,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![
+                    token(100, "XDAI", "4500", Some(1.0)),
+                    token(1, "ETH", "0.5", Some(2_469.0)),
+                    token(8_453, "LEAF", "1200", None),
+                ],
+                failed_chain_ids: Vec::new(),
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 100, 8_453],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// Three sends through the real feed core — a split of 683.75 USDC between
+/// two people (the newest), 1.5 xDAI received, 12 USDC sent — with the
+/// feed's privacy as asked. What `VELA_ACTIVITY_FIXTURE` draws: the home's
+/// rows and the newest one's detail from the LIVE builders, shown or hidden,
+/// so the masked figures ("•••• USDC" for the split's total AND for each
+/// recipient's share — the core's `privacy::masked_amount`) can be looked at
+/// without a wallet that has a history.
 #[must_use]
 pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
     use vela_core::app::activity_feed::{Event, FeedTxKind, FeedTxRecord, FeedTxStatus};
@@ -859,7 +968,31 @@ pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
             settlement: None,
         }
     };
+    // One send to two people: two records of one operation, which the core
+    // folds into one row (PR 3 note 15) — the shared privacy fixture's own
+    // figures.
+    let share = |id: &str, to: &str, name: Option<&str>, value: &str| FeedTxRecord {
+        user_op_hash: format!("0x{}", "ef".repeat(32)),
+        to: to.to_owned(),
+        to_name: name.map(str::to_owned),
+        decimals: 6,
+        timestamp: DAY_MS / 1000.0 + 54_000.0,
+        usd: Some(value.to_owned()),
+        ..record(id, FeedTxKind::Send, value, "USDC", 8_453)
+    };
     let mut host = core_feed_host(vec![
+        share(
+            "c3",
+            "0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd",
+            Some("Bea"),
+            "214.5",
+        ),
+        share(
+            "d4",
+            "0xFAfaFAFAfaFAfAFAFAFAfAfAFaFafAfAFAfaFaFA",
+            None,
+            "469.25",
+        ),
         record("a1", FeedTxKind::Receive, "1.5", "xDAI", 100),
         record("b2", FeedTxKind::Send, "12", "USDC", 8_453),
     ]);

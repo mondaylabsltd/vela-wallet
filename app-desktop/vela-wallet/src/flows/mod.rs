@@ -348,9 +348,18 @@ pub struct FlowStrings {
     pub net_picker_empty: String,
     pub network_added: SharedString,
     pub not_compatible: SharedString,
-    pub error_not_compatible: SharedString,
-    pub deploy_contracts: SharedString,
     pub unable_to_verify: SharedString,
+    /// Why the add-network wizard stopped, by the corpus key the core names
+    /// (`NetWizardView::error_key`, `NetCompatibility::hint_key`): the core
+    /// chooses the sentence and these are only its words
+    /// ([`FlowStrings::wizard_stop_of`]). The network tab used to say "Not
+    /// compatible · Deploy missing contracts" for every stop — over a network
+    /// with no P-256 verifier, where nothing can be deployed, and over a
+    /// check that never reached the network.
+    pub wizard_stops: Vec<(&'static str, SharedString)>,
+    /// "Open Chain Setup Tool" — drawn only where the core names somewhere
+    /// to go (`NetCompatibility::setup_url`).
+    pub open_chain_setup_tool: SharedString,
 
     // Send.
     /// The plain verb, not the "Send {{symbol}}" template — DSD4L's bar keeps
@@ -837,6 +846,17 @@ pub fn refusal_of(sentences: &[(&'static str, SharedString)], key: Option<&str>)
 }
 
 impl FlowStrings {
+    /// The sentence the add-network wizard stopped with, by the key the core
+    /// named. `None` for a key this build has no words for — the caller says
+    /// its own general line then, never the key.
+    #[must_use]
+    pub fn wizard_stop_of(&self, key: &str) -> Option<SharedString> {
+        self.wizard_stops
+            .iter()
+            .find(|(known, _)| *known == key)
+            .map(|(_, text)| text.clone())
+    }
+
     /// The sentence for a refusal, by the key the core chose.
     #[must_use]
     pub fn refusal(&self, key: Option<&str>) -> SharedString {
@@ -988,9 +1008,27 @@ impl FlowStrings {
             net_picker_empty: raw("addToken.netPickerEmpty"),
             network_added: s("addToken.networkAdded"),
             not_compatible: s("addToken.notCompatible"),
-            error_not_compatible: s("addToken.errorNotCompatible"),
-            deploy_contracts: s("addToken.deployContracts"),
             unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
+            wizard_stops: {
+                use vela_core::app::network_admin::{
+                    MISSING_CONTRACTS_HINT, NO_P256_HINT, WIZARD_ALREADY_ADDED,
+                    WIZARD_CHECK_FAILED, WIZARD_NO_RPC_ENDPOINT, WIZARD_NOT_COMPATIBLE,
+                    WIZARD_NOT_FOUND,
+                };
+                [
+                    WIZARD_ALREADY_ADDED,
+                    WIZARD_NOT_FOUND,
+                    WIZARD_NO_RPC_ENDPOINT,
+                    WIZARD_NOT_COMPATIBLE,
+                    WIZARD_CHECK_FAILED,
+                    NO_P256_HINT,
+                    MISSING_CONTRACTS_HINT,
+                ]
+                .into_iter()
+                .map(|key| (key, s(key)))
+                .collect()
+            },
+            open_chain_setup_tool: s("settingsModals.addNetwork.openChainSetupTool"),
 
             send_action: s("componentsUi.dock.send"),
             select_token_title: s("send.selectTokenTitle"),

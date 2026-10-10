@@ -410,8 +410,113 @@ pub fn refused_wizard(
         }),
         compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
         error: None,
+        error_key: None,
         can_add: false,
     }
+}
+
+/// One way the add-network wizard stops, as `VELA_NET_STOP` and
+/// `VELA_SEND_STATE=lock-*` name it ([`stopped_wizard`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WizardStopPin {
+    /// The network is already in the list.
+    AlreadyAdded,
+    /// The chain index has no such chain.
+    NotFound,
+    /// The chain is known and lists no RPC endpoint.
+    NoRpc,
+    /// The check could not reach a verdict.
+    CheckFailed,
+    /// Checked and refused, on the path with no confirm step.
+    Refused(vela_core::app::network_admin::NetBlocker),
+}
+
+impl WizardStopPin {
+    pub const ALL: [(Self, &'static str); 6] = [
+        (Self::AlreadyAdded, "already_added"),
+        (Self::NotFound, "not_found"),
+        (Self::NoRpc, "no_rpc"),
+        (Self::CheckFailed, "check_failed"),
+        (
+            Self::Refused(vela_core::app::network_admin::NetBlocker::NoP256),
+            "no_p256",
+        ),
+        (
+            Self::Refused(vela_core::app::network_admin::NetBlocker::MissingContracts),
+            "missing_contracts",
+        ),
+    ];
+
+    /// The stop a pin's value names.
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(stop, name)| (name == want.trim()).then_some(stop))
+    }
+}
+
+/// The add-network wizard stopped for `stop`, shaped as the core leaves it:
+/// the error, the corpus key of its sentence (the core's own
+/// `wizard_error_key`) and — on the path that saves without a confirm step —
+/// the check kept beside the error (PR 3 notes 5 and 10). A real wizard
+/// cannot be made to stop each way on demand, and every stop has to be
+/// looked at and tested in its own words.
+#[must_use]
+pub fn stopped_wizard(stop: WizardStopPin) -> vela_core::app::network_admin::NetWizardView {
+    use vela_core::app::network_admin::{
+        NetBlocker, NetRpcFailureKind, NetWizardErrorKind, NetWizardPhase, wizard_error_key,
+    };
+    // The chosen chain, as a check on it would have left the wizard.
+    let mut view = refused_wizard(NetBlocker::MissingContracts);
+    let chain_id = REFUSED_CHAIN_ID;
+    let error = match stop {
+        WizardStopPin::AlreadyAdded => {
+            // Stopped before anything was resolved: Ethereum is built in.
+            view.chain_info = None;
+            view.compat = None;
+            view.query = "1".to_owned();
+            NetWizardErrorKind::AlreadyAdded { chain_id: 1 }
+        }
+        WizardStopPin::NotFound => {
+            view.chain_info = None;
+            view.compat = None;
+            NetWizardErrorKind::NotFound { chain_id }
+        }
+        WizardStopPin::NoRpc => {
+            // Resolved, and nothing to check it through.
+            if let Some(info) = view.chain_info.as_mut() {
+                info.rpc_url.clear();
+                info.rpc_urls.clear();
+            }
+            view.compat = None;
+            NetWizardErrorKind::NoRpcEndpoint
+        }
+        WizardStopPin::CheckFailed => {
+            // No endpoint answered: nothing was probed, nothing is refused.
+            view.compat = view.compat.take().map(|mut compat| {
+                compat.rpc_failure = Some(NetRpcFailureKind::AllProbesFailed);
+                compat.p256_available = None;
+                compat.contracts.clear();
+                compat.best_rpc_url = None;
+                compat.best_rpc_latency_ms = None;
+                compat.blocker = None;
+                compat.hint_key = None;
+                compat.setup_url = None;
+                compat
+            });
+            NetWizardErrorKind::CheckFailed { chain_id }
+        }
+        WizardStopPin::Refused(blocker) => {
+            view.compat = Some(refused_compat(chain_id, blocker));
+            NetWizardErrorKind::NotCompatible { chain_id }
+        }
+    };
+    view.phase = NetWizardPhase::Error;
+    view.error_key = Some(wizard_error_key(&error, view.compat.as_ref()).to_owned());
+    view.error = Some(error);
+    view.can_add = false;
+    view
 }
 
 /// The sheet a page opens with `wallet_addEthereumChain`, on the same
@@ -869,7 +974,7 @@ pub fn banner_text(s: &SettingsStrings) -> SharedString {
 #[must_use]
 pub fn unavailable_text(s: &SettingsStrings, names: &[SharedString]) -> SharedString {
     SharedString::from(match names {
-        [one] => fill(&s.wizard_no_rpc, "name", one),
+        [one] => fill(&s.unreachable_one, "name", one),
         many => fill(&s.unreachable_many, "n", &many.len().to_string()),
     })
 }
