@@ -51,7 +51,7 @@ const APP: VenueModel = {
 			},
 			keysOn: 'Keys on getvela.app',
 			integrity: {
-				text: "Version 0ba8ee8c · matches Vela's published build list · checked 14:32",
+				text: "Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked 14:32",
 				tone: 'ok'
 			},
 			active: true
@@ -63,7 +63,7 @@ const APP: VenueModel = {
 			title: 'On a trusted page',
 			body: 'A zero-dependency page shows exactly what you sign',
 			page: {
-				name: 'Self-hosted · sign.example.com',
+				name: 'Self-hosted\u00a0· sign.example.com',
 				host: 'sign.example.com',
 				official: false,
 				hostShown: false
@@ -132,7 +132,7 @@ describe('Where you review and sign', () => {
 	it('names a self-hosted page once: its name already says the host', () => {
 		const view = drawn(APP);
 		const own = view.radios()[2].querySelector('.title');
-		expect(own?.textContent).toBe('Self-hosted · sign.example.com');
+		expect(own?.textContent).toBe('Self-hosted\u00a0· sign.example.com');
 		expect(own?.querySelector('.host')).toBeNull();
 		// The official page's name does not say it, so the host is drawn beside it.
 		expect(view.radios()[1].querySelector('.title .host')?.textContent).toBe('sign.getvela.app');

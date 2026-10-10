@@ -66,7 +66,7 @@ describe('the hand-off boards', () => {
 		const ready = buildHandoffState('ho1', base, m).handoff!;
 		expect(ready.open.enabled).toBe(true);
 		expect(ready.integrity).toEqual({
-			text: "Version 0ba8ee8c · matches Vela's published build list · checked 14:32",
+			text: "Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked 14:32",
 			tone: 'ok'
 		});
 		expect(ready.title).toBe('Review and sign on a trusted signing page');
