@@ -387,6 +387,26 @@ final class UIBatchScreenshotTests: XCTestCase {
         }
     }
 
+    /// The sign-in sheet lists the same three rows the create screen does
+    /// (issue #475: Settings metrics, a hairline between rows, one line under
+    /// each title), with the signing-page entry apart.
+    func testTheSignInSheet() {
+        for look in Self.looks {
+            let zh = look.lang == "zh"
+            let tag = "\(look.lang)-\(look.theme)"
+            let app = launch(env: [:], args: ["-vela.parallelSpace", "0"], lang: look.lang, theme: look.theme)
+            let signIn = app.buttons[zh ? "我已有钱包" : "I already have a wallet"]
+            XCTAssertTrue(signIn.waitForExistence(timeout: 40), "no Welcome (\(tag))")
+            signIn.tap()
+            for place in zh ? ["这台设备", "手机或平板", "USB 安全密钥"] : ["This device", "Phone or tablet", "USB security key"] {
+                XCTAssertTrue(app.staticTexts[place].waitForExistence(timeout: 10), "no \(place) (\(tag))")
+            }
+            settle(1)
+            attach(app, "475-signin-sheet-\(tag)")
+            app.terminate()
+        }
+    }
+
     // MARK: - The live home: the newest three, the person's currency, a hidden detail
 
     /// A read-only account over real chains, with five transfers seeded.
