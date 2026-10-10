@@ -702,6 +702,25 @@ fn the_keys_screen_heading_follows_the_count() {
     assert_eq!(add_heading_key(8), ADD_HEADING_FULL);
 }
 
+/// "Added 0 / 7" counted nothing, and one shell hid it while three drew it:
+/// the counter appears with the first key, on every shell.
+#[test]
+fn the_key_counter_appears_with_the_first_key() {
+    let mut sut = filled("Ann");
+    sut.dispatch(Event::Submit);
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(group_key_generated());
+    assert!(!sut.view().key_count_shown, "no key: nothing to count");
+    assert!(registered("Ann").view().key_count_shown);
+    assert!(two_keys("Ann").view().key_count_shown);
+    // A view written before the field reads as "not shown".
+    let mut old = serde_json::to_value(registered("Ann").view()).unwrap_or_default();
+    old.as_object_mut().map(|map| map.remove("key_count_shown"));
+    let old: vela_core::app::create_wallet::CreateView =
+        serde_json::from_value(old).expect("an older view still reads");
+    assert!(!old.key_count_shown);
+}
+
 /// The zero-key heading is not the screen's title said twice: in every
 /// language it differs from "Add passkeys", and from the fold's "Add another".
 #[test]

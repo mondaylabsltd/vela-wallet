@@ -504,6 +504,12 @@ pub struct CreateView {
     /// tapped) — or, at the cap, are not drawn.
     #[serde(default)]
     pub methods_pinned: bool,
+    /// Is the "Added n / 7" counter drawn? From the first key on. With no
+    /// key it read "0 / 7" over an empty list — a count of nothing, beside a
+    /// subtitle that already says "up to 7" — and one shell hid it while
+    /// three showed it. One rule: no key, no counter.
+    #[serde(default)]
+    pub key_count_shown: bool,
     /// May the key set be frozen and published (≥1 key, nothing in flight)?
     pub can_finish: bool,
     /// The sole drafted key is NOT a synced passkey: one lost device would
@@ -667,6 +673,7 @@ impl App for CreateWallet {
             add_methods: methods_for(),
             add_heading_key: add_heading_key(model.drafts.len()).to_owned(),
             methods_pinned: !has_draft && can_add_key,
+            key_count_shown: has_draft,
             can_finish: at_key_list
                 && has_draft
                 && model.drafts.iter().all(|draft| draft.proof.is_some())
