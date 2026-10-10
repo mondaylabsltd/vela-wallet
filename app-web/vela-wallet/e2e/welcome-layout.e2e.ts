@@ -221,8 +221,16 @@ for (const [width, height] of [
 	test(`sign-in offers the three ways in, with icons, at ${width}px`, async ({ page }) => {
 		await page.setViewportSize({ width, height });
 		await page.goto('/en');
-		await page.getByRole('button', { name: 'I already have a wallet' }).click();
-		await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
+		// The button is in the server's HTML before the page hydrates; pressed
+		// then it does nothing (the same race as the intro's keys, below).
+		// Press until the sheet answers.
+		const heading = page.getByRole('heading', { name: 'Sign In' });
+		await expect(async () => {
+			if (!(await heading.isVisible())) {
+				await page.getByRole('button', { name: 'I already have a wallet' }).click();
+			}
+			await expect(heading).toBeVisible({ timeout: 1_000 });
+		}).toPass({ timeout: 20_000 });
 		const rows = page.locator('.methods .method');
 		await expect(rows).toHaveCount(3);
 		await expect(page.getByText(en('onboarding.create.signingPageTitle'))).toHaveCount(0);
@@ -282,12 +290,19 @@ test.describe('the first-run intro', () => {
 	test('the last slide puts the two ways in side by side at 1440px', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await page.goto('/en?intro');
-		await page.keyboard.press('ArrowRight');
-		await page.keyboard.press('ArrowRight');
+		// The keys are the carousel's only once it has hydrated: two presses
+		// sent the moment the document arrived went to nobody, the slide never
+		// changed, and the test waited out its 30 s for a button on a slide it
+		// was not on. The carousel clamps at its last slide, so pressing until
+		// that slide answers is the same two steps — taken when it can hear them.
+		await expect(page.locator('.intro .rail')).toBeVisible();
+		const signInButton = page.getByRole('button', { name: 'I already have a wallet' });
+		await expect(async () => {
+			await page.keyboard.press('ArrowRight');
+			await expect(signInButton).toBeVisible({ timeout: 500 });
+		}).toPass({ timeout: 20_000 });
 		const create = (await page.getByRole('link', { name: 'Create Wallet' }).boundingBox())!;
-		const signIn = (await page
-			.getByRole('button', { name: 'I already have a wallet' })
-			.boundingBox())!;
+		const signIn = (await signInButton.boundingBox())!;
 		expect(signIn.x).toBeGreaterThan(create.x + create.width - 1);
 		expect(Math.abs(signIn.y - create.y)).toBeLessThan(2);
 	});
