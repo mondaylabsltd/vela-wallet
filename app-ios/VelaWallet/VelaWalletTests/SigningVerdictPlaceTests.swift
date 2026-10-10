@@ -2,22 +2,26 @@
 //  SigningVerdictPlaceTests.swift
 //  VelaWalletTests
 //
-//  The simulation verdict's place on the signing sheet (PR 3 final note F2).
+//  The simulation verdict's place on the signing sheet, and the confirm
+//  under it (PR 3 final note F2; the device round's item 1).
 //
-//  The iOS sheet kept no room for the verdict: it was appended to the form
-//  when the simulation answered, a moment after the sheet opened, and the fee
-//  row, the signing account and the confirm rode down by its height under a
-//  thumb already on its way to the button.
+//  A site's transaction keeps a place for the verdict from its first frame —
+//  "Checking…" in the balance card's outline — at least as tall as the usual
+//  verdict, so the usual verdict moves nothing when it lands.
 //
-//  Now a site's transaction keeps ONE place for it from the first frame — a
-//  balance card of two rows and half a third — holding "Checking…" while the
-//  simulation is out, then whatever it found; a verdict taller than the place
-//  scrolls inside it.
+//  The verdict is the one part of the sheet a site cannot write, so nothing
+//  of it is ever under a fold. The place is a MINIMUM: a taller verdict — a
+//  third and a fourth balance row, the warning under an unverified token —
+//  is shown whole, the place as tall as what it holds. (It used to be one
+//  height with a scroll, a fade and a clip inside it.) The confirm is not in
+//  the scroll at all: it is pinned to the bottom of the sheet, at one
+//  position whatever the body holds, and when the sheet outgrows the screen
+//  the body scrolls under it and brings the verdict into view as it lands.
 //
-//  The real `SigningSheet`, hosted in a window, stepped through every verdict
-//  kind; the confirm's position is read from the tree an assistive client
-//  gets. Each walk is made twice: as the sheet was (the verdict appended) and
-//  as it is, and the numbers are printed as `MEASURE` lines.
+//  The real `SigningSheet`, hosted in a window the size of a phone's sheet,
+//  stepped through every verdict kind; positions are read from the tree an
+//  assistive client gets and from the sheet's own scroll view, and printed
+//  as `MEASURE` lines.
 //
 
 import Foundation
@@ -50,7 +54,7 @@ struct SigningVerdictPlaceTests {
     }
 
     private enum Verdict: String, CaseIterable {
-        case out, send, swap, three, unverified, nothing, caution, danger
+        case out, send, swap, three, unverified, tall, nothing, caution, danger
     }
 
     /// The judged view as the real `token_trust` core writes it.
@@ -83,7 +87,9 @@ struct SigningVerdictPlaceTests {
         case .swap: return try context([native, Self.usdc], .answered)
         case .three: return try context([native, weth, Self.usdc], .answered)
         case .unverified: return try context([native, unknown], .answered)
-        // A check under which nothing moves, as the core says it.
+        // Four balance rows and the unverified-token warning; and a check
+        // under which nothing moves — both the core's own views.
+        case .tall: return try context(core: TrustCoreScene.tall(chainId: 100))
         case .nothing: return try context(core: TrustCoreScene.nothing(chainId: 100))
         case .caution:
             return try context(nil, .notice(
@@ -269,7 +275,7 @@ struct SigningVerdictPlaceTests {
         }
     }
 
-    // MARK: - Nothing moves
+    // MARK: - The real sheet, hosted
 
     @MainActor
     @Observable
@@ -296,10 +302,13 @@ struct SigningVerdictPlaceTests {
         }
     }()
 
+    /// One node of the tree an assistive client gets: something it reads
+    /// (`element`), or a place with a name of its own (the verdict's).
     private struct Element {
         let label: String
         let id: String
         let frame: CGRect
+        let element: Bool
     }
 
     private static func identifier(of object: NSObject) -> String {
@@ -310,9 +319,10 @@ struct SigningVerdictPlaceTests {
 
     private func collect(_ any: Any, depth: Int, into found: inout [Element]) {
         guard depth < 48, let object = any as? NSObject else { return }
-        if object.isAccessibilityElement {
-            found.append(Element(label: object.accessibilityLabel ?? "",
-                                 id: Self.identifier(of: object), frame: object.accessibilityFrame))
+        let id = Self.identifier(of: object)
+        if object.isAccessibilityElement || !id.isEmpty {
+            found.append(Element(label: object.accessibilityLabel ?? "", id: id,
+                                 frame: object.accessibilityFrame, element: object.isAccessibilityElement))
         }
         if let children = object.accessibilityElements {
             for child in children { collect(child, depth: depth + 1, into: &found) }
@@ -327,6 +337,14 @@ struct SigningVerdictPlaceTests {
         }
     }
 
+    /// Every scroll view under `view` — the sheet has ONE, its body.
+    private func scrollViews(in view: UIView) -> [UIScrollView] {
+        var found: [UIScrollView] = []
+        if let scroll = view as? UIScrollView { found.append(scroll) }
+        for sub in view.subviews { found += scrollViews(in: sub) }
+        return found
+    }
+
     private func shown(_ view: UIView) async throws {
         view.layoutIfNeeded()
         try await Task.sleep(for: .milliseconds(200))
@@ -336,29 +354,78 @@ struct SigningVerdictPlaceTests {
         try await Task.sleep(for: .milliseconds(100))
     }
 
-    /// Where the fee row's refresh and the confirm sit, once two reads agree.
-    private func settled(_ view: UIView) async throws -> (fee: CGFloat, confirm: CGFloat, tree: [Element]) {
-        var last: [CGFloat]?
-        var tree: [Element] = []
+    /// The sheet as it stands, once two reads agree on where everything is.
+    private struct Seen {
+        let verdict: Verdict
+        let tree: [Element]
+        /// The fee row's refresh control: the first thing under the place.
+        let fee: CGRect
+        let confirm: CGRect
+        /// What stands in the verdict's place — the verdict's own frame;
+        /// the room a short one leaves under it is not in it.
+        let place: CGRect
+        /// The body's viewport on screen — what of the body can be seen,
+        /// clear of the status bar — and how far it is scrolled.
+        let viewport: CGRect
+        let offset: CGFloat
+        let contentHeight: CGFloat
+        let scrollViews: Int
+        /// The sheet's own bottom edge, above the home indicator.
+        let bottom: CGFloat
+
+        /// Where `label` is said — in the verdict's place when it is said
+        /// there (the drawn send has a figure and a coin of its own above).
+        func frame(_ label: String) throws -> CGRect {
+            let said = tree.filter { $0.element && $0.label == label }
+            let inPlace = said.first { $0.frame.midY >= place.minY && $0.frame.midY <= place.maxY }
+            return try #require(inPlace ?? said.first, "\(verdict): \"\(label)\" is in the tree").frame
+        }
+
+        var scrolls: Bool { contentHeight > viewport.height + 0.5 }
+
+        /// Where the fee row and the verdict stand in the BODY, however far
+        /// it is scrolled.
+        var feeInBody: CGFloat { fee.minY + offset }
+        var placeInBody: CGFloat { place.minY + offset }
+
+        /// `frame` can be read whole: inside the body's viewport (to the
+        /// point: the tree's frames are rounded to the screen's pixels).
+        func inView(_ frame: CGRect) -> Bool {
+            frame.minY >= viewport.minY - 1 && frame.maxY <= viewport.maxY + 1
+        }
+    }
+
+    private func read(_ verdict: Verdict, _ view: UIView) async throws -> Seen {
+        var last: [CGRect]?
+        var seen: Seen?
         for _ in 0..<40 {
-            tree = []
+            var tree: [Element] = []
             collect(view as Any, depth: 0, into: &tree)
+            let scrolls = scrollViews(in: view)
             if let fee = tree.first(where: { $0.id == "signing.fee.refresh" }),
-               let confirm = tree.first(where: { $0.id == "signing.confirm" }) {
-                let frame = [fee.frame.minY, confirm.frame.minY]
-                if frame == last { return (frame[0], frame[1], tree) }
-                last = frame
+               let confirm = tree.first(where: { $0.id == "signing.confirm" }),
+               let place = tree.first(where: { $0.id == SigningVerdictRoom<EmptyView>.testId && !$0.element }),
+               let body = scrolls.first {
+                let frames = [fee.frame, confirm.frame, place.frame, CGRect(origin: body.contentOffset, size: body.contentSize)]
+                seen = Seen(
+                    verdict: verdict, tree: tree, fee: fee.frame, confirm: confirm.frame, place: place.frame,
+                    viewport: body.convert(body.bounds, to: nil).inset(by: body.adjustedContentInset),
+                    offset: body.contentOffset.y,
+                    contentHeight: body.contentSize.height, scrollViews: scrolls.count,
+                    bottom: view.bounds.maxY - view.safeAreaInsets.bottom
+                )
+                if frames == last { break }
+                last = frames
             }
             try await shown(view)
             try await Task.sleep(for: .milliseconds(50))
         }
-        let frame = try #require(last, "the fee row's refresh and the confirm are in the tree")
-        return (frame[0], frame[1], tree)
+        return try #require(seen, "\(verdict): the fee row, the confirm, the verdict's place and the body are in the tree")
     }
 
-    /// The drawn send (cs1) with `verdict` on it — in the place (`kept`), or
-    /// appended to the form as the sheet used to do it.
-    private func model(_ verdict: Verdict, kept: Bool) throws -> SigningModel {
+    /// The drawn send (cs1) through the production renderer, with `verdict`
+    /// in the place the sheet keeps.
+    private func model(_ verdict: Verdict) throws -> SigningModel {
         let base = SigningFixtures.build(.cs1, loc: loc)
         let landed = try verdictBlocks(verdict)
         var model = SigningModel(
@@ -371,99 +438,271 @@ struct SigningVerdictPlaceTests {
         )
         model.closeLabel = loc.t("common.close")
         model.feeRefresh = FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: false)
-        if kept {
-            model.verdictPlace = SigningVerdictPlace(
-                at: base.blocks.count, count: landed.count, pending: SigningLive.pendingVerdict(loc)
-            )
-        }
+        model.verdictPlace = SigningVerdictPlace(
+            at: base.blocks.count, count: landed.count, pending: SigningLive.pendingVerdict(loc)
+        )
         return model
     }
 
-    /// One live sheet, `width` points wide, stepped through `verdicts`: where
-    /// the confirm sits under each, and what is said.
+    /// A phone's sheet and a short phone's (an iPhone SE's), in points.
+    private static let normal = CGSize(width: 390, height: 844)
+    private static let short = CGSize(width: 375, height: 560)
+
+    /// One live sheet of `size`, stepped through `verdicts` as a simulation
+    /// lands them; `each` may handle the sheet (scroll it) after a step.
     private func walk(
-        _ verdicts: [Verdict], kept: Bool, width: CGFloat = 390, height: CGFloat = 1_400
-    ) async throws -> [(verdict: Verdict, fee: CGFloat, confirm: CGFloat, tree: [Element])] {
+        _ verdicts: [Verdict], size: CGSize,
+        each: @MainActor (Seen, UIScrollView, UIView) async throws -> Void = { _, _, _ in }
+    ) async throws -> [Seen] {
         _ = Self.automation
-        let box = Box(try model(verdicts[0], kept: kept))
+        let box = Box(try model(verdicts[0]))
         let host = UIHostingController(rootView: Host(box: box))
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
-        var out: [(Verdict, CGFloat, CGFloat, [Element])] = []
+        var out: [Seen] = []
         for verdict in verdicts {
-            box.model = try model(verdict, kept: kept)
+            box.model = try model(verdict)
             try await shown(host.view)
-            let at = try await settled(host.view)
-            out.append((verdict, at.fee, at.confirm, at.tree))
+            // A landing glides into view: let it come to rest.
+            try await Task.sleep(for: .milliseconds(400))
+            let seen = try await read(verdict, host.view)
+            out.append(seen)
+            try await each(seen, try #require(scrollViews(in: host.view).first), host.view)
         }
         return out
     }
 
-    /// The measurement. As it was: the confirm under each verdict sits lower
-    /// than it did while the simulation was out. As it is: the confirm, and
-    /// the fee row above it, have ONE position — with no verdict yet, with
-    /// each kind, and with the two that are taller than the place.
+    private func measure(_ name: String, _ size: CGSize, _ step: Seen) {
+        print("MEASURE \(name) \(Int(size.width))x\(Int(size.height)) \(step.verdict.rawValue):"
+            + " confirm.y \(step.confirm.minY)…\(step.confirm.maxY) fee.y \(step.fee.minY)"
+            + " place \(step.place.minY)…\(step.place.maxY) h=\(step.place.height)"
+            + " viewport \(step.viewport.minY)…\(step.viewport.maxY) content=\(step.contentHeight) offset=\(step.offset)")
+    }
+
+    // MARK: - The confirm has one position
+
+    /// The confirm is pinned: ONE frame — with no verdict yet, under each
+    /// kind, under the tall one — whole, on the sheet, on a phone and on a
+    /// short one. It used to be the last thing in the scroll, so whatever
+    /// grew above it pushed it down.
     @Test func theConfirmHasOnePositionUnderEveryVerdict() async throws {
-        let order: [Verdict] = [.out, .send, .swap, .three, .unverified, .nothing, .caution, .danger, .out]
-        for width in [390.0, 375.0] as [CGFloat] {
-            let before = try await walk(order, kept: false, width: width)
-            let after = try await walk(order, kept: true, width: width)
-            let open = try #require(before.first).confirm
-            for (was, now) in zip(before, after) {
-                print("MEASURE signing-verdict w=\(Int(width)) \(was.verdict.rawValue): confirm.y before \(was.confirm)"
-                    + " (\(was.confirm - open >= 0 ? "+" : "")\(was.confirm - open)) after \(now.confirm)"
-                    + " | fee.y before \(was.fee) after \(now.fee)")
+        let order: [Verdict] = [.out, .send, .swap, .three, .unverified, .tall, .nothing, .caution, .danger, .out]
+        for size in [Self.normal, Self.short] {
+            let walked = try await walk(order, size: size)
+            let first = try #require(walked.first)
+            for step in walked {
+                measure("signing-confirm", size, step)
+                #expect(step.confirm == first.confirm,
+                        "\(Int(size.height)) \(step.verdict): confirm at \(step.confirm), was \(first.confirm)")
+                #expect(step.confirm.minY >= step.viewport.maxY - 0.5,
+                        "\(Int(size.height)) \(step.verdict): the confirm is not under the body")
+                #expect(step.confirm.maxY <= step.bottom + 0.5 && step.confirm.height >= 44,
+                        "\(Int(size.height)) \(step.verdict): the confirm is not whole on the sheet: \(step.confirm)")
+                #expect(step.scrollViews == 1, "\(Int(size.height)) \(step.verdict): \(step.scrollViews) scroll views")
+                // A landed verdict is in view, whole — on the short screen too.
+                if step.verdict != .out, step.place.height <= step.viewport.height {
+                    #expect(step.inView(step.place),
+                            "\(Int(size.height)) \(step.verdict): the verdict \(step.place) is not whole in \(step.viewport)")
+                }
             }
-            // As it was: every verdict moved the confirm.
-            for step in before where step.verdict != .out {
-                #expect(step.confirm > open + 20, "w\(Int(width)) \(step.verdict): the old sheet did not move (\(step.confirm) vs \(open))")
-            }
-            // As it is: not a point, under any of them.
-            let kept = try #require(after.first)
-            for step in after {
-                #expect(step.confirm == kept.confirm,
-                        "w\(Int(width)) \(step.verdict): confirm at \(step.confirm), was \(kept.confirm)")
-                #expect(step.fee == kept.fee, "w\(Int(width)) \(step.verdict): fee row at \(step.fee), was \(kept.fee)")
+        }
+    }
+
+    /// The usual verdicts move nothing: under "Checking…", "No asset
+    /// changes", a one-row and a two-row card, the could-not-check line and
+    /// the longest revert line, the fee row under the place — and so the
+    /// account, and the confirm — sits where it sat, and the verdict starts
+    /// where "Checking…" did. On a phone and at 375 pt.
+    @Test func theUsualVerdictsMoveNothing() async throws {
+        let usual: [Verdict] = [.out, .nothing, .send, .swap, .caution, .danger, .out]
+        for size in [Self.normal, CGSize(width: 375, height: 844)] {
+            let walked = try await walk(usual, size: size)
+            let kept = try #require(walked.first)
+            for step in walked {
+                measure("signing-usual", size, step)
+                #expect(step.fee == kept.fee, "\(Int(size.width)) \(step.verdict): the fee row at \(step.fee), was \(kept.fee)")
+                #expect(step.place.minY == kept.place.minY,
+                        "\(Int(size.width)) \(step.verdict): the verdict starts at \(step.place.minY), was \(kept.place.minY)")
+                #expect(step.confirm == kept.confirm)
+                #expect(step.offset == kept.offset, "\(Int(size.width)) \(step.verdict): the body scrolled")
+                #expect(!step.scrolls, "\(Int(size.width)) \(step.verdict): the usual sheet does not fit a phone")
             }
         }
     }
 
     /// The place is never blank, and what stands in it is said aloud: the
     /// quiet "Checking…" while the simulation is out, then the verdict's own
-    /// words.
+    /// words — "No asset changes" in the core's.
     @Test func thePlaceIsNeverBlankAndSaysWhatItHolds() async throws {
-        let walked = try await walk([.out, .send, .nothing, .caution], kept: true)
-        let said = walked.map { step in step.tree.map(\.label) }
+        let walked = try await walk([.out, .send, .nothing, .caution], size: Self.normal)
+        let said = walked.map { step in step.tree.filter(\.element).map(\.label) }
         #expect(said[0].contains("Balance changes") && said[0].contains("Checking…"))
         #expect(said[1].contains("Balance changes") && said[1].contains("xDAI") && !said[1].contains("Checking…"))
-        #expect(said[2].contains("No asset changes"))
+        #expect(said[2].contains("Balance changes") && said[2].contains("No asset changes"))
         #expect(said[2].contains(loc.t("componentsUi.signing.simResultNoChange")))
         #expect(said[3].contains(loc.t("componentsUi.signing.simUnavailableWarning")))
+        for step in walked {
+            #expect(step.tree.allSatisfy { !$0.label.contains("leave your wallet") })
+        }
     }
 
-    /// The usual verdict lands whole — a send's row, a swap's two — and one
-    /// taller than the place is cut at the fold and scrolls inside it: its
-    /// last line starts below the place's bottom edge, not below a taller
-    /// sheet.
-    @Test func aTallVerdictScrollsInsideThePlace() async throws {
-        let walked = try await walk([.swap, .three, .unverified], kept: true)
-        func top(_ step: Int, _ label: String) throws -> CGFloat {
-            try #require(walked[step].tree.first { $0.label == label }, "\(label) is in the tree").frame.minY
+    // MARK: - A tall verdict is shown whole
+
+    private static let tallRows = ["xDAI", "WETH", "USDC", "Unverified token"]
+
+    /// The verdict's own card, alone, as wide as the place: how tall it asks
+    /// to be when nothing limits it.
+    private func ownHeight(_ verdict: Verdict, width: CGFloat) throws -> CGFloat {
+        guard case .balances(let title, let rows, let note, let tone)? = try verdictBlocks(verdict).first else {
+            Issue.record("\(verdict) is not a balance card")
+            return 0
         }
-        func bottom(_ step: Int, _ label: String) throws -> CGFloat {
-            try #require(walked[step].tree.first { $0.label == label }, "\(label) is in the tree").frame.maxY
+        let card = UIHostingController(
+            rootView: SigningBalances(title: title, rows: rows, note: note, noteTone: tone).themed(.light)
+        )
+        return card.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height
+    }
+
+    /// Four balance rows and the unverified-token warning, on a phone: the
+    /// place is exactly as tall as the verdict — taller than the place that
+    /// was kept — every row and the warning stand whole and in view, there
+    /// is no scroll view but the body's, and the confirm is where it was
+    /// with one row and with none.
+    @Test func aTallVerdictIsShownWholeAndTheConfirmDoesNotMove() async throws {
+        let walked = try await walk([.out, .send, .swap, .three, .tall], size: Self.normal)
+        let (out, send, swap, three, tall) = (walked[0], walked[1], walked[2], walked[3], walked[4])
+        for step in walked { measure("signing-tall", Self.normal, step) }
+        let warning = loc.t("componentsUi.signing.unverifiedWarning")
+
+        // The verdict is laid out at the height it asks for, alone: nothing
+        // squeezed it into the place.
+        let own = try ownHeight(.tall, width: tall.place.width)
+        #expect(abs(tall.place.height - own) <= 1.5, "the verdict is \(tall.place.height) tall, and asks \(own)")
+
+        // The place. What it holds pushes the fee row down by what the place
+        // GREW — so the place's height is the kept one plus that. Under the
+        // usual verdicts it grew nothing; under three rows and under the
+        // tall one it is the verdict's own height, to the point.
+        #expect(send.feeInBody == out.feeInBody && swap.feeInBody == out.feeInBody)
+        let threePlace = three.place.height - (three.feeInBody - out.feeInBody)
+        let tallPlace = tall.place.height - (tall.feeInBody - out.feeInBody)
+        // Two rows and half a third: the height kept before this round.
+        let kept = ((swap.place.height + three.place.height) / 2).rounded()
+        print("MEASURE signing-tall place: kept=\(kept) three=\(three.place.height) (+\(three.feeInBody - out.feeInBody))"
+            + " tall=\(tall.place.height) (+\(tall.feeInBody - out.feeInBody)) content=\(own)")
+        #expect(abs(threePlace - kept) <= 0.5, "three rows: the place is not the verdict's height (\(threePlace) vs \(kept))")
+        #expect(abs(tallPlace - kept) <= 0.5, "the tall verdict: the place is not its height (\(tallPlace) vs \(kept))")
+        #expect(tall.place.height > kept + 60, "the tall verdict did not outgrow the kept place")
+        #expect(tall.placeInBody == out.placeInBody, "the verdict does not start where \"Checking…\" did")
+
+        // Every row and the warning: a whole row each, one under the other,
+        // inside the verdict, in view.
+        let row = try send.frame("xDAI").height
+        var under = tall.place.minY
+        for label in Self.tallRows + [warning] {
+            let frame = try tall.frame(label)
+            if label != warning {
+                #expect(abs(frame.height - row) <= 0.5, "\(label) is \(frame.height) tall, a row is \(row)")
+            }
+            #expect(frame.minY >= under - 0.5, "\(label) \(frame) overlaps the line above it")
+            #expect(frame.maxY <= tall.place.maxY + 0.5, "\(label) \(frame) runs out of the verdict \(tall.place)")
+            #expect(tall.inView(frame), "\(label) \(frame) is outside the body's viewport \(tall.viewport)")
+            under = frame.maxY
         }
-        let fee = walked[0].fee
-        // A swap: both rows above the fee row, whole.
-        #expect(try bottom(0, "USDC") < fee)
-        // Three coins: the third row begins inside the place (it is cut, not
-        // hidden) and the fee row has not moved for it.
-        let third = try top(1, "USDC")
-        #expect(third < fee, "the third row is hidden entirely: starts at \(third), fee row at \(fee)")
-        #expect(walked[1].fee == fee && walked[2].fee == fee)
-        // The place scrolls: there is a scroll view inside the sheet's own.
-        #expect(try bottom(1, "USDC") > third)
+        // The four figures too, each on its coin's row.
+        for (label, delta) in zip(Self.tallRows, ["\u{2212}1.5", "\u{2212}0.04", "\u{2212}25", "+"]) {
+            let at = try tall.frame(delta)
+            #expect(abs(at.midY - (try tall.frame(label)).midY) <= 1, "\(delta) is not on \(label)'s row")
+        }
+        #expect(try tall.frame(warning).height > row, "the warning is cut to a line")
+
+        // Nothing scrolls but the body.
+        #expect(tall.scrollViews == 1, "a scroll view inside the sheet's own: \(tall.scrollViews)")
+
+        // The confirm: whole, and where it was.
+        #expect(tall.confirm == send.confirm && tall.confirm == out.confirm,
+                "the confirm moved: \(out.confirm) → \(send.confirm) → \(tall.confirm)")
+        #expect(tall.confirm.maxY <= tall.bottom + 0.5)
+    }
+
+    /// On a screen too short for the sheet the BODY scrolls: the verdict is
+    /// brought into view as it lands, every row and the warning can be
+    /// brought fully into view, and the confirm has not moved — not when the
+    /// verdict landed, and not while the body scrolled.
+    @Test func onAShortScreenTheBodyScrollsAndTheConfirmStays() async throws {
+        let warning = loc.t("componentsUi.signing.unverifiedWarning")
+        var reached: [String: CGRect] = [:]
+        var confirmWhileScrolling: [CGRect] = []
+        let walked = try await walk([.out, .send, .tall], size: Self.short) { seen, body, view in
+            guard seen.verdict == .tall else { return }
+            // Bring each row, then the warning, then the first row again,
+            // fully into the viewport — by scrolling the body and nothing else.
+            for label in Self.tallRows + [warning, Self.tallRows[0]] {
+                var at = try await self.read(.tall, view)
+                let frame = try at.frame(label)
+                let below = frame.maxY - at.viewport.maxY
+                let above = at.viewport.minY - frame.minY
+                if below > 0 || above > 0 {
+                    body.setContentOffset(
+                        CGPoint(x: 0, y: body.contentOffset.y + (below > 0 ? below : -above)), animated: false)
+                    try await self.shown(view)
+                    at = try await self.read(.tall, view)
+                }
+                let now = try at.frame(label)
+                #expect(at.inView(now), "\(label) cannot be brought into view: \(now) in \(at.viewport)")
+                reached[label] = now
+                confirmWhileScrolling.append(at.confirm)
+            }
+        }
+        let (out, send, tall) = (walked[0], walked[1], walked[2])
+        for step in walked { measure("signing-short", Self.short, step) }
+
+        // The sheet is taller than this screen, and what scrolls is its body.
+        #expect(tall.scrolls, "the sheet fits \(Self.short): content \(tall.contentHeight), viewport \(tall.viewport.height)")
+        #expect(tall.scrollViews == 1)
+        // The verdict is still its own height: the short screen cut nothing
+        // off it, and the body grew by it.
+        #expect(abs(tall.place.height - (try ownHeight(.tall, width: tall.place.width))) <= 1.5)
+        #expect(tall.contentHeight > out.contentHeight + 60)
+
+        // It opened at its top, on "Checking…". Each verdict was brought
+        // into view as it landed: whole where the viewport can hold it —
+        // by the least scroll that shows all of it — else from its top.
+        #expect(out.placeInBody == send.placeInBody && out.placeInBody == tall.placeInBody)
+        #expect(send.inView(send.place), "the one-row verdict \(send.place) is not whole in \(send.viewport)")
+        #expect(tall.offset > out.offset, "the tall verdict landed under the fold and the body did not move")
+        if tall.place.height <= tall.viewport.height {
+            #expect(tall.inView(tall.place), "the landed verdict \(tall.place) is not whole in the viewport \(tall.viewport)")
+            // …by the least scroll that shows all of it: it ends at the fold.
+            #expect(abs(tall.place.maxY - tall.viewport.maxY) <= 1, "the body scrolled further than the verdict needed")
+        } else {
+            #expect(abs(tall.place.minY - tall.viewport.minY) <= 1, "the landed verdict does not start at the viewport's top")
+        }
+
+        // Every row and the warning could be read, whole.
+        #expect(reached.count == Self.tallRows.count + 1)
+
+        // The confirm: one frame, whole, under the body — before the
+        // verdict, under one row, under the tall one, and at every scroll.
+        for frame in [send.confirm, tall.confirm] + confirmWhileScrolling {
+            #expect(frame == out.confirm, "the confirm moved: \(frame) vs \(out.confirm)")
+        }
+        #expect(out.confirm.maxY <= out.bottom + 0.5 && out.confirm.minY >= tall.viewport.maxY - 0.5)
+    }
+
+    /// The placeholder is not a verdict: a sheet that opens on "Checking…"
+    /// on a short screen opens at its top. One that opens with its verdict
+    /// already there shows it.
+    @Test func aSheetOpensAtItsTopAndOnItsVerdictWhenItHasOne() async throws {
+        let pending = try await walk([.out], size: Self.short)[0]
+        let landed = try await walk([.tall], size: Self.short)[0]
+        measure("signing-open", Self.short, pending)
+        measure("signing-open", Self.short, landed)
+        #expect(pending.offset <= 0, "the sheet did not open at its top: \(pending.offset)")
+        #expect(landed.offset > pending.offset, "a sheet opened with its verdict under the fold")
+        #expect(landed.inView(landed.place) || abs(landed.place.minY - landed.viewport.minY) <= 1)
+        #expect(landed.confirm == pending.confirm)
     }
 }

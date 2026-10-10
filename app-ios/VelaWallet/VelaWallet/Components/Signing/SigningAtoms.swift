@@ -542,12 +542,17 @@ struct SigningBalances: View {
                                                           : noteTone.color(theme))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, Tokens.Space.s8)
+                    // As far from the card's edge as the title is. With
+                    // none, the last line of the unverified-token warning
+                    // stood on the border — unseen while a tall verdict
+                    // faded out above it, plain now that it is shown whole.
+                    .padding(.bottom, Tokens.Space.s8)
             }
         }
         // The card is the column's width whatever it holds. With rows it
-        // always was (a row spans it); with none — "Checking…", "No assets
-        // leave your wallet" — it hugged its words, so the card that landed
-        // over "Checking…" also grew sideways (final note F2).
+        // always was (a row spans it); with none — "Checking…", "No asset
+        // changes" — it hugged its words, so the card that landed over
+        // "Checking…" also grew sideways (final note F2).
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Space.s16)
         .padding(.vertical, Tokens.Space.s4)
@@ -558,67 +563,51 @@ struct SigningBalances: View {
     }
 }
 
-// MARK: - The simulation verdict's place (PR 3 final note F2)
+// MARK: - The simulation verdict's place
 
-/// The room the signing sheet keeps for the simulation's verdict: ONE height
-/// from the request's first frame, whatever stands in it — "Checking…", a
-/// balance card, the core's notice — so nothing under it moves when the
-/// verdict lands.
+/// The place the signing sheet keeps for the simulation's verdict. It is
+/// there from the request's first frame — "Checking…" in the balance card's
+/// own outline — and whatever the simulation then says stands in it.
 ///
-/// **How tall.** A balance card of two rows and half of a third, in the
-/// text's own sizes (so it holds at every text scale). Two rows is what a
-/// send (one) and a swap (two) show, and every notice the core words is
-/// shorter, so the usual verdict lands whole. The half row is deliberate: a
-/// third coin moving is the unusual case that must not be missed on the one
-/// part of the sheet a site cannot author, and a room cut exactly at a row's
-/// edge would show nothing of it.
+/// **A minimum height, never a limit.** The place is at least a balance card
+/// of two rows and half of a third, in the text's own sizes (so it holds at
+/// every text scale). Two rows is what a send (one) and a swap (two) show,
+/// and every notice the core words is shorter: the usual verdict lands in
+/// room that was already there, and nothing under it moves (final note F2).
 ///
-/// **Taller than the room** — a third balance row, the note under an
-/// unverified token — the verdict scrolls INSIDE the room rather than growing
-/// the sheet. One that fits is drawn as it is, with no scroll view around it.
+/// **A taller verdict is shown WHOLE.** A third and a fourth balance row, the
+/// warning under an unverified token: the place grows to the verdict's own
+/// height. Nothing in it is cut, faded or scrolled, and there is no scroll
+/// view of its own to find — the verdict is the one part of the sheet a site
+/// cannot write, and a row under a fold is a row somebody signs without
+/// reading. (It used to be one height with a scroll inside it: a third coin
+/// moving showed as half a row over a fade.) When the sheet then outgrows
+/// the screen its BODY scrolls, under a confirm that stays where it is
+/// (`SigningSheet`).
 struct SigningVerdictRoom<Content: View>: View {
-    @Environment(\.theme) private var theme
+    /// The verdict in its place, as a group with a name: an assistive
+    /// client's (and a test's) handle on what the place holds. Its frame is
+    /// the verdict's own — the room around a short one is not in it.
+    static var testId: String { "signing.verdict" }
+
     @ViewBuilder var content: Content
 
     var body: some View {
         VerdictRoomLayout {
             reference(rows: 2)
             reference(rows: 3)
-            ViewThatFits(in: .vertical) {
-                column
-                ScrollView {
-                    // Room under the last line, so the end of the verdict
-                    // clears the fade once it is scrolled to.
-                    column.padding(.bottom, Tokens.Space.s16)
-                }
-                .scrollBounceBehavior(.basedOnSize)
-                // More than fits: say so as it lands — the indicator, and
-                // the fold fading out rather than cutting a line in two.
-                .scrollIndicatorsFlash(onAppear: true)
-                .overlay(alignment: .bottom) {
-                    LinearGradient(
-                        colors: [theme.bgRaised.opacity(0), theme.bgRaised],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                    .frame(height: Tokens.Space.s16)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                }
+            VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+                content
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .clipped()
-    }
-
-    private var column: some View {
-        VStack(alignment: .leading, spacing: Tokens.Space.s16) {
-            content
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(Self.testId)
     }
 
     /// A balance card of `rows` rows, measured and never seen or said: the
-    /// room's height is taken from the real card, not from arithmetic that
-    /// would drift from it.
+    /// minimum is taken from the real card, not from arithmetic that would
+    /// drift from it.
     private func reference(rows: Int) -> some View {
         SigningBalances(
             title: "0",
@@ -630,21 +619,26 @@ struct SigningVerdictRoom<Content: View>: View {
     }
 }
 
-/// Sizes the room from its two references (the first two subviews: a card of
-/// two rows and one of three) and gives every subview the room.
+/// As tall as the verdict (the last subview), and never shorter than the
+/// minimum its two references give (the first two: a card of two rows and
+/// one of three, so two and a half).
 private struct VerdictRoomLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard subviews.count >= 2 else { return .zero }
+        guard subviews.count >= 3 else { return .zero }
         let across = ProposedViewSize(width: proposal.width, height: nil)
         let two = subviews[0].sizeThatFits(across)
         let three = subviews[1].sizeThatFits(across)
-        return CGSize(width: proposal.width ?? two.width, height: ((two.height + three.height) / 2).rounded())
+        let minimum = ((two.height + three.height) / 2).rounded()
+        let verdict = subviews[2].sizeThatFits(across).height
+        return CGSize(width: proposal.width ?? two.width, height: max(minimum, verdict))
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let room = ProposedViewSize(width: bounds.width, height: bounds.height)
+        // Each at its own height, from the top: the verdict is never handed
+        // less room than it asks for.
+        let across = ProposedViewSize(width: bounds.width, height: nil)
         for subview in subviews {
-            subview.place(at: bounds.origin, anchor: .topLeading, proposal: room)
+            subview.place(at: bounds.origin, anchor: .topLeading, proposal: across)
         }
     }
 }
