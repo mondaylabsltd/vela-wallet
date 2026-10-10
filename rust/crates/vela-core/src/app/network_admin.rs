@@ -306,6 +306,18 @@ pub const NO_P256_HINT: &str = "settingsModals.addNetwork.noP256Hint";
 /// ([`NetBlocker::MissingContracts`]).
 pub const MISSING_CONTRACTS_HINT: &str = "settingsModals.addNetwork.incompatibleHint";
 
+/// Why the add-network wizard stopped, as a sentence
+/// ([`NetWizardView::error_key`]): the network is already in the list.
+pub const WIZARD_ALREADY_ADDED: &str = "addToken.errorAlreadyAdded";
+/// … the chain index has no such chain.
+pub const WIZARD_NOT_FOUND: &str = "addToken.errorChainNotFound";
+/// … the chain is known and lists no RPC endpoint to check it through.
+pub const WIZARD_NO_RPC_ENDPOINT: &str = "settingsModals.addNetwork.noRpcEndpoint";
+/// … it was checked and refused, and the check itself names no reason.
+pub const WIZARD_NOT_COMPATIBLE: &str = "addToken.errorNotCompatible";
+/// … the check could not reach a verdict (never worded as a refusal).
+pub const WIZARD_CHECK_FAILED: &str = "settingsModals.addNetwork.unableToVerify";
+
 /// `SERVICE_IDENTITY` (SettingsScreen.tsx:340-344) — the `/api/health`
 /// `service` field each endpoint must report. A passkey index pointed at the
 /// wrong service is a LOGIN SAFETY problem, not a latency problem
@@ -1685,8 +1697,22 @@ pub struct NetWizardView {
     pub custom_rpc: String,
     pub suggestions: Vec<NetChainIndexEntry>,
     pub chain_info: Option<NetChainInfo>,
+    /// The check's result — in the `Checked` phase, and ALSO beside an
+    /// `Error` the check itself raised (a refusal or an inconclusive probe on
+    /// the path that saves without a confirm step): the reason
+    /// ([`NetCompatibility::hint_key`]) and the Chain Setup link
+    /// ([`NetCompatibility::setup_url`]) are drawn from it on every path a
+    /// network is added by.
     pub compat: Option<NetCompatibility>,
     pub error: Option<NetWizardErrorKind>,
+    /// The corpus key of the sentence for [`Self::error`], so no shell words
+    /// a stop itself (three of them had no words on the web and read
+    /// "Incompatible"): [`WIZARD_ALREADY_ADDED`], [`WIZARD_NOT_FOUND`],
+    /// [`WIZARD_NO_RPC_ENDPOINT`], [`WIZARD_CHECK_FAILED`], and for a refusal
+    /// the check's own reason ([`NetCompatibility::hint_key`]) when it kept
+    /// one, else [`WIZARD_NOT_COMPATIBLE`]. `None` with no error.
+    #[serde(default)]
+    pub error_key: Option<String>,
     /// The "Add network" button renders only when this is true.
     pub can_add: bool,
 }
@@ -2572,6 +2598,7 @@ fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffec
     if compat.compatible {
         let Some(info) = model.wizard.chain_info.clone() else {
             // Unreachable by construction; refuse rather than save garbage.
+            // No reason is kept: the check found none.
             model.wizard.phase = WizardPhase::Error {
                 kind: NetWizardErrorKind::NotCompatible {
                     chain_id: compat.chain_id,
@@ -2600,6 +2627,12 @@ fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffec
             }
         },
     };
+    // The check is kept beside the error (PR 3 notes 5 and 10). This path
+    // used to drop it, so a refusal here could only say "Incompatible":
+    // whether the network has no P-256 verifier (nothing can be deployed;
+    // money sent there is stuck) or only lacks contracts (Chain Setup) was
+    // known and thrown away — on the one path with no confirm step to show it.
+    model.wizard.compat = Some(compat);
     render()
 }
 
@@ -3887,6 +3920,9 @@ fn wizard_view(model: &Model) -> NetWizardView {
     let can_add = phase == NetWizardPhase::Checked
         && !model.wizard.auto
         && model.wizard.compat.as_ref().is_some_and(|c| c.compatible);
+    let error_key = error
+        .as_ref()
+        .map(|kind| wizard_error_key(kind, model.wizard.compat.as_ref()).to_owned());
     NetWizardView {
         phase,
         query: model.wizard.query.clone(),
@@ -3895,7 +3931,27 @@ fn wizard_view(model: &Model) -> NetWizardView {
         chain_info: model.wizard.chain_info.clone(),
         compat: model.wizard.compat.clone(),
         error,
+        error_key,
         can_add,
+    }
+}
+
+/// The sentence for a wizard stop ([`NetWizardView::error_key`]). A refusal
+/// says the check's own reason when the check was kept; an inconclusive
+/// check is never worded as one (invariant ③).
+#[must_use]
+pub fn wizard_error_key<'a>(
+    kind: &NetWizardErrorKind,
+    compat: Option<&'a NetCompatibility>,
+) -> &'a str {
+    match kind {
+        NetWizardErrorKind::AlreadyAdded { .. } => WIZARD_ALREADY_ADDED,
+        NetWizardErrorKind::NotFound { .. } => WIZARD_NOT_FOUND,
+        NetWizardErrorKind::NoRpcEndpoint => WIZARD_NO_RPC_ENDPOINT,
+        NetWizardErrorKind::NotCompatible { .. } => compat
+            .and_then(|compat| compat.hint_key.as_deref())
+            .unwrap_or(WIZARD_NOT_COMPATIBLE),
+        NetWizardErrorKind::CheckFailed { .. } => WIZARD_CHECK_FAILED,
     }
 }
 

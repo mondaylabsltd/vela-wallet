@@ -2341,3 +2341,179 @@ fn the_public_rpcs_are_built_in_https_and_alive_when_measured() {
     );
     assert!(public_rpc_urls(NEW_CHAIN).is_empty());
 }
+
+// ===========================================================================
+// PR 3 notes 5, 10, 18: every path a network is added by says why it stopped
+// ===========================================================================
+
+/// The path with no confirm step (a scanned request, "Add this network")
+/// used to drop its check and could only say "Incompatible". It keeps it: a
+/// network with no P-256 verifier says so there too, with no Chain Setup
+/// link — and one that only lacks contracts gets the link, on that chain.
+#[test]
+fn the_scan_path_keeps_its_check_so_a_refusal_says_why() {
+    use vela_core::app::network_admin::{WIZARD_CHECK_FAILED, WIZARD_NOT_COMPATIBLE};
+    let scan = || {
+        let mut sut = started();
+        sut.dispatch(Event::AddByChainIdRequested {
+            chain_id: NEW_CHAIN,
+            now_iso: NOW_ISO.to_owned(),
+        });
+        sut.resolve(Res::ChainInfo {
+            chain_id: NEW_CHAIN,
+            data: Some(raw_chain()),
+        });
+        resolve_race(&mut sut);
+        sut
+    };
+
+    // No P-256 verifier: contracts all there, the precompile is not.
+    let mut sut = scan();
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        sut.resolve(code_ok(RPC_FAST, address));
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some("0x".to_owned()),
+    });
+    sut.resolve(code_result(RPC_FAST, P256_PRECOMPILE, Some("0x")));
+    let wizard = sut.view().wizard;
+    assert_eq!(
+        wizard.error,
+        Some(NetWizardErrorKind::NotCompatible {
+            chain_id: NEW_CHAIN
+        })
+    );
+    let compat = wizard.compat.expect("the check is kept beside the error");
+    assert_eq!(compat.blocker, Some(NetBlocker::NoP256));
+    assert_eq!(compat.setup_url, None, "nothing to deploy");
+    assert_eq!(wizard.error_key.as_deref(), Some(NO_P256_HINT));
+    assert!(!wizard.can_add);
+    assert_eq!(sut.view().networks.len(), 24, "nothing saved");
+
+    // Missing contracts: the verifier answers, the contracts are not there.
+    let mut sut = scan();
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        sut.resolve(code_result(RPC_FAST, address, Some("0x")));
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some(p256_one()),
+    });
+    let wizard = sut.view().wizard;
+    let compat = wizard.compat.expect("the check is kept beside the error");
+    assert_eq!(compat.blocker, Some(NetBlocker::MissingContracts));
+    assert_eq!(
+        compat.setup_url.as_deref(),
+        Some(chain_setup_url(NEW_CHAIN).as_str())
+    );
+    assert_eq!(wizard.error_key.as_deref(), Some(MISSING_CONTRACTS_HINT));
+
+    // Inconclusive: the probes failed. Kept too, and never worded as a
+    // refusal — no reason, no link.
+    let mut sut = scan_unreachable();
+    let wizard = sut.view().wizard;
+    assert_eq!(
+        wizard.error,
+        Some(NetWizardErrorKind::CheckFailed {
+            chain_id: NEW_CHAIN
+        })
+    );
+    assert_eq!(wizard.error_key.as_deref(), Some(WIZARD_CHECK_FAILED));
+    let compat = wizard.compat.expect("kept");
+    assert!(compat.rpc_failure.is_some());
+    assert_eq!((compat.blocker, compat.setup_url), (None, None));
+
+    // The next selection starts clean: no stale reason under a new chain.
+    sut.dispatch(Event::ChainSelected {
+        chain_id: 8888,
+        keep_custom_rpc: false,
+    });
+    let wizard = sut.view().wizard;
+    assert_eq!((wizard.compat, wizard.error_key), (None, None));
+
+    // A refusal whose check named no reason still has a sentence.
+    assert_eq!(
+        vela_core::app::network_admin::wizard_error_key(
+            &NetWizardErrorKind::NotCompatible { chain_id: 1 },
+            None
+        ),
+        WIZARD_NOT_COMPATIBLE
+    );
+}
+
+/// The scan path with both probes failing.
+fn scan_unreachable() -> Sut {
+    let mut sut = started();
+    sut.dispatch(Event::AddByChainIdRequested {
+        chain_id: NEW_CHAIN,
+        now_iso: NOW_ISO.to_owned(),
+    });
+    sut.resolve(Res::ChainInfo {
+        chain_id: NEW_CHAIN,
+        data: Some(raw_chain()),
+    });
+    sut.resolve(probe(RPC_SLOW, None, 0.0));
+    sut.resolve(probe(RPC_FAST, None, 0.0));
+    sut
+}
+
+/// Every way the wizard stops has a sentence of its own, in the corpus: on
+/// the web three of them had none and read "Incompatible" — over a network
+/// that was merely already added, or not found.
+#[test]
+fn every_wizard_stop_has_its_own_sentence_in_the_corpus() {
+    use vela_core::app::network_admin::{
+        WIZARD_ALREADY_ADDED, WIZARD_CHECK_FAILED, WIZARD_NOT_COMPATIBLE, WIZARD_NOT_FOUND,
+        WIZARD_NO_RPC_ENDPOINT,
+    };
+    // Already added.
+    let mut sut = started_with(vec![custom_network(999)], vec![]);
+    sut.dispatch(Event::ChainSelected {
+        chain_id: 999,
+        keep_custom_rpc: false,
+    });
+    assert_eq!(
+        sut.view().wizard.error_key.as_deref(),
+        Some(WIZARD_ALREADY_ADDED)
+    );
+
+    // Not found.
+    let mut sut = started();
+    sut.dispatch(Event::ChainSelected {
+        chain_id: NEW_CHAIN,
+        keep_custom_rpc: false,
+    });
+    sut.resolve(Res::ChainInfo {
+        chain_id: NEW_CHAIN,
+        data: None,
+    });
+    assert_eq!(
+        sut.view().wizard.error_key.as_deref(),
+        Some(WIZARD_NOT_FOUND)
+    );
+
+    // No RPC endpoint.
+    let mut sut = started();
+    let mut bare = raw_chain();
+    bare.rpc.clear();
+    select_and_resolve(&mut sut, bare);
+    let wizard = sut.view().wizard;
+    assert_eq!(wizard.error, Some(NetWizardErrorKind::NoRpcEndpoint));
+    assert_eq!(wizard.error_key.as_deref(), Some(WIZARD_NO_RPC_ENDPOINT));
+
+    // No stop, no sentence.
+    assert_eq!(started().view().wizard.error_key, None);
+
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [
+        WIZARD_ALREADY_ADDED,
+        WIZARD_NOT_FOUND,
+        WIZARD_NO_RPC_ENDPOINT,
+        WIZARD_NOT_COMPATIBLE,
+        WIZARD_CHECK_FAILED,
+    ] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
+}
