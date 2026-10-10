@@ -56,8 +56,9 @@ struct BalanceDisplay: View {
     /// control, Receive / Send and every row under them down by the line's
     /// height and the gap above it — 24.7 pt on an iPhone 17 — and each
     /// departure pulled them back. The line's room is always there now: the
-    /// status line stands in it, or a zero wallet's "live" line, or nothing,
-    /// and the page under the hero is where it was in all three.
+    /// first read's "Checking…" stands in it, or the status line, or a zero
+    /// wallet's "live" line, or nothing, and the page under the hero is
+    /// where it was in all four.
     ///
     /// One line is what is held. The two long reasons a hero can carry
     /// ("Something went wrong inside Vela. If it keeps happening, reopen the
@@ -69,7 +70,11 @@ struct BalanceDisplay: View {
             statusRow(BalanceStatusModel(kind: .warning, text: "0"))
                 .hidden()
                 .accessibilityHidden(true)
-            if let status = model.status {
+            // "Checking…" stands alone (final note F19): the first read is
+            // out, so there is no reason to give yet and no "live" to claim.
+            if let checking = model.checkingText {
+                checkingRow(checking)
+            } else if let status = model.status {
                 statusDoor(status)
             } else if let live = model.liveText {
                 liveRow(live)
@@ -141,6 +146,20 @@ struct BalanceDisplay: View {
                 .typeRole(Typography.rowSub.scaled(textScale))
                 .foregroundStyle(theme.successBase)
         }
+    }
+
+    /// "Checking…" — the live line before anything has answered: the same
+    /// dot, not green yet, and quiet ink. No chevron and no tap: there is
+    /// nothing to open about a read that has not come back.
+    private func checkingRow(_ text: String) -> some View {
+        HStack(spacing: Tokens.Space.s8) {
+            PulsingDot(color: theme.fgSubtle)
+            Text(verbatim: text)
+                .typeRole(Typography.rowSub.scaled(textScale))
+                .foregroundStyle(theme.fgMuted)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("balance-checking")
     }
 
     /// The line, as a control where there is somewhere to go.

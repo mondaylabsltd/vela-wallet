@@ -241,19 +241,29 @@ enum WalletLive {
         loc: Loc? = nil,
         networks: WalletNetworks = .builtin
     ) -> BalanceModel {
+        // Final note F19: while the first read of this account is out the
+        // line under the total says "Checking…" (the core's `checkingKey`),
+        // and nothing else — a cached figure under a first read is not
+        // "still updating" yet, and no chain has failed to answer.
+        let checking = loc.flatMap { loc in view.checkingKey.map { loc.t($0) } }
+        let kind = state(view, display: display)
         var model = BalanceModel(
             label: fallback.label,
             // Named apart from the figure: the stored choice while it is on
             // its way ("CNY" over the waiting figure, never "USD" first), and
             // nothing while no choice is known.
             currency: display.settled ? display.code : (display.pendingCode ?? ""),
-            state: state(view, display: display),
+            state: kind,
             integer: nil,
             decimals: nil,
-            liveText: nil,
-            status: status(view, fallback: fallback, loc: loc, networks: networks),
+            // "Live · listening for payments" is the core's to say
+            // (`liveKey`), under the zero it is about.
+            liveText: kind == .zeroLive ? loc.flatMap { loc in view.liveKey.map { loc.t($0) } } : nil,
+            status: checking == nil
+                ? status(view, fallback: fallback, loc: loc, networks: networks) : nil,
             a11yHide: fallback.a11yHide,
-            a11yShow: fallback.a11yShow
+            a11yShow: fallback.a11yShow,
+            checkingText: checking
         )
 
         // Hidden and loading both draw without a figure, so there is nothing to
@@ -272,8 +282,14 @@ enum WalletLive {
     }
 
     /// `nil` total is **not** zero — it is "no total can be stated", and the
-    /// drawn loading treatment is what says that. `zeroLive` is for a wallet
-    /// that genuinely holds nothing, which the core distinguishes.
+    /// drawn loading treatment is what says that.
+    ///
+    /// **"Zero, live" is `view.liveKey != nil` and nothing else** (final note
+    /// F19). The core says it only when the last round settled, every chain
+    /// it asked answered and the wallet holds nothing. This shell used to
+    /// call any total of 0 live, which a wallet that held nothing last
+    /// session satisfies from its cache before anything has been read — and
+    /// keeps satisfying after a read that threw.
     private static func state(_ view: BalanceViewWire, display: Display = .usd) -> BalanceStateKind {
         if view.hidden { return .hidden }
         // The currency is not known yet: no figure — not the total, and not
@@ -286,8 +302,8 @@ enum WalletLive {
         // total is 0 then; a settled-looking "$0.00" (and "Deposit your first
         // asset") under the reason was the bug. A skeleton and the reason.
         if view.unreachable == true { return .loading }
-        guard let total = view.displayTotalUsd ?? view.cachedTotalUsd else { return .loading }
-        return total == 0 ? .zeroLive : .normal
+        guard view.displayTotalUsd ?? view.cachedTotalUsd != nil else { return .loading }
+        return view.liveKey != nil ? .zeroLive : .normal
     }
 
     /// The line under the figure. A partial total says so; a figure the core
