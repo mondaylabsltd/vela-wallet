@@ -180,7 +180,7 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
 pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
     use vela_core::app::balance_dashboard::{
         BalanceSwitcherView, BalanceView, LAST_SEEN, LAST_SEEN_EMPTY, LastKnown, NOT_READ_YET,
-        UNREACHABLE_MANY, UnreachableNetwork,
+        UNREACHABLE_MANY, UnreachableCause, UnreachableNetwork,
     };
     let row =
         |chain_id: u32, last_known: LastKnown, usd: Option<f64>, key: &str| UnreachableNetwork {
@@ -188,6 +188,8 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
             last_known,
             last_seen_usd: usd,
             line_key: key.to_owned(),
+            cause: UnreachableCause::Network,
+            rpc_fixable: true,
         };
     BalanceView {
         address: Some(ADDRESS_FULL.to_owned()),
@@ -259,6 +261,57 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
                 rate_limited_chain_ids: Vec::new(),
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: vec![1],
+                registry_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// PR 3 note 4's gallery state (DSR8), through the real balance core: the
+/// account holds $4,500 on Gnosis, and Tempo's node answered while its token
+/// list could not be loaded (`registry_chain_ids`, as the executor reports a
+/// registry document that is unread for a chain with no native coin). The
+/// hero says the token list — never "Can't reach Tempo" — the list it opens
+/// has the one row with no "Fix", and the Settings banner's chip offers none.
+#[must_use]
+pub fn token_list_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    const TEMPO: u32 = vela_core::app::fee_policy::TEMPO_CHAIN_IDS[0];
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![BalanceToken {
+                    chain_id: 100,
+                    symbol: "XDAI".to_owned(),
+                    name: "xDAI".to_owned(),
+                    balance: "4500".to_owned(),
+                    decimals: 18,
+                    token_address: None,
+                    price_usd: Some(1.0),
+                    spam: false,
+                }],
+                failed_chain_ids: vec![TEMPO],
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![100, TEMPO],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: vec![TEMPO],
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -310,6 +363,7 @@ pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
                 rate_limited_chain_ids: Vec::new(),
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: Vec::new(),
+                registry_chain_ids: Vec::new(),
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.

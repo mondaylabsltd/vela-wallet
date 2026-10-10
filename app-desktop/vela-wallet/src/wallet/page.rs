@@ -594,6 +594,10 @@ enum GalleryTab {
     /// the app's own fault where the "can't reach" line goes, never "Can't
     /// reach Ethereum".
     Dsr7,
+    /// PR 3 note 4 — a network whose node answers and whose token list could
+    /// not be loaded (Tempo): the hero says the token list, the list it opens
+    /// has one row and no "Fix", and the Settings banner's chip offers none.
+    Dsr8,
     Components,
     ContactsComponents,
     Identicons,
@@ -602,7 +606,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 25] = [
+    const ALL: [(GalleryTab, &'static str); 26] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -625,6 +629,7 @@ impl GalleryTab {
         (GalleryTab::Dsr1, "DSR1"),
         (GalleryTab::Dsr6, "DSR6"),
         (GalleryTab::Dsr7, "DSR7"),
+        (GalleryTab::Dsr8, "DSR8"),
         (GalleryTab::Components, "Components"),
         (GalleryTab::ContactsComponents, "Contacts"),
         (GalleryTab::Identicons, "Identicons"),
@@ -1266,6 +1271,14 @@ impl WalletPage {
         let mut page = Self::with_section(Section::Wallet, gallery, window, cx);
         if gallery && let Some(tab) = GalleryTab::from_gallery_env() {
             page.select_tab(tab, window);
+            // `VELA_SECTION=settings` with a chip: that chip's state as
+            // Settings shows it — DSR8's banner, whose chip offers no "Fix".
+            // A click a screenshot pass cannot make; the list the chip opens
+            // on the home stays shut, it would cover the banner.
+            if crate::dev_env::var!("VELA_SECTION").as_deref() == Some("settings") {
+                page.section = Section::Settings;
+                page.unreachable_open = false;
+            }
         }
         // `VELA_SIGNING_STATE=cs36`: the third column on one drawn request —
         // there is no live request on this route, and no way to click to one.
@@ -4730,6 +4743,15 @@ impl WalletPage {
                     &money,
                 );
             }
+            if self.tab == GalleryTab::Dsr8 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::token_list_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
             // `VELA_CURRENCY_PENDING`: the same held wallet, its total
             // waiting on the currency.
             if let Some(money) = Self::pinned_pending_currency() {
@@ -8162,7 +8184,7 @@ impl WalletPage {
         // core, because the drawing has none — and cleared by every other chip,
         // so a toast cannot leak onto the state next door.
         self.celebrating = tab == GalleryTab::D1b;
-        self.unreachable_open = tab == GalleryTab::Dsr6;
+        self.unreachable_open = matches!(tab, GalleryTab::Dsr6 | GalleryTab::Dsr8);
         self.contact = 0;
         self.contacts_empty = tab == GalleryTab::Dc3;
         self.group = match tab {
@@ -8923,42 +8945,52 @@ impl WalletPage {
         // 092's order), and this is where the person finally sees it. A
         // correct verdict nobody is shown is, from the chair in front of the
         // screen, no verdict.
-        let live = self.identity.is_some().then(|| {
-            let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-            let ids: Vec<u32> = view
-                .unreachable_networks
-                .iter()
-                .map(|network| network.chain_id)
-                .collect();
-            (wallet_live::unreachable_chips(&view), ids)
+        //
+        // The gallery's DSR8 draws the token-list fixture through the same
+        // builders: the one banner whose chip offers nothing (PR 3 note 4).
+        let banner_view = if self.identity.is_some() {
+            Some(resident::resident::<BalanceDashboard>(cx).read(cx).view())
+        } else {
+            (self.tab == GalleryTab::Dsr8).then(fixtures::token_list_view)
+        };
+        let live_chips = banner_view.map(|view| {
+            // The headline is the home's own line, in the core's choice of
+            // sentence — "Can't load Tempo's token list" is not "Can't
+            // reach Tempo".
+            let text = wallet_live::unreachable_line(&view, &self.strings);
+            (wallet_live::unreachable_chips(&view), text)
         });
-        let banner_chain_ids = live
-            .as_ref()
-            .map(|(_, ids)| ids.clone())
-            .unwrap_or_default();
-        let live_chips = live.map(|(chips, _)| chips);
         let action = self.settings.rpc_fix_action.clone();
         let banner = match live_chips {
-            Some(chips) if !chips.is_empty() => {
-                let names: Vec<SharedString> =
-                    chips.iter().map(|(_, _, name)| name.clone()).collect();
-                let text = settings_fixtures::unavailable_text(&self.settings, &names);
+            Some((chips, text)) if !chips.is_empty() => {
+                let names: Vec<SharedString> = chips.iter().map(|chip| chip.name.clone()).collect();
+                let text = text
+                    .unwrap_or_else(|| settings_fixtures::unavailable_text(&self.settings, &names));
                 let chips = chips
                     .into_iter()
-                    .enumerate()
-                    .map(|(index, (letter, color, name))| {
+                    .map(|chip| {
                         // Each chip opens ITS chain's editor. A single "fix"
                         // button that always opened the first one would send
-                        // somebody to repair a network that is working.
-                        let chain_id = banner_chain_ids.get(index).copied();
-                        let on_click: Option<panels::Click> = chain_id.map(|chain_id| {
-                            Box::new(cx.listener(move |this: &mut Self, _, _, cx| {
-                                this.settings_fix_chain = Some(chain_id);
-                                this.settings_dialog = Some(SettingsDialog::FixRpc);
-                                cx.notify();
-                            })) as panels::Click
+                        // somebody to repair a network that is working — and
+                        // so would a chip on a network whose RPC is not what
+                        // failed: that one names the network and offers
+                        // nothing (the core's `rpc_fixable`).
+                        let chain_id = chip.chain_id;
+                        let fix = chip.rpc_fixable.then(|| {
+                            let open: panels::Click =
+                                Box::new(cx.listener(move |this: &mut Self, _, _, cx| {
+                                    this.settings_fix_chain = Some(chain_id);
+                                    this.settings_dialog = Some(SettingsDialog::FixRpc);
+                                    cx.notify();
+                                }));
+                            (action.clone(), Some(open))
                         });
-                        (letter, color, name, action.clone(), on_click)
+                        crate::settings::components::BannerChip {
+                            letter: chip.letter,
+                            color: chip.tint,
+                            name: chip.name,
+                            fix,
+                        }
                     })
                     .collect();
                 Some(rpc_banner(theme, &mut self.icons, text, chips))
@@ -8972,13 +9004,14 @@ impl WalletPage {
                     .iter()
                     .map(|id| {
                         let n = settings_fixtures::network(id);
-                        (
-                            SharedString::from(n.letter),
-                            n.color,
-                            SharedString::from(n.name),
-                            action.clone(),
-                            None,
-                        )
+                        crate::settings::components::BannerChip {
+                            letter: SharedString::from(n.letter),
+                            color: n.color,
+                            name: SharedString::from(n.name),
+                            // The mock's chips say "Fix" and open nothing:
+                            // the editor is already on screen.
+                            fix: Some((action.clone(), None)),
+                        }
                     })
                     .collect();
                 Some(rpc_banner(theme, &mut self.icons, text, chips))
@@ -18734,9 +18767,12 @@ impl WalletPage {
         if !self.unreachable_open {
             return None;
         }
-        // The gallery's DSR6 draws the fixture view through the same builders.
+        // The gallery's DSR6 draws the fixture view through the same builders
+        // — and DSR8 the one network whose token list could not be loaded.
         let view = if self.identity.is_some() {
             resident::resident::<BalanceDashboard>(cx).read(cx).view()
+        } else if self.tab == GalleryTab::Dsr8 {
+            fixtures::token_list_view()
         } else {
             fixtures::unreachable_view()
         };
@@ -18755,20 +18791,25 @@ impl WalletPage {
         }
         for row in &list.rows {
             let chain_id = row.chain_id;
-            let fix = div()
-                .id(("unreachable-fix", chain_id as usize))
-                .flex_none()
-                .cursor_pointer()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.info_base)
-                .active(|el| el.opacity(0.6))
-                .child(self.strings.unreachable_fix.clone())
-                .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                    // Its RPC editor opens over the list; closing it comes back.
-                    this.settings_fix_chain = Some(chain_id);
-                    this.settings_dialog = Some(SettingsDialog::FixRpc);
-                    cx.notify();
-                }));
+            // "Fix" only where the RPC is what failed (the core's
+            // `rpc_fixable`): a network whose token list could not be loaded
+            // has an endpoint that works, and nothing here would repair it.
+            let fix = row.rpc_fixable.then(|| {
+                div()
+                    .id(("unreachable-fix", chain_id as usize))
+                    .flex_none()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.info_base)
+                    .active(|el| el.opacity(0.6))
+                    .child(self.strings.unreachable_fix.clone())
+                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                        // Its RPC editor opens over the list; closing it comes back.
+                        this.settings_fix_chain = Some(chain_id);
+                        this.settings_dialog = Some(SettingsDialog::FixRpc);
+                        cx.notify();
+                    }))
+            });
             body = body.child(
                 div()
                     .flex()
@@ -18804,7 +18845,7 @@ impl WalletPage {
                                     .child(row.line.clone()),
                             ),
                     )
-                    .child(fix),
+                    .children(fix),
             );
         }
         Some(
@@ -21737,6 +21778,7 @@ mod tests {
                 "DSR1",
                 "DSR6",
                 "DSR7",
+                "DSR8",
                 "Components",
                 "Contacts",
                 "Identicons",

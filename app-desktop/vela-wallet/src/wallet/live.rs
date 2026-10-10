@@ -10,7 +10,8 @@ use vela_core::app::activity_feed::{
     FeedAllowance, FeedDirection, FeedItem, FeedLine, FeedRow, FeedTxKind, FeedTxStatus, FeedView,
 };
 use vela_core::app::balance_dashboard::{
-    BalanceNotice, BalanceToken, BalanceView, UNREACHABLE_MANY, UNREACHABLE_ONE,
+    BalanceNotice, BalanceToken, BalanceView, TOKEN_LIST_UNREACHABLE, UNREACHABLE_MANY,
+    UNREACHABLE_ONE, UnreachableCause,
 };
 use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::number::format_token_amount;
@@ -344,18 +345,18 @@ pub fn internal_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedStri
 }
 
 /// The line over the networks the wallet cannot reach (spec 092) — the
-/// hero's status line and the title of the list it opens. The core chooses
-/// the sentence (`unreachable_key`: one network named, several counted); this
-/// only fills it. `None` when every network answered.
+/// hero's status line, the title of the list it opens and the Settings
+/// banner's headline. The core chooses the sentence (`unreachable_key`: one
+/// network named, several counted — or, PR 3 note 4, the one network whose
+/// node answers and whose token list is what could not be loaded); this only
+/// fills it. `None` when every network answered.
 #[must_use]
 pub fn unreachable_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
     let first = view.unreachable_networks.first()?;
+    let name = || crate::executor::custom_tokens::network_name(first.chain_id);
     let line = match view.unreachable_key.as_deref()? {
-        UNREACHABLE_ONE => crate::wallet::fill(
-            &s.unreachable_one,
-            "name",
-            &crate::executor::custom_tokens::network_name(first.chain_id),
-        ),
+        UNREACHABLE_ONE => crate::wallet::fill(&s.unreachable_one, "name", &name()),
+        TOKEN_LIST_UNREACHABLE => crate::wallet::fill(&s.token_list_unreachable, "name", &name()),
         UNREACHABLE_MANY => crate::wallet::fill(
             &s.unreachable_many,
             "n",
@@ -364,6 +365,20 @@ pub fn unreachable_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedS
         _ => return None,
     };
     Some(SharedString::from(line))
+}
+
+/// The NAMES of the networks whose RPC is failing — what a problem report's
+/// "RPC failing" line may say. The core's `rpc_fixable` rows only: a network
+/// whose node answers (its token list is what could not be loaded, PR 3
+/// note 4) is not an RPC failure, and a report that said so would send
+/// whoever reads it after an endpoint that is working.
+#[must_use]
+pub fn rpc_failing_names(view: &BalanceView) -> Vec<String> {
+    view.unreachable_networks
+        .iter()
+        .filter(|network| network.rpc_fixable)
+        .map(|network| crate::executor::custom_tokens::network_name(network.chain_id))
+        .collect()
 }
 
 /// The list the hero's "can't reach" line opens (spec 092) — the web's
@@ -382,6 +397,11 @@ pub struct UnreachableRow {
     pub name: SharedString,
     /// "Last seen $1,234.50", "Not read yet", …
     pub line: SharedString,
+    /// May the row offer its network's RPC editor ("Fix")? The core's
+    /// `rpc_fixable`: only when the network itself did not answer. A network
+    /// whose token list is what could not be loaded has an endpoint that
+    /// works, and "Fix" there sends a person to repair it (PR 3 note 4).
+    pub rpc_fixable: bool,
 }
 
 #[must_use]
@@ -410,6 +430,7 @@ pub fn unreachable_list(
                     network.chain_id,
                 )),
                 line: SharedString::from(crate::wallet::fill(template, "amount", &amount)),
+                rpc_fixable: network.rpc_fixable,
             }
         })
         .collect::<Vec<_>>();
@@ -465,14 +486,27 @@ pub fn balance_detail(
             retry: false,
         })
         .collect();
-    for chain_id in view.unreachable_networks.iter().map(|n| n.chain_id) {
+    for network in &view.unreachable_networks {
+        let chain_id = network.chain_id;
         if pending.iter().any(|row| row.chain_id == chain_id) {
             continue;
         }
+        // What kept it from being read is the core's (`cause`). "RPC
+        // unavailable" under a network whose node answered is false: there
+        // the token list is what could not be loaded, and the row says that
+        // (PR 3 note 4). Either way it can be read again.
+        let status = match network.cause {
+            UnreachableCause::Network => s.detail_failed.clone(),
+            UnreachableCause::TokenList => SharedString::from(crate::wallet::fill(
+                &s.token_list_unreachable,
+                "name",
+                &name(chain_id),
+            )),
+        };
         pending.push(DetailChain {
             chain_id,
             name: name(chain_id),
-            status: Some((s.detail_failed.clone(), true)),
+            status: Some((status, true)),
             amount: None,
             retry: true,
         });
@@ -772,6 +806,7 @@ mod tests {
                 rate_limited_chain_ids: Vec::new(),
                 read_chain_ids: vec![1, 56],
                 internal_chain_ids: internal.clone(),
+                registry_chain_ids: Vec::new(),
                 now_ms: 1.0,
             }
         };
@@ -854,7 +889,9 @@ mod tests {
     }
 
     fn set_unreachable(view: &mut BalanceView, chain_ids: &[u32]) {
-        use vela_core::app::balance_dashboard::{LastKnown, NOT_READ_YET, UnreachableNetwork};
+        use vela_core::app::balance_dashboard::{
+            LastKnown, NOT_READ_YET, UnreachableCause, UnreachableNetwork,
+        };
         view.unreachable_networks = chain_ids
             .iter()
             .map(|&chain_id| UnreachableNetwork {
@@ -862,6 +899,8 @@ mod tests {
                 last_known: LastKnown::NotRead,
                 last_seen_usd: None,
                 line_key: NOT_READ_YET.to_owned(),
+                cause: UnreachableCause::Network,
+                rpc_fixable: true,
             })
             .collect();
         view.unreachable_key = match chain_ids.len() {
@@ -2123,6 +2162,72 @@ mod tests {
         assert!(none.summary.is_none() && none.rows.is_empty());
     }
 
+    /// PR 3 note 4, on every surface that draws the unreachable networks
+    /// (the gallery's DSR8 is this state): Tempo's node answers and its token
+    /// list could not be loaded. The hero's line, the list's title and the
+    /// Settings banner say the token list — never "Can't reach Tempo"; the
+    /// list's row and the banner's chip offer no "Fix"; the breakdown does
+    /// not say "RPC unavailable"; and a problem report does not name it as
+    /// an RPC that is failing.
+    #[test]
+    fn a_token_list_that_cant_be_loaded_is_never_an_rpc_to_fix() {
+        crate::executor::storage::tests::with_temp_state("token-list-unreachable", || {
+            let loc = crate::loc::Loc::for_language("en");
+            let s = WalletStrings::resolve(&loc);
+            let money = Money::usd();
+            let tempo = crate::wallet::fixtures::token_list_view();
+
+            let line = unreachable_line(&tempo, &s).unwrap_or_else(|| unreachable!("a line"));
+            assert_eq!(line.as_ref(), "Can't load Tempo's token list right now");
+            let hero = balance(&tempo, &s, "en", money);
+            assert_eq!(hero.status.map(|(_, line)| line), Some(line.clone()));
+            assert_eq!(hero.integer.as_ref(), "$4,500", "the total stands");
+
+            let list = unreachable_list(&tempo, &s, "en", money);
+            assert_eq!(list.title, line);
+            let rows: Vec<(&str, bool)> = list
+                .rows
+                .iter()
+                .map(|row| (row.name.as_ref(), row.rpc_fixable))
+                .collect();
+            assert_eq!(rows, vec![("Tempo", false)], "one row, no Fix");
+
+            let chips = unreachable_chips(&tempo);
+            assert_eq!(chips.len(), 1);
+            assert_eq!(chips[0].name, "Tempo");
+            assert!(
+                !chips[0].rpc_fixable,
+                "the chip names it and offers nothing"
+            );
+
+            let detail = balance_detail(&tempo, &s, "en", money);
+            let status = detail.pending[0]
+                .status
+                .clone()
+                .unwrap_or_else(|| unreachable!("a status"));
+            assert_eq!(status.0, line);
+            assert_ne!(status.0, s.detail_failed, "its RPC is not unavailable");
+            assert!(detail.pending[0].retry, "it can still be read again");
+
+            assert!(
+                rpc_failing_names(&tempo).is_empty(),
+                "no RPC is failing: a report must not say one is"
+            );
+
+            // A network that is really out of reach keeps all of it.
+            let mut down = view(Some(10.0));
+            set_unreachable(&mut down, &[137]);
+            assert!(unreachable_list(&down, &s, "en", money).rows[0].rpc_fixable);
+            assert!(unreachable_chips(&down)[0].rpc_fixable);
+            assert_eq!(rpc_failing_names(&down), vec!["Polygon".to_owned()]);
+            let detail = balance_detail(&down, &s, "en", money);
+            assert_eq!(
+                detail.pending[0].status.as_ref().map(|(text, _)| text),
+                Some(&s.detail_failed)
+            );
+        });
+    }
+
     /// SR3 splits the chains the way the web's does: rate-limited ones retry
     /// by themselves, unreachable ones offer Retry, and a chain in either
     /// list is not also counted as settled.
@@ -2695,13 +2800,15 @@ mod tests {
             set_unreachable(&mut down, &[100, 137]);
             let chips = unreachable_chips(&down);
             assert_eq!(chips.len(), 2);
-            assert_eq!(chips[0].2, "Gnosis");
-            assert_eq!(chips[1].2, "Polygon");
-            assert_eq!(chips[0].0, "G");
+            assert_eq!(chips[0].name, "Gnosis");
+            assert_eq!(chips[1].name, "Polygon");
+            assert_eq!(chips[0].letter, "G");
+            assert_eq!((chips[0].chain_id, chips[1].chain_id), (100, 137));
+            assert!(chips.iter().all(|chip| chip.rpc_fixable));
             // The tint is the settings table's, so the chip matches the network
             // row for the same chain.
             assert_eq!(
-                chips[0].1,
+                chips[0].tint,
                 crate::settings::model::chain_tint(100)
                     .unwrap_or_else(|| unreachable!("Gnosis has a tint"))
             );
@@ -2721,7 +2828,7 @@ mod tests {
             }
             let mut custom = view(Some(10.0));
             set_unreachable(&mut custom, &[7_777_777]);
-            assert_eq!(unreachable_chips(&custom)[0].2, "My testnet");
+            assert_eq!(unreachable_chips(&custom)[0].name, "My testnet");
         });
     }
 
@@ -2834,23 +2941,41 @@ mod tests {
 /// MINUS rate-limited (invariant ⑦), because a rate limit lifts on its own and
 /// a "fix your RPC" banner that nags about one is telling somebody to repair
 /// something that is not broken — and it is in the core's order (spec 092).
+///
+/// Every network the core lists is named; only one whose RPC is the problem
+/// (`rpc_fixable`) offers its editor. A network whose token list could not
+/// be loaded (PR 3 note 4) is a chip that names it and offers nothing: its
+/// endpoint is working.
 #[must_use]
-pub fn unreachable_chips(view: &BalanceView) -> Vec<(SharedString, u32, SharedString)> {
+pub fn unreachable_chips(view: &BalanceView) -> Vec<UnreachableChip> {
     view.unreachable_networks
         .iter()
-        .map(|network| &network.chain_id)
-        .map(|chain_id| {
-            let name = crate::executor::custom_tokens::network_name(*chain_id);
-            (
-                crate::settings::model::lettermark(&name),
+        .map(|network| {
+            let name = crate::executor::custom_tokens::network_name(network.chain_id);
+            UnreachableChip {
+                chain_id: network.chain_id,
+                letter: crate::settings::model::lettermark(&name),
                 // The same table the network rows and the activity badges read.
                 // A second colour map for the same chains is how one screen's
                 // Polygon stops matching another's.
-                crate::settings::model::chain_tint(u64::from(*chain_id)).unwrap_or(0x8A_8F_98),
-                SharedString::from(name),
-            )
+                tint: crate::settings::model::chain_tint(u64::from(network.chain_id))
+                    .unwrap_or(0x8A_8F_98),
+                name: SharedString::from(name),
+                rpc_fixable: network.rpc_fixable,
+            }
         })
         .collect()
+}
+
+/// One network in the Settings banner ([`unreachable_chips`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnreachableChip {
+    pub chain_id: u32,
+    pub letter: SharedString,
+    pub tint: u32,
+    pub name: SharedString,
+    /// Does the chip open its network's RPC editor? The core's word.
+    pub rpc_fixable: bool,
 }
 
 /// The home's asset strip — the person's holdings, most valuable first.

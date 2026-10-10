@@ -64,6 +64,9 @@ pub struct WalletStrings {
     /// carrying `{{name}}` / `{{n}}`.
     pub unreachable_one: String,
     pub unreachable_many: String,
+    /// The same line when the one network's node answers and its token list
+    /// is what could not be loaded (PR 3 note 4); `{{name}}`.
+    pub token_list_unreachable: String,
     /// Under the list's title: what is there is unaffected, only unread.
     pub unreachable_body: SharedString,
     /// The list's title once every network in it has come back.
@@ -194,6 +197,7 @@ impl WalletStrings {
             balance_unpriced: s("home.balanceUnpriced"),
             unreachable_one: raw("assets.unreachableOne"),
             unreachable_many: raw("assets.unreachableMany"),
+            token_list_unreachable: raw(vela_core::app::balance_dashboard::TOKEN_LIST_UNREACHABLE),
             unreachable_body: s("assets.unreachableBody"),
             unreachable_none: s("assets.unreachableNone"),
             unreachable_lines: {

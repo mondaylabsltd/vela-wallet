@@ -406,6 +406,7 @@ fn base_view() -> CreateView {
         add_methods: KeyMethod::ALL.to_vec(),
         add_heading_key: vela_core::app::create_wallet::ADD_HEADING_FIRST.to_owned(),
         methods_pinned: true,
+        key_count_shown: false,
     }
 }
 
@@ -416,6 +417,8 @@ fn settle_heading(mut view: CreateView) -> CreateView {
     view.add_heading_key =
         vela_core::app::create_wallet::add_heading_key(view.keys.len()).to_owned();
     view.methods_pinned = view.keys.is_empty() && view.can_add_key;
+    // The counter, as the core decides it: from the first key on.
+    view.key_count_shown = !view.keys.is_empty();
     view
 }
 

@@ -410,6 +410,7 @@ pub fn refused_wizard(
         }),
         compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
         error: None,
+        error_key: None,
         can_add: false,
     }
 }

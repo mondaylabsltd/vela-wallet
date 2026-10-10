@@ -1492,6 +1492,7 @@ mod tests {
             add_methods: crate::hardware::CREATE_ROUTES.to_vec(),
             add_heading_key: vela_core::app::create_wallet::ADD_HEADING_FIRST.to_owned(),
             methods_pinned: !busy,
+            key_count_shown: false,
         }
     }
 
