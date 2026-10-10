@@ -876,22 +876,32 @@ pub fn probe_health() -> Probe {
 /// the returned struct's fifth slot.
 const LEGACY_INDEX_CONTRACT: &str = "0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3";
 
-/// Gnosis RPC endpoints, tried in order. Same set the wallet's rpc pool pins
-/// for chain 100; this module keeps its own copy because the onboarding
-/// executor has no pool.
-const GNOSIS_RPC_URLS: &[&str] = &[
-    "https://rpc.gnosischain.com",
-    "https://gnosis-rpc.publicnode.com",
-    "https://1rpc.io/gnosis",
-];
+/// Gnosis's built-in default RPC, asked first — then the core's curated
+/// public fallbacks for chain 100 ([`gnosis_rpc_urls`]). The onboarding
+/// executor has no pool, so it walks the same endpoints by hand.
+const GNOSIS_DEFAULT_RPC: &str = "https://rpc.gnosischain.com";
+
+/// Gnosis RPC endpoints, tried in order: the default, then the core's public
+/// tier (`network_admin::public_rpc_urls(100)`) — the list the wallet's rpc
+/// pool uses, not a copy that can go stale (this one still named a
+/// `1rpc.io` endpoint that had stopped answering).
+fn gnosis_rpc_urls() -> Vec<String> {
+    let mut urls = vec![GNOSIS_DEFAULT_RPC.to_owned()];
+    for url in vela_core::app::network_admin::public_rpc_urls(100) {
+        if !urls.contains(&url) {
+            urls.push(url);
+        }
+    }
+    urls
+}
 
 /// The v1 index's display name for a credential. Best effort and read-only; a
 /// lost name degrades the label ("Wallet"), never the flow.
 pub fn legacy_name(credential_id: &str) -> Option<String> {
     let data = encode_get_record(RELYING_PARTY, credential_id);
     let data_hex = format!("0x{}", vela_core::primitives::to_hex(&data, false));
-    for url in GNOSIS_RPC_URLS {
-        match eth_call(url, LEGACY_INDEX_CONTRACT, &data_hex) {
+    for url in gnosis_rpc_urls() {
+        match eth_call(&url, LEGACY_INDEX_CONTRACT, &data_hex) {
             // An empty (reverted) result is a definite "no record" — a v2-era
             // wallet. Do not burn two more RPCs re-asking the same question.
             Ok(result) if result.is_empty() => return None,
