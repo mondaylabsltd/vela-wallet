@@ -73,7 +73,10 @@ final class SplitRowTouchDeviceTests: XCTestCase {
         // top of the well to its bottom.
         let wellEdge = field.maxX - 12
         let origin = app.coordinate(withNormalizedOffset: .zero)
-        let ordinal = origin.withOffset(CGVector(dx: field.minX - 60, dy: field.minY + 6))
+        // The row's ordinal is on the line above the amount now (PR 3 note
+        // 21): left of the amount on its own line is the ADDRESS field, and
+        // a tap there would take the keyboard.
+        let ordinal = app.staticTexts["收款人 1"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         for x in [wellEdge - 2, wellEdge + 2, field.maxX - 2] {
             for y in stride(from: field.minY + 2, through: field.maxY - 2, by: (field.height - 4) / 4) {
                 origin.withOffset(CGVector(dx: x, dy: y)).tap()
