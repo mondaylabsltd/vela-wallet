@@ -373,8 +373,7 @@ pub fn judge(
         // and the line for it is the core's own rule over no moves.
         return Judged {
             judgments: Vec::new(),
-            no_change_key: vela_core::app::sim_outcome::no_change_key(std::iter::empty())
-                .map(str::to_owned),
+            no_change_key: vela_core::app::sim_outcome::no_change_key_of(&[]).map(str::to_owned),
         };
     }
     let (reply, answer) = channel();

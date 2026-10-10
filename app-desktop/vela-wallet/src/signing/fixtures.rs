@@ -354,7 +354,7 @@ pub fn sim_pin_block(pin: SimPin, s: &SigningStrings) -> Option<Block> {
     use vela_core::app::sim_outcome::{
         KEY_UNAVAILABLE, KEY_WILL_FAIL_REASON, REVERT_REASON_MAX_CHARS, SimNotice,
     };
-    use vela_core::app::token_trust::TrustSimJudgment as J;
+    use vela_core::app::token_trust::{TrustSimDirection as Direction, TrustSimJudgment as J};
     let trusted = |symbol: &str, delta: &str, decimals: u32| J::Erc20Trusted {
         token: format!("0x{symbol}"),
         delta: delta.to_owned(),
@@ -385,7 +385,7 @@ pub fn sim_pin_block(pin: SimPin, s: &SigningStrings) -> Option<Block> {
                 usdc_out(),
                 J::Erc20Unverified {
                     token: Some("0xdead".to_owned()),
-                    delta: "1000000".to_owned(),
+                    direction: Direction::In,
                 },
             ],
             None,
@@ -398,7 +398,7 @@ pub fn sim_pin_block(pin: SimPin, s: &SigningStrings) -> Option<Block> {
                 trusted("DAI", "-250000000000000000000", 18),
                 J::Erc20Unverified {
                     token: Some("0xdead".to_owned()),
-                    delta: "1000000".to_owned(),
+                    direction: Direction::In,
                 },
             ],
             None,
@@ -433,7 +433,7 @@ pub fn sim_pin_block(pin: SimPin, s: &SigningStrings) -> Option<Block> {
     // (`TrustSimView.no_change_key`): its own rule, once the answer is a
     // check that landed.
     let no_change_key = (stage == SimStage::Landed && notice.is_none())
-        .then(|| vela_core::app::sim_outcome::no_change_key(judgments.iter().map(J::delta)))
+        .then(|| vela_core::app::sim_outcome::no_change_key_of(&judgments))
         .flatten();
     verdict_block(stage, &judgments, notice.as_ref(), no_change_key, 1, s)
 }

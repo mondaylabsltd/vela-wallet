@@ -1034,6 +1034,12 @@ fn stored_value(value: Option<&Value>) -> String {
 /// unverified one with neither and `unverified: true`. No `ok`: this
 /// shell's simulation gives no revert verdict, so the row claims none.
 /// `activity_feed::stored_changes` reads it back.
+///
+/// An unverified token's line keeps its `direction` and NO `delta` (PR 3):
+/// the judgment carries no figure — the simulation's number for a token
+/// nobody vouches for is whatever the site being signed for chose to emit —
+/// so there is none to store. A row stored before that still holds a
+/// `delta` there; the reader takes its direction and drops the figure.
 fn stored_changes(
     changes: &[vela_core::app::token_trust::TrustSimJudgment],
     chain_id: u32,
@@ -1070,8 +1076,12 @@ fn stored_changes(
                 }
                 line
             }
-            J::Erc20Unverified { token, delta } => {
-                let mut line = json!({ "kind": "erc20", "delta": delta, "unverified": true });
+            J::Erc20Unverified { token, direction } => {
+                let mut line = json!({
+                    "kind": "erc20",
+                    "direction": direction,
+                    "unverified": true,
+                });
                 if let Some(token) = token {
                     line["token"] = json!(token);
                 }
@@ -3099,9 +3109,13 @@ mod tests {
                 "0x0",
                 vec![
                     usdc("-100000"),
+                    // As the core judges a simulated +1,000,000 × 10¹⁸ of a
+                    // token nobody vouches for: its direction, and no figure.
                     vela_core::app::token_trust::TrustSimJudgment::Erc20Unverified {
                         token: Some("0x00000000000000000000000000000000000bad01".to_owned()),
-                        delta: "1000000000000000000000000".to_owned(),
+                        direction: vela_core::app::token_trust::TrustSimDirection::of_delta(
+                            "1000000000000000000000000",
+                        ),
                     },
                 ],
                 "",
@@ -3116,6 +3130,22 @@ mod tests {
             assert!(
                 stored[0].get("assetChanges").is_none(),
                 "nothing the page sent"
+            );
+            // PR 3 fix B: the unverified line is stored as a direction — the
+            // record holds no figure for it, because nobody handed it one.
+            assert_eq!(
+                stored[1]["assetChanges"]["changes"][1],
+                json!({
+                    "kind": "erc20",
+                    "direction": "in",
+                    "unverified": true,
+                    "token": "0x00000000000000000000000000000000000bad01",
+                })
+            );
+            assert!(
+                !stored[1]["assetChanges"]
+                    .to_string()
+                    .contains("1000000000000")
             );
 
             let mut host = CoreHost::<ActivityFeed>::new();

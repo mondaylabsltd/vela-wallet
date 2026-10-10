@@ -768,7 +768,9 @@ fn plain_send_blocks(
 ///   token emits its own log, so what leaves cannot be understated;
 /// - an **inflow** renders a number only when the token is trusted. A site can
 ///   emit any `Transfer` it likes from a contract it controls, so an
-///   unverified receipt shows its DIRECTION and its name and no figure at all.
+///   unverified receipt shows its DIRECTION and its name and no figure at all
+///   — and since PR 3 this builder is never handed one: the judgment of an
+///   unverified token is `{ token, direction }`.
 ///
 /// `notice` is the core's reading of the answer (spec 082 RG6,
 /// `sim_outcome::notice`) and a different sentence from an empty list: a
@@ -784,7 +786,7 @@ pub fn sim_blocks(
     chain_id: u32,
     s: &SigningStrings,
 ) -> Vec<Block> {
-    use vela_core::app::token_trust::TrustSimJudgment as J;
+    use vela_core::app::token_trust::{TrustSimDirection as Direction, TrustSimJudgment as J};
 
     if let Some(notice) = notice {
         return vec![sim_notice_block(notice, s)];
@@ -823,13 +825,24 @@ pub fn sim_blocks(
                 signed_amount(delta, *decimals)?,
                 delta_tone(delta),
             )),
-            // No attacker-controlled amount on screen. The direction is the
-            // core's and it is safe to state; the figure is not.
-            J::Erc20Unverified { delta, .. } => Some((
-                s.balance_unverified_token.clone(),
-                SharedString::from(if delta.starts_with('-') { "−" } else { "+" }),
-                Tone::Caution,
-            )),
+            // No attacker-controlled amount on screen — and none in hand:
+            // the judgment carries a direction and no figure (PR 3), so the
+            // row is its label, the caution's colour and a sign. A move of
+            // nothing is no row, as a zero never is; a figure nobody could
+            // read keeps its row and its caution, with no sign to state.
+            J::Erc20Unverified { direction, .. } => {
+                let sign = match direction {
+                    Direction::In => "+",
+                    Direction::Out => "−",
+                    Direction::Unreadable => "",
+                    Direction::Still => return None,
+                };
+                Some((
+                    s.balance_unverified_token.clone(),
+                    SharedString::from(sign),
+                    Tone::Caution,
+                ))
+            }
         })
         .collect();
 
@@ -843,10 +856,14 @@ pub fn sim_blocks(
     // the sentence the phones say under the same card (`unverifiedWarning`),
     // and the reason its row carries a direction and no figure. Once, not per
     // row: the caution is the same each time, and repeating it is how people
-    // stop reading it.
-    let unverified = judgments
-        .iter()
-        .any(|judgment| matches!(judgment, J::Erc20Unverified { .. }));
+    // stop reading it. Said for a row that is drawn: a move of nothing has
+    // none, and nothing to warn about.
+    let unverified = judgments.iter().any(|judgment| {
+        matches!(
+            judgment,
+            J::Erc20Unverified { direction, .. } if *direction != Direction::Still
+        )
+    });
     vec![Block::Balances {
         title: s.balances_title.clone(),
         rows,
@@ -1078,14 +1095,14 @@ mod verdict_place_tests {
     /// that never came, and a move nobody can write, look like.
     #[test]
     fn nothing_moves_is_said_when_the_core_says_it_and_never_by_an_empty_list() {
-        use vela_core::app::sim_outcome::{KEY_NO_CHANGE, no_change_key};
+        use vela_core::app::sim_outcome::{KEY_NO_CHANGE, no_change_key_of};
         use vela_core::app::token_trust::TrustSimJudgment as J;
         let s = strings();
         let native = |delta: &str| J::Native {
             delta: delta.to_owned(),
         };
         // What the core's judged view carries for these judgments.
-        let core_key = |judgments: &[J]| no_change_key(judgments.iter().map(J::delta));
+        let core_key = |judgments: &[J]| no_change_key_of(judgments);
         let landed = |judgments: &[J], key: Option<&str>| {
             let Some(Block::Verdict { inner, .. }) =
                 verdict_block(SimStage::Landed, judgments, None, key, 1, &s)
@@ -1204,11 +1221,12 @@ mod verdict_place_tests {
     /// in the caution's colour — and a card with no such token has none.
     #[test]
     fn an_unverified_token_puts_one_warning_under_the_card() {
-        use vela_core::app::token_trust::TrustSimJudgment as J;
+        use vela_core::app::token_trust::{TrustSimDirection, TrustSimJudgment as J};
         let s = strings();
+        // As the core judges a simulated figure: its direction, and no more.
         let unverified = |delta: &str| J::Erc20Unverified {
             token: Some("0xbad".to_owned()),
-            delta: delta.to_owned(),
+            direction: TrustSimDirection::of_delta(delta),
         };
         let native = J::Native {
             delta: "-10000000000000000".to_owned(),
@@ -1283,33 +1301,111 @@ mod sim_block_tests {
         assert_eq!(rows[1].2, Tone::Success);
     }
 
-    /// An unverified inflow shows a DIRECTION and never a figure.
+    /// An unverified token is a DIRECTION and never a figure (PR 3 fix B).
     ///
     /// This is the whole asymmetry: a site can emit any `Transfer` it likes
     /// from a contract it controls, so "+1,000,000 SAFEMOON" on a signing
-    /// sheet would be the attacker writing the wallet's own reassurance.
+    /// sheet would be the attacker writing the wallet's own reassurance —
+    /// Android's sheet printed 「未验证代币 +5,000,000,000,000,000,000,000.00」.
+    ///
+    /// The figure here goes the way a real one does: a simulated delta of
+    /// 5000000000000000000000, judged by the core (`judge_delta`, the token
+    /// trusted by nobody), drawn by this builder. What is drawn is the label
+    /// and "+", and no digit of the figure stands anywhere in the verdict's
+    /// place; an outflow draws "−"; a zero draws no row; a figure nobody
+    /// could read keeps its row and its caution with no sign.
     #[test]
-    fn an_unverified_inflow_carries_no_number() {
-        let s = strings();
-        let blocks = sim_blocks(
-            &[J::Erc20Unverified {
-                token: Some("0xbad".to_owned()),
-                delta: "1000000000000000000000000".to_owned(),
-            }],
-            None,
-            100,
-            &s,
-        );
-        let Some(Block::Balances { rows, .. }) = blocks.first() else {
-            unreachable!("a balances block");
+    fn an_unverified_token_draws_its_direction_and_no_figure() {
+        use vela_core::app::token_trust::{
+            TrustAssetDelta, TrustDeltaKind, TrustSimDirection as Direction, judge_delta,
         };
-        assert_eq!(rows[0].0, s.balance_unverified_token);
-        assert_eq!(rows[0].1, "+", "a direction, not an amount");
-        assert!(
-            !rows[0].1.contains('1'),
-            "no attacker digits: {}",
-            rows[0].1
+        const LURE: &str = "5000000000000000000000";
+        let s = strings();
+        // No metadata, and in nobody's trusted set: a token nobody vouches
+        // for, whichever way it moves.
+        let judged = |delta: &str| {
+            judge_delta(
+                &TrustAssetDelta {
+                    kind: TrustDeltaKind::Erc20,
+                    token: Some("0xbad0000000000000000000000000000000000bad".to_owned()),
+                    delta: delta.to_owned(),
+                },
+                None,
+                false,
+            )
+        };
+        let unverified = |direction| J::Erc20Unverified {
+            token: Some("0xbad0000000000000000000000000000000000bad".to_owned()),
+            direction,
+        };
+        // Everything the verdict's place draws for these judgments, as text.
+        let drawn = |judgments: &[J]| {
+            let Some(Block::Verdict { inner, .. }) =
+                verdict_block(SimStage::Landed, judgments, None, None, 100, &s)
+            else {
+                unreachable!("a place");
+            };
+            let rows = match inner.first() {
+                Some(Block::Balances { rows, .. }) => rows.clone(),
+                _ => Vec::new(),
+            };
+            (rows, verdict_said(&inner))
+        };
+
+        // The inflow: the label and "+", in the caution's colour.
+        let inflow = judged(LURE);
+        assert_eq!(inflow, unverified(Direction::In));
+        let (rows, said) = drawn(std::slice::from_ref(&inflow));
+        assert_eq!(
+            rows,
+            vec![(
+                s.balance_unverified_token.clone(),
+                SharedString::from("+"),
+                Tone::Caution
+            )]
         );
+        assert!(
+            !said.chars().any(|c| c.is_ascii_digit()),
+            "no digit of the figure, nor any other: {said}"
+        );
+        assert!(!said.contains(LURE) && !said.contains("5,000"));
+        assert!(said.contains(s.warn_unverified_amount.as_ref()));
+
+        // The outflow: U+2212, the minus every figure on this sheet wears.
+        let outflow = judged(&format!("-{LURE}"));
+        assert_eq!(outflow, unverified(Direction::Out));
+        let (rows, said) = drawn(std::slice::from_ref(&outflow));
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].1, "\u{2212}");
+        assert_eq!(rows[0].2, Tone::Caution);
+        assert!(!said.chars().any(|c| c.is_ascii_digit()), "{said}");
+
+        // A move of nothing is no row — beside a row that is one.
+        let native = J::Native {
+            delta: "-10000000000000000".to_owned(),
+        };
+        assert_eq!(judged("0"), unverified(Direction::Still));
+        let (rows, said) = drawn(&[native, unverified(Direction::Still)]);
+        assert_eq!(rows.len(), 1, "the zero is not drawn");
+        assert_ne!(rows[0].0, s.balance_unverified_token);
+        assert!(
+            !said.contains(s.warn_unverified_amount.as_ref()),
+            "and no warning stands under a card with no such row"
+        );
+
+        // A figure nobody could read: the row with its label and caution,
+        // and no sign — never "+", which would be a direction nobody read.
+        assert_eq!(judged("lots"), unverified(Direction::Unreadable));
+        let (rows, said) = drawn(&[unverified(Direction::Unreadable)]);
+        assert_eq!(
+            rows,
+            vec![(
+                s.balance_unverified_token.clone(),
+                SharedString::default(),
+                Tone::Caution
+            )]
+        );
+        assert!(said.contains(s.warn_unverified_amount.as_ref()));
     }
 
     /// "Could not check" and "checked, nothing moves" are different sentences,

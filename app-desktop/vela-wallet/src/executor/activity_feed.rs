@@ -37,7 +37,7 @@ use serde_json::{Value, json};
 use vela_core::app::activity_feed::{
     ActivityFeed, Event, FeedOperation, FeedShellResult, FeedTxKind, FeedTxRecord, FeedTxStatus,
 };
-use vela_core::app::token_trust::TrustSimJudgment;
+use vela_core::app::token_trust::{TrustSimDirection, TrustSimJudgment};
 
 use crate::executor::{identity, storage};
 use crate::resident::{self, Answer, Machine};
@@ -207,16 +207,18 @@ fn clipped_call_data(request: &str) -> Option<String> {
 /// line says `trusted: true` (the web writes no such word, so its lines are
 /// drawn but never the row's figure); and anything marked unverified or
 /// missing either — the safe reading — an unverified token, which carries no
-/// figure. A line of any other kind is dropped.
+/// figure: only which way it moved ([`stored_direction`]). A line of any
+/// other kind is dropped, and so is one that says neither how much nor which
+/// way.
 fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
     let lines = stored.get("changes")?.as_array()?;
     Some(
         lines
             .iter()
             .filter_map(|line| {
-                let delta = line.get("delta").and_then(Value::as_str)?.to_owned();
+                let delta = line.get("delta").and_then(Value::as_str).map(str::to_owned);
                 match line.get("kind").and_then(Value::as_str)? {
-                    "native" => Some(TrustSimJudgment::Native { delta }),
+                    "native" => Some(TrustSimJudgment::Native { delta: delta? }),
                     "erc20" => {
                         let token = line.get("token").and_then(Value::as_str).map(str::to_owned);
                         let symbol = line
@@ -229,17 +231,24 @@ fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
                             .and_then(|decimals| u32::try_from(decimals).ok());
                         let unverified = line.get("unverified").and_then(Value::as_bool);
                         let trusted = line.get("trusted").and_then(Value::as_bool) == Some(true);
-                        Some(match (token, symbol, decimals, unverified) {
-                            (Some(token), Some(symbol), Some(decimals), None | Some(false)) => {
-                                TrustSimJudgment::Erc20Trusted {
-                                    token,
-                                    delta,
-                                    symbol: symbol.to_owned(),
-                                    decimals,
-                                    in_trusted_set: trusted,
-                                }
-                            }
-                            (token, ..) => TrustSimJudgment::Erc20Unverified { token, delta },
+                        Some(match (token, symbol, decimals, unverified, delta) {
+                            (
+                                Some(token),
+                                Some(symbol),
+                                Some(decimals),
+                                None | Some(false),
+                                Some(delta),
+                            ) => TrustSimJudgment::Erc20Trusted {
+                                token,
+                                delta,
+                                symbol: symbol.to_owned(),
+                                decimals,
+                                in_trusted_set: trusted,
+                            },
+                            (token, ..) => TrustSimJudgment::Erc20Unverified {
+                                token,
+                                direction: stored_direction(line)?,
+                            },
                         })
                     }
                     _ => None,
@@ -247,6 +256,25 @@ fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
             })
             .collect(),
     )
+}
+
+/// Which way an unverified token's stored line moves (PR 3 fix B).
+///
+/// The line this build writes says it: `direction`, and no figure — the
+/// judgment carries none (`TrustSimJudgment::Erc20Unverified`). A line stored
+/// before that kept the simulation's raw `delta` "to read the sign from"; it
+/// is read here for exactly that, by the core's own rule
+/// (`TrustSimDirection::of_delta`), and the figure goes no further — not into
+/// the judgment, so not onto any screen. Neither shape fails the record: a
+/// line that says neither is dropped, as a line with no delta always was.
+fn stored_direction(line: &Value) -> Option<TrustSimDirection> {
+    line.get("direction")
+        .and_then(|direction| serde_json::from_value(direction.clone()).ok())
+        .or_else(|| {
+            line.get("delta")
+                .and_then(Value::as_str)
+                .map(TrustSimDirection::of_delta)
+        })
 }
 
 /// Whether a dApp's transaction carried calldata (083 F3): calldata makes
@@ -1631,9 +1659,19 @@ mod tests {
     /// missing its symbol or decimals, reads as unverified (no figure), never
     /// as a trusted amount; a line of no known kind, or with no delta, is
     /// dropped; a row without the field has none.
+    ///
+    /// PR 3 fix B: an unverified line is read in both its shapes — the
+    /// `direction` this build writes, and the raw `delta` a row stored before
+    /// it kept, of which only the direction is taken (9000 and
+    /// 5000000000000000000000 alike are "in"). The old shape fails nothing:
+    /// every other line of the row still reads.
     #[test]
     fn a_rows_balance_changes_read_back_as_the_sheets_judgments() {
-        use vela_core::app::token_trust::TrustSimJudgment as J;
+        use vela_core::app::token_trust::{TrustSimDirection as Direction, TrustSimJudgment as J};
+        let unverified = |token: Option<&str>, direction| J::Erc20Unverified {
+            token: token.map(str::to_owned),
+            direction,
+        };
         storage::tests::with_temp_state("feed-asset-changes", || {
             seed(json!([
                 {
@@ -1650,7 +1688,28 @@ mod tests {
                           "symbol": "FREE", "decimals": 18, "unverified": true },
                         { "kind": "erc20", "token": "0xodd", "delta": "5", "symbol": "ODD" },
                         { "kind": "erc721", "delta": "1" },
-                        { "kind": "native" }
+                        { "kind": "native" },
+                        // The old shape, with the figure of the evidence and
+                        // its opposite, a zero and a word that is no number.
+                        { "kind": "erc20", "token": "0xlure",
+                          "delta": "5000000000000000000000", "unverified": true },
+                        { "kind": "erc20", "token": "0xgone",
+                          "delta": "-5000000000000000000000", "unverified": true },
+                        { "kind": "erc20", "token": "0xzero", "delta": "0", "unverified": true },
+                        { "kind": "erc20", "token": "0xword", "delta": "lots", "unverified": true },
+                        // The shape this build writes: a direction, no figure.
+                        { "kind": "erc20", "token": "0xnew", "direction": "out",
+                          "unverified": true },
+                        { "kind": "erc20", "direction": "unreadable", "unverified": true },
+                        // A direction wins over a figure beside it; a word
+                        // this build does not know falls back to the figure's.
+                        { "kind": "erc20", "token": "0xboth", "direction": "out",
+                          "delta": "77", "unverified": true },
+                        { "kind": "erc20", "token": "0xlater", "direction": "sideways",
+                          "delta": "77", "unverified": true },
+                        // Neither a figure nor a direction: dropped.
+                        { "kind": "erc20", "token": "0xmute", "unverified": true },
+                        { "kind": "erc20", "token": "0xmute", "symbol": "MUTE", "decimals": 6 }
                     ] }
                 },
                 { "id": "old", "timestamp": 1_759_000_000, "chainId": 8453, "type": "dapp_tx" }
@@ -1678,17 +1737,23 @@ mod tests {
                         decimals: 6,
                         in_trusted_set: false,
                     },
-                    J::Erc20Unverified {
-                        token: Some("0xbad".to_owned()),
-                        delta: "9000".to_owned(),
-                    },
-                    J::Erc20Unverified {
-                        token: Some("0xodd".to_owned()),
-                        delta: "5".to_owned(),
-                    },
+                    unverified(Some("0xbad"), Direction::In),
+                    unverified(Some("0xodd"), Direction::In),
+                    unverified(Some("0xlure"), Direction::In),
+                    unverified(Some("0xgone"), Direction::Out),
+                    unverified(Some("0xzero"), Direction::Still),
+                    unverified(Some("0xword"), Direction::Unreadable),
+                    unverified(Some("0xnew"), Direction::Out),
+                    unverified(None, Direction::Unreadable),
+                    unverified(Some("0xboth"), Direction::Out),
+                    unverified(Some("0xlater"), Direction::In),
                 ])
             );
             assert_eq!(records[1].balance_changes, None);
+            // What the core is handed holds no digit of the old figure.
+            let handed = serde_json::to_string(&records[0].balance_changes).unwrap_or_default();
+            assert!(!handed.contains("5000000000000000000000"), "{handed}");
+            assert!(!handed.contains("9000"), "{handed}");
         });
     }
 

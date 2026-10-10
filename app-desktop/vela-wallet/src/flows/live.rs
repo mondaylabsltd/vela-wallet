@@ -7965,7 +7965,9 @@ mod tests {
         if let Some(changes) = records[0].balance_changes.as_mut() {
             changes.push(TrustSimJudgment::Erc20Unverified {
                 token: Some("0x00000000000000000000000000000000000bad01".to_owned()),
-                delta: "1000000000000000000000".to_owned(),
+                direction: vela_core::app::token_trust::TrustSimDirection::of_delta(
+                    "1000000000000000000000",
+                ),
             });
         }
         let mut bare = records[0].clone();

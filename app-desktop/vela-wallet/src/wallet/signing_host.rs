@@ -1882,7 +1882,7 @@ mod tests {
             },
             J::Erc20Unverified {
                 token: Some("0xbad".to_owned()),
-                delta: "1000000000000000000000".to_owned(),
+                direction: vela_core::app::token_trust::TrustSimDirection::In,
             },
         ];
         assert_eq!(approved_changes(&drawn, false), Some(drawn.clone()));
