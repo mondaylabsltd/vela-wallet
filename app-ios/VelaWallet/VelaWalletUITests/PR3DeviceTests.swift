@@ -40,6 +40,16 @@
 //  - `testLeaveSpace` — `VELA_PARALLEL_SPACE=0`: back to the wallet that was
 //    in front. `PR2PolishDeviceTests/testState` before and after must match.
 //
+//  The three last fixes (2026-10-11):
+//  - `testReceiptsStandUnderTheirOwnDay` — LOOK ONLY, the person's own
+//    wallet: the home's Activity read per tick while the stored receipts'
+//    times are repaired, then History. Opens no sheet, starts no request.
+//  - `testConfirmWaitsForTheVerdict` — the space: the test dApp's message
+//    and its "Send dust", the confirm and the line under it sampled from the
+//    first frame. Both DECLINED.
+//  - `testConfirmWaitBoards` — `VELA_PAGE=pr3c`: the held confirm and the
+//    waited-out verdict on the phone's own screen. Nothing is tapped.
+//
 //  Skipped in the scheme (they need the phone, the network and the space);
 //  run them by name from a copy of the .xctestrun with the skips removed.
 //
@@ -50,12 +60,26 @@ import XCTest
 final class PR3DeviceTests: XCTestCase {
 
     private var server: LocalDappServer?
+    /// The app as a test in the space launched it — so that a test which
+    /// stops half-way never leaves a request's sheet open behind it.
+    private var spaceApp: XCUIApplication?
 
     override func setUpWithError() throws {
         continueAfterFailure = true
     }
 
     override func tearDownWithError() throws {
+        // A request still on the sheet is REFUSED before anything else can
+        // happen to the app: the test dApp's "Send dust" pays the person's
+        // real address, and a sheet must never be left open unattended.
+        if let app = spaceApp, app.state == .runningForeground {
+            let close = app.buttons["signing.close"].firstMatch
+            if close.exists {
+                close.tap()
+                XCTFail("a signing sheet was still open when the test ended — it was closed by its ✕ (refused)")
+            }
+        }
+        spaceApp = nil
         server?.stop()
         server = nil
     }
@@ -682,6 +706,49 @@ final class PR3DeviceTests: XCTestCase {
         app.terminate()
     }
 
+    /// The confirm and the simulation's verdict, live, in the space: the test
+    /// dApp's message (no simulation: never held) and its "Send dust" (a
+    /// transaction: the confirm is shut, with one line, until the verdict is
+    /// in its place). Both are DECLINED by the ✕, and each refusal is read
+    /// back from the page (4001) before the next step. Nothing is confirmed:
+    /// the confirm is never tapped, and "Send dust" pays the person's real
+    /// address, so it is refused whatever else happens (`tearDownWithError`).
+    ///
+    /// Read from one snapshot of the tree per tick (`frames`): whether the
+    /// confirm is enabled, the line under it, the verdict's place, and where
+    /// the confirm is — which must be one position from the sheet's first
+    /// frame to its last.
+    func testConfirmWaitsForTheVerdict() throws {
+        startServer()
+        let app = launchInSpace()
+        openExplore(app)
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30), "the test dApp did not load")
+        connect(app)
+
+        // personal_sign: no simulation is started for a message.
+        app.webViews.buttons["Sign"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["signing.close"].waitForExistence(timeout: 30), "no sheet for personal_sign")
+        frames(app, "wait-message", seconds: 7)
+        shoot(app, "wait-1-message")
+        dump(app, "wait-1-message")
+        app.buttons["signing.close"].tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict personal_sign err 4001"), "closing did not refuse personal_sign")
+
+        // Send dust: sampled from the sheet's first frame, past the core's
+        // four seconds and the fee's own arrival.
+        app.webViews.buttons["Send dust"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["signing.close"].waitForExistence(timeout: 30), "no sheet for the send")
+        frames(app, "wait-send", seconds: 22)
+        shoot(app, "wait-2-send")
+        dump(app, "wait-2-send")
+        app.buttons["signing.close"].tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_sendTransaction err 4001"), "closing did not refuse the send")
+        settle(1)
+        shoot(app, "wait-9-left")
+        XCTAssertFalse(app.buttons["signing.close"].exists, "a sheet is still up")
+        app.terminate()
+    }
+
     /// Part 1 item 1 on the phone's own screen (`VELA_PAGE=pr3c`): the
     /// presented sheet under "Checking…", "No asset changes", a tall verdict
     /// (four balance rows and the unverified-token warning), and the tall one
@@ -762,6 +829,75 @@ final class PR3DeviceTests: XCTestCase {
             XCTAssertEqual(confirm.frame.minY, rested.minY, accuracy: 0.5, "the confirm is not back where it was (\(board))")
             shoot(app, "verdict-\(board)-3-back")
             app.terminate()
+        }
+    }
+
+    /// The confirm waiting for the simulation's verdict, on the phone's own
+    /// screen (`VELA_PAGE=pr3c`). The live sheet cannot show it on this
+    /// phone — Gnosis nodes answer "not offered" at once, and the space's
+    /// wallet holds no coin for a fee — so the boards hold the two moments
+    /// still: `sheet-held` (the simulation is out: the confirm is shut and
+    /// says so in one line) and `sheet-waited-out` (the core's deadline
+    /// passed: "could not check" in the verdict's place, the confirm open).
+    /// `sheet-out` is the measure: a sheet with nothing to wait for.
+    ///
+    /// Nothing is tapped. The confirm's frame, whether it is enabled, the
+    /// line under it and the verdict's place are read from the tree, and the
+    /// confirm must be at ONE position on all three.
+    func testConfirmWaitBoards() throws {
+        let boards = (ProcessInfo.processInfo.environment["WAIT_BOARDS"] ?? "sheet-out,sheet-held,sheet-waited-out")
+            .split(separator: ",").map(String.init)
+        var confirmY: [String: CGFloat] = [:]
+        var report: [String] = []
+        for board in boards {
+            let app = XCUIApplication()
+            app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+            app.launchEnvironment["VELA_PAGE"] = "pr3c"
+            app.launchEnvironment["VELA_STATE"] = board
+            app.launch()
+            let confirm = app.buttons["signing.confirm"].firstMatch
+            guard confirm.waitForExistence(timeout: 20) else {
+                XCTFail("no confirm on \(board)")
+                shoot(app, "wait-\(board)-MISSING")
+                dump(app, "wait-\(board)-MISSING")
+                app.terminate()
+                continue
+            }
+            // Longer than the core's four seconds: a board that says "held"
+            // must still be held after them, and nothing may move meanwhile.
+            frames(app, "wait-\(board)", seconds: 7)
+            shoot(app, "wait-\(board)")
+            dump(app, "wait-\(board)")
+            let footer = app.descendants(matching: .any)["signing.confirmBlock"].firstMatch
+            let line = footer.exists ? footer.label : ""
+            let verdict = app.staticTexts.allElementsBoundByIndex.map { $0.label }.filter { label in
+                ["正在检查", "未能检查", "无资产变动", "预计会失败", "余额变化", "Checking", "couldn’t check", "No asset changes"]
+                    .contains { label.contains($0) }
+            }
+            confirmY[board] = confirm.frame.minY
+            report.append(String(
+                format: "%@: confirm y=%.1f h=%.1f enabled=%@ line=[%@]%@ verdict=[%@]",
+                board, confirm.frame.minY, confirm.frame.height, "\(confirm.isEnabled)", line,
+                footer.exists ? String(format: "@%.1f", footer.frame.minY) : "",
+                verdict.joined(separator: " | ")
+            ))
+            if board.hasSuffix("held") {
+                XCTAssertFalse(confirm.isEnabled, "the confirm is open while the verdict is out (\(board))")
+                XCTAssertTrue(line.contains("正在检查这笔交易") || line.contains("Checking what this transaction does"),
+                              "the held confirm does not say what it waits for (\(board)): [\(line)]")
+            }
+            if board.hasSuffix("waited-out") {
+                XCTAssertTrue(confirm.isEnabled, "the confirm is still shut after the deadline (\(board))")
+                XCTAssertTrue(verdict.contains { $0.contains("未能检查") || $0.contains("couldn’t check") },
+                              "the verdict's place does not say it could not check (\(board)): \(verdict)")
+            }
+            app.terminate()
+        }
+        note("wait-boards", report.joined(separator: "\n"))
+        if let first = confirmY.values.first {
+            for (board, y) in confirmY {
+                XCTAssertEqual(y, first, accuracy: 0.5, "the confirm is elsewhere on \(board): \(confirmY)")
+            }
         }
     }
 
@@ -981,6 +1117,155 @@ final class PR3DeviceTests: XCTestCase {
         }
     }
 
+    // MARK: - 12. A receipt's time is its block's time: the repair, watched
+
+    /// LOOK ONLY, on the person's own wallet: nothing is tapped but the Wallet
+    /// tab, Activity's「全部」and History's back. No sheet is opened and no
+    /// request is started.
+    ///
+    /// Three receipts of 2026-09-29 stood under「今天」on 2026-10-10: their
+    /// block's time had not been read and the clock stood in, for good. This
+    /// build re-reads each stored receive's block time in the background and
+    /// rewrites the record. The home's Activity is read from one snapshot of
+    /// the tree per tick — its day headers and rows, top to bottom — from the
+    /// first frame (the stored times, as they were) until the rows stand
+    /// under their own day, and History is read the same way after.
+    ///
+    /// `REPAIR_WAIT` (seconds, default 150) is how long the home is watched;
+    /// `REPAIR_ROW` (default "Interleave") names the rows to follow.
+    func testReceiptsStandUnderTheirOwnDay() throws {
+        let env = ProcessInfo.processInfo.environment
+        let wait = TimeInterval(env["REPAIR_WAIT"] ?? "") ?? 150
+        let followed = env["REPAIR_ROW"] ?? "Interleave"
+        let app = XCUIApplication()
+        app.terminate()
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        let started = Date()
+        app.launch()
+
+        var timeline: [String] = []
+        var last: [String]? = nil
+        var changes = 0
+        var movedAt: TimeInterval? = nil
+        var final: [String] = []
+        while Date().timeIntervalSince(started) < wait {
+            let at = Date().timeIntervalSince(started)
+            guard let outline = activityOutline(app, from: "活动", to: "资产") else {
+                settle(0.3)
+                continue
+            }
+            if outline != last {
+                timeline.append(String(format: "t=%.2f %@", at, outline.joined(separator: " | ")))
+                shoot(app, String(format: "repair-home-%02d", changes))
+                if changes < 4 { dump(app, String(format: "repair-home-%02d", changes)) }
+                changes += 1
+                last = outline
+            }
+            final = outline
+            // The rows followed are on the home and none of them is under「今天」.
+            let rows = Self.rows(of: outline, containing: followed)
+            if !rows.isEmpty, rows.allSatisfy({ $0.day != "今天" && $0.day != "Today" }) {
+                if movedAt == nil { movedAt = at }
+                // Watch a little longer: what moved must stay.
+                if let movedAt, at - movedAt > 25 { break }
+            } else {
+                movedAt = nil
+            }
+            settle(0.5)
+        }
+        note("repair-home-timeline", timeline.joined(separator: "\n"))
+        XCTAssertFalse(app.staticTexts["PARALLEL SPACE"].exists, "this walk is the person's own wallet, not the space")
+        let rows = Self.rows(of: final, containing: followed)
+        XCTAssertFalse(rows.isEmpty, "no \(followed) row on the home: \(final)")
+        XCTAssertTrue(rows.allSatisfy { $0.day != "今天" && $0.day != "Today" },
+                      "a \(followed) receipt still stands under today after \(Int(wait)) s: \(final)")
+        shoot(app, "repair-home-final")
+        dump(app, "repair-home-final")
+
+        // History: the same rows, under the same day.
+        let all = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "全部"))
+            .allElementsBoundByIndex.filter { $0.isHittable }.min { $0.frame.minY < $1.frame.minY }
+        XCTAssertNotNil(all, "no 全部 over Activity")
+        all?.tap()
+        settle(3)
+        shoot(app, "repair-history-1")
+        dump(app, "repair-history-1")
+        let history = activityOutline(app, from: nil, to: nil) ?? []
+        note("repair-history-outline", history.joined(separator: "\n"))
+        let listed = Self.rows(of: history, containing: followed)
+        XCTAssertFalse(listed.isEmpty, "no \(followed) row in History: \(history)")
+        XCTAssertTrue(listed.allSatisfy { $0.day != "今天" && $0.day != "Today" },
+                      "History still files a \(followed) receipt under today: \(history)")
+        XCTAssertEqual(Set(listed.map { $0.day }), Set(rows.map { $0.day }), "the home and History name different days")
+        swipePage(app, from: 0.8, to: 0.3)
+        settle(1)
+        shoot(app, "repair-history-2-lower")
+        let back = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "返回", "Back"))
+            .allElementsBoundByIndex.first { $0.isHittable }
+        XCTAssertNotNil(back, "no back on History")
+        back?.tap()
+        settle(1.5)
+        shoot(app, "repair-home-after-history")
+        app.terminate()
+    }
+
+    /// The day headers and rows of an activity list, top to bottom, from ONE
+    /// snapshot: `"# <day>"` for a header and the row's own label for a row.
+    /// `from` / `to` are the section titles that bound it on the home (the
+    /// whole page when `nil`). `nil` when the tree could not be read or the
+    /// bounds are not on screen yet.
+    private func activityOutline(_ app: XCUIApplication, from: String?, to: String?) -> [String]? {
+        guard let root = try? app.snapshot() else { return nil }
+        var all: [XCUIElementSnapshot] = []
+        func walk(_ node: XCUIElementSnapshot) {
+            all.append(node)
+            node.children.forEach(walk)
+        }
+        walk(root)
+        let texts = all.filter { $0.elementType == .staticText }
+        var top = -CGFloat.infinity, bottom = CGFloat.infinity
+        if let from {
+            guard let title = texts.first(where: { $0.label == from }) else { return nil }
+            top = title.frame.maxY
+        }
+        if let to, let title = texts.first(where: { $0.label == to && $0.frame.minY > top }) {
+            bottom = title.frame.minY
+        }
+        // A row is a wide button whose label reads as a row ("…、…"); a day
+        // header is a text that is no row's child, at the list's leading edge.
+        let rows = all.filter {
+            $0.elementType == .button && $0.frame.width > 250 && $0.label.contains("、")
+                && $0.frame.minY >= top && $0.frame.maxY <= bottom + 1
+        }
+        guard let leading = rows.map({ $0.frame.minX }).min() else {
+            // No row at all: the list's own words (empty, loading), if any.
+            let words = texts.filter { $0.frame.minY >= top && $0.frame.maxY <= bottom + 1 }.map { $0.label }
+            return words.isEmpty ? [] : ["(no rows: \(words.joined(separator: " / ")))"]
+        }
+        let headers = texts.filter { text in
+            abs(text.frame.minX - leading) < 2
+                && text.frame.minY >= top && text.frame.maxY <= bottom + 1
+                && !rows.contains { row in row.frame.contains(text.frame) }
+        }
+        let lines = rows.map { ($0.frame.minY, $0.label) } + headers.map { ($0.frame.minY, "# " + $0.label) }
+        return lines.sorted { $0.0 < $1.0 }.map { $0.1 }
+    }
+
+    /// The rows of an outline whose label contains `fragment`, each with the
+    /// day header it stands under.
+    private static func rows(of outline: [String], containing fragment: String) -> [(day: String, row: String)] {
+        var day = "(no header)"
+        var out: [(day: String, row: String)] = []
+        for line in outline {
+            if line.hasPrefix("# ") {
+                day = String(line.dropFirst(2))
+            } else if line.contains(fragment) {
+                out.append((day: day, row: line))
+            }
+        }
+        return out
+    }
+
     // MARK: - Out of the space
 
     func testLeaveSpace() throws {
@@ -1015,6 +1300,7 @@ final class PR3DeviceTests: XCTestCase {
         if page { app.launchEnvironment["VELA_URL"] = LocalDappServer.url }
         app.launchArguments += extraArguments
         app.launch()
+        spaceApp = app
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30), "not in the parallel space")
         return app
     }
