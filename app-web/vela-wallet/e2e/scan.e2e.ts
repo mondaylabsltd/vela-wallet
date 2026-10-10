@@ -233,6 +233,41 @@ test('a code that names a network offers only what the payer holds there', async
 	await expect(page.getByRole('textbox', { name: en('send.recipientLabel') })).toHaveCount(0);
 });
 
+test('a code on a network the wallet does not have: said, with the way to add it', async ({
+	page
+}) => {
+	// PR 3 final notes F6/F27. The send core stops a locked request for a
+	// network it does not know (`lock_error`) and offers "Add this network".
+	// The web drew none of it: the stage fell through to the asset picker with
+	// no word about what had been scanned, and nothing dispatched the add.
+	await stubCamera(page, 'NotAllowedError');
+	await openHome(page);
+	await openScanner(page);
+	// Linea: not a network this wallet ships with.
+	await pick(page, `ethereum:${ALICE}@59144`);
+
+	const stop = page.getByRole('dialog', { name: en('send.lock.netTitle') });
+	await expect(stop).toBeVisible({ timeout: 30_000 });
+	await expect(stop).toContainText(en('send.lock.netBody').replace('{{chainId}}', '59144'));
+	const add = stop.getByRole('button', { name: en('send.lock.addNetwork') });
+	await expect(add).toBeEnabled();
+
+	// The registry here has no document for it (every off-origin read is
+	// refused): the add answers at once, in the core's sentence, under the
+	// button — and the button is there to try again.
+	await add.click();
+	await expect(stop.getByText(en('send.lock.netNotFound'))).toBeVisible({ timeout: 30_000 });
+	await expect(add).toBeEnabled();
+
+	// Closing it closes the send: there is nothing under it to go on with.
+	await stop.getByRole('button', { name: en('componentsUi.identiconViewer.close') }).click();
+	await expect(stop).toHaveCount(0);
+	await expect(
+		page.getByRole('button', { name: en('componentsUi.dock.scan') }).first()
+	).toBeVisible();
+	await expect(page.getByText(en('send.selectTokenTitle'))).toHaveCount(0);
+});
+
 test('the scanner opened from the send form fills the row it was opened from', async ({ page }) => {
 	// The other half of T423, and the one the CORE owns end to end: the
 	// recipient row dispatches `open_scanner`, the core's own `show_scanner`

@@ -205,6 +205,18 @@ export const WALLET_FLOW_KEYS = [
 	'settingsModals.addNetwork.recheckWithRpc',
 
 	// ------------------------------------------------------------------ send
+	// A payment request this wallet cannot take up as it is (the send core's
+	// `lock_error`): a network it does not have — with "Add this network" and
+	// what came of it — or a token it cannot describe. In the corpus since the
+	// first client, and on no web surface until PR 3's final round (F6/F27).
+	'send.lock.netTitle',
+	'send.lock.netBody',
+	'send.lock.addNetwork',
+	'send.lock.netNotFound',
+	'send.lock.netNotCompatible',
+	'send.lock.netAddError',
+	'send.lock.tokenTitle',
+	'send.lock.tokenBody',
 	'send.selectTokenTitle',
 	'send.searchPlaceholder',
 	// What an EMPTY list says. Both were in the corpus and neither was on a

@@ -99,6 +99,8 @@
 	import { createSendSession, type SendSession } from '$lib/flows/core/send-session';
 	import { toSendToken } from '$lib/flows/core/send-types';
 	import { chosenCurrencyCode, sendDisplayContext } from '$lib/flows/core/send-display';
+	import { liveSendLock } from '$lib/flows/live-send-lock';
+	import SendLock from '$lib/flows/ui/SendLock.svelte';
 	import { answerHoldings, readHoldings, type HoldingsSource } from '$lib/flows/core/send-holdings';
 	import { toApiToken } from '$lib/wallet/core/balance-executor';
 	import type { SendToken } from '$lib/core/generated/SendToken';
@@ -674,6 +676,19 @@
 	function heldSendTokens(address: string): SendToken[] | null {
 		const read = readHoldings(address, holdingsSource);
 		return read.kind === 'tokens' ? read.tokens : null;
+	}
+
+	/**
+	 * The send is stopped on a request it cannot take up — a network this
+	 * wallet does not have, a token it cannot describe (`lock_error`). The
+	 * stage used to fall through to the asset picker with no word about what
+	 * had been scanned, and "Add this network" (`add_network_tapped`) had no
+	 * caller on the web (PR 3 final notes F6/F27).
+	 */
+	const sendLock = $derived(sendView ? liveSendLock(sendView, data.flowMessages) : undefined);
+
+	function addLockedNetwork(chainId: number): void {
+		sendSession?.dispatch({ type: 'add_network_tapped', chain_id: chainId });
 	}
 
 	/** What Send last heard of the holdings, so an unchanged list is not re-sent. */
@@ -2471,6 +2486,27 @@
 		/>
 	{/if}
 {/snippet}
+
+<!-- A payment request the wallet cannot take up as it is (the send core's
+     `lock_error`, PR 3 final notes F6/F27): said over the send, with "Add this
+     network" where that is the way on. Closing it closes the send — there is
+     nothing under it to go on with. -->
+{#if sendLock !== undefined && identity}
+	{#if wide.current}
+		<Dialog title={sendLock.title} closeLabel={rm.common.close} onclose={closeSend}>
+			<SendLock lock={sendLock} onadd={addLockedNetwork} />
+		</Dialog>
+	{:else}
+		<BottomSheet
+			title={sendLock.title}
+			closeLabel={rm.common.close}
+			height="half"
+			onclose={closeSend}
+		>
+			<SendLock lock={sendLock} onadd={addLockedNetwork} />
+		</BottomSheet>
+	{/if}
+{/if}
 
 {#if rescue !== null && identity}
 	{#if wide.current}
