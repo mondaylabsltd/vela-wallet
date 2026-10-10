@@ -659,6 +659,12 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .integration:
+            #if DEBUG
+            IntegrationGalleryScreen(loc: loc, state: PageOverride.state ?? "home-token-list")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -4046,6 +4052,8 @@ enum PageOverride {
         case correctness
         /// PR 3's boards (`UIBatchGalleryScreen`).
         case uiBatch
+        /// PR 3's integration round (`IntegrationGalleryScreen`).
+        case integration
     }
 
     static let page: Page? = {
@@ -4071,6 +4079,7 @@ enum PageOverride {
         case "handoff": .handoff
         case "pr2": .correctness
         case "pr3": .uiBatch
+        case "pr3b": .integration
         default: nil
         }
     }()
