@@ -234,7 +234,6 @@ fun SigningSheetContent(
                     block.shown?.let { shown -> Draw(shown) }
                 }
             }
-
         }
         model.blocks.forEach { block -> Draw(block) }
 
