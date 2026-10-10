@@ -613,6 +613,9 @@ enum I18nKeys {
             // four row lines the core names in `line_key`.
         static let unreachableOne = "assets.unreachableOne"
         static let unreachableMany = "assets.unreachableMany"
+            // PR 3 note 4: the one network's RPC answers — its token list is
+            // what could not be loaded (`{{name}}`, as `unreachableOne`).
+        static let tokenListUnreachable = "assets.tokenListUnreachable"
         static let unreachableBody = "assets.unreachableBody"
         static let unreachableNone = "assets.unreachableNone"
         static let lastSeen = "assets.lastSeen"

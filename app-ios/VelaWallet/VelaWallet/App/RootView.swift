@@ -1019,6 +1019,12 @@ struct RootView: View {
                             onCommitRpc: { commitRescueRpc() },
                             onRetryChain: { _ in wallet.refresh(pull: true) },
                             onFixChain: { chainId in
+                                // Only a row the core says an RPC fix can
+                                // help (PR 3 note 4): a chain whose token list
+                                // is what failed has no button, and no door.
+                                guard wallet.balance?.unreachableNetworks
+                                    .first(where: { $0.chainId == chainId })?.rpcFixable != false
+                                else { return }
                                 openRpcFix(chainId)
                                 rescueStep = .rpcFix
                             }

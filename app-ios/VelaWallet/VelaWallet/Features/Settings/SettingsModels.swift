@@ -516,7 +516,10 @@ struct UnreachableRowModel: Identifiable {
     let name: String
     /// "Last seen $1,234.50", "Not read yet", …
     let line: String
-    let action: String
+    /// "Fix" — the row's RPC editor. `nil` where the core says the endpoint
+    /// is not what failed (`rpc_fixable == false`, PR 3 note 4): no label,
+    /// no control.
+    let action: String?
 }
 
 /// SR4: fund this chain's bundler treasury.

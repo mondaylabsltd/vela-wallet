@@ -89,7 +89,7 @@ struct RegistryDocumentTests {
 
         // The whole round, offline: every chain with a native coin fails as
         // before; Tempo with its document unread fails too — never answered.
-        func round(_ document: ChainTokens.Document) async throws -> (failed: [Int], read: [Int]) {
+        func round(_ document: ChainTokens.Document) async throws -> (failed: [Int], read: [Int], registry: [Int]) {
             let defaults = UserDefaults(suiteName: UUID().uuidString)!
             let store = VelaStore(defaults: defaults)
             let pool = RpcPool(store: store, accounts: AccountStore(defaults: defaults), offline: true)
@@ -98,12 +98,37 @@ struct RegistryDocumentTests {
             let reply = try CoreJSON.object(await executor.perform([
                 "type": "fetch_tokens", "address": golden, "pull": false,
             ]))
-            return (reply["failed_chain_ids"] as? [Int] ?? [], reply["read_chain_ids"] as? [Int] ?? [])
+            #expect(reply["registry_chain_ids"] is [Int], "the settle omits `registry_chain_ids`")
+            return (reply["failed_chain_ids"] as? [Int] ?? [], reply["read_chain_ids"] as? [Int] ?? [],
+                    reply["registry_chain_ids"] as? [Int] ?? [])
         }
         let unread = try await round(.unread)
         #expect(unread.failed.contains(4217), "Tempo, not read, was counted as answered: \(unread.failed)")
         #expect(unread.read.contains(4217))
         let absent = try await round(.absent)
         #expect(!absent.failed.contains(4217), "a 404 is an answer: \(absent.failed)")
+
+        // PR 3 note 4 — and it says WHY: Tempo's RPC was never asked, its
+        // token list is what could not be loaded. The settle names it in
+        // `registry_chain_ids`, a subset of the failed chains; a chain with
+        // a native coin that failed (offline) is the network's, not the
+        // list's, whatever its document did.
+        #expect(unread.registry.contains(4217), "Tempo's failure is not said to be its token list: \(unread.registry)")
+        #expect(Set(unread.registry).isSubset(of: Set(unread.failed)), "registry ⊆ failed")
+        #expect(!unread.registry.contains(1) && !unread.registry.contains(8453),
+                "a chain whose own read failed was blamed on the token list: \(unread.registry)")
+        #expect(unread.failed.contains(1), "offline, Ethereum's own read fails")
+        #expect(absent.registry.isEmpty, "a 404 is an answer — nothing failed for want of a list: \(absent.registry)")
+        // The read itself says so, and no other failure does.
+        let pool = RpcPool(store: VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!),
+                           accounts: AccountStore(defaults: UserDefaults(suiteName: UUID().uuidString)!), offline: true)
+        let tempo = await BalanceExecutor.readChain(
+            address: golden, chainId: 4217, tokens: [], pool: pool, chainlinkPrices: [:], document: .unread
+        )
+        #expect(tempo.failed && tempo.tokenListFault && !tempo.internalFault)
+        let ethereum = await BalanceExecutor.readChain(
+            address: golden, chainId: 1, tokens: [], pool: pool, chainlinkPrices: [:], document: .unread
+        )
+        #expect(ethereum.failed && !ethereum.tokenListFault)
     }
 }

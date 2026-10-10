@@ -1124,11 +1124,18 @@ enum SettingsLive {
             BalanceDetailRowModel(id: String(id), mark: row(id), name: chainName(id),
                                   status: loc.t(k.balanceDetailRetrying), tone: .neutral)
         }
-        for id in balance.unreachableNetworks.map(\.chainId)
-        where !pending.contains(where: { $0.id == String(id) }) {
+        for network in balance.unreachableNetworks
+        where !pending.contains(where: { $0.id == String(network.chainId) }) {
+            let id = network.chainId
             pending.append(BalanceDetailRowModel(
                 id: String(id), mark: row(id), name: chainName(id),
-                status: loc.t(k.balanceDetailFailed), tone: .error,
+                // PR 3 note 4: a chain whose RPC answers is never "RPC
+                // unavailable" — its token list is what could not be loaded,
+                // said in the core's sentence for exactly that.
+                status: network.rpcFixable
+                    ? loc.t(k.balanceDetailFailed)
+                    : loc.t(k.tokenListUnreachable, vars: ["name": chainName(id)]),
+                tone: .error,
                 action: loc.t(k.balanceDetailRetry)
             ))
         }
@@ -1182,9 +1189,11 @@ enum SettingsLive {
 
     /// SR6 (spec 092) — the list the hero's "can't reach" line opens: every
     /// network the core lists, in its order, each with what was last read
-    /// there (its worth in the display currency, masked while hidden) and its
-    /// RPC fix. Built from the live view on every render, so a network that
-    /// comes back leaves the open sheet; the title is the hero's own line.
+    /// there (its worth in the display currency, masked while hidden) and —
+    /// only where the core says the endpoint is what failed (`rpc_fixable`,
+    /// PR 3 note 4) — its RPC fix. Built from the live view on every render,
+    /// so a network that comes back leaves the open sheet; the title is the
+    /// hero's own line.
     static func withUnreachable(
         _ balance: BalanceViewWire,
         display: WalletLive.Display,
@@ -1207,7 +1216,7 @@ enum SettingsLive {
                 mark: mark(chainId: network.chainId, name: name),
                 name: name,
                 line: loc.t(network.lineKey, vars: ["amount": amount]),
-                action: loc.t(k.rpcFix)
+                action: network.rpcFixable ? loc.t(k.rpcFix) : nil
             )
         }
         var live = model

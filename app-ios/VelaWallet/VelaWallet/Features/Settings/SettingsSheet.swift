@@ -1413,19 +1413,24 @@ private struct UnreachableSheetBody: View {
                         .monospacedDigit()
                 }
                 Spacer(minLength: Tokens.Space.s8)
-                if let onFix {
-                    Button { onFix(row.chainId) } label: {
-                        Text(row.action)
+                // No action, no control (PR 3 note 4): a network whose RPC
+                // is fine offers no "Fix" — the row is its name and its line.
+                if let action = row.action {
+                    if let onFix {
+                        Button { onFix(row.chainId) } label: {
+                            Text(action)
+                                .typeRole(Typography.flowCaption)
+                                .foregroundStyle(theme.infoBase)
+                                .padding(.vertical, Tokens.Space.s8)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainTextButtonStyle())
+                        .accessibilityIdentifier("unreachable.fix.\(row.chainId)")
+                    } else {
+                        Text(action)
                             .typeRole(Typography.flowCaption)
                             .foregroundStyle(theme.infoBase)
-                            .padding(.vertical, Tokens.Space.s8)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(PlainTextButtonStyle())
-                } else {
-                    Text(row.action)
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(theme.infoBase)
                 }
             }
             .padding(.vertical, Tokens.Space.s12)

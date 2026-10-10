@@ -58,6 +58,54 @@ struct UnreachableNetworkWire: Decodable, Equatable {
     let lastSeenUsd: Double?
     /// The corpus key of the row's line; `assets.lastSeen` fills `{{amount}}`.
     let lineKey: String
+    /// What kept it from being read (PR 3 note 4): its nodes, or the token
+    /// list that names what to read there. Absent on the wire (a view from
+    /// before the field) reads as the network's.
+    var cause: UnreachableCauseWire = .network
+    /// May the row offer its RPC editor? The core's answer — true only when
+    /// the network itself did not answer. A row that is `false` draws no
+    /// "Fix" anywhere: the endpoint is fine, and a fix there sends a person
+    /// to repair what is working. Absent reads `true`, the core's own default.
+    var rpcFixable = true
+
+    private enum CodingKeys: String, CodingKey {
+        case chainId, lastKnown, lastSeenUsd, lineKey, cause, rpcFixable
+    }
+
+    init(
+        chainId: Int, lastKnown: String, lastSeenUsd: Double?, lineKey: String,
+        cause: UnreachableCauseWire = .network, rpcFixable: Bool = true
+    ) {
+        self.chainId = chainId
+        self.lastKnown = lastKnown
+        self.lastSeenUsd = lastSeenUsd
+        self.lineKey = lineKey
+        self.cause = cause
+        self.rpcFixable = rpcFixable
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chainId = try c.decode(Int.self, forKey: .chainId)
+        lastKnown = try c.decode(String.self, forKey: .lastKnown)
+        lastSeenUsd = try c.decodeIfPresent(Double.self, forKey: .lastSeenUsd)
+        lineKey = try c.decode(String.self, forKey: .lineKey)
+        // A cause this build has never heard of is not the network's to fix
+        // either way: the row's own `rpc_fixable` decides the button.
+        cause = try c.decodeIfPresent(String.self, forKey: .cause)
+            .flatMap(UnreachableCauseWire.init(rawValue:)) ?? .network
+        rpcFixable = try c.decodeIfPresent(Bool.self, forKey: .rpcFixable) ?? true
+    }
+}
+
+/// Why a network in the unreachable list could not be read — the core's
+/// `UnreachableCause`.
+enum UnreachableCauseWire: String, Decodable {
+    /// None of its RPC endpoints answered.
+    case network
+    /// Its RPC answers; the token list that names what to read there could
+    /// not be loaded, and it has no native coin to read without one (Tempo).
+    case tokenList = "token_list"
 }
 
 struct BalanceSwitcherViewWire: Decodable, Equatable {
@@ -122,7 +170,9 @@ struct BalanceViewWire: Decodable, Equatable {
     /// default only serves Swift-built test views.
     var unreachableNetworks: [UnreachableNetworkWire] = []
     /// The corpus key of the home line over them (`assets.unreachableOne` /
-    /// `assets.unreachableMany`); `nil` when every network answered.
+    /// `assets.unreachableMany`, or `assets.tokenListUnreachable` when the
+    /// one network's token list is what could not be loaded — PR 3 note 4);
+    /// `nil` when every network answered.
     var unreachableKey: String? = nil
     /// The failed chains whose read never left the app (PR 2 note 11) — not
     /// in `unreachableNetworks`: nothing there is the network's doing. The
