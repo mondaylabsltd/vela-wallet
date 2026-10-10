@@ -59,7 +59,13 @@ struct FlowSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.vertical, Tokens.Space.s32)
-        .presentationDetents([.height(sheetHeight)])
+        // As tall as what it holds (PR 3 note 26a). The height was fixed —
+        // 340, or 400 with two buttons — and a message of more than a couple
+        // of lines outgrew it: the content was centred in a sheet too short
+        // for it, so its top padding went first and the "!" badge sat under
+        // the grabber. Measured, the sheet opens at the old height and comes
+        // to exactly its content's.
+        .contentSizedSheet(expected: expectedHeight)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
         .interactiveDismissDisabled(false)
@@ -76,10 +82,10 @@ struct FlowSheet: View {
         onAnswer(accepted)
     }
 
-    /// Content-height-ish detent. A prompt's message is one or two sentences,
-    /// and a fixed medium detent would leave most of them floating in a
-    /// half-empty sheet.
-    private var sheetHeight: CGFloat {
+    /// What the sheet opens at before its content is measured: about what a
+    /// prompt of one or two sentences comes to, so the first frame is near
+    /// the height it settles at instead of growing from nothing.
+    private var expectedHeight: CGFloat {
         confirmable ? 400 : 340
     }
 
