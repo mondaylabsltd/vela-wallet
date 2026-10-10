@@ -256,18 +256,31 @@ struct BrowserChromeTests {
     /// Stop row, the watchdog and the pending page stay up for good and the
     /// bar stops following the page (082 review). Real WebKit, no network.
     ///
-    /// Every wait here ends on the engine's own state, never on the clock
-    /// (`Waits.swift`). It runs as the suite starts: its page waits for
-    /// WebKit's GPU, Networking and WebContent processes to launch, and every
-    /// step of the load is a turn of the one main actor the whole suite
-    /// shares. On the three-core runner the launches alone took
-    /// 5–30 s ("took 29.7 seconds to launch", CI on PR #351), and the 30 s
-    /// deadline this setup had for the commit failed main and three PRs in a
-    /// row. A wait for what never comes is the time limit's to report.
-    @Test(.timeLimit(.minutes(10)))
+    /// The page is ON SCREEN, as a tab's page is. It was in no window, and
+    /// that is what made this the test that kept `ios (unit)` red: a 600 s
+    /// limit run out, and 54 to 586 s in the runs that passed. WebKit runs a
+    /// load asked of a page nobody can see in the foreground for thirty
+    /// seconds — its own log says `Client navigation (timeout: 30 sec)` — and
+    /// then moves its WebContent, Networking and GPU processes to the
+    /// background role. On the three-core runner the thirty seconds were over
+    /// before those processes had launched (4 to 67 s there), and what was
+    /// left of the load crawled: 14 to 104 s from the commit to the finish,
+    /// with every other suite already done. A page in a window holds `View
+    /// is visible` in the foreground for as long as it is there.
+    ///
+    /// Every wait here still ends on the engine's own state, never on the
+    /// clock (`Waits.swift`), and still takes as long as the run: every step
+    /// of the load is a turn of the one main actor the whole target shares,
+    /// and WebKit gets its turn only between drains of the main queue — 12
+    /// to 14 s into a 14 s run on a laptop, and the run is one to nearly
+    /// three minutes on the runner. A wait for what never comes is the time
+    /// limit's to report, in five minutes now and not ten.
+    @Test(.timeLimit(.minutes(5)))
     func aSameDocumentArrivalEndsItsLoad() async throws {
         let engine = BrowserEngine(id: "tab-\(UUID().uuidString)")
         defer { engine.tearDown() }
+        let window = try onScreen(engine.webView)
+        defer { window.isHidden = true }
         // The local page has no host that could fall silent, so while WebKit
         // comes up the watchdog is told it is answering: on a starved main
         // actor its 20 s budget can run out between WebKit's policy questions,
@@ -290,6 +303,22 @@ struct BrowserChromeTests {
         #expect(!ExploreLive.siteMenuItems(
             bookmarked: false, connected: false, loading: engine.loading, loc: loc
         ).contains { $0.id == "stop" })
+    }
+
+    /// A window of the test's own with `view` filling it, over the app's: a
+    /// page in a window is a page WebKit keeps in the foreground.
+    private func onScreen(_ view: UIView) throws -> UIWindow {
+        let scene = try #require(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first,
+            "the test host has no window scene to show the page in"
+        )
+        let window = UIWindow(windowScene: scene)
+        window.frame = scene.coordinateSpace.bounds
+        window.rootViewController = UIViewController()
+        window.isHidden = false
+        view.frame = window.bounds
+        window.rootViewController?.view.addSubview(view)
+        return window
     }
 
     /// Back across a single-page app's own entry (`goBack` names the entry it

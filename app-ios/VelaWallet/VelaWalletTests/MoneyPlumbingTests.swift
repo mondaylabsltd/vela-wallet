@@ -555,7 +555,7 @@ struct TxRecordWriteTests {
 /// timers stopped (a scripted relay answers by design), so a quote that never
 /// settles is a hang, and this is what reports it (`Waits.swift`).
 @MainActor
-@Suite(.timeLimit(.minutes(10)))
+@Suite(.timeLimit(.minutes(5)))
 struct SendMachineTests {
     private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
 

@@ -70,8 +70,13 @@ struct SiteRowView: View {
                 }
             }
             .padding(.vertical, Tokens.Space.s12)
+            // The whole row answers, not only what is drawn on it. The shape
+            // belongs on the LABEL: a plain button hit-tests its label, and
+            // set on the button from outside it left the row's blank part
+            // dead — most of a resume row, whose name and host end before
+            // its middle, which is where a thumb (and the gallery walk) taps.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
     }
 }

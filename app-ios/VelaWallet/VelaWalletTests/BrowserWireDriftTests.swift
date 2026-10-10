@@ -20,7 +20,11 @@ import Testing
 import VelaCore
 @testable import VelaWallet
 
+/// `timeLimit`: one wait here is for the sheet's request to arrive, which no machine's idleness
+/// bounds (`Waits.swift`). With no limit, one that never came would have
+/// taken the job with it; this reports it.
 @MainActor
+@Suite(.timeLimit(.minutes(5)))
 struct BrowserWireDriftTests {
 
     /// `dispatch` and `resolveEffect` answer `{ view, effects,
