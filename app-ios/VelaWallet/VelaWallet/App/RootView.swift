@@ -659,6 +659,12 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .integration:
+            #if DEBUG
+            IntegrationGalleryScreen(loc: loc, state: PageOverride.state ?? "home-token-list")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -1019,6 +1025,12 @@ struct RootView: View {
                             onCommitRpc: { commitRescueRpc() },
                             onRetryChain: { _ in wallet.refresh(pull: true) },
                             onFixChain: { chainId in
+                                // Only a row the core says an RPC fix can
+                                // help (PR 3 note 4): a chain whose token list
+                                // is what failed has no button, and no door.
+                                guard wallet.balance?.unreachableNetworks
+                                    .first(where: { $0.chainId == chainId })?.rpcFixable != false
+                                else { return }
                                 openRpcFix(chainId)
                                 rescueStep = .rpcFix
                             }
@@ -2278,6 +2290,8 @@ struct RootView: View {
                 record: feed.transactions.first { $0.id == item.id },
                 on: detail, loc: loc,
                 hidden: feed.hidden,
+                // No fiat before the person's currency is known (PR 3).
+                display: WalletLive.Display.live(settings.currency),
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
@@ -3036,6 +3050,9 @@ struct RootView: View {
             torchOn: camera.torchOn,
             onTool: { tool in scanTool(tool) }
         )
+        // A gallery / board / dev session: the drawn viewfinder, never a
+        // camera (PR 3 note 7).
+        inputs.fixture = camera.fixtureOnly
         if camera.refusal == .denied {
             inputs.refusalAction = (
                 label: loc.t("componentsUi.scanner.grantPermission"),
@@ -4035,6 +4052,8 @@ enum PageOverride {
         case correctness
         /// PR 3's boards (`UIBatchGalleryScreen`).
         case uiBatch
+        /// PR 3's integration round (`IntegrationGalleryScreen`).
+        case integration
     }
 
     static let page: Page? = {
@@ -4060,9 +4079,24 @@ enum PageOverride {
         case "handoff": .handoff
         case "pr2": .correctness
         case "pr3": .uiBatch
+        case "pr3b": .integration
         default: nil
         }
     }()
+
+    /// Is this a gallery, fixture, board or dev-flow session? Any
+    /// `VELA_PAGE` override is one — none of them is production navigation —
+    /// and so is the onboarding gallery (`VELA_GALLERY=1`).
+    /// The signal the scanner reads to draw a fixture frame and never open
+    /// the camera (PR 3 note 7, `CameraScanner.fixtureOnly`): a desktop
+    /// gallery sweep photographed the person at the machine. Read from the
+    /// raw variable, so a page name this build has never heard of counts.
+    static func isDevSession(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        // …and the onboarding gallery's own switch (`GalleryMode`).
+        !(environment["VELA_PAGE"] ?? "").isEmpty || environment["VELA_GALLERY"] == "1"
+    }
 
     /// WHICH state the overridden page opens on — `VELA_STATE=e4`,
     /// `VELA_STATE=cs5`, or `VELA_STATE=st9` to put `settings-live` straight

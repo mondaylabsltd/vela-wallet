@@ -230,8 +230,19 @@ struct NetWizardViewWire: Decodable, Equatable {
     let customRpc: String
     let suggestions: [NetChainIndexEntryWire]
     let chainInfo: NetChainInfoWire?
+    /// The check's result. Present in the `checked` phase — and, since PR 3
+    /// (notes 5, 10), ALSO beside `phase: error` when the check itself raised
+    /// the stop (the scan / auto-add path: `not_compatible`, `check_failed`),
+    /// so a refusal there can say why and offer Chain Setup where it applies.
     let compat: NetCompatibilityWire?
     let error: NetWizardErrorWire?
+    /// The corpus key of the SENTENCE for `error`, chosen by the core (PR 3
+    /// notes 5/10/18): already added, not found, no RPC endpoint listed,
+    /// unable to verify, and for a refusal the check's own reason. The shell
+    /// draws `t(errorKey)` and maps no `error.type` to words — it used to,
+    /// and "no RPC endpoint" borrowed "unable to verify". Absent with no
+    /// error (and from a hand-built view): then there is no sentence.
+    var errorKey: String? = nil
     /// **The add gate.** Never re-derived in Swift: the core owns what makes a
     /// candidate addable, and a second opinion here is how a screen offers to
     /// add a chain the core will refuse.

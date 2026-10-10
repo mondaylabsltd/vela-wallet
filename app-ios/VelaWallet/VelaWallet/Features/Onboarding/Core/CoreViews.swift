@@ -132,12 +132,18 @@ struct CreateView: Equatable {
     /// first key commits the set to one domain.
     var canChoosePage: Bool = false
     /// Issue #475: the corpus key of the heading over the three places —
-    /// "Add a passkey" with no key, "Add another" after, "Limit of 7 reached"
-    /// when full. The core's choice; empty from a core that predates it.
+    /// "Choose where it lives" with no key (PR 3 note 17), "Add another"
+    /// after, "Limit of 7 reached" when full. The core's choice; empty from
+    /// a core that predates it.
     var addHeadingKey: String = ""
     /// The three places are pinned open: no key yet, and one may be added.
     /// The fold's own open/closed state is the screen's.
     var methodsPinned: Bool = false
+    /// Is the "Added n / 7" counter drawn? The core's one rule for the four
+    /// shells (PR 3 note 22): not at 0 keys — the subtitle already says "up
+    /// to 7" — and from the first key on. Absent reads `false`, the core's
+    /// own default; this shell no longer has a condition of its own.
+    var keyCountShown: Bool = false
 }
 
 extension CreateView: Decodable {
@@ -146,7 +152,7 @@ extension CreateView: Decodable {
         case showStartOver, busy, status, keys, canAddKey, canFinish, needsSecondKey
         case canGoBack, address, syncErrorDetail, addMethods
         case signingDomain, signingPage, canChoosePage
-        case addHeadingKey, methodsPinned
+        case addHeadingKey, methodsPinned, keyCountShown
     }
 
     /// Written out for the three spec-102 fields: a decode failure here is
@@ -182,6 +188,7 @@ extension CreateView: Decodable {
         // repeat — no key yet, and one may be added.
         methodsPinned = try values.decodeIfPresent(Bool.self, forKey: .methodsPinned)
             ?? (keys.isEmpty && canAddKey)
+        keyCountShown = try values.decodeIfPresent(Bool.self, forKey: .keyCountShown) ?? false
     }
 }
 

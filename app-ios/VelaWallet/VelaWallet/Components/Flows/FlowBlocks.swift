@@ -808,6 +808,13 @@ struct RecipientFieldView: View {
                             Text(verbatim: line)
                                 .monoRole(Typography.monoAddressDetail.scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
+                                // Each half of the address is ONE line. Since
+                                // the scan icon joined the address book
+                                // (issue #471) a whole address's halves were a
+                                // character too wide on a board and each
+                                // dropped its last one onto a line of its own.
+                                .lineLimit(1)
+                                .minimumScaleFactor(WalletGeometry.heroMinScale)
                         }
                     }
                 }
@@ -958,13 +965,32 @@ struct FeeRowView: View {
         }
     }
 
-    /// The row's face: label and value side by side while both fit whole;
-    /// the label on its own line and the value under it otherwise. It used
-    /// to break the label inside a word ("Netzwerkg / ebühr") and cut the
-    /// value to "0.00421…". The chevron promises the coin list, so it stands
-    /// only where a tap opens it.
+    /// The room a FULL fee line takes in this row's face: six decimals of the
+    /// coin, its symbol and a four-digit fiat half, with the mark and the
+    /// chevron. What the row is arranged for, whatever it shows right now.
+    private var fullLine: CGFloat {
+        let template = "0.000000 \(fee.mark.ticker) · ≈$0,000.00" as NSString
+        let text = template.size(withAttributes: [.font: Typography.body.scaled(textScale).uiFont]).width
+        return WalletFlowGeometry.inlineMark + Tokens.Space.s8 + text.rounded(.up)
+            + Tokens.Space.s8 + LucideIconSize.smallChevron
+    }
+
+    /// The row's face: label and value side by side where a full fee line
+    /// fits beside the label; the label on its own line and the value under
+    /// it otherwise. It used to break the label inside a word ("Netzwerkg /
+    /// ebühr") and cut the value to "0.00421…". The chevron promises the
+    /// coin list, so it stands only where a tap opens it.
+    ///
+    /// **The arrangement never follows the value** (PR 3 notes 9/27). It was
+    /// chosen from whatever the value was at that moment, so the row
+    /// re-arranged — and Speed and Continue under it moved 21 pt — when the
+    /// figure replaced "Estimating…", when its fiat half joined it, or when
+    /// a re-quote had a digit more: side by side for "0.02 USDC", stacked for
+    /// "0.02 USDC · ≈¥0.14". It is arranged for a full line from the first
+    /// frame (`fullLine`): on a phone that is the stacked one, in every
+    /// language and for every value.
     private var rowFace: some View {
-        TitleAndValue {
+        TitleAndValue(valueReserve: fullLine) {
             Text(verbatim: fee.label)
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)

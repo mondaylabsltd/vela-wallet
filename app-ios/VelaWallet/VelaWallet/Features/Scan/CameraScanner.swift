@@ -17,6 +17,18 @@
 //     `DiscoverySession` simply comes back empty, and the surface falls back to
 //     the photo library rather than showing a failure nobody can act on.
 //
+//  And a fifth, bought on the desktop (PR 3 note 7, PRIVACY):
+//
+//  5. **A gallery, fixture, board or dev-flow session never opens the
+//     camera.** A desktop gallery sweep started the real camera and captured
+//     a frame of the person at the machine. Under any `VELA_PAGE` override
+//     (`PageOverride.isDevSession`) this scanner is `fixtureOnly`: `start()`
+//     returns before it asks AVFoundation anything — no device discovery, no
+//     permission prompt, no session, no `startRunning` — and the surface
+//     draws a FIXTURE frame, a drawn viewfinder with the sample code
+//     (`ScanSurfaceView.fixtureFrame`). The gate is here, at the one place
+//     the camera is started, so no caller can forget it.
+//
 
 import AVFoundation
 import Foundation
@@ -48,7 +60,21 @@ final class CameraScanner: NSObject {
     /// exactly once per session.
     var onScan: (String) -> Void = { _ in }
 
-    let session = AVCaptureSession()
+    /// Rule 5: this session draws a fixture frame and never touches the
+    /// camera. Decided once, when the scanner is made.
+    let fixtureOnly: Bool
+    /// How many times this scanner got PAST the gate, towards the capture
+    /// hardware (device discovery, permission, the session). Always 0 for a
+    /// `fixtureOnly` scanner — which is what its test holds.
+    @ObservationIgnored private(set) var hardwareReaches = 0
+
+    /// Made on first use, so a `fixtureOnly` scanner never makes one at all.
+    @ObservationIgnored private(set) lazy var session: AVCaptureSession = {
+        sessionMade = true
+        return AVCaptureSession()
+    }()
+    /// Whether `session` was ever made — never, for a fixture scanner.
+    @ObservationIgnored private(set) var sessionMade = false
     private let queue = DispatchQueue(label: "vela.scan")
     private var input: AVCaptureDeviceInput?
     private var output: AVCaptureVideoDataOutput?
@@ -56,12 +82,24 @@ final class CameraScanner: NSObject {
     /// Rule 3.
     private var reported = false
 
+    /// `fixtureOnly` defaults to the session's own signal: any `VELA_PAGE`
+    /// override is a gallery, a board or a dev flow.
+    init(fixtureOnly: Bool = PageOverride.isDevSession()) {
+        self.fixtureOnly = fixtureOnly
+        super.init()
+    }
+
     /// Ask for the camera and start, or record why not.
     ///
     /// Idempotent: the surface's `.task` runs again on every rebuild, and
     /// re-configuring a running session drops frames for a beat.
     func start() async {
+        // Rule 5, before anything else: a gallery / board / dev session has
+        // no camera to ask for. Not a refusal — the surface draws its
+        // fixture frame — and nothing below this line runs.
+        guard !fixtureOnly else { return }
         guard !running, refusal == nil else { return }
+        hardwareReaches += 1
         // **Is there a camera at all, before asking to use one.** Asking
         // permission for hardware that does not exist is absurd on its face,
         // and on a simulator `requestAccess` simply never answers — a
@@ -94,13 +132,16 @@ final class CameraScanner: NSObject {
 
     func stop() {
         running = false
+        // Nothing was ever started in a fixture session, and nothing is made
+        // now just to be stopped.
+        guard !fixtureOnly, sessionMade else { return }
         let session = session
         queue.async { if session.isRunning { session.stopRunning() } }
     }
 
     /// The torch, which only a back camera has.
     func toggleTorch() {
-        guard let device = input?.device, device.hasTorch else { return }
+        guard !fixtureOnly, let device = input?.device, device.hasTorch else { return }
         do {
             try device.lockForConfiguration()
             device.torchMode = device.torchMode == .on ? .off : .on
@@ -114,7 +155,7 @@ final class CameraScanner: NSObject {
     /// The other lens. The torch goes out with it — a front camera has none,
     /// and leaving the flag on would draw a control that does nothing.
     func flip() {
-        guard canFlip else { return }
+        guard !fixtureOnly, canFlip else { return }
         front.toggle()
         torchOn = false
         Task { await configure() }
@@ -131,6 +172,10 @@ final class CameraScanner: NSObject {
     }
 
     private func configure() async {
+        // Rule 5 again, at the one place a session is configured and
+        // started: whatever called this, a fixture session stops here.
+        guard !fixtureOnly else { return }
+        hardwareReaches += 1
         let position: AVCaptureDevice.Position = front ? .front : .back
         let devices = Self.cameras()
         guard !devices.isEmpty else {

@@ -121,9 +121,12 @@ struct UIBatchGalleryScreen: View {
     /// written out: a drawing has no chain behind it.
     private static func backupCheck(_ state: String) -> RegistryBackup.Check? {
         func row(_ subtitle: String, _ tone: RegistryBackup.Row.Tone, _ action: RegistryBackup.Row.Action) -> RegistryBackup.Row {
+            // The core gives every state its paragraph but the one that can
+            // never be copied (`BackupRow.explain_key`, PR 3 note 6).
             RegistryBackup.Row(
                 titleKey: "settingsModals.backup.title",
-                subtitleKey: "settingsModals.backup.\(subtitle)", tone: tone, action: action
+                subtitleKey: "settingsModals.backup.\(subtitle)", tone: tone, action: action,
+                explainKey: subtitle == "cannotCopy" ? nil : RegistryBackup.Row.explainKey
             )
         }
         switch state {

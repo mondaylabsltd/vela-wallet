@@ -57,6 +57,17 @@ final class RegistryBackup {
         let subtitleKey: String
         let tone: Tone
         let action: Action
+        /// The corpus key of the paragraph under the Keys block for THIS
+        /// state (`BackupRow.explain_key`, PR 3 note 6): what a copy
+        /// publishes, what it costs and how it is made — for every state a
+        /// copy can still be made or checked in. Absent for a wallet that can
+        /// never be copied: the paragraph described what the row above had
+        /// just said cannot be done, so there is none, and no slot kept.
+        var explainKey: String? = nil
+
+        /// The paragraph while the walk is still running, and for a silence
+        /// this file caused — the core's `EXPLAIN_KEY`.
+        static let explainKey = "settingsModals.backup.explain"
 
         /// The row for a silence THIS file caused — a step that could not be
         /// read, a walk that ran out of rounds — which the core never saw to
@@ -64,7 +75,7 @@ final class RegistryBackup {
         static let couldNotCheck = Row(
             titleKey: "settingsModals.backup.title",
             subtitleKey: "settingsModals.backup.couldNotCheck",
-            tone: .neutral, action: .retry
+            tone: .neutral, action: .retry, explainKey: Row.explainKey
         )
 
         /// A tone or an action this build does not know reads as the quiet
@@ -76,15 +87,18 @@ final class RegistryBackup {
             self.init(
                 titleKey: title, subtitleKey: subtitle,
                 tone: (json["tone"] as? String).flatMap(Tone.init) ?? .neutral,
-                action: (json["action"] as? String).flatMap(Action.init) ?? Action.none
+                action: (json["action"] as? String).flatMap(Action.init) ?? Action.none,
+                // Absent is "no paragraph" — the core leaves the key out.
+                explainKey: (json["explain_key"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             )
         }
 
-        init(titleKey: String, subtitleKey: String, tone: Tone, action: Action) {
+        init(titleKey: String, subtitleKey: String, tone: Tone, action: Action, explainKey: String? = nil) {
             self.titleKey = titleKey
             self.subtitleKey = subtitleKey
             self.tone = tone
             self.action = action
+            self.explainKey = explainKey
         }
     }
 

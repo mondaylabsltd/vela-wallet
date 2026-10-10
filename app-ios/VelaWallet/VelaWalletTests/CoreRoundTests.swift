@@ -297,6 +297,95 @@ struct CoreRoundTests {
         #expect(row.status == loc.t("componentsUi.gas.reasonInternal"))
     }
 
+    /// PR 3 note 4 — a token list that can't be loaded is not a network out
+    /// of reach. The REAL `balance_dashboard` core over a round in which
+    /// Tempo failed for want of its list (`registry_chain_ids`): the home
+    /// says the LIST could not be loaded, never "Can't reach Tempo"; the
+    /// row says what kept it from being read and that an RPC fix cannot
+    /// help; and no surface offers one — not the list, not its door.
+    @Test func aTokenListThatCantLoadIsNotANetworkOutOfReach() throws {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let fallback = WalletFixtures.buildMobileState(.h1, loc: loc).balance
+        let view = try #require(BalanceCoreScene.view(failedChain: 4217, internalFault: false, tokenListFault: true))
+        #expect(view.unreachableKey == I18nKeys.SettingsUi.tokenListUnreachable)
+        #expect(view.unreachableKey == "assets.tokenListUnreachable")
+        let row = try #require(view.unreachableNetworks.first)
+        #expect(view.unreachableNetworks.count == 1 && row.chainId == 4217)
+        #expect(row.cause == .tokenList)
+        #expect(!row.rpcFixable, "the core says an RPC fix can help a chain whose RPC is fine")
+
+        // The home's line, resolved like any other key the core names.
+        let line = WalletLive.balance(view, fallback: fallback, loc: loc).status?.text
+        #expect(line == "Can't load Tempo's token list right now", "\(String(describing: line))")
+        #expect(line?.contains("Can't reach") == false)
+        #expect(WalletLive.balance(view, fallback: fallback, loc: zh).status?.text == "暂时读不到 Tempo 的代币列表")
+        #expect(WalletLive.unreachableLine(view, loc: loc)?.contains("{{") == false)
+
+        // The list it opens: Tempo's row, its line, and NO "Fix".
+        let list = SettingsLive.withUnreachable(
+            view, display: .usd, on: SettingsFixtures.build(.sr6, loc: loc), loc: loc
+        ).unreachable
+        #expect(list.title == line, "the list is titled by the home's own line")
+        #expect(list.rows.count == 1)
+        #expect(list.rows.first?.name == "Tempo")
+        #expect(list.rows.first?.action == nil, "a chain whose RPC is fine is offered an RPC fix")
+        #expect(list.rows.first?.line == loc.t("assets.notReadYet"))
+
+        // The balance detail's row never reads "RPC unavailable" for it.
+        let detail = SettingsLive.withBalanceDetail(
+            view, display: .usd, on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        ).balanceDetail
+        let pending = try #require(detail.pending.first { $0.id == "4217" })
+        #expect(pending.status == line)
+        #expect(pending.status != loc.t("home.balanceDetailStatusFailed"))
+
+        // The same chain really out of reach is the network's, with its Fix.
+        let down = try #require(BalanceCoreScene.view(failedChain: 4217, internalFault: false))
+        let downRow = try #require(down.unreachableNetworks.first)
+        #expect(downRow.cause == .network && downRow.rpcFixable)
+        #expect(down.unreachableKey == I18nKeys.SettingsUi.unreachableOne)
+        #expect(WalletLive.balance(down, fallback: fallback, loc: loc).status?.text == "Can't reach Tempo right now")
+        let downList = SettingsLive.withUnreachable(
+            down, display: .usd, on: SettingsFixtures.build(.sr6, loc: loc), loc: loc
+        ).unreachable
+        #expect(downList.rows.first?.action == loc.t("assets.rpcFix"))
+        #expect(SettingsLive.withBalanceDetail(
+            down, display: .usd, on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        ).balanceDetail.pending.first { $0.id == "4217" }?.status == loc.t("home.balanceDetailStatusFailed"))
+    }
+
+    /// The two new fields ride on the wire under these names; a row from
+    /// before them (a hand-written view, an older core) is the network's,
+    /// fixable — the core's own defaults — and a cause this build has never
+    /// heard of still decodes, its `rpc_fixable` deciding the button.
+    @Test func theUnreachableRowsCauseDecodesAndAnAbsentOneIsTheNetworks() throws {
+        func decode(_ extra: [String: Any]) throws -> UnreachableNetworkWire {
+            var json: [String: Any] = [
+                "chain_id": 4217, "last_known": "not_read", "last_seen_usd": NSNull(),
+                "line_key": "assets.notReadYet",
+            ]
+            json.merge(extra) { _, new in new }
+            return try CoreJSON.decode(UnreachableNetworkWire.self, from: json)
+        }
+        let list = try decode(["cause": "token_list", "rpc_fixable": false])
+        #expect(list.cause == .tokenList && !list.rpcFixable)
+        let network = try decode(["cause": "network", "rpc_fixable": true])
+        #expect(network.cause == .network && network.rpcFixable)
+        let old = try decode([:])
+        #expect(old.cause == .network && old.rpcFixable)
+        let novel = try decode(["cause": "something_new", "rpc_fixable": false])
+        #expect(!novel.rpcFixable, "an unknown cause lost the core's own answer about the button")
+        // A view carrying a list row draws no Fix; several networks are still counted.
+        var many = try #require(BalanceCoreScene.view(internalFault: false))
+        many.unreachableNetworks = [network, list]
+        many.unreachableKey = I18nKeys.SettingsUi.unreachableMany
+        #expect(WalletLive.unreachableLine(many, loc: loc) == "Can't reach 2 networks right now")
+        let rows = SettingsLive.withUnreachable(
+            many, display: .usd, on: SettingsFixtures.build(.sr6, loc: loc), loc: loc
+        ).unreachable.rows
+        #expect(rows.map { $0.action != nil } == [true, false])
+    }
+
     /// Every chain's read failed, nothing cached (PR 2 integration): no
     /// settled "$0.00" and no "Deposit your first asset" under the reason —
     /// the skeleton, and Vela's own sentence when the fault was its own, else

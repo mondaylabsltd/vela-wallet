@@ -179,6 +179,9 @@
                <Test
                   Identifier = "UIBatchScreenshotTests">
                </Test>
+               <Test
+                  Identifier = "IntegrationRound2ScreenshotTests">
+               </Test>
             </SkippedTests>
          </TestableReference>
       </Testables>

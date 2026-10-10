@@ -56,6 +56,12 @@ enum TokenReads {
         /// send, a request this build could not write (PR 2 note 11). Always
         /// with `failed`. The core never says "can't reach" for it.
         var internalFault = false
+        /// Failed because the chain's TOKEN LIST — the registry document that
+        /// names its stablecoins — could not be loaded, and the chain has no
+        /// native coin to read without it (Tempo; PR 3 note 4). Always with
+        /// `failed`. Its RPC was never asked, so the core says the list is
+        /// what could not be loaded and offers no RPC fix.
+        var tokenListFault = false
     }
 
     /// One chain's read, given up on at the core's per-chain deadline

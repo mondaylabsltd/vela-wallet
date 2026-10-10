@@ -12,7 +12,9 @@
 //  `signerPageAdmit`).
 //
 
+import CoreText
 import Foundation
+import UIKit
 import Testing
 import VelaCore
 @testable import VelaWallet
@@ -342,6 +344,102 @@ struct SignerPageChecksTests {
         #expect(!today.contains("{{") && !yesterday.contains("{{"))
         let zh = line(now - 2 * 60 * 1000).text(Loc(overrideTag: "zh", preferredLanguages: []), nowMs: now)
         #expect(zh.hasSuffix("检查于 11:58"), "\(zh)")
+    }
+
+    /// PR 3 note 14: the moment is ONE unbreakable unit, CJK included. A
+    /// no-break space keeps "2:32 PM" together and is not enough for a day
+    /// period written in Han or kana — a line may break between any two such
+    /// characters, and 「下午」 split after 「下」 at some widths. The core now
+    /// puts a WORD JOINER (U+2060) between them. This shell neither strips
+    /// nor re-inserts it: the line carries the core's string byte for byte,
+    /// and laid out by CoreText in the line's own face at every width from
+    /// a sliver to a full phone, the moment is never broken across lines.
+    @Test func aCheckedTimeIsOneUnbreakableUnitInCJKToo() throws {
+        let saved = Formats.current
+        defer { Formats.current = saved }
+        Formats.current = Formats.Current(number: .commaDot, date: .iso, time: .h12)
+        var parts = DateComponents()
+        (parts.year, parts.month, parts.day, parts.hour, parts.minute) = (2026, 6, 13, 15, 0)
+        let three = try #require(Calendar(identifier: .gregorian).date(from: parts))
+        let now = UInt64(three.timeIntervalSince1970 * 1000)
+        let at = now - 28 * 60 * 1000 // 2:32 in the afternoon, today
+        let yesterday = at - 24 * Self.hour
+
+        // The core's own words for the moment, in each script.
+        func moment(_ tag: String, _ checked: UInt64) -> String {
+            SignerIntegrityLine.checkedTime(checked, nowMs: now, loc: Loc(overrideTag: tag, preferredLanguages: []))
+        }
+        // A Latin-script moment is byte-identical to before.
+        #expect(moment("en", at) == "2:32\u{a0}PM")
+        // Han and kana carry the joiner inside the day period.
+        #expect(moment("zh", at) == "下\u{2060}午\u{a0}2:32")
+        #expect(moment("ja", at) == "午\u{2060}後\u{a0}2:32")
+        // Nothing breakable is left inside any of them: no plain space, and
+        // every pair of neighbours that could be parted is glued.
+        for tag in ["en", "zh", "zh-TW", "zh-HK", "ja", "ko", "de", "ru", "tr", "vi"] {
+            for checked in [at, yesterday] {
+                let text = moment(tag, checked)
+                #expect(!text.contains(" "), "\(tag): a plain space in \(text.debugDescription)")
+                #expect(!text.isEmpty)
+            }
+        }
+
+        // The line is the core's string, untouched.
+        let key = "componentsUi.signing.integrity.matches"
+        for tag in ["zh", "ja", "en"] {
+            let loc = Loc(overrideTag: tag, preferredLanguages: [])
+            for checked in [at, yesterday] {
+                let line = SignerIntegrityLine(state: .matches, version: "0ba8ee8c", checkedAtMs: checked, key: key, opens: true)
+                let text = line.text(loc, nowMs: now)
+                let time = moment(tag, checked)
+                #expect(text.contains(time), "\(tag): the line re-spelled the moment: \(text.debugDescription)")
+                #expect(!text.contains("{{"))
+
+                // Laid out in the line's own face, at every width: the
+                // moment's characters all sit on one line.
+                let attributed = NSAttributedString(string: text, attributes: [.font: Typography.flowCaption.uiFont])
+                let whole = text as NSString
+                let range = whole.range(of: time)
+                #expect(range.location != NSNotFound)
+                let setter = CTFramesetterCreateWithAttributedString(attributed)
+                let own = (time as NSString).size(withAttributes: [.font: Typography.flowCaption.uiFont]).width
+                var widths = 0
+                for width in stride(from: CGFloat(60), through: 400, by: 1) where width >= own + 2 {
+                    widths += 1
+                    let path = CGPath(rect: CGRect(x: 0, y: 0, width: width, height: 10_000), transform: nil)
+                    let frame = CTFramesetterCreateFrame(setter, CFRange(location: 0, length: 0), path, nil)
+                    let lines = (CTFrameGetLines(frame) as? [CTLine]) ?? []
+                    let holders = lines.filter { line in
+                        let span = CTLineGetStringRange(line)
+                        return NSIntersectionRange(NSRange(location: span.location, length: span.length), range).length > 0
+                    }
+                    if holders.count != 1 {
+                        Issue.record("\(tag): the moment \(time.debugDescription) is split over \(holders.count) lines at \(width) pt")
+                        break
+                    }
+                }
+                #expect(widths > 100, "\(tag): no width was wide enough to hold the moment (\(own) pt)")
+            }
+        }
+
+        // And the joiner is what does it: the same day period without one
+        // DOES break at some width — so the check above is not vacuous.
+        let bare = "检查于 下午\u{a0}2:32"
+        let bareAttributed = NSAttributedString(string: bare, attributes: [.font: Typography.flowCaption.uiFont])
+        let bareSetter = CTFramesetterCreateWithAttributedString(bareAttributed)
+        let period = (bare as NSString).range(of: "下午")
+        var splits = false
+        for width in stride(from: CGFloat(20), through: 200, by: 1) {
+            let path = CGPath(rect: CGRect(x: 0, y: 0, width: width, height: 10_000), transform: nil)
+            let frame = CTFramesetterCreateFrame(bareSetter, CFRange(location: 0, length: 0), path, nil)
+            let lines = (CTFrameGetLines(frame) as? [CTLine]) ?? []
+            let holders = lines.filter { line in
+                let span = CTLineGetStringRange(line)
+                return NSIntersectionRange(NSRange(location: span.location, length: span.length), period).length > 0
+            }
+            if holders.count > 1 { splits = true; break }
+        }
+        #expect(splits, "without the joiner 下午 never splits either — this layout cannot see the defect")
     }
 }
 

@@ -84,16 +84,25 @@ struct FlowFixturesTests {
         }
         let none = try view("keys · none")
         #expect(none.methodsPinned)
-        #expect(en.t(none.addHeadingKey) == "Add a passkey")
-        #expect(zh.t(none.addHeadingKey) == "添加通行密钥")
+        // PR 3 note 17: with no key the heading says something the screen's
+        // title ("Add passkeys" / 「添加通行密钥」) has not already said.
+        #expect(none.addHeadingKey == I18nKeys.Create.keyPlaceHeading)
+        #expect(en.t(none.addHeadingKey) == "Choose where it lives")
+        #expect(zh.t(none.addHeadingKey) == "选择存放位置")
+        #expect(en.t(none.addHeadingKey) != en.t(I18nKeys.Create.keysTitle))
+        #expect(zh.t(none.addHeadingKey) != zh.t(I18nKeys.Create.keysTitle))
+        // PR 3 note 22: no counter over an empty list.
+        #expect(!none.keyCountShown)
 
         let one = try view("keys · one, needs a second")
         #expect(!one.methodsPinned, "with a key the three places fold")
         #expect(en.t(one.addHeadingKey) == "Add another")
+        #expect(one.keyCountShown, "the counter appears with the first key")
 
         let full = try view("keys · at the cap")
         #expect(!full.methodsPinned && !full.canAddKey)
         #expect(en.t(full.addHeadingKey) == "Limit of 7 reached")
+        #expect(full.keyCountShown)
     }
 
     @Test func fixtureCodesAreUnique() {

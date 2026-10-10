@@ -144,11 +144,21 @@ struct DisplayCurrencyTests {
         #expect(value.contains("8,765"))
     }
 
-    /// An uncommitted choice is the USD placeholder, whatever code the model
-    /// happens to be carrying.
-    @Test func anUncommittedChoiceShowsThePlaceholder() {
+    /// An uncommitted choice draws NO figure, whatever code and rate the
+    /// model happens to be carrying — never the carried code's glyph on
+    /// unconverted digits, and (PR 3 notes 9/27: the withhold rule has no
+    /// surface it skips) not the "USD · $1,234.56" placeholder either: a
+    /// first launch that is about to seed the device's currency would say
+    /// "USD" and then change. The row keeps its place; its value lands with
+    /// the commit.
+    @Test func anUncommittedChoiceDrawsNoFigure() {
         let seeded = CurrencyViewWire(code: "CNY", rate: 7.1, committed: false)
-        #expect(SettingsLive.currencyRowValue(seeded).hasPrefix("USD"))
+        #expect(SettingsLive.currencyRowValue(seeded) == "")
+        #expect(SettingsLive.currencyRowValue(.unread) == "")
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: false)) == "")
+        // Committed USD is a choice like any other, with its sample.
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: true))
+                .hasPrefix("USD · $"))
     }
 
     /// PR 3: the person's own stored choice, while its rate is on its way,

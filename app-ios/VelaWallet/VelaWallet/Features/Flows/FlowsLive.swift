@@ -220,18 +220,24 @@ enum FlowsLive {
     ///
     /// `hidden`: the feed's own privacy flag (`FeedView.hidden`, PR 2) — the
     /// figure and its worth are the mask; who, where and when stay.
+    ///
+    /// `display`: only its `settled` is read. The worth under the figure is
+    /// the STORED dollar string, never re-priced — but it is a fiat figure,
+    /// and the withhold rule has no surface it skips (PR 3 notes 9/27): while
+    /// the person's currency is not known it keeps its line and draws nothing.
     static func txDetail(
         _ item: FeedItemWire,
         record: FeedTxRecordWire?,
         on model: TxDetailModel,
         loc: Loc,
         hidden: Bool = false,
+        display: WalletLive.Display = .usd,
         readRequest: @escaping (String) -> String? = { _ in nil },
         networks: WalletNetworks = .builtin
     ) -> TxDetailModel {
         if let dapp = item.dapp {
             return dappDetail(item, dapp: dapp, record: record, on: model, loc: loc, hidden: hidden,
-                              readRequest: readRequest, networks: networks)
+                              display: display, readRequest: readRequest, networks: networks)
         }
         let incoming = item.direction == .in
         let dapp = item.kind == .dappTx
@@ -290,6 +296,7 @@ enum FlowsLive {
             ))
         }
 
+        let parts = batchParts(item, loc: loc, hidden: hidden, networks: networks)
         return TxDetailModel(
             title: dapp
                 ? loc.t("history.txLabelDappTx")
@@ -299,17 +306,19 @@ enum FlowsLive {
             // record lookup that defaulted a missing one to "succeeded".
             status: status(item.status, loc: loc),
             closeLabel: model.closeLabel,
+            // Hidden, the figure is the core's masked amount — the mask and
+            // the coin, "•••• USDC" (`maskedAmount(unit:)`, PR 3 notes 3/11).
             amount: dapp && item.value == nil
                 ? ""
                 : (hidden && item.figureMaskable
-                    ? WalletFixtures.mask
-                    : (incoming ? "+" : "\u{2212}") + WalletLive.compactAmount(item.value, batch: item.batch))
-                    + (item.symbol.isEmpty ? "" : " \(item.symbol)"),
+                    ? maskedAmount(unit: item.symbol)
+                    : (incoming ? "+" : "\u{2212}") + WalletLive.compactAmount(item.value, batch: item.batch)
+                        + (item.symbol.isEmpty ? "" : " \(item.symbol)")),
             // The STORED figure, not a recomputed one: it is what this wallet
             // recorded the transfer was worth when it happened, and re-pricing
             // it today would quietly restate history. None at all when the
             // core knows no price (spec 097 N7: unknown is not "$0.00").
-            fiat: Self.maskedFiat(item.priced ? (record?.usd.map { "≈ \($0)" } ?? "") : "", hidden: hidden),
+            fiat: Self.storedFiat(item.priced ? record?.usd : nil, hidden: hidden, display: display),
             positive: incoming,
             facts: facts,
             viewOnExplorer: hash.isEmpty ? nil : model.viewOnExplorer,
@@ -321,8 +330,63 @@ enum FlowsLive {
             deleteLabel: loc.t("history.deleteRecord"),
             // RJ18: quiet while it may still land — and a record nothing
             // settles (087 F04) may have been sent too.
-            deleteQuiet: item.status == .pending || item.status == .unknown
+            deleteQuiet: item.status == .pending || item.status == .unknown,
+            breakdownTitle: parts.title,
+            breakdown: parts.rows
         )
+    }
+
+    /// What a folded batch row folded (spec 038 #D2): a split's recipients
+    /// by name and avatar with each one's share, a sweep's coins by their
+    /// marks — nothing for a single transfer. The detail used to state a
+    /// split's total and nobody it went to.
+    ///
+    /// Every part is a figure on a masked surface (the core's transfer
+    /// detail): `hidden`, each reads the core's masked amount with its coin
+    /// — "•••• USDC" — never the share (PR 3 note 15: the web drew who got
+    /// how much of a split under a masked hero).
+    static func batchParts(
+        _ item: FeedItemWire, loc: Loc, hidden: Bool, networks: WalletNetworks = .builtin
+    ) -> (title: String?, rows: [BreakdownRowModel]) {
+        guard let batch = item.batch, !batch.transfers.isEmpty else { return (nil, []) }
+        let masked = hidden && item.figureMaskable
+        func value(_ transfer: FeedBatchTransferWire) -> String {
+            masked
+                ? maskedAmount(unit: transfer.symbol)
+                : "\(WalletLive.compactAmount(transfer.value)) \(transfer.symbol)"
+                    .trimmingCharacters(in: .whitespaces)
+        }
+        switch batch.kind {
+        case .split:
+            let rows = batch.transfers.map { transfer in
+                BreakdownRowModel(
+                    identiconSeed: transfer.to,
+                    label: transfer.toName ?? AddressText.short(transfer.to),
+                    value: value(transfer),
+                    mono: transfer.toName == nil
+                )
+            }
+            return (loc.t("send.recipientCount", count: rows.count), rows)
+        case .multiSelect:
+            let color = SettingsLive.chainColor(item.chainId)
+            let native = networks.meta(item.chainId)?.nativeSymbol
+            let rows = batch.transfers.map { transfer in
+                BreakdownRowModel(
+                    // A stored line has no contract address: the network's
+                    // own coin is told by its ticker, any other coin is a
+                    // contract the mark rule cannot place ("" — no logo
+                    // guessed for it), as the desktop's detail draws it.
+                    lead: TokenMarkModel.of(
+                        chainId: item.chainId, symbol: transfer.symbol,
+                        tokenAddress: transfer.symbol.caseInsensitiveCompare(native ?? "") == .orderedSame ? nil : "",
+                        color: color, named: transfer.logoUrls ?? []
+                    ),
+                    label: transfer.symbol,
+                    value: value(transfer)
+                )
+            }
+            return (loc.t("componentsTx.receipt.assetsCount", vars: ["n": String(rows.count)]), rows)
+        }
     }
 
     /// A dApp interaction, opened from its row (spec 093) — every line the
@@ -345,25 +409,28 @@ enum FlowsLive {
         on model: TxDetailModel,
         loc: Loc,
         hidden: Bool = false,
+        display: WalletLive.Display = .usd,
         readRequest: @escaping (String) -> String?,
         networks: WalletNetworks = .builtin
     ) -> TxDetailModel {
-        let money = WalletLive.dappFigure(item, dapp: dapp).map { hidden ? WalletFixtures.mask : $0 }
-        let allowance = money == nil
-            ? dapp.allowance.flatMap { WalletLive.allowanceText($0, loc: loc) }.map { text in
-                hidden && !text.unlimited ? (amount: WalletFixtures.mask, unit: text.unit, unlimited: false) : text
-            }
-            : nil
-        let backText = dapp.received.map { change in
-            [WalletLive.changeFigure(change, hidden: hidden), change.symbol]
-                .filter { !$0.isEmpty }.joined(separator: " ")
+        // A figure and its unit, as one text — hidden, the core's masked
+        // amount (`maskedAmount(unit:)`, PR 3 notes 3/11): the mask keeps
+        // its coin, "•••• USDC".
+        func figure(_ amount: String, _ unit: String, masked: Bool) -> String {
+            masked ? maskedAmount(unit: unit) : [amount, unit].filter { !$0.isEmpty }.joined(separator: " ")
         }
+        let money = WalletLive.dappFigure(item, dapp: dapp)
+        let allowance = money == nil
+            ? dapp.allowance.flatMap { WalletLive.allowanceText($0, loc: loc) }
+            : nil
+        let backText = dapp.received.map { WalletLive.changeText($0, hidden: hidden) }
         // Spec 097 N5: nothing left and something came back (a borrow) —
         // what came back is the figure.
         let leadsWithBack = money == nil && allowance == nil && backText != nil
-        let amount = money.map { [$0, item.symbol] }
-            ?? allowance.map { [$0.amount, $0.unit] }
-            ?? (leadsWithBack ? [backText ?? ""] : [])
+        let amount = money.map { figure($0, item.symbol, masked: hidden) }
+            // 无限额 is a risk to see, not an amount: never masked.
+            ?? allowance.map { figure($0.amount, $0.unit, masked: hidden && !$0.unlimited) }
+            ?? (leadsWithBack ? backText ?? "" : "")
         let hash = item.txHash ?? ""
         let technical = dapp.technical.compactMap {
             technicalLine($0, id: item.id, loc: loc, readRequest: readRequest)
@@ -372,12 +439,11 @@ enum FlowsLive {
             title: WalletLive.dappTitle(dapp, loc: loc),
             status: dapp.offChain ? nil : status(item.status, loc: loc),
             closeLabel: model.closeLabel,
-            amount: amount.filter { !$0.isEmpty }.joined(separator: " "),
+            amount: amount,
             // The STORED figure, as for any transfer — never re-priced; none
             // when the core knows no price (spec 097 N7).
-            fiat: Self.maskedFiat(
-                money == nil || !item.priced ? "" : (record?.usd.map { "≈ \($0)" } ?? ""), hidden: hidden
-            ),
+            fiat: Self.storedFiat(money == nil || !item.priced ? nil : record?.usd, hidden: hidden,
+                                  display: display),
             positive: leadsWithBack && dapp.received?.direction == .in,
             facts: dapp.facts.compactMap {
                 fact($0, item: item, dapp: dapp, loc: loc, hidden: hidden, networks: networks)
@@ -429,10 +495,13 @@ enum FlowsLive {
             return partyFact(loc.t("componentsUi.signing.labelSpender"), address, name, loc: loc)
         case .spendingCap(let allowance):
             guard let cap = WalletLive.allowanceText(allowance, loc: loc) else { return nil }
-            let amount = hidden && !cap.unlimited ? WalletFixtures.mask : cap.amount
             return FactRowModel(
                 label: loc.t("componentsUi.signingApprove.spendingCap"),
-                value: [amount, cap.unit].filter { !$0.isEmpty }.joined(separator: " "),
+                // Hidden, a capped allowance is the core's masked amount with
+                // its coin; the unlimited one stays said.
+                value: hidden && !cap.unlimited
+                    ? maskedAmount(unit: cap.unit)
+                    : [cap.amount, cap.unit].filter { !$0.isEmpty }.joined(separator: " "),
                 danger: cap.unlimited
             )
         case .expires(let at):
@@ -459,10 +528,15 @@ enum FlowsLive {
         }
     }
 
-    /// A stored worth, or the mask while the balance is hidden — and nothing
-    /// where there was nothing to hide.
-    static func maskedFiat(_ fiat: String, hidden: Bool) -> String {
-        hidden && !fiat.isEmpty ? WalletFixtures.mask : fiat
+    /// A record's stored worth as the detail's line: "≈ $163.25" — the mask
+    /// while hidden, nothing where the record kept none, and (PR 3 notes
+    /// 9/27) the line's own height with nothing on it while the display
+    /// currency is not known yet: no fiat figure is drawn before it commits,
+    /// on this surface either.
+    static func storedFiat(_ usd: String?, hidden: Bool, display: WalletLive.Display) -> String {
+        guard let usd, !usd.isEmpty else { return "" }
+        if hidden { return WalletFixtures.mask }
+        return display.settled ? "≈ \(usd)" : WalletLive.Display.withheldLine
     }
 
     /// One of the core's technical lines, labelled (spec 093).
@@ -607,9 +681,13 @@ enum FlowsLive {
         if let price = token.priceUsd {
             facts.append(FactRowModel(
                 label: loc.t("tokenDetail.labelPrice"),
-                value: loc.t("tokenDetail.priceValue", vars: [
-                    "symbol": token.symbol, "value": money(price * display.rate, display),
-                ])
+                // The price is a fiat figure (PR 3 notes 9/27 — the token
+                // page was one of the surfaces the rule missed): while the
+                // person's currency is not known the row keeps its place and
+                // its label, and the value lands beside it.
+                value: display.fiat(price).map { figure in
+                    loc.t("tokenDetail.priceValue", vars: ["symbol": token.symbol, "value": figure])
+                } ?? ""
             ))
         }
         if let contract = token.tokenAddress, !contract.isEmpty {
@@ -641,22 +719,25 @@ enum FlowsLive {
             symbol: token.symbol,
             chain: chain,
             closeLabel: model.closeLabel,
-            balance: "\(hidden ? WalletFixtures.mask : WalletLive.compactAmount(token.balance)) \(token.symbol)",
-            fiat: maskedFiat(token.priceUsd.map { price in
-                money((Double(token.balance) ?? 0) * price * display.rate, display)
-            } ?? "", hidden: hidden),
+            // Hidden: the core's masked amount, which keeps the coin.
+            balance: hidden
+                ? maskedAmount(unit: token.symbol)
+                : "\(WalletLive.compactAmount(token.balance)) \(token.symbol)",
+            // The holding's worth: masked while hidden, and — withheld —
+            // the line's own height with nothing on it, so Receive and Send
+            // under it do not move when the figure lands. An unpriced coin
+            // has no worth line at all, as before.
+            fiat: token.priceUsd.map { price in
+                hidden
+                    ? WalletFixtures.mask
+                    : display.fiatLine((Double(token.balance) ?? 0) * price)
+            } ?? "",
             receive: model.receive,
             send: model.send,
             facts: facts,
             transactionsTitle: model.transactionsTitle,
             rows: rows,
             viewOnExplorer: model.viewOnExplorer
-        )
-    }
-
-    private static func money(_ value: Double, _ display: WalletLive.Display) -> String {
-        display.glyph + Formats.number(
-            value, minimumFractionDigits: 2, maximumFractionDigits: 2
         )
     }
 

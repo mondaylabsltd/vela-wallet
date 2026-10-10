@@ -42,8 +42,11 @@ struct RegistryBackupTests {
             "could_not_check": ("couldNotCheck", "neutral", "retry"),
             "not_copyable": ("cannotCopy", "neutral", "none"),
         ]
+        // …and its paragraph (`explain_key`, PR 3 note 6): every state but
+        // the one that can never be copied, where the key is left out.
         let row = rows[state].map { subtitle, tone, action in
-            #","row":{"title_key":"settingsModals.backup.title","subtitle_key":"settingsModals.backup.\#(subtitle)","tone":"\#(tone)","action":"\#(action)"}"#
+            let explain = state == "not_copyable" ? "" : #","explain_key":"settingsModals.backup.explain""#
+            return #","row":{"title_key":"settingsModals.backup.title","subtitle_key":"settingsModals.backup.\#(subtitle)","tone":"\#(tone)","action":"\#(action)"\#(explain)}"#
         } ?? ""
         return #"{"type":"done","state":"\#(state)","call":\#(call),"unit_id":10\#(row)}"#
     }
@@ -104,14 +107,20 @@ struct RegistryBackupTests {
     /// came: the corpus keys, the tone, and what a tap does.
     @Test func theCoresRowIsHandedOnAsItCame() async {
         let title = "settingsModals.backup.title"
+        let explain = "settingsModals.backup.explain"
         #expect(await check("backed_up").row == RegistryBackup.Row(
-            titleKey: title, subtitleKey: "settingsModals.backup.backedUp", tone: .positive, action: .none))
+            titleKey: title, subtitleKey: "settingsModals.backup.backedUp", tone: .positive, action: .none,
+            explainKey: explain))
         #expect(await check("not_backed_up").row == RegistryBackup.Row(
-            titleKey: title, subtitleKey: "settingsModals.backup.notBackedUp", tone: .neutral, action: .copy))
+            titleKey: title, subtitleKey: "settingsModals.backup.notBackedUp", tone: .neutral, action: .copy,
+            explainKey: explain))
         #expect(await check("could_not_check").row == RegistryBackup.Row(
-            titleKey: title, subtitleKey: "settingsModals.backup.couldNotCheck", tone: .neutral, action: .retry))
+            titleKey: title, subtitleKey: "settingsModals.backup.couldNotCheck", tone: .neutral, action: .retry,
+            explainKey: explain))
+        // The one state with no paragraph: nothing can be copied.
         #expect(await check("not_copyable").row == RegistryBackup.Row(
-            titleKey: title, subtitleKey: "settingsModals.backup.cannotCopy", tone: .neutral, action: .none))
+            titleKey: title, subtitleKey: "settingsModals.backup.cannotCopy", tone: .neutral, action: .none,
+            explainKey: nil))
         // Nothing is drawn where there is nothing to copy to, or from.
         #expect(await check("unavailable").row == nil)
         #expect(await check("not_registered").row == nil)
@@ -145,6 +154,38 @@ struct RegistryBackupTests {
 
     private var loc: Loc { Loc(overrideTag: "en", preferredLanguages: []) }
     private var base: SettingsScreenModel { SettingsFixtures.build(.st1, loc: loc) }
+
+    /// PR 3 note 6 — the paragraph under the row is the core's to give
+    /// (`BackupRow.explain_key`): the explanation while the walk runs and
+    /// for every state a copy can still be made or checked in; NOTHING under
+    /// a wallet that can never be copied — it told somebody how to make a
+    /// copy the row above had just said cannot be made. No row, no paragraph.
+    @Test func theExplanationIsTheCoresAndAWalletThatCannotBeCopiedHasNone() async {
+        let keys = WalletKeys.Result(source: .registry, rows: [key("Mine")])
+        func explain(_ check: RegistryBackup.Check?) -> String? {
+            SettingsLive.withWalletKeys(keys, backup: check, on: base, loc: loc).keys?.backupExplain
+        }
+        let words = loc.t("settingsModals.backup.explain")
+        #expect(words != "settingsModals.backup.explain" && !words.isEmpty)
+
+        // Still asking: the explanation, as before.
+        #expect(explain(nil) == words)
+        for state in ["backed_up", "not_backed_up", "could_not_check"] {
+            #expect(explain(await check(state)) == words, "\(state) lost its explanation")
+        }
+        // The calm end: its row, and no paragraph.
+        let never = await check("not_copyable")
+        #expect(never.row != nil && never.row?.explainKey == nil)
+        #expect(explain(never) == nil, "a wallet that cannot be copied is still told how to copy")
+        #expect(SettingsLive.withWalletKeys(keys, backup: never, on: base, loc: loc).keys?.backup?.subtitle
+                == "This older wallet can't be copied")
+        // A silence this transport caused keeps the paragraph: asking again may answer.
+        #expect(explain(RegistryBackup.Check(state: .couldNotCheck, call: nil, row: .couldNotCheck)) == words)
+        // (That the REAL core writes the key under the name this file reads
+        // is `theRealCoreWordsASilenceAsARetry`: its row equals this file's
+        // own, paragraph and all.)
+        #expect(RegistryBackup.Row.couldNotCheck.explainKey == "settingsModals.backup.explain")
+    }
 
     /// The row reads the core's words, tone and action. "Not copied yet" is
     /// neutral — a copy is optional and costs a fee — and the only state

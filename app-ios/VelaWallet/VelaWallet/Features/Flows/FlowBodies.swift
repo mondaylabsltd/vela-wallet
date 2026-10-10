@@ -352,6 +352,14 @@ struct TxDetailBody: View {
                     onCopy: { copiedIndex = index }
                 )
             }
+            // A folded batch's parts — a split's people, a sweep's coins —
+            // where a single send's "To" would have been (spec 038 #D2).
+            if !model.breakdown.isEmpty {
+                FlowDivider()
+                ReceiptBreakdownView(title: model.breakdownTitle, rows: model.breakdown)
+                    .padding(.vertical, Tokens.Space.s12)
+                    .accessibilityIdentifier("txDetail.breakdown")
+            }
             if let technical = model.technical {
                 FlowDivider()
                 technicalSection(technical)
@@ -1662,10 +1670,21 @@ private struct ReceiptBreakdownView: View {
                         if let seed = row.identiconSeed {
                             IdenticonAvatar(seed: seed, size: WalletFlowGeometry.inlineMark)
                         }
-                        Text(verbatim: row.label)
-                            .typeRole(Typography.body.scaled(textScale))
-                            .foregroundStyle(theme.fgBase)
-                            .lineLimit(1)
+                        // An unnamed payee is its address, in the mono face
+                        // (as the confirm lists the same people); a name is
+                        // drawn as written — "0x…" in the body face read
+                        // "0×…", its contextual rule at work on an address.
+                        if row.mono {
+                            Text(verbatim: row.label)
+                                .monoRole(Typography.monoAddressDetail.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                                .lineLimit(1)
+                        } else {
+                            Text(verbatim: row.label)
+                                .typeRole(Typography.body.literal.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                                .lineLimit(1)
+                        }
                         Spacer(minLength: Tokens.Space.s8)
                         Text(verbatim: row.value)
                             .typeRole(Typography.body.scaled(textScale))

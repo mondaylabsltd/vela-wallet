@@ -397,7 +397,8 @@ final class UIBatchScreenshotTests: XCTestCase {
                     let place = app.staticTexts[zh ? "手机或平板" : "Phone or tablet"]
                     switch fixture {
                     case "keys · none", "keys · signing page offered":
-                        XCTAssertEqual(heading.label, zh ? "添加通行密钥" : "Add a passkey")
+                        // PR 3 note 17: the zero-key heading no longer repeats the title.
+                        XCTAssertEqual(heading.label, zh ? "选择存放位置" : "Choose where it lives")
                         XCTAssertTrue(place.exists, "the three places are not open with no key (\(tag))")
                     case "keys · at the cap":
                         XCTAssertEqual(heading.label, zh ? "已达上限 7 把" : "Limit of 7 reached")

@@ -516,7 +516,10 @@ struct UnreachableRowModel: Identifiable {
     let name: String
     /// "Last seen $1,234.50", "Not read yet", …
     let line: String
-    let action: String
+    /// "Fix" — the row's RPC editor. `nil` where the core says the endpoint
+    /// is not what failed (`rpc_fixable == false`, PR 3 note 4): no label,
+    /// no control.
+    let action: String?
 }
 
 /// SR4: fund this chain's bundler treasury.
@@ -561,7 +564,10 @@ struct WalletKeysModel {
     /// Under the row: what a copy of the record is (`settingsModals.backup
     /// .explain`) — what is already public, that it is a transaction the
     /// person pays for, and that it moves no money and recovers no passkey.
-    let backupExplain: String
+    /// The CORE says whether it applies (`BackupRow.explain_key`, PR 3 note
+    /// 6): `nil` under a wallet that can never be copied — no paragraph, and
+    /// no empty slot where it was.
+    let backupExplain: String?
     let copyLabel: String
     let copiedLabel: String
     /// Spec 102: "Keys on {{domain}}" for an account on its own domain —

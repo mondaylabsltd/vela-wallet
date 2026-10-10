@@ -239,9 +239,10 @@ struct KeysScreen: View {
     private var full: Bool { view.keys.count >= maxKeys }
 
     /// The heading over the three places, chosen by the core from the count
-    /// (issue #475): "Add a passkey" with none, "Add another" after the
-    /// first, "Limit of 7 reached" when full. An absent key (a core from
-    /// before #475) keeps the old label.
+    /// (issue #475; PR 3 note 17): "Choose where it lives" with none — it
+    /// used to repeat the screen's title — "Add another" after the first,
+    /// "Limit of 7 reached" when full. An absent key (a core from before
+    /// #475) keeps the old label.
     private var addHeading: String {
         loc.t(view.addHeadingKey.isEmpty ? I18nKeys.Create.addMethodLabel : view.addHeadingKey)
     }
@@ -351,9 +352,10 @@ struct KeysScreen: View {
                     }
 
                     // "Added 0 / 7" over an empty list said nothing the title
-                    // had not (issue #475: the screen was wordy); the count and
-                    // its list appear with the first key.
-                    if !view.keys.isEmpty {
+                    // had not (issue #475: the screen was wordy). Whether the
+                    // counter is drawn is the CORE's (`key_count_shown`, PR 3
+                    // note 22 — one rule on four shells): from the first key.
+                    if view.keyCountShown {
                         HStack {
                             Text(loc.t(I18nKeys.Create.keysLabel))
                                 .typeRole(Typography.label)
@@ -370,7 +372,11 @@ struct KeysScreen: View {
                             .foregroundStyle(theme.fgMuted)
                         }
                         .padding(.top, Tokens.Space.s8)
+                        .accessibilityIdentifier("create.keyCount")
+                    }
 
+                    // The keys themselves: drawn whenever there is one.
+                    if !view.keys.isEmpty {
                         VStack(spacing: 0) {
                             ForEach(Array(view.keys.enumerated()), id: \.offset) { index, key in
                                 if index > 0 {
@@ -586,15 +592,38 @@ struct KeyMethodRows: View {
     }
 }
 
+/// How a row's second line is held to one line (`oneLineSubtitle`).
+enum OneLineSubtitle {
+    /// The most a line may tighten before it is cut (issue #475).
+    ///
+    /// Four languages' "Phone or tablet" line (de, fr, it, es-MX: 52–55
+    /// characters) only fitted a 375 pt phone by shrinking to this, drawn
+    /// visibly smaller than the lines above and below it. The core shortened
+    /// those four and they fit at FULL size now (PR 3 note 23;
+    /// `MethodRowFitTests`: de 279, es-MX 261, fr 259, it 257 pt of the 280
+    /// the row's column has there).
+    ///
+    /// The floor itself stays, because two other lines still need it on that
+    /// phone and would be CUT without it — ru 309 pt, pt-BR 307 pt, drawn 9 %
+    /// tighter. A 5 % floor was tried in this round and cut both ("…на
+    /// устройстве р…"). Shortening those two is the corpus's; until then a
+    /// line that fits is at full size and one that does not is whole.
+    static let minScale: CGFloat = 0.8
+}
+
 extension View {
-    /// A row's second line, held to ONE line (issue #475): it shrinks to 80%
-    /// before it is cut, and at the accessibility text sizes — where one line
-    /// of a sentence is a few words — it wraps instead.
+    /// A row's second line, held to ONE line (issue #475): at its own size
+    /// where it fits — which is every language but two on the narrowest
+    /// phone (`OneLineSubtitle`) — tightened before it is ever cut. At a text
+    /// size LARGER than the default it wraps instead (PR 3 note 23):
+    /// somebody who asked for bigger text gets bigger text on two lines, not
+    /// a line shrunk back to where it started and then cut. (It wrapped only
+    /// at the accessibility sizes before.)
     @ViewBuilder func oneLineSubtitle(_ typeSize: DynamicTypeSize) -> some View {
-        if typeSize.isAccessibilitySize {
+        if typeSize > .large {
             fixedSize(horizontal: false, vertical: true)
         } else {
-            lineLimit(1).minimumScaleFactor(0.8)
+            lineLimit(1).minimumScaleFactor(OneLineSubtitle.minScale)
         }
     }
 }

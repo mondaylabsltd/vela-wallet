@@ -39,14 +39,40 @@ struct BalanceDisplay: View {
                 .typeRole(Typography.label.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
             amount
-            if let live = model.liveText {
+            // A drawing that carries both lines keeps both, as drawn.
+            if let live = model.liveText, model.status != nil {
                 liveRow(live)
             }
-            if let status = model.status {
-                statusDoor(status)
-            }
+            statusSlot
             if let refresh = model.refresh {
                 BalanceRefreshControl(model: refresh, onRefresh: onRefresh)
+            }
+        }
+    }
+
+    /// The ONE line under the figure, held from the first frame (PR 3 note
+    /// 26b). "Can't reach …", "Some balances are still updating." arrive
+    /// after the figure and go again, and each arrival pushed the refresh
+    /// control, Receive / Send and every row under them down by the line's
+    /// height and the gap above it — 24.7 pt on an iPhone 17 — and each
+    /// departure pulled them back. The line's room is always there now: the
+    /// status line stands in it, or a zero wallet's "live" line, or nothing,
+    /// and the page under the hero is where it was in all three.
+    ///
+    /// One line is what is held. The two long reasons a hero can carry
+    /// ("Something went wrong inside Vela. If it keeps happening, reopen the
+    /// app.", "The request never arrived — …") still take their second line:
+    /// cutting a sentence that says what went wrong is the worse trade.
+    private var statusSlot: some View {
+        ZStack(alignment: .leading) {
+            // The room: a status row's own height, whatever stands in it.
+            statusRow(BalanceStatusModel(kind: .warning, text: "0"))
+                .hidden()
+                .accessibilityHidden(true)
+            if let status = model.status {
+                statusDoor(status)
+            } else if let live = model.liveText {
+                liveRow(live)
             }
         }
     }

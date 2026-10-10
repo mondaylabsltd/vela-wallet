@@ -537,7 +537,7 @@ enum SettingsLive {
             note: keys?.source == .device ? loc.t(k.keysFromDevice) : nil,
             rows: rows,
             backup: ethereumBackupRow(backup, loc: loc),
-            backupExplain: loc.t(k.backupExplain),
+            backupExplain: backupExplain(backup, loc: loc),
             copyLabel: loc.t(k.keysCopy),
             copiedLabel: loc.t(k.keysCopied)
         )
@@ -547,6 +547,16 @@ enum SettingsLive {
     /// The key as stored, without a `0x` it may or may not have worn.
     private static func body130(_ hex: String) -> String {
         hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
+    }
+
+    /// The paragraph under the backup row (PR 3 note 6). While the walk is
+    /// still running it is the explanation, as before; once it has answered
+    /// it is the row's own `explain_key` — and nothing where the core gives
+    /// none (a wallet that can never be copied: the paragraph told somebody
+    /// how to make a copy the row above had just said cannot be made).
+    static func backupExplain(_ check: RegistryBackup.Check?, loc: Loc) -> String? {
+        guard let check else { return loc.t(I18nKeys.SettingsUi.backupExplain) }
+        return check.row?.explainKey.map { loc.t($0) }
     }
 
     /// "Copy this wallet's record to Ethereum" as a row — the CORE's row
@@ -611,11 +621,6 @@ enum SettingsLive {
         guard session.hasWallet else { return model }
         let k = I18nKeys.SettingsUi.self
 
-        func money(_ usd: Double) -> String {
-            display.glyph + Formats.number(usd * display.rate,
-                                           minimumFractionDigits: 2,
-                                           maximumFractionDigits: 2)
-        }
         /// The header's own truncation, so a row and the header above it
         /// never disagree about the same address.
         func shortenAddress(_ address: String) -> String {
@@ -638,7 +643,8 @@ enum SettingsLive {
                 // never a figure, never a blank that reads as "unknown".
                 // …and while the display currency is not known yet (PR 3),
                 // the empty cell an unpriced account shows: no dollars first.
-                amount: hidden ? WalletFixtures.mask : (display.settled ? usd.map(money) ?? "" : ""),
+                // The one formatter withholds it (`Display.fiat`).
+                amount: hidden ? WalletFixtures.mask : usd.flatMap(display.fiat) ?? "",
                 selected: index == session.activeIndex
             )
         }
@@ -649,12 +655,12 @@ enum SettingsLive {
         copy.accountsSheet.removeCancel = loc.t("settings.signOut.cancel")
         copy.accountsSheet.summary =
             loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
-            // No total while the currency is not known: the count alone.
-            + (hidden || display.settled ? loc.t(k.accountsTotal, vars: [
-                "amount": hidden
-                    ? WalletFixtures.mask
-                    : money(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
-            ]) : "")
+            // No total while the currency is not known: the count alone
+            // (Settings' total is one of the withheld surfaces).
+            + ((hidden
+                ? WalletFixtures.mask
+                : display.fiat(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
+            ).map { loc.t(k.accountsTotal, vars: ["amount": $0]) } ?? "")
         return copy
     }
 
@@ -734,9 +740,13 @@ enum SettingsLive {
             // alone — their choice and no figure yet — never "USD · $…" for
             // the seconds before its rate arrives.
             if let pending = view.pending, !pending.isEmpty { return pending }
-            // Nothing chosen: the USD placeholder is what is in force.
-            let usd = CurrencyCatalog.entry("USD")
-            return "USD · \(usd?.glyph ?? "$")\(format(sample))"
+            // Nothing committed and nothing known to be on its way: the
+            // machine is still reading (a first launch may be about to seed
+            // the device's currency). No figure, and no "USD" that turns
+            // into another code a moment later — the withhold rule has no
+            // surface it skips (PR 3 notes 9/27). The row keeps its place;
+            // its value lands with the commit.
+            return ""
         }
         guard let rate = view.rate, rate > 0, let entry = CurrencyCatalog.entry(view.code) else {
             return view.code
@@ -786,7 +796,7 @@ enum SettingsLive {
                     meta: chainMeta(loc, entry.chainId)
                 )
             }
-            model.callout = errorCallout(wizard.error, loc: loc)
+            model.callout = errorCallout(wizard, loc: loc)
             return model
         }
 
@@ -821,18 +831,30 @@ enum SettingsLive {
             return model
         case .error:
             model.candidate = candidate(meta: chainMeta(loc, info.chainId), badge: nil)
-            model.callout = errorCallout(wizard.error, loc: loc)
-            // A check that could not run can run again; a refusal cannot.
+            // Why it stopped, in the core's sentence (`error_key`) — for a
+            // refusal that is the check's own reason: no P-256 verifier, or
+            // missing contracts (PR 3 notes 5, 10, 18).
+            model.callout = errorCallout(wizard, loc: loc)
             switch wizard.error {
+            // A check that could not run can run again; a refusal cannot.
+            // "Unable to verify" carries no reason and no link, whatever
+            // the check kept.
             case .checkFailed, .noRpcEndpoint: model.recheck = loc.t(k.addRecheckWithRpc)
-            // A refusal that still carries its check says WHY, and offers
-            // Chain Setup only for a gap somebody can fill (PR 3).
+            // A refusal on the scan / auto-add path now keeps its check, so
+            // it draws what the wizard's own `checked` phase draws: the
+            // reason, and "Open Chain Setup Tool" only where the core gives
+            // it somewhere to go — a gap somebody can fill, on the page for
+            // THIS chain. No verdict badge and no check list: this path has
+            // no confirm step, and the sentence is the whole answer.
             case .notCompatible:
-                if let refusal = refusal(wizard.compat, loc: loc) {
-                    model.callout = refusal.callout
-                    model.secondary = refusal.setup?.label
-                    model.secondaryUrl = refusal.setup?.url
+                if let setup = refusal(wizard.compat, loc: loc)?.setup {
+                    model.secondary = setup.label
+                    model.secondaryUrl = setup.url
                 }
+                // And the re-check, as there: the RPC field is on this page,
+                // and another endpoint may answer differently — a field with
+                // nothing to send it would be a dead end.
+                model.recheck = loc.t(k.addRecheckWithRpc)
             default: break
             }
             return model
@@ -866,7 +888,7 @@ enum SettingsLive {
         model.checks = checks(compat, loc: loc)
 
         let refused = refusal(compat, loc: loc)
-        model.callout = errorCallout(wizard.error, loc: loc)
+        model.callout = errorCallout(wizard, loc: loc)
             ?? refused?.callout
             // Spec 081 FR-009: compatible, and still not somewhere a wallet
             // with several passkeys can be created. Both halves are true;
@@ -956,22 +978,15 @@ enum SettingsLive {
         return loc.t(k.addCompatibilityCheck)
     }
 
-    /// The core's refusal, in the words the corpus already has.
-    private static func errorCallout(_ error: NetWizardErrorWire?, loc: Loc) -> CalloutModel? {
-        let k = I18nKeys.SettingsUi.self
-        guard let error else { return nil }
-        let text = switch error {
-        case .alreadyAdded: loc.t(k.addAlreadyAdded)
-        case .notFound: loc.t(k.addChainNotFound)
-        // The corpus has no "no RPC endpoint" sentence. `unableToVerify` is the
-        // true thing rather than the exact thing: with no endpoint there is
-        // nothing to verify against. Recorded as a wording gap.
-        case .noRpcEndpoint: loc.t(k.addUnableToVerify)
-        case .notCompatible: loc.t(k.addNotCompatible)
-        // Not a verdict: the probes failed and nothing was learned.
-        case .checkFailed: loc.t(k.addUnableToVerify)
-        }
-        return CalloutModel(tone: .warning, text: text)
+    /// Why the wizard stopped, in the CORE's sentence (`error_key`, PR 3
+    /// notes 5/10/18). Nothing here maps `error.type` to words any more: the
+    /// shell's own table said "unable to verify" for a network that lists no
+    /// RPC endpoint, and could not tell a refusal's two reasons apart. No
+    /// error, no line; an error with no key (a view no core wrote) says
+    /// nothing rather than something this file made up.
+    private static func errorCallout(_ wizard: NetWizardViewWire, loc: Loc) -> CalloutModel? {
+        guard wizard.error != nil, let key = wizard.errorKey else { return nil }
+        return CalloutModel(tone: .warning, text: loc.t(key))
     }
 
     /// One row of 设置 → 网络.
@@ -1103,15 +1118,14 @@ enum SettingsLive {
         networks: WalletNetworks = .builtin
     ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
-        let mask = "••••"
-        // The same figure the hero prints, through the same two decisions: the
-        // display currency's glyph and `Formats`' number shape. A second
-        // formatter here would eventually disagree with the total above it.
-        func money(_ usd: Double) -> String {
-            display.glyph + Formats.number(usd * display.rate,
-                                           minimumFractionDigits: 2,
-                                           maximumFractionDigits: 2)
-        }
+        let mask = WalletFixtures.mask
+        // The same figure the hero prints, through the same ONE formatter
+        // (`Display.fiat`): the display currency's glyph and `Formats`' number
+        // shape — and nothing at all while that currency is not known yet
+        // (PR 3 notes 9/27: this sheet drew "$" for the first seconds). A
+        // second formatter here would eventually disagree with the total
+        // above it.
+        func money(_ usd: Double) -> String? { display.fiat(usd) }
 
         func chainName(_ id: Int) -> String {
             networks.meta(id)?.displayName ?? chainMeta(loc, id)
@@ -1124,11 +1138,18 @@ enum SettingsLive {
             BalanceDetailRowModel(id: String(id), mark: row(id), name: chainName(id),
                                   status: loc.t(k.balanceDetailRetrying), tone: .neutral)
         }
-        for id in balance.unreachableNetworks.map(\.chainId)
-        where !pending.contains(where: { $0.id == String(id) }) {
+        for network in balance.unreachableNetworks
+        where !pending.contains(where: { $0.id == String(network.chainId) }) {
+            let id = network.chainId
             pending.append(BalanceDetailRowModel(
                 id: String(id), mark: row(id), name: chainName(id),
-                status: loc.t(k.balanceDetailFailed), tone: .error,
+                // PR 3 note 4: a chain whose RPC answers is never "RPC
+                // unavailable" — its token list is what could not be loaded,
+                // said in the core's sentence for exactly that.
+                status: network.rpcFixable
+                    ? loc.t(k.balanceDetailFailed)
+                    : loc.t(k.tokenListUnreachable, vars: ["name": chainName(id)]),
+                tone: .error,
                 action: loc.t(k.balanceDetailRetry)
             ))
         }
@@ -1159,6 +1180,8 @@ enum SettingsLive {
             .map { id, usd in
                 BalanceDetailRowModel(
                     id: String(id), mark: row(id), name: chainName(id),
+                    // Withheld: the row is its mark and its name, at the same
+                    // height — the figure lands beside them.
                     amount: balance.hidden ? mask : money(usd)
                 )
             }
@@ -1166,11 +1189,12 @@ enum SettingsLive {
         var live = model
         live.balanceDetail = BalanceDetailModel(
             title: model.balanceDetail.title,
-            summary: loc.t(k.balanceDetailTotal, vars: [
-                "amount": balance.hidden || balance.displayTotalUsd == nil
-                    ? mask
-                    : money(balance.displayTotalUsd ?? 0),
-            ]),
+            // "Total ¥8,876.00" — or, while the currency is on its way, the
+            // line's own height with nothing on it: the total lands in place.
+            summary: (balance.hidden || balance.displayTotalUsd == nil
+                ? mask
+                : money(balance.displayTotalUsd ?? 0)
+            ).map { loc.t(k.balanceDetailTotal, vars: ["amount": $0]) } ?? WalletLive.Display.withheldLine,
             sectionPending: model.balanceDetail.sectionPending,
             pendingNote: model.balanceDetail.pendingNote,
             pending: pending,
@@ -1182,9 +1206,11 @@ enum SettingsLive {
 
     /// SR6 (spec 092) — the list the hero's "can't reach" line opens: every
     /// network the core lists, in its order, each with what was last read
-    /// there (its worth in the display currency, masked while hidden) and its
-    /// RPC fix. Built from the live view on every render, so a network that
-    /// comes back leaves the open sheet; the title is the hero's own line.
+    /// there (its worth in the display currency, masked while hidden) and —
+    /// only where the core says the endpoint is what failed (`rpc_fixable`,
+    /// PR 3 note 4) — its RPC fix. Built from the live view on every render,
+    /// so a network that comes back leaves the open sheet; the title is the
+    /// hero's own line.
     static func withUnreachable(
         _ balance: BalanceViewWire,
         display: WalletLive.Display,
@@ -1196,18 +1222,24 @@ enum SettingsLive {
         let rows = balance.unreachableNetworks.map { network -> UnreachableRowModel in
             let name = networks.meta(network.chainId)?.displayName
                 ?? chainMeta(loc, network.chainId)
-            let amount = balance.hidden || network.lastSeenUsd == nil
-                ? "••••"
-                : display.glyph + Formats.number((network.lastSeenUsd ?? 0) * display.rate,
-                                                 minimumFractionDigits: 2,
-                                                 maximumFractionDigits: 2)
+            // "Last seen ¥1,234.50" is a fiat figure like any other: the one
+            // formatter writes it, and while the currency is not known yet
+            // the row keeps its line with nothing on it (PR 3 notes 9/27).
+            let amount: String? = balance.hidden || network.lastSeenUsd == nil
+                ? WalletFixtures.mask
+                : display.fiat(network.lastSeenUsd ?? 0)
             return UnreachableRowModel(
                 id: String(network.chainId),
                 chainId: network.chainId,
                 mark: mark(chainId: network.chainId, name: name),
                 name: name,
-                line: loc.t(network.lineKey, vars: ["amount": amount]),
-                action: loc.t(k.rpcFix)
+                line: amount.map { loc.t(network.lineKey, vars: ["amount": $0]) }
+                    // Only the line that states a worth waits; the others
+                    // ("Not read yet", "Held nothing…") have no figure.
+                    ?? (network.lineKey == k.lastSeen
+                        ? WalletLive.Display.withheldLine
+                        : loc.t(network.lineKey)),
+                action: network.rpcFixable ? loc.t(k.rpcFix) : nil
             )
         }
         var live = model
