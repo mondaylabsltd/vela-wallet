@@ -17520,7 +17520,7 @@ impl WalletPage {
         // operation (PR 2 note 9), drawn from the real core's view by the
         // live receipt builder — there is no request on this route.
         if self.gallery
-            && self.signing_host.is_none()
+            && self.no_signing_host()
             && let Some(view) = signing_fixtures::refusal_pin()
         {
             let summary = crate::signing::status::summary_of(&model.blocks);
