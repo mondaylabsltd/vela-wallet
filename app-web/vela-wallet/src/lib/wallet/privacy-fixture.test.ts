@@ -237,6 +237,51 @@ describe('the shared hidden-balance fixture, through every web surface builder',
 		expect(feed.toast).toBeNull();
 	});
 
+	// PR 3 item 12: one rule for a masked token figure — the amount is the
+	// mask, the unit is kept ("•••• USDT"). It says what kind of money without
+	// saying how much. A hidden transfer's detail read "•••• xDAI" on iOS and
+	// a bare "••••" on Android and on the web.
+	it('hidden: a masked token figure keeps its unit, wherever the two are one string', () => {
+		const { balance, feed } = FIXTURE.hidden;
+		const detail = (id: string) =>
+			liveTxDetail(feedItems(feed).find((item) => item.id === id)!, {
+				m: fm,
+				wm: m,
+				currency: USD,
+				hidden: feed.hidden,
+				identicon,
+				now: NOW
+			});
+		// A transfer in, a transfer out, and a dApp's swap.
+		expect(detail('received').amount).toBe(`${MASK} USDT`);
+		expect(detail('sent').amount).toBe(`${MASK} USDC`);
+		expect(detail('swap').amount).toBe(`${MASK} USDC`);
+		// A permit's cap is money too (the core's `figure_maskable`)…
+		expect(detail('permit').amount).toMatch(new RegExp(`^${MASK} \\S+$`));
+		// …an unlimited one is a risk to see, and a signature has no figure.
+		expect(detail('permit-unlimited').amount).not.toContain(MASK);
+		expect(detail('signature').amount).toBe('');
+		// The fiat worth has no unit apart from its figure: the bare mask.
+		expect(detail('received').fiat).toBe(MASK);
+		// A token's own detail: its balance, masked, still says which token.
+		for (const token of balance.tokens) {
+			const sheet = withLiveFlow(buildFlowState('t2', fm, identicon), {
+				balance,
+				currency: USD,
+				m,
+				emptyCopy: undefined,
+				feed,
+				fm,
+				selectedToken: token
+			}).sheet;
+			if (sheet?.kind !== 'token-detail') throw new Error('t2 raises the token detail');
+			expect(sheet.model.balance, token.symbol).toBe(`${MASK} ${token.symbol}`);
+		}
+		// The rows draw the amount and the unit apart, and always kept it.
+		const row = liveActivityRow(feedItems(feed).find((i) => i.id === 'received')!, m, true, NOW);
+		expect([row.amount, row.unit]).toEqual([MASK, 'USDT']);
+	});
+
 	it('a row’s figure masks exactly when the core says it is money', () => {
 		const { feed } = FIXTURE.hidden;
 		const items = feedItems(feed);

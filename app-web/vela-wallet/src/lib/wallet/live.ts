@@ -176,6 +176,22 @@ export function fixedTwo(value: number): [string, string] {
 }
 
 /**
+ * A token figure as balance privacy draws it: the mask where the amount was,
+ * and the UNIT KEPT — "•••• xDAI". The unit says what kind of money without
+ * saying how much, so a hidden row still reads as the transfer it is.
+ *
+ * One rule for every masked token figure on the web, and the same on all four
+ * apps (PR 3 item 12: a hidden transfer's detail read "•••• xDAI" on iOS and a
+ * bare "••••" on Android and here). The activity ROW always kept its unit —
+ * it draws the amount and the unit apart; this is for the surfaces that write
+ * the two as one string. A fiat worth has no unit apart from its figure, so
+ * it stays the bare mask.
+ */
+export function maskedFigure(unit: string): string {
+	return `${MASK} ${unit}`.trim();
+}
+
+/**
  * What stands where a money figure WILL be, while the display currency is not
  * the person's yet.
  *
@@ -852,7 +868,9 @@ export function liveAssetDetail(
 		token: {
 			ticker: token.symbol,
 			badgeColor: art.badgeColor,
-			balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
+			balance: hidden
+				? maskedFigure(token.symbol)
+				: `${tokenAmountText(token.balance)} ${token.symbol}`,
 			fiatLine: [fiat, chainName(token.chain_id)].filter((part) => part !== undefined).join(' · '),
 			logoUrls: art.logoUrls,
 			badgeLogoUrl: art.badgeLogoUrl,

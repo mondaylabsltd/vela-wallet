@@ -34,7 +34,7 @@ import {
 	drawnMark,
 	tokenMarkFor
 } from './marks';
-import { chainColor, MASK } from '$lib/wallet/fixtures';
+import { chainColor } from '$lib/wallet/fixtures';
 import type {
 	AddTokenTab,
 	FactRowModel,
@@ -52,6 +52,7 @@ import {
 	liveActivityGroups,
 	liveActivityRow,
 	liveAssetRow,
+	maskedFigure,
 	moneyText,
 	narrowedFeed,
 	tokenAmountText,
@@ -414,7 +415,9 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		mark: balanceTokenMark(token),
 		symbol: token.symbol,
 		chain: chainName(token.chain_id),
-		balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
+		balance: hidden
+			? maskedFigure(token.symbol)
+			: `${tokenAmountText(token.balance)} ${token.symbol}`,
 		fiat,
 		facts,
 		rows,
