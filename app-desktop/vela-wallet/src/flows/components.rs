@@ -824,6 +824,17 @@ pub fn ghost_pill_row(theme: &Theme, icons: &mut IconCache, pills: Vec<GhostPill
 }
 
 pub fn mono_field(theme: &Theme, label: Option<SharedString>, value: SharedString) -> Div {
+    mono_field_ink(theme, label, value, theme.fg_base)
+}
+
+/// [`mono_field`] with the value's ink chosen — the subtle one when what the
+/// box shows is its placeholder, not an entry.
+pub fn mono_field_ink(
+    theme: &Theme,
+    label: Option<SharedString>,
+    value: SharedString,
+    ink: gpui::Hsla,
+) -> Div {
     // The web's `MonoField` (078 F-11): an 11 label over a raised field.
     let mut col = div().flex().flex_col().gap(px(6.));
     if let Some(label) = label {
@@ -841,7 +852,7 @@ pub fn mono_field(theme: &Theme, label: Option<SharedString>, value: SharedStrin
             .bg(theme.bg_raised)
             .font_family(theme::font_mono())
             .text_size(theme::text_mono_address())
-            .text_color(theme.fg_base)
+            .text_color(ink)
             .child(value),
     )
 }

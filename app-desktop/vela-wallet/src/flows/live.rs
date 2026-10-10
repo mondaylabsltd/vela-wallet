@@ -921,6 +921,7 @@ pub fn add_token(view: &MtokView, s: &FlowStrings) -> crate::flows::fixtures::Ad
             None
         },
         result,
+        rpc: None,
         notice: None,
         cta: s.add_to_wallet.clone(),
         cta_disabled: found.is_none_or(|found| found.added) || view.saving,
@@ -1109,6 +1110,23 @@ pub fn add_network_tab(
         }
     };
 
+    // The RPC field and "Re-check with this RPC" — the core's one rule for
+    // every surface that draws this wizard (`rpc_field`; PR 3 final notes
+    // F4, F14, F22). This tab had neither: its no-RPC stop said "Enter one,
+    // then re-check" over a panel with nowhere to enter one. Not after an
+    // add (the panel is saying "added"; the wizard behind it is reset), and
+    // not over an emptied search, which draws no result at all.
+    let rpc = crate::settings::live::wizard_rpc_label_key(wizard)
+        .filter(|_| added.is_none() && !query.trim().is_empty())
+        .and_then(|key| s.rpc_field_label_of(key))
+        .map(|label| crate::flows::fixtures::AddTokenRpc {
+            label,
+            value: SharedString::from(wizard.custom_rpc.clone()),
+            placeholder: s.rpc_field_placeholder.clone(),
+            notice: s.rpc_relay_notice.clone(),
+            recheck: s.recheck_with_rpc.clone(),
+        });
+
     crate::flows::fixtures::AddToken {
         tab_erc20: s.tab_erc20.clone(),
         tab_native: s.tab_native.clone(),
@@ -1119,6 +1137,7 @@ pub fn add_network_tab(
         field_placeholder: s.net_search_placeholder.clone(),
         field_error: None,
         result,
+        rpc,
         notice: None,
         cta: s.add_network_btn.clone(),
         cta_disabled: !can_add,
@@ -6668,6 +6687,91 @@ mod tests {
                 AddTokenResult::Note(line) => assert!(line.contains("No RPC endpoint"), "{line}"),
                 _ => unreachable!("said as a line"),
             }
+        });
+    }
+
+    /// PR 3 final notes F14, F4 and F22 — the add-token flow's network tab
+    /// draws the wizard's RPC field and "Re-check with this RPC" by the
+    /// core's one rule (`NetWizardView::rpc_field`), as Settings' dialog
+    /// does. Its no-RPC stop said "Enter one, then re-check" with nowhere to
+    /// enter one; now the field is there, labelled plain "RPC URL", with the
+    /// re-check. A refusal gets neither; an inconclusive check gets the
+    /// optional field; and the relay notice travels with the field.
+    #[test]
+    fn the_native_tab_draws_the_rpc_field_where_the_core_says() {
+        use crate::settings::fixtures::{WizardStopPin, refused_wizard, stopped_wizard};
+        use vela_core::app::network_admin::NetBlocker;
+        crate::executor::storage::tests::with_temp_state("flows-wizard-rpc", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::for_language("en"));
+            let rpc = |wizard: &vela_core::app::network_admin::NetWizardView| {
+                add_network_tab(wizard, "example", None, &s).rpc
+            };
+
+            // F14 + F4: the stop that asks for an endpoint has the field —
+            // "RPC URL", not "(optional)" — and the re-check with it.
+            let no_rpc = rpc(&stopped_wizard(WizardStopPin::NoRpc))
+                .unwrap_or_else(|| unreachable!("\"Enter one\" needs a field"));
+            assert_eq!(no_rpc.label.as_ref(), "RPC URL");
+            assert_eq!(no_rpc.recheck.as_ref(), "Re-check with this RPC");
+            assert_eq!(no_rpc.value.as_ref(), "", "nothing typed yet");
+            assert_eq!(no_rpc.placeholder, s.rpc_field_placeholder);
+            assert!(
+                no_rpc.notice.contains("relay"),
+                "spec 098: where an RPC is typed, that the relay is sent it"
+            );
+
+            // A check that could not reach a verdict: another endpoint may
+            // answer — the optional field.
+            let failed = rpc(&stopped_wizard(WizardStopPin::CheckFailed))
+                .unwrap_or_else(|| unreachable!("a field"));
+            assert_eq!(failed.label.as_ref(), "Custom RPC (optional)");
+
+            // What was typed stands in the field (the draft is the core's).
+            let mut typed = stopped_wizard(WizardStopPin::NoRpc);
+            typed.custom_rpc = "https://rpc.example".to_owned();
+            assert_eq!(
+                rpc(&typed).map(|rpc| rpc.value),
+                Some(SharedString::from("https://rpc.example"))
+            );
+
+            // F22: a refusal another endpoint would not change — neither
+            // the field nor the re-check, on either path.
+            for blocker in [NetBlocker::NoP256, NetBlocker::MissingContracts] {
+                assert_eq!(rpc(&refused_wizard(blocker)), None, "{blocker:?}");
+                assert_eq!(rpc(&stopped_wizard(WizardStopPin::Refused(blocker))), None);
+            }
+            // Nothing to check: no field.
+            for stop in [WizardStopPin::AlreadyAdded, WizardStopPin::NotFound] {
+                assert_eq!(rpc(&stopped_wizard(stop)), None, "{stop:?}");
+            }
+
+            // The tab draws exactly what Settings' dialog draws: the same
+            // core rule through the same function, for every stop.
+            for (stop, name) in WizardStopPin::ALL {
+                let wizard = stopped_wizard(stop);
+                assert_eq!(
+                    rpc(&wizard).is_some(),
+                    crate::settings::live::wizard_rpc_label_key(&wizard).is_some(),
+                    "{name}"
+                );
+            }
+
+            // Not after an add (the panel says "added"; the wizard is reset),
+            // and not over an emptied search, which draws no result.
+            let no_rpc = stopped_wizard(WizardStopPin::NoRpc);
+            let info = no_rpc.chain_info.clone();
+            assert_eq!(
+                add_network_tab(&no_rpc, "example", info.as_ref(), &s).rpc,
+                None
+            );
+            assert_eq!(add_network_tab(&no_rpc, "  ", None, &s).rpc, None);
+
+            // In the reader's language.
+            let zh = FlowStrings::resolve(&crate::loc::Loc::for_language("zh"));
+            let tab = add_network_tab(&stopped_wizard(WizardStopPin::NoRpc), "example", None, &zh);
+            let rpc = tab.rpc.unwrap_or_else(|| unreachable!("a field"));
+            assert_eq!(rpc.label.as_ref(), "RPC URL");
+            assert_eq!(rpc.recheck.as_ref(), "用此 RPC 重新检查");
         });
     }
 

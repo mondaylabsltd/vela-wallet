@@ -338,6 +338,14 @@ pub struct FlowStrings {
     pub label_native_token: SharedString,
     pub compatible: SharedString,
     pub add_network_btn: SharedString,
+    /// The native tab's RPC field (PR 3 final notes F4, F14): its label by
+    /// the corpus key the core names (`NetWizardView::rpc_field_label_key`),
+    /// its placeholder, the relay notice under it (spec 098 §5.1) and the
+    /// re-check that reads it — Settings' own words for the same wizard.
+    pub rpc_field_labels: Vec<(&'static str, SharedString)>,
+    pub rpc_field_placeholder: SharedString,
+    pub rpc_relay_notice: SharedString,
+    pub recheck_with_rpc: SharedString,
     pub add_token_error_title: SharedString,
     pub add_token_error_save: SharedString,
     /// DT3L live, as the web's `liveAddToken` / `liveAddNetworkTab` word it
@@ -857,6 +865,15 @@ impl FlowStrings {
             .map(|(_, text)| text.clone())
     }
 
+    /// The wizard's RPC field label, by the key the core named.
+    #[must_use]
+    pub fn rpc_field_label_of(&self, key: &str) -> Option<SharedString> {
+        self.rpc_field_labels
+            .iter()
+            .find(|(known, _)| *known == key)
+            .map(|(_, text)| text.clone())
+    }
+
     /// The sentence for a refusal, by the key the core chose.
     #[must_use]
     pub fn refusal(&self, key: Option<&str>) -> SharedString {
@@ -1001,6 +1018,16 @@ impl FlowStrings {
             label_native_token: s("addToken.labelNativeToken"),
             compatible: s("addToken.compatible"),
             add_network_btn: s("addToken.addNetworkBtn"),
+            rpc_field_labels: {
+                use vela_core::app::network_admin::{RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED};
+                [RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED]
+                    .into_iter()
+                    .map(|key| (key, s(key)))
+                    .collect()
+            },
+            rpc_field_placeholder: s("settingsModals.addNetwork.customRpcPlaceholder"),
+            rpc_relay_notice: s("settingsModals.network.relayNotice"),
+            recheck_with_rpc: s("settingsModals.addNetwork.recheckWithRpc"),
             add_token_error_title: s("addToken.errorTitle"),
             add_token_error_save: s("addToken.errorSaveToken"),
             invalid_contract: s("addToken.invalidAddress"),

@@ -1078,16 +1078,34 @@ pub fn wizard_stop(view: &NetWizardView, loc: &crate::loc::Loc) -> Option<Wizard
     })
 }
 
-/// Is an RPC of the person's own the way on from this stop? When the chain
-/// lists no endpoint ("Enter one, then re-check") and when the check could
-/// not reach a verdict — the two stops the dialog draws its RPC field under.
+/// The RPC field under the wizard's result — and, always and only with it,
+/// "Re-check with this RPC" — on EVERY surface that draws this wizard
+/// (Settings → Add network, the add-token flow's network tab): the corpus
+/// key of the field's label when the field is drawn, `None` when it is not.
+///
+/// The rule is the core's (`NetWizardView::rpc_field`, PR 3 final notes F4,
+/// F14 and F22) and this only reads it. The two surfaces each had their own:
+/// a re-check under a refusal with no field for it to read, "Enter one, then
+/// re-check" over a tab with no field at all, and a field labelled
+/// "(optional)" under the stop that asks for it.
 #[must_use]
-pub fn wizard_stop_wants_rpc(view: &NetWizardView) -> bool {
-    view.phase == NetWizardPhase::Error
-        && matches!(
-            view.error,
-            Some(NetWizardErrorKind::NoRpcEndpoint | NetWizardErrorKind::CheckFailed { .. })
-        )
+pub fn wizard_rpc_label_key(view: &NetWizardView) -> Option<&str> {
+    use vela_core::app::network_admin::{NetRpcField, RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED};
+    match view.rpc_field {
+        NetRpcField::None => None,
+        // The core names the label with the field; were a view ever to
+        // carry the field without one, the field's own kind still says it.
+        NetRpcField::Optional => Some(
+            view.rpc_field_label_key
+                .as_deref()
+                .unwrap_or(RPC_FIELD_OPTIONAL),
+        ),
+        NetRpcField::Required => Some(
+            view.rpc_field_label_key
+                .as_deref()
+                .unwrap_or(RPC_FIELD_REQUIRED),
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -1147,7 +1165,8 @@ mod wizard_tests {
             keep_custom_rpc: false,
         });
         assert_eq!(wizard_stop(&host.view().wizard, &loc()), None);
-        assert!(!wizard_stop_wants_rpc(&host.view().wizard));
+        // Nothing checked yet: no RPC field, and so no re-check.
+        assert_eq!(wizard_rpc_label_key(&host.view().wizard), None);
     }
 
     /// The refusal the person is most likely to meet: they pick a chain the
@@ -1166,7 +1185,7 @@ mod wizard_tests {
             stop.map(|stop| stop.text),
             Some("This network is already added".into())
         );
-        assert!(!wizard_stop_wants_rpc(&host.view().wizard));
+        assert_eq!(wizard_rpc_label_key(&host.view().wizard), None);
     }
 
     /// The registry has no such chain.
@@ -1300,10 +1319,10 @@ mod wizard_tests {
             "No RPC endpoint is listed for this network. Enter one, then re-check."
         );
         assert_eq!(stop.setup_url, None);
-        assert!(
-            wizard_stop_wants_rpc(&wizard),
-            "\"Enter one\" needs a field"
-        );
+        // "Enter one" needs a field — and the field is the one thing asked
+        // for, so its label is plain "RPC URL", never "(optional)" (F4).
+        let label = wizard_rpc_label_key(&wizard).map(|key| loc().t(key));
+        assert_eq!(label.as_deref(), Some("RPC URL"), "from the real core");
     }
 
     /// Every stop is said in the core's sentence for it, and no two of them
@@ -1378,7 +1397,7 @@ mod wizard_tests {
         let stop = wizard_stop(&wizard, &loc).unwrap_or_else(|| unreachable!("it stopped"));
         assert_eq!(stop.text.as_ref(), "Unable to verify — RPC request failed");
         assert_eq!(stop.setup_url, None);
-        assert!(wizard_stop_wants_rpc(&wizard));
+        assert!(wizard_rpc_label_key(&wizard).is_some());
 
         wizard.compat = Some(crate::settings::fixtures::refused_compat(
             chain_id,
@@ -1390,11 +1409,105 @@ mod wizard_tests {
         // And only the two stops an RPC of one's own gets past ask for one.
         for (pin, name) in WizardStopPin::ALL {
             assert_eq!(
-                wizard_stop_wants_rpc(&stopped_wizard(pin)),
+                wizard_rpc_label_key(&stopped_wizard(pin)).is_some(),
                 matches!(pin, WizardStopPin::NoRpc | WizardStopPin::CheckFailed),
                 "{name}"
             );
         }
+    }
+
+    /// PR 3 final notes F4, F14 and F22 — the core's one rule, read by the
+    /// one function every wizard surface on the desktop draws from: the RPC
+    /// field (and, with it and only with it, "Re-check with this RPC") and
+    /// its label, for every row of the core's table.
+    #[test]
+    fn the_rpc_field_and_its_label_are_the_cores_for_every_state() {
+        use crate::settings::fixtures::{WizardStopPin, refused_wizard, stopped_wizard};
+        use vela_core::app::network_admin::{
+            NetBlocker, NetRpcFailureKind, NetRpcField, wizard_rpc_field,
+        };
+        let en = loc();
+        let label = |view: &NetWizardView| wizard_rpc_label_key(view).map(|key| en.t(key));
+        let optional = Some(SharedString::from("Custom RPC (optional)"));
+        let required = Some(SharedString::from("RPC URL"));
+
+        // The stops.
+        let stop = |pin| label(&stopped_wizard(pin));
+        assert_eq!(
+            stop(WizardStopPin::NoRpc),
+            required,
+            "F4: not \"(optional)\""
+        );
+        assert_eq!(stop(WizardStopPin::CheckFailed), optional);
+        assert_eq!(stop(WizardStopPin::AlreadyAdded), None);
+        assert_eq!(stop(WizardStopPin::NotFound), None);
+        // F22: no field — so no re-check — under a refusal, on either path:
+        // the one with no confirm step (an error beside the check)…
+        for blocker in [NetBlocker::NoP256, NetBlocker::MissingContracts] {
+            assert_eq!(stop(WizardStopPin::Refused(blocker)), None);
+            // …and the wizard's own (checked, and the verdict is a blocker).
+            assert_eq!(label(&refused_wizard(blocker)), None);
+        }
+
+        // Checked and compatible, and checked without a verdict: optional.
+        let mut checked = refused_wizard(NetBlocker::MissingContracts);
+        let mut set = |view: &mut NetWizardView, edit: &dyn Fn(&mut NetCompatibility)| {
+            if let Some(compat) = view.compat.as_mut() {
+                edit(compat);
+            }
+            // As the core's view would carry it for that state.
+            view.rpc_field =
+                wizard_rpc_field(view.phase, view.error.as_ref(), view.compat.as_ref());
+            view.rpc_field_label_key = match view.rpc_field {
+                NetRpcField::None => None,
+                NetRpcField::Optional => {
+                    Some(vela_core::app::network_admin::RPC_FIELD_OPTIONAL.to_owned())
+                }
+                NetRpcField::Required => {
+                    Some(vela_core::app::network_admin::RPC_FIELD_REQUIRED.to_owned())
+                }
+            };
+        };
+        set(&mut checked, &|compat| {
+            compat.blocker = None;
+            compat.compatible = true;
+        });
+        assert_eq!(label(&checked), optional, "compatible");
+        set(&mut checked, &|compat| {
+            compat.compatible = false;
+            compat.rpc_failure = Some(NetRpcFailureKind::AllProbesFailed);
+        });
+        assert_eq!(label(&checked), optional, "unable to verify");
+
+        // Searching, resolving, checking: nothing to re-check yet.
+        for phase in [
+            NetWizardPhase::Idle,
+            NetWizardPhase::Searching,
+            NetWizardPhase::Suggested,
+            NetWizardPhase::Resolving,
+            NetWizardPhase::Checking,
+        ] {
+            checked.phase = phase;
+            set(&mut checked, &|_| {});
+            assert_eq!(label(&checked), None, "{phase:?}");
+        }
+
+        // The words, in the reader's language.
+        let zh = crate::loc::Loc::for_language("zh");
+        let no_rpc = stopped_wizard(WizardStopPin::NoRpc);
+        assert_eq!(
+            wizard_rpc_label_key(&no_rpc)
+                .map(|key| zh.t(key))
+                .as_deref(),
+            Some("RPC URL")
+        );
+        let failed = stopped_wizard(WizardStopPin::CheckFailed);
+        assert_eq!(
+            wizard_rpc_label_key(&failed)
+                .map(|key| zh.t(key))
+                .as_deref(),
+            Some("自定义 RPC（可选）")
+        );
     }
 }
 

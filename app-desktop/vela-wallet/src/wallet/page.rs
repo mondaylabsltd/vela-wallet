@@ -5989,6 +5989,40 @@ impl WalletPage {
                 })) as panels::Click
             })
             .collect();
+        // The wizard's RPC field and the re-check that reads it (the core's
+        // `rpc_field`; PR 3 final note F14) — the same draft and the same
+        // event Settings' dialog sends. Bound whenever there is a chain to
+        // ask again; whether they are DRAWN is the builder's reading of the
+        // core's rule, not this binding's.
+        actions.add_net_rpc = Some(panels::AddressField {
+            focus: self.endpoint_focus(WIZARD_RPC_FOCUS, cx),
+            value: wizard.custom_rpc.clone(),
+            placeholder: self.flow_strings.rpc_field_placeholder.clone(),
+            on_change: Box::new(
+                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(NetEvent::CustomRpcEdited { value: text }, cx);
+                    });
+                },
+            ),
+        });
+        actions.add_net_recheck = wizard.chain_info.as_ref().map(|info| {
+            let chain_id = info.chain_id;
+            Box::new(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                // A re-check KEEPS the typed RPC: it is the reason to ask
+                // again.
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(
+                        NetEvent::ChainSelected {
+                            chain_id,
+                            keep_custom_rpc: true,
+                        },
+                        cx,
+                    );
+                });
+                cx.notify();
+            })) as panels::Click
+        });
         actions.add_to_wallet = Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
             // Added on the core's word, not the press: `add_confirmed`
             // refuses silently unless the wizard is Checked and
@@ -7125,6 +7159,8 @@ impl WalletPage {
             add_to_wallet: None,
             add_token_tabs: None,
             add_token_picks: Vec::new(),
+            add_net_rpc: None,
+            add_net_recheck: None,
             open_send_rows: Vec::new(),
             send_class_chips: Vec::new(),
             sweep_select_all: None,
@@ -12793,7 +12829,14 @@ impl WalletPage {
         }
 
         let s = &self.settings;
-        let custom_title = s.custom_rpc_title.clone();
+        // The RPC field and "Re-check with this RPC": drawn together or not
+        // at all, by the core's one rule (`rpc_field`; PR 3 final notes F4,
+        // F14, F22), labelled with the core's key — "RPC URL" where an
+        // endpoint is the one thing asked for, "Custom RPC (optional)" where
+        // it is one way on among others. This dialog used to decide both per
+        // verdict: a re-check under a refusal with no field to read, and
+        // "(optional)" under "Enter one, then re-check".
+        let rpc_label = settings_live::wizard_rpc_label_key(&wizard).map(|key| self.loc.t(key));
         let custom_placeholder = s.custom_rpc_placeholder.clone();
         let relay_notice = s.network_relay_notice.clone();
         let checks_title = s.compatibility_check.clone();
@@ -12807,23 +12850,19 @@ impl WalletPage {
             pill: (Tone, SharedString),
             checks: Option<Vec<(SharedString, bool)>>,
             callout: Option<SharedString>,
-            custom_rpc: bool,
             primary: Option<SharedString>,
             /// Where "Open Chain Setup Tool" goes — the core's
             /// `NetCompatibility.setup_url`, only for a chain whose missing
             /// contracts can be deployed. `None` = no such button.
             setup_url: Option<String>,
-            recheck: bool,
         }
         let checking = || Verdict {
             meta: s.wizard_checking.clone(),
             pill: (Tone::Neutral, s.compatibility_check.clone()),
             checks: None,
             callout: None,
-            custom_rpc: false,
             primary: None,
             setup_url: None,
-            recheck: false,
         };
         let verdict = match wizard.phase {
             NetWizardPhase::Checked => match wizard.compat.as_ref() {
@@ -12845,12 +12884,10 @@ impl WalletPage {
                     // Spec 081 FR-009: works, and a wallet with more than one
                     // passkey still cannot be made here — both true.
                     callout: (!compat.multi_key_ready).then(|| s.single_key_only.clone()),
-                    custom_rpc: true,
                     // `can_add` is the core's whole judgement; the button
                     // appears only when it says yes.
                     primary: wizard.can_add.then(|| s.add_network.clone()),
                     setup_url: None,
-                    recheck: false,
                 },
                 // Refused — and WHY is the core's (`blocker`): a network with
                 // no P-256 verifier says plainly that Vela cannot run there
@@ -12863,10 +12900,8 @@ impl WalletPage {
                         pill: (Tone::Error, s.wizard_incompatible.clone()),
                         checks: settings_live::compat_checks(compat, s),
                         callout: refusal.as_ref().map(|refusal| refusal.hint.clone()),
-                        custom_rpc: false,
                         primary: None,
                         setup_url: refusal.and_then(|refusal| refusal.setup_url),
-                        recheck: true,
                     }
                 }
                 // The probes never reached a verdict — "unable to verify",
@@ -12876,10 +12911,8 @@ impl WalletPage {
                     pill: (Tone::Warn, s.wizard_unable_to_verify.clone()),
                     checks: None,
                     callout: None,
-                    custom_rpc: true,
                     primary: Some(s.wizard_retry.clone()),
                     setup_url: None,
-                    recheck: true,
                 },
             },
             // The wizard stopped: why, in the core's own sentence
@@ -12889,7 +12922,8 @@ impl WalletPage {
             // verdict above; a probe that failed is "unable to verify" and
             // gets neither. Where the way on is an RPC of the person's own —
             // a chain that lists none ("Enter one, then re-check"), a check
-            // that could not be made — the field is under the sentence.
+            // that could not be made — the field is under the sentence
+            // (the core's `rpc_field`, read once above).
             NetWizardPhase::Error => {
                 let stop = settings_live::wizard_stop(&wizard, &self.loc);
                 Verdict {
@@ -12897,9 +12931,7 @@ impl WalletPage {
                         || s.wizard_unable_to_verify.clone(),
                         |stop| stop.text.clone(),
                     )),
-                    custom_rpc: settings_live::wizard_stop_wants_rpc(&wizard),
                     setup_url: stop.and_then(|stop| stop.setup_url),
-                    recheck: chain_id.is_some(),
                     ..checking()
                 }
             }
@@ -12963,12 +12995,13 @@ impl WalletPage {
                 text,
             ));
         }
-        if verdict.custom_rpc {
+        let rpc_field = rpc_label.is_some();
+        if let Some(rpc_label) = rpc_label {
             let rpc_focus = self.endpoint_focus(WIZARD_RPC_FOCUS, cx);
             col = col.child(editable_url_field(
                 ElementId::from("wizard-rpc"),
                 theme,
-                Some(custom_title),
+                Some(rpc_label),
                 &wizard.custom_rpc,
                 custom_placeholder,
                 None,
@@ -13070,7 +13103,9 @@ impl WalletPage {
             );
         }
         // The web's re-check: a link in the info colour with its refresh.
-        if verdict.recheck {
+        // Drawn exactly when the field it reads is — never under a refusal,
+        // which another endpoint would not change.
+        if rpc_field {
             col = col.child(
                 div()
                     .id("wizard-recheck-rpc")
