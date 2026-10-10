@@ -2,10 +2,15 @@
 //  SigningSheet.swift
 //  VelaWallet
 //
-//  The signing sheet (spec 022): the universal block renderer, then the
-//  technical details, the fee and the signer — a body that scrolls — over a
-//  confirm that does not, on the page that asked for the signature, so the
-//  site you are dealing with never leaves the screen.
+//  The signing sheet (spec 022): who is asking and the ✕, then the universal
+//  block renderer, the technical details, the fee and the signer — a body
+//  that scrolls — over a confirm that does not, on the page that asked for
+//  the signature, so the site you are dealing with never leaves the screen.
+//
+//  The header is pinned above the body. Its ✕ is the ONE way to refuse, and
+//  the body brings a tall verdict into view by itself: with the header in
+//  the scroll, a short screen kept the confirm in sight and scrolled the
+//  refusal — and the name of who is asking — out of it.
 //
 //  The confirm and the one line a shut gate says are a footer OUTSIDE the
 //  scroll, pinned to the bottom of the sheet (the Send confirm's own frame,
@@ -77,9 +82,10 @@ struct SigningSheet: View {
     /// sheet's first frame. A reference, not view state: recording it draws
     /// nothing.
     @State private var verdictSeen = VerdictSeenBox()
-    /// The body holds more than its viewport shows: it runs on under the
-    /// pinned confirm, which then draws the edge it runs under.
-    @State private var bodyRunsOn = false
+    /// What of the body is out of sight — scrolled under the pinned header,
+    /// still to come under the pinned confirm: each draws the edge the body
+    /// runs under, and only then.
+    @State private var bodyEdges = BodyEdges()
 
     private var techOpen: Binding<Bool> {
         Binding(get: { techOverride ?? model.techOpen }, set: { techOverride = $0 })
@@ -87,15 +93,20 @@ struct SigningSheet: View {
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
+            // Who is asking, on which network, and the ✕ — in every form of
+            // the sheet (the receipt's close is the same control), above the
+            // scroll, with the gap the first block always had under it.
+            SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
+                              headline: model.headline,
+                              iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl,
+                              onClose: onClose, closeLabel: model.closeLabel)
+                .padding(.top, Tokens.Space.s8)
+                .padding(.horizontal, Tokens.Layout.screenPaddingX)
+                .padding(.bottom, Tokens.Space.s16)
+                .overlay(alignment: .bottom) { edge(shown: bodyEdges.above) }
             ScrollViewReader { scroll in
                 ScrollView {
                     VStack(alignment: .leading, spacing: Tokens.Space.s16) {
-                        SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
-                                          headline: model.headline,
-                                          iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl,
-                                          onClose: onClose, closeLabel: model.closeLabel)
-                            .padding(.top, Tokens.Space.s8)
-
                         // Spec 079: approved — the receipt replaces the form.
                         if let receipt = model.receipt {
                             receiptBody(receipt)
@@ -107,10 +118,10 @@ struct SigningSheet: View {
                     // Scrolled to its end, the last row stands a gap above
                     // the confirm — the gap it always had.
                     .padding(.bottom, footerShown ? Tokens.Space.s4 : Tokens.Space.s0)
-                    .onGeometryChange(for: Bool.self) { content in
-                        content.bounds(of: .scrollView).map { content.size.height > $0.height + 0.5 } ?? false
-                    } action: { runsOn in
-                        bodyRunsOn = runsOn
+                    .onGeometryChange(for: BodyEdges.self) { content in
+                        BodyEdges(content: content)
+                    } action: { edges in
+                        bodyEdges = edges
                     }
                 }
                 .accessibilityLabel(model.panelTitle)
@@ -260,15 +271,35 @@ struct SigningSheet: View {
                     }
                 }
             }
-            // A body longer than its viewport ends at an edge, not under a
+            // A body with more to come ends at an edge, not under a
             // floating button (the Send confirm's hairline over its pinned
-            // card). Drawn over the footer, so it takes no room: the confirm
-            // is where it is with the edge and without.
-            .overlay(alignment: .top) {
-                FlowDivider()
-                    .opacity(bodyRunsOn ? 1 : 0)
-                    .accessibilityHidden(true)
-            }
+            // card).
+            .overlay(alignment: .top) { edge(shown: bodyEdges.below) }
+        }
+    }
+
+    /// The hairline a pinned part draws where the body runs under it. Drawn
+    /// OVER the part, so it takes no room: the header and the confirm are
+    /// where they are with the edge and without.
+    private func edge(shown: Bool) -> some View {
+        FlowDivider()
+            .opacity(shown ? 1 : 0)
+            .accessibilityHidden(true)
+    }
+
+    /// What of the body its viewport does not show.
+    private nonisolated struct BodyEdges: Equatable, Sendable {
+        /// Scrolled under the header.
+        var above = false
+        /// Still to come, under the confirm.
+        var below = false
+
+        init() {}
+
+        init(content: GeometryProxy) {
+            guard let visible = content.bounds(of: .scrollView) else { return }
+            above = visible.minY > 0.5
+            below = visible.maxY < content.size.height - 0.5
         }
     }
 

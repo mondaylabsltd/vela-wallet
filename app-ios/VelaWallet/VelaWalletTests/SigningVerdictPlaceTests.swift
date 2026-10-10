@@ -17,6 +17,8 @@
 //  the scroll at all: it is pinned to the bottom of the sheet, at one
 //  position whatever the body holds, and when the sheet outgrows the screen
 //  the body scrolls under it and brings the verdict into view as it lands.
+//  The header is pinned too: its ✕ is the one way to refuse, and a body that
+//  scrolls by itself must not scroll the refusal out of sight.
 //
 //  The real `SigningSheet`, hosted in a window the size of a phone's sheet,
 //  stepped through every verdict kind; positions are read from the tree an
@@ -361,6 +363,8 @@ struct SigningVerdictPlaceTests {
         /// The fee row's refresh control: the first thing under the place.
         let fee: CGRect
         let confirm: CGRect
+        /// The header's ✕: the one way to refuse.
+        let close: CGRect
         /// What stands in the verdict's place — the verdict's own frame;
         /// the room a short one leaves under it is not in it.
         let place: CGRect
@@ -404,11 +408,14 @@ struct SigningVerdictPlaceTests {
             let scrolls = scrollViews(in: view)
             if let fee = tree.first(where: { $0.id == "signing.fee.refresh" }),
                let confirm = tree.first(where: { $0.id == "signing.confirm" }),
+               let close = tree.first(where: { $0.id == "signing.close" }),
                let place = tree.first(where: { $0.id == SigningVerdictRoom<EmptyView>.testId && !$0.element }),
                let body = scrolls.first {
-                let frames = [fee.frame, confirm.frame, place.frame, CGRect(origin: body.contentOffset, size: body.contentSize)]
+                let frames = [fee.frame, confirm.frame, close.frame, place.frame,
+                              CGRect(origin: body.contentOffset, size: body.contentSize)]
                 seen = Seen(
-                    verdict: verdict, tree: tree, fee: fee.frame, confirm: confirm.frame, place: place.frame,
+                    verdict: verdict, tree: tree, fee: fee.frame, confirm: confirm.frame, close: close.frame,
+                    place: place.frame,
                     viewport: body.convert(body.bounds, to: nil).inset(by: body.adjustedContentInset),
                     offset: body.contentOffset.y,
                     contentHeight: body.contentSize.height, scrollViews: scrolls.count,
@@ -420,7 +427,7 @@ struct SigningVerdictPlaceTests {
             try await shown(view)
             try await Task.sleep(for: .milliseconds(50))
         }
-        return try #require(seen, "\(verdict): the fee row, the confirm, the verdict's place and the body are in the tree")
+        return try #require(seen, "\(verdict): the fee row, the confirm, the ✕, the verdict's place and the body are in the tree")
     }
 
     /// The drawn send (cs1) through the production renderer, with `verdict`
@@ -476,7 +483,8 @@ struct SigningVerdictPlaceTests {
 
     private func measure(_ name: String, _ size: CGSize, _ step: Seen) {
         print("MEASURE \(name) \(Int(size.width))x\(Int(size.height)) \(step.verdict.rawValue):"
-            + " confirm.y \(step.confirm.minY)…\(step.confirm.maxY) fee.y \(step.fee.minY)"
+            + " confirm.y \(step.confirm.minY)…\(step.confirm.maxY) close.y \(step.close.minY)…\(step.close.maxY)"
+            + " fee.y \(step.fee.minY)"
             + " place \(step.place.minY)…\(step.place.maxY) h=\(step.place.height)"
             + " viewport \(step.viewport.minY)…\(step.viewport.maxY) content=\(step.contentHeight) offset=\(step.offset)")
     }
@@ -501,6 +509,12 @@ struct SigningVerdictPlaceTests {
                 #expect(step.confirm.maxY <= step.bottom + 0.5 && step.confirm.height >= 44,
                         "\(Int(size.height)) \(step.verdict): the confirm is not whole on the sheet: \(step.confirm)")
                 #expect(step.scrollViews == 1, "\(Int(size.height)) \(step.verdict): \(step.scrollViews) scroll views")
+                // The ✕ — the one way to refuse — is pinned above the body:
+                // one frame, whole, whatever the body scrolled to.
+                #expect(step.close == first.close,
+                        "\(Int(size.height)) \(step.verdict): the ✕ at \(step.close), was \(first.close)")
+                #expect(step.close.minY >= 0 && step.close.maxY <= step.viewport.minY + 0.5 && step.close.height >= 40,
+                        "\(Int(size.height)) \(step.verdict): the ✕ \(step.close) is not whole above the body \(step.viewport)")
                 // A landed verdict is in view, whole — on the short screen too.
                 if step.verdict != .out, step.place.height <= step.viewport.height {
                     #expect(step.inView(step.place),
@@ -635,6 +649,7 @@ struct SigningVerdictPlaceTests {
         let warning = loc.t("componentsUi.signing.unverifiedWarning")
         var reached: [String: CGRect] = [:]
         var confirmWhileScrolling: [CGRect] = []
+        var closeWhileScrolling: [CGRect] = []
         let walked = try await walk([.out, .send, .tall], size: Self.short) { seen, body, view in
             guard seen.verdict == .tall else { return }
             // Bring each row, then the warning, then the first row again,
@@ -654,7 +669,15 @@ struct SigningVerdictPlaceTests {
                 #expect(at.inView(now), "\(label) cannot be brought into view: \(now) in \(at.viewport)")
                 reached[label] = now
                 confirmWhileScrolling.append(at.confirm)
+                closeWhileScrolling.append(at.close)
             }
+            // …and to its very end: the last row of the sheet.
+            body.setContentOffset(
+                CGPoint(x: 0, y: max(0, body.contentSize.height - body.bounds.height)), animated: false)
+            try await self.shown(view)
+            let end = try await self.read(.tall, view)
+            confirmWhileScrolling.append(end.confirm)
+            closeWhileScrolling.append(end.close)
         }
         let (out, send, tall) = (walked[0], walked[1], walked[2])
         for step in walked { measure("signing-short", Self.short, step) }
@@ -690,6 +713,15 @@ struct SigningVerdictPlaceTests {
             #expect(frame == out.confirm, "the confirm moved: \(frame) vs \(out.confirm)")
         }
         #expect(out.confirm.maxY <= out.bottom + 0.5 && out.confirm.minY >= tall.viewport.maxY - 0.5)
+
+        // And the ✕, the one way to refuse: the body scrolled by itself when
+        // the verdict landed, and to its end by hand, and the ✕ is where it
+        // was — whole, above the body.
+        #expect(tall.offset > 0, "the body did not scroll: nothing was shown about the ✕")
+        for frame in [send.close, tall.close] + closeWhileScrolling {
+            #expect(frame == out.close, "the ✕ moved: \(frame) vs \(out.close)")
+        }
+        #expect(out.close.minY >= 0 && out.close.maxY <= tall.viewport.minY + 0.5)
     }
 
     /// The placeholder is not a verdict: a sheet that opens on "Checking…"

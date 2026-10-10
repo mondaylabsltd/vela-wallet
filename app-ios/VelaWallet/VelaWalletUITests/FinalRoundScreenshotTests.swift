@@ -231,6 +231,8 @@ final class FinalRoundScreenshotTests: XCTestCase {
         let place: CGRect
         let fee: CGRect
         let body: CGRect
+        /// The header's ✕ — the one way to refuse — where the board has one.
+        let close: CGRect?
         /// From the verdict's last point to the fee row: the least it can
         /// be when the place is exactly as tall as the verdict.
         var gap: CGFloat { fee.minY - place.maxY }
@@ -259,7 +261,9 @@ final class FinalRoundScreenshotTests: XCTestCase {
         XCTAssertTrue(body.exists, "no body (\(what))")
         let fee = app.buttons["signing.fee.refresh"].firstMatch
         XCTAssertTrue(fee.exists, "no fee row (\(what))")
-        return Verdict(confirm: confirm.frame, place: place.frame, fee: fee.frame, body: body.frame)
+        let close = app.buttons["signing.close"].firstMatch
+        return Verdict(confirm: confirm.frame, place: place.frame, fee: fee.frame, body: body.frame,
+                       close: close.exists ? close.frame : nil)
     }
 
     func testATallVerdictIsShownWholeOverAPinnedConfirm() {
@@ -359,10 +363,20 @@ final class FinalRoundScreenshotTests: XCTestCase {
                 settle(1.2)
                 let after = read(app, what)
                 log("verdict-lands \(what) screen=\(Int(screen.width))x\(Int(screen.height))"
+                    + " close=\(String(describing: after.close))"
                     + " confirm before=\(before.confirm) after=\(after.confirm)"
                     + " place before=\(before.place) after=\(after.place) body=\(after.body)")
                 XCTAssertEqual(after.confirm, before.confirm, "the confirm moved when the verdict landed (\(what))")
                 XCTAssertTrue(app.buttons["signing.confirm"].firstMatch.isHittable, "the confirm cannot be tapped (\(what))")
+                // The ✕ is pinned above the body: where it was, and in reach.
+                if board.hasPrefix("sheet-") {
+                    XCTAssertNotNil(before.close, "the presented sheet has no ✕ (\(what))")
+                    XCTAssertEqual(after.close, before.close, "the ✕ moved when the verdict landed (\(what))")
+                    XCTAssertTrue(app.buttons["signing.close"].firstMatch.isHittable, "the ✕ cannot be tapped (\(what))")
+                    if let close = after.close {
+                        XCTAssertLessThanOrEqual(close.maxY, after.body.minY + 0.5, "the ✕ is inside the scroll (\(what))")
+                    }
+                }
                 XCTAssertGreaterThan(after.place.height, before.place.height + 20, "the place did not grow (\(what))")
                 // In view as it landed: whole when the body can hold it, else from its top.
                 if after.place.height <= after.body.height {
@@ -398,6 +412,20 @@ final class FinalRoundScreenshotTests: XCTestCase {
                     }
                     XCTAssertEqual(app.buttons["signing.confirm"].firstMatch.frame, before.confirm,
                                    "the confirm moved while the body scrolled (\(what))")
+                }
+                // To the body's end, by hand: the ✕ and the confirm are where they were.
+                for _ in 0..<2 {
+                    body.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                        .press(forDuration: 0.05, thenDragTo: body.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)))
+                }
+                settle(0.8)
+                let end = read(app, what)
+                log("verdict-lands \(what) at the body's end: confirm=\(end.confirm) close=\(String(describing: end.close))"
+                    + " verdict=\(end.place) body=\(end.body)")
+                XCTAssertEqual(end.confirm, before.confirm, "the confirm moved at the body's end (\(what))")
+                XCTAssertEqual(end.close, before.close, "the ✕ moved at the body's end (\(what))")
+                if board.hasPrefix("sheet-") {
+                    XCTAssertTrue(app.buttons["signing.close"].firstMatch.isHittable, "the ✕ is out of reach at the body's end (\(what))")
                 }
                 attach(app, "04-\(board)-scrolled-\(tag)-\(Int(screen.width))pt")
                 app.terminate()
