@@ -1460,6 +1460,13 @@ class CoreWireDriftTest {
             ConfirmState(enabled = false, block = ConfirmBlock.FeeShort, key = "componentsUi.signing.confirmBlock.feeShort"),
             roundTrip<ConfirmState>("""{"enabled":false,"block":"fee_short","key":"componentsUi.signing.confirmBlock.feeShort"}"""),
         )
+        // PR 3: the confirm waits for the simulation's verdict. A gate this
+        // build could not decode is read as "no answer", which keeps the
+        // confirm shut for ever with no line under it.
+        assertEquals(
+            ConfirmState(enabled = false, block = ConfirmBlock.SimChecking, key = "componentsUi.signing.confirmBlock.simChecking"),
+            roundTrip<ConfirmState>("""{"enabled":false,"block":"sim_checking","key":"componentsUi.signing.confirmBlock.simChecking"}"""),
+        )
         val entry = roundTrip<TrackEntryView>(
             """{"user_op_hash":"0xaa","chain_id":42161,"record_ids":[],"status":"pending","tx_hash":null,"polling":true,"submitted_at_ms":1.0,"outcome":"landing","relay_tx_hash":null,"relay_sent_at_ms":4000.0}""",
         )
@@ -1554,6 +1561,29 @@ class CoreWireDriftTest {
         assertVariantsExist<SignEvent>("SignEvent")
         assertVariantFields(SignOperation.serializer(), "SignOperation")
         assertVariantFields(SignEvent.serializer(), "SignEvent")
+        // PR 3, the simulation's wait: the two events this shell says, the one
+        // timer it runs (an operation it could not decode would be answered
+        // `responded`, and the deadline would never pass), its answer, and
+        // the two fields the sheet reads.
+        assertEquals("""{"type":"sim_started","id":"r1"}""", Wire.json.encodeToString(SignEvent.serializer(), SignEvent.SimStarted("r1")))
+        assertEquals("""{"type":"sim_settled","id":"r1"}""", Wire.json.encodeToString(SignEvent.serializer(), SignEvent.SimSettled("r1")))
+        assertEquals(
+            SignOperation.SimVerdictTimer(id = "r1", round = 3, ms = 4000),
+            roundTrip<SignOperation>("""{"type":"sim_verdict_timer","id":"r1","round":3,"ms":4000}"""),
+        )
+        assertEquals(
+            """{"type":"sim_verdict_timer_fired","id":"r1","round":3}""",
+            Wire.json.encodeToString(SignShellResult.serializer(), SignShellResult.SimVerdictTimerFired("r1", 3)),
+        )
+        val waiting = roundTrip<SignView>("""{"surface":"sheet","confirm_gate_open":true,"sim_checking":true,"sim_waited_out_key":null}""")
+        assertTrue(waiting.sim_checking)
+        assertEquals(null, waiting.sim_waited_out_key)
+        assertEquals(
+            "componentsUi.signing.simUnavailableWarning",
+            roundTrip<SignView>("""{"surface":"sheet","sim_checking":false,"sim_waited_out_key":"componentsUi.signing.simUnavailableWarning"}""").sim_waited_out_key,
+        )
+        // A core that predates the wait says neither: nothing is held.
+        assertEquals(false, roundTrip<SignView>("""{"surface":"sheet"}""").sim_checking)
         // The wallet's own request is marked as such where it is raised, and
         // the view says so; a request that does not say is a page's.
         assertTrue("first_party" in serializer<SignRequestView>().descriptor.elementNames)

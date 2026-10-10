@@ -1036,6 +1036,105 @@ class SigningLiveTest {
     }
 
     /**
+     * PR 3, fix C — the verdict's place follows the core's wait for the
+     * simulation ([SigningLive.verdictShown]); the confirm is the gate's and
+     * is not decided here.
+     *
+     * - While the core waits (`sim_checking`) the place says "checking" — its
+     *   skeleton — even when this shell already holds the answer: the verdict
+     *   and the confirm that waited for it are one commit of the core's, so
+     *   no frame shows a verdict over "Checking what this transaction does…".
+     * - The deadline passed with the simulation still out
+     *   (`sim_waited_out_key`): that sentence in the place, a caution — the
+     *   very block a node that cannot simulate is drawn as.
+     * - A verdict that lands late replaces the caution at once.
+     * - No simulation: no place, whatever the view says.
+     *
+     * Same place, same number of blocks, in every one of them: nothing moves.
+     */
+    @Test
+    fun `the verdict's place follows the core's wait — checking, the waited-out caution, then the verdict`() {
+        val params = org.json.JSONArray().put(org.json.JSONObject().put("to", founder).put("value", "0x38d7ea4c68000")).toString()
+        val settled = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://app.example", null, 100, null),
+            confirm_gate_open = true,
+        )
+        val checking = settled.copy(sim_checking = true)
+        val key = "componentsUi.signing.simUnavailableWarning"
+        val waitedOut = settled.copy(sim_waited_out_key = key)
+        val pending = SigningController.SimOutcome.Pending
+        val verdict = SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000")))
+        val notice = app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck()
+        val reverts = SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFail")
+
+        // No simulation: nothing to show and no place, whatever the view says.
+        for (sign in listOf(settled, checking, waitedOut)) assertNull(SigningLive.verdictShown(null, sign))
+        // The core still waits: "checking" — also once this shell holds the answer.
+        for (sim in listOf(pending, verdict, notice, reverts)) assertEquals(pending, SigningLive.verdictShown(sim, checking))
+        // The deadline passed, the simulation still out: the core's sentence, a caution.
+        assertEquals(SigningController.SimOutcome.Notice(ClearRisk.Caution, key), SigningLive.verdictShown(pending, waitedOut))
+        // A late answer takes the caution's place at once, before the core takes its line back.
+        for (sim in listOf(verdict, notice, reverts)) assertEquals(sim, SigningLive.verdictShown(sim, waitedOut))
+        // No wait at all (a core that predates it, a board): as it always was.
+        for (sim in listOf(pending, verdict, notice, reverts)) assertEquals(sim, SigningLive.verdictShown(sim, settled))
+
+        // On the sheet.
+        fun sheet(sign: SignView, sim: SigningController.SimOutcome?) =
+            SigningLive.model(drawn, request(params), sign, ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+        fun place(model: app.getvela.wallet.feature.signing.SigningScreenModel) = model.blocks.single { it is SigningBlock.Held } as SigningBlock.Held
+        val couldNotCheck = SigningBlock.Warning(SigningTone.Caution, strings.t(key))
+
+        val held = sheet(checking, pending)
+        assertNull("checking: the skeleton", place(held).shown)
+        assertFalse("the gate is the core's: the confirm is shut", held.confirmEnabled)
+        assertEquals("Checking what this transaction does…", held.confirmBlockLine)
+        // The answer is in this shell's hands and the core has not heard yet:
+        // still "checking", in both places — never the verdict over that line.
+        val between = sheet(checking, verdict)
+        assertNull(place(between).shown)
+        assertFalse(between.confirmEnabled)
+        assertEquals(held.confirmBlockLine, between.confirmBlockLine)
+        // The core heard: the verdict, and the confirm, in one frame.
+        val landed = sheet(settled, verdict)
+        assertTrue(place(landed).shown is SigningBlock.Balances)
+        assertTrue(landed.confirmEnabled)
+        assertNull(landed.confirmBlockLine)
+
+        // Waited out: the caution where "checking" was, the confirm open, no line.
+        val out = sheet(waitedOut, pending)
+        assertEquals(couldNotCheck, place(out).shown)
+        assertEquals("the same block the could-not-check notice draws", SigningLive.simBlocks(notice, ctx).single(), place(out).shown)
+        assertTrue(out.confirmEnabled)
+        assertNull(out.confirmBlockLine)
+        // …and the late verdict in its place.
+        assertTrue(place(sheet(waitedOut, verdict)).shown is SigningBlock.Balances)
+
+        // One place, kept: the same block index and count in every frame.
+        val frames = listOf(held, between, landed, out, sheet(waitedOut, verdict), sheet(settled, pending))
+        for (frame in frames) {
+            assertEquals(held.blocks.indexOfFirst { it is SigningBlock.Held }, frame.blocks.indexOfFirst { it is SigningBlock.Held })
+            assertEquals(held.blocks.size, frame.blocks.size)
+            assertEquals(place(held).rooms, place(frame).rooms)
+        }
+        // A site's sheet with no simulation keeps no place — and is not held by one.
+        assertTrue(sheet(settled, null).blocks.none { it is SigningBlock.Held })
+        // The board helper is the same rule.
+        assertEquals(listOf<SigningBlock>(place(out)), SigningLive.verdictPlace(pending, waitedOut, ctx))
+        assertEquals(listOf<SigningBlock>(place(held)), SigningLive.verdictPlace(pending, checking, ctx))
+        assertTrue(SigningLive.verdictPlace(null, checking, ctx).isEmpty())
+
+        // The wallet's own request (the key backup) keeps no place while it
+        // waits — its expected verdict folds into the technical details — but
+        // a deadline that passed is said on the sheet, never folded away.
+        val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
+        fun ownSheet(sign: SignView, sim: SigningController.SimOutcome?) =
+            SigningLive.model(drawn, own, sign.copy(request = sign.request?.copy(first_party = true)), ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+        assertTrue(ownSheet(checking, pending).blocks.none { it is SigningBlock.Held })
+        assertEquals(listOf<SigningBlock>(couldNotCheck), ownSheet(waitedOut, pending).blocks.said().filterIsInstance<SigningBlock.Warning>())
+    }
+
+    /**
      * The device round, item 1 (security): a verdict taller than its place is
      * shown whole, and on a sheet taller than the screen the BODY scrolls to
      * it — all of it when it fits the body's frame, by the edge that is out;

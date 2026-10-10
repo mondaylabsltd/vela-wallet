@@ -825,6 +825,13 @@ object I18nKeys {
          * "previous transaction pending" refusal, with Try again.
          */
         const val PREVIOUS_PENDING = "componentsUi.signing.confirmBlock.previousPending"
+        /**
+         * PR 3: "Checking what this transaction does…" — the one line under a
+         * confirm that waits for the simulation's verdict
+         * (`ConfirmBlock.SimChecking`; the core's `ConfirmState.key`). Listed
+         * so the smoke test holds it in the corpus.
+         */
+        const val SIM_CHECKING = "componentsUi.signing.confirmBlock.simChecking"
         /** The fee's own reasons (issue #483): the chain's nodes out of reach (`{{chain}}`), or a fault inside the app. */
         const val FEE_REASON_CHAIN_DOWN = "componentsUi.gas.reasonChainDown"
         const val FEE_REASON_INTERNAL = "componentsUi.gas.reasonInternal"

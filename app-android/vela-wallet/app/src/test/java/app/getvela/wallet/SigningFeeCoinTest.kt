@@ -153,7 +153,14 @@ class SigningFeeCoinTest {
             override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> = null to false
             override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult? {
                 simulated.incrementAndGet()
-                return simulate()
+                // A node is waited for, never blocked on. These stubs may hold
+                // their thread (a latch) to stand for a slow one, so they
+                // answer off the caller's: the sheet's controller starts its
+                // simulation in the step that opens the request (PR 3), and a
+                // stub that blocked there would hold `open` itself. (IO, not
+                // the scope's own Default: `withContext` onto the dispatcher
+                // a coroutine already has runs in place.)
+                return kotlinx.coroutines.withContext(Dispatchers.IO) { simulate() }
             }
             override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>) =
                 judge?.invoke(deltas)

@@ -811,6 +811,7 @@ class DappActivityTest {
         is SignOperation.ClearToPost -> SignShellResult.Responded
         is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
         is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
+        is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(op.id, op.round)
     }
 
     private companion object {

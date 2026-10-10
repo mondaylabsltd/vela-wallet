@@ -147,6 +147,7 @@ class BridgeSmokeTest {
                 is SignOperation.ClearToPost -> SignShellResult.Responded
                 is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
                 is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
+                is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(op.id, op.round)
             }
         }
         sign.dispatch(SignEvent.NetworksChanged(listOf(1, 100)), SignEvent.serializer())

@@ -325,6 +325,7 @@ class BrowserTabsAndLayersTest {
                     is SignOperation.ClearToPost -> SignShellResult.Responded
                     is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
                     is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
+                    is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(operation.id, operation.round)
                 }
             },
             escapedFailure = JsonShell.escapedFailure(SignOperation.serializer(), SignShellResult.serializer(), fallback = SignShellResult.Responded) { SignShellResult.Responded },

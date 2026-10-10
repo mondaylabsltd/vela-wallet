@@ -352,7 +352,10 @@ object SigningLive {
         // says so (`first_party`, set in the one place the backup is raised) —
         // never this sheet, from bytes or an origin any page could send.
         val own = sign.request?.first_party == true
-        val sims = simBlocks(sim, ctx)
+        // PR 3: what stands in the verdict's place is the simulation's
+        // outcome as the core's wait for it allows ([verdictShown]).
+        val verdict = verdictShown(sim, sign)
+        val sims = simBlocks(verdict, ctx)
         // Issue #314: on the wallet's own request a simulation that moves
         // nothing only confirms what the wallet itself wrote — a technical
         // fact, folded with the others, not a bordered card weighing as much as
@@ -360,7 +363,7 @@ object SigningLive {
         // not check, a balance that would move) stays on the sheet. "Moves
         // nothing" is the core's line being there (`no_change_key`), and the
         // fact folded is that line.
-        val quietSim = (sim as? SigningController.SimOutcome.Ready)?.noChangeKey?.takeIf { own }?.let { s.t(it) }
+        val quietSim = (verdict as? SigningController.SimOutcome.Ready)?.noChangeKey?.takeIf { own }?.let { s.t(it) }
         // The verdict's place is kept from the first frame, at least the size
         // of the tallest verdict a sheet usually ends on ([verdictRooms]; a
         // taller one is shown whole and the place grows). The sheet is
@@ -374,10 +377,10 @@ object SigningLive {
         val simPlace: List<SigningBlock> = when {
             quietSim != null -> emptyList()
             own && sims.isEmpty() -> emptyList()
-            sim == null -> emptyList()
+            verdict == null -> emptyList()
             // While it is out the place holds a skeleton, said as the
             // corpus's plain "Checking…" (F2: it was blank).
-            else -> listOf(SigningBlock.Held(verdictRooms(ctx), sims.singleOrNull(), waiting = s.t(I18nKeys.SettingsUi.BACKUP_CHECKING)))
+            else -> listOf(heldPlace(sims.singleOrNull(), ctx))
         }
         // Spec 102 D4: a page venue's sheet does not repeat the preview — the
         // page is the authority. What stays is what only Vela can decide
@@ -1222,6 +1225,51 @@ object SigningLive {
             }
         }
         if (message.danger_class == ClearDangerClass.EthSign) add(SigningBlock.Warning(SigningTone.Danger, s.s("ethSignWarning")))
+    }
+
+    /**
+     * What stands in the verdict's place (PR 3, fix C): the simulation's
+     * outcome as this shell holds it ([sim]), read with the core's word on
+     * the wait the confirm keeps for it ([sign]).
+     *
+     * - No simulation ([sim] `null`): nothing, and no place.
+     * - **The core is still waiting** ([SignView.sim_checking]): "checking" —
+     *   the skeleton. Also for the instant between this shell holding the
+     *   answer and the core hearing so (`SimSettled` is on its way): the
+     *   verdict and the confirm that waited for it are both the core's one
+     *   commit, so they turn in the SAME frame — never a verdict standing
+     *   over a confirm that still says "Checking what this transaction
+     *   does…".
+     * - **The wait is over and the simulation is still out** — the core's
+     *   deadline passed ([SignView.sim_waited_out_key]): that sentence, a
+     *   caution, exactly as the could-not-check notice of a node that cannot
+     *   simulate is drawn ([simBlocks]), in the same place.
+     * - Otherwise the outcome itself: a verdict that lands after the deadline
+     *   replaces the caution at once.
+     *
+     * Nothing here shuts or opens the confirm: that is the gate's
+     * ([confirmState]), which reads the same view.
+     */
+    internal fun verdictShown(sim: SigningController.SimOutcome?, sign: SignView): SigningController.SimOutcome? = when {
+        sim == null -> null
+        sign.sim_checking -> SigningController.SimOutcome.Pending
+        sim == SigningController.SimOutcome.Pending ->
+            sign.sim_waited_out_key?.let { key -> SigningController.SimOutcome.Notice(ClearRisk.Caution, key) } ?: sim
+        else -> sim
+    }
+
+    /** The verdict's place, holding [shown] — or, with none yet, its skeleton, said as the corpus's plain "Checking…". */
+    internal fun heldPlace(shown: SigningBlock?, ctx: Context): SigningBlock.Held =
+        SigningBlock.Held(verdictRooms(ctx), shown, waiting = ctx.strings.t(I18nKeys.SettingsUi.BACKUP_CHECKING))
+
+    /**
+     * The verdict's place on a site's request, for [sim] under [sign]'s wait
+     * ([verdictShown]) — what [model] puts on the sheet, for a board that
+     * draws that place over a body of its own. Empty with no simulation.
+     */
+    internal fun verdictPlace(sim: SigningController.SimOutcome?, sign: SignView, ctx: Context): List<SigningBlock> {
+        val verdict = verdictShown(sim, sign) ?: return emptyList()
+        return listOf(heldPlace(simBlocks(verdict, ctx).singleOrNull(), ctx))
     }
 
     /**
