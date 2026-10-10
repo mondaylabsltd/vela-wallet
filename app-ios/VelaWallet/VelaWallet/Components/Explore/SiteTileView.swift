@@ -41,8 +41,14 @@ struct SiteTileView: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            // The whole tile answers, not only what is drawn on it (final
+            // note F9). The shape belongs on the LABEL, as on `SiteRowView`:
+            // a plain button hit-tests its label, and set on the button from
+            // outside the shape changed the tile's accessibility frame and
+            // nothing a finger could feel — the corners beside the round
+            // mark took no tap.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
     }
 }
