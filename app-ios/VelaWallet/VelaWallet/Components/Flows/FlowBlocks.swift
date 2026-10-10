@@ -808,6 +808,13 @@ struct RecipientFieldView: View {
                             Text(verbatim: line)
                                 .monoRole(Typography.monoAddressDetail.scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
+                                // Each half of the address is ONE line. Since
+                                // the scan icon joined the address book
+                                // (issue #471) a whole address's halves were a
+                                // character too wide on a board and each
+                                // dropped its last one onto a line of its own.
+                                .lineLimit(1)
+                                .minimumScaleFactor(WalletGeometry.heroMinScale)
                         }
                     }
                 }
