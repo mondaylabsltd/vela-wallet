@@ -14,7 +14,13 @@
 #      scrolling body: its position is the same with no verdict yet, with
 #      each kind of verdict and with a tall one, and it is always wholly on
 #      screen; when the sheet is taller than the window the body scrolls;
-#   4. a verdict that lands partly outside the body is brought into view.
+#   4. a verdict that lands partly outside the body is brought into view;
+#   5. the confirm WAITS for the verdict (PR 3 fix C), and that costs no
+#      movement either: while the answer is out a line under the confirm says
+#      so, and once an answer is in — or the wait has run out, and the
+#      verdict's place says "couldn't check" — the line keeps its place with
+#      nothing to say, so the confirm stands where it stood. A request
+#      nothing simulates has no such line at all.
 #
 # None of that is arithmetic a unit test can do: it is where gpui puts the
 # boxes. So this opens the drawn send (gallery, cs1) under every simulation
@@ -60,9 +66,10 @@ open() {
       VELA_STATE_DIR="$WORK/$text" VELA_LAYOUT_PROBE="$WORK/$name.txt" "$@" \
       "$BIN" >"$WORK/$name.log" 2>&1 &
     pid=$!
-    # The first frame, whenever a busy machine gets to it.
+    # The first frame, whenever a busy machine gets to it — whole: the
+    # confirm is the last box of the column it reports.
     for _ in $(seq 1 300); do
-      [ -s "$WORK/$name.txt" ] && break
+      grep -q '^signing-confirm ' "$WORK/$name.txt" 2>/dev/null && break
       kill -0 "$pid" 2>/dev/null || break
       sleep 0.1
     done
@@ -104,7 +111,7 @@ outside() {
   ' "$1"
 }
 
-ANSWERS="out nothing send swap caution danger three unverified tall"
+ANSWERS="out nothing send swap caution danger three unverified tall waited"
 
 echo "opening the drawn send under every answer, three ways (${DWELL}s each)"
 n=0
@@ -129,7 +136,13 @@ open short-top largest "$DWELL" VELA_SIM=tall VELA_PANEL_SCROLL=0
 open short-bottom largest "$DWELL" VELA_SIM=tall VELA_PANEL_SCROLL=bottom
 # The pinned answer lands 2.5 s after the window opens
 # (`signing::fixtures::SIM_PIN_LANDS_AFTER`), then the body glides.
-open short-lands largest "$(awk -v dwell="$DWELL" 'BEGIN { print dwell + 3 }')" "VELA_SIM=out>tall"
+LANDS=$(awk -v dwell="$DWELL" 'BEGIN { print dwell + 3 }')
+open short-lands largest "$LANDS" "VELA_SIM=out>tall"
+# The held confirm's three ways out (5.): the verdict lands, the wait runs
+# out with none, and an answer comes after that.
+open held-lands standard "$LANDS" "VELA_SIM=out>send"
+open held-waits standard "$LANDS" "VELA_SIM=out>waited"
+open late-answer standard "$LANDS" "VELA_SIM=waited>send"
 wait
 
 for died in "$WORK"/*.died; do
@@ -142,10 +155,15 @@ if grep -l "camera: opening the default camera" "$WORK"/*.log >/dev/null 2>&1; t
   fail "a camera was opened"
 fi
 
-printf '\n%-13s %-11s %9s %8s %9s %10s %13s\n' way answer "confirm y" bottom "place h" "content h" "scrolled/max"
+printf '\n%-13s %-11s %9s %8s %9s %10s %13s %7s\n' way answer "confirm y" bottom "place h" "content h" "scrolled/max" line
 for way in design tall-window largest-text; do
   reference=$(value "$WORK/$way-out.txt" signing-confirm 3)
   least=$(value "$WORK/$way-out.txt" verdict-place 5)
+  # The held confirm's line, as it is said while the answer is out.
+  line_y=$(value "$WORK/$way-out.txt" signing-note 3)
+  line_h=$(value "$WORK/$way-out.txt" signing-note 5)
+  reference_foot=$(value "$WORK/$way-out.txt" panel-foot 3)
+  reference_end=$(awk -v y="$reference_foot" -v h="$(value "$WORK/$way-out.txt" panel-foot 5)" 'BEGIN { print y + h }')
   for answer in none $ANSWERS; do
     probe="$WORK/$way-$answer.txt"
     if [ ! -s "$probe" ]; then
@@ -161,16 +179,45 @@ for way in design tall-window largest-text; do
     scrolled=$(value "$probe" panel-body 2)
     can=$(value "$probe" panel-body 3)
     bottom=$(awk -v y="$y" -v h="$h" 'BEGIN { print y + h }')
-    printf '%-13s %-11s %9s %8s %9s %10s %13s\n' "$way" "$answer" "$y" "$bottom" "$place" "$content" "$scrolled/$can"
+    said=$(value "$probe" signing-note 3)
+    kept=$(value "$probe" signing-note-held 3)
+    line=none
+    [ "$kept" = none ] || line=kept
+    [ "$said" = none ] || line=said
+    printf '%-13s %-11s %9s %8s %9s %10s %13s %7s\n' "$way" "$answer" "$y" "$bottom" "$place" "$content" "$scrolled/$can" "$line"
 
-    # 3. One position for the confirm, whatever stands above it…
-    same "$y" "$reference" || fail "$way/$answer: the confirm stands at $y, not at $reference"
     # …wholly inside the column's foot, which ends where the window does.
     column_end=$(awk -v y="$foot_y" -v h="$foot_h" 'BEGIN { print y + h }')
     if more "$bottom" "$column_end"; then
       fail "$way/$answer: the confirm ends at $bottom, under the column's end $column_end"
     fi
-    if [ "$answer" = none ]; then continue; fi
+    same "$column_end" "$reference_end" || fail "$way/$answer: the foot ends at $column_end, not at $reference_end"
+    if [ "$answer" = none ]; then
+      # 5. A request nothing simulates waits for no verdict: no line under
+      # its confirm, said or kept. Its foot is shorter by exactly that, and
+      # holds the confirm the same way.
+      [ "$line" = none ] || fail "$way/none: a line under a confirm that waits for no verdict"
+      [ "$line_y" != none ] || fail "$way/out: the held confirm says no line (this case measures nothing)"
+      same "$(awk -v y="$y" -v f="$foot_y" 'BEGIN { print y - f }')" \
+        "$(awk -v y="$reference" -v f="$reference_foot" 'BEGIN { print y - f }')" ||
+        fail "$way/none: the confirm does not stand in its foot as it does under an answer"
+      more "$y" "$reference" || fail "$way/none: the held confirm's line takes no room (this case measures nothing)"
+      continue
+    fi
+
+    # 3. One position for the confirm, whatever stands above it…
+    same "$y" "$reference" || fail "$way/$answer: the confirm stands at $y, not at $reference"
+    # 5. …and whatever the line under it says: said while the answer is
+    # out, kept — in the same box, with nothing to say — once one is in or
+    # the wait has run out.
+    if [ "$answer" = out ]; then
+      [ "$line" = said ] || fail "$way/out: the held confirm's line is not said"
+    else
+      [ "$line" = kept ] || fail "$way/$answer: the confirm's line is $line, not kept in its place"
+      same "$kept" "$line_y" || fail "$way/$answer: the line's place is at $kept, not at $line_y"
+      same "$(value "$probe" signing-note-held 5)" "$line_h" ||
+        fail "$way/$answer: the line's place is not as tall as the line ($line_h)"
+    fi
 
     # 1. Never less than the least room…
     if more "$least" "$place"; then
@@ -244,8 +291,52 @@ hidden=$(outside "$WORK/short-lands.txt" panel-body)
 printf '%-13s %-11s %9s -> %s (scrolled %s -> %s)\n' largest-text "out>tall" "$before" "$after" \
   "$(value "$WORK/short-lands.early" panel-body 2)" "$(value "$WORK/short-lands.txt" panel-body 2)"
 
-# The design size is the confirm's one position at either text size.
-same "$(value "$WORK/design-out.txt" signing-confirm 3)" "$reference" ||
+# 5. The wait run out: the verdict's place says "couldn't check" as the
+# node that could not check says it — the same block, so the same box.
+for way in design tall-window largest-text; do
+  same "$(value "$WORK/$way-waited.txt" verdict-content 5)" "$(value "$WORK/$way-caution.txt" verdict-content 5)" ||
+    fail "$way/waited: the could-not-check sentence is not drawn as the notice is"
+  [ "$(value "$WORK/$way-waited.txt" verdict-note 5)" = none ] ||
+    fail "$way/waited: \"Checking…\" still stands in the verdict's place"
+done
+
+# 5. The held confirm's three ways out, each measured before and after:
+# what the first frame held, what stands there afterwards, and a confirm
+# that did not move.
+changed() { # <name> <the mark that must be absent before> <and present after>
+  local name="$1" early="$WORK/$1.early" late="$WORK/$1.txt"
+  if [ ! -s "$early" ] || [ ! -s "$late" ]; then
+    fail "$name: the layout said nothing"
+    return
+  fi
+  local before after
+  before=$(value "$early" signing-confirm 3)
+  after=$(value "$late" signing-confirm 3)
+  [ "$(value "$early" "$3" 3)" = none ] || fail "$name: the first frame already had $3 (this case measures nothing)"
+  [ "$(value "$early" "$2" 3)" != none ] || fail "$name: the first frame had no $2"
+  [ "$(value "$late" "$3" 3)" != none ] || fail "$name: $3 never came"
+  same "$before" "$after" || fail "$name: the confirm moved from $before to $after"
+  same "$before" "$(value "$WORK/design-out.txt" signing-confirm 3)" ||
+    fail "$name: the confirm stands at $before, not where the design size puts it"
+  same "$(value "$early" verdict-place 5)" "$(value "$late" verdict-place 5)" ||
+    fail "$name: the verdict's place changed height"
+  printf '%-13s %-11s %9s -> %s\n' design "$name" "$before" "$after"
+}
+# The verdict lands: the line said, then kept; the card's row in the place.
+changed held-lands signing-note signing-note-held
+[ "$(value "$WORK/held-lands.txt" verdict-row-0 5)" != none ] || fail "held-lands: the verdict never landed"
+# The wait runs out: the line said, then kept; the caution in the place.
+changed held-waits signing-note signing-note-held
+same "$(value "$WORK/held-waits.txt" verdict-content 5)" "$(value "$WORK/design-caution.txt" verdict-content 5)" ||
+  fail "held-waits: the place does not hold the could-not-check sentence"
+# An answer after that: the line kept throughout; the card replaces the caution.
+changed late-answer signing-note-held verdict-row-0
+[ "$(value "$WORK/late-answer.early" signing-note 3)" = none ] ||
+  fail "late-answer: the confirm was held after its wait had run out"
+
+# The design size is the confirm's one position at either text size — with
+# no line under it: a line is as tall as its text, and the foot grows upward.
+same "$(value "$WORK/design-none.txt" signing-confirm 3)" "$(value "$WORK/largest-text-none.txt" signing-confirm 3)" ||
   fail "the confirm's position depends on the text size"
 
 if [ "$failed" -gt 0 ]; then
@@ -254,4 +345,4 @@ if [ "$failed" -gt 0 ]; then
   exit 1
 fi
 echo
-echo "ok: the confirm has one position per window, every verdict is whole, and a landed verdict is in view"
+echo "ok: the confirm has one position per window — held, released and waited out — every verdict is whole, and a landed verdict is in view"

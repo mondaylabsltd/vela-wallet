@@ -17907,6 +17907,7 @@ impl WalletPage {
         // `VELA_SIM`: the verdict's place on the drawn request, holding the
         // answer the pin names — where the live sheet puts it, after what
         // the request says of itself.
+        let mut pinned_note: Option<(SharedString, bool)> = None;
         if self.gallery
             && self.no_signing_host()
             && let Some(pin) = if self.sim_pin_landed {
@@ -17918,6 +17919,29 @@ impl WalletPage {
             model
                 .blocks
                 .extend(signing_fixtures::sim_pin_block(pin, &self.signing));
+            // …and the confirm under it, as the core's gate holds it (PR 3
+            // fix C): shut over the gate's own line while the answer is
+            // out, open once it is in or the wait has run out. The line
+            // keeps its place when it has no more to say, as the live
+            // sheet's does (`HeldLines::note`) — so the confirm stands where
+            // it stood. A drawn request that holds its confirm for a reason
+            // of its own keeps that, as the gate would say it first; and the
+            // hand-off draws no verdict, so nothing is waited for there.
+            if model.confirm_enabled
+                && !model.confirm_label.is_empty()
+                && crate::gallery::handoff_pin().is_none()
+                && let Some(gate) = signing_fixtures::sim_pin_confirm(pin)
+            {
+                model.confirm_enabled = gate.enabled;
+                let key = gate
+                    .key
+                    .as_deref()
+                    .unwrap_or(vela_core::app::sign_confirm::SIM_CHECKING_KEY);
+                pinned_note = Some((
+                    SharedString::from(self.loc.t(key).to_string()),
+                    gate.key.is_some(),
+                ));
+            }
         }
         // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the
         // operation (PR 2 note 9), drawn from the real core's view by the
@@ -17963,8 +17987,9 @@ impl WalletPage {
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
         let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
         // The confirm's note line, held for a live request (`HeldLines::note`):
-        // its words, and whether they are said now.
-        let mut held_note: Option<Option<(SharedString, bool)>> = None;
+        // its words, and whether they are said now. A pinned answer's
+        // (`VELA_SIM`) is held the same way.
+        let mut held_note: Option<Option<(SharedString, bool)>> = pinned_note.map(Some);
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
@@ -18028,11 +18053,15 @@ impl WalletPage {
                 // final note F2), so the answer landing — a few hundred
                 // milliseconds after the sheet opens — moves neither the fee
                 // row nor the confirm under a pointer on its way there.
+                // PR 3 fix C: when the confirm's wait for it has run out,
+                // the core names the sentence that stands there meanwhile
+                // (`sim_waited_out_key`) — in the same place.
                 model.blocks.extend(signing_live::verdict_block(
-                    host.sim_stage,
-                    &host.sim,
-                    host.sim_notice.as_ref(),
-                    host.sim_no_change.as_deref(),
+                    host.sim.stage,
+                    &host.sim.judgments,
+                    host.sim.notice.as_ref(),
+                    host.sim.no_change.as_deref(),
+                    host.view.sim_waited_out_key.as_deref(),
                     host.chain_id,
                     &self.signing,
                 ));
@@ -18764,6 +18793,7 @@ impl WalletPage {
             })
             .map(|(note, said)| {
                 div()
+                    .relative()
                     .text_size(theme::text_row_sub())
                     .text_color(if said {
                         theme.fg_subtle
@@ -18771,6 +18801,13 @@ impl WalletPage {
                         gpui::transparent_black()
                     })
                     .child(crate::ui::prose(note))
+                    // For a measurement pass: the line's box, under the name
+                    // that says whether it is said or only keeping its place.
+                    .children(crate::dev_probe::mark(if said {
+                        "signing-note"
+                    } else {
+                        "signing-note-held"
+                    }))
             });
         let foot = (action.is_some() || note.is_some()).then(|| {
             div()

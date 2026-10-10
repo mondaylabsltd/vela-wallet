@@ -32,6 +32,19 @@ use serde_json::json;
 use vela_core::app::fee_policy::FeeCall;
 use vela_core::app::sim_outcome::{self, SimOutcome, SimReply};
 
+/// Whether there is anything to ask the chain about `calls`: at least one
+/// call, and a first call that goes somewhere (a call with no `to` is a
+/// deployment, which this simulation does not run).
+///
+/// Asked BEFORE a simulation is sent (PR 3 fix C): the signing column holds
+/// its confirm for a verdict only when a simulation really goes out, so a
+/// request that cannot be asked about says "couldn't check" from its first
+/// frame and waits for nothing.
+#[must_use]
+pub fn askable(calls: &[FeeCall]) -> bool {
+    calls.first().is_some_and(|first| !first.to.is_empty())
+}
+
 /// Simulate `calls` as `from`, and what the answer means (spec 082 RG6,
 /// L-D5): the pool's reply normalised into the core's [`SimReply`] and judged
 /// by `sim_outcome::classify` — the deltas when every call ran, a revert with
@@ -44,10 +57,7 @@ use vela_core::app::sim_outcome::{self, SimOutcome, SimReply};
 /// draws "couldn't check", never "nothing moves".
 #[must_use]
 pub fn simulate(from: &str, calls: &[FeeCall], chain_id: u32) -> SimOutcome {
-    let Some(first) = calls.first() else {
-        return SimOutcome::NotOffered;
-    };
-    if first.to.is_empty() {
+    if !askable(calls) {
         return SimOutcome::NotOffered;
     }
     let payload = json!({
@@ -188,16 +198,25 @@ mod tests {
         assert!(sim_outcome::notice(&SimOutcome::Deltas { deltas }).is_none());
     }
 
-    /// Nothing to simulate is a question that could not be asked.
+    /// Nothing to simulate is a question that could not be asked — known
+    /// before anything is sent (`askable`), and answered without a node.
     #[test]
     fn nothing_to_simulate_could_not_be_checked() {
+        assert!(!askable(&[]));
         assert_eq!(simulate(ME, &[], 100), SimOutcome::NotOffered);
         let deploy = FeeCall {
             to: String::new(),
             value: "0".to_owned(),
             data: "0x60".to_owned(),
         };
+        assert!(!askable(std::slice::from_ref(&deploy)));
         assert_eq!(simulate(ME, &[deploy], 100), SimOutcome::NotOffered);
+        let send = FeeCall {
+            to: "0x000000000000000000000000000000000000dEaD".to_owned(),
+            value: "1".to_owned(),
+            data: "0x".to_owned(),
+        };
+        assert!(askable(&[send]));
     }
 
     /// No copy of the delta parser is left on the desktop: the core's

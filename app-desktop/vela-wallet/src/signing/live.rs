@@ -911,13 +911,21 @@ pub enum SimStage {
 /// - **landed, with rows** — [`sim_blocks`]: the balance card;
 /// - **landed, no row and no key** — a move nobody can write, or a judgment
 ///   that never came. That is not "nothing moves": the core's could-not-check
-///   caution, never an empty card.
+///   caution, never an empty card;
+/// - **out, and the wait for it has run out** (PR 3 fix C, `waited_out_key`:
+///   `SignView.sim_waited_out_key`) — the confirm waited for this verdict
+///   and the core's deadline passed without one. The core names the sentence
+///   (`sim_outcome::KEY_UNAVAILABLE`) and it stands here in place of
+///   "Checking…", as the caution it is when a node could not check: the same
+///   block, the same tone. A verdict that still lands clears the key and is
+///   drawn as any other — in the same place, so nothing moves either time.
 #[must_use]
 pub fn verdict_block(
     stage: SimStage,
     judgments: &[vela_core::app::token_trust::TrustSimJudgment],
     notice: Option<&vela_core::app::sim_outcome::SimNotice>,
     no_change_key: Option<&str>,
+    waited_out_key: Option<&str>,
     chain_id: u32,
     s: &SigningStrings,
 ) -> Option<Block> {
@@ -929,6 +937,9 @@ pub fn verdict_block(
     };
     let inner = match stage {
         SimStage::NotAsked => return None,
+        SimStage::Out if waited_out_key.is_some() => {
+            vec![sim_notice_block(&could_not_check(), s)]
+        }
         SimStage::Out => vec![quiet(&s.sim_checking)],
         SimStage::Landed => {
             if let Some(notice) = notice {
@@ -950,7 +961,9 @@ pub fn verdict_block(
     };
     Some(Block::Verdict {
         inner,
-        landed: stage == SimStage::Landed,
+        // Something to read is in the place: an answer — or the sentence
+        // that says none came in time, which is why the confirm opened.
+        landed: stage == SimStage::Landed || waited_out_key.is_some(),
     })
 }
 
@@ -1036,7 +1049,7 @@ mod verdict_place_tests {
             assert_eq!(landed, pin != SimPin::Out, "{name}");
         }
         // A request nothing simulates — a message, typed data — keeps none.
-        assert!(verdict_block(SimStage::NotAsked, &[], None, None, 1, &s).is_none());
+        assert!(verdict_block(SimStage::NotAsked, &[], None, None, None, 1, &s).is_none());
         assert_eq!(SimStage::default(), SimStage::NotAsked);
     }
 
@@ -1076,6 +1089,9 @@ mod verdict_place_tests {
         assert_eq!(said(SimPin::Nothing), card(0, Some("No asset changes")));
         let (_, _, caution) = said(SimPin::Caution);
         assert_eq!(caution, Some(s.warn_sim_unavailable.to_string()));
+        // PR 3 fix C: no answer inside the core's deadline says the same
+        // sentence there.
+        assert_eq!(said(SimPin::Waited), said(SimPin::Caution));
         let (_, _, danger) = said(SimPin::Danger);
         assert!(
             danger.is_some_and(|line| line.starts_with("Expected to fail: ")),
@@ -1105,7 +1121,7 @@ mod verdict_place_tests {
         let core_key = |judgments: &[J]| no_change_key_of(judgments);
         let landed = |judgments: &[J], key: Option<&str>| {
             let Some(Block::Verdict { inner, .. }) =
-                verdict_block(SimStage::Landed, judgments, None, key, 1, &s)
+                verdict_block(SimStage::Landed, judgments, None, key, None, 1, &s)
             else {
                 unreachable!("a place");
             };
@@ -1164,6 +1180,7 @@ mod verdict_place_tests {
             &[],
             revert.as_ref(),
             Some(KEY_NO_CHANGE),
+            None,
             1,
             &s,
         ) else {
@@ -1186,6 +1203,76 @@ mod verdict_place_tests {
         assert_eq!(
             crate::executor::token_trust::Judged::default().no_change_key,
             None
+        );
+    }
+
+    /// PR 3 fix C: the place while the confirm's wait has run out. The
+    /// simulation is still out — no answer of its own — and the core names
+    /// the sentence that stands there meanwhile (`sim_waited_out_key`): the
+    /// could-not-check caution, the very block a node that could not check
+    /// draws, in place of "Checking…". One block in the one place, so it is
+    /// no taller than the room the sheet already kept. The key says nothing
+    /// once an answer is in: the answer is drawn.
+    #[test]
+    fn a_waited_out_verdict_says_could_not_check_in_the_same_place() {
+        use vela_core::app::sim_outcome::{KEY_UNAVAILABLE, SimOutcome, notice};
+        let s = strings();
+        let place = |stage, notice: Option<&vela_core::app::sim_outcome::SimNotice>, key| {
+            let Some(Block::Verdict { inner, landed }) =
+                verdict_block(stage, &[], notice, None, key, 1, &s)
+            else {
+                unreachable!("a place");
+            };
+            assert_eq!(inner.len(), 1);
+            (inner.into_iter().next(), landed)
+        };
+
+        // Out, and still waited for: "Checking…", nothing to bring into view.
+        let (checking, landed) = place(SimStage::Out, None, None);
+        assert!(matches!(
+            checking,
+            Some(Block::Balances { rows, note: Some(note), .. })
+                if rows.is_empty() && note == s.sim_checking
+        ));
+        assert!(!landed);
+
+        // Out, and waited out: the caution — the same block and tone as a
+        // node that answered "not offered".
+        let (waited, landed) = place(SimStage::Out, None, Some(KEY_UNAVAILABLE));
+        let not_offered = notice(&SimOutcome::NotOffered);
+        let (offered, _) = place(SimStage::Landed, not_offered.as_ref(), None);
+        let said = |block: &Option<Block>| match block {
+            Some(Block::Warning { tone, text }) => Some((*tone, text.clone())),
+            _ => None,
+        };
+        assert_eq!(
+            said(&waited),
+            Some((Tone::Caution, s.warn_sim_unavailable.clone()))
+        );
+        assert_eq!(said(&waited), said(&offered));
+        assert!(landed, "it is something to read: brought into view");
+        // The sentence is the one the core's key names.
+        assert_eq!(
+            s.warn_sim_unavailable,
+            crate::loc::Loc::for_language("en").t(KEY_UNAVAILABLE)
+        );
+
+        // An answer that is in is drawn, whatever the key says.
+        let revert = notice(&SimOutcome::Reverts { reason: None });
+        let (danger, _) = place(SimStage::Landed, revert.as_ref(), Some(KEY_UNAVAILABLE));
+        assert_eq!(said(&danger).map(|(tone, _)| tone), Some(Tone::Danger));
+        // And a request nothing simulates keeps no place, key or no key.
+        assert!(
+            verdict_block(
+                SimStage::NotAsked,
+                &[],
+                None,
+                None,
+                Some(KEY_UNAVAILABLE),
+                1,
+                &s
+            )
+            .is_none()
         );
     }
 
@@ -1341,7 +1428,7 @@ mod sim_block_tests {
         // Everything the verdict's place draws for these judgments, as text.
         let drawn = |judgments: &[J]| {
             let Some(Block::Verdict { inner, .. }) =
-                verdict_block(SimStage::Landed, judgments, None, None, 100, &s)
+                verdict_block(SimStage::Landed, judgments, None, None, None, 100, &s)
             else {
                 unreachable!("a place");
             };
