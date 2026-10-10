@@ -415,8 +415,11 @@ pub enum AddTokenResult {
         mark: TokenMark,
         name: SharedString,
         chip: StatusChip,
-        /// Under the head: why an incompatible chain is so, and what fixes it.
-        link: Option<SharedString>,
+        /// Under the head: why a refused chain is so, in the core's sentence.
+        note: Option<SharedString>,
+        /// "Open Chain Setup Tool" and where it goes — only where the core
+        /// names somewhere to go (contracts that can be deployed).
+        setup: Option<(SharedString, String)>,
         facts: Vec<FactRow>,
     },
 }
@@ -618,6 +621,10 @@ pub struct SendNotice {
     /// "Report this", on the two relay stops while the core has a report
     /// for them (issue 466): it opens the in-app reporter seeded with it.
     pub report: Option<SharedString>,
+    /// A button that opens a page, and its label — today only a locked
+    /// request's network refused for contracts that can be deployed: "Open
+    /// Chain Setup Tool", on that chain (the core's `setup_url`).
+    pub link: Option<(SharedString, String)>,
     /// Red rather than amber: the person cannot proceed as things stand.
     pub error: bool,
     /// Neither red nor amber — the calm tone: nothing went wrong and
@@ -1333,7 +1340,8 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
                     text: s.compatible.clone(),
                     tone: StatusTone::Success,
                 },
-                link: None,
+                note: None,
+                setup: None,
                 facts: vec![
                     fact(&s.label_chain_id, avax.chain_id),
                     fact(&s.label_native_token, avax.code),

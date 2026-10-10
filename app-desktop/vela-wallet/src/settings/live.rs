@@ -808,6 +808,17 @@ pub fn pinned_refusal() -> Option<vela_core::app::network_admin::NetBlocker> {
     serde_json::from_value(serde_json::Value::String(want)).ok()
 }
 
+/// `VELA_NET_STOP=already_added|not_found|no_rpc|check_failed|no_p256|
+/// missing_contracts` (developer builds): Settings' add-network dialog on a
+/// wizard that STOPPED that way (`fixtures::stopped_wizard`) — the last two
+/// as the path with no confirm step leaves them, the check kept beside the
+/// error. Each stop has its own sentence, and none can be reached on demand.
+/// The same env-pin family as `VELA_NET_REFUSAL`.
+#[must_use]
+pub fn pinned_stop() -> Option<crate::settings::fixtures::WizardStopPin> {
+    crate::settings::fixtures::WizardStopPin::named(&crate::dev_env::var!("VELA_NET_STOP")?)
+}
+
 /// The wizard's compatibility rows, from what the probe found.
 ///
 /// **An unreachable chain is not an incompatible one** — the core's invariant
@@ -997,59 +1008,59 @@ pub fn override_hint(row: &NetNetworkRow, s: &SettingsStrings) -> SharedString {
     ))
 }
 
-/// The one line the add-network dialog owes the person: what the wizard is
-/// doing, or why it stopped.
-///
-/// `Progress` is a wait on something outside the app (the chain index, the RPC
-/// probes) and draws a spinner; `Refusal` is a verdict and draws in the error
-/// tint. `Idle`, `Suggested` and `Checked` return **nothing**, because in those
-/// three the dialog already speaks — the suggestion list, the check list, the
-/// CTA.
+/// Why the add-network wizard stopped, as the core says it — for every
+/// place a network is added (Settings' dialog, the add-token panel's network
+/// tab, a payment request's "Add this network").
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum WizardNotice {
-    Progress(SharedString),
-    Refusal(SharedString),
+pub struct WizardStop {
+    /// The sentence: `t(NetWizardView::error_key)`.
+    pub text: SharedString,
+    /// Where "Open Chain Setup Tool" goes — only for a refusal the check
+    /// explained as contracts that can be deployed
+    /// (`NetCompatibility::setup_url`). `None` = the button is not drawn.
+    pub setup_url: Option<String>,
 }
 
-/// What the core decided the wizard is, in words.
+/// The wizard's stop, or `None` while it has not stopped.
 ///
-/// Every one of these already existed in the corpus: the scan path and the
-/// add-token screen refuse in the same four ways (`NetWizardErrorKind` serves
-/// both callers — the core's invariant ①), so this adds no new key. The
-/// alternative — a silent dialog — is the phase 6 bug in another screen:
-/// **the core computed a refusal and the screen kept it to itself.**
+/// The core names the sentence (`error_key`) and this draws it. It used to
+/// map `error.type` to words itself — and for a chain that lists no RPC it
+/// borrowed the home's "Can't reach {{name}} right now", which is a
+/// different thing: nothing was unreachable, there was nothing to ask.
+///
+/// A refusal reached without the confirm step (a payment request's "Add this
+/// network") now keeps its check beside the error (PR 3 notes 5 and 10), so
+/// the reason and the Chain Setup button show there as they do in the
+/// wizard: `error_key` IS the check's own reason, and `setup_url` is read
+/// from the same check. An inconclusive check is never a refusal: its words
+/// are "unable to verify", with no reason and no link.
 #[must_use]
-pub fn wizard_notice(view: &NetWizardView, s: &SettingsStrings) -> Option<WizardNotice> {
-    match view.phase {
-        NetWizardPhase::Idle | NetWizardPhase::Suggested | NetWizardPhase::Checked => None,
-        NetWizardPhase::Searching => Some(WizardNotice::Progress(s.wizard_searching.clone())),
-        // Resolving the chain and probing its endpoints are one wait as far as
-        // the person is concerned; the core keeps them apart for its own
-        // generation rules, not for the screen.
-        NetWizardPhase::Resolving | NetWizardPhase::Checking => {
-            Some(WizardNotice::Progress(s.wizard_checking.clone()))
-        }
-        NetWizardPhase::Error => view.error.as_ref().map(|kind| {
-            WizardNotice::Refusal(match kind {
-                NetWizardErrorKind::AlreadyAdded { .. } => s.wizard_already_added.clone(),
-                NetWizardErrorKind::NotFound { .. } => s.wizard_not_found.clone(),
-                // The chain resolved — its name is the honest subject of the
-                // sentence. The query is the fallback for a state the core
-                // does not produce today (`chain_info` is set before this
-                // error is raised), never a guess dressed as a chain name.
-                NetWizardErrorKind::NoRpcEndpoint => {
-                    let name = view
-                        .chain_info
-                        .as_ref()
-                        .map_or_else(|| view.query.clone(), |info| info.name.clone());
-                    SharedString::from(crate::wallet::fill(&s.wizard_no_rpc, "name", &name))
-                }
-                NetWizardErrorKind::NotCompatible { .. } => s.wizard_incompatible.clone(),
-                // Not a verdict: the probes never reached the chain (spec 038 #E1).
-                NetWizardErrorKind::CheckFailed { .. } => s.wizard_unable_to_verify.clone(),
-            })
-        }),
+pub fn wizard_stop(view: &NetWizardView, loc: &crate::loc::Loc) -> Option<WizardStop> {
+    if view.phase != NetWizardPhase::Error {
+        return None;
     }
+    let key = view.error_key.as_deref()?;
+    let refused = matches!(view.error, Some(NetWizardErrorKind::NotCompatible { .. }));
+    Some(WizardStop {
+        text: loc.t(key),
+        setup_url: view
+            .compat
+            .as_ref()
+            .filter(|_| refused)
+            .and_then(|compat| compat.setup_url.clone()),
+    })
+}
+
+/// Is an RPC of the person's own the way on from this stop? When the chain
+/// lists no endpoint ("Enter one, then re-check") and when the check could
+/// not reach a verdict — the two stops the dialog draws its RPC field under.
+#[must_use]
+pub fn wizard_stop_wants_rpc(view: &NetWizardView) -> bool {
+    view.phase == NetWizardPhase::Error
+        && matches!(
+            view.error,
+            Some(NetWizardErrorKind::NoRpcEndpoint | NetWizardErrorKind::CheckFailed { .. })
+        )
 }
 
 #[cfg(test)]
@@ -1064,6 +1075,10 @@ mod wizard_tests {
 
     fn strings() -> SettingsStrings {
         SettingsStrings::resolve(&crate::loc::Loc::from_env())
+    }
+
+    fn loc() -> crate::loc::Loc {
+        crate::loc::Loc::for_language("en")
     }
 
     /// A core whose ledger is in.
@@ -1090,44 +1105,22 @@ mod wizard_tests {
         host
     }
 
-    /// Nothing has happened yet, so there is nothing to say. A notice here
-    /// would be noise in an empty dialog.
+    /// Nothing has happened yet, so there is nothing to say; and a wizard
+    /// that is searching or checking has not stopped.
     #[test]
-    fn an_untouched_wizard_says_nothing() {
-        let host = loaded_host();
-        assert_eq!(wizard_notice(&host.view().wizard, &strings()), None);
-    }
-
-    /// Typing arms a search that runs on a debounce and then a network call.
-    /// Until phase 6b's rule reached this dialog it drew a still list and no
-    /// word about the query being worked on.
-    #[test]
-    fn a_running_search_says_it_is_running() {
+    fn a_wizard_that_has_not_stopped_says_no_stop() {
         let mut host = loaded_host();
+        assert_eq!(wizard_stop(&host.view().wizard, &loc()), None);
         host.dispatch(NetEvent::SearchInput {
             query: "gnosis".to_owned(),
         });
-        let s = strings();
-        assert_eq!(
-            wizard_notice(&host.view().wizard, &s),
-            Some(WizardNotice::Progress(s.wizard_searching.clone()))
-        );
-    }
-
-    /// Picking a chain starts a resolve and then a probe race — seconds of
-    /// waiting, previously spent staring at an unchanged dialog.
-    #[test]
-    fn a_chain_being_checked_says_it_is_being_checked() {
-        let mut host = loaded_host();
+        assert_eq!(wizard_stop(&host.view().wizard, &loc()), None);
         host.dispatch(NetEvent::ChainSelected {
             chain_id: 7_777_777,
             keep_custom_rpc: false,
         });
-        let s = strings();
-        assert_eq!(
-            wizard_notice(&host.view().wizard, &s),
-            Some(WizardNotice::Progress(s.wizard_checking.clone()))
-        );
+        assert_eq!(wizard_stop(&host.view().wizard, &loc()), None);
+        assert!(!wizard_stop_wants_rpc(&host.view().wizard));
     }
 
     /// The refusal the person is most likely to meet: they pick a chain the
@@ -1141,11 +1134,12 @@ mod wizard_tests {
             chain_id: 1,
             keep_custom_rpc: false,
         });
-        let s = strings();
+        let stop = wizard_stop(&host.view().wizard, &loc());
         assert_eq!(
-            wizard_notice(&host.view().wizard, &s),
-            Some(WizardNotice::Refusal(s.wizard_already_added.clone()))
+            stop.map(|stop| stop.text),
+            Some("This network is already added".into())
         );
+        assert!(!wizard_stop_wants_rpc(&host.view().wizard));
     }
 
     /// The registry has no such chain.
@@ -1167,10 +1161,10 @@ mod wizard_tests {
                 );
             }
         }
-        let s = strings();
+        let stop = wizard_stop(&host.view().wizard, &loc());
         assert_eq!(
-            wizard_notice(&host.view().wizard, &s),
-            Some(WizardNotice::Refusal(s.wizard_not_found.clone()))
+            stop.map(|stop| stop.text),
+            Some("Chain info not found".into())
         );
     }
 
@@ -1240,11 +1234,12 @@ mod wizard_tests {
         assert_eq!(host.view().last_added_chain_id, None);
     }
 
-    /// A chain that resolved but lists no endpoint. The sentence names the
-    /// chain, because by now the wizard knows which one it is — and the custom
-    /// RPC field sitting under the notice is the way out.
+    /// A chain that resolved but lists no endpoint says THAT, in the core's
+    /// sentence — it used to borrow the home's "Can't reach {{name}} right
+    /// now", and nothing had been unreachable: there was nothing to ask. The
+    /// sentence says "Enter one", so the dialog draws its RPC field under it.
     #[test]
-    fn a_chain_with_no_endpoint_is_named_in_the_refusal() {
+    fn a_chain_with_no_endpoint_says_so_and_asks_for_one() {
         let mut host = loaded_host();
         let pending = host.dispatch(NetEvent::ChainSelected {
             chain_id: 7_777_777,
@@ -1271,14 +1266,108 @@ mod wizard_tests {
                 );
             }
         }
-        let Some(WizardNotice::Refusal(body)) = wizard_notice(&host.view().wizard, &strings())
-        else {
-            unreachable!("a chain with no endpoint is refused")
-        };
-        assert!(
-            body.contains("Zora"),
-            "the refusal names the chain it refused: {body}"
+        let wizard = host.view().wizard;
+        let stop = wizard_stop(&wizard, &loc()).unwrap_or_else(|| unreachable!("it stopped"));
+        assert_eq!(
+            stop.text.as_ref(),
+            "No RPC endpoint is listed for this network. Enter one, then re-check."
         );
+        assert_eq!(stop.setup_url, None);
+        assert!(
+            wizard_stop_wants_rpc(&wizard),
+            "\"Enter one\" needs a field"
+        );
+    }
+
+    /// Every stop is said in the core's sentence for it, and no two of them
+    /// read alike: a network already here, one nobody knows, one with no
+    /// endpoint, one that could not be checked and one refused for each of
+    /// the two reasons.
+    #[test]
+    fn every_stop_has_its_own_sentence() {
+        use crate::settings::fixtures::{WizardStopPin, stopped_wizard};
+        let loc = loc();
+        let mut said: Vec<SharedString> = Vec::new();
+        for (pin, name) in WizardStopPin::ALL {
+            let wizard = stopped_wizard(pin);
+            let stop = wizard_stop(&wizard, &loc).unwrap_or_else(|| unreachable!("{name} stops"));
+            assert_ne!(
+                stop.text.as_ref(),
+                wizard.error_key.as_deref().unwrap_or_default(),
+                "{name} echoed its key"
+            );
+            assert!(!said.contains(&stop.text), "{name} reads like another");
+            said.push(stop.text);
+            // The pin's own name finds it again.
+            assert_eq!(WizardStopPin::named(name), Some(pin));
+        }
+        assert_eq!(WizardStopPin::named("something_else"), None);
+    }
+
+    /// A refusal on the path with no confirm step says WHY, from the check
+    /// kept beside it: no P-256 verifier (nothing can be deployed — no
+    /// button), or missing contracts (Chain Setup, opened on that chain).
+    #[test]
+    fn a_refusal_without_a_confirm_step_says_why() {
+        use crate::settings::fixtures::{WizardStopPin, stopped_wizard};
+        use vela_core::app::network_admin::{NetBlocker, chain_setup_url};
+        let loc = loc();
+        let chain_id = crate::settings::fixtures::REFUSED_CHAIN_ID;
+        let refused = |blocker| stopped_wizard(WizardStopPin::Refused(blocker));
+
+        let no_p256 = wizard_stop(&refused(NetBlocker::NoP256), &loc)
+            .unwrap_or_else(|| unreachable!("refused"));
+        assert!(no_p256.text.contains("P-256"), "{}", no_p256.text);
+        assert_eq!(no_p256.setup_url, None, "nothing to deploy");
+
+        let missing = wizard_stop(&refused(NetBlocker::MissingContracts), &loc)
+            .unwrap_or_else(|| unreachable!("refused"));
+        assert!(missing.text.contains("Chain Setup"), "{}", missing.text);
+        assert_eq!(missing.setup_url, Some(chain_setup_url(chain_id)));
+        assert_ne!(no_p256.text, missing.text);
+
+        // The same two sentences the wizard's confirm step draws.
+        for (blocker, stop) in [
+            (NetBlocker::NoP256, &no_p256),
+            (NetBlocker::MissingContracts, &missing),
+        ] {
+            let compat = crate::settings::fixtures::refused_compat(chain_id, blocker);
+            let checked = net_refusal(&compat, &loc).unwrap_or_else(|| unreachable!("a reason"));
+            assert_eq!(checked.hint, stop.text);
+            assert_eq!(checked.setup_url, stop.setup_url);
+        }
+    }
+
+    /// A check that could not reach a verdict is not a refusal (the core's
+    /// invariant ③): "unable to verify", no reason and no Chain Setup link —
+    /// even with a check beside it that names somewhere to go.
+    #[test]
+    fn an_inconclusive_check_is_never_worded_as_a_refusal() {
+        use crate::settings::fixtures::{WizardStopPin, stopped_wizard};
+        use vela_core::app::network_admin::NetBlocker;
+        let loc = loc();
+        let chain_id = crate::settings::fixtures::REFUSED_CHAIN_ID;
+        let mut wizard = stopped_wizard(WizardStopPin::CheckFailed);
+        let stop = wizard_stop(&wizard, &loc).unwrap_or_else(|| unreachable!("it stopped"));
+        assert_eq!(stop.text.as_ref(), "Unable to verify — RPC request failed");
+        assert_eq!(stop.setup_url, None);
+        assert!(wizard_stop_wants_rpc(&wizard));
+
+        wizard.compat = Some(crate::settings::fixtures::refused_compat(
+            chain_id,
+            NetBlocker::MissingContracts,
+        ));
+        let stop = wizard_stop(&wizard, &loc).unwrap_or_else(|| unreachable!("it stopped"));
+        assert_eq!(stop.setup_url, None, "not a refusal: no link");
+
+        // And only the two stops an RPC of one's own gets past ask for one.
+        for (pin, name) in WizardStopPin::ALL {
+            assert_eq!(
+                wizard_stop_wants_rpc(&stopped_wizard(pin)),
+                matches!(pin, WizardStopPin::NoRpc | WizardStopPin::CheckFailed),
+                "{name}"
+            );
+        }
     }
 }
 

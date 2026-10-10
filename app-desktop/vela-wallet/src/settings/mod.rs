@@ -252,16 +252,15 @@ pub struct SettingsStrings {
     /// looks broken because nobody said it was working.
     pub wizard_searching: SharedString,
     pub wizard_checking: SharedString,
-    /// The four ways the wizard STOPS (`NetWizardErrorKind`). The core decides
-    /// which; these are only the words, and all four were already in the
-    /// corpus — the scan path and the add-token screen say the same things.
-    pub wizard_already_added: SharedString,
-    pub wizard_not_found: SharedString,
-    /// "Can't reach {{name}} right now" (spec 092's one-network line): the
-    /// registry listed no endpoint for the resolved chain, and no custom RPC
-    /// was typed. Carries the chain's name because at this point the wizard
-    /// HAS resolved it.
-    pub wizard_no_rpc: String,
+    /// Why the wizard STOPPED is not here: the core names the sentence
+    /// (`NetWizardView::error_key`) and `live::wizard_stop` draws it. This
+    /// struct once kept four of them and chose between them by error type —
+    /// and borrowed "Can't reach {{name}}" for a chain that lists no RPC.
+    ///
+    /// "Can't reach {{name}} right now" (spec 092's one-network line), for
+    /// the mock banner's headline (`fixtures::unavailable_text`).
+    pub unreachable_one: String,
+    /// The refused verdict's pill.
     pub wizard_incompatible: SharedString,
     /// Spec 038 #E1: the probes failed — not a verdict.
     pub wizard_unable_to_verify: SharedString,
@@ -525,9 +524,7 @@ impl SettingsStrings {
             open_chain_setup_tool: s("settingsModals.addNetwork.openChainSetupTool"),
             wizard_searching: s("settingsModals.addNetwork.searching"),
             wizard_checking: s("settingsModals.addNetwork.checkingCompatibility"),
-            wizard_already_added: s("addToken.errorAlreadyAdded"),
-            wizard_not_found: s("addToken.errorChainNotFound"),
-            wizard_no_rpc: raw("assets.unreachableOne"),
+            unreachable_one: raw("assets.unreachableOne"),
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             wizard_retry: s("settingsModals.addNetwork.retry"),

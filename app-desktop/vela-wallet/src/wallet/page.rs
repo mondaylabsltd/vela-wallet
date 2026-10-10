@@ -6695,6 +6695,7 @@ impl WalletPage {
             }
             (body, _) => body,
         };
+        let body = crate::gallery::net_stop_pin(body, &self.flow_strings);
         crate::gallery::send_state_pin(body, &self.flow_strings, &self.strings)
     }
 
@@ -12631,6 +12632,10 @@ impl WalletPage {
     /// `VELA_NET_REFUSAL` (developer builds), a chain checked and refused for
     /// that reason (`settings_live::pinned_refusal`).
     fn wizard_view(cx: &mut gpui::App) -> vela_core::app::network_admin::NetWizardView {
+        // … or, under `VELA_NET_STOP`, one stopped that way.
+        if let Some(stop) = settings_live::pinned_stop() {
+            return settings_fixtures::stopped_wizard(stop);
+        }
         match settings_live::pinned_refusal() {
             Some(blocker) => settings_fixtures::refused_wizard(blocker),
             None => {
@@ -12654,7 +12659,7 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
-        use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
+        use vela_core::app::network_admin::NetWizardPhase;
         let wizard = Self::wizard_view(cx);
         if matches!(
             wizard.phase,
@@ -12753,34 +12758,23 @@ impl WalletPage {
                     recheck: true,
                 },
             },
-            // The wizard stopped: why, in a warning, and the way on. A probe
-            // that failed is "unable to verify" and gets no setup tool; a chain
-            // that is already here, unknown, or endpoint-less says so.
+            // The wizard stopped: why, in the core's own sentence
+            // (`error_key`), and the way on. A refusal reached without the
+            // confirm step keeps its check beside the error, so it says the
+            // same reason and offers the same Chain Setup button as the
+            // verdict above; a probe that failed is "unable to verify" and
+            // gets neither. Where the way on is an RPC of the person's own —
+            // a chain that lists none ("Enter one, then re-check"), a check
+            // that could not be made — the field is under the sentence.
             NetWizardPhase::Error => {
-                let refusal =
-                    settings_live::wizard_notice(&wizard, s).and_then(|notice| match notice {
-                        settings_live::WizardNotice::Refusal(text) => Some(text),
-                        settings_live::WizardNotice::Progress(_) => None,
-                    });
-                // A refusal reached without the confirm step (the scan path)
-                // carries the reason only when the core kept the check; with
-                // it, the same line and button as above. Without it the
-                // verdict is said alone ("Incompatible"): which of the two
-                // reasons it was is not known here, so neither "contracts are
-                // missing" nor a deploy button is claimed.
-                let why = wizard
-                    .compat
-                    .as_ref()
-                    .filter(|_| {
-                        matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }))
-                    })
-                    .and_then(|compat| settings_live::net_refusal(compat, &self.loc));
+                let stop = settings_live::wizard_stop(&wizard, &self.loc);
                 Verdict {
-                    callout: Some(match why.as_ref() {
-                        Some(why) => why.hint.clone(),
-                        None => refusal.unwrap_or_else(|| s.wizard_unable_to_verify.clone()),
-                    }),
-                    setup_url: why.and_then(|why| why.setup_url),
+                    callout: Some(stop.as_ref().map_or_else(
+                        || s.wizard_unable_to_verify.clone(),
+                        |stop| stop.text.clone(),
+                    )),
+                    custom_rpc: settings_live::wizard_stop_wants_rpc(&wizard),
+                    setup_url: stop.and_then(|stop| stop.setup_url),
                     recheck: chain_id.is_some(),
                     ..checking()
                 }

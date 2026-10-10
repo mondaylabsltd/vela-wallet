@@ -1462,7 +1462,8 @@ fn add_token(
             mark,
             name,
             chip,
-            link,
+            note,
+            setup,
             facts,
         } => {
             let mut card = div()
@@ -1493,17 +1494,43 @@ fn add_token(
                         )
                         .child(status_chip(theme, chip)),
                 );
-            if let Some(link) = link {
+            if let Some(note) = note {
                 card = card.child(
                     div()
                         .pt(px(8.))
                         .text_size(theme::text_row_sub())
+                        .line_height(gpui::relative(1.4))
                         .text_color(theme.fg_muted)
-                        .child(link.clone()),
+                        .child(crate::ui::prose(note.clone())),
                 );
             }
             for fact in facts {
                 card = card.child(fact_row(theme, icons, identicons, fact, None));
+            }
+            // Where a refused chain can be made ready — an outline button,
+            // never the accent: it is not the action somebody came for. It
+            // was a line of grey text that ended in "↗" and opened nothing.
+            if let Some((label, url)) = setup {
+                let url = url.clone();
+                let open: Click = Box::new(move |_, _, cx| cx.open_url(&url));
+                card = card.child(
+                    div().pt(px(12.)).child(clickable(
+                        ElementId::from("add-token-chain-setup"),
+                        Some(open),
+                        div()
+                            .h(px(40.))
+                            .rounded(px(10.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .border_1()
+                            .border_color(theme.outline_strong)
+                            .text_size(theme::text_row_sub())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.fg_base)
+                            .child(label.clone()),
+                    )),
+                );
             }
             col.child(card)
         }
@@ -1633,6 +1660,17 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
         row = row.child(clickable(
             "flow-notice-copy",
             Some(copy),
+            pill(theme, label.clone()),
+        ));
+    }
+    // So is a page to open: where a refused network can be made ready.
+    if let Some((label, url)) = &notice.link {
+        any = true;
+        let url = url.clone();
+        let open: Click = Box::new(move |_, _, cx| cx.open_url(&url));
+        row = row.child(clickable(
+            "flow-notice-link",
+            Some(open),
             pill(theme, label.clone()),
         ));
     }

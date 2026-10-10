@@ -199,6 +199,60 @@ pub fn send_state_pin(
             other => other,
         };
     }
+    // `lock-no-p256|lock-missing|lock-unverified` (PR 3 notes 5 and 10) —
+    // with the send's mock picker (`VELA_FLOW=DSD1`): a payment request on a
+    // network the wallet lacks, after "Add this network" stopped — the live
+    // notice over the wizard's stop as the executor hands it to the send
+    // machine: the reason, and Chain Setup only for contracts that can be
+    // deployed.
+    let stop = match want.trim() {
+        "lock-no-p256" => Some(crate::settings::fixtures::WizardStopPin::Refused(
+            vela_core::app::network_admin::NetBlocker::NoP256,
+        )),
+        "lock-missing" => Some(crate::settings::fixtures::WizardStopPin::Refused(
+            vela_core::app::network_admin::NetBlocker::MissingContracts,
+        )),
+        "lock-unverified" => Some(crate::settings::fixtures::WizardStopPin::CheckFailed),
+        _ => None,
+    };
+    if let Some(stop) = stop {
+        return match body {
+            FlowBody::SendPick(mut pick) => {
+                let mut send =
+                    crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+                send.lock_error = Some(vela_core::app::send::SendLockError::Network {
+                    chain_id: crate::settings::fixtures::REFUSED_CHAIN_ID,
+                });
+                send.add_network_msg =
+                    Some(vela_core::app::send::SendAddNetworkMsg::NetNotCompatible {
+                        detail: crate::flows::live::AddNetworkStop::of(
+                            &crate::settings::fixtures::stopped_wizard(stop),
+                        )
+                        .and_then(|stop| stop.to_detail()),
+                    });
+                let fee =
+                    crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new()
+                        .view();
+                pick.lock_notice = crate::flows::live::send_notice(
+                    &crate::flows::live::SendInputs {
+                        send: &send,
+                        fee: &fee,
+                        s,
+                        wallet,
+                        locale: "en",
+                        money: crate::wallet::live::Money::usd(),
+                        identity_name: crate::wallet::fixtures::WALLET_NAME,
+                        identity_address: crate::wallet::fixtures::ADDRESS_FULL,
+                        speed: None,
+                        relay_sent_at_ms: None,
+                    },
+                    false,
+                );
+                FlowBody::SendPick(pick)
+            }
+            other => other,
+        };
+    }
     if want.trim() == "not-sent" {
         return match body {
             FlowBody::SendConfirm(mut confirm) => {
@@ -261,6 +315,39 @@ pub fn send_state_pin(
             relay_sent_at_ms: None,
         },
     ))
+}
+
+/// `VELA_NET_STOP` / `VELA_NET_REFUSAL` (developer builds) — with
+/// `VELA_PAGE=gallery` and the add-token panel's network tab
+/// (`VELA_FLOW=DT3b`): the live tab over a wizard that stopped that way, or
+/// that checked a chain and refused it — the reason in the core's sentence,
+/// and Chain Setup only for contracts that can be deployed (PR 3 notes 5, 10
+/// and 18). The same pins Settings' add-network dialog answers to.
+pub fn net_stop_pin(
+    body: crate::flows::fixtures::FlowBody,
+    s: &crate::flows::FlowStrings,
+) -> crate::flows::fixtures::FlowBody {
+    use crate::flows::fixtures::FlowBody;
+    let wizard = match (
+        crate::settings::live::pinned_stop(),
+        crate::settings::live::pinned_refusal(),
+    ) {
+        (Some(stop), _) => crate::settings::fixtures::stopped_wizard(stop),
+        (None, Some(blocker)) => crate::settings::fixtures::refused_wizard(blocker),
+        (None, None) => return body,
+    };
+    match body {
+        FlowBody::AddToken(tab) if tab.native => {
+            let query = wizard
+                .chain_info
+                .as_ref()
+                .map_or_else(|| wizard.query.clone(), |info| info.name.clone());
+            FlowBody::AddToken(crate::flows::live::add_network_tab(
+                &wizard, &query, None, s,
+            ))
+        }
+        other => other,
+    }
 }
 
 /// `VELA_SEND_STATE=alert-down|alert-internal|alert-other` — with

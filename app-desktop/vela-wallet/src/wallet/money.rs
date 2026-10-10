@@ -1367,7 +1367,12 @@ fn estimate_failed() -> SendShellResult {
 /// machine words it — `None` while it is still resolving and probing. The
 /// web's `addCustomNetworkByChainId` mapping: saved is added; an unknown
 /// chain is not found; one already present counts as added only when it is a
-/// saved custom row; anything else it refused is not compatible.
+/// saved custom row; anything else it stopped for is the send machine's "not
+/// compatible" — carrying WHY, as the core said it (PR 3 notes 5 and 10): the
+/// wizard's own sentence key and, for contracts that can be deployed, where
+/// Chain Setup opens ([`AddNetworkStop`]). It carried nothing, so the notice
+/// could only say "isn't compatible yet" — for a network with no P-256
+/// verifier and for a check that never reached the network alike.
 fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOutcome> {
     let saved = view
         .networks
@@ -1380,7 +1385,10 @@ fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOu
         return Some(match error {
             NetWizardErrorKind::NotFound { .. } => SendAddNetworkOutcome::NotFound,
             NetWizardErrorKind::AlreadyAdded { .. } if saved => SendAddNetworkOutcome::Added,
-            _ => SendAddNetworkOutcome::NotCompatible { detail: None },
+            _ => SendAddNetworkOutcome::NotCompatible {
+                detail: crate::flows::live::AddNetworkStop::of(wizard)
+                    .and_then(|stop| stop.to_detail()),
+            },
         });
     }
     (wizard.phase == NetWizardPhase::Idle && saved).then_some(SendAddNetworkOutcome::Added)
