@@ -226,12 +226,15 @@ object SendLive {
             }
             when (lock) {
                 is SendLockError.Network -> SendNoticeModel(
-                    mark = WalletLive.chainMark(lock.chain_id, nativeSymbol(lock.chain_id, ctx)),
+                    // The network's own logo where the registry has one; its
+                    // coin is not known here, so no coin's letters stand in
+                    // for it ("ETH" under "Network not supported" was a guess).
+                    mark = WalletLive.chainMark(lock.chain_id, ctx.chainNames[lock.chain_id]?.let { nativeSymbol(lock.chain_id, ctx) } ?: UNKNOWN_MARK),
                     text = attempt ?: "${s.t(I18nKeys.Flows.LOCK_NET_TITLE)} — ${s.t(I18nKeys.Flows.LOCK_NET_BODY, mapOf("chainId" to lock.chain_id.toString()))}",
                 )
                 SendLockError.Token -> SendNoticeModel(
                     mark = (view.request_chain_id ?: chainFilter)?.let { WalletLive.chainMark(it, nativeSymbol(it, ctx)) }
-                        ?: WalletLive.chainMark(1, "ETH"),
+                        ?: WalletLive.chainMark(0, UNKNOWN_MARK),
                     text = "${s.t(I18nKeys.Flows.LOCK_TOKEN_TITLE)} — ${s.t(I18nKeys.Flows.LOCK_TOKEN_BODY)}",
                 )
             }
@@ -349,6 +352,9 @@ object SendLive {
     }
 
     // -- SD2c: the batch sheet (spec 045 US3) --------------------------------------
+
+    /** The glyph of a mark for something this wallet cannot name — a network it does not have. */
+    private const val UNKNOWN_MARK = "?"
 
     /** What stands where the importer's currency code will be while the person's currency is not known ([batchImport]). */
     internal const val BATCH_CURRENCY_PENDING = "…"

@@ -59,6 +59,9 @@ object FlowFixtures {
     // Spec 018's roster, reused rather than re-invented.
     private const val ALICE_DISPLAY = "0x9F3c…21aE"
     private const val ALICE_FULL = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE"
+
+    /** The importer boards' second payee (SD2P / SD2Q). */
+    private const val SECOND_PAYEE = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
     private const val A_HAO_FULL = "0x77Bd59A302cC93D23dB0d0BA6a45C6830EF74F02"
     private const val HOLD_ON_DISPLAY = "0xCafe…F00d"
     private const val HOLD_ON_FULL = "0xCafe9078B1c2A04d33Ff21B0BC934eB8A812F00d"
@@ -1099,6 +1102,9 @@ object FlowFixtures {
             FlowState.A2H -> hiddenDetail(s)
             FlowState.A2S -> splitDetail(s, hidden = false)
             FlowState.A2SH -> splitDetail(s, hidden = true)
+            FlowState.SD1L -> screen(FlowBase.SendPick(lockedPick(s)))
+            FlowState.SD2P -> screen(FlowBase.SendForm(sendForm(s, SendFormMode.Split)), FlowSheet.BatchImport(liveBatchImport(s, currencyKnown = false)))
+            FlowState.SD2Q -> screen(FlowBase.SendForm(sendForm(s, SendFormMode.Split)), FlowSheet.BatchImport(liveBatchImport(s, currencyKnown = true)))
             FlowState.SD2N -> screen(FlowBase.SendForm(currencyForm(s, committed = false)))
             FlowState.SD2O -> screen(FlowBase.SendForm(currencyForm(s, committed = true)))
             FlowState.SD3J -> screen(FlowBase.SendConfirm(currencyConfirm(s, committed = false)))
@@ -1323,6 +1329,51 @@ object FlowFixtures {
             // fresh composition with nothing remembered, so it says so itself.
             form.copy(fee = form.fee.copy(worthRoom = true), speed = form.speed?.copy(worthRoom = true))
         }
+
+    /**
+     * SD1L: a payment request for a network the wallet lacks (chain 48900),
+     * through [app.getvela.wallet.feature.send.SendLive.pick]: the core's
+     * `lock_error`, said on the picker's notice.
+     */
+    private fun lockedPick(s: VelaStrings): SendPickModel =
+        app.getvela.wallet.feature.send.SendLive.pick(
+            sendPick(s, multi = false).copy(rows = emptyList()),
+            app.getvela.wallet.feature.send.core.SendView(
+                stage = app.getvela.wallet.feature.send.core.SendStage.LockError,
+                locked = true,
+                lock_error = app.getvela.wallet.feature.send.core.SendLockError.Network(48_900),
+            ),
+            boardContext(s),
+        )
+
+    /**
+     * SD2P / SD2Q: the batch importer through
+     * [app.getvela.wallet.feature.send.SendLive.batchImport] — two rows of a
+     * sheet read in the display currency — before anything is known of that
+     * currency (the importer holds the placeholder's code and says none) and
+     * once it has been told CNY.
+     */
+    private fun liveBatchImport(s: VelaStrings, currencyKnown: Boolean): BatchImportModel {
+        val wire = app.getvela.wallet.feature.send.core.BatchView(
+            opened = true,
+            unit = app.getvela.wallet.feature.send.core.BatchUnit.Fiat,
+            fiat_code = if (currencyKnown) "CNY" else "USD",
+            raw_text = "$ALICE_FULL,5000\n$SECOND_PAYEE,8000",
+            rate_status = app.getvela.wallet.feature.send.core.BatchRateStatus.Ok,
+            rate_input = if (currencyKnown) "7.25" else "1",
+            preview = listOf(
+                app.getvela.wallet.feature.send.core.BatchPreviewRow(line = 1, address = ALICE_FULL, valid = true, raw_amount = "5000", token_amount = if (currencyKnown) "689.655172" else "5000", ok = true),
+                app.getvela.wallet.feature.send.core.BatchPreviewRow(line = 2, address = SECOND_PAYEE, valid = true, raw_amount = "8000", token_amount = if (currencyKnown) "1103.448275" else "8000", ok = true),
+            ),
+            recipient_count = 2,
+            total_token = if (currencyKnown) "1793.103447" else "13000",
+            total_fiat = "13000",
+            can_apply = currencyKnown,
+            over_balance = !currencyKnown,
+        )
+        val view = boardSend().copy(stage = app.getvela.wallet.feature.send.core.SendStage.EnterDetails, split_mode = true, show_batch_import = true)
+        return app.getvela.wallet.feature.send.SendLive.batchImport(batchImport(s), wire, view, boardContext(s), currencyUnknown = !currencyKnown)
+    }
 
     /** SD3J / SD3K: the confirm of that send — the worth under the figure, and the fee's. */
     private fun currencyConfirm(s: VelaStrings, committed: Boolean): SendConfirmModel =
