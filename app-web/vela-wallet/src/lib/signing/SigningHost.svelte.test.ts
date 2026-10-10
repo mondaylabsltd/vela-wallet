@@ -439,6 +439,18 @@ describe('the sheet’s one simulation, read by the core (device round, item 3)'
 	/** The reads about THIS suite's calls. */
 	const asked = () =>
 		fake.simulated.filter((read) => JSON.stringify(read.calls).includes(CALLS[0].to));
+	/**
+	 * The host has asked the node `count` times about these calls. The engine
+	 * and the core are loaded on first use, so how long that takes is not this
+	 * suite's to assume: what is expected to HAPPEN is waited for, with room,
+	 * and never given a fixed moment. (What is expected NOT to happen still
+	 * has only a pause to stand on — see each such check.)
+	 */
+	const read = (count = 1) =>
+		vi.waitFor(() => expect(asked()).toHaveLength(count), { timeout: 10_000, interval: 20 });
+	/** The card has landed on the sheet. */
+	const landed = () =>
+		vi.waitFor(() => expect(card()).not.toBeNull(), { timeout: 10_000, interval: 20 });
 
 	// An earlier test's host may still be on its way to the node (the engine
 	// is loaded on first use): let it land on a state nobody reads.
@@ -449,11 +461,22 @@ describe('the sheet’s one simulation, read by the core (device round, item 3)'
 
 	it('nothing moves: one read tells the fee and lands the card — and the confirm is where it was', async () => {
 		fake.calls = CALLS;
-		let answer: (reply: string) => void = () => {};
-		fake.nodeReply = () => new Promise((resolve) => (answer = resolve));
+		// One resolver per read, in the order the reads arrived: an earlier
+		// test's host can still reach the node after this one has (its read is
+		// about other calls), and a single slot would then hold ITS promise —
+		// the answer went to nobody and the card never landed.
+		const pending: { about: unknown; resolve: (reply: string) => void }[] = [];
+		fake.nodeReply = () =>
+			// The read this call belongs to is the one the seam has just recorded.
+			new Promise((resolve) => pending.push({ about: fake.simulated.at(-1)?.calls, resolve }));
+		const answer = (reply: string) =>
+			pending
+				.filter((read) => JSON.stringify(read.about).includes(CALLS[0].to))
+				.forEach((read) => read.resolve(reply));
 		const view = mount();
 		raise('tx:1');
 		await settle();
+		await read();
 		await pause(350); // past the entry animation
 		// Asked once, about this request's calls, from the account that signs.
 		expect(asked()).toEqual([
@@ -464,6 +487,7 @@ describe('the sheet’s one simulation, read by the core (device round, item 3)'
 		const was = confirmTop();
 
 		answer(NOTHING_MOVES);
+		await landed();
 		await settle();
 		expect(card()?.textContent).toContain('said:componentsUi.signing.simResultNoChange');
 		expect(card()?.hasAttribute('data-verdict')).toBe(true);
@@ -483,7 +507,8 @@ describe('the sheet’s one simulation, read by the core (device round, item 3)'
 			raise('tx:1');
 			await settle();
 			expect(view.sheet()).not.toBeNull();
-			expect(asked()).toHaveLength(1);
+			await read();
+			await settle();
 			expect(card()).toBeNull();
 			expect(fake.told).toEqual([]);
 			await view.screen.unmount();
@@ -499,14 +524,14 @@ describe('the sheet’s one simulation, read by the core (device round, item 3)'
 		const view = mount();
 		raise('tx:1');
 		await settle();
+		await read();
 		answers[0](NOTHING_MOVES);
-		await settle();
-		expect(card()).not.toBeNull();
+		await landed();
 
 		// Another request takes the sheet: no card until ITS simulation says so.
 		raise('tx:2');
 		await settle();
-		expect(asked()).toHaveLength(2);
+		await read(2);
 		expect(card()).toBeNull();
 		answers[1](REVERTS);
 		await settle();
@@ -518,7 +543,7 @@ describe('the sheet’s one simulation, read by the core (device round, item 3)'
 		await settle();
 		raise('tx:3');
 		await settle();
-		expect(asked()).toHaveLength(3);
+		await read(3);
 		raise('tx:4');
 		await settle();
 		answers[2](NOTHING_MOVES);
