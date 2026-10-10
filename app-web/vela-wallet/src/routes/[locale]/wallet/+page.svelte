@@ -1917,6 +1917,15 @@
 							: rm.relayer.title
 	);
 
+	/**
+	 * The sentence the hero's status line said when it was pressed (PR 3 final
+	 * note F16): the line is one line and ends in "…" when its sentence is
+	 * longer, so the sheet it opens says it whole at its top. The unreachable
+	 * list's title IS that sentence; the breakdown is told it here — as it was
+	 * at the press, so the sheet's first line does not change under a reader.
+	 */
+	let rescueSaid = $state<string | undefined>(undefined);
+
 	function openRescue() {
 		if (balance.view.unreachable_networks.length > 0) {
 			rescue = 'unreachable';
@@ -1925,6 +1934,7 @@
 			balance.unreachableListOpened();
 			return;
 		}
+		rescueSaid = (wide.current ? liveDesktop : liveHome).balance.status?.text;
 		rescue = 'balance-detail';
 	}
 
@@ -2409,6 +2419,7 @@
 	{:else if rescue === 'balance-detail'}
 		<BalanceDetailBody
 			panel={balanceDetailModel}
+			said={rescueSaid}
 			onretry={(id) => {
 				balance.fixChainResolved(Number(id));
 				balance.refresh(true);

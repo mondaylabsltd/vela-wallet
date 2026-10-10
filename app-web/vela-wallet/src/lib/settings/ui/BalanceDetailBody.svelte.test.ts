@@ -99,6 +99,37 @@ describe('the balance breakdown — a heading stands over its rows, or not at al
 		expect(screen.container.textContent).toContain('Total $4,500.00');
 	});
 
+	// PR 3 final note F16: the hero's status is one line and ends in "…" when
+	// its sentence is longer; the sheet it opens says the sentence whole, first.
+	it('says the sentence of the line that opened it, whole, before anything else', async () => {
+		const said = 'Something went wrong inside Vela. If it keeps happening, reopen the app.';
+		const host = document.createElement('div');
+		host.style.width = '288px';
+		document.body.appendChild(host);
+		const screen = render(BalanceDetailBody, {
+			target: host,
+			props: { panel: panel({ done: [ETHEREUM_DONE] }), said }
+		});
+		const line = screen.getByTestId('balance-detail-said').element() as HTMLElement;
+		expect(line.textContent).toBe(said);
+		// First in the sheet…
+		expect(screen.container.querySelector('p')).toBe(line);
+		// …whole: wrapped onto as many lines as it needs, nothing cut.
+		expect(getComputedStyle(line).textOverflow).not.toBe('ellipsis');
+		expect(line.scrollWidth).toBeLessThanOrEqual(line.clientWidth + 0.5);
+		expect(line.getBoundingClientRect().height).toBeGreaterThan(
+			parseFloat(getComputedStyle(line).fontSize) * 2
+		);
+		expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(
+			host.getBoundingClientRect().right + 0.5
+		);
+		screen.unmount();
+		host.remove();
+		// Opened from nowhere (Settings' board): no such line.
+		const plain = render(BalanceDetailBody, { props: { panel: panel({ done: [ETHEREUM_DONE] }) } });
+		expect(plain.container.querySelector('[data-testid="balance-detail-said"]')).toBeNull();
+	});
+
 	it('a short status sits on one line beside its network at 320 px', async () => {
 		const host = document.createElement('div');
 		host.style.width = '288px';

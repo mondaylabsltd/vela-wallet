@@ -384,6 +384,131 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		}
 	});
 
+	/*
+	 * PR 3 final note F16: the status is ONE line. A sentence longer than the
+	 * line wrapped onto a second one and grew the line the hero keeps — the
+	 * page dropped a line when "No podemos cargar la lista de tokens de Tempo
+	 * por ahora" landed at 320 px. It is set a little smaller first (never
+	 * under 85 %), then ends in "…"; the whole sentence is the line's name.
+	 */
+	const frames = () =>
+		new Promise<void>((resolve) =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
+	const LONGEST = [
+		// `assets.tokenListUnreachable`, the longest two the corpus has.
+		'No podemos cargar la lista de tokens de Tempo por ahora',
+		"Al momento non riusciamo a caricare l'elenco dei token di Tempo",
+		// Vela's own-fault sentence: the first status that was long enough to wrap.
+		'Something went wrong inside Vela. If it keeps happening, reopen the app.'
+	];
+
+	it('a sentence longer than its line is one line with "…", and the hero is as tall as with none', async () => {
+		for (const [width, scale] of [
+			['320px', '1'],
+			['288px', '1'],
+			['390px', '1.35']
+		] as const) {
+			for (const text of LONGEST) {
+				const at = `${text.slice(0, 24)}… @ ${width} × ${scale}`;
+				const host = document.createElement('div');
+				host.style.width = width;
+				host.style.setProperty('--text-scale', scale);
+				document.body.appendChild(host);
+				const quiet: BalanceModel = { ...hero(false), status: undefined };
+				const screen = render(BalanceDisplay, { target: host, props: { balance: quiet } });
+				const said = () => screen.container.querySelector('.said') as HTMLElement;
+				const measure = () => ({
+					control: control(screen.container).getBoundingClientRect().top,
+					figure: screen.container.querySelector('.amount')!.getBoundingClientRect().top,
+					slot: said().getBoundingClientRect().height,
+					hero: host.getBoundingClientRect().height
+				});
+				const before = measure();
+
+				await screen.rerender({ balance: { ...hero(false), status: { kind: 'warning', text } } });
+				await tick();
+				await frames();
+				expect(measure(), at).toEqual(before);
+
+				const door = screen.container.querySelector('.status') as HTMLButtonElement;
+				const sentence = door.querySelector('.sentence') as HTMLElement;
+				// One line, inside the hero's column, ending in "…".
+				expect(door.getBoundingClientRect().right, at).toBeLessThanOrEqual(
+					host.getBoundingClientRect().right + 0.5
+				);
+				expect(getComputedStyle(sentence).whiteSpace, at).toBe('nowrap');
+				expect(getComputedStyle(sentence).textOverflow, at).toBe('ellipsis');
+				expect(sentence.scrollWidth, at).toBeGreaterThan(sentence.clientWidth);
+				// Set smaller first — to the floor, no further.
+				const base = parseFloat(getComputedStyle(door).fontSize);
+				expect(parseFloat(getComputedStyle(sentence).fontSize) / base, at).toBeCloseTo(0.85, 2);
+				// The whole sentence is still what the line is called, and what it holds.
+				expect(door.getAttribute('aria-label'), at).toBe(text);
+				expect(door.getAttribute('title'), at).toBe(text);
+				expect(sentence.textContent, at).toBe(text);
+				// Both glyphs are whole: the warning mark and the chevron.
+				const glyphs = [...door.querySelectorAll(':scope > svg')].map((g) =>
+					g.getBoundingClientRect()
+				);
+				expect(glyphs, at).toHaveLength(2);
+				expect(glyphs[0].width, at).toBe(glyphs[1].width);
+				expect(glyphs[1].right, at).toBeLessThanOrEqual(host.getBoundingClientRect().right + 0.5);
+				screen.unmount();
+				host.remove();
+			}
+		}
+	});
+
+	it('a sentence a little too long is set a little smaller and drawn whole; a short one is left alone', async () => {
+		const host = document.createElement('div');
+		host.style.width = '320px';
+		document.body.appendChild(host);
+		const text = "Can't reach 24 networks right now";
+		const screen = render(BalanceDisplay, {
+			target: host,
+			props: { balance: { ...hero(false), status: { kind: 'warning', text } } }
+		});
+		await tick();
+		await frames();
+		const sentence = () => screen.container.querySelector('.sentence') as HTMLElement;
+		const door = () => screen.container.querySelector('.status') as HTMLElement;
+		const sizeRatio = () =>
+			parseFloat(getComputedStyle(sentence()).fontSize) /
+			parseFloat(getComputedStyle(door()).fontSize);
+		// Room to spare: as set.
+		expect(sizeRatio()).toBe(1);
+		expect(sentence().style.getPropertyValue('--shrink')).toBe('');
+		const heroHeight = host.getBoundingClientRect().height;
+		const doorMiddle = () => {
+			const box = door().getBoundingClientRect();
+			return Math.round((box.top + box.height / 2) * 10) / 10;
+		};
+		const middle = doorMiddle();
+
+		// The column narrows until the sentence is a little too long for it.
+		const full = sentence().getBoundingClientRect().width;
+		const beside = door().getBoundingClientRect().width - full;
+		host.style.width = `${Math.floor(full * 0.93 + beside)}px`;
+		await frames();
+		await frames();
+		expect(sizeRatio()).toBeGreaterThanOrEqual(0.85);
+		expect(sizeRatio()).toBeLessThan(1);
+		// Whole: nothing cut.
+		expect(sentence().scrollWidth).toBeLessThanOrEqual(sentence().clientWidth + 1);
+		// The line did not move or change height for it.
+		expect(host.getBoundingClientRect().height).toBe(heroHeight);
+		expect(doorMiddle()).toBe(middle);
+
+		// …and the room coming back sets it at full size again.
+		host.style.width = '320px';
+		await frames();
+		await frames();
+		expect(sizeRatio()).toBe(1);
+		screen.unmount();
+		host.remove();
+	});
+
 	it('"Checking…" stands under the skeleton too, in the line the figure’s status will take', async () => {
 		const host = document.createElement('div');
 		host.style.width = '320px';

@@ -13,10 +13,20 @@
 	interface Props {
 		panel: BalanceDetailModel;
 		onretry?: (id: string) => void;
+		/**
+		 * The sentence of the line this sheet was opened from, in full (PR 3
+		 * final note F16). The hero's status is one line and ends in "…" when
+		 * its sentence is longer than that; here it is read whole, first.
+		 */
+		said?: string;
 	}
 
-	let { panel, onretry }: Props = $props();
+	let { panel, onretry, said }: Props = $props();
 </script>
+
+{#if said !== undefined}
+	<p class="said" data-testid="balance-detail-said">{said}</p>
+{/if}
 
 <p class="summary">{panel.summary}</p>
 
@@ -73,6 +83,15 @@
 {/if}
 
 <style>
+	/* The line that was pressed, whole: the sheet's first words. */
+	.said {
+		margin: 0 0 var(--space-md);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
+	}
+
 	.summary {
 		margin: 0 0 var(--space-xl);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
