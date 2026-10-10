@@ -459,11 +459,13 @@ export interface SettingsMessages {
 		 */
 		words: Record<BackupRowKey, string>;
 		/**
-		 * What the copy makes public — the wallet's name, and each key's name,
-		 * public key, credential ID and authenticator model — and that it costs
-		 * a network fee.
+		 * The paragraph under the block, BY CORPUS KEY — the core names it for
+		 * each state (`BackupRow.explain_key`) and names none for a record that
+		 * can never be copied. The one there is says what the copy makes public
+		 * — the wallet's name, and each key's name, public key, credential ID
+		 * and authenticator model — and that it costs a network fee.
 		 */
-		explain: string;
+		explains: Record<BackupExplainKey, string>;
 	};
 	/** The keys that control this wallet (spec 062). */
 	keys: {
@@ -622,6 +624,15 @@ export const BACKUP_ROW_KEYS = [
 ] as const;
 
 export type BackupRowKey = (typeof BACKUP_ROW_KEYS)[number];
+
+/**
+ * Every paragraph the core's backup row can name under the Keys block
+ * (`registry_backup::EXPLAIN_KEY`, via `BackupRow.explain_key`). Held to the
+ * core's source by the same test as the row's lines.
+ */
+export const BACKUP_EXPLAIN_KEYS = ['settingsModals.backup.explain'] as const;
+
+export type BackupExplainKey = (typeof BACKUP_EXPLAIN_KEYS)[number];
 
 /**
  * Every corpus key the settings screens consume, in the order the manifest

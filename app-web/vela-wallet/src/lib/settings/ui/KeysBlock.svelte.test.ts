@@ -49,7 +49,6 @@ const model: WalletKeysModel = {
 		]),
 		row('Parallel Three', [{ text: 'Device-bound', tone: 'local' }])
 	],
-	backupExplain: '',
 	copy: { action: 'Copy', done: 'Copied' }
 };
 
@@ -86,10 +85,11 @@ describe('the key this device signs with', () => {
  * and costs a fee, so it is a state, never a defect.
  */
 describe('the Ethereum copy’s row', () => {
+	const EXPLAIN = 'Your wallet’s record on Gnosis is public…';
+	/** The row as the model carries it: the core's paragraph rides on the row. */
 	const withBackup = (backup: WalletKeysModel['backup']): WalletKeysModel => ({
 		...model,
-		backup,
-		backupExplain: 'Your wallet’s record on Gnosis is public…'
+		backup
 	});
 	const TITLE = "Copy this wallet's record to Ethereum";
 	const drawn = (backup: NonNullable<WalletKeysModel['backup']>) => {
@@ -151,6 +151,43 @@ describe('the Ethereum copy’s row', () => {
 		// Only the row's own upload mark: nothing trailing invites a tap.
 		expect(button.querySelectorAll('svg')).toHaveLength(1);
 		expect(getComputedStyle(state).color).not.toBe(warning());
+	});
+
+	// PR 3 note 6: the paragraph describes making the copy, and the core names
+	// none for a wallet that can never be copied. Then nothing is drawn — and
+	// no empty slot is left where it stood: the block ends on its row.
+	it('the explanation is drawn when the row carries one, and leaves no gap when it does not', async () => {
+		const row = {
+			title: TITLE,
+			subtitle: 'Not copied yet (optional)',
+			tone: 'neutral',
+			action: 'copy'
+		} as const;
+		const told = drawn({ ...row, explain: EXPLAIN });
+		const paragraph = told.screen.container.querySelector('p.explain') as HTMLElement;
+		expect(paragraph.textContent).toBe(EXPLAIN);
+		const section = told.screen.container.querySelector('section') as HTMLElement;
+		// The paragraph is the block's last thing, under the row.
+		expect(section.getBoundingClientRect().bottom).toBeCloseTo(
+			paragraph.getBoundingClientRect().bottom,
+			0
+		);
+		told.screen.unmount();
+
+		const never = drawn({
+			title: TITLE,
+			subtitle: "This older wallet can't be copied",
+			tone: 'neutral',
+			action: 'none'
+		});
+		expect(never.screen.container.querySelector('p.explain')).toBeNull();
+		expect(never.screen.container.textContent).not.toContain(EXPLAIN);
+		// No room kept for it: the block's bottom is the row's bottom.
+		const block = never.screen.container.querySelector('section') as HTMLElement;
+		expect(block.getBoundingClientRect().bottom).toBeCloseTo(
+			never.button.getBoundingClientRect().bottom,
+			0
+		);
 	});
 
 	it('copied: the success ink and a tick, and nothing to tap', async () => {

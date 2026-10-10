@@ -46,25 +46,35 @@ const EMPTY_BYTES = '0x' + word(0x20) + word(0);
 
 /** The rows the core says to draw (`registry_backup::BackupState::row`). */
 const TITLE = 'settingsModals.backup.title';
+/**
+ * The paragraph under the Keys block (`registry_backup::EXPLAIN_KEY`): named
+ * for every state a copy can still be made or checked in — and for none that
+ * can never be copied (PR 3 note 6).
+ */
+const EXPLAIN = 'settingsModals.backup.explain';
 const ROW = {
 	backedUp: {
 		title_key: TITLE,
 		subtitle_key: 'settingsModals.backup.backedUp',
 		tone: 'positive',
-		action: 'none'
+		action: 'none',
+		explain_key: EXPLAIN
 	},
 	notBackedUp: {
 		title_key: TITLE,
 		subtitle_key: 'settingsModals.backup.notBackedUp',
 		tone: 'neutral',
-		action: 'copy'
+		action: 'copy',
+		explain_key: EXPLAIN
 	},
 	couldNotCheck: {
 		title_key: TITLE,
 		subtitle_key: 'settingsModals.backup.couldNotCheck',
 		tone: 'neutral',
-		action: 'retry'
+		action: 'retry',
+		explain_key: EXPLAIN
 	},
+	// No `explain_key`: the core omits it, and no paragraph is drawn.
 	cannotCopy: {
 		title_key: TITLE,
 		subtitle_key: 'settingsModals.backup.cannotCopy',
@@ -205,13 +215,30 @@ describe('checkEthereumBackup', () => {
 		expect(thrown.row).toEqual(ROW.couldNotCheck);
 	});
 
-	it('while the walk runs the row is the core’s "Checking…": neutral, nothing to tap', () => {
+	it('while the walk runs the row is the core’s "Checking…": neutral, nothing to tap — and the explanation stays', () => {
 		expect(CHECKING_ROW).toEqual({
 			title_key: TITLE,
 			subtitle_key: 'componentsUi.funding.checking',
 			tone: 'neutral',
-			action: 'none'
+			action: 'none',
+			// Nothing is known yet that would take the paragraph away.
+			explain_key: EXPLAIN
 		});
+	});
+
+	// PR 3 note 6: the paragraph describes making the copy. The core names it
+	// for every state but the one that can never be copied — read here off the
+	// REAL core's answers, so the web's mirror of the row cannot drift.
+	it('the core names the explanation for every drawn state except "can never be copied"', async () => {
+		const notCopied = await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		expect(notCopied.state).toBe('not_backed_up');
+		expect(notCopied.row?.explain_key).toBe(EXPLAIN);
+
+		payloadOnGnosis = EMPTY_BYTES;
+		const never = await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		expect(never.state).toBe('not_copyable');
+		expect(never.row).not.toBeNull();
+		expect(never.row).not.toHaveProperty('explain_key');
 	});
 
 	it('server-free: the index service is never contacted', async () => {

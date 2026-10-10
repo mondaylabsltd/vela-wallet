@@ -26,11 +26,13 @@ import type { ExtensionMessages } from '$lib/extension/messages';
 import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
+	BACKUP_EXPLAIN_KEYS,
 	BACKUP_ROW_KEYS,
 	NET_HINT_KEYS,
 	NET_STOP_KEYS,
 	UNREACHABLE_LINE_KEYS,
 	VENUE_BLOCK_KEYS,
+	type BackupExplainKey,
 	type BackupRowKey,
 	type NetHintKey,
 	type NetStopKey,
@@ -747,7 +749,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 				BackupRowKey,
 				string
 			>,
-			explain: k('settingsModals.backup.explain')
+			explains: Object.fromEntries(BACKUP_EXPLAIN_KEYS.map((key) => [key, k(key)])) as Record<
+				BackupExplainKey,
+				string
+			>
 		},
 		keys: {
 			title: k('settingsModals.keys.title'),

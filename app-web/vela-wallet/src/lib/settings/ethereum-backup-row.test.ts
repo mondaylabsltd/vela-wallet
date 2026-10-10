@@ -13,11 +13,13 @@ import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
 import { CHECKING_ROW, type EthereumBackupRow } from '$lib/services/registry-backup';
 import { ethereumBackupRow, walletKeysModel } from './live';
-import { BACKUP_ROW_KEYS } from './messages';
+import { BACKUP_EXPLAIN_KEYS, BACKUP_ROW_KEYS } from './messages';
 import { deviceKeys } from '$lib/services/wallet-keys';
 import type { WalletKeyRow, WalletKeys } from '$lib/services/wallet-keys';
 
 const m = resolveSettingsMessages('en');
+/** The paragraph under the block, in English. */
+const EXPLAIN = m.backup.explains['settingsModals.backup.explain'];
 const key = (over: Partial<WalletKeyRow>): WalletKeyRow => ({
 	name: '',
 	authenticator_attachment: 'platform',
@@ -37,25 +39,31 @@ const key = (over: Partial<WalletKeyRow>): WalletKeyRow => ({
 
 /** `BackupState::row()` for each state that draws one — the core's table. */
 const TITLE_KEY = 'settingsModals.backup.title';
+/** `registry_backup::EXPLAIN_KEY` — on every row but the one that can never be copied. */
+const EXPLAIN_KEY = 'settingsModals.backup.explain';
 const CORE_ROW = {
 	backed_up: {
 		title_key: TITLE_KEY,
 		subtitle_key: 'settingsModals.backup.backedUp',
 		tone: 'positive',
-		action: 'none'
+		action: 'none',
+		explain_key: EXPLAIN_KEY
 	},
 	not_backed_up: {
 		title_key: TITLE_KEY,
 		subtitle_key: 'settingsModals.backup.notBackedUp',
 		tone: 'neutral',
-		action: 'copy'
+		action: 'copy',
+		explain_key: EXPLAIN_KEY
 	},
 	could_not_check: {
 		title_key: TITLE_KEY,
 		subtitle_key: 'settingsModals.backup.couldNotCheck',
 		tone: 'neutral',
-		action: 'retry'
+		action: 'retry',
+		explain_key: EXPLAIN_KEY
 	},
+	// The core names no explanation here: nothing can be copied.
 	not_copyable: {
 		title_key: TITLE_KEY,
 		subtitle_key: 'settingsModals.backup.cannotCopy',
@@ -71,13 +79,15 @@ describe('ethereumBackupRow', () => {
 			// Optional, and it costs a fee: a state, never a warning.
 			subtitle: 'Not copied yet (optional)',
 			tone: 'neutral',
-			action: 'copy'
+			action: 'copy',
+			explain: EXPLAIN
 		});
 		expect(ethereumBackupRow(CORE_ROW.backed_up, m)).toEqual({
 			title: "Copy this wallet's record to Ethereum",
 			subtitle: 'Copied to Ethereum',
 			tone: 'positive',
-			action: 'none'
+			action: 'none',
+			explain: EXPLAIN
 		});
 		const zh = resolveSettingsMessages('zh');
 		expect(ethereumBackupRow(CORE_ROW.not_backed_up, zh)).toMatchObject({
@@ -94,7 +104,8 @@ describe('ethereumBackupRow', () => {
 			title: "Copy this wallet's record to Ethereum",
 			subtitle: "Couldn't check. Tap to try again.",
 			tone: 'neutral',
-			action: 'retry'
+			action: 'retry',
+			explain: EXPLAIN
 		});
 		// An older wallet's record can never be copied. Asking again gets the
 		// same answer, so it is a calm end with nothing to tap — it used to
@@ -110,8 +121,36 @@ describe('ethereumBackupRow', () => {
 			title: "Copy this wallet's record to Ethereum",
 			subtitle: 'Checking…',
 			tone: 'neutral',
-			action: 'none'
+			action: 'none',
+			explain: EXPLAIN
 		});
+	});
+
+	// PR 3 note 6. The paragraph says what the copy makes public and what it
+	// costs — "This puts a copy on Ethereum too… you confirm it with a
+	// passkey". Under "This older wallet can't be copied" it told a person how
+	// to do the one thing the line above had just said cannot be done.
+	it('a wallet that can never be copied is not told how to copy: no paragraph at all', () => {
+		const row = ethereumBackupRow(CORE_ROW.not_copyable, m);
+		expect(row).toBeDefined();
+		expect(row).not.toHaveProperty('explain');
+		// Every other drawn state keeps it — and the walk still running does too.
+		for (const other of [
+			CORE_ROW.backed_up,
+			CORE_ROW.not_backed_up,
+			CORE_ROW.could_not_check,
+			CHECKING_ROW
+		]) {
+			expect(ethereumBackupRow(other, m)?.explain).toBe(EXPLAIN);
+		}
+		// `null` is absent too (the wire's other spelling of "none").
+		expect(ethereumBackupRow({ ...CORE_ROW.backed_up, explain_key: null }, m)).not.toHaveProperty(
+			'explain'
+		);
+		// A paragraph this build has no words for draws none — never a dotted path.
+		expect(
+			ethereumBackupRow({ ...CORE_ROW.backed_up, explain_key: 'settingsModals.backup.other' }, m)
+		).not.toHaveProperty('explain');
 	});
 
 	it('no state is a caution: the row never wears the warning tone', () => {
@@ -141,22 +180,24 @@ describe('ethereumBackupRow', () => {
 				(match) => match[1]
 			)
 		);
-		// The explanation under the block is a paragraph, not a row line.
-		named.delete('settingsModals.backup.explain');
-		expect(named.size).toBeGreaterThanOrEqual(6);
-		expect([...named].sort()).toEqual([...BACKUP_ROW_KEYS].sort());
+		// The row's lines, and the paragraph under the block — each in its own
+		// list, both held to the core.
+		expect(named.size).toBeGreaterThanOrEqual(7);
+		expect([...named].sort()).toEqual([...BACKUP_ROW_KEYS, ...BACKUP_EXPLAIN_KEYS].sort());
+		expect(source).toContain(`pub const EXPLAIN_KEY: &str = "${EXPLAIN_KEY}";`);
 	});
 
 	it('every locale has words for every key, and an explanation', () => {
 		for (const locale of SUPPORTED_LOCALES) {
 			const backup = resolveSettingsMessages(locale).backup;
 			for (const key of BACKUP_ROW_KEYS) expect(backup.words[key], `${locale} ${key}`).toBeTruthy();
-			expect(backup.explain, locale).not.toBe('');
+			for (const key of BACKUP_EXPLAIN_KEYS)
+				expect(backup.explains[key], `${locale} ${key}`).toBeTruthy();
 		}
 	});
 
 	it('the explanation says what becomes public and that it costs a fee — not "only public keys"', () => {
-		const explain = m.backup.explain;
+		const explain = EXPLAIN;
 		for (const said of ['name', 'public key', 'credential ID', 'authenticator model', 'fee']) {
 			expect(explain).toContain(said);
 		}
@@ -218,7 +259,7 @@ describe('walletKeysModel', () => {
 		// The mark and the caption read one field, and it is the report.
 		expect(model.rows.map((row) => row.key.kind)).toEqual(['platform', 'security_key', 'hybrid']);
 		expect(model.rows.every((row) => row.key.synced_known)).toBe(true);
-		expect(model.backupExplain).toBe(m.backup.explain);
+		expect(model.backup?.explain).toBe(EXPLAIN);
 	});
 
 	it('still asking: a title and no guessed count', () => {
@@ -257,9 +298,10 @@ describe('walletKeysModel', () => {
 		expect(walletKeysModel(registry, CORE_ROW.backed_up, m).backup).toMatchObject({
 			action: 'none'
 		});
-		expect(walletKeysModel(registry, CORE_ROW.not_copyable, m).backup).toMatchObject({
-			action: 'none'
-		});
+		const never = walletKeysModel(registry, CORE_ROW.not_copyable, m).backup;
+		expect(never).toMatchObject({ action: 'none' });
+		// …and it ends on its row: no paragraph about making a copy.
+		expect(never).not.toHaveProperty('explain');
 		// No registry on Ethereum: the keys are still shown, the copy is not offered.
 		expect(walletKeysModel(registry, null, m).backup).toBeUndefined();
 	});

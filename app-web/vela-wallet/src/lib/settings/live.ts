@@ -1586,9 +1586,9 @@ export function liveRelayReport(m: RescueMessages, facts: DeviceFacts): Feedback
  * or `undefined` when it says to draw nothing: no registry on Ethereum (the
  * feature is dark) or no record to copy.
  *
- * Nothing here maps a state. Which words a state says, in which tone, and
- * what a tap does are the core's, the same on all four apps; this looks the
- * two corpus keys up. A key the manifest does not carry draws no row rather
+ * Nothing here maps a state. Which words a state says, in which tone, what a
+ * tap does and whether a paragraph stands under it are the core's, the same
+ * on all four apps; this looks the corpus keys up. A key the manifest does not carry draws no row rather
  * than a dotted path — `ethereum-backup-row.test.ts` holds the manifest to
  * every key the core can name.
  */
@@ -1601,7 +1601,21 @@ export function ethereumBackupRow(
 	const title = words[row.title_key];
 	const subtitle = words[row.subtitle_key];
 	if (title === undefined || subtitle === undefined) return undefined;
-	return { title, subtitle, tone: row.tone, action: row.action };
+	// The paragraph under the row is the core's too (`explain_key`, PR 3 note
+	// 6): present while a copy can still be made or checked, absent for a
+	// record that can never be copied — which used to be told how to copy it.
+	const explains = m.backup.explains as Record<string, string | undefined>;
+	const explain =
+		row.explain_key && Object.hasOwn(explains, row.explain_key)
+			? explains[row.explain_key]
+			: undefined;
+	return {
+		title,
+		subtitle,
+		tone: row.tone,
+		action: row.action,
+		...(explain === undefined ? {} : { explain })
+	};
 }
 
 /**
@@ -1715,7 +1729,6 @@ export function walletKeysModel(
 			customDomain === undefined ? undefined : fill(m.signing.keysOn, { domain: customDomain }),
 		rows,
 		backup: ethereumBackupRow(backup, m),
-		backupExplain: m.backup.explain,
 		copy: { action: m.keys.copy, done: m.keys.copied }
 	};
 }

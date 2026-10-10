@@ -986,6 +986,14 @@ export interface EthereumBackupRowModel {
 	 * tap at all.
 	 */
 	action: 'none' | 'copy' | 'retry';
+	/**
+	 * The paragraph under the row: what the copy makes public (the wallet's
+	 * name, each key's name, public key, credential ID and authenticator
+	 * model) and that it costs a network fee. The core names it per state
+	 * (`BackupRow.explain_key`) and names none for a record that can never be
+	 * copied — absent, no paragraph is drawn and no room is kept for one.
+	 */
+	explain?: string;
 }
 
 /**
@@ -1008,14 +1016,11 @@ export interface WalletKeysModel {
 	 */
 	domain?: string;
 	rows: WalletKeyRowModel[];
-	/** The wallet record's standing on Ethereum; absent = nothing to draw. */
-	backup?: EthereumBackupRowModel;
 	/**
-	 * Under the row: what the copy makes public (the wallet's name, each key's
-	 * name, public key, credential ID and authenticator model) and that it
-	 * costs a network fee.
+	 * The wallet record's standing on Ethereum, and the paragraph under it;
+	 * absent = nothing to draw.
 	 */
-	backupExplain: string;
+	backup?: EthereumBackupRowModel;
 	copy: { action: string; done: string };
 }
 

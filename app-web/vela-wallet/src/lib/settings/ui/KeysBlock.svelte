@@ -162,7 +162,14 @@
 				<span class="done"><Icon icon={UTILITY_ICONS.check} size="sm" /></span>
 			{/if}
 		</button>
-		<p class="explain">{model.backupExplain}</p>
+		<!--
+			The core names the paragraph per state and names none for a record
+			that can never be copied (PR 3 note 6): then nothing is drawn here,
+			and no room is kept — the block ends on its row.
+		-->
+		{#if backup.explain !== undefined}
+			<p class="explain">{backup.explain}</p>
+		{/if}
 	{/if}
 </section>
 
