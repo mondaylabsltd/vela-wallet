@@ -157,6 +157,23 @@ async function checkChain(page: Page, locale = 'en'): Promise<void> {
  * deploy onto a network that can never check a passkey signature, and said
  * nothing about money getting stuck there.
  */
+/**
+ * A refusal draws no RPC field and no "Re-check with this RPC" (PR 3 final
+ * note F22, the core's `rpc_field: none`): another endpoint would not change
+ * the verdict. The re-check stood here with no field to read.
+ */
+async function expectNoRpcField(page: Page): Promise<void> {
+	await expect(
+		page.getByRole('button', { name: en('settingsModals.addNetwork.recheckWithRpc') })
+	).toHaveCount(0);
+	await expect(
+		page.getByRole('textbox', { name: en('settingsModals.addNetwork.customRpcTitle') })
+	).toHaveCount(0);
+	await expect(
+		page.getByRole('textbox', { name: en('settingsModals.network.fieldRpcUrl'), exact: true })
+	).toHaveCount(0);
+}
+
 test.describe('a refused network says why', () => {
 	test('missing contracts: Chain Setup is offered, opened on this chain', async ({ page }) => {
 		await stubEverything(page, { contracts: false, p256: true });
@@ -176,6 +193,7 @@ test.describe('a refused network says why', () => {
 		await expect(
 			page.getByRole('button', { name: en('settingsModals.addNetwork.addNetworkBtn') })
 		).toHaveCount(0);
+		await expectNoRpcField(page);
 	});
 
 	test('no P-256 verifier: the network cannot run Vela wallets — nothing to deploy, no button', async ({
@@ -195,6 +213,13 @@ test.describe('a refused network says why', () => {
 		await expect(
 			page.getByRole('button', { name: en('settingsModals.addNetwork.addNetworkBtn') })
 		).toHaveCount(0);
+		await expectNoRpcField(page);
+		// The hint's hex is written "0x100" — and drawn so (the UI face would
+		// make it "0×100" if its contextual alternates were left on).
+		await expect(line).toContainText('0x100');
+		expect(await line.evaluate((el) => getComputedStyle(el).fontVariantLigatures)).toBe(
+			'no-contextual'
+		);
 	});
 
 	test('both gone: no verifier wins — deploying the contracts would not make it work', async ({
@@ -335,6 +360,86 @@ test.describe('a wizard that stops says why', () => {
 		).toBeVisible({ timeout: 30_000 });
 		await expect(page.getByText(en('settingsModals.addNetwork.noRpcEndpoint'))).toHaveCount(0);
 	});
+});
+
+/**
+ * PR 3 final note F14 — the add-token sheet's network tab draws the same
+ * wizard, and its no-RPC stop said "Enter one, then re-check" over nothing to
+ * enter it in. It has the field the core gives ("RPC URL") and the re-check
+ * that reads it, and they do what Settings' do.
+ */
+test('the add-token sheet’s network tab: no RPC listed → the field it asks for → re-check → compatible', async ({
+	page
+}) => {
+	await stubEverything(page);
+	await page.route(new RegExp(`/chains/eip155-${CHAIN_ID}\\.json$`), (route) =>
+		route.fulfill({
+			contentType: 'application/json',
+			body: JSON.stringify({
+				chainId: CHAIN_ID,
+				name: NAME,
+				shortName: 'linea',
+				nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+				rpc: [],
+				explorers: []
+			})
+		})
+	);
+	await page.goto('/en/wallet');
+	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
+
+	// Assets → "Add a token by address" → the network tab. (The home's rows
+	// are in the server's HTML before the page hydrates: press until the list
+	// answers.)
+	const byAddress = page.getByRole('button', { name: en('assets.addByAddress') });
+	await expect(async () => {
+		if (!(await byAddress.isVisible())) {
+			// The second "All": the Assets section's (the first is Activity's).
+			await page
+				.getByRole('button', { name: en('history.filterAll'), exact: true })
+				.last()
+				.click();
+		}
+		await expect(byAddress).toBeVisible({ timeout: 1_000 });
+	}).toPass({ timeout: 30_000 });
+	await byAddress.click();
+	const sheet = page.getByRole('dialog');
+	await expect(sheet).toBeVisible();
+	await sheet.getByText(en('addToken.tabNative'), { exact: true }).click();
+	await sheet.getByRole('textbox', { name: en('addToken.netSearchLabel') }).fill(String(CHAIN_ID));
+	await sheet
+		.getByRole('button', { name: new RegExp(NAME) })
+		.first()
+		.click();
+
+	// The stop, in the core's sentence — and what it asks for, under it.
+	await expect(sheet.getByText(en('settingsModals.addNetwork.noRpcEndpoint'))).toBeVisible({
+		timeout: 30_000
+	});
+	const field = sheet.getByRole('textbox', {
+		name: en('settingsModals.network.fieldRpcUrl'),
+		exact: true
+	});
+	await expect(field).toBeVisible();
+	await expect(
+		sheet.getByRole('textbox', { name: en('settingsModals.addNetwork.customRpcTitle') })
+	).toHaveCount(0);
+	const recheck = sheet.getByRole('button', {
+		name: en('settingsModals.addNetwork.recheckWithRpc')
+	});
+	await expect(recheck).toBeVisible();
+
+	await field.fill(`${STUB}/${CHAIN_ID}`);
+	await recheck.click();
+	await expect(sheet.getByText(en('addToken.compatible'), { exact: true })).toBeVisible({
+		timeout: 30_000
+	});
+	await expect(sheet.getByText(en('settingsModals.addNetwork.noRpcEndpoint'))).toHaveCount(0);
+	// Compatible: the field is the optional one now, with what was typed in it.
+	await expect(
+		sheet.getByRole('textbox', { name: en('settingsModals.addNetwork.customRpcTitle') })
+	).toHaveValue(`${STUB}/${CHAIN_ID}`);
+	await expect(sheet.getByRole('button', { name: en('addToken.addNetworkBtn') })).toBeEnabled();
 });
 
 test('search → verdict → add → listed → survives a reload → removed', async ({ page }) => {
