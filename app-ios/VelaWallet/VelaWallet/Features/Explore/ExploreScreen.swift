@@ -983,7 +983,10 @@ struct ExploreScreen: View {
             session: liveSession,
             refusalText: scanRefusalText,
             refusalAction: grantAction,
-            torchOn: camera?.torchOn ?? false
+            torchOn: camera?.torchOn ?? false,
+            // A gallery / board / dev session — or a drawing with no camera
+            // behind it at all: the fixture frame (PR 3 note 7).
+            fixtureFrame: camera?.fixtureOnly ?? true
         )
     }
 

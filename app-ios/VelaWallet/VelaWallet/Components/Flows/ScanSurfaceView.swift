@@ -12,6 +12,12 @@
 //  device with no camera, and then the frame holds the inert surface it always
 //  did — so the drawing is still exactly the drawing.
 //
+//  PR 3 note 7 (PRIVACY): in a gallery, a board or a dev session there is no
+//  camera behind it AT ALL (`CameraScanner.fixtureOnly`), and the frame is
+//  the FIXTURE frame: the drawn viewfinder holding the sample code — the
+//  deterministic demo pattern every drawn code on this client uses — so the
+//  state reads as what it is, a scanner aimed at a code, without a lens.
+//
 
 import AVFoundation
 import SwiftUI
@@ -35,6 +41,9 @@ struct ScanSurfaceView: View {
     var refusalAction: (label: String, act: () -> Void)?
     /// Whether the torch is lit, so the control can say so.
     var torchOn = false
+    /// A gallery / board / dev session: draw the fixture frame (the sample
+    /// code in the viewfinder). Never set where a real camera may run.
+    var fixtureFrame = false
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -54,7 +63,7 @@ struct ScanSurfaceView: View {
             .padding(.top, Tokens.Space.s16)
 
             Spacer()
-            ScanFrame(session: session)
+            ScanFrame(session: session, fixture: fixtureFrame && session == nil)
             Text(verbatim: refusalText ?? model.hint)
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(refusalText == nil ? theme.fgMuted : theme.warningBase)
@@ -115,6 +124,9 @@ private struct ScanFrame: View {
     @Environment(\.theme) private var theme
 
     var session: AVCaptureSession?
+    /// The fixture frame: the sample code, drawn where a camera's picture of
+    /// one would be (PR 3 note 7).
+    var fixture = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -125,6 +137,14 @@ private struct ScanFrame: View {
                         .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.r8))
                 } else {
                     RoundedRectangle(cornerRadius: Tokens.Radius.r8).fill(theme.bgSunken)
+                    if fixture {
+                        // A code as a camera would see it: on its own white
+                        // card, in both appearances, well inside the brackets.
+                        SampleCode()
+                            .frame(width: side * 0.62, height: side * 0.62)
+                            .accessibilityElement()
+                            .accessibilityIdentifier("scan.fixtureFrame")
+                    }
                 }
                 Path { path in
                     let arm = WalletFlowGeometry.scanBracketArm
@@ -158,5 +178,28 @@ private struct ScanFrame: View {
         .aspectRatio(1, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, Tokens.Layout.screenPaddingX * 2)
+    }
+}
+
+/// The deterministic demo pattern on a white card — the sample code the
+/// fixture frame holds. Never real encoded data.
+private struct SampleCode: View {
+    var body: some View {
+        Canvas { context, size in
+            let cells = QrPattern.cells
+            let count = cells.count
+            let module = min(size.width, size.height) / CGFloat(count)
+            for row in 0..<count {
+                for column in 0..<cells[row].count where cells[row][column] {
+                    let rect = CGRect(
+                        x: CGFloat(column) * module, y: CGFloat(row) * module,
+                        width: module.rounded(.up), height: module.rounded(.up)
+                    )
+                    context.fill(Path(rect), with: .color(WalletGeometry.qrInk))
+                }
+            }
+        }
+        .padding(Tokens.Space.s12)
+        .background(RoundedRectangle(cornerRadius: Tokens.Radius.r8).fill(WalletGeometry.qrCard))
     }
 }

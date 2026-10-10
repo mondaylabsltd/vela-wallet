@@ -48,6 +48,10 @@ struct ScanInputs {
     var refusalAction: (label: String, act: () -> Void)?
     var torchOn = false
     var onTool: (ScanTool) -> Void = { _ in }
+    /// A gallery, board or dev session (PR 3 note 7): the surface draws its
+    /// FIXTURE frame — a drawn viewfinder with the sample code — and there
+    /// is no camera behind it (`CameraScanner.fixtureOnly`).
+    var fixture = false
 }
 
 struct FlowHost: View {
@@ -316,7 +320,10 @@ struct FlowHost: View {
                 session: scan?.session,
                 refusalText: scan?.refusal,
                 refusalAction: scan?.refusalAction,
-                torchOn: scan?.torchOn ?? false
+                torchOn: scan?.torchOn ?? false,
+                // No live inputs at all is a gallery or a screenshot sweep:
+                // the fixture frame, as for a dev session's scanner.
+                fixtureFrame: scan?.fixture ?? true
             )
         case .share(let m):
             // Not a screen: the saved image, shown on its own so the gallery

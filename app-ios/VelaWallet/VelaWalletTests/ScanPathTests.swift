@@ -141,12 +141,20 @@ struct ScanPathTests {
 
     /// There is no camera in a simulator, and that is an ANSWER — not an
     /// error, and not silence. The surface falls back to the photo library.
+    ///
+    /// Simulator only (PR 3 note 7): this is the one test that lets a
+    /// scanner past its gate, and on hardware with a lens that would be a
+    /// real camera — which no test run may ever open.
     @Test func noCameraIsItsOwnAnswer() async {
-        let camera = CameraScanner()
+        #if targetEnvironment(simulator)
+        let camera = CameraScanner(fixtureOnly: false)
         await camera.start()
         #expect(camera.refusal == .noCamera || camera.refusal == .denied,
                 "a simulator has no camera and must say which refusal it is")
         #expect(!camera.running)
+        // The gate's counter bites: this scanner did reach for the hardware.
+        #expect(camera.hardwareReaches > 0)
+        #endif
     }
 
     /// Four refusals, four sentences. A person who denied permission and a

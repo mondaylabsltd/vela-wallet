@@ -3044,6 +3044,9 @@ struct RootView: View {
             torchOn: camera.torchOn,
             onTool: { tool in scanTool(tool) }
         )
+        // A gallery / board / dev session: the drawn viewfinder, never a
+        // camera (PR 3 note 7).
+        inputs.fixture = camera.fixtureOnly
         if camera.refusal == .denied {
             inputs.refusalAction = (
                 label: loc.t("componentsUi.scanner.grantPermission"),
@@ -4071,6 +4074,20 @@ enum PageOverride {
         default: nil
         }
     }()
+
+    /// Is this a gallery, fixture, board or dev-flow session? Any
+    /// `VELA_PAGE` override is one — none of them is production navigation —
+    /// and so is the onboarding gallery (`VELA_GALLERY=1`).
+    /// The signal the scanner reads to draw a fixture frame and never open
+    /// the camera (PR 3 note 7, `CameraScanner.fixtureOnly`): a desktop
+    /// gallery sweep photographed the person at the machine. Read from the
+    /// raw variable, so a page name this build has never heard of counts.
+    static func isDevSession(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        // …and the onboarding gallery's own switch (`GalleryMode`).
+        !(environment["VELA_PAGE"] ?? "").isEmpty || environment["VELA_GALLERY"] == "1"
+    }
 
     /// WHICH state the overridden page opens on — `VELA_STATE=e4`,
     /// `VELA_STATE=cs5`, or `VELA_STATE=st9` to put `settings-live` straight
