@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -467,6 +468,7 @@ fun RecipientCard(
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.lg,
                 textAlign = TextAlign.End,
+                fontFeatureSettings = VelaFontFeatures,
             )
             if (onAmountChange != null && recipient.amountValue != null) {
                 var typed by remember(recipient.id) { mutableStateOf(amountFieldOf(recipient.amountValue)) }

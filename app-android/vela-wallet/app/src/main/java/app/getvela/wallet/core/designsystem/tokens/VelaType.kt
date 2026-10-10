@@ -139,6 +139,14 @@ val VelaFontFamily: FontFamily = FontFamily(
 const val VelaFontFeatures: String = "calt 0"
 
 /**
+ * [VelaFontFeatures] with tabular figures, for a count that must not change
+ * width as it ticks. A style that asks for `tnum` REPLACES the theme's
+ * features, so it has to say "no contextual alternates" again itself — the
+ * rule that turns "0x" into "0×" came back on with every bare `"tnum"`.
+ */
+const val VelaFontFeaturesTabular: String = "tnum, calt 0"
+
+/**
  * font.mono projection. No mono face is bundled (DV-004), so this resolves to
  * the platform monospace family — enough for the fixed-width hex blocks the
  * spec-018 mocks render (contact-row addresses, the C2 地址 block). Declared in

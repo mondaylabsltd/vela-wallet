@@ -743,7 +743,7 @@ fun AllowanceEditor(
                             }
                         },
                         singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg, fontFeatureSettings = app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner ->
