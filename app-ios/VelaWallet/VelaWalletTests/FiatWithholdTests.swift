@@ -259,8 +259,10 @@ struct FiatWithholdTests {
 
     /// No other file multiplies by the rate or glues a currency glyph to a
     /// number: every surface asks `Display.fiat`. (The glyph is private to
-    /// the formatter's file, which the compiler holds; the rate is read in
-    /// one other place — handed to the send machine as its own input.)
+    /// the formatter's file, which the compiler holds; the rate leaves that
+    /// file by one door — `Display.sendContext`, the send machine's own
+    /// input, at its open and at every change after it — so no other file
+    /// reads it at all.)
     @Test func noOtherFileFormatsFiatItself() throws {
         let app = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
@@ -276,8 +278,6 @@ struct FiatWithholdTests {
             for (number, line) in source.components(separatedBy: "\n").enumerated() {
                 let code = line.components(separatedBy: "//").first ?? line
                 guard code.contains("display.rate") || code.contains("display.glyph") else { continue }
-                // The send machine's own input, not a figure drawn here.
-                if code.contains("displayRate: display.rate") { continue }
                 offenders.append("\(url.lastPathComponent):\(number + 1): \(code.trimmingCharacters(in: .whitespaces))")
             }
         }

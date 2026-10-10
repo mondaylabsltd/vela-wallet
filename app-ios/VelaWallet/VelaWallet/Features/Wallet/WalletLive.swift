@@ -141,6 +141,28 @@ enum WalletLive {
         static func live(_ view: CurrencyViewWire?) -> Display {
             view.map(from) ?? .waiting(for: nil)
         }
+
+        /// The display currency as the SEND MACHINE is told it — ONE rule,
+        /// for its `open` and for every change after it (PR 3 final note
+        /// F25), and the one place outside the formatter where the rate is
+        /// read: handed over as the machine's own input, never multiplied
+        /// here.
+        ///
+        /// - **committed**: the pair the hero prints in (a committed
+        ///   currency nobody could price is dollars there, and here);
+        /// - **not yet**: the code on its way when there is one, with NO
+        ///   rate. Before there is a committed pair the currency view is the
+        ///   USD/1 placeholder, which is not the person's currency; handed
+        ///   over as it was, a Send opened in a wallet's first seconds could
+        ///   be flipped to typing dollars at rate 1. `rate: nil` is the state
+        ///   the machine keeps for exactly this: the ⇄ toggle will not enter
+        ///   fiat, and sending in the token's own units is untouched.
+        static func sendContext(_ view: CurrencyViewWire?) -> (code: String, rate: Double?) {
+            guard let view else { return ("USD", nil) }
+            guard view.committed else { return (view.pending ?? view.code, nil) }
+            let display = from(view)
+            return (display.code, display.rate)
+        }
     }
 
     /// Swap the balance hero and the asset rows onto the drawn home.

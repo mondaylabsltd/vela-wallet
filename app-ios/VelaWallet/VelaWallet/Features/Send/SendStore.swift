@@ -249,23 +249,12 @@ final class SendStore {
         "\(code)|\(rate.map { String($0) } ?? "-")|\(decimals)"
     }
 
-    /// The display currency, as the send machine is told it — ONE rule, for
-    /// `open` and for every change after it (PR 3 final note F25):
-    ///
-    /// - **committed**: the pair the hero prints in (`WalletLive.Display`: a
-    ///   committed currency nobody could price is dollars there, and here);
-    /// - **not yet**: the code on its way when there is one, with NO rate.
-    ///   Before there is a committed pair the currency view is the USD/1
-    ///   placeholder, which is not the person's currency; handed over as it
-    ///   was, a Send opened in a wallet's first seconds could be flipped to
-    ///   typing dollars at rate 1. `rate: nil` is the state the machine keeps
-    ///   for exactly this: the ⇄ toggle will not enter fiat, and sending in
-    ///   the token's own units is untouched.
+    /// The display currency, as the send machine is told it — at `open` and
+    /// at every change after it (PR 3 final note F25). The rule is the
+    /// formatter's own (`WalletLive.Display.sendContext`): the committed
+    /// pair, or the code on its way and NO rate.
     static func displayContext(_ currency: CurrencyViewWire?) -> (code: String, rate: Double?) {
-        guard let currency else { return ("USD", nil) }
-        guard currency.committed else { return (currency.pending ?? currency.code, nil) }
-        let display = WalletLive.Display.from(currency)
-        return (display.code, display.rate)
+        WalletLive.Display.sendContext(currency)
     }
 
     func dispatch(_ event: [String: Any]) { core.dispatch(CoreJSON.string(event)) }

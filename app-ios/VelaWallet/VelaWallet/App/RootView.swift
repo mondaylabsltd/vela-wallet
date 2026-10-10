@@ -2646,7 +2646,7 @@ struct RootView: View {
         }
         // The display currency as the machine is told it — the same rule
         // again at every change while the journey is open (`sendDisplayStands`).
-        let display = SendStore.displayContext(settings.currency)
+        let told = SendStore.displayContext(settings.currency)
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
@@ -2655,8 +2655,8 @@ struct RootView: View {
             accountId: record?["id"] as? String ?? "",
             address: session.view.address,
             name: session.view.activeName.isEmpty ? nil : session.view.activeName,
-            displayCode: display.code,
-            displayRate: display.rate,
+            displayCode: told.code,
+            displayRate: told.rate,
             fiatDecimals: Self.sendFiatDecimals
         )
     }
@@ -2667,8 +2667,8 @@ struct RootView: View {
     /// The display currency committed, or changed (final note F25): an open
     /// Send journey hears it, and re-denominates by its own rule.
     private func sendDisplayStands() {
-        let display = SendStore.displayContext(settings.currency)
-        send.displayStands(code: display.code, rate: display.rate, fiatDecimals: Self.sendFiatDecimals)
+        let told = SendStore.displayContext(settings.currency)
+        send.displayStands(code: told.code, rate: told.rate, fiatDecimals: Self.sendFiatDecimals)
     }
 
     // MARK: - Into and out of Send (087 F27)
