@@ -128,7 +128,9 @@ pub fn callout(
                 .min_w(px(0.))
                 .text_size(theme::text_row_sub())
                 .text_color(fg)
-                .child(text.into()),
+                // A sentence, and it wraps: by the CJK line rule, so its
+                // full stop is never alone on the last line (`ui::prose`).
+                .child(crate::ui::prose(text)),
         )
 }
 
@@ -472,7 +474,7 @@ fn menu_of(
                 div()
                     .text_size(theme::text_label())
                     .text_color(theme.fg_subtle)
-                    .child(note.clone()),
+                    .child(crate::ui::prose(note.clone())),
             );
         }
         if *selected {
@@ -556,7 +558,7 @@ pub fn dropdown_menu_details(
                     .text_size(theme::text_label())
                     .line_height(theme::line_height_body())
                     .text_color(theme.fg_subtle)
-                    .child(detail.clone()),
+                    .child(crate::ui::prose(detail.clone())),
             );
         }
         let mut row = div()
@@ -975,7 +977,7 @@ pub fn editable_url_field(
                 .text_size(theme::text_label())
                 .line_height(px(16.))
                 .text_color(theme.fg_subtle)
-                .child(hint),
+                .child(crate::ui::prose(hint)),
         );
     }
     col
@@ -1083,7 +1085,7 @@ pub fn url_field_with(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(hint),
+                .child(crate::ui::prose(hint)),
         );
     }
     col
@@ -1211,7 +1213,7 @@ pub fn storage_group_with(
                             div()
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_subtle)
-                                .child(item.meta.clone()),
+                                .child(crate::ui::prose(item.meta.clone())),
                         )
                         .child(crate::flows::panels::clickable(
                             ElementId::from((key, index)),
@@ -1444,7 +1446,7 @@ pub fn danger_card(
                     div()
                         .text_size(theme::text_label())
                         .text_color(theme.fg_muted)
-                        .child(subtitle),
+                        .child(crate::ui::prose(subtitle)),
                 ),
         )
         .child(
@@ -1527,7 +1529,7 @@ pub fn confirm_sheet(
                 .text_size(theme::text_row_title())
                 .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_base)
-                .child(copy.body),
+                .child(crate::ui::prose(copy.body)),
         );
     if let Some(note) = copy.note {
         sheet = sheet.child(
@@ -1535,7 +1537,7 @@ pub fn confirm_sheet(
                 .text_size(theme::text_row_sub())
                 .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_subtle)
-                .child(note),
+                .child(crate::ui::prose(note)),
         );
     }
     if let Some(callout) = copy.callout {
@@ -1547,7 +1549,7 @@ pub fn confirm_sheet(
                 .text_size(theme::text_row_sub())
                 .line_height(theme::line_height_body())
                 .text_color(theme.error_base)
-                .child(callout),
+                .child(crate::ui::prose(callout)),
         );
     }
     sheet.child(
@@ -1640,7 +1642,7 @@ pub fn rpc_banner(
                         .text_size(theme::text_row_sub())
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.warning_base)
-                        .child(text),
+                        .child(crate::ui::prose(text)),
                 ),
         )
         .child(row)

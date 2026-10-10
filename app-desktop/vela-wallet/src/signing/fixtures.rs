@@ -728,10 +728,11 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
             m
         }
 
-        // The wallet's own key backup to Ethereum, as the live column draws
+        // "Copy this wallet's record to Ethereum", as the live column draws
         // the core's reading of it (a test holds the two together): the
-        // intent leads as the headline, then Network / Address / Public keys,
-        // each in the core's words; the confirm says the intent.
+        // intent leads as the headline, then Network / Address / Wallet name
+        // / Keys included, each in the core's words — the name is on the
+        // sheet because the copy makes it public; the confirm says the intent.
         "cs36" => {
             let term = |term: ClearTerm| s.terms.get(&term).cloned().unwrap_or_default();
             let intent = term(ClearTerm::IntentBackUpPublicKeys);
@@ -754,6 +755,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     Block::Rows(vec![
                         row(term(ClearTerm::LabelNetwork), "Ethereum"),
                         mono_row(term(ClearTerm::LabelAddress), "0x88cCA0…266894"),
+                        row(term(ClearTerm::LabelWalletName), "Interleave"),
                         row(term(ClearTerm::LabelPublicKeys), "3"),
                     ]),
                 ],

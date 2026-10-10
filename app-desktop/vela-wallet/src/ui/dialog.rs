@@ -113,7 +113,7 @@ pub fn dialog(
                         .mt(px(SUBTITLE_GAP))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_subtle)
-                        .child(subtitle)
+                        .child(crate::ui::prose(subtitle))
                 })),
         )
         .child(
@@ -170,7 +170,8 @@ pub fn dialog_body(theme: &Theme, text: impl Into<SharedString>) -> Div {
         .text_size(theme::text_row_sub())
         .line_height(gpui::relative(1.4))
         .text_color(theme.fg_muted)
-        .child(text.into())
+        // A sentence that wraps: by the CJK line rule (`ui::prose`).
+        .child(super::prose(text))
 }
 
 /// The web's `.dialog-actions`: the answers at the row's end, 8 apart, each

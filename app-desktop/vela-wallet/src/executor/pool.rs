@@ -61,61 +61,6 @@ use crate::core_host::CoreHost;
 use crate::diag::{host_of, vlog};
 use crate::executor::{proxy, storage};
 
-/// Curated public fallbacks (`PUBLIC_RPCS`, rpc-pool-endpoints.ts:50-60).
-///
-/// A data table, ported verbatim. It is tier 4 of six — below a user override, a
-/// configured provider and the built-in default, above whatever the chain index
-/// happens to list.
-const PUBLIC_RPCS: &[(u32, &[&str])] = &[
-    (
-        1,
-        &["https://ethereum-rpc.publicnode.com", "https://1rpc.io/eth"],
-    ),
-    // bsc.meowrpc.com was dropped (issue #212; measured 2026-09-20): its
-    // eth_gasPrice flips between 0.05, 0.1 and 1.0 gwei and ~33% of calls error.
-    (
-        56,
-        &["https://bsc-rpc.publicnode.com", "https://bsc.drpc.org"],
-    ),
-    (
-        137,
-        &[
-            "https://polygon-bor-rpc.publicnode.com",
-            "https://1rpc.io/matic",
-        ],
-    ),
-    (
-        42161,
-        &[
-            "https://arbitrum-one-rpc.publicnode.com",
-            "https://1rpc.io/arb",
-        ],
-    ),
-    (
-        10,
-        &["https://optimism-rpc.publicnode.com", "https://1rpc.io/op"],
-    ),
-    (
-        8453,
-        &["https://base-rpc.publicnode.com", "https://1rpc.io/base"],
-    ),
-    (
-        43114,
-        &[
-            "https://avalanche-c-chain-rpc.publicnode.com",
-            "https://1rpc.io/avax/c",
-        ],
-    ),
-    (
-        100,
-        &[
-            "https://gnosis-rpc.publicnode.com",
-            "https://1rpc.io/gnosis",
-        ],
-    ),
-    (196, &["https://rpc.xlayer.tech", "https://xlayer.drpc.org"]),
-];
-
 /// How long a read waits on one endpoint before the same read also goes to
 /// the endpoint the core asks next (spec 083 D3b, hand-off H6). The delay,
 /// which reads may be hedged ([`is_hedged_read`]), where a hedge goes
@@ -1631,11 +1576,13 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
         add(custom, RpcSource::Default, &mut rpc);
     }
 
-    // 4. the curated public fallbacks.
-    if let Some((_, urls)) = PUBLIC_RPCS.iter().find(|(id, _)| *id == chain_id) {
-        for url in *urls {
-            add((*url).to_owned(), RpcSource::Public, &mut rpc);
-        }
+    // 4. the curated public fallbacks — the CORE's list
+    // (`network_admin::PUBLIC_RPCS`), one table for every shell. The desktop
+    // kept its own copy, and that copy still named `1rpc.io`, which timed
+    // out on every call (issue 483's research): a fallback that never
+    // answers is a slower failure, not a second chance.
+    for url in vela_core::app::network_admin::public_rpc_urls(chain_id) {
+        add(url, RpcSource::Public, &mut rpc);
     }
 
     // Tiers 5 and 6 are the chain index, which this cut does not fetch here:
@@ -2097,6 +2044,54 @@ mod tests {
                 WENT_OFFLINE.load(std::sync::atomic::Ordering::SeqCst),
                 offline_before,
                 "one dead chain raised \"offline\""
+            );
+        });
+    }
+
+    /// PR 3 item 11: the public tier is the CORE's curated list
+    /// (`network_admin::public_rpc_urls`), in its order, for every built-in
+    /// network — one table for every shell. The desktop's own copy still
+    /// named `1rpc.io`, which had stopped answering; no endpoint of that
+    /// host is seeded on any chain any more.
+    #[test]
+    fn the_public_tier_is_the_cores_curated_list() {
+        storage::tests::with_temp_state("pool-public-tier", || {
+            use vela_core::app::network_admin::public_rpc_urls;
+            let mut with_a_public_tier = 0;
+            for chain in BUILTIN_CHAINS {
+                let (rpc, _) = collect_endpoints(chain.chain_id);
+                let public: Vec<&str> = rpc
+                    .iter()
+                    .filter(|seed| seed.source == RpcSource::Public)
+                    .map(|seed| seed.url.as_str())
+                    .collect();
+                // The core's list, less any URL that is also the chain's
+                // default (offered once, at its own tier).
+                let expected: Vec<String> = public_rpc_urls(chain.chain_id)
+                    .into_iter()
+                    .filter(|url| url != chain.rpc_url)
+                    .collect();
+                assert_eq!(public, expected, "chain {}", chain.chain_id);
+                assert!(
+                    rpc.iter().all(|seed| !seed.url.contains("1rpc.io")),
+                    "chain {}: a dead fallback is still offered",
+                    chain.chain_id
+                );
+                with_a_public_tier += usize::from(!expected.is_empty());
+            }
+            assert!(
+                with_a_public_tier >= 9,
+                "the curated list covers the majors"
+            );
+            // Polygon, where the dead fallback was measured: a second
+            // endpoint that answers.
+            let (polygon, _) = collect_endpoints(137);
+            assert!(
+                polygon
+                    .iter()
+                    .any(|seed| seed.url == "https://polygon.gateway.tenderly.co"),
+                "{:?}",
+                polygon.iter().map(|seed| &seed.url).collect::<Vec<_>>()
             );
         });
     }

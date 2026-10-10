@@ -2423,9 +2423,9 @@ mod tests {
         );
     }
 
-    /// The wallet's own key backup speaks the reader's language through the
-    /// core's terms alone: its intent, then Network / Address / Public keys,
-    /// in that order. Nothing relabels by position — that swap put
+    /// The copy of the wallet's record speaks the reader's language through
+    /// the core's terms alone: its intent, then Network / Address / Wallet
+    /// name / Keys included, in that order. Nothing relabels by position — that swap put
     /// "Registered as" over whichever row came first, which is the Network
     /// row now. The confirm says the intent too, not a generic "Confirm".
     #[test]
@@ -2450,14 +2450,15 @@ mod tests {
             (intent, rows)
         };
         let (intent, rows) = rows_of(1);
-        assert_eq!(intent, "备份公钥");
+        assert_eq!(intent, "复制钱包记录");
         let labels: Vec<&str> = rows.iter().map(|(label, _)| label.as_str()).collect();
-        assert_eq!(labels, ["网络", "地址", "公钥数量"]);
+        assert_eq!(labels, ["网络", "地址", "钱包名称", "包含的钥匙"]);
         assert_eq!(rows[0].1, "Ethereum", "the network the header chip said");
-        assert_eq!(rows[2].1, "3");
+        assert_eq!(rows[2].1, "Interleave", "the name the copy makes public");
+        assert_eq!(rows[3].1, "3");
         assert_eq!(
             confirm_label(&registry_backup_reading(1), &zh).as_ref(),
-            "备份公钥",
+            "复制钱包记录",
             "the confirm says what it does, and nothing else"
         );
         // The rehearsal chain names itself the same way.

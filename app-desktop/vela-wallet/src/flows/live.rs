@@ -119,9 +119,7 @@ fn asset_row(
             // about what "no price" is called.
             Fiat::NoPrice(wallet.no_price.clone())
         } else {
-            Fiat::Value(SharedString::from(
-                currency.text(amount * token.price_usd.unwrap_or(0.0), locale),
-            ))
+            currency.fiat(amount * token.price_usd.unwrap_or(0.0), locale)
         },
     }
 }
@@ -1828,7 +1826,7 @@ fn send_token_row(
         balance: SharedString::from(trimmed(amount)),
         fiat: match token.price_usd {
             None => Fiat::NoPrice(wallet.no_price.clone()),
-            Some(price) => Fiat::Value(SharedString::from(currency.text(amount * price, locale))),
+            Some(price) => currency.fiat(amount * price, locale),
         },
     }
 }
@@ -4627,7 +4625,6 @@ pub fn contact_pick(view: &ContactsView, s: &FlowStrings) -> ContactPick {
     };
     ContactPick {
         search_placeholder: s.pick_contact_search.clone(),
-        scan_row: s.scan_to_fill.clone(),
         groups_title: s.contacts_groups.clone(),
         groups: view
             .groups
@@ -6953,7 +6950,11 @@ mod tests {
             assert_eq!(chip.text, s.status_pending);
             assert!(matches!(chip.tone, StatusTone::Info));
 
-            // Privacy masks the figure here as everywhere.
+            // Privacy masks the figure here as everywhere — and keeps its
+            // unit (PR 3 item 12, the core's `privacy::masked_amount`): the
+            // detail reads "•••• xDAI", what kind of money without how much,
+            // as the row it was opened from does. Not the digits, not the
+            // sign, not a bare mask.
             let hidden = tx_detail(
                 &view,
                 "a",
@@ -6964,7 +6965,13 @@ mod tests {
                 crate::wallet::live::Money::usd(),
             )
             .unwrap_or_else(|| unreachable!("row a exists"));
-            assert_eq!(hidden.amount, crate::wallet::fixtures::MASK);
+            assert_eq!(hidden.amount, "•••• xDAI");
+            assert_eq!(
+                hidden.amount,
+                vela_core::app::privacy::masked_amount("xDAI"),
+                "the core's rule, not this shell's"
+            );
+            assert!(!hidden.amount.contains("1.5"));
             assert_eq!(hidden.fiat, "");
 
             // A row that no longer exists has no detail — the panel closes
@@ -7819,6 +7826,7 @@ mod tests {
                         Fiat::Value(v) => v.to_string(),
                         Fiat::NoPrice(v) => v.to_string(),
                         Fiat::Masked => "•••".to_owned(),
+                        Fiat::Pending => String::new(),
                     }
                 );
             }

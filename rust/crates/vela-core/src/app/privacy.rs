@@ -22,6 +22,15 @@
 //! money; an unlimited allowance is a risk to see, and a signature with no
 //! figure has nothing to hide (a mask there would claim a figure).
 //!
+//! **A masked amount keeps its unit** ([`masked_amount`]): "•••• xDAI", never
+//! a bare "••••", wherever the shown figure carries one ("0.5 xDAI"). The
+//! unit says what kind of money moved without saying how much — the secret
+//! is the number — and one shell dropping it while another keeps it is the
+//! same transfer reading two ways (the 102 device run: a hidden transfer's
+//! detail read "•••• xDAI" on iOS and "••••" on Android). A figure drawn
+//! with no unit beside it (a holding's amount under its own ticker, a fiat
+//! total) masks to [`MASK`] alone, as before.
+//!
 //! **What stays visible on purpose** ([`MoneySurface::VISIBLE`]): the flows a
 //! person starts, where the number IS the decision — Send (the picker, Max,
 //! the confirm), the signing sheet (balance changes, the fee) and Receive's
@@ -45,6 +54,21 @@ pub const MASK: &str = "••••";
 
 /// The hero's mask — one glyph wider, so the hidden total keeps its weight.
 pub const BALANCE_MASK: &str = "••••••";
+
+/// A masked amount as every shell draws it: the mask, then the unit the
+/// shown figure carries — "•••• xDAI". The one rule for whether a hidden
+/// amount keeps its unit: it does. `unit` is the token's symbol exactly as
+/// the shown figure prints it; an empty one (a figure with no unit of its
+/// own) gives [`MASK`] alone, never a trailing space.
+#[must_use]
+pub fn masked_amount(unit: &str) -> String {
+    let unit = unit.trim();
+    if unit.is_empty() {
+        MASK.to_owned()
+    } else {
+        format!("{MASK} {unit}")
+    }
+}
 
 /// Every surface that draws a money figure, by whether privacy masks it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -133,5 +157,21 @@ pub fn figure_maskable(item: &FeedItem) -> bool {
             .as_ref()
             .is_some_and(|allowance| !allowance.unlimited && allowance.value.is_some()),
         None => item.batch.is_some(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One rule on every shell: a hidden amount keeps its unit and hides
+    /// only the number; a figure with no unit is the mask alone.
+    #[test]
+    fn a_masked_amount_keeps_its_unit() {
+        assert_eq!(masked_amount("xDAI"), "•••• xDAI");
+        assert_eq!(masked_amount("USDC"), format!("{MASK} USDC"));
+        assert_eq!(masked_amount(""), MASK);
+        assert_eq!(masked_amount("  "), MASK, "never a trailing space");
+        assert!(!masked_amount("ETH").chars().any(|c| c.is_ascii_digit()));
     }
 }

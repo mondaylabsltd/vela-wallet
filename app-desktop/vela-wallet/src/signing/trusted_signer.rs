@@ -340,7 +340,7 @@ pub fn handoff_facts(
                 .text_size(theme::text_row_sub())
                 .line_height(gpui::relative(integrity::LINE_HEIGHT))
                 .text_color(theme.error_base)
-                .child(blocked.clone()),
+                .child(crate::ui::prose(blocked.clone())),
         ));
     }
     if let Some((said, tone)) = &model.integrity {

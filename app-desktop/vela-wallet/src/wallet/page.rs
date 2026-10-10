@@ -836,10 +836,7 @@ pub struct WalletPage {
     /// (`None` = still asking). Asked of the chain, never of our server, each
     /// time the Account page meets a different account.
     backup_for: Option<String>,
-    backup_check: Option<(
-        vela_core::registry_backup::BackupState,
-        Option<vela_core::registry_backup::BackupCall>,
-    )>,
+    backup_check: Option<crate::executor::registry::BackupAnswer>,
     /// Which passkeys control that same wallet (spec 062), read from the
     /// registry contract; `None` = still asking.
     keys_check: Option<(
@@ -1072,8 +1069,6 @@ pub struct WalletPage {
     /// (078 C-07).
     export_scope: Option<ContactExportScope>,
     pick_query_focus: gpui::FocusHandle,
-    /// The contact whose address is being shown as a code, if any.
-    contact_qr: Option<(SharedString, SharedString)>,
     /// The group name sheet: `Some((id, name))`, with `None` for a new group.
     /// One dialog for 新建分组 and 重命名分组, because they are one question.
     group_form: Option<(Option<String>, String)>,
@@ -1356,6 +1351,19 @@ impl WalletPage {
                 .unwrap_or_default();
             self.signer_page_rename = Some((url, name));
         }
+        // `VELA_SETTINGS_SCROLL=<px>|bottom`: the open panel scrolled that
+        // far down — a screenshot pass cannot turn a wheel, and the Keys
+        // block (with its copy-to-Ethereum row) sits below the first screen.
+        match crate::dev_env::var!("VELA_SETTINGS_SCROLL").as_deref() {
+            Some("bottom") => self.settings_scroll.scroll_to_bottom(),
+            Some(raw) => {
+                if let Ok(down) = raw.parse::<f32>() {
+                    self.settings_scroll
+                        .set_offset(gpui::point(px(0.), px(-down.max(0.))));
+                }
+            }
+            None => {}
+        }
     }
 
     /// What the header, the receive panel and the identicon are drawn from.
@@ -1393,7 +1401,19 @@ impl WalletPage {
 
     /// `VELA_PAGE=explore` opens straight onto the browser (spec 022).
     pub fn explore(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::with_section(Section::Explore, false, window, cx)
+        let mut page = Self::with_section(Section::Explore, false, window, cx);
+        // `VELA_NET_REFUSAL` (developer builds): the Connection column is up,
+        // because that is where the pinned add-network sheet is drawn.
+        // …and `VELA_PANEL_SCROLL=bottom` shows the sheet's end — its line
+        // and whether there is a button under it — which a pass that cannot
+        // turn a wheel never reaches on a long sheet.
+        if settings_live::pinned_refusal().is_some() {
+            page.panel = PanelId::Connection;
+            if crate::dev_env::var!("VELA_PANEL_SCROLL").as_deref() == Some("bottom") {
+                page.panel_scroll.scroll_to_bottom();
+            }
+        }
+        page
     }
 
     fn with_section(
@@ -1505,7 +1525,11 @@ impl WalletPage {
             celebrating: false,
             chain_filter: None,
             feed_privacy: None,
-            tx_detail: None,
+            // `VELA_ACTIVITY_FIXTURE`: the detail opens on the fixture's
+            // newest transfer.
+            tx_detail: Self::pinned_feed()
+                .as_ref()
+                .and_then(|feed| wallet_live::history_item_ids(feed).into_iter().next()),
             tx_technical: None,
             asset_detail: None,
             add_token_focus: cx.focus_handle(),
@@ -1629,7 +1653,6 @@ impl WalletPage {
             pick: None,
             export_scope: None,
             pick_query_focus: cx.focus_handle(),
-            contact_qr: None,
             group_form: None,
             group_form_focus: cx.focus_handle(),
             contact_form_name_focus: cx.focus_handle(),
@@ -2296,7 +2319,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_body())
                     .text_color(theme.fg_muted)
-                    .child(empty),
+                    .child(crate::ui::prose(empty)),
             );
         } else {
             let mut list = self.pick_scroll.attach(
@@ -2456,145 +2479,6 @@ impl WalletPage {
             )
             .into_any_element(),
         )
-    }
-
-    /// A contact's address as a code, the way the receive card does our own.
-    ///
-    /// The three pills on the contact panel were drawn in 018 and none of them
-    /// did anything until 2026-09-23. 转账 and 收款 had another route (the row's
-    /// context menu); **二维码 had none at all**, which is why it needed a
-    /// surface rather than a handler. The web's sheet is the model: their
-    /// identicon, their name, their address encoded — a picture somebody can
-    /// hold up to a phone.
-    ///
-    /// The identicon is not decoration. It is the anti-forgery mark the receive
-    /// redesign leans on: two addresses that read alike do not draw alike.
-    fn contact_qr_dialog(
-        &mut self,
-        theme: &Theme,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> Option<gpui::AnyElement> {
-        let (name, address) = self.contact_qr.clone()?;
-        let s = &self.contacts;
-        let title = s.action_qr.clone();
-        let copy_label = if self.copied.as_deref() == Some(CONTACT_QR_COPY) {
-            s.copied.clone()
-        } else {
-            s.copy_address.clone()
-        };
-
-        // 21 modules for a 42-character address is not a given, so the module
-        // size is derived from the code's own width rather than assumed.
-        let code = qrcode::QrCode::new(address.as_bytes()).ok();
-        let matrix: Div = match code {
-            Some(code) => {
-                let width = code.width();
-                let module = (220.0 / width as f32).floor().max(2.0);
-                let colors = code.to_colors();
-                let mut grid = div().flex().flex_col().p(px(12.)).bg(gpui::rgb(0xffffff));
-                for row in 0..width {
-                    let mut line = div().flex().flex_row();
-                    for col in 0..width {
-                        let dark =
-                            matches!(colors.get(row * width + col), Some(qrcode::Color::Dark));
-                        let mut cell = div().size(px(module));
-                        if dark {
-                            cell = cell.bg(gpui::rgb(0x000000));
-                        }
-                        line = line.child(cell);
-                    }
-                    grid = grid.child(line);
-                }
-                grid
-            }
-            // An address that cannot be encoded is a bug elsewhere; drawing a
-            // fake pattern would be worse than drawing nothing, because a fake
-            // one gets photographed.
-            None => div(),
-        };
-
-        // The web's `ContactQr`: the code, the name at 17 bold, the address in
-        // full in the mono face, and a hairline pill that copies it.
-        let body = div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(8.))
-            .pb(px(16.))
-            .child(crate::wallet::components::identicon_avatar(
-                &mut self.identicons,
-                &address,
-                56.,
-            ))
-            .child(
-                div()
-                    .mt(px(8.))
-                    .rounded(px(14.))
-                    .overflow_hidden()
-                    .child(matrix),
-            )
-            .child(
-                div()
-                    .mt(px(8.))
-                    .text_size(theme::text_button())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(name),
-            )
-            .child(
-                div()
-                    .max_w(px(300.))
-                    .font_family(theme::font_mono())
-                    .text_size(theme::text_label())
-                    .text_color(theme.fg_muted)
-                    .text_center()
-                    .child(address.clone()),
-            )
-            .child(
-                div()
-                    .id("contact-qr-copy")
-                    .h(px(36.))
-                    .px(px(16.))
-                    .flex()
-                    .items_center()
-                    .rounded_full()
-                    .border_1()
-                    .border_color(theme.border_card)
-                    .bg(theme.bg_raised)
-                    .cursor_pointer()
-                    .hover(|el| el.opacity(0.92))
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.copy_text(
-                            CONTACT_QR_COPY,
-                            address.to_string(),
-                            CONTACTS_COPY_HOLD,
-                            cx,
-                        );
-                    }))
-                    .child(copy_label),
-            );
-
-        Some(
-            crate::ui::dialog::dialog(
-                "contact-qr",
-                theme,
-                window,
-                title,
-                None,
-                self.dialog_close_icon(theme),
-                body,
-                &self.dialog_scroll("contact-qr"),
-                Self::closer(cx, |this, _| this.close_contact_qr()),
-            )
-            .into_any_element(),
-        )
-    }
-
-    fn close_contact_qr(&mut self) {
-        self.contact_qr = None;
     }
 
     /// The add/edit contact form — the third column, as the web draws it
@@ -3018,7 +2902,7 @@ impl WalletPage {
                     .text_size(theme::text_row_sub())
                     .line_height(gpui::relative(1.6))
                     .text_color(theme.fg_muted)
-                    .child(caption),
+                    .child(crate::ui::prose(caption)),
             )
             // The whole address, never shortened: a fingerprint you can only
             // see half of teaches half a habit.
@@ -3567,8 +3451,6 @@ impl WalletPage {
             self.explore_form = None;
         } else if self.explore_groups {
             self.explore_groups = false;
-        } else if self.contact_qr.is_some() {
-            self.close_contact_qr();
         } else if self.contact_form.is_some() {
             self.contact_form = None;
         } else if self.import_result.is_some() {
@@ -3845,7 +3727,9 @@ impl WalletPage {
         // The ids behind the preview rows, in the same order they draw. The
         // home drops the core's day headers, so row N here is feed item N.
         let home_tx_ids: Vec<String> = if self.identity.is_some() {
-            wallet_live::history_item_ids(&resident::resident::<ActivityFeed>(cx).read(cx).view())
+            // The same view the rows were built from (`feed_view`), so row N
+            // and id N cannot come from two feeds.
+            wallet_live::history_item_ids(&self.feed_view(cx))
         } else {
             Vec::new()
         };
@@ -4447,7 +4331,23 @@ impl WalletPage {
     /// and a dApp's detail) masks on the feed's own `hidden`, which the core
     /// keeps from `PrivacyChanged` — so it is told before anyone reads it,
     /// and a relaunch with the balance hidden never shows a figure first.
+    /// `VELA_ACTIVITY_FIXTURE=shown|hidden` (developer builds): the feed is
+    /// `fixtures::transfer_feed` — two transfers through the real feed core,
+    /// its privacy as asked — so the home's rows and a transfer's detail
+    /// (`VELA_FLOW=DA2`) can be looked at shown and hidden without a wallet
+    /// that has a history. The same env-pin family as `VELA_FLOW`.
+    fn pinned_feed() -> Option<vela_core::app::activity_feed::FeedView> {
+        match crate::dev_env::var!("VELA_ACTIVITY_FIXTURE").as_deref() {
+            Some("hidden") => Some(fixtures::transfer_feed(true)),
+            Some("shown") => Some(fixtures::transfer_feed(false)),
+            _ => None,
+        }
+    }
+
     fn feed_view(&mut self, cx: &mut Context<Self>) -> vela_core::app::activity_feed::FeedView {
+        if let Some(pinned) = Self::pinned_feed() {
+            return pinned;
+        }
         self.sync_feed_privacy(cx);
         resident::resident::<ActivityFeed>(cx).read(cx).view()
     }
@@ -4579,7 +4479,6 @@ impl WalletPage {
             || self.export_scope.is_some()
             || self.explore_form.is_some()
             || self.explore_groups
-            || self.contact_qr.is_some()
             || self.balance_detail_open
             || self.unreachable_open
             || self.feedback.viewer_open()
@@ -4708,6 +4607,17 @@ impl WalletPage {
     /// whole cut exists to fix.
     fn asset_models(&mut self, cx: &mut Context<Self>) -> Vec<fixtures::AssetRowModel> {
         if self.identity.is_none() {
+            // `VELA_CURRENCY_PENDING`: a held wallet through the live
+            // builder, its worth waiting on the currency.
+            if let Some(money) = Self::pinned_pending_currency() {
+                return wallet_live::asset_rows(
+                    &fixtures::held_view(),
+                    &self.strings,
+                    &self.locale,
+                    None,
+                    &money,
+                );
+            }
             return fixtures::assets_default(&self.strings);
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
@@ -4815,6 +4725,16 @@ impl WalletPage {
                 let money = self.money(cx);
                 return wallet_live::balance(
                     &fixtures::internal_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
+            // `VELA_CURRENCY_PENDING`: the same held wallet, its total
+            // waiting on the currency.
+            if let Some(money) = Self::pinned_pending_currency() {
+                return wallet_live::balance(
+                    &fixtures::held_view(),
                     &self.strings,
                     &self.locale,
                     &money,
@@ -5242,7 +5162,7 @@ impl WalletPage {
                     .pt(px(12.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(caption),
+                    .child(crate::ui::prose(caption)),
             )
     }
 
@@ -5450,8 +5370,6 @@ impl WalletPage {
         let delete = self.contacts.delete_contact.clone();
         let delete_name = model.name.clone();
         let send = self.contacts.action_send.clone();
-        let receive = self.contacts.action_receive.clone();
-        let qr = self.contacts.action_qr.clone();
 
         // The membership chips, and the web's `+` chip after them — 移入分组
         // from where the groups are shown, not only from a right-click
@@ -5571,75 +5489,38 @@ impl WalletPage {
                     .child(chips),
             );
 
-        // What the three pills DO. They have been drawn since 018 and did
-        // nothing at all; 转账 and 收款 at least had the row's context menu,
-        // and 二维码 had no other route anywhere in the app.
+        // The page's one action (issue 479): Send, to this person. Receive
+        // (the wallet's OWN code, which is not about this contact) and the
+        // QR pill are gone — a person on someone's page is there to pay them,
+        // and the address above stays copyable. One pill takes the row's
+        // whole width, in the place the first of three used to start.
         let send_to = model.address_full.to_string();
-        let qr_name = model.name.clone();
-        let qr_address = SharedString::from(model.address_full.to_string());
-        let actions = div()
-            .flex()
-            // Three words in a long language at the largest text size are
-            // wider than this panel: unwrapped, 二维码 was drawn half off the
-            // right edge of the window. The chips above wrap for the same
-            // reason.
-            .flex_wrap()
-            .gap(px(8.))
-            .child(
-                contacts_components::detail_action(
-                    "contact-send",
-                    theme,
-                    &mut self.icons,
-                    Icon::ArrowUpRight,
-                    send,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    // The same route the row's 转账 takes: the send flow with
-                    // this person prefilled. The core takes the prefill; the
-                    // shell does not type into its own screen.
-                    this.section = Section::Wallet;
-                    this.send_sweeping = false;
-                    this.flows = FlowPanel::entry(FlowEntry::Send);
-                    this.panel = PanelId::Flow;
-                    this.open_send(
-                        SendOpenParams {
-                            prefilled_recipient: Some(send_to.clone()),
-                            ..SendOpenParams::default()
-                        },
-                        cx,
-                    );
-                    cx.notify();
-                })),
+        let actions = div().flex().child(
+            contacts_components::detail_action(
+                "contact-send",
+                theme,
+                &mut self.icons,
+                Icon::ArrowUpRight,
+                send,
             )
-            .child(
-                contacts_components::detail_action(
-                    "contact-receive",
-                    theme,
-                    &mut self.icons,
-                    Icon::ArrowDownLeft,
-                    receive,
-                )
-                .on_click(cx.listener(|this, _, _, cx| {
-                    // My own address — what a person needs when the answer to
-                    // "how do I pay you" is asked of them.
-                    this.section = Section::Wallet;
-                    this.enter_flow(FlowEntry::Receive, cx);
-                    cx.notify();
-                })),
-            )
-            .child(
-                contacts_components::detail_action(
-                    "contact-qr",
-                    theme,
-                    &mut self.icons,
-                    Icon::QrCode,
-                    qr,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
-                    cx.notify();
-                })),
-            );
+            .on_click(cx.listener(move |this, _, _, cx| {
+                // The same route the row's 转账 takes: the send flow with
+                // this person prefilled. The core takes the prefill; the
+                // shell does not type into its own screen.
+                this.section = Section::Wallet;
+                this.send_sweeping = false;
+                this.flows = FlowPanel::entry(FlowEntry::Send);
+                this.panel = PanelId::Flow;
+                this.open_send(
+                    SendOpenParams {
+                        prefilled_recipient: Some(send_to.clone()),
+                        ..SendOpenParams::default()
+                    },
+                    cx,
+                );
+                cx.notify();
+            })),
+        );
 
         let mut activity = div().flex().flex_col().child(
             div()
@@ -7172,6 +7053,7 @@ impl WalletPage {
             split_amount_fields: Vec::new(),
             split_address_fields: Vec::new(),
             pick_recipient_rows: Vec::new(),
+            scan_recipient_rows: Vec::new(),
             remove_recipient_rows: Vec::new(),
             fill_empty: None,
             search: None,
@@ -7498,9 +7380,16 @@ impl WalletPage {
                             }),
                         });
                         if let Some(id) = send.recipients.get(index).map(|r| r.id.clone()) {
+                            actions.pick_recipient_rows.push(to_host(
+                                SendEvent::OpenContactPicker {
+                                    target: Some(id.clone()),
+                                },
+                            ));
+                            // …and its own scan (issue 471): the code lands
+                            // in THIS row, as the pick above does.
                             actions
-                                .pick_recipient_rows
-                                .push(to_host(SendEvent::OpenContactPicker { target: Some(id) }));
+                                .scan_recipient_rows
+                                .push(to_host(SendEvent::OpenScanner { target: Some(id) }));
                         }
                     }
                     for (index, focus) in send.split_focuses.iter().enumerate() {
@@ -7663,14 +7552,14 @@ impl WalletPage {
                     actions.advance = Some(to_host(SendEvent::Continue));
                     // The recipient field's scan (078 F-01). The scanner is the
                     // CORE's state, as on the web: `OpenScanner` raises it and
-                    // `ScanResolved` fills the form and takes it down.
-                    actions.open_scan = Some(to_host(SendEvent::OpenScanner));
+                    // `ScanResolved` fills the form and takes it down. No
+                    // target: the single field, or the first empty split row.
+                    actions.open_scan = Some(to_host(SendEvent::OpenScanner { target: None }));
                 }
                 FlowPanel::Dsd2e => {
-                    // The picker's "scan to fill" row opens the same scanner;
-                    // the scan IS the pick, and the core closes the picker with
-                    // it (issue #270).
-                    actions.open_scan = Some(to_host(SendEvent::OpenScanner));
+                    // The picker is the book only (issue 471): its "scan to
+                    // fill" row is gone, every recipient row has its own scan.
+                    actions.open_scan = None;
                     // A pick lands in the field AND closes the sheet. The core
                     // at this branch point leaves the sheet up after
                     // `PickedAddress`; spec 028's core closes it itself, after
@@ -7901,13 +7790,13 @@ impl WalletPage {
                         theme,
                         &mut self.icons,
                     ))
-                    .child(s.warning_title.clone()),
+                    .child(crate::ui::prose(s.warning_title.clone())),
             )
             .child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(s.warning_reminder.clone()),
+                    .child(crate::ui::prose(s.warning_reminder.clone())),
             )
             .child(
                 div()
@@ -7984,7 +7873,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.fg_muted)
-                            .child(model.sub.clone()),
+                            .child(crate::ui::prose(model.sub.clone())),
                     ),
             );
 
@@ -8967,7 +8856,7 @@ impl WalletPage {
                             .max_w(width)
                             .text_size(size)
                             .text_color(theme.fg_muted)
-                            .child(description),
+                            .child(crate::ui::prose(description)),
                     );
                 }
                 titles
@@ -9403,7 +9292,7 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_muted)
-                                .child(remove_body.clone()),
+                                .child(crate::ui::prose(remove_body.clone())),
                         )
                         .child(
                             div()
@@ -9458,7 +9347,7 @@ impl WalletPage {
                     .pb(px(12.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(summary),
+                    .child(crate::ui::prose(summary)),
             )
             .child(list)
             // Onboarding over this wallet (spec 072): the root shows it while
@@ -9566,7 +9455,7 @@ impl WalletPage {
                     .pb(px(12.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(summary),
+                    .child(crate::ui::prose(summary)),
             )
             .child(list)
             .child(self.account_buttons(theme, false, cx))
@@ -9599,7 +9488,7 @@ impl WalletPage {
                     .pb(px(24.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(sign_out_desc),
+                    .child(crate::ui::prose(sign_out_desc)),
             )
             // No handler: this is the board the window draws before anybody has
             // signed in, and there is nothing on it to erase. The LIVE account
@@ -9700,6 +9589,30 @@ impl WalletPage {
             return;
         };
         self.backup_check = None;
+        // `VELA_BACKUP_STATE=backed_up|not_backed_up|could_not_check|
+        // not_copyable` (developer builds): the row in that state, with no
+        // walk — a wallet from before registry V13, or one never copied,
+        // cannot be had on demand, and each state's row has to be looked at.
+        // The same env-pin family as `VELA_SETTINGS_STATE`.
+        if let Some(state) = crate::dev_env::var!("VELA_BACKUP_STATE").and_then(|want| {
+            serde_json::from_value::<vela_core::registry_backup::BackupState>(
+                serde_json::Value::String(want),
+            )
+            .ok()
+        }) {
+            use vela_core::registry_backup::{BackupCall, BackupState, REGISTRY, TARGET_CHAIN};
+            self.backup_check = Some(crate::executor::registry::BackupAnswer {
+                state,
+                call: (state == BackupState::NotBackedUp).then(|| BackupCall {
+                    chain_id: TARGET_CHAIN,
+                    to: REGISTRY.to_owned(),
+                    value: "0".to_owned(),
+                    data: "0x".to_owned(),
+                }),
+                row: state.row(),
+            });
+            return;
+        }
         let address = account.address.clone();
         let key = account.keys.first().map_or_else(
             || account.public_key_hex.clone(),
@@ -9728,38 +9641,35 @@ impl WalletPage {
         .detach();
     }
 
-    /// The Ethereum backup row (spec 062): one line, three states, a button
-    /// only while there is something to do. Nothing at all when the registry is
-    /// not on Ethereum or the wallet has no record there to copy.
+    /// "Copy this wallet's record to Ethereum" (spec 062): one line, a button
+    /// only while there is something to do. Nothing at all when the registry
+    /// is not on Ethereum or the wallet has no record there to copy.
+    ///
+    /// The row is the CORE's (`BackupState::row`): its words, its tone and
+    /// what a tap does — copy, ask again, or nothing. "Not copied yet" is a
+    /// state, not a warning (a copy is optional and costs a fee), and a
+    /// wallet from before registry V13 gets a calm end with nothing to tap
+    /// rather than a "could not check" that retries forever.
     fn backup_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        use crate::executor::registry::{BackupPress, backup_line};
         use vela_core::registry_backup::BackupState;
-        let s = &self.settings;
-        // The web's four states (`ethereumBackupRow`): what the row says, in
-        // which colour, and what — if anything — pressing it does.
-        let (subtitle, colour, call, retry) = match &self.backup_check {
-            None => (s.backup_checking.clone(), theme.fg_subtle, None, false),
-            Some((BackupState::BackedUp, _)) => {
-                (s.backup_backed_up.clone(), theme.success, None, false)
-            }
-            Some((BackupState::NotBackedUp, call)) => (
-                s.backup_not_backed_up.clone(),
-                theme.warning_base,
-                call.clone(),
-                false,
-            ),
-            // Pressable, and what it does is ask again — the state a person is
-            // most likely to press, and the only one where "nothing happened"
-            // was the whole experience.
-            Some((BackupState::CouldNotCheck, _)) => (
-                s.backup_could_not_check.clone(),
-                theme.fg_subtle,
-                None,
-                true,
-            ),
-            Some((BackupState::Unavailable | BackupState::NotRegistered, _)) => return None,
+        let line = backup_line(self.backup_check.as_ref())?;
+        let title = self.loc.t(&line.title_key);
+        let subtitle = self.loc.t(&line.subtitle_key);
+        let colour = if line.positive {
+            theme.success
+        } else {
+            theme.fg_subtle
         };
-        let backed_up = matches!(&self.backup_check, Some((BackupState::BackedUp, _)));
-        let title = s.backup_title.clone();
+        let (call, retry) = match line.press {
+            BackupPress::Copy(call) => (Some(call), false),
+            BackupPress::Retry => (None, true),
+            BackupPress::Nothing => (None, false),
+        };
+        let backed_up = self
+            .backup_check
+            .as_ref()
+            .is_some_and(|answer| answer.state == BackupState::BackedUp);
         let actionable = call.is_some() || retry;
         let accent = theme.accent;
         let mut row = div()
@@ -9812,7 +9722,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(colour)
-                            .child(subtitle),
+                            .child(crate::ui::prose(subtitle)),
                     ),
             );
         // What the row's end says it will do: ask again, go on, or — done.
@@ -9995,7 +9905,7 @@ impl WalletPage {
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(in_vela_body),
+                        .child(crate::ui::prose(in_vela_body)),
                 );
             if let Some(block) = &choice.blocked {
                 body = body.child(div().pt(px(6.)).child(reason(self, block)));
@@ -10054,7 +9964,7 @@ impl WalletPage {
                                 div()
                                     .text_size(theme::text_row_sub())
                                     .text_color(theme.fg_muted)
-                                    .child(on_page_body),
+                                    .child(crate::ui::prose(on_page_body)),
                             ),
                     ),
             );
@@ -10175,7 +10085,7 @@ impl WalletPage {
                         .pb(px(12.))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_subtle)
-                        .child(subtitle),
+                        .child(crate::ui::prose(subtitle)),
                 )
                 .child(rows),
         )
@@ -10276,7 +10186,7 @@ impl WalletPage {
                     .pb(px(8.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(subtitle),
+                    .child(crate::ui::prose(subtitle)),
             );
 
         match check {
@@ -10602,14 +10512,17 @@ impl WalletPage {
             }
         }
         match self.backup_row(theme, cx) {
-            // PUBLIC keys: "back up keys" read as handing over the keys themselves.
+            // Under the row, what the copy makes public and what it costs
+            // (`registry_backup::EXPLAIN_KEY`): the wallet's name, each key's
+            // name, public key, credential ID and authenticator model, for
+            // one Ethereum transaction and its fee — never "only public keys".
             Some(backup) => block.child(backup).child(
                 div()
                     .pl(px(theme::KEY_ROW_MARK + 12.))
                     .pb(px(8.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(explain),
+                    .child(crate::ui::prose(explain)),
             ),
             None => block,
         }
@@ -10740,7 +10653,7 @@ impl WalletPage {
                     .pb(px(24.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(sign_out_desc),
+                    .child(crate::ui::prose(sign_out_desc)),
             )
             // The one irreversible control asks first (spec 072 FR-010, and
             // spec 081 FR-017 — it had no handler at all from the day it was
@@ -10908,11 +10821,37 @@ impl WalletPage {
     /// Signed out there is no committed pair and nothing to convert, so it is
     /// USD — the same thing every fixture board shows.
     fn money(&self, cx: &mut Context<Self>) -> wallet_live::Money {
+        if let Some(pending) = Self::pinned_pending_currency() {
+            return pending;
+        }
         if self.identity.is_none() {
             return wallet_live::Money::default();
         }
-        let view = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        wallet_live::Money::new(&view.code, view.rate)
+        // Committed or not, as the core has it: while it is not, `Money`
+        // withholds every figure (the hero waits on its skeleton).
+        wallet_live::Money::of(&resident::resident::<DisplayCurrency>(cx).read(cx).view())
+    }
+
+    /// `VELA_CURRENCY_PENDING=<code>|none` (developer builds): the display
+    /// currency as it stands before the core commits one — the USD/1
+    /// placeholder, with that stored choice on its way (`none`: a first
+    /// launch, nothing chosen). On a design surface the home then draws
+    /// `fixtures::held_view` through the live builders, so the waiting hero
+    /// and the holdings' bars can be looked at: the window between launch
+    /// and the first rate is a second or two, and cannot be held open by
+    /// hand. The same env-pin family as `VELA_SETTINGS_STATE`.
+    fn pinned_pending_currency() -> Option<wallet_live::Money> {
+        let want = crate::dev_env::var!("VELA_CURRENCY_PENDING")?;
+        let want = want.trim();
+        Some(wallet_live::Money::of(
+            &vela_core::app::display_currency::CurrencyView {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                committed: false,
+                pending: (!want.is_empty() && !want.eq_ignore_ascii_case("none"))
+                    .then(|| want.to_uppercase()),
+            },
+        ))
     }
 
     fn currency_value(&self, cx: &mut Context<Self>) -> gpui::SharedString {
@@ -11329,7 +11268,7 @@ impl WalletPage {
                 .mb(px(-8.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(self.settings.providers_desc.clone()),
+                .child(crate::ui::prose(self.settings.providers_desc.clone())),
         );
 
         // Live since 031. An API key is a CREDENTIAL, and the field it goes in
@@ -11542,7 +11481,7 @@ impl WalletPage {
                 .text_size(theme::text_row_sub())
                 .line_height(px(20.))
                 .text_color(theme.fg_muted)
-                .child(self.settings.endpoints_desc.clone()),
+                .child(crate::ui::prose(self.settings.endpoints_desc.clone())),
         );
 
         // Live since 031. 030 recorded this panel as "unfinished rather than
@@ -12070,7 +12009,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.error_base)
-                    .child(refused),
+                    .child(crate::ui::prose(refused)),
             );
         }
         div()
@@ -12183,7 +12122,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.fg_subtle)
-                            .child(summary),
+                            .child(crate::ui::prose(summary)),
                     ),
             )
             .child(storage_bar(theme, &segments))
@@ -12552,7 +12491,7 @@ impl WalletPage {
                 .text_center()
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
-                .child(self.settings.about_footer.clone()),
+                .child(crate::ui::prose(self.settings.about_footer.clone())),
         )
     }
 
@@ -12575,10 +12514,7 @@ impl WalletPage {
             // chain is chosen it names it (078 S-05).
             SettingsDialog::AddNetwork if self.identity.is_some() => {
                 use vela_core::app::network_admin::NetWizardPhase;
-                let wizard = resident::resident::<NetworkAdmin>(cx)
-                    .read(cx)
-                    .view()
-                    .wizard;
+                let wizard = Self::wizard_view(cx);
                 let searching = matches!(
                     wizard.phase,
                     NetWizardPhase::Idle | NetWizardPhase::Searching | NetWizardPhase::Suggested
@@ -12658,6 +12594,21 @@ impl WalletPage {
         )
     }
 
+    /// The add-network wizard as the core shows it — or, under
+    /// `VELA_NET_REFUSAL` (developer builds), a chain checked and refused for
+    /// that reason (`settings_live::pinned_refusal`).
+    fn wizard_view(cx: &mut gpui::App) -> vela_core::app::network_admin::NetWizardView {
+        match settings_live::pinned_refusal() {
+            Some(blocker) => settings_fixtures::refused_wizard(blocker),
+            None => {
+                resident::resident::<NetworkAdmin>(cx)
+                    .read(cx)
+                    .view()
+                    .wizard
+            }
+        }
+    }
+
     /// DST4b's body, live: type a chain, see its verdict, add it.
     ///
     /// Two states, as the web's `AddNetworkPanel` has them (078 S-05): the
@@ -12671,8 +12622,7 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> Div {
         use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
-        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
-        let wizard = view.wizard.clone();
+        let wizard = Self::wizard_view(cx);
         if matches!(
             wizard.phase,
             NetWizardPhase::Idle | NetWizardPhase::Searching | NetWizardPhase::Suggested
@@ -12697,7 +12647,10 @@ impl WalletPage {
             callout: Option<SharedString>,
             custom_rpc: bool,
             primary: Option<SharedString>,
-            setup_tool: bool,
+            /// Where "Open Chain Setup Tool" goes — the core's
+            /// `NetCompatibility.setup_url`, only for a chain whose missing
+            /// contracts can be deployed. `None` = no such button.
+            setup_url: Option<String>,
             recheck: bool,
         }
         let checking = || Verdict {
@@ -12707,7 +12660,7 @@ impl WalletPage {
             callout: None,
             custom_rpc: false,
             primary: None,
-            setup_tool: false,
+            setup_url: None,
             recheck: false,
         };
         let verdict = match wizard.phase {
@@ -12734,19 +12687,26 @@ impl WalletPage {
                     // `can_add` is the core's whole judgement; the button
                     // appears only when it says yes.
                     primary: wizard.can_add.then(|| s.add_network.clone()),
-                    setup_tool: false,
+                    setup_url: None,
                     recheck: false,
                 },
-                Some(compat) if compat.rpc_failure.is_none() => Verdict {
-                    meta: s.compatibility_check.clone(),
-                    pill: (Tone::Error, s.wizard_incompatible.clone()),
-                    checks: settings_live::compat_checks(compat, s),
-                    callout: Some(s.wizard_incompatible_hint.clone()),
-                    custom_rpc: false,
-                    primary: None,
-                    setup_tool: true,
-                    recheck: true,
-                },
+                // Refused — and WHY is the core's (`blocker`): a network with
+                // no P-256 verifier says plainly that Vela cannot run there
+                // and offers nothing to deploy; one that only lacks contracts
+                // keeps Chain Setup, opened on this chain.
+                Some(compat) if compat.rpc_failure.is_none() => {
+                    let refusal = settings_live::net_refusal(compat, &self.loc);
+                    Verdict {
+                        meta: s.compatibility_check.clone(),
+                        pill: (Tone::Error, s.wizard_incompatible.clone()),
+                        checks: settings_live::compat_checks(compat, s),
+                        callout: refusal.as_ref().map(|refusal| refusal.hint.clone()),
+                        custom_rpc: false,
+                        primary: None,
+                        setup_url: refusal.and_then(|refusal| refusal.setup_url),
+                        recheck: true,
+                    }
+                }
                 // The probes never reached a verdict — "unable to verify",
                 // never "incompatible" (the core's invariant ③).
                 _ => Verdict {
@@ -12756,7 +12716,7 @@ impl WalletPage {
                     callout: None,
                     custom_rpc: true,
                     primary: Some(s.wizard_retry.clone()),
-                    setup_tool: false,
+                    setup_url: None,
                     recheck: true,
                 },
             },
@@ -12769,15 +12729,25 @@ impl WalletPage {
                         settings_live::WizardNotice::Refusal(text) => Some(text),
                         settings_live::WizardNotice::Progress(_) => None,
                     });
-                let incompatible =
-                    matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }));
+                // A refusal reached without the confirm step (the scan path)
+                // carries the reason only when the core kept the check; with
+                // it, the same line and button as above. Without it the
+                // verdict is said alone ("Incompatible"): which of the two
+                // reasons it was is not known here, so neither "contracts are
+                // missing" nor a deploy button is claimed.
+                let why = wizard
+                    .compat
+                    .as_ref()
+                    .filter(|_| {
+                        matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }))
+                    })
+                    .and_then(|compat| settings_live::net_refusal(compat, &self.loc));
                 Verdict {
-                    callout: Some(if incompatible {
-                        s.wizard_incompatible_hint.clone()
-                    } else {
-                        refusal.unwrap_or_else(|| s.wizard_unable_to_verify.clone())
+                    callout: Some(match why.as_ref() {
+                        Some(why) => why.hint.clone(),
+                        None => refusal.unwrap_or_else(|| s.wizard_unable_to_verify.clone()),
                     }),
-                    setup_tool: incompatible,
+                    setup_url: why.and_then(|why| why.setup_url),
                     recheck: chain_id.is_some(),
                     ..checking()
                 }
@@ -12822,7 +12792,7 @@ impl WalletPage {
                                 div()
                                     .text_size(theme::text_row_sub())
                                     .text_color(theme.fg_subtle)
-                                    .child(verdict.meta.clone()),
+                                    .child(crate::ui::prose(verdict.meta.clone())),
                             ),
                     )
                     // Its own width, always: a long line beside it shrinks,
@@ -12927,7 +12897,9 @@ impl WalletPage {
         }
         // Where a chain this wallet refuses can be made ready — an outline
         // button, never the accent: it is not the action somebody came for.
-        if verdict.setup_tool {
+        // Drawn only when the core names somewhere to go (contracts that can
+        // be deployed), and it opens on the chain that was checked.
+        if let Some(url) = verdict.setup_url.clone() {
             col = col.child(
                 div()
                     .id("wizard-chain-setup-tool")
@@ -12943,9 +12915,7 @@ impl WalletPage {
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_base)
                     .child(self.settings.open_chain_setup_tool.clone())
-                    .on_click(|_, _, cx| {
-                        cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL);
-                    }),
+                    .on_click(move |_, _, cx| cx.open_url(&url)),
             );
         }
         // The web's re-check: a link in the info colour with its refresh.
@@ -13302,7 +13272,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_label())
                             .text_color(theme.fg_subtle)
-                            .child(providers_hint),
+                            .child(crate::ui::prose(providers_hint)),
                     )
                     .child(chips),
             )
@@ -13431,7 +13401,7 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_label())
                             .text_color(theme.fg_subtle)
-                            .child(providers_hint),
+                            .child(crate::ui::prose(providers_hint)),
                     )
                     .child(chips),
             )
@@ -13464,7 +13434,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_row_title())
                     .text_color(theme.fg_base)
-                    .child(desc),
+                    .child(crate::ui::prose(desc)),
             )
             .child(
                 div()
@@ -15163,7 +15133,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(reason)
+                    .child(crate::ui::prose(reason))
             }))
             .child(
                 div()
@@ -15292,7 +15262,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(self.explore.page_crashed_body.clone()),
+                    .child(crate::ui::prose(self.explore.page_crashed_body.clone())),
             )
             .child(
                 outline_button(
@@ -16593,7 +16563,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_body())
                     .text_color(theme.fg_muted)
-                    .child(e.start_hint.clone()),
+                    .child(crate::ui::prose(e.start_hint.clone())),
             )
             .child(
                 div()
@@ -16905,7 +16875,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(self.explore.consent_body.clone()),
+                    .child(crate::ui::prose(self.explore.consent_body.clone())),
             )
             // Spec 082 RD11 (G11): WHO would be connected and on WHICH network,
             // before the answer — the account the grant would be made for,
@@ -16963,6 +16933,11 @@ impl WalletPage {
         &mut self,
         cx: &mut Context<Self>,
     ) -> Option<vela_core::app::network_admin::NetDappAddView> {
+        // `VELA_NET_REFUSAL` (developer builds): the sheet on a refused
+        // chain, for a screenshot pass — see `settings_live::pinned_refusal`.
+        if let Some(blocker) = settings_live::pinned_refusal() {
+            return Some(settings_fixtures::refused_dapp_add(blocker));
+        }
         self.browser_host.as_ref()?;
         let admin = self.network_admin(cx);
         admin.read(cx).view().dapp_add
@@ -17016,7 +16991,7 @@ impl WalletPage {
                             div()
                                 .text_size(theme::text_row_sub())
                                 .text_color(theme.fg_muted)
-                                .child(sheet.lead.clone()),
+                                .child(crate::ui::prose(sheet.lead.clone())),
                         ),
                 ),
         );
@@ -17084,7 +17059,9 @@ impl WalletPage {
                     .child(crate::flows::components::accent_button(theme, label)),
             );
         }
-        if let Some(label) = sheet.setup_tool.clone() {
+        // Chain Setup, on this chain — only where the core says there is
+        // something to deploy (never for a network with no P-256 verifier).
+        if let Some((label, url)) = sheet.setup_tool.clone() {
             col = col.child(
                 outline_button(
                     ElementId::from("add-network-setup-tool"),
@@ -17093,7 +17070,7 @@ impl WalletPage {
                     None,
                     label,
                 )
-                .on_click(|_, _, cx| cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL)),
+                .on_click(move |_, _, cx| cx.open_url(&url)),
             );
         }
         col.child(
@@ -17265,7 +17242,7 @@ impl WalletPage {
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(self.explore.connection_explainer.clone()),
+                    .child(crate::ui::prose(self.explore.connection_explainer.clone())),
             )
             .child(disconnect)
             .child(
@@ -17273,7 +17250,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
-                    .child(self.explore.auto_request_hint.clone()),
+                    .child(crate::ui::prose(self.explore.auto_request_hint.clone())),
             )
     }
 
@@ -17970,7 +17947,7 @@ impl WalletPage {
                         } else {
                             gpui::transparent_black()
                         })
-                        .child(note)
+                        .child(crate::ui::prose(note))
                 }));
         }
         // The wallet's own request draws no header — and no gap where it was:
@@ -18334,7 +18311,7 @@ impl WalletPage {
                             } else {
                                 gpui::transparent_black()
                             })
-                            .child(note)
+                            .child(crate::ui::prose(note))
                     }),
             );
         // A refused request's one way out (the web's `dismissOnly`): Close,
@@ -18773,7 +18750,7 @@ impl WalletPage {
                     .text_size(theme::text_row_sub())
                     .line_height(gpui::relative(1.4))
                     .text_color(theme.fg_subtle)
-                    .child(summary),
+                    .child(crate::ui::prose(summary)),
             );
         }
         for row in &list.rows {
@@ -18868,7 +18845,7 @@ impl WalletPage {
                 .text_size(theme::text_row_sub())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_base)
-                .child(text)
+                .child(crate::ui::prose(text))
         };
         let row = |line: &wallet_live::DetailChain, retry: Option<gpui::AnyElement>| {
             let name = crate::executor::custom_tokens::network_name(line.chain_id);
@@ -18925,7 +18902,7 @@ impl WalletPage {
                 .mb(px(16.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(detail.summary.clone()),
+                .child(crate::ui::prose(detail.summary.clone())),
         );
         body = body.child(section(s.detail_networks_label.clone())).child(
             div()
@@ -18933,7 +18910,7 @@ impl WalletPage {
                 .text_size(theme::text_label())
                 .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_subtle)
-                .child(s.detail_networks_note.clone()),
+                .child(crate::ui::prose(s.detail_networks_note.clone())),
         );
         for line in &detail.pending {
             let retry = line.retry.then(|| {
@@ -20015,7 +19992,7 @@ impl WalletPage {
                     .text_size(theme::text_body())
                     .line_height(theme::line_height_body())
                     .text_color(theme.fg_muted)
-                    .child(s.export_body.clone()),
+                    .child(crate::ui::prose(s.export_body.clone())),
             )
             .child(
                 div()
@@ -20148,10 +20125,10 @@ impl WalletPage {
                     },
                 )) as contacts_components::MenuAction),
             ],
-            // The contact's own menu, in the order it is drawn: send, receive,
-            // copy, edit, move to a group, delete. Every one of them has
-            // somewhere to go on this shell — which is why it is opened at
-            // last.
+            // The contact's own menu, in the order it is drawn: send, copy,
+            // edit, move to a group, delete (no 收款 — issue 479). The menu
+            // is POSITIONAL: action N belongs to drawn row N, so this list
+            // and `contacts_fixtures::contact_context` change together.
             ContactsMenu::Contact => {
                 let view = resident::resident::<Contacts>(cx).read(cx).view();
                 let Some(row) = contacts_live::rows(&view).into_iter().nth(self.contact) else {
@@ -20168,7 +20145,10 @@ impl WalletPage {
                 } else {
                     name.clone()
                 });
-                vec![
+                // An array of the menu's own length: one action too many or
+                // too few is a compile error, not a handler on the wrong row.
+                let actions: [Option<contacts_components::MenuAction>;
+                    contacts_fixtures::CONTACT_CONTEXT_ROWS] = [
                     // 转账 — the send flow, opened with this person in the
                     // recipient field. The core takes the prefill; the shell
                     // does not type into its own screen.
@@ -20189,14 +20169,6 @@ impl WalletPage {
                             cx.notify();
                         })) as contacts_components::MenuAction,
                     ),
-                    // 收款 — my own address, which is what a person needs when
-                    // the answer to "how do I pay you" is asked of them.
-                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                        this.menu = None;
-                        this.section = Section::Wallet;
-                        this.enter_flow(FlowEntry::Receive, cx);
-                        cx.notify();
-                    })) as contacts_components::MenuAction),
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
@@ -20230,7 +20202,8 @@ impl WalletPage {
                             cx.notify();
                         })) as contacts_components::MenuAction,
                     ),
-                ]
+                ];
+                Vec::from(actions)
             }
 
             // One row per network, in the order the menu drew them. The site
@@ -20658,7 +20631,6 @@ impl Render for WalletPage {
         let export_format = self.export_format_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
         let explore_groups = self.explore_groups_dialog(&theme, window, cx);
-        let contact_qr = self.contact_qr_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
         let unreachable = self.unreachable_dialog(&theme, window, cx);
         let mut root = div()
@@ -20719,9 +20691,6 @@ impl Render for WalletPage {
         }
         if let Some(export_format) = export_format {
             root = root.child(export_format);
-        }
-        if let Some(contact_qr) = contact_qr {
-            root = root.child(contact_qr);
         }
         if let Some(explore_form) = explore_form {
             root = root.child(explore_form);
@@ -20900,7 +20869,6 @@ fn confirmed_sends(
 
 /// The technical details' address copy (078 G-05).
 const SIGNING_TECH_COPY: &str = "signing-tech-copy";
-const CONTACT_QR_COPY: &str = "contact-qr";
 const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
 
 /// The Ethereum key backup, as a request for the SHARED signing sheet.
@@ -21330,7 +21298,6 @@ mod tests {
             ("export_format_dialog", "self.export_scope"),
             ("explore_form_dialog", "self.explore_form"),
             ("explore_groups_dialog", "self.explore_groups"),
-            ("contact_qr_dialog", "self.contact_qr"),
             ("balance_detail_dialog", "self.balance_detail_open"),
             ("unreachable_dialog", "self.unreachable_open"),
             ("sign_out_dialog", ".sign_out"),

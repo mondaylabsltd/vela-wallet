@@ -76,6 +76,11 @@ pub enum Fiat {
     Value(SharedString),
     NoPrice(SharedString),
     Masked,
+    /// The worth is known but the display currency is not committed yet
+    /// (the core's withhold rule): a waiting bar in the figure's place —
+    /// never the placeholder's dollars, which would jump to the person's
+    /// own money a moment later.
+    Pending,
 }
 
 #[derive(Clone)]
@@ -264,6 +269,57 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
     host.view()
 }
 
+/// A wallet that holds something and read every chain it asked, through the
+/// real balance core: $4,500 on Gnosis and half an ETH. What the home draws
+/// from it depends only on the display currency — which is what
+/// `VELA_CURRENCY_PENDING` shows (the core's withhold rule: no figure until
+/// the currency is committed).
+#[must_use]
+pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    let token = |chain_id: u32, symbol: &str, balance: &str, price: f64| BalanceToken {
+        chain_id,
+        symbol: symbol.to_owned(),
+        name: symbol.to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(price),
+        spam: false,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![
+                    token(100, "XDAI", "4500", 1.0),
+                    token(1, "ETH", "0.5", 2_469.0),
+                ],
+                failed_chain_ids: Vec::new(),
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 100],
+                internal_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
 /// Component-board balance variants (gallery Components tab).
 pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
     vec![
@@ -403,11 +459,12 @@ fn row(
     }
 }
 
-/// The four D1 activity rows, timestamps included (desktop subtitles carry
-/// `· <day> <clock>` per the D1 mock).
+/// The three D1 activity rows, timestamps included (desktop subtitles carry
+/// `· <day> <clock>` per the D1 mock). Three because the home draws the
+/// core's cut, the newest three (`FeedView.home_rows`, issue 469); History
+/// draws every row.
 pub fn activity_default(s: &WalletStrings) -> Vec<ActivityRowModel> {
     let today = s.today.as_ref();
-    let yesterday = s.yesterday.as_ref();
     let mut rows = vec![
         row(
             s,
@@ -439,22 +496,9 @@ pub fn activity_default(s: &WalletStrings) -> Vec<ActivityRowModel> {
             false,
             chain_bnb(),
         ),
-        row(
-            s,
-            ActivityKind::Received,
-            format!(
-                "{} · {yesterday} 20:15",
-                fill(&s.from_name, "name", "Alice")
-            ),
-            "+50",
-            "USDC",
-            true,
-            chain_base(),
-        ),
     ];
     // The web's D1 files them under their days (spec 038 #E3).
     rows[0].day = Some(s.today.clone());
-    rows[3].day = Some(s.yesterday.clone());
     rows
 }
 
@@ -771,6 +815,58 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
     vec![swap, permit, sign_in]
 }
 
+/// Two transfers through the real feed core — 1.5 xDAI received, 12 USDC
+/// sent — with the feed's privacy as asked. What `VELA_ACTIVITY_FIXTURE`
+/// draws: the home's rows and a transfer's detail from the LIVE builders,
+/// shown or hidden, so the masked figure ("•••• xDAI", the core's
+/// `privacy::masked_amount`) can be looked at without a wallet that has a
+/// history.
+#[must_use]
+pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
+    use vela_core::app::activity_feed::{Event, FeedTxKind, FeedTxRecord, FeedTxStatus};
+    // A fixed afternoon: the rows read the same on every run.
+    const DAY_MS: f64 = 1_756_000_000_000.0 - 1_756_000_000_000.0 % 86_400_000.0;
+    let record = |id: &str, kind: FeedTxKind, value: &str, symbol: &str, chain_id: u32| {
+        let incoming = kind == FeedTxKind::Receive;
+        let other = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE".to_owned();
+        FeedTxRecord {
+            id: id.to_owned(),
+            user_op_hash: String::new(),
+            tx_hash: format!("0x{}", id.repeat(8)),
+            from: if incoming {
+                other.clone()
+            } else {
+                "0xme".to_owned()
+            },
+            to: if incoming { "0xme".to_owned() } else { other },
+            to_name: None,
+            value: value.to_owned(),
+            symbol: symbol.to_owned(),
+            decimals: 18,
+            logo_urls: None,
+            chain_id,
+            timestamp: DAY_MS / 1000.0 + if incoming { 50_400.0 } else { 40_500.0 },
+            day_start_ms: DAY_MS,
+            status: FeedTxStatus::Confirmed,
+            kind: Some(kind),
+            usd: None,
+            dapp_url: None,
+            intent: None,
+            balance_changes: None,
+            calldata: None,
+            call_data: None,
+            summary: None,
+            settlement: None,
+        }
+    };
+    let mut host = core_feed_host(vec![
+        record("a1", FeedTxKind::Receive, "1.5", "xDAI", 100),
+        record("b2", FeedTxKind::Send, "12", "USDC", 8_453),
+    ]);
+    let _ = host.dispatch(Event::PrivacyChanged { hidden });
+    host.view()
+}
+
 /// The REAL feed core over `records`, loaded the way the executor answers it
 /// for the account `0xme` — what Activity draws from those records.
 #[cfg(test)]
@@ -780,9 +876,9 @@ pub fn core_feed(
     core_feed_host(records).view()
 }
 
-/// [`core_feed`]'s machine itself, for a test that tells it more (a contact
-/// page opening).
-#[cfg(test)]
+/// The real feed machine over `records`, loaded the way the executor
+/// answers it — for a test that tells it more (a contact page opening), and
+/// for [`transfer_feed`].
 pub fn core_feed_host(
     records: Vec<vela_core::app::activity_feed::FeedTxRecord>,
 ) -> crate::core_host::CoreHost<vela_core::app::activity_feed::ActivityFeed> {
@@ -838,7 +934,8 @@ mod tests {
         let rows = activity_default(&s);
         assert_eq!(rows[0].title.as_ref(), "已发送");
         assert_eq!(rows[0].subtitle.as_ref(), "至 hold on · 今天 14:02");
-        assert_eq!(rows[3].subtitle.as_ref(), "来自 Alice · 昨天 20:15");
+        assert_eq!(rows.len(), 3, "the home draws the newest three (#469)");
+        assert_eq!(rows[1].subtitle.as_ref(), "来自 0x9F3c…21aE · 今天 11:20");
 
         assert_eq!(receive_network_detail(&s).as_ref(), "BNB Chain · 链 ID 56");
         assert_eq!(

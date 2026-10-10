@@ -122,10 +122,16 @@ pub fn picked_language(index: usize) -> Option<&'static str> {
 /// Converted only when the core priced the currency: `rate: None` is not 1,
 /// so an unpriced choice prints the USD figure the core does have rather than
 /// dressing it in another currency's symbol.
+///
+/// And not at all while the display currency is not committed (the core's
+/// withhold rule, `CurrencyView.committed`): the placeholder is not the
+/// person's currency, so the figure waits as a dash rather than read "$…"
+/// for a moment and then jump to "¥…".
 #[must_use]
 pub fn account_total(usd: f64, currency: Option<&CurrencyView>, locale: &str) -> SharedString {
     let options = crate::executor::format_prefs::fiat_options();
     SharedString::from(match currency {
+        Some(view) if !view.committed => crate::wallet::live::WITHHELD_FIGURE.to_owned(),
         Some(CurrencyView {
             code,
             rate: Some(rate),
@@ -165,11 +171,18 @@ pub fn switcher_figures(
     // The sum is over what is actually KNOWN — an account with no cached
     // figure contributes nothing rather than making the sentence wait for it.
     let known_total: f64 = accounts.iter().filter_map(|address| figure(address)).sum();
+    // The display currency not committed yet: the total is the withheld
+    // dash, and a row has no figure — as for an account nobody has counted.
+    let withheld = currency.is_some_and(|currency| !currency.committed);
     (
         account_total(known_total, currency, locale),
         accounts
             .iter()
-            .map(|address| figure(address).map(|usd| account_total(usd, currency, locale)))
+            .map(|address| {
+                figure(address)
+                    .filter(|_| !withheld)
+                    .map(|usd| account_total(usd, currency, locale))
+            })
             .collect(),
     )
 }
@@ -373,8 +386,16 @@ pub fn symbol_for(code: &str) -> &str {
 ///   figure wearing its symbol, which is the specific lie `rate: None` exists to
 ///   prevent: "a rate of 1 is a claim (1 USD = 1 CNY)". Showing `¥1,234.56` for
 ///   an unpriced JPY would assert an exchange rate nobody obtained.
+///
+/// And before the core has committed anything (`committed: false`): the
+/// person's stored choice on its way, by its code alone — or nothing. Never
+/// the USD/1 placeholder, which would read "USD · $1,234.56" for a moment on
+/// a wallet set to CNY.
 #[must_use]
 pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
+    if !view.committed {
+        return SharedString::from(view.pending.clone().unwrap_or_default());
+    }
     match view.rate {
         Some(rate) => {
             let sample = format_fiat(
@@ -571,6 +592,7 @@ mod tests {
             code: code.to_owned(),
             rate,
             committed: true,
+            pending: None,
         }
     }
 
@@ -596,6 +618,50 @@ mod tests {
             !value.contains("1,234.56"),
             "an unpriced currency must not print a figure it cannot vouch for"
         );
+    }
+
+    /// PR 3 item 10: before the core commits a currency, nothing on this
+    /// page is drawn in the USD/1 placeholder. The row names the stored
+    /// choice on its way (its code alone) or nothing; an account's total is
+    /// the withheld dash, and a row in the switcher has no figure.
+    #[test]
+    fn nothing_is_drawn_in_the_placeholder_before_the_currency_commits() {
+        let waiting = |pending: Option<&str>| CurrencyView {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+            committed: false,
+            pending: pending.map(str::to_owned),
+        };
+        assert_eq!(
+            currency_row_value(&waiting(Some("CNY")), "en").as_ref(),
+            "CNY"
+        );
+        assert_eq!(currency_row_value(&waiting(None), "en").as_ref(), "");
+
+        let total = account_total(1234.5, Some(&waiting(Some("CNY"))), "en");
+        assert_eq!(total.as_ref(), crate::wallet::live::WITHHELD_FIGURE);
+        assert!(!total.contains('$') && !total.contains("1,234"), "{total}");
+
+        let switcher = vela_core::app::balance_dashboard::BalanceSwitcherView {
+            open: false,
+            loading: false,
+            balances: vec![vela_core::app::balance_dashboard::BalanceCacheEntry {
+                address: "0xaaa".to_owned(),
+                usd: 1234.5,
+            }],
+            hidden: false,
+        };
+        let (total, rows) =
+            switcher_figures(&switcher, &["0xaaa"], Some(&waiting(Some("CNY"))), "en");
+        assert_eq!(total.as_ref(), crate::wallet::live::WITHHELD_FIGURE);
+        assert_eq!(rows, vec![None], "no figure in a row either");
+
+        // Committed: the figures appear, in the person's money.
+        let cny = view("CNY", Some(7.2));
+        let (total, rows) = switcher_figures(&switcher, &["0xaaa"], Some(&cny), "en");
+        assert!(total.contains("8,888.40"), "{total}");
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].as_ref().is_some_and(|row| row.contains("8,888.40")));
     }
 
     /// A code with no glyph falls back to itself, and CLDR then separates it
@@ -695,6 +761,51 @@ pub fn probe_badge(health: &NetProbeHealth) -> Option<Pill> {
         }
         _ => None,
     }
+}
+
+/// Why a checked network is refused, in the core's words — one rule for both
+/// places a network is added (Settings, and the sheet a dApp opens).
+///
+/// The two refusals are opposite in what can be done about them, so the core
+/// says which (`NetCompatibility.{blocker, hint_key, setup_url}`):
+///
+/// - **no P-256 verifier**: this network cannot check a passkey signature and
+///   nothing can be deployed to change that. The line says so, and that money
+///   sent to a Vela address there would be stuck. **No Chain Setup button** —
+///   a deploy button on a chain that can never work is an invitation to lose
+///   money.
+/// - **contracts missing**: the line says so, and Chain Setup opens on THIS
+///   chain (`?chain=<id>`), listing which and who can deploy them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NetRefusal {
+    /// The line under the verdict.
+    pub hint: SharedString,
+    /// Where "Open Chain Setup Tool" goes. `None` = the button is not drawn.
+    pub setup_url: Option<String>,
+}
+
+/// The refusal for `compat`, or `None` when the core gave no reason (a
+/// compatible chain, or a check that never answered — "unable to verify" is
+/// not a refusal).
+#[must_use]
+pub fn net_refusal(compat: &NetCompatibility, loc: &crate::loc::Loc) -> Option<NetRefusal> {
+    let key = compat.hint_key.as_deref()?;
+    Some(NetRefusal {
+        hint: loc.t(key),
+        setup_url: compat.setup_url.clone(),
+    })
+}
+
+/// `VELA_NET_REFUSAL=no_p256|missing_contracts` (developer builds): both
+/// places a network is added draw a chain refused for that reason
+/// (`fixtures::refused_wizard`, `fixtures::refused_dapp_add`). A real check
+/// cannot be made to end either way on demand — every built-in network has
+/// the verifier — and the two refusals have to be looked at side by side.
+/// The same env-pin family as `VELA_SETTINGS_STATE`.
+#[must_use]
+pub fn pinned_refusal() -> Option<vela_core::app::network_admin::NetBlocker> {
+    let want = crate::dev_env::var!("VELA_NET_REFUSAL")?;
+    serde_json::from_value(serde_json::Value::String(want)).ok()
 }
 
 /// The wizard's compatibility rows, from what the probe found.
@@ -1190,6 +1301,72 @@ mod endpoint_tests {
         assert_eq!(ok.label, "45ms");
     }
 
+    /// PR 3 item 9: the refusal's line and its button are the core's, by
+    /// reason. No P-256 verifier → the plain "can't work here, money would be
+    /// stuck" line and NO Chain Setup button; contracts missing → the
+    /// contracts line and Chain Setup opened on that chain. A check that
+    /// never answered, and a chain that works, are not refusals.
+    #[test]
+    fn a_refusal_draws_the_cores_reason_and_only_a_deployable_gap_has_a_link() {
+        use vela_core::app::network_admin::{
+            MISSING_CONTRACTS_HINT, NO_P256_HINT, NetBlocker, NetRpcFailureKind, chain_setup_url,
+        };
+        let compat = |blocker: Option<NetBlocker>| NetCompatibility {
+            chain_id: 7_777_777,
+            compatible: blocker.is_none(),
+            multi_key_ready: blocker.is_none(),
+            contracts: Vec::new(),
+            p256_available: Some(blocker != Some(NetBlocker::NoP256)),
+            best_rpc_url: None,
+            best_rpc_latency_ms: None,
+            rpc_failure: None,
+            blocker,
+            hint_key: blocker.map(|blocker| {
+                match blocker {
+                    NetBlocker::NoP256 => NO_P256_HINT,
+                    NetBlocker::MissingContracts => MISSING_CONTRACTS_HINT,
+                }
+                .to_owned()
+            }),
+            setup_url: (blocker == Some(NetBlocker::MissingContracts))
+                .then(|| chain_setup_url(7_777_777)),
+        };
+        let en = crate::loc::Loc::for_tag("en");
+
+        let no_p256 = net_refusal(&compat(Some(NetBlocker::NoP256)), &en)
+            .unwrap_or_else(|| unreachable!("a refusal has its line"));
+        assert!(no_p256.hint.contains("Vela wallets can't work here"));
+        assert!(no_p256.hint.contains("Don't send money"));
+        assert_eq!(no_p256.setup_url, None, "nothing to deploy, no button");
+
+        let missing = net_refusal(&compat(Some(NetBlocker::MissingContracts)), &en)
+            .unwrap_or_else(|| unreachable!("a refusal has its line"));
+        assert!(missing.hint.contains("Chain Setup"));
+        assert_eq!(
+            missing.setup_url.as_deref(),
+            Some("https://getvela.app/chain-setup?chain=7777777")
+        );
+        assert_ne!(no_p256.hint, missing.hint, "two reasons, two lines");
+
+        assert_eq!(net_refusal(&compat(None), &en), None);
+        let mut unanswered = compat(None);
+        unanswered.compatible = false;
+        unanswered.rpc_failure = Some(NetRpcFailureKind::AllProbesFailed);
+        assert_eq!(
+            net_refusal(&unanswered, &en),
+            None,
+            "unable to verify is not a refusal"
+        );
+
+        // Neither line echoes its key in any language the app ships.
+        for lang in ["en", "zh", "de", "ja"] {
+            let loc = crate::loc::Loc::for_tag(lang);
+            for key in [NO_P256_HINT, MISSING_CONTRACTS_HINT] {
+                assert_ne!(loc.t(key).as_ref(), key, "{lang}: {key}");
+            }
+        }
+    }
+
     /// An unreachable chain gets a retry, never four red crosses.
     #[test]
     fn a_probe_that_could_not_ask_does_not_condemn_the_chain() {
@@ -1215,6 +1392,9 @@ mod endpoint_tests {
                 best_rpc_url: None,
                 best_rpc_latency_ms: None,
                 rpc_failure,
+                blocker: None,
+                hint_key: None,
+                setup_url: None,
             };
 
         // Could not reach a verdict: NO rows. The caller draws a retry, which
@@ -1270,6 +1450,9 @@ mod endpoint_tests {
             best_rpc_url: None,
             best_rpc_latency_ms: None,
             rpc_failure: None,
+            blocker: None,
+            hint_key: None,
+            setup_url: None,
         };
 
         let rows = compat_checks(&compat, &s)
@@ -1780,6 +1963,7 @@ mod parity_tests {
             code: code.to_owned(),
             rate,
             committed: true,
+            pending: None,
         }
     }
 

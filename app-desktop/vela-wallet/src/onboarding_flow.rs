@@ -21,6 +21,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Div, FocusHandle, FontWeight, ImageSource, InteractiveElement as _,
     IntoElement as _, ParentElement, SharedString, Stateful, StatefulInteractiveElement as _,
@@ -57,9 +58,6 @@ pub const TERMS_URL: &str = "https://getvela.app/terms";
 /// was plain text: an arrow that went nowhere, on the one screen whose whole
 /// subject is running these services yourself.
 pub const SELF_HOSTING_URL: &str = "https://getvela.app/docs/self-hosting";
-/// Where a chain that the wallet refuses can be made ready: the page deploys
-/// everything anyone can deploy, and says who has to do the rest.
-pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";
 
 // ---------------------------------------------------------------------------
 // Screen selection — the whole of the create UI's logic
@@ -360,7 +358,7 @@ fn title(theme: &Theme, text: SharedString) -> Div {
         .line_height(theme::line_height_title())
         .font_weight(FontWeight::BOLD)
         .text_color(theme.fg_base)
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 fn subtitle(theme: &Theme, text: SharedString) -> Div {
@@ -368,7 +366,7 @@ fn subtitle(theme: &Theme, text: SharedString) -> Div {
         .text_size(theme::text_flow_sub())
         .line_height(theme::line_height_flow_sub())
         .text_color(theme.fg_muted)
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 /// The tiny uppercase label that heads a field or a list section.
@@ -393,7 +391,7 @@ fn caption(theme: &Theme, text: SharedString) -> Div {
     div()
         .text_size(theme::text_flow_caption())
         .text_color(theme.fg_subtle)
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 /// A flow CTA's three states, out of the core's two flags.
@@ -646,7 +644,9 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
                         .text_size(theme::text_body())
                         .line_height(theme::line_height_flow_sub())
                         .text_color(theme.fg_base)
-                        .child(loc.t("onboarding.create.needSecondKeyHint")),
+                        .child(crate::ui::prose(
+                            loc.t("onboarding.create.needSecondKeyHint"),
+                        )),
                 ),
         );
     }
@@ -681,51 +681,33 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
             .child(rows),
     );
 
-    // Add-key control, with the cap stated on it rather than behind it.
-    let on_toggle = emit(&host.sink, FlowEvent::TogglePicker);
-    let add_label = if full {
-        loc.t("onboarding.create.keyLimitReached")
+    // The heading over the three places is the screen's ONLY add affordance
+    // (issue 475): the core words it by the count — "Add a passkey" with no
+    // key yet, "Add another" with room for one more, "Limit of 7 reached" at
+    // the cap — and says when the places are pinned open. There is no
+    // separate "+ Add a passkey" button beside it any more.
+    let heading = if view.add_heading_key.is_empty() {
+        loc.t(vela_core::app::create_wallet::add_heading_key(
+            view.keys.len(),
+        ))
     } else {
-        loc.t("onboarding.create.addKeyBtn")
+        loc.t(&view.add_heading_key)
     };
-    // v2 draws this as an outlined button in its own right — same rectangle as
-    // the CTA below it, one notch shorter — not as a bare row in the list.
-    let mut add = div()
-        .w_full()
-        .flex()
-        .flex_col()
-        .gap(px(FLOW_GAP_SM))
-        .child({
-            let row = div()
+    let open = view.methods_pinned || (host.picker_open && view.can_add_key);
+    let mut add = div().w_full().flex().flex_col();
+    add = if view.methods_pinned {
+        // No key yet: the list is the only way forward, so it is open, with
+        // a plain heading saying what it is — nothing to fold.
+        add.child(
+            div()
                 .id("flow-add-key")
-                .w_full()
-                .h(px(theme::BTN_H_SECONDARY))
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(px(FLOW_GAP_SM))
-                .rounded(px(theme::RADIUS_CTA))
-                .border_1()
-                .border_color(theme.divider)
-                .text_size(theme::text_row_name())
-                .font_weight(FontWeight::BOLD)
-                .text_color(theme.fg_base)
-                .child(div().text_size(theme::text_card_title()).child("+"))
-                .child(div().child(add_label));
-            if view.can_add_key {
-                let accent = theme.accent;
-                row.cursor_pointer()
-                    .hover(move |s| s.border_color(accent))
-                    .on_click(move |_, window, cx| on_toggle(window, cx))
-            } else {
-                row.opacity(OPACITY_DISABLED)
-            }
-        });
-    // An EMPTY list keeps the methods expanded: the first key's method is the
-    // person's choice too, and an empty list with a collapsed "+" is a
-    // puzzle, not a step.
-    if (host.picker_open || view.keys.is_empty()) && view.can_add_key {
+                .pb(px(FLOW_GAP_SM))
+                .child(section_label(theme, heading)),
+        )
+    } else {
+        add.child(add_disclosure(host, heading, open))
+    };
+    if open {
         add = add.child(method_picker(host));
     }
     column = column.child(add);
@@ -943,6 +925,60 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
 /// the three places are minted ON that page (R3), and the banner says which
 /// page, whose keys the wallet's will be, and how its check went — with the
 /// way back to Vela's own keys while no key exists yet.
+/// The keys screen's fold once a key exists (issue 475): "+ Add another"
+/// with a chevron, closed until tapped, opening the three places under it.
+/// At the cap it reads "Limit of 7 reached", dimmed, with nothing to open.
+fn add_disclosure(host: &FlowHost<'_>, heading: SharedString, open: bool) -> Stateful<Div> {
+    let theme = host.theme;
+    let enabled = host.view.can_add_key;
+    let tint = if enabled {
+        theme.accent
+    } else {
+        theme.fg_muted
+    };
+    let chevron = host.icons.borrow_mut().image(
+        if open {
+            crate::icons::Icon::ChevronDown
+        } else {
+            crate::icons::Icon::ChevronRight
+        },
+        false,
+        theme.fg_subtle,
+        16,
+    );
+    let row = div()
+        .id("flow-add-key")
+        .w_full()
+        .min_h(px(METHOD_ROW_MIN_H))
+        .flex()
+        .items_center()
+        .gap(px(FLOW_GAP_SM))
+        .border_b_1()
+        .border_color(theme.divider)
+        .text_size(theme::text_row_name())
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(tint)
+        .when(enabled, |row| {
+            row.child(div().text_size(theme::text_card_title()).child("+"))
+        })
+        .child(div().flex_1().min_w(px(0.)).child(heading))
+        .when(enabled, |row| {
+            row.child(img(ImageSource::Render(chevron)).size(px(16.)).flex_none())
+        });
+    if enabled {
+        let on_toggle = emit(&host.sink, FlowEvent::TogglePicker);
+        row.cursor_pointer()
+            .hover(move |s| s.bg(theme.bg_sunken))
+            .on_click(move |_, window, cx| on_toggle(window, cx))
+    } else {
+        row.opacity(OPACITY_DISABLED)
+    }
+}
+
+/// A place row's height, title-to-line gap and divider — the Settings row's
+/// metrics (issue 475), so the three places read as a list, not a pile.
+const METHOD_ROW_MIN_H: f32 = 52.;
+
 fn method_picker(host: &FlowHost<'_>) -> Div {
     let theme = host.theme;
     let loc = host.loc;
@@ -982,6 +1018,7 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         let row = div()
             .id(("flow-method", method as u64))
             .w_full()
+            .min_h(px(METHOD_ROW_MIN_H))
             .flex()
             .items_center()
             .gap(px(FLOW_GAP_MD))
@@ -1000,14 +1037,16 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
                     .min_w(px(0.))
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
+                    .gap(px(4.))
                     .child(
                         div()
                             .text_size(theme::text_card_title())
                             .text_color(theme.fg_base)
                             .child(loc.t(title_key)),
                     )
-                    .child(caption(theme, body)),
+                    // One line, always (issue 475): a wrapped line makes
+                    // one place taller than its neighbours.
+                    .child(caption(theme, body).whitespace_nowrap().truncate()),
             );
         if available {
             row.cursor_pointer()
@@ -1018,11 +1057,9 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         }
     };
 
-    let mut list = div()
-        .w_full()
-        .flex()
-        .flex_col()
-        .child(caption(theme, loc.t("onboarding.create.addMethodLabel")));
+    // The heading over these rows is the caller's (the core's
+    // `add_heading_key`), drawn as a heading or as the fold.
+    let mut list = div().w_full().flex().flex_col();
     if let Some(chosen) = host.own_page {
         // Only before the first key may the page change; after it, the
         // banner stays as the fact it is, without its ×.
@@ -1453,6 +1490,8 @@ mod tests {
             signing_page: None,
             can_choose_page: !busy,
             add_methods: crate::hardware::CREATE_ROUTES.to_vec(),
+            add_heading_key: vela_core::app::create_wallet::ADD_HEADING_FIRST.to_owned(),
+            methods_pinned: !busy,
         }
     }
 

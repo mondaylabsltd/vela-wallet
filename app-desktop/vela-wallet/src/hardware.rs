@@ -53,7 +53,7 @@ pub(crate) fn title(theme: &Theme, text: SharedString) -> Div {
         .text_size(theme::text_flow_headline())
         .font_weight(FontWeight::BOLD)
         .text_color(theme.fg_base)
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 pub(crate) fn body(theme: &Theme, text: SharedString) -> Div {
@@ -61,7 +61,9 @@ pub(crate) fn body(theme: &Theme, text: SharedString) -> Div {
         .text_size(theme::text_body())
         .line_height(theme::line_height_body())
         .text_color(theme.fg_muted)
-        .child(text)
+        // A sentence that wraps: by the CJK line rule (`ui::prose`), so a
+        // card never ends on a full stop alone.
+        .child(crate::ui::prose(text))
 }
 
 /// "Your key is blinking — touch it."
@@ -73,9 +75,12 @@ pub(crate) fn body(theme: &Theme, text: SharedString) -> Div {
 /// which is why the page renders this over everything rather than inside a
 /// step.
 ///
-/// **No buttons.** There is nothing to press here — the answer is on the desk,
-/// and a Cancel would only be a second way to do what walking away already does
-/// (the exchange times out and reports it).
+/// **One button, and only where it works.** The answer is on the desk, so
+/// there is nothing to press to go on — but the card covers the window for as
+/// long as a key waits, so it carries Cancel at the bottom whenever the wait
+/// can be stopped (`TouchRequest::cancellable`), and no button at all when it
+/// cannot: a Cancel that hid the card and left the ceremony running behind it
+/// would be worse than none.
 pub fn touch_card(
     theme: &Theme,
     loc: &Loc,
@@ -312,12 +317,19 @@ pub fn own_page_row(
                             .text_color(theme.fg_base)
                             .child(loc.t(words.title_key)),
                     )
-                    .child(body(
-                        theme,
-                        words
-                            .line_key()
-                            .map_or_else(SharedString::default, |key| loc.t(key)),
-                    )),
+                    // One line, always (issue 475): the entry's line is
+                    // short in every language now, and a row that wraps is
+                    // taller than the three places over it.
+                    .child(
+                        body(
+                            theme,
+                            words
+                                .line_key()
+                                .map_or_else(SharedString::default, |key| loc.t(key)),
+                        )
+                        .whitespace_nowrap()
+                        .truncate(),
+                    ),
             )
             .child(
                 div()
@@ -459,8 +471,11 @@ pub fn signin_method_card(
 /// own white quiet-zone box, the one place in this file that names a literal
 /// colour on purpose.
 ///
-/// **No buttons.** The answer is the phone; there is nothing to press. It clears
-/// itself the moment the tunnel is up.
+/// **Cancel at the bottom, nothing else** (the house pattern for ceremony
+/// sheets, issue 480: no ✕). The answer is the phone, so there is nothing to
+/// press to go on, and the card clears itself the moment the tunnel is up —
+/// but it waits up to ninety seconds over a scrim that swallows every press,
+/// so Cancel (and Escape) is the way out.
 ///
 /// **Its line is the caller's.** The create card's "create it on a nearby
 /// device" is false over a signature (083 W19) and over a sign-in (083 W16);
@@ -731,7 +746,7 @@ pub fn pick_card(
                             div()
                                 .text_size(theme::text_flow_caption())
                                 .text_color(theme.fg_subtle)
-                                .child(subtitle),
+                                .child(crate::ui::prose(subtitle)),
                         ),
                 ),
         );

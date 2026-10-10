@@ -332,6 +332,113 @@ pub fn compatibility_checks(s: &SettingsStrings, ok: bool) -> [(SharedString, bo
     ]
 }
 
+// -- a refused network (PR 3 item 9) -----------------------------------------
+
+/// The made-up chain the refusal fixtures are about: not in any catalog, so
+/// nothing real is ever said to be unusable.
+pub const REFUSED_CHAIN_ID: u32 = 424_242;
+
+/// A checked network refused for `blocker`, shaped as the core's check ends:
+/// no P-256 verifier with every contract in place, or the verifier present
+/// and the Safe contracts not deployed yet. The reason, its line and — only
+/// for missing contracts — the Chain Setup link are the core's own constants
+/// and `chain_setup_url`, so a fixture cannot drift from what a real check
+/// says.
+#[must_use]
+pub fn refused_compat(
+    chain_id: u32,
+    blocker: vela_core::app::network_admin::NetBlocker,
+) -> vela_core::app::network_admin::NetCompatibility {
+    use vela_core::app::network_admin::{
+        MISSING_CONTRACTS_HINT, NO_P256_HINT, NetBlocker, NetCompatibility, NetContractStatus,
+        REQUIRED_CONTRACTS, chain_setup_url,
+    };
+    let missing = blocker == NetBlocker::MissingContracts;
+    NetCompatibility {
+        chain_id,
+        compatible: false,
+        multi_key_ready: false,
+        contracts: REQUIRED_CONTRACTS
+            .iter()
+            .map(|(name, address, multi_key_only)| NetContractStatus {
+                name: (*name).to_owned(),
+                address: (*address).to_owned(),
+                deployed: !(missing && name.contains("Safe")),
+                multi_key_only: *multi_key_only,
+            })
+            .collect(),
+        p256_available: Some(blocker != NetBlocker::NoP256),
+        best_rpc_url: Some("https://rpc.example-l2.org".to_owned()),
+        best_rpc_latency_ms: Some(212.0),
+        rpc_failure: None,
+        blocker: Some(blocker),
+        hint_key: Some(
+            match blocker {
+                NetBlocker::NoP256 => NO_P256_HINT,
+                NetBlocker::MissingContracts => MISSING_CONTRACTS_HINT,
+            }
+            .to_owned(),
+        ),
+        setup_url: missing.then(|| chain_setup_url(chain_id)),
+    }
+}
+
+/// Settings' add-network wizard on [`refused_compat`]: a chain chosen,
+/// checked and refused.
+#[must_use]
+pub fn refused_wizard(
+    blocker: vela_core::app::network_admin::NetBlocker,
+) -> vela_core::app::network_admin::NetWizardView {
+    use vela_core::app::network_admin::{NetChainInfo, NetWizardPhase, NetWizardView};
+    NetWizardView {
+        phase: NetWizardPhase::Checked,
+        query: REFUSED_CHAIN_ID.to_string(),
+        custom_rpc: String::new(),
+        suggestions: Vec::new(),
+        chain_info: Some(NetChainInfo {
+            chain_id: REFUSED_CHAIN_ID,
+            name: "Example L2".to_owned(),
+            short_name: "exl2".to_owned(),
+            native_name: "Ether".to_owned(),
+            native_symbol: "ETH".to_owned(),
+            native_decimals: 18,
+            rpc_url: "https://rpc.example-l2.org".to_owned(),
+            rpc_urls: vec!["https://rpc.example-l2.org".to_owned()],
+            explorer_url: "https://explorer.example-l2.org".to_owned(),
+            logo_url: String::new(),
+            is_testnet: false,
+        }),
+        compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
+        error: None,
+        can_add: false,
+    }
+}
+
+/// The sheet a page opens with `wallet_addEthereumChain`, on the same
+/// refused chain.
+#[must_use]
+pub fn refused_dapp_add(
+    blocker: vela_core::app::network_admin::NetBlocker,
+) -> vela_core::app::network_admin::NetDappAddView {
+    use vela_core::app::network_admin::{NetDappAddPhase, NetDappAddView};
+    NetDappAddView {
+        tab: "fixture".to_owned(),
+        id: "fixture".to_owned(),
+        origin: "https://app.example".to_owned(),
+        host: "app.example".to_owned(),
+        chain_id: REFUSED_CHAIN_ID,
+        name: "Example L2".to_owned(),
+        native_symbol: "ETH".to_owned(),
+        rpc_host: Some("rpc.example-l2.org".to_owned()),
+        explorer_host: Some("explorer.example-l2.org".to_owned()),
+        from_site: true,
+        phase: NetDappAddPhase::NotCompatible,
+        reported_chain_id: None,
+        compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
+        can_add: false,
+    }
+}
+
 // -- rpc providers ------------------------------------------------------------
 
 pub struct ProviderFixture {

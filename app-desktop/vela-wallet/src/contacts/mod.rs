@@ -87,15 +87,13 @@ pub struct ContactsStrings {
     pub delete_contact: SharedString,
     pub delete: SharedString,
     pub edit: SharedString,
-    pub action_qr: SharedString,
     pub address_label: SharedString,
     /// Template carrying `{{query}}` (search-empty board variant).
     pub no_results: String,
     // reused keys (spec 015 map — no corpus change)
     pub action_send: SharedString,
-    pub action_receive: SharedString,
     pub copy_address: SharedString,
-    /// What the copy button says once it has (078 X-04, the QR dialog).
+    /// What a copy button says once it has (078 X-04).
     pub copied: SharedString,
     pub label_sent: SharedString,
     pub label_received: SharedString,
@@ -176,11 +174,9 @@ impl ContactsStrings {
             delete_contact: s("contacts.deleteContact"),
             delete: s("contacts.delete"),
             edit: s("contacts.edit"),
-            action_qr: s("contacts.actionQr"),
             address_label: s("contacts.addressLabel"),
             no_results: raw("contacts.noResults"),
             action_send: s("componentsUi.dock.send"),
-            action_receive: s("componentsUi.dock.receive"),
             copy_address: s("componentsUi.identiconViewer.copyAddress"),
             copied: s("componentsUi.identiconViewer.copied"),
             label_sent: s("history.labelSent"),
@@ -212,7 +208,6 @@ mod tests {
             (s.recent_activity.as_ref(), "contacts.recentActivity"),
             (s.view_all_activity.as_ref(), "contacts.viewAllActivity"),
             (s.delete_contact.as_ref(), "contacts.deleteContact"),
-            (s.action_qr.as_ref(), "contacts.actionQr"),
             (s.import_done_title.as_ref(), "contacts.importDoneTitle"),
             (s.import_done_body.as_str(), "contacts.importDoneBody"),
             (s.import_fail_title.as_ref(), "contacts.importFailTitle"),

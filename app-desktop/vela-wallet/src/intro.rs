@@ -211,7 +211,7 @@ pub fn render_intro(state: &mut IntroState, theme: &Theme, loc: &Loc, sink: Intr
                         .line_height(theme::line_height_flow_sub())
                         .text_color(theme.fg_muted)
                         .text_center()
-                        .child(loc.t(body_key)),
+                        .child(crate::ui::prose(loc.t(body_key))),
                 ),
         );
     }

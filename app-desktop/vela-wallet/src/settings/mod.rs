@@ -121,12 +121,6 @@ pub struct SettingsStrings {
     pub account_create: SharedString,
     pub account_sign_in: SharedString,
     pub sign_out_button: SharedString,
-    /// The Ethereum backup row (spec 062).
-    pub backup_title: SharedString,
-    pub backup_backed_up: SharedString,
-    pub backup_not_backed_up: SharedString,
-    pub backup_could_not_check: SharedString,
-    pub backup_checking: SharedString,
     /// The keys block (spec 062): which passkeys control the wallet.
     pub keys_title: SharedString,
     pub keys_subtitle: SharedString,
@@ -147,7 +141,9 @@ pub struct SettingsStrings {
     pub keys_attestation: SharedString,
     pub keys_copy: SharedString,
     pub keys_copied: SharedString,
-    /// PUBLIC keys only; private keys never leave the device.
+    /// What copying the record to Ethereum makes public and what it costs
+    /// (`registry_backup::EXPLAIN_KEY`). The backup ROW's own words are the
+    /// core's (`BackupState::row`), resolved where it is drawn.
     pub backup_explain: SharedString,
     pub sign_out_desc: SharedString,
     pub erase_title: SharedString,
@@ -269,10 +265,10 @@ pub struct SettingsStrings {
     pub wizard_incompatible: SharedString,
     /// Spec 038 #E1: the probes failed — not a verdict.
     pub wizard_unable_to_verify: SharedString,
-    /// The unverifiable verdict's CTA, and the incompatible one's sentence
-    /// (the web's `retry` / `incompatibleHint`, 078 S-05).
+    /// The unverifiable verdict's CTA (the web's `retry`, 078 S-05). The
+    /// refused verdict's sentence is the core's, by reason
+    /// (`NetCompatibility.hint_key` — `live::net_refusal`).
     pub wizard_retry: SharedString,
-    pub wizard_incompatible_hint: SharedString,
     pub endpoints_reset: SharedString,
     /// Spec 072 (FR-010): the question the reset asks first.
     pub endpoints_reset_title: SharedString,
@@ -431,11 +427,6 @@ impl SettingsStrings {
             account_create: s("settingsModals.account.createNew"),
             account_sign_in: s("settingsModals.account.signInExisting"),
             sign_out_button: s("settings.signOut.button"),
-            backup_title: s("settingsModals.backup.title"),
-            backup_backed_up: s("settingsModals.backup.backedUp"),
-            backup_not_backed_up: s("settingsModals.backup.notBackedUp"),
-            backup_could_not_check: s("settingsModals.backup.couldNotCheck"),
-            backup_checking: s("componentsUi.funding.checking"),
             keys_title: s("settingsModals.keys.title"),
             keys_subtitle: s("settingsModals.keys.subtitle"),
             keys_key_n: raw("settingsModals.keys.keyN"),
@@ -540,7 +531,6 @@ impl SettingsStrings {
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             wizard_retry: s("settingsModals.addNetwork.retry"),
-            wizard_incompatible_hint: s("settingsModals.addNetwork.incompatibleHint"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
             endpoints_reset_title: s("settingsModals.endpoints.resetTitle"),
             endpoints_reset_body: s("settingsModals.endpoints.resetBody"),
