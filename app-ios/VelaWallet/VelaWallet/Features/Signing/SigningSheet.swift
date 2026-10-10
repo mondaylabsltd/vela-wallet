@@ -146,8 +146,18 @@ struct SigningSheet: View {
             }
         } else {
             // The wallet's own request: its intent is already the header's title.
-            ForEach(model.formBlocks) { block in
-                blockView(block)
+            ForEach(model.formItems) { item in
+                switch item {
+                case .block(let block):
+                    blockView(block)
+                case .verdict(let inner):
+                    // Final note F2: the simulation's verdict lands in a
+                    // place the sheet already kept, so the fee row, the
+                    // account and the confirm are where they were.
+                    SigningVerdictRoom {
+                        ForEach(inner) { block in blockView(block) }
+                    }
+                }
             }
 
             Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)

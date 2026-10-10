@@ -133,6 +133,42 @@ enum SigningBlock: Identifiable {
     }
 }
 
+/// The simulation verdict's PLACE on the sheet (PR 3 final note F2).
+///
+/// The verdict used to be appended to the form when the simulation answered,
+/// a moment after the sheet opened: the fee row, the signing account and the
+/// confirm rode down by its height under a thumb already on its way to the
+/// button. The place is there from the request's first frame, at one height
+/// (`SigningVerdictRoom`), and whatever the simulation has to say — and
+/// nothing yet — stands in it.
+struct SigningVerdictPlace {
+    /// Where in `SigningModel.blocks` the verdict's blocks stand …
+    let at: Int
+    /// … and how many they are: none while the simulation is out.
+    let count: Int
+    /// What the place holds meanwhile: the balance card's own outline and
+    /// title with "Checking…" where its rows will be — never a blank room.
+    let pending: SigningBlock
+}
+
+/// One thing the form draws: a block, or the verdict's place with what
+/// stands in it.
+enum SigningFormItem: Identifiable {
+    case block(SigningBlock)
+    case verdict([SigningBlock])
+
+    /// The place is ONE view whatever stands in it, so nothing under it is
+    /// re-inserted when the verdict lands.
+    static let verdictId = "signing-verdict-place"
+
+    var id: String {
+        switch self {
+        case .block(let block): block.id
+        case .verdict: Self.verdictId
+        }
+    }
+}
+
 struct TechIdentity: Identifiable {
     let id = UUID()
     let role: String
@@ -274,6 +310,25 @@ struct SigningModel {
     /// sheet's confirm dropped 26 pt when that figure landed (iPhone pass
     /// 2026-10-09); after a line has been said, `SigningFeeView` holds it.
     var feeReserve: String?
+    /// PR 3 final note F2: the simulation verdict's place among `blocks`.
+    /// `nil` where nothing is kept: a request nothing simulates (a message,
+    /// typed data), a refusal, the hand-off card, a drawn board — and the
+    /// wallet's own request, whose usual verdict ("nothing moves") is a
+    /// folded technical row by issue #314's ruling, not a card.
+    var verdictPlace: SigningVerdictPlace?
+
+    /// What the form draws, in order: every block — with the verdict's
+    /// blocks (or, while the simulation is out, its placeholder) gathered
+    /// into the one place kept for them.
+    var formItems: [SigningFormItem] {
+        guard !dappOwn, let place = verdictPlace,
+              place.at >= 0, place.count >= 0, place.at + place.count <= blocks.count
+        else { return formBlocks.map(SigningFormItem.block) }
+        let landed = Array(blocks[place.at ..< place.at + place.count])
+        return blocks[..<place.at].map(SigningFormItem.block)
+            + [.verdict(landed.isEmpty ? [place.pending] : landed)]
+            + blocks[(place.at + place.count)...].map(SigningFormItem.block)
+    }
 
     /// The wallet's own request leads with its outcome (issue #314): its
     /// first intent ("备份公钥") is the sheet's title, in the header row
