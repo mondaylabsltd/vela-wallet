@@ -922,6 +922,41 @@ describe('a verdict is shown whole, and the confirm does not move (device round,
 		await view.screen.unmount();
 	});
 
+	it('two that land together are both brought into sight; when the window cannot hold both, the danger line is', async () => {
+		const both = sheetWith({ line: WILL_FAIL.text, card: NO_CHANGE });
+		const outcomes: string[] = [];
+		// From a window that holds everything down to one that holds neither whole.
+		for (let height = 760; height >= 400; height -= 40) {
+			const view = await at(390, height);
+			const scroller = scrollerOf(view.sheet);
+			const was = top(confirm(view.sheet));
+			await land(view, both);
+			const [line, landedCard] = [...view.sheet.querySelectorAll('[data-verdict]')];
+			expect(landedCard.textContent).toContain('No asset changes');
+			expect(top(confirm(view.sheet))).toBe(was);
+			const window =
+				scroller.getBoundingClientRect().bottom -
+				headerOf(view.sheet).getBoundingClientRect().bottom;
+			const span = landedCard.getBoundingClientRect().bottom - line.getBoundingClientRect().top;
+			const scrolled = scroller.scrollTop > 0;
+			if (span <= window) {
+				// They fit together: both are whole, in sight.
+				expect(inSight(view.sheet, line), `line at ${height}`).toBe(true);
+				expect(inSight(view.sheet, landedCard), `card at ${height}`).toBe(true);
+				outcomes.push(scrolled ? 'both, scrolled' : 'both');
+			} else {
+				// They do not: the body ends on the danger line.
+				expect(inSight(view.sheet, line), `line at ${height}`).toBe(true);
+				outcomes.push('line');
+			}
+			await view.screen.unmount();
+		}
+		// Each case was met — not one of them passed for want of a window.
+		expect(outcomes).toContain('both');
+		expect(outcomes).toContain('both, scrolled');
+		expect(outcomes).toContain('line');
+	});
+
 	it('a long figure wraps inside the card instead of running out of it', async () => {
 		const view = await at(320, 700);
 		await land(

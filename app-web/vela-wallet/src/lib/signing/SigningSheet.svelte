@@ -109,7 +109,8 @@
 	 * its foot is held where it rested across the landing (`keepAt`). Then the
 	 * body is scrolled, if it has to be, so that what landed can be read
 	 * (`reveal`) — under the header, which stays at the top of the scroll:
-	 * who is asking, and the ✕ that refuses.
+	 * who is asking, and the ✕ that refuses. Two that land together are both
+	 * brought into sight.
 	 */
 	const CONFIRM = '[data-testid="signing-confirm"]';
 	const VERDICT = '[data-verdict]';
@@ -132,11 +133,16 @@
 	$effect(() => {
 		void verdictKey;
 		if (confirmAt !== null) sheet?.keepAt(CONFIRM, confirmAt);
-		const landed = verdicts.findIndex((said) => !seen.includes(said));
+		const landed = verdicts.flatMap((said, nth) => (seen.includes(said) ? [] : [nth]));
 		seen = verdicts;
-		if (landed === -1) return;
-		// Once the card has been laid out with its foot held.
-		void tick().then(() => sheet?.reveal(VERDICT, { nth: landed, under: HEADER }));
+		if (landed.length === 0) return;
+		// Once the card has been laid out with its foot held. Each one that
+		// landed, the last first: they all end in sight when the body's window
+		// holds them together, and when it cannot, the first — the relay's
+		// danger line — is the one it ends on.
+		void tick().then(() => {
+			for (const nth of landed.reverse()) sheet?.reveal(VERDICT, { nth, under: HEADER });
+		});
 	});
 	// The form gives way to the status (or comes back): another sheet's worth
 	// of content, in the middle again.
