@@ -576,7 +576,11 @@ struct SigningLiveTests {
         let params = #"[{"to":"0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9","data":"0xcd438f9b","value":"0x0"}]"#
         func sheet(own: Bool, simulation: SigningController.Simulation, judgments: [[String: Any]] = []) throws -> SigningModel {
             var ctx = context()
-            ctx.sim = try CoreJSON.decode(TrustSimViewWire.self, from: ["ready": true, "judgments": judgments])
+            // A check that moved nothing is the real core's view of one —
+            // it carries the line the sheet folds (`noChangeKey`).
+            ctx.sim = judgments.isEmpty
+                ? try #require(TrustCoreScene.nothing(chainId: 1))
+                : try CoreJSON.decode(TrustSimViewWire.self, from: ["ready": true, "judgments": judgments])
             ctx.simulation = simulation
             var request = SigningController.Incoming(
                 id: "r", method: "eth_sendTransaction", paramsJson: params,
@@ -597,7 +601,7 @@ struct SigningLiveTests {
         #expect(own.dappOwn)
         #expect(!hasBalances(own), "the no-change card is still on the sheet")
         #expect(own.tech.simResult?.label == loc.t("componentsUi.signing.simResultLabel"))
-        #expect(own.tech.simResult?.value == loc.t("componentsUi.signing.balanceNoAssetsMove"))
+        #expect(own.tech.simResult?.value == loc.t("componentsUi.signing.simResultNoChange"))
 
         let dapp = try sheet(own: false, simulation: .answered)
         #expect(hasBalances(dapp), "a dApp keeps its balance card")

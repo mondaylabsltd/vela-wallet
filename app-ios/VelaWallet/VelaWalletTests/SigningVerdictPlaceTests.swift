@@ -53,6 +53,16 @@ struct SigningVerdictPlaceTests {
         case out, send, swap, three, unverified, nothing, caution, danger
     }
 
+    /// The judged view as the real `token_trust` core writes it.
+    private func context(core sim: TrustSimViewWire?) throws -> SigningLive.Context {
+        let judged: TrustSimViewWire = try #require(sim, "the core projected no simulation view")
+        return SigningLive.Context(
+            loc: loc, chainName: "Gnosis", chainDot: .green, nativeSymbol: "xDAI",
+            walletName: "Me", walletAddress: me, origin: "https://app.example",
+            sim: judged, simulation: .answered
+        )
+    }
+
     private static let usdc: [String: Any] = [
         "type": "erc20_trusted", "token": "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83",
         "delta": "2500000", "symbol": "USDC", "decimals": 6, "in_trusted_set": true,
@@ -73,7 +83,8 @@ struct SigningVerdictPlaceTests {
         case .swap: return try context([native, Self.usdc], .answered)
         case .three: return try context([native, weth, Self.usdc], .answered)
         case .unverified: return try context([native, unknown], .answered)
-        case .nothing: return try context([], .answered)
+        // A check under which nothing moves, as the core says it.
+        case .nothing: return try context(core: TrustCoreScene.nothing(chainId: 100))
         case .caution:
             return try context(nil, .notice(
                 risk: "caution", key: "componentsUi.signing.simUnavailableWarning", reason: nil))
@@ -186,17 +197,76 @@ struct SigningVerdictPlaceTests {
         #expect(SigningFixtures.build(.cs23, loc: loc).verdictPlace == nil)
     }
 
-    /// A verdict whose every change was a zero says nothing moved — never a
-    /// card with a title and nothing under it.
-    @Test func aVerdictOfZeroChangesSaysNothingMoved() throws {
-        let zero = try context([["type": "native", "delta": "0"]], .answered)
-        guard case .balances(_, let rows, let note, _)? =
-            SigningLive.balanceBlocks(isTransaction: true, context: zero).first
+    /// "No asset changes" is the core's line, drawn exactly when the judged
+    /// view carries its key (item 3) — for a check that moved nothing, and
+    /// for one whose every move was a zero. It was this shell's own case
+    /// ("no row came out") and its own sentence, "No assets leave your
+    /// wallet", which the corpus no longer has.
+    @Test func noAssetChangesIsTheCoresLineAndTheCoreSaysWhen() throws {
+        let key = "componentsUi.signing.simResultNoChange"
+        #expect(loc.t(key) == "No asset changes")
+        #expect(!loc.t("componentsUi.signing.balanceNoAssetsMove").contains("leave your wallet"),
+                "the retired sentence is still in the corpus")
+
+        let nothing = try #require(TrustCoreScene.nothing(chainId: 100))
+        #expect(nothing.ready && nothing.judgments.isEmpty && nothing.noChangeKey == key)
+        let zero = try #require(TrustCoreScene.sim(
+            [["kind": "native", "token": NSNull(), "delta": "0"]], chainId: 100))
+        #expect(zero.noChangeKey == key, "a move of zero is not a move: \(zero)")
+        for sim in [nothing, zero] {
+            guard case .balances(let title, let rows, let note, let tone)? =
+                SigningLive.balanceBlocks(isTransaction: true, context: try context(core: sim)).first
+            else {
+                Issue.record("no card")
+                continue
+            }
+            #expect(title == "Balance changes" && rows.isEmpty && note == "No asset changes" && tone == .neutral)
+        }
+        // Something moves: no key, and no such line.
+        let moving = try #require(TrustCoreScene.tall(chainId: 100))
+        #expect(moving.noChangeKey == nil && moving.judgments.count == 4)
+        guard case .balances(_, let rows, let note, let tone)? =
+            SigningLive.balanceBlocks(isTransaction: true, context: try context(core: moving)).first
         else {
             Issue.record("no card")
             return
         }
-        #expect(rows.isEmpty && note == loc.t("componentsUi.signing.balanceNoAssetsMove"))
+        #expect(rows.map(\.symbol) == ["xDAI", "WETH", "USDC", "Unverified token"])
+        #expect(note == loc.t("componentsUi.signing.unverifiedWarning") && tone == .caution)
+
+        // The key decides, not this shell: the same answer in another
+        // language reads that language's line.
+        var zh = try context(core: nothing)
+        zh = SigningLive.Context(
+            loc: Loc(overrideTag: "zh", preferredLanguages: []), chainName: zh.chainName, chainDot: zh.chainDot,
+            nativeSymbol: zh.nativeSymbol, walletName: zh.walletName, walletAddress: zh.walletAddress,
+            sim: nothing, simulation: .answered
+        )
+        #expect(SigningLive.noChangeLine(zh) == zh.loc.t(key))
+        // Not while the simulation is out, and not under a notice.
+        #expect(SigningLive.noChangeLine(try context(nil, .pending)) == nil)
+        var noticed = try context(core: nothing)
+        noticed.simulation = .notice(risk: "caution", key: "componentsUi.signing.simUnavailableWarning", reason: nil)
+        #expect(SigningLive.noChangeLine(noticed) == nil)
+    }
+
+    /// No row to draw and NO key is not "nothing moves": a move this sheet
+    /// cannot write (or a view from before the key) gets the core's
+    /// could-not-check line, in caution — never an empty card, and never
+    /// the quiet line.
+    @Test func noRowsAndNoKeyIsCouldNotCheckNeverAnEmptyCard() throws {
+        let unreadable = try context([["type": "native", "delta": "not-a-number"]], .answered)
+        let keyless = try context([], .answered)
+        for (name, context) in [("a move nobody can write", unreadable), ("a view without the key", keyless)] {
+            #expect(context.sim?.noChangeKey == nil)
+            let blocks = SigningLive.balanceBlocks(isTransaction: true, context: context)
+            guard blocks.count == 1, case .warning(let tone, let text)? = blocks.first else {
+                Issue.record("\(name): \(blocks.map(\.id))")
+                continue
+            }
+            #expect(tone == .caution, "\(name)")
+            #expect(text == loc.t("componentsUi.signing.simUnavailableWarning"), "\(name)")
+        }
     }
 
     // MARK: - Nothing moves
@@ -368,7 +438,8 @@ struct SigningVerdictPlaceTests {
         let said = walked.map { step in step.tree.map(\.label) }
         #expect(said[0].contains("Balance changes") && said[0].contains("Checking…"))
         #expect(said[1].contains("Balance changes") && said[1].contains("xDAI") && !said[1].contains("Checking…"))
-        #expect(said[2].contains(loc.t("componentsUi.signing.balanceNoAssetsMove")))
+        #expect(said[2].contains("No asset changes"))
+        #expect(said[2].contains(loc.t("componentsUi.signing.simResultNoChange")))
         #expect(said[3].contains(loc.t("componentsUi.signing.simUnavailableWarning")))
     }
 

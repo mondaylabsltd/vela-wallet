@@ -893,7 +893,7 @@ enum SigningFixtures {
                     loc,
                     fn: (label: t(loc, "techFunction"), signature: t(loc, "intentBackUpPublicKeys")),
                     simResult: SigningRow(label: t(loc, "simResultLabel"),
-                                          value: t(loc, "balanceNoAssetsMove")),
+                                          value: t(loc, "simResultNoChange")),
                     raw: (label: t(loc, "techRawData"), hex: "0xcd438f9b0000000000000000000000000000…")
                 ),
                 techOpen: false, fee: onchainFee(loc), signer: signer(loc),

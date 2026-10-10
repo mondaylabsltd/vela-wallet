@@ -259,11 +259,11 @@ enum SigningLive {
         // fact, folded with the others, not a bordered card weighing as much as
         // the outcome. Anything else it has to say (a revert, a node that could
         // not check, a balance that would move) stays on the sheet.
+        // "Nothing moves" is the core's to say, and in its words
+        // (`noChangeLine`): this row is folded exactly when it does.
         let quietSim: SigningRow? = {
-            guard own, !refused, balances.count == 1,
-                  case .balances(_, let rows, let note, _) = balances[0], rows.isEmpty
-            else { return nil }
-            return SigningRow(label: s(loc, "simResultLabel"), value: note ?? s(loc, "simResultNoChange"))
+            guard own, !refused, facts != nil, let line = noChangeLine(context) else { return nil }
+            return SigningRow(label: s(loc, "simResultLabel"), value: line)
         }()
         // What stands above the simulation's verdict, and the verdict: kept
         // apart so the sheet can hold the verdict's PLACE from the first
@@ -853,12 +853,28 @@ enum SigningLive {
         ]
     }
 
+    /// The verdict's quiet line — "No asset changes" — when this request's
+    /// simulation was a check under which nothing of the person's moves:
+    /// the judged view's `noChangeKey`, through the corpus. `nil` whenever
+    /// the core does not say so (still out, a notice, something moves).
+    ///
+    /// Both the case and the sentence are the core's. This file used to
+    /// decide the case itself ("no row came out of the judgments") and say
+    /// its own sentence for it, "No assets leave your wallet", while the
+    /// desktop and Android said another.
+    static func noChangeLine(_ context: Context) -> String? {
+        guard let sim = context.sim, sim.ready, context.simulation == .answered,
+              let key = sim.noChangeKey
+        else { return nil }
+        return context.loc.t(key)
+    }
+
     /// What the simulation found, or that it could not look.
     ///
     /// Three outcomes and they are three different sentences:
     ///
     /// - judgments → the rows, each one the CORE's verdict;
-    /// - answered, nothing moved → "checked, nothing moves";
+    /// - checked, nothing moves → the core's line for it (`noChangeLine`);
     /// - the core's notice → its sentence in its tone: "expected to fail"
     ///   (danger) or "Vela couldn't check" (caution) — never silence, because
     ///   a wallet that stays quiet when it could not check teaches people
@@ -880,18 +896,25 @@ enum SigningLive {
         // a block that appears and then changes its mind is worse than one that
         // arrives late.
         guard let sim = context.sim, sim.ready, context.simulation == .answered else { return [] }
-        // A zero change is not a change: the core writes none (RJ15), and
-        // the row is not drawn.
-        let rows = sim.judgments.compactMap { balanceRow($0, context: context) }
-        // Nothing moved — no judgment, or every one of them a zero: said out
-        // loud, never a card with a title and nothing under it.
-        guard !rows.isEmpty else {
+        // Nothing moves — said out loud, in the card's own outline, exactly
+        // when the core says so and in its sentence.
+        if let line = noChangeLine(context) {
             return [.balances(
                 title: s(loc, "balanceChangesTitle"),
                 rows: [],
-                note: s(loc, "balanceNoAssetsMove"),
+                note: line,
                 noteTone: .neutral
             )]
+        }
+        // A zero change is not a change: the core writes none (RJ15), and
+        // the row is not drawn.
+        let rows = sim.judgments.compactMap { balanceRow($0, context: context) }
+        // No row to draw and no word from the core that nothing moves: a
+        // move nobody here can write. That is not "nothing moves" — it is a
+        // check this sheet cannot report, so it says the core's
+        // could-not-check line, never an empty card.
+        guard !rows.isEmpty else {
+            return [.warning(tone: .caution, text: s(loc, "simUnavailableWarning"))]
         }
         // One warning for the whole block, not one per row: the caution is
         // about the same thing each time, and repeating it is how people stop

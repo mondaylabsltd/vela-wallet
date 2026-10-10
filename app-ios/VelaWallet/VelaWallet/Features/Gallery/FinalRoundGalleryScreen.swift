@@ -111,7 +111,10 @@ struct FinalRoundGalleryScreen: View {
 
     private static let address = "0x88cca0eedbf2c4426110bbfc998f048689266894"
 
-    private func simulation(_ verdict: String) -> (judgments: [[String: Any]]?, state: SigningController.Simulation) {
+    private func simulation(_ verdict: String) -> (sim: TrustSimViewWire?, state: SigningController.Simulation) {
+        func judged(_ judgments: [[String: Any]]) -> TrustSimViewWire? {
+            try? CoreJSON.decode(TrustSimViewWire.self, from: ["ready": true, "judgments": judgments])
+        }
         let native: [String: Any] = ["type": "native", "delta": "-1500000000000000000"]
         let usdc: [String: Any] = [
             "type": "erc20_trusted", "token": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -125,11 +128,12 @@ struct FinalRoundGalleryScreen: View {
             "type": "erc20_unverified", "token": "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a", "delta": "123456789",
         ]
         switch verdict {
-        case "send": return ([native], .answered)
-        case "swap": return ([native, usdc], .answered)
-        case "three": return ([native, weth, usdc], .answered)
-        case "unverified": return ([native, unknown], .answered)
-        case "nothing": return ([], .answered)
+        case "send": return (judged([native]), .answered)
+        case "swap": return (judged([native, usdc]), .answered)
+        case "three": return (judged([native, weth, usdc]), .answered)
+        case "unverified": return (judged([native, unknown]), .answered)
+        // The core's own view: "No asset changes" is its key.
+        case "nothing": return (TrustCoreScene.nothing(), .answered)
         case "caution":
             return (nil, .notice(risk: "caution", key: "componentsUi.signing.simUnavailableWarning", reason: nil))
         case "danger":
@@ -163,9 +167,7 @@ struct FinalRoundGalleryScreen: View {
             walletName: "Everyday wallet", walletAddress: Self.address
         )
         context.chainId = 8_453
-        context.sim = sim.judgments.flatMap {
-            try? CoreJSON.decode(TrustSimViewWire.self, from: ["ready": true, "judgments": $0])
-        }
+        context.sim = sim.sim
         context.simulation = sim.state
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc), request: request, sign: sign,

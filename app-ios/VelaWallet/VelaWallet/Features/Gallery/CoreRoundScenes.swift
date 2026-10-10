@@ -12,6 +12,10 @@
 //    does then (`wouldFail`);
 //  - `BalanceCoreScene` — the `balance_dashboard` machine over a round whose
 //    Ethereum read never left the app (note 11): the home's line.
+//  - `TrustCoreScene` — the `token_trust` machine's judged view of a
+//    simulation (PR 3 device round): the view the signing sheet draws its
+//    verdict from, with the core's own "No asset changes" key on a check
+//    that moves nothing, and a verdict of four rows and a warning.
 //
 //  The boards draw them and the tests read them, so both show what the
 //  machine itself says — never a hand-written guess at its JSON.
@@ -274,6 +278,70 @@ enum BalanceCoreScene {
             let last = try? CoreJSON.decode(BalanceViewWire.self, from: settled)
         else { return nil }
         return (first, last)
+    }
+}
+
+/// The signing sheet's simulation verdict as the `token_trust` core judges
+/// it (PR 3 device round): the deltas go in as a simulation's would, the
+/// metadata the core then asks for is answered from `named`, and the view it
+/// writes — judgments, `ready`, and `noChangeKey` when nothing moves — comes
+/// back as it is.
+enum TrustCoreScene {
+    /// A token's `symbol()` and `decimals()`, as the chain would answer.
+    typealias Named = [String: (symbol: String, decimals: Int)]
+
+    @MainActor
+    static func sim(
+        _ deltas: [[String: Any]] = [], chainId: Int = 8453, named: Named = [:]
+    ) -> TrustSimViewWire? {
+        let core = TokenTrustCore()
+        guard var step = try? CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
+            "type": "sim_deltas_computed", "address": FeeCoreScene.account.lowercased(),
+            "chain_id": chainId, "deltas": deltas,
+        ]))) else { return nil }
+        // A token the core cannot name yet: it asks, and holds the verdict
+        // until the answer. One nobody names stays unverified.
+        for effect in step["effects"] as? [[String: Any]] ?? [] {
+            guard let operation = effect["operation"] as? [String: Any],
+                  operation["type"] as? String == "multicall_erc20_meta",
+                  let id = (effect["id"] as? NSNumber)?.uint64Value
+            else { continue }
+            let entries = (operation["addrs"] as? [String] ?? []).map { addr -> [String: Any] in
+                guard let meta = named[addr.lowercased()] else { return ["addr": addr, "meta": NSNull()] }
+                return ["addr": addr, "meta": ["symbol": meta.symbol, "decimals": meta.decimals]]
+            }
+            guard let answered = try? CoreJSON.object(core.resolveEffect(
+                effectId: id,
+                resultJson: CoreJSON.string(["type": "erc_meta", "chain_id": chainId, "entries": entries])
+            )) else { return nil }
+            step = answered
+        }
+        guard let view = step["view"] as? [String: Any],
+              let trust = try? CoreJSON.decode(TrustViewWire.self, from: view)
+        else { return nil }
+        return trust.sim
+    }
+
+    /// A check under which nothing of the person's moves.
+    @MainActor
+    static func nothing(chainId: Int = 8453) -> TrustSimViewWire? { sim([], chainId: chainId) }
+
+    static let weth = "0x4200000000000000000000000000000000000006"
+    static let usdc = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+    static let unknown = "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+
+    /// A verdict taller than the place the sheet keeps: three coins leave
+    /// (the chain's own, WETH, USDC — outflows, so each is written) and a
+    /// token nobody vouches for arrives — four rows, and the warning under
+    /// an unverified token.
+    @MainActor
+    static func tall(chainId: Int = 8453) -> TrustSimViewWire? {
+        sim([
+            ["kind": "native", "token": NSNull(), "delta": "-1500000000000000000"],
+            ["kind": "erc20", "token": weth, "delta": "-40000000000000000"],
+            ["kind": "erc20", "token": usdc, "delta": "-25000000"],
+            ["kind": "erc20", "token": unknown, "delta": "123456789"],
+        ], chainId: chainId, named: [weth: ("WETH", 18), usdc: ("USDC", 6)])
     }
 }
 

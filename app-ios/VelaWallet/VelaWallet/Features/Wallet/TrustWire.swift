@@ -126,6 +126,14 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
 struct TrustSimViewWire: Decodable, Equatable {
     let ready: Bool
     let judgments: [TrustSimJudgmentWire]
+    /// The verdict's quiet line when the checked answer moves nothing of the
+    /// person's: `componentsUi.signing.simResultNoChange`, "No asset
+    /// changes" — set by the core once `ready`, with no judgment or every
+    /// one a zero. **The sheet says the line exactly when this key is there**
+    /// and never picks the case, or the sentence, itself. `nil` while
+    /// resolving, whenever something moves, and on a view from before the
+    /// key.
+    var noChangeKey: String? = nil
 }
 
 /// The scan half of the view.
