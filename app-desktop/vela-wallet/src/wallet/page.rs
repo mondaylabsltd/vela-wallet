@@ -19589,32 +19589,65 @@ impl WalletPage {
             // A scanner just opened: what the last one said is not true of it.
             self.scan_notice = None;
             self.scan_quiet_until = None;
-            self.scan_camera = Some(crate::executor::camera::start());
+            // The one place a scanner's frames start — and the real camera
+            // only for a signed-in person's own scanner (PR 3 note 7). The
+            // gallery, a design page and a flow stack a developer pin put up
+            // draw the fixture frame: a sweep of those states once opened
+            // the camera on the person at the machine.
+            let source = crate::executor::camera::Source::for_session(
+                self.gallery,
+                self.identity.is_some(),
+                FlowPanel::from_env().is_some(),
+            );
+            let session = crate::executor::camera::start(source);
             // The camera has its own thread and no way to reach this window;
             // this asks for a repaint at roughly the rate a preview needs one,
-            // and stops the moment the scanner is gone.
-            cx.spawn(async move |page, cx| {
-                loop {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_millis(60))
-                        .await;
-                    let alive = page
-                        .update(cx, |this, cx| {
-                            let alive = this.scan_camera.is_some();
-                            if alive {
-                                cx.notify();
-                            }
-                            alive
-                        })
-                        .unwrap_or(false);
-                    if !alive {
-                        return;
-                    }
-                }
-            })
-            .detach();
+            // and stops the moment the scanner is gone. The fixture is one
+            // drawn frame, published below: there is nothing to keep fed.
+            if !session.is_fixture() {
+                Self::pump_camera_repaints(cx);
+            }
+            self.scan_camera = Some(session);
         }
 
+        let Some(session) = self.scan_camera.as_ref() else {
+            return;
+        };
+        // The fixture's frame never changes: once it is on screen there is
+        // nothing more to publish, and no code will ever be "seen" in it.
+        if session.is_fixture() && self.scan_preview.slot.is_some() {
+            return;
+        }
+        self.publish_camera_frame(window, cx);
+    }
+
+    /// Ask for a repaint at the rate a live preview needs one, until the
+    /// scanner is gone.
+    fn pump_camera_repaints(cx: &mut Context<Self>) {
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(60))
+                    .await;
+                let alive = page
+                    .update(cx, |this, cx| {
+                        let alive = this.scan_camera.is_some();
+                        if alive {
+                            cx.notify();
+                        }
+                        alive
+                    })
+                    .unwrap_or(false);
+                if !alive {
+                    return;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Act on a code the camera saw, and put its newest frame on screen.
+    fn publish_camera_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(session) = self.scan_camera.as_ref() else {
             return;
         };
