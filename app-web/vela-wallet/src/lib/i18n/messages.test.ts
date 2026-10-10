@@ -148,6 +148,28 @@ describe('onboarding flow messages resolve through the vela-core engine (spec 01
 		expect(flow['onboarding.common.notDiscoverableTitle']).toBe('这台设备上没有可用的通行密钥');
 	});
 
+	// PR 3 note 17: with no key yet the keys screen's title and the heading
+	// over its three places read the same words (zh 「添加通行密钥」 twice; en
+	// "Add passkeys" / "Add a passkey"). The heading has its own key now —
+	// "Choose where it lives" — and the old one is retired: `t()` throws on it.
+	it('the keys screen’s first heading adds information: never the title’s words again, in any language', () => {
+		expect(FLOW_KEYS).toContain('onboarding.create.keyPlaceHeading');
+		expect(FLOW_KEYS).not.toContain('onboarding.create.addKeyBtn');
+		for (const locale of SUPPORTED_LOCALES) {
+			const flow = resolveFlowMessages(locale);
+			const heading = flow['onboarding.create.keyPlaceHeading'];
+			expect(heading, locale).toBeTruthy();
+			expect(heading, locale).not.toBe(flow['onboarding.create.keysTitle']);
+			// …and it is not the "Add another" of the keys after the first.
+			expect(heading, locale).not.toBe(flow['onboarding.create.addMethodLabel']);
+			expect(flow, locale).not.toHaveProperty('onboarding.create.addKeyBtn');
+		}
+		expect(resolveFlowMessages('en')['onboarding.create.keyPlaceHeading']).toBe(
+			'Choose where it lives'
+		);
+		expect(resolveFlowMessages('zh')['onboarding.create.keyPlaceHeading']).toBe('选择存放位置');
+	});
+
 	it('interpolation templates ship raw and fill client-side (FR-011 frozen numbers)', () => {
 		const flow = resolveFlowMessages('en');
 		expect(flow['onboarding.create.keyCount']).toContain('{{current}}');

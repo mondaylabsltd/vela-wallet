@@ -28,11 +28,19 @@
 		addMethods?: KeyMethod[];
 		/**
 		 * The corpus key of the heading over the three places (issue 475) — the
-		 * core's `CreateView.add_heading_key`: "Add a passkey" with no key yet,
-		 * "Add another" with room for one more, "Limit of 7 reached" at the cap.
-		 * It is the screen's ONLY add affordance.
+		 * core's `CreateView.add_heading_key`: "Choose where it lives" with no
+		 * key yet, "Add another" with room for one more, "Limit of 7 reached" at
+		 * the cap. It is the screen's ONLY add affordance.
 		 */
 		addHeadingKey: string;
+		/**
+		 * The core's `CreateView.key_count_shown`: is "Added n / 7" drawn? From
+		 * the first key on. With no key it read "Added 0 / 7" over an empty
+		 * list — a count of nothing, beside a subtitle that already says "up to
+		 * 7" — and one app hid it while three showed it. One rule on all four,
+		 * and none of it decided here.
+		 */
+		keyCountShown: boolean;
 		/**
 		 * The core's `CreateView.methods_pinned`: no key yet and one may be
 		 * added, so the three places are drawn open under a plain heading, with
@@ -64,6 +72,7 @@
 		maxKeys,
 		addMethods,
 		addHeadingKey,
+		keyCountShown,
 		methodsPinned,
 		signingDomain = '',
 		signingPage = null,
@@ -129,13 +138,22 @@
 		</div>
 	{/if}
 
-	<div class="list">
-		<div class="listhead">
-			<span class="label">{strings('onboarding.create.keysLabel')}</span>
-			<span class="count"
-				>{strings('onboarding.create.keyCount', { current: keys.length, max: maxKeys })}</span
-			>
-		</div>
+	<!--
+		The keys drafted so far, under "Added n / 7". The head is drawn when the
+		core says so (`key_count_shown`: from the first key on). With no head and
+		no key there is nothing in the block, so it takes no room either — an
+		empty one would still cost a gap of the screen's rhythm, between the
+		subtitle and the three places.
+	-->
+	<div class="list" class:nothing={!keyCountShown && keys.length === 0}>
+		{#if keyCountShown}
+			<div class="listhead">
+				<span class="label">{strings('onboarding.create.keysLabel')}</span>
+				<span class="count"
+					>{strings('onboarding.create.keyCount', { current: keys.length, max: maxKeys })}</span
+				>
+			</div>
+		{/if}
 
 		<ul class="rows">
 			{#each keys as key, index (index)}
@@ -285,6 +303,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-lg);
+	}
+
+	/* No head and no key: nothing to draw, and no gap kept for it. */
+	.list.nothing {
+		display: none;
 	}
 
 	/* The chosen page: which site every key will belong to, said once, calmly. */

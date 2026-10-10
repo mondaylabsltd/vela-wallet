@@ -238,6 +238,7 @@
 			maxKeys={MAX_KEYS}
 			addMethods={view.add_methods}
 			addHeadingKey={view.add_heading_key}
+			keyCountShown={view.key_count_shown}
 			methodsPinned={view.methods_pinned}
 			signingDomain={view.signing_domain}
 			signingPage={view.signing_page ?? null}
