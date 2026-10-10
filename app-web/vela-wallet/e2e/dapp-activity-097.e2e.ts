@@ -283,23 +283,9 @@ test.describe('phone width', () => {
 		}
 		await page.screenshot({ path: `${SHOTS}/activity-phone-en.png`, fullPage: true });
 
-		await open(page, /Withdraw on Aave/);
-		let sheet = page.getByRole('dialog');
-		await expect(sheet.getByText(en('componentsUi.signing.refused'))).toBeVisible();
-		await page.screenshot({ path: `${SHOTS}/failed-detail-phone-en.png` });
-		await page.keyboard.press('Escape');
-		await page.waitForTimeout(500);
-
-		await open(page, /Create order on 1inch/);
-		sheet = page.getByRole('dialog');
-		await expect(sheet.getByText('NativeOrderFactory')).toBeVisible();
-		await expect(sheet.getByText(/≈ \$0\.00/)).toHaveCount(0);
-		await page.screenshot({ path: `${SHOTS}/order-detail-phone-en.png` });
-		await page.keyboard.press('Escape');
-		await page.waitForTimeout(500);
-
 		// "All" opens History, which draws every row.
 		await openHistory(page);
+		await expect(page.getByRole('heading', { name: en('history.navTitle'), level: 1 })).toBeVisible();
 		for (const title of TITLES) {
 			await expect(page.getByRole('button', { name: new RegExp(title) }).first()).toBeVisible({
 				timeout: 20_000
@@ -313,7 +299,7 @@ test.describe('phone width', () => {
 		await page.screenshot({ path: `${SHOTS}/history-phone-en.png`, fullPage: true });
 
 		await open(page, /Borrow on Aave/);
-		sheet = page.getByRole('dialog');
+		let sheet = page.getByRole('dialog');
 		await expect(sheet.getByText('+0.3 USDC', { exact: true }).first()).toBeVisible();
 		await expect(sheet.getByText(/≈ \$0\.00/)).toHaveCount(0);
 		await page.screenshot({ path: `${SHOTS}/borrow-detail-phone-en.png` });
@@ -326,6 +312,30 @@ test.describe('phone width', () => {
 		// The hero and its balance-change line (097 D: the row leads with it).
 		await expect(sheet.getByText('−1.16 USDC', { exact: true })).toHaveCount(2);
 		await page.screenshot({ path: `${SHOTS}/swap-detail-phone-en.png` });
+		await page.keyboard.press('Escape');
+		await page.waitForTimeout(500);
+
+		// Back on the home it is three again, and a row there opens its own
+		// detail — the same one History opens for it.
+		await page.getByRole('button', { name: en('receive.a11yBack') }).click();
+		await expect(page.getByRole('heading', { name: en('history.navTitle'), level: 1 })).toHaveCount(0);
+		for (const title of HISTORY_ONLY_TITLES) {
+			await expect(page.getByRole('button', { name: new RegExp(title) })).toHaveCount(0);
+		}
+		await open(page, /Withdraw on Aave/);
+		sheet = page.getByRole('dialog');
+		await expect(sheet.getByText(en('componentsUi.signing.refused'))).toBeVisible();
+		await page.screenshot({ path: `${SHOTS}/failed-detail-phone-en.png` });
+		await page.keyboard.press('Escape');
+		await page.waitForTimeout(500);
+
+		// A detail opened from the home is a sheet over History (the flow's
+		// stack), so closing it leaves the person there, among every row.
+		await open(page, /Create order on 1inch/);
+		sheet = page.getByRole('dialog');
+		await expect(sheet.getByText('NativeOrderFactory')).toBeVisible();
+		await expect(sheet.getByText(/≈ \$0\.00/)).toHaveCount(0);
+		await page.screenshot({ path: `${SHOTS}/order-detail-phone-en.png` });
 	});
 
 	test('the same rows in Chinese', async ({ page }) => {
@@ -336,14 +346,13 @@ test.describe('phone width', () => {
 		// The borrow is the fourth row: History's, not the home's (issue 469).
 		await expect(page.getByRole('button', { name: /在 Aave 借入/ })).toHaveCount(0);
 		await page.screenshot({ path: `${SHOTS}/activity-phone-zh.png`, fullPage: true });
-		await open(page, /在 Aave 取出/);
-		await page.screenshot({ path: `${SHOTS}/failed-detail-phone-zh.png` });
-		await page.keyboard.press('Escape');
-		await page.waitForTimeout(500);
 		await openHistory(page, 'zh');
 		await expect(page.getByRole('button', { name: /在 Aave 借入/ }).first()).toBeVisible({
 			timeout: 20_000
 		});
+		await page.screenshot({ path: `${SHOTS}/history-phone-zh.png`, fullPage: true });
+		await open(page, /在 Aave 取出/);
+		await page.screenshot({ path: `${SHOTS}/failed-detail-phone-zh.png` });
 	});
 });
 

@@ -26,6 +26,9 @@ const EXPLORER = 'https://explorer.op-stub.test';
 const CHAIN_ID = 59144;
 const NAME = 'Linea';
 
+/** The P-256 verifier's address (EIP-7951 / RIP-7212): `network_admin::P256_PRECOMPILE`. */
+const P256_PRECOMPILE = '0x0000000000000000000000000000000000000100';
+
 /**
  * What the chain under test answers the check with. The default is a chain
  * that passes; the two refusals are one fact each: no contract code, or a
@@ -34,7 +37,11 @@ const NAME = 'Linea';
 interface ChainFacts {
 	/** Every required contract has code. */
 	contracts: boolean;
-	/** The P-256 verifier (EIP-7951 / RIP-7212 at 0x100) answers. */
+	/**
+	 * The P-256 verifier (EIP-7951 / RIP-7212 at 0x100) is there. The core
+	 * probes twice — a call that must answer `1`, then code at the address —
+	 * and a chain without it fails both.
+	 */
 	p256: boolean;
 }
 
@@ -92,8 +99,14 @@ async function stubEverything(
 		if (method === 'eth_chainId') return '0x' + chainId.toString(16);
 		if (method === 'eth_blockNumber') return '0x10';
 		if (method === 'eth_getLogs') return [];
-		// Every required contract is deployed — unless this chain has none.
-		if (method === 'eth_getCode') return facts.contracts ? '0x6001' : '0x';
+		if (method === 'eth_getCode') {
+			// The verifier's second probe: code AT the precompile's address.
+			// A chain with no verifier has none there, whatever else it has.
+			const address = String(params[0] ?? '').toLowerCase();
+			if (address === P256_PRECOMPILE) return facts.p256 ? '0x6001' : '0x';
+			// Every required contract is deployed — unless this chain has none.
+			return facts.contracts ? '0x6001' : '0x';
+		}
 		if (method === 'eth_call') {
 			const call = params[0] as { data?: string } | undefined;
 			// Only a real aggregate3 envelope has a count to read; the P-256 probe
