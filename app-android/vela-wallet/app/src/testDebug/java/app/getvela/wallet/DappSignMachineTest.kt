@@ -224,8 +224,7 @@ class DappSignMachineTest {
         val read = withTimeout(20_000) { c.clear.first { it.resolved } }
         assertTrue("the reading is the core's: ${read.surface}", read.result != null || read.surface.name.isNotEmpty())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         val answer = answers.first { it.first == "tab-1/r1" }.second
         assertEquals("the page gets the TRANSACTION hash once the receipt landed", "0xtx", answer.getString("result"))
@@ -279,8 +278,7 @@ class DappSignMachineTest {
         val c = controller(now = { 1_791_000_000_000.0 })
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         withTimeout(10_000) { while (handed.size < 2) delay(20) }
         val record = "dapp-1791000000000-tx"
@@ -303,8 +301,7 @@ class DappSignMachineTest {
         val c = controller()
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         assertEquals("0xtx", answers.first { it.first == "tab-1/r1" }.second.getString("result"))
         assertEquals(listOf(Triple<String?, String, KeyMethod>(second, "usb,nfc,ble", KeyMethod.SecurityKey)), routes)
@@ -325,8 +322,7 @@ class DappSignMachineTest {
         val c = controller(receiptWaitMs = 600L)
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         val answered = answers.filter { it.first == "tab-1/r1" }
         assertEquals("exactly one answer", 1, answered.size)
@@ -365,8 +361,7 @@ class DappSignMachineTest {
         val c = controller(signer = leavesMidCeremony).also { sheet = it }
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(20_000) { while (events.none { it == "sign" }) delay(50) }
         delay(1_500)
         assertEquals("never posted: $events", 0, events.count { it == "relay.send" })
@@ -383,8 +378,7 @@ class DappSignMachineTest {
         val c = controller()
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         // Spec 096 F8: the failure is on the sheet, its answer held — nothing
         // was sent, so it may be tried again — until the person closes it.
         val failed = withTimeout(30_000) { c.sign.first { it.error != null } }
@@ -416,8 +410,7 @@ class DappSignMachineTest {
         val c = controller()
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { c.sign.first { it.error != null && it.failure_retryable } }
         // The relay is back; the person tries again.
         scriptRelay()
@@ -425,7 +418,7 @@ class DappSignMachineTest {
         withTimeout(20_000) { c.sign.first { it.error == null && it.confirm_gate_open } }
         assertTrue("still unanswered", answers.none { it.first == "tab-1/r1" })
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         val answered = answers.filter { it.first == "tab-1/r1" }
         assertEquals("exactly one answer", 1, answered.size)
@@ -446,8 +439,7 @@ class DappSignMachineTest {
         c.open(transfer())
         withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet && it.request != null } }
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         assertEquals(
             "the page is told it is not confirmed yet when the receipt is late (083)",
@@ -487,8 +479,7 @@ class DappSignMachineTest {
         val c = controller(receiptWaitMs = 600L)
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         assertTrue("the row was on disk when the POST left: $events", "relay.saw-record" in events)
         val local = signedOp!!
@@ -524,8 +515,7 @@ class DappSignMachineTest {
         val c = controller()
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { posting.await() }
         // The process ends here: nothing more runs.
         scope.cancel()
@@ -556,9 +546,9 @@ class DappSignMachineTest {
         val c = controller()
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.awaitGate("the confirm opens") { it.enabled }
         store.refuseWrites = true
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { c.sign.first { it.error != null } }
         c.swipeDismissed()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
@@ -580,8 +570,7 @@ class DappSignMachineTest {
         val c = controller()
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         val sheet = withTimeout(30_000) { c.sign.first { it.error != null } }
         assertTrue("the sheet knows it was refused", sheet.failure_refused)
         assertTrue("a refusal is not tried again", !sheet.failure_retryable)
@@ -609,8 +598,7 @@ class DappSignMachineTest {
         val c = controller(receiptWaitMs = 60_000L)
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (events.none { it.startsWith("op:") }) delay(20) }
         delay(300)
         val landed = "0x" + "c4".repeat(32)
@@ -642,8 +630,7 @@ class DappSignMachineTest {
         val c = controller(receiptWaitMs = 60_000L)
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { posting.await() }
         val landed = "0x" + "d5".repeat(32)
         trackerSays(app.getvela.wallet.feature.send.core.TrackStatus.Confirmed, landed)
@@ -669,8 +656,7 @@ class DappSignMachineTest {
         val c = controller(receiptWaitMs = 60_000L)
         c.open(transfer())
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (events.none { it.startsWith("op:") }) delay(20) }
         withTimeout(10_000) { c.sign.first { it.pending_op_hash != null } }
         trackerSays(app.getvela.wallet.feature.send.core.TrackStatus.Rejected, null)
@@ -708,8 +694,7 @@ class DappSignMachineTest {
         // (Both speeds meet the $0.01 floor on this script, so only the NAME
         // tells them apart — which is the thing the wire has to carry.)
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready && it.fee?.tier == FeeTier.Slow } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         assertTrue("the wire names the speed picked: $events", "relay.tier:slow" in events)
         assertFalse("never the speed walked away from: $events", "relay.tier:standard" in events)
@@ -740,8 +725,7 @@ class DappSignMachineTest {
         withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet } }
         val read = withTimeout(20_000) { c.clear.first { it.message != null } }
         assertEquals("Hello, Vela", read.message!!.decoded_text)
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r2" }) delay(50) }
         val signature = answers.first { it.first == "tab-1/r2" }.second.getString("result")
         assertTrue("an EIP-1271 envelope, not a bare 65-byte signature: ${signature.length}", signature.startsWith("0x") && signature.length > 300)
@@ -767,8 +751,7 @@ class DappSignMachineTest {
         assertTrue(guard.unlimited_consented)
         assertNull("the site's own bytes", guard.rewritten_params_json)
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r3k" }) delay(50) }
         assertTrue("the submit guard let the consented approval through", answers.first { it.first == "tab-1/r3k" }.second.has("result"))
         assertEquals(1, signs)
@@ -792,8 +775,7 @@ class DappSignMachineTest {
         assertTrue("the calldata carries the bounded amount", bounded.rewritten_params_json!!.contains("095ea7b3"))
         assertFalse(bounded.rewritten_params_json!!.contains("f".repeat(64)))
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r3" }) delay(50) }
         assertTrue(answers.first { it.first == "tab-1/r3" }.second.has("result"))
         assertEquals(1, signs)
@@ -809,8 +791,7 @@ class DappSignMachineTest {
         withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet } }
         val read = withTimeout(20_000) { c.clear.first { it.message != null } }
         assertEquals(app.getvela.wallet.feature.signing.core.ClearDangerClass.EthSign, read.message!!.danger_class)
-        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
-        c.approve()
+        c.approveWhenOpen()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r5" }) delay(50) }
         val signature = answers.first { it.first == "tab-1/r5" }.second.getString("result")
         assertTrue(signature.startsWith("0x") && signature.length > 300)

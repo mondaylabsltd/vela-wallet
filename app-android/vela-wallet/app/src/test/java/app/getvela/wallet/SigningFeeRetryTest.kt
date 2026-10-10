@@ -190,13 +190,15 @@ class SigningFeeRetryTest {
         val c = controller()
         c.open(transfer())
         withTimeout(20_000) { c.fee.first { it.failed != null } }
-        val feeJson = withTimeout(5_000) { c.feeJson.first { it != null && it.contains("chain_read") } }
-        val signJson = withTimeout(5_000) { c.signJson.first { it != null } }
-        val clearJson = withTimeout(5_000) { c.clearJson.first { it != null } }
-        val guardJson = withTimeout(5_000) { c.guardJson.first { it != null } }
-        val gate = SigningLive.confirmState(signJson, guardJson, clearJson, feeJson, null)
+        withTimeout(5_000) { c.feeJson.first { it != null && it.contains("chain_read") } }
+        // The gate asks the request, the reading and the guard before the
+        // fee, and those three machines settle on threads of their own: the
+        // gate is read once it has come to the fee, not at whatever each
+        // machine happened to have written first.
+        val gate = c.awaitGate("the footer names the fee's failure") {
+            it.block == app.getvela.wallet.feature.signing.core.ConfirmBlock.FeeFailed
+        }
         assertTrue("the confirm is shut", !gate.enabled)
-        assertEquals(app.getvela.wallet.feature.signing.core.ConfirmBlock.FeeFailed, gate.block)
 
         val reads = port.calls.count { it.endsWith("eth_getCode") }
         c.feeTapped()
