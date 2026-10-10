@@ -554,6 +554,15 @@ object WalletFixtures {
         ) = app.getvela.wallet.feature.wallet.core.FeedRow.Item(
             app.getvela.wallet.feature.wallet.core.FeedItem(
                 id = id, direction = direction, value = value, symbol = symbol, chain_id = chain, timestamp = (day + 36_000_000) / 1000,
+                // Who it was with, as the core's record carries it — a detail opened on the row names them.
+                counterparty = subtitle.firstNotNullOfOrNull { line ->
+                    when (line) {
+                        is FeedLine.From -> line.address
+                        is FeedLine.To -> line.address
+                        else -> null
+                    }
+                },
+                alias = subtitle.firstNotNullOfOrNull { (it as? FeedLine.To)?.name ?: (it as? FeedLine.From)?.name },
                 day_start_ms = day, kind = kind, status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Confirmed,
                 priced = value != null, usd_value = value?.toDoubleOrNull() ?: 0.0, dapp = dapp, subtitle = subtitle, figure_maskable = maskable,
             ),
