@@ -179,6 +179,17 @@ data class BalanceView(
      * reach 24 networks".
      */
     val live_key: String? = null,
+    /**
+     * The Assets list's empty state: `assets.emptyTitle` ("Deposit your first
+     * asset"), with its caption and its action. Set only when the first read
+     * of the account has ended, nothing is held, and holdings are neither
+     * loading, unknown nor unreachable. **The list is empty exactly when this
+     * is set, and for no other reason**: a wallet that held nothing last
+     * session opens with a cached total of 0, and "no tokens, a known total"
+     * drew "Deposit your first asset" under "Checking…", before anything had
+     * been read. `null` from a core that predates the field: not empty.
+     */
+    val empty_key: String? = null,
     val holdings_loading: Boolean = false,
     val cached_total_usd: Double? = null,
     val switcher: BalanceSwitcherView = BalanceSwitcherView(),

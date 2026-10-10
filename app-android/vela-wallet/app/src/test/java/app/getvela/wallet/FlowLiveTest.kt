@@ -703,6 +703,29 @@ class FlowLiveTest {
         assertNull(live.empty)
     }
 
+    /**
+     * The device round, item 2: the Assets page is empty when the core says
+     * so (`BalanceView.empty_key`). Its own rule — no rows, not loading, not
+     * unknown — was true of a wallet nothing had read yet: last session's
+     * cached zero, its first read still out ("Checking…" on the home).
+     */
+    @Test
+    fun `the assets page invites a first deposit only when the core says the wallet is empty`() {
+        val copy = FlowFixtures.assetsEmpty(strings)
+        fun page(view: BalanceView) =
+            FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true), emptyCopy = copy)
+        val address = "0x" + "ab".repeat(20)
+        val out = app.getvela.wallet.feature.wallet.core.BalanceBoards.firstRead(address, 1.7e12, app.getvela.wallet.feature.wallet.core.BalanceBoards.FirstRead.Out)
+        val answered = app.getvela.wallet.feature.wallet.core.BalanceBoards.firstRead(address, 1.7e12, app.getvela.wallet.feature.wallet.core.BalanceBoards.FirstRead.Answered)
+
+        assertFalse("the old rule's inputs all say settled", out.holdings_loading || out.balance_unknown)
+        assertNull("the first read is out: no empty state", page(out).empty)
+        assertEquals(emptyList<Any>(), page(out).rows)
+        assertEquals("a read ended and found nothing", copy, page(answered).empty)
+        assertEquals(strings.t("assets.emptyTitle"), page(answered).empty?.title)
+        assertNull("no key, no empty state", page(BalanceView()).empty)
+    }
+
     @Test
     fun `a token detail with no matching id renders nothing`() {
         val view = BalanceView(tokens = listOf(token("POL", "1", 137, price = 1.0)))

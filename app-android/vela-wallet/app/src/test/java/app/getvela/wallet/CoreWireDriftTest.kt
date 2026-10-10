@@ -382,6 +382,8 @@ class CoreWireDriftTest {
         // The final core round (F19): "Checking…" and "live" are the core's to say.
         assertTrue("checking_key" in serializer<BalanceView>().descriptor.elementNames)
         assertTrue("live_key" in serializer<BalanceView>().descriptor.elementNames)
+        // The device round: the Assets list's empty state is the core's too.
+        assertTrue("empty_key" in serializer<BalanceView>().descriptor.elementNames)
     }
 
     @Test

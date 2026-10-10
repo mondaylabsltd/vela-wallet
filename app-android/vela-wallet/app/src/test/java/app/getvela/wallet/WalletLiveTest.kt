@@ -246,12 +246,60 @@ class WalletLiveTest {
     fun `an empty list while loading is not an empty wallet`() {
         val loading = home(BalanceView(holdings_loading = true))
         val unknown = home(BalanceView(balance_unknown = true))
-        val settled = home(BalanceView())
+        val settled = home(BalanceView(empty_key = "assets.emptyTitle"))
 
         assertEquals(SectionMode.Loading, loading.assetsSection.mode)
         assertEquals("a balance nobody could read is not an empty wallet (087 F03)", SectionMode.Loading, unknown.assetsSection.mode)
         assertEquals(SectionMode.Empty, settled.assetsSection.mode)
         assertEquals(strings.t("assets.emptyTitle"), settled.assetsSection.empty?.title)
+    }
+
+    /**
+     * The device round, item 2 — the Assets list is empty when the core says
+     * so (`BalanceView.empty_key`), and for no other reason.
+     *
+     * A wallet that held nothing last session opens with a cached total of
+     * 0. "No tokens, not loading, not unknown" was this file's own rule for
+     * an empty wallet, and that view satisfies it: the home read "Deposit
+     * your first asset" under "Checking…", before anything had been read.
+     * The real machine, through its first read: out, then settled.
+     */
+    @Test
+    fun `a cached zero invites no first deposit until a read has found nothing`() {
+        val checking = strings.t("componentsUi.funding.checking")
+        val deposit = strings.t("assets.emptyTitle")
+        assertEquals("Deposit your first asset", deposit)
+
+        // The first read is out over last session's zero: every flag this
+        // file used to read says "settled, nothing held".
+        val out = firstRead(FirstRead.Out)
+        assertTrue(out.tokens.isEmpty())
+        assertEquals("the cached zero is a known total", 0.0, out.display_total_usd)
+        assertFalse(out.holdings_loading || out.balance_unknown || out.unreachable)
+        assertNull("nothing has been read: the core says no empty state", out.empty_key)
+        val checkingHome = home(out)
+        assertEquals(checking, checkingHome.balance.checkingText)
+        assertEquals("no \"Deposit your first asset\" under \"Checking…\"", SectionMode.Loading, checkingHome.assetsSection.mode)
+        assertTrue(checkingHome.assetRows.isEmpty())
+
+        // It settled, and found nothing: the empty state, in the core's line.
+        val answered = firstRead(FirstRead.Answered)
+        assertEquals("assets.emptyTitle", answered.empty_key)
+        val emptyHome = home(answered)
+        assertNull(emptyHome.balance.checkingText)
+        assertEquals(SectionMode.Empty, emptyHome.assetsSection.mode)
+        assertEquals(deposit, emptyHome.assetsSection.empty?.title)
+        assertEquals("its caption is the drawn one", base().assetsSection.empty?.caption, emptyHome.assetsSection.empty?.caption)
+
+        // The key is the whole rule: no flag of the view makes an empty
+        // state without it, and none unmakes it.
+        assertEquals(SectionMode.Loading, home(BalanceView()).assetsSection.mode)
+        assertEquals(SectionMode.Loading, home(BalanceView(display_total_usd = 0.0)).assetsSection.mode)
+        assertEquals(SectionMode.Empty, home(answered.copy(holdings_loading = true)).assetsSection.mode)
+        // A core that predates the field sends no key: not empty.
+        val old = app.getvela.wallet.core.crux.Wire.json.decodeFromString(BalanceView.serializer(), """{"display_total_usd":0.0,"tokens":[]}""")
+        assertNull(old.empty_key)
+        assertEquals(SectionMode.Loading, home(old).assetsSection.mode)
     }
 
     /**

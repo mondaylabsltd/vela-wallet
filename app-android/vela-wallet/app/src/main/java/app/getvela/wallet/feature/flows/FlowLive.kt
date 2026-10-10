@@ -709,11 +709,13 @@ object FlowLive {
         // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
         val rows = WalletLive.assetRows(view, chainNames, currency)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
-        // The web's rule (`liveAssets`): empty once the core has actually
-        // looked — never while the holdings are still loading — or when the
-        // chosen network holds nothing while others do (issue #266: that list
-        // used to be blank, with nothing saying why).
-        val settledEmpty = rows.isEmpty() && !view.balance_unknown && !view.holdings_loading
+        // Empty when the core says so (`empty_key`: the first read ended and
+        // found nothing held) — it was this builder's own "no rows, not
+        // loading, not unknown", which a cached zero satisfied before anything
+        // had been read — or when the chosen network holds nothing while
+        // others do (issue #266: that list used to be blank, with nothing
+        // saying why; the filter is this screen's, the core does not hold it).
+        val settledEmpty = rows.isEmpty() && view.empty_key != null
         val filteredEmpty = rows.isEmpty() && view.tokens.isNotEmpty()
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),

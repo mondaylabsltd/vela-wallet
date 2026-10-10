@@ -128,17 +128,19 @@ object WalletLive {
                     // A network filtered down to nothing reads as the empty
                     // state, not as a list still loading or a blank one.
                     chainFilter != null && view.tokens.isNotEmpty() -> SectionMode.Empty
-                    // "Nothing here" is a claim: not while the first read is
-                    // out, and not while the balance cannot be read at all —
-                    // the web's `assetsMode`, the desktop's and the iPhone's
-                    // (087 F03).
-                    // Nor while nothing could be read at all — every chain
-                    // failed, or the fetch threw, with nothing cached
-                    // (`unreachable`): "Deposit your first asset" under the
-                    // reason would be a claim nobody made (PR 2 integration).
-                    view.holdings_loading || view.balance_unknown || view.unreachable -> SectionMode.Loading
-                    else -> SectionMode.Empty
+                    // "Nothing here" is a claim, and the core's to make
+                    // (`empty_key`): only once the first read of the account
+                    // has ended and found nothing held — never while it is
+                    // out, loading, unknown or out of reach. This used to be
+                    // worked out here from those flags, and a wallet that
+                    // held nothing last session (a cached total of 0, no
+                    // tokens) read "Deposit your first asset" under
+                    // "Checking…", before anything had been read.
+                    view.empty_key != null -> SectionMode.Empty
+                    else -> SectionMode.Loading
                 },
+                // The empty state's title is the core's line.
+                empty = fallback.assetsSection.empty?.let { drawn -> view.empty_key?.let { drawn.copy(title = strings.t(it)) } ?: drawn },
             ),
             assetRows = rows,
         )
