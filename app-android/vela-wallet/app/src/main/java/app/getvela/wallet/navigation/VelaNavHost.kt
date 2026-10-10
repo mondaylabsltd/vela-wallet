@@ -1020,6 +1020,15 @@ fun VelaNavHost(
                         }
                     }
                 }
+                // F25: the money the open Send shows follows the display currency —
+                // committed after the Send opened (a cold start: the rate is a round
+                // trip behind the first tap) or changed while it is open. The Send
+                // machine was told once, at open, and kept the placeholder's dollars
+                // for the whole journey. Declared after the open above, so a Send
+                // opening in this very frame is told by its own open; the controller
+                // says it only to an open Send, and only when it is news.
+                val displayNow = sendDisplay()
+                LaunchedEffect(displayNow) { send.displayChanged(displayNow) }
                 LaunchedEffect(sendClosed) {
                     if (sendClosed && flows.top in SEND_STATES) flows.close()
                 }
