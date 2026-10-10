@@ -718,28 +718,39 @@ describe('the confirm does not move while the line comes and goes (PR 3)', () =>
 			core.arrive('tx:1', 'transaction');
 			await asked();
 			await held();
-			// Past the sheet's entrance: the confirm has come to rest.
-			let rest = Number.NaN;
-			await vi.waitFor(() => {
-				const now = confirmTop();
-				const same = now === rest;
-				rest = now;
-				expect(same).toBe(true);
-			}, WAIT);
-			const linePresent = confirmTop();
+			/**
+			 * Where the confirm rests: whole inside the window, and in the same
+			 * place over a run of PAINTED frames. Two looks a moment apart can
+			 * agree in the middle of the sheet's entrance when the machine is
+			 * busy and no frame was drawn between them.
+			 */
+			const restingTop = async () => {
+				let last = Number.NaN;
+				let still = 0;
+				await vi.waitFor(async () => {
+					await frames.further(2);
+					const now = confirmTop();
+					const inside = confirmEl()!.getBoundingClientRect().bottom <= window.innerHeight;
+					still = inside && now === last ? still + 1 : 0;
+					last = now;
+					expect(still).toBeGreaterThanOrEqual(4);
+				}, WAIT);
+				return last;
+			};
+			// Past the sheet's entrance, held with its line.
+			const linePresent = await restingTop();
+			expect(heldLine()).toBe(CHECKING);
 
 			// The deadline: the line goes, the caution lands.
 			core.timers[0].fire();
 			await vi.waitFor(() => expect(cardNote()?.textContent).toBe(COULD_NOT_CHECK), WAIT);
 			await open();
-			await frames.further();
-			const lineAbsent = confirmTop();
+			const lineAbsent = await restingTop();
 
 			// The late answer: "No asset changes" takes the caution's place.
 			node.asked[0].answer(NOTHING_MOVES);
 			await vi.waitFor(() => expect(cardNote()?.textContent).toBe(NO_CHANGE), WAIT);
-			await frames.further();
-			const answered = confirmTop();
+			const answered = await restingTop();
 
 			// Measured on this build: 739 on the phone sheet and 551 on the
 			// centred card, in all three states.
