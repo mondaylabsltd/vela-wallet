@@ -84,8 +84,8 @@ enum RpcEndpoints {
             .first { ($0["chainId"] as? NSNumber)?.intValue == chainId }
         add(custom?["rpcURL"] as? String, "default")
 
-        // 4. Curated public fallbacks.
-        for url in ChainCatalog.publicRPCs[chainId] ?? [] { add(url, "public") }
+        // 4. Curated public fallbacks — the core's one list.
+        for url in ChainCatalog.publicRPCs(chainId) { add(url, "public") }
 
         // 5/6. The chain index: the first few as primary, the rest as deep
         //      fallback. A chain nobody built in is reachable ONLY through

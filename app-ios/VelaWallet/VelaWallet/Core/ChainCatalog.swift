@@ -24,6 +24,7 @@
 //
 
 import Foundation
+import VelaCore
 
 struct ChainMeta {
     /// Stable string id used in code and storage (`ethereum`, `bnb`).
@@ -160,25 +161,22 @@ enum ChainCatalog {
         chains.first { $0.apiNetworkId == apiNetworkId }
     }
 
-    /// Curated public endpoints, CORS-friendly: the Expo table, minus endpoints
-    /// dropped for measured cause (see the inline notes).
+    /// Curated public endpoints for a chain, in the order to try them: the
+    /// CORE's list (`network_admin::PUBLIC_RPCS`, PR 3), one for every shell.
+    ///
+    /// Each shell kept its own copy, and this one still named `1rpc.io` for
+    /// seven chains — endpoints that timed out on every call (issue 483's
+    /// research) — and none at all for Celo and Ink, whose defaults do not
+    /// answer from some networks. Empty for a chain the core curates nothing
+    /// for.
     ///
     /// A **fallback tier**, not a preference: the core scores them below a
     /// user's own endpoint and below a paid provider, and only measured latency
     /// moves anything after that.
-    static let publicRPCs: [Int: [String]] = [
-        1: ["https://ethereum-rpc.publicnode.com", "https://1rpc.io/eth"],
-        // bsc.meowrpc.com was dropped (issue #212; measured 2026-09-20): its
-        // eth_gasPrice flips between 0.05, 0.1 and 1.0 gwei and ~33% of calls error.
-        56: ["https://bsc-rpc.publicnode.com", "https://bsc.drpc.org"],
-        137: ["https://polygon-bor-rpc.publicnode.com", "https://1rpc.io/matic"],
-        42_161: ["https://arbitrum-one-rpc.publicnode.com", "https://1rpc.io/arb"],
-        10: ["https://optimism-rpc.publicnode.com", "https://1rpc.io/op"],
-        8_453: ["https://base-rpc.publicnode.com", "https://1rpc.io/base"],
-        43_114: ["https://avalanche-c-chain-rpc.publicnode.com", "https://1rpc.io/avax/c"],
-        100: ["https://gnosis-rpc.publicnode.com", "https://1rpc.io/gnosis"],
-        196: ["https://rpc.xlayer.tech", "https://xlayer.drpc.org"],
-    ]
+    static func publicRPCs(_ chainId: Int) -> [String] {
+        guard let id = UInt32(exactly: chainId) else { return [] }
+        return publicRpcUrls(chainId: id)
+    }
 }
 
 // MARK: - Providers
