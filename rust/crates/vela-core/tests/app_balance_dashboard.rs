@@ -2722,6 +2722,69 @@ fn the_empty_state_is_only_a_read_wallet_holding_nothing() {
     assert_eq!(empty.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
 }
 
+/// A first round that ended without one chain answering has read nothing:
+/// over a cached zero the hero says "Can't reach", and the list does not
+/// invite a first deposit under it. A round that misses only some networks
+/// still speaks for the ones that answered.
+#[test]
+fn the_empty_state_needs_a_chain_to_have_answered() {
+    use vela_core::app::balance_dashboard::ASSETS_EMPTY;
+    let cached_zero = |result: Res| {
+        let mut sut = boot(ADDR_A);
+        sut.resolve(Res::CachedTotalLoaded {
+            address: ADDR_A.to_owned(),
+            usd: Some(0.0),
+        });
+        sut.resolve(result);
+        sut
+    };
+
+    // Every network failed: the round ended, and nobody answered.
+    let dark = cached_zero(settled_read(vec![], vec![1, 56, 100], vec![1, 56, 100]));
+    let view = dark.view();
+    assert_eq!(view.checking_key, None, "the first read has ended");
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_MANY));
+    assert_eq!(view.empty_key, None, "no chain said this wallet is empty");
+
+    // The read threw before any chain answered.
+    let threw = cached_zero(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        internal: false,
+    });
+    assert_eq!(threw.view().empty_key, None);
+
+    // One network of three is down, the others answered holding nothing: a
+    // new wallet is not kept at a skeleton by it.
+    let partial = cached_zero(settled_read(vec![], vec![56], vec![1, 56, 100]));
+    let view = partial.view();
+    assert!(view.unreachable_key.is_some());
+    assert_eq!(view.empty_key.as_deref(), Some(ASSETS_EMPTY));
+
+    // Once chains have answered, a later read that throws takes nothing
+    // back: what they found stands.
+    let mut later = cached_zero(settled_read(vec![], vec![], vec![1, 56, 100]));
+    later.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    later.resolve(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        internal: false,
+    });
+    assert_eq!(later.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+
+    // And the network that was down coming back, holding nothing, says it.
+    let mut back = cached_zero(settled_read(vec![], vec![1, 56, 100], vec![1, 56, 100]));
+    back.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    back.resolve(settled_read(vec![], vec![], vec![1, 56, 100]));
+    assert_eq!(back.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+}
+
 /// A view written before the empty fact reads without it.
 #[test]
 fn a_view_from_before_the_empty_fact_still_reads() {

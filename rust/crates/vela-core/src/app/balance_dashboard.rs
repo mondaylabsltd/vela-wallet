@@ -1148,14 +1148,19 @@ pub struct BalanceView {
     pub live_key: Option<String>,
     /// The Assets list's empty state: [`ASSETS_EMPTY`] ("Deposit your first
     /// asset"), with its caption and its action. `Some` only when a read has
-    /// ended and found nothing held: never while the first read of the
-    /// account is out ([`Self::checking_key`]), never while holdings are
-    /// loading or unknown, never when no network could be read. A wallet
-    /// that held nothing last session opens with a cached total of 0, and
-    /// each shell took "no tokens, a known total" for an empty wallet — so
-    /// it invited a first deposit under "Checking…", before anything had
-    /// been read. A shell draws the empty state exactly when this is `Some`,
-    /// and with no tokens and no key it draws what it draws while loading.
+    /// ended and a chain that ANSWERED found nothing held: never while the
+    /// first read of the account is out ([`Self::checking_key`]), never
+    /// while holdings are loading or unknown, and never while no chain has
+    /// answered for this account — a first round in which every network
+    /// failed, or which threw, has ended and has read nothing. A wallet that
+    /// held nothing last session opens with a cached total of 0, and each
+    /// shell took "no tokens, a known total" for an empty wallet — so it
+    /// invited a first deposit under "Checking…", and again under "Can't
+    /// reach 24 networks", before anything had been read. A round that
+    /// misses SOME networks still says it for the ones that answered: a new
+    /// wallet is not held at a skeleton by one network that is down. A shell
+    /// draws the empty state exactly when this is `Some`, and with no tokens
+    /// and no key it draws what it draws while loading.
     #[serde(default)]
     pub empty_key: Option<String>,
     /// `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
@@ -1345,6 +1350,7 @@ impl App for BalanceDashboard {
                 && total == 0.0)
                 .then(|| LIVE_ZERO.to_owned()),
             empty_key: (first_read_ended
+                && some_chain_answered(model)
                 && model.tokens.is_empty()
                 && !holdings_loading
                 && !unknown
@@ -1813,6 +1819,14 @@ fn arm_list_recheck(model: &mut Model, operations: &mut Vec<BalanceOperation>) {
 /// over for it (the web's and the desktop's `carry_over_unanswered`) stand in
 /// only when this account has no read of it yet — they are that shell's last
 /// read.
+/// Some chain has answered for this account since it opened: one is in
+/// [`Model::last_read`] — or, for a shell that does not say which chains a
+/// round read, the last round settled with none failed. Until then nothing
+/// on screen was said by a chain, whatever the cache holds.
+fn some_chain_answered(model: &Model) -> bool {
+    !model.last_read.is_empty() || (model.last_round_answered && model.failed_chain_ids.is_empty())
+}
+
 fn remember_reads(model: &mut Model, live: &[BalanceToken], failed: &[u32], read: &[u32]) {
     let mut answered: BTreeSet<u32> = read.iter().copied().collect();
     answered.extend(live.iter().map(|t| t.chain_id));
