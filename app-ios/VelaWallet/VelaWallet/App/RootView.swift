@@ -2386,7 +2386,9 @@ struct RootView: View {
             if case .batchImport(let sheet)? = model.sheet {
                 model.sheet = .batchImport(
                     SendLive.batchImport(
-                        batch.view, view: view, on: sheet, loc: loc, replaces: importReplaces
+                        batch.view, view: view, on: sheet, loc: loc, replaces: importReplaces,
+                        // No currency is named before the person's is known.
+                        currencyUnknown: SendLive.batchCurrency(settings.currency) == nil
                     )
                 )
             }

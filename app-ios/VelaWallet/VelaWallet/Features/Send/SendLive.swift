@@ -1822,6 +1822,20 @@ enum SendLive {
 
     // MARK: - SD2C, the payroll importer
 
+    /// What stands where the importer's currency code will be while the
+    /// person's currency is not known (`batchImport(currencyUnknown:)`).
+    static let batchCurrencyPending = "…"
+
+    /// The currency the importer's figures are read as, as it is TOLD the
+    /// importer (final note F8): the committed code, else the stored choice
+    /// on its way — and `nil` while neither is known, when the importer keeps
+    /// the placeholder it needs to exist at all and the sheet says no code.
+    static func batchCurrency(_ currency: CurrencyViewWire?) -> String? {
+        guard let currency else { return nil }
+        if currency.committed { return WalletLive.Display.from(currency).code }
+        return currency.pending
+    }
+
     /// The web's `liveBatchImport`, word for word: the core parsed, priced and
     /// gated; this only says so.
     ///
@@ -1832,12 +1846,22 @@ enum SendLive {
     ///
     /// `replaces` is the person's choice, made on this sheet: an import ADDS to
     /// the rows already on the form unless they asked for it to replace them.
+    ///
+    /// `currencyUnknown` is the withhold rule on this surface (final note
+    /// F8): nothing has been read of the person's display currency yet, so
+    /// the code the importer was opened with is the placeholder's "USD" —
+    /// nobody's choice — and it is not SAID anywhere: the unit, the rate, the
+    /// rate's hint and the sheet's sum carry the pending mark where the code
+    /// will be, on the same lines, until `BatchStore.setFiatCode` tells the
+    /// importer the real one.
     static func batchImport(
         _ batch: BatchViewWire, view: SendViewWire, on model: BatchImportModel, loc: Loc,
-        replaces: Bool = false
+        replaces: Bool = false, currencyUnknown: Bool = false
     ) -> BatchImportModel {
         let symbol = view.selectedToken?.symbol ?? ""
         let count = batch.recipientCount
+        // The currency the sheet's figures are in, as it may be said.
+        let code = currencyUnknown ? batchCurrencyPending : batch.fiatCode
         // Whether there is anyone on the form for an import to meet — the
         // core's own count, read back from the room it reports.
         let formHasRows = view.splitImportRoom < BatchStore.maxRecipients
@@ -1848,7 +1872,7 @@ enum SendLive {
                     vars: ["count": String(count)]
                 ),
                 value: "\(trim(batch.totalToken)) \(symbol)",
-                detail: batch.totalFiat.map { "\($0) \(batch.fiatCode)" },
+                detail: batch.totalFiat.map { "\($0) \(code)" },
                 // Adding to people already typed, what is left to give out is
                 // the figure that matters; otherwise the balance itself.
                 balance: formHasRows && !replaces && view.splitRemaining != nil
@@ -1873,7 +1897,7 @@ enum SendLive {
                 ))
             : nil
         let rateValue = switch batch.rateStatus {
-        case .ok: "\(batch.rateInput) \(batch.fiatCode)"
+        case .ok: "\(batch.rateInput) \(code)"
         case .loading: loc.t("send.batchRateLoading")
         // Unknown, and said so — the core has already refused to apply.
         case .failed: loc.t("send.batchRateFailed")
@@ -1911,7 +1935,7 @@ enum SendLive {
         return BatchImportModel(
             title: model.title,
             closeLabel: model.closeLabel,
-            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": batch.fiatCode]),
+            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": code]),
             unitToken: loc.t("send.batchUnitToken", vars: ["sym": symbol]),
             unit: batch.unit,
             pasteValue: batch.rawText,
@@ -1921,7 +1945,7 @@ enum SendLive {
             rateSection: model.rateSection,
             rateLabel: loc.t("send.batchRateLabel", vars: ["sym": symbol]),
             rateValue: rateValue,
-            rateHint: loc.t("send.batchRateHint", vars: ["code": batch.fiatCode, "sym": symbol]),
+            rateHint: loc.t("send.batchRateHint", vars: ["code": code, "sym": symbol]),
             rateReset: loc.t("send.batchRateReset"),
             rateEdited: batch.rateEdited,
             // The core's own flag. In 按 xDAI 数量 the figures in the file ARE

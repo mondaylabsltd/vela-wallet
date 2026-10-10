@@ -262,6 +262,60 @@ struct BatchImportTests {
         #expect(refused.noteIsError)
     }
 
+    // MARK: - No currency is named before the person's is known (final note F8)
+
+    /// Opened before the display currency has been read, the importer holds
+    /// the placeholder's "USD" — nobody's choice — and the sheet says it
+    /// nowhere: the unit, the rate, its hint and the sheet's sum carry the
+    /// pending mark where the code will be, on the same lines. Told the real
+    /// code (the core's `set_fiat_code`), it says that one — and fetches THAT
+    /// currency's rate rather than relabelling the old one.
+    @Test func noCurrencyIsNamedBeforeThePersonsIsKnown() throws {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let model = sheetModel(loc: loc)
+        let core = BatchImportCore()
+        try priced(core)
+        let pasted = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "set_raw_text", "text": "0x1111111111111111111111111111111111111111,10",
+        ]))
+        let wire = try CoreJSON.decode(BatchViewWire.self, from: try view(from: pasted))
+        #expect(wire.fiatCode == "USD" && wire.totalFiat != nil)
+
+        let withheld = SendLive.batchImport(wire, view: sendView(), on: model, loc: loc, currencyUnknown: true)
+        #expect(withheld.unitFiat == "In …")
+        #expect(withheld.rateValue.hasSuffix(" …"), "\(withheld.rateValue)")
+        #expect(withheld.total?.detail?.hasSuffix(" …") == true, "\(String(describing: withheld.total?.detail))")
+        for line in [withheld.unitFiat, withheld.rateValue, withheld.rateHint, withheld.total?.detail ?? ""] {
+            // (The token here is USDC: its own symbol is not the currency.)
+            #expect(!line.replacingOccurrences(of: "USDC", with: "").contains("USD"),
+                    "the placeholder's currency is said: \(line)")
+        }
+        // The token's own figures are not fiat: they do not wait.
+        #expect(withheld.total?.value.contains("USDC") == true)
+        #expect(withheld.unitToken == SendLive.batchImport(wire, view: sendView(), on: model, loc: loc).unitToken)
+
+        // Known: said, in the same places.
+        let known = SendLive.batchImport(wire, view: sendView(), on: model, loc: loc)
+        #expect(known.unitFiat == "In USD" && known.total?.detail?.hasSuffix(" USD") == true)
+        #expect(known.rows.count == withheld.rows.count && (known.total == nil) == (withheld.total == nil))
+
+        // Which code the importer is told, and when it is told none.
+        #expect(SendLive.batchCurrency(nil) == nil)
+        #expect(SendLive.batchCurrency(.unread) == nil)
+        #expect(SendLive.batchCurrency(CurrencyViewWire(code: "USD", rate: 1, committed: false)) == nil)
+        #expect(SendLive.batchCurrency(CurrencyViewWire(code: "USD", rate: 1, committed: false, pending: "CNY")) == "CNY")
+        #expect(SendLive.batchCurrency(CurrencyViewWire(code: "CNY", rate: 7.1, committed: true)) == "CNY")
+
+        // The core's own event for the code becoming known: a new currency,
+        // a new rate asked for — never the old one's figure under a new code.
+        let told = try core.dispatch(eventJson: CoreJSON.string(["type": "set_fiat_code", "code": "CNY"]))
+        let after = try CoreJSON.decode(BatchViewWire.self, from: try view(from: told))
+        #expect(after.fiatCode == "CNY")
+        #expect(tags(try effects(from: told)).contains("fetch_usd_fiat_rate"), "the new currency was not priced")
+        #expect(after.rateInput.isEmpty, "the dollar rate stands under CNY: \(after.rateInput)")
+        #expect(!after.canApply, "rows can be applied at a rate that is not this currency's")
+    }
+
     private func sheetModel(loc: Loc) -> BatchImportModel {
         guard case .batchImport(let model)? = WalletFlowFixtures.build(.sd2c, loc: loc).sheet
         else { fatalError("SD2c does not draw the importer") }
