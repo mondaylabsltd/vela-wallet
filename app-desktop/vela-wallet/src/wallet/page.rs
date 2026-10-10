@@ -9228,7 +9228,6 @@ impl WalletPage {
         in_dialog: bool,
         cx: &mut Context<Self>,
     ) -> Div {
-        let accounts_count = self.settings.accounts_count.clone();
         let accounts_total = self.settings.accounts_total.clone();
         // Drawing this list IS the switcher opening: the core refreshes every
         // listed account's total while it is up and answers in
@@ -9236,11 +9235,10 @@ impl WalletPage {
         // say how MANY accounts there were — and its sentence ended on a
         // dangling "·" waiting for the half this adds.
         self.sync_switcher(session, cx);
-        let summary_count = crate::wallet::fill(
-            &accounts_count,
-            "count",
-            &session.accounts.len().to_string(),
-        );
+        // The count's own plural form — "1 account", never "1 accounts"
+        // (PR 3 final note F15).
+        let summary_count =
+            crate::settings::switcher_account_count(&self.loc, session.accounts.len());
 
         let switcher = resident::resident::<BalanceDashboard>(cx)
             .read(cx)
@@ -9249,7 +9247,7 @@ impl WalletPage {
         // The display currency the totals are stated in (spec 072) — the
         // web's switcher prints them the way the hero would.
         let currency = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        // "1 accounts · Total $0.75" — and every figure masked while the
+        // "1 account · Total $0.75" — and every figure masked while the
         // balance is hidden: the core sends none then (`switcher.hidden`).
         let addresses: Vec<&str> = session
             .accounts
@@ -9503,7 +9501,7 @@ impl WalletPage {
 
     fn settings_account(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
-        let summary = settings_fixtures::accounts_summary(s);
+        let summary = settings_fixtures::accounts_summary(s, &self.loc);
         let sign_out = s.sign_out_button.clone();
         let sign_out_desc = s.sign_out_desc.clone();
         let erase_title = s.erase_title.clone();

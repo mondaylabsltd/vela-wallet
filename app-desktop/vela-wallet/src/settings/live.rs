@@ -138,14 +138,17 @@ pub fn account_total(usd: f64, currency: Option<&CurrencyView>, locale: &str) ->
     )
 }
 
-/// "1 accounts · Total $0.75" — the count, then the total's own clause
-/// (`total`, carrying `{{amount}}`). While the total is withheld (the
-/// display currency is not committed) the count stands alone: "· Total"
-/// with nothing after it would read as a fault. One line either way.
+/// "1 account · Total $0.75" — the count (`count`, the corpus's own plural
+/// form, which ends in the "· " that joins the two), then the total's own
+/// clause (`total`, carrying `{{amount}}`). While the total is withheld (the
+/// display currency is not committed) the count stands alone, without the
+/// joiner it ends in: "1 account ·" with nothing after it would read as a
+/// fault. One line either way.
 #[must_use]
 pub fn accounts_summary(count: &str, total: &str, known_total: &str) -> SharedString {
     if known_total.is_empty() {
-        return SharedString::from(count.to_owned());
+        let alone = count.trim_end_matches(|c: char| c.is_whitespace() || c == '·');
+        return SharedString::from(alone.to_owned());
     }
     SharedString::from(format!(
         "{count}{}",
@@ -674,13 +677,19 @@ mod tests {
         assert_eq!(rows, vec![None], "no figure in a row either");
         // The header says the count alone — never "· Total" with nothing
         // after it — and the whole sentence once the total lands.
+        // In the corpus's own words: the count's plural form ends in the
+        // joiner, the total's clause carries the figure.
+        let en = crate::loc::Loc::for_language("en");
+        let count = crate::settings::switcher_account_count(&en, 1);
+        let clause = en.t("settingsModals.account.total");
         assert_eq!(
-            accounts_summary("1 accounts", " · Total {{amount}}", &total).as_ref(),
-            "1 accounts"
+            accounts_summary(&count, &clause, &total).as_ref(),
+            "1 account",
+            "no joiner left dangling"
         );
         assert_eq!(
-            accounts_summary("1 accounts", " · Total {{amount}}", "¥8,888.40").as_ref(),
-            "1 accounts · Total ¥8,888.40"
+            accounts_summary(&count, &clause, "¥8,888.40").as_ref(),
+            "1 account · Total ¥8,888.40"
         );
 
         // Committed: the figures appear, in the person's money.

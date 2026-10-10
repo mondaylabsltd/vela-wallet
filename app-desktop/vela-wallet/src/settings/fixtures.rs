@@ -188,8 +188,8 @@ pub const TOTAL_BALANCE: &str = "$3,262.40";
 
 /// "3 个账户 · 总计 $3,262.40" — composed here, because the order of the two
 /// clauses is a translation concern and a component must never learn one.
-pub fn accounts_summary(s: &SettingsStrings) -> SharedString {
-    let count = fill(&s.accounts_count, "count", &ACCOUNTS.len().to_string());
+pub fn accounts_summary(s: &SettingsStrings, loc: &crate::loc::Loc) -> SharedString {
+    let count = crate::settings::switcher_account_count(loc, ACCOUNTS.len());
     let total = fill(&s.accounts_total, "amount", TOTAL_BALANCE);
     SharedString::from(format!("{count}{total}"))
 }
