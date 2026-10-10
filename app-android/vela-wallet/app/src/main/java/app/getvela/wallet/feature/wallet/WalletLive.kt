@@ -68,6 +68,15 @@ object WalletLive {
     const val BALANCE_MASK = "••••••"
 
     /**
+     * A masked figure that is written WITH its unit: the dots, then the coin
+     * — "•••• xDAI". The unit stays on every surface: it says what kind of
+     * money without saying how much, and a row that draws its unit apart from
+     * the figure has always kept it. A transfer's detail dropped it ("••••")
+     * while iOS kept it; one rule now.
+     */
+    fun masked(unit: String): String = listOf(MASK, unit).filter { it.isNotBlank() }.joinToString(" ")
+
+    /**
      * The home screen, from the person's own holdings.
      *
      * [fallback] supplies everything that is content rather than data — section
@@ -257,7 +266,7 @@ object WalletLive {
             // What came back masks whenever the balance is hidden, whatever
             // the row's own figure is (`privacy`).
             received = dapp?.received?.let { change ->
-                listOf(if (hidden) MASK else changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
+                if (hidden) masked(change.symbol) else listOf(changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
             },
         )
     }
