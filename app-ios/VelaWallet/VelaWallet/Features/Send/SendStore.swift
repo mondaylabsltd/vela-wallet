@@ -36,6 +36,10 @@ final class SendStore {
     var isIdle: Bool { core.isIdle }
     /// Whether `Open` has been sent for the journey currently on screen.
     private var entered = false
+    /// The display currency the open journey's machine was last told —
+    /// at `open`, then at every change after it (`displayStands`). `nil`
+    /// with no journey open.
+    private var toldDisplay: String?
     /// How many journeys the CORE has closed — its `back` from the picker, or
     /// `done`. The flow host watches it and takes the send screens away, so
     /// the machine's close and the screen's close are one event (087 F27):
@@ -106,6 +110,7 @@ final class SendStore {
             self?.heardRound = nil
             self?.toldFeeToken = nil
             self?.toldFeeFailed = nil
+            self?.toldDisplay = nil
             self?.trustedSignerNotice = nil
             self?.closes += 1
         }
@@ -138,6 +143,7 @@ final class SendStore {
         heardRound = nil
         toldFeeToken = nil
         toldFeeFailed = nil
+        toldDisplay = nil
         trustedSignerNotice = nil
         alert = nil
     }
@@ -190,6 +196,7 @@ final class SendStore {
         heardRound = nil
         toldFeeToken = nil
         toldFeeFailed = nil
+        toldDisplay = Self.displayKey(code: displayCode, rate: displayRate, decimals: fiatDecimals)
         journey += 1
         if !core.boot(event) { core.dispatch(event) }
         // What is in flight already: a journey opened after the tracker's
@@ -236,6 +243,29 @@ final class SendStore {
             "rate": rate.map { $0 as Any } ?? NSNull(),
             "fiat_decimals": decimals,
         ]
+    }
+
+    private static func displayKey(code: String, rate: Double?, decimals: Int) -> String {
+        "\(code)|\(rate.map { String($0) } ?? "-")|\(decimals)"
+    }
+
+    /// The display currency, as the send machine is told it — ONE rule, for
+    /// `open` and for every change after it (PR 3 final note F25):
+    ///
+    /// - **committed**: the pair the hero prints in (`WalletLive.Display`: a
+    ///   committed currency nobody could price is dollars there, and here);
+    /// - **not yet**: the code on its way when there is one, with NO rate.
+    ///   Before there is a committed pair the currency view is the USD/1
+    ///   placeholder, which is not the person's currency; handed over as it
+    ///   was, a Send opened in a wallet's first seconds could be flipped to
+    ///   typing dollars at rate 1. `rate: nil` is the state the machine keeps
+    ///   for exactly this: the ⇄ toggle will not enter fiat, and sending in
+    ///   the token's own units is untouched.
+    static func displayContext(_ currency: CurrencyViewWire?) -> (code: String, rate: Double?) {
+        guard let currency else { return ("USD", nil) }
+        guard currency.committed else { return (currency.pending ?? currency.code, nil) }
+        let display = WalletLive.Display.from(currency)
+        return (display.code, display.rate)
     }
 
     func dispatch(_ event: [String: Any]) { core.dispatch(CoreJSON.string(event)) }
@@ -456,5 +486,20 @@ final class SendStore {
             "type": "display_changed",
             "display": Self.display(code: code, rate: rate, decimals: fiatDecimals),
         ])
+    }
+
+    /// The display currency as it stands now (PR 3 final note F25). The
+    /// machine was told once, at `open`, and never again: a Send opened
+    /// before the currency committed kept what it was opened with for as
+    /// long as it stayed open, and one open across a change in Settings kept
+    /// the old currency's rate. The home calls this whenever the currency
+    /// view changes; it reaches the machine only while a journey is open, and
+    /// only when the pair is not the one it was last told.
+    func displayStands(code: String, rate: Double?, fiatDecimals: Int) {
+        guard entered else { return }
+        let key = Self.displayKey(code: code, rate: rate, decimals: fiatDecimals)
+        guard key != toldDisplay else { return }
+        toldDisplay = key
+        displayChanged(code: code, rate: rate, fiatDecimals: fiatDecimals)
     }
 }

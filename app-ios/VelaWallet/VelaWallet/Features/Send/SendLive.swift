@@ -483,7 +483,14 @@ enum SendLive {
                 // nobody can act on.
                 denomShown: view.denomToggleShown,
                 denomEnabled: view.denomToggleEnabled,
-                denomReason: view.denomToggleReason.map { issue in
+                // Not while the display currency is still on its way (final
+                // note F25): the machine is told "no rate" then, because
+                // there is none to type money against yet — but "can't
+                // convert" is a refusal, and this is a wait of a second or
+                // two: the line would come, go, and move the form under it
+                // both times. Once the pair commits the reason is the core's
+                // again.
+                denomReason: !display.settled ? nil : view.denomToggleReason.map { issue in
                     loc.t("send.warnCannotConvert", vars: [
                         "code": issue.code, "symbol": issue.symbol,
                     ])

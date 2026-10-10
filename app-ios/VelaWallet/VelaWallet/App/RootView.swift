@@ -794,6 +794,9 @@ struct RootView: View {
             // The send machine closed its journey — its back from the picker,
             // or done — and the screens go with it (087 F27).
             .onChange(of: send.closes) { _, _ in sendClosed() }
+            // …and it hears the display currency commit or change while its
+            // journey is open (final note F25).
+            .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
         }
     }
 
@@ -2633,7 +2636,9 @@ struct RootView: View {
         let record = await accounts.loadAccounts().first {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }
-        let display = WalletLive.Display.live(settings.currency)
+        // The display currency as the machine is told it — the same rule
+        // again at every change while the journey is open (`sendDisplayStands`).
+        let display = SendStore.displayContext(settings.currency)
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
@@ -2644,8 +2649,18 @@ struct RootView: View {
             name: session.view.activeName.isEmpty ? nil : session.view.activeName,
             displayCode: display.code,
             displayRate: display.rate,
-            fiatDecimals: 2
+            fiatDecimals: Self.sendFiatDecimals
         )
+    }
+
+    /// Every currency the wallet lists is entered to two places.
+    private static let sendFiatDecimals = 2
+
+    /// The display currency committed, or changed (final note F25): an open
+    /// Send journey hears it, and re-denominates by its own rule.
+    private func sendDisplayStands() {
+        let display = SendStore.displayContext(settings.currency)
+        send.displayStands(code: display.code, rate: display.rate, fiatDecimals: Self.sendFiatDecimals)
     }
 
     // MARK: - Into and out of Send (087 F27)
