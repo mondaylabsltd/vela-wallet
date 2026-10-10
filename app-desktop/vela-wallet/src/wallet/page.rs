@@ -4802,7 +4802,7 @@ impl WalletPage {
             if self.tab == GalleryTab::Dsr3 {
                 let money = self.money(cx);
                 return wallet_live::balance(
-                    &fixtures::breakdown_view(),
+                    &Self::breakdown_fixture(),
                     &self.strings,
                     &self.locale,
                     &money,
@@ -10973,6 +10973,17 @@ impl WalletPage {
     /// round ends, and the three lines have to be looked at side by side.
     fn pinned_first_read() -> Option<fixtures::FirstRead> {
         fixtures::FirstRead::named(&crate::dev_env::var!("VELA_FIRST_READ")?)
+    }
+
+    /// DSR3's view: the breakdown board — or, with `VELA_BREAKDOWN=statuses`
+    /// (developer builds), the one where a network carries each short status
+    /// a row can (rate-limited, RPC unavailable, token list unavailable; PR 3
+    /// final note F21).
+    fn breakdown_fixture() -> vela_core::app::balance_dashboard::BalanceView {
+        match crate::dev_env::var!("VELA_BREAKDOWN").as_deref() {
+            Some("statuses") => fixtures::breakdown_statuses_view(),
+            _ => fixtures::breakdown_view(),
+        }
     }
 
     fn pinned_currency() -> Option<wallet_live::Money> {
@@ -18994,7 +19005,7 @@ impl WalletPage {
         let view = if self.identity.is_some() {
             resident::resident::<BalanceDashboard>(cx).read(cx).view()
         } else if self.tab == GalleryTab::Dsr3 {
-            fixtures::breakdown_view()
+            Self::breakdown_fixture()
         } else {
             return None;
         };

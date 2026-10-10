@@ -11,7 +11,7 @@ use vela_core::app::activity_feed::{
 };
 use vela_core::app::balance_dashboard::{
     BalanceNotice, BalanceToken, BalanceView, TOKEN_LIST_UNREACHABLE, UNREACHABLE_MANY,
-    UNREACHABLE_ONE, UnreachableCause,
+    UNREACHABLE_ONE,
 };
 use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::number::format_token_amount;
@@ -594,18 +594,14 @@ pub fn balance_detail(
         if pending.iter().any(|row| row.chain_id == chain_id) {
             continue;
         }
-        // What kept it from being read is the core's (`cause`). "RPC
-        // unavailable" under a network whose node answered is false: there
-        // the token list is what could not be loaded, and the row says that
-        // (PR 3 note 4). Either way it can be read again.
-        let status = match network.cause {
-            UnreachableCause::Network => s.detail_failed.clone(),
-            UnreachableCause::TokenList => SharedString::from(crate::wallet::fill(
-                &s.token_list_unreachable,
-                "name",
-                &name(chain_id),
-            )),
-        };
+        // What the row says is the core's (`status_key`, PR 3 final note
+        // F21): "RPC unavailable", or — under a network whose node answered
+        // and whose token list is what could not be loaded — "Token list
+        // unavailable". The row used to borrow the hero's whole sentence
+        // ("Can't load Tempo's token list right now") for the second: a
+        // sentence naming the network again, under the network's name, in a
+        // column of two-word statuses. Either way it can be read again.
+        let status = s.detail_status(&network.status_key);
         pending.push(DetailChain {
             chain_id,
             name: name(chain_id),
@@ -2440,6 +2436,7 @@ mod tests {
     /// an RPC that is failing.
     #[test]
     fn a_token_list_that_cant_be_loaded_is_never_an_rpc_to_fix() {
+        use vela_core::app::balance_dashboard::STATUS_RPC_UNAVAILABLE;
         crate::executor::storage::tests::with_temp_state("token-list-unreachable", || {
             let loc = crate::loc::Loc::for_language("en");
             let s = WalletStrings::resolve(&loc);
@@ -2474,8 +2471,18 @@ mod tests {
                 .status
                 .clone()
                 .unwrap_or_else(|| unreachable!("a status"));
-            assert_eq!(status.0, line);
-            assert_ne!(status.0, s.detail_failed, "its RPC is not unavailable");
+            // The breakdown's short status is the core's key for the row
+            // (PR 3 final note F21) — not the hero's sentence borrowed, and
+            // not "RPC unavailable", which is false here.
+            assert_eq!(status.0.as_ref(), "Token list unavailable");
+            assert_eq!(status.0, loc.t(&tempo.unreachable_networks[0].status_key));
+            assert_ne!(status.0, line, "the hero's sentence stays the hero's");
+            assert_ne!(
+                status.0,
+                s.detail_status(STATUS_RPC_UNAVAILABLE),
+                "its RPC is not unavailable"
+            );
+            assert!(status.1, "drawn as the failure it is");
             assert!(detail.pending[0].retry, "it can still be read again");
 
             assert!(
@@ -2490,11 +2497,63 @@ mod tests {
             assert!(unreachable_chips(&down)[0].rpc_fixable);
             assert_eq!(rpc_failing_names(&down), vec!["Polygon".to_owned()]);
             let detail = balance_detail(&down, &s, "en", money);
-            assert_eq!(
-                detail.pending[0].status.as_ref().map(|(text, _)| text),
-                Some(&s.detail_failed)
-            );
+            let status = detail.pending[0].status.as_ref().map(|(text, _)| text);
+            assert_eq!(status, Some(&s.detail_status(STATUS_RPC_UNAVAILABLE)));
+            assert_eq!(status.map(AsRef::as_ref), Some("RPC unavailable"));
+            // A key this build does not know says nothing false.
+            assert_eq!(s.detail_status("home.someLaterStatus").as_ref(), "");
         });
+    }
+
+    /// PR 3 final note F21: each unreachable row of the breakdown draws
+    /// `t(row.status_key)` — the core's key for THAT row — and a
+    /// rate-limited one keeps "retrying automatically". The three stand side
+    /// by side on the gallery's `VELA_BREAKDOWN=statuses` board.
+    #[test]
+    fn the_breakdown_draws_each_rows_own_status_key() {
+        let loc = crate::loc::Loc::for_language("en");
+        let s = WalletStrings::resolve(&loc);
+        let view = crate::wallet::fixtures::breakdown_statuses_view();
+        let detail = balance_detail(&view, &s, "en", &Money::default());
+        let rows: Vec<(String, String, bool, bool)> = detail
+            .pending
+            .iter()
+            .map(|row| {
+                let (status, failed) = row.status.clone().unwrap_or_default();
+                (row.name.to_string(), status.to_string(), failed, row.retry)
+            })
+            .collect();
+        let row = |name: &str, status: &str, failed: bool| {
+            (name.to_owned(), status.to_owned(), failed, failed)
+        };
+        assert_eq!(
+            rows,
+            vec![
+                row("Polygon", "Rate-limited · retrying automatically", false),
+                row("BNB Chain", "RPC unavailable", true),
+                row("Tempo", "Token list unavailable", true),
+            ]
+        );
+        // Each is the corpus's sentence for the key on its own row.
+        for network in &view.unreachable_networks {
+            let drawn = detail
+                .pending
+                .iter()
+                .find(|row| row.chain_id == network.chain_id)
+                .and_then(|row| row.status.clone())
+                .map(|(status, _)| status);
+            assert_eq!(drawn, Some(loc.t(&network.status_key)));
+        }
+        // And in the reader's language.
+        let zh = WalletStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        let detail = balance_detail(&view, &zh, "zh", &Money::default());
+        assert_eq!(
+            detail.pending[2]
+                .status
+                .as_ref()
+                .map(|(text, _)| text.as_ref()),
+            Some("代币列表无法读取")
+        );
     }
 
     /// SR3 splits the chains the way the web's does: rate-limited ones retry
