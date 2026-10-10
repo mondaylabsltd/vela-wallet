@@ -160,8 +160,11 @@ private fun FlowHostContent(
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
+            // With no live send behind it this is a board (the gallery's S1,
+            // a preview): the brackets hold the fixture's sample code, and
+            // no camera is ever involved.
             is FlowBase.Scan -> send?.scan?.let { live -> LiveScanSurface(model = base.model, callbacks = live) }
-                ?: ScanSurface(model = base.model, onClose = onBack)
+                ?: ScanSurface(model = base.model, onClose = onBack, preview = { app.getvela.wallet.feature.scan.ScanFixtureFrame() })
             is FlowBase.Share -> Box(
                 modifier = Modifier
                     .fillMaxSize()

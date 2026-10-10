@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.scan
 
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -29,6 +30,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [QrDecoder]; the first hit is reported once and the analysis stops.
  * `onUnavailable` fires when the camera cannot be opened (another app has it,
  * no camera at all) — the photo path still works then.
+ *
+ * **This is the one place a camera is started**, so it is the one place that
+ * refuses to: in a gallery, board, preview or developer-route session
+ * ([ScanCamera.fixtureOnly]) it draws [ScanFixtureFrame] and returns before
+ * any of the camera API is touched — a sweep of the boards must never
+ * photograph the person at the machine.
  */
 @Composable
 fun CameraScanner(
@@ -39,6 +46,10 @@ fun CameraScanner(
     /** Spec 048: which camera — 翻转 rebinds to the other one when the device has it. */
     lensFacing: Int = CameraSelector.LENS_FACING_BACK,
 ) {
+    if (ScanCamera.fixtureOnly(inspection = LocalInspectionMode.current)) {
+        ScanFixtureFrame(modifier)
+        return
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val decoded = rememberUpdatedState(onDecoded)
@@ -50,6 +61,8 @@ fun CameraScanner(
     var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
     LaunchedEffect(lensFacing) {
+        // Counted, so a test can show a fixture session never gets here.
+        ScanCamera.starts.incrementAndGet()
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             val cameraProvider = runCatching { future.get() }.getOrNull()

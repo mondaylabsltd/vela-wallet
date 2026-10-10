@@ -65,8 +65,12 @@ fun LiveScanSurface(
     // Spec 048: 翻转 — the other camera; CameraScanner falls back to the back one when there is no front camera.
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
     val haptic = rememberVelaHaptic()
+    // A gallery, board, preview or developer-route session opens no camera
+    // (`ScanCamera`): it does not ask for one either — the frame is the
+    // fixture's, whatever the permission says.
+    val fixture = ScanCamera.fixtureOnly(inspection = androidx.compose.ui.platform.LocalInspectionMode.current)
     LaunchedEffect(Unit) {
-        if (!granted && !asked) {
+        if (!fixture && !granted && !asked) {
             asked = true
             granted = callbacks.requestPermission()
         }
@@ -92,13 +96,14 @@ fun LiveScanSurface(
             }
         },
         status = when {
+            fixture -> message ?: status
             !granted -> callbacks.permissionText
             cameraDead -> callbacks.cameraUnavailable
             else -> message ?: status
         },
-        statusAction = if (!granted) callbacks.grantLabel else null,
+        statusAction = if (!granted && !fixture) callbacks.grantLabel else null,
         onStatusAction = { scope.launch { granted = callbacks.requestPermission() } },
-        preview = if (granted && !cameraDead) {
+        preview = if (fixture || (granted && !cameraDead)) {
             {
                 CameraScanner(
                     torch = torch,
