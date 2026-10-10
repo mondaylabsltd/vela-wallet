@@ -651,64 +651,84 @@ struct SendHoldingsAndFeesTests {
     /// A flow opened before the asset list settled for this account waits for
     /// the first round — streaming what has arrived — instead of "could not
     /// load".
+    ///
+    /// Each step of the asset list is taken when the executor makes the call
+    /// it answers — pointing the dashboard at the account, streaming a
+    /// partial — never when this test next gets a turn. `fetch_tokens` gives
+    /// the first round 30 s by the wall clock, and with every test of the
+    /// target started at once a turn of this one came later than that: on
+    /// 54a56bbd7 the executor had answered before the first chain was put in,
+    /// and the test waited ten minutes for a partial that could no longer
+    /// come.
     @Test func fetchTokensWaitsForTheFirstRound() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
         let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
+        let oneChain = try balance([("xDAI", "0.5", 1.0)], refreshedAt: nil)
+        let theRound = try balance([("xDAI", "0.5", 1.0), ("USDC", "3", 1.0)])
         var current: BalanceViewWire?
         var settled: Int?
         var opened: [String] = []
         var partials: [[[String: Any]]] = []
         var ports = SendExecutor.Ports()
-        ports.tokensPartial = { partials.append($0) }
+        // What has arrived is shown; then the round settles.
+        ports.tokensPartial = {
+            partials.append($0)
+            current = theRound
+            settled = 1
+        }
         let send = try executor(
             relay: relay, fees: fees, balances: { current },
-            round: { _ in settled }, open: { opened.append($0) }, ports: ports
+            // The dashboard is pointed at the account; one chain answers.
+            round: { _ in settled }, open: { opened.append($0); current = oneChain }, ports: ports
         )
-        let asked = Task { await send.perform(["type": "fetch_tokens", "address": golden]) }
-        // What the executor does, waited for as it happens — not 200 and 400
-        // ms of sleep that a loaded runner can outlast (`Waits.swift`).
-        await Wait.until { !opened.isEmpty }
+        let answer = try CoreJSON.object(await send.perform(["type": "fetch_tokens", "address": golden]))
         #expect(opened == [golden], "the dashboard is pointed at the account")
-        // One chain has answered: shown, not answered.
-        current = try balance([("xDAI", "0.5", 1.0)], refreshedAt: nil)
-        await Wait.until { !partials.isEmpty }
+        // One chain had answered: shown, not answered.
         #expect(partials.count == 1)
-        // The round settles.
-        current = try balance([("xDAI", "0.5", 1.0), ("USDC", "3", 1.0)])
-        settled = 1
-        let answer = try CoreJSON.object(await asked.value)
+        #expect(partials.first?.count == 1)
         #expect(answer["type"] as? String == "tokens_loaded")
         let tokens = try #require(answer["tokens"] as? [[String: Any]], "never null for money on its way")
-        #expect(tokens.count == 2)
+        #expect(tokens.count == 2, "answered before the round settled")
     }
 
     /// A load that reached nothing — a launch-time proxy blip — is read ONCE
     /// more before anything is answered, and the next full load answers
     /// whatever it holds.
+    ///
+    /// The next load lands on the executor's own second look after it asked
+    /// for the re-read — so the first look finds the re-read still out, and
+    /// must neither answer nor ask again. It was 300 ms of this test's sleep,
+    /// which with every test started at once outlasted the 30 s the executor
+    /// gives the re-read (`answer["tokens"] → <null>`, 54a56bbd7).
     @Test func aLoadThatReachedNothingIsReadOnceMore() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
         let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil, timers: .stopped)
+        let nextLoad = try balance([("xDAI", "0.5", 1.0)], failed: [1])
         var current = try balance([], failed: [1, 100])
         var round: Int? = 1
         var refreshes = 0
+        var looksSinceTheReRead = 0
         var ports = SendExecutor.Ports()
         ports.refreshBalances = { refreshes += 1 }
         let send = try executor(
-            relay: relay, fees: fees, balances: { current }, round: { _ in round }, ports: ports
+            relay: relay, fees: fees,
+            balances: {
+                if refreshes > 0 {
+                    looksSinceTheReRead += 1
+                    if looksSinceTheReRead == 2 {
+                        current = nextLoad
+                        round = 2
+                    }
+                }
+                return current
+            },
+            round: { _ in round }, ports: ports
         )
-        let asked = Task { await send.perform(["type": "fetch_tokens", "address": golden]) }
-        await Wait.until { refreshes > 0 }
-        #expect(refreshes == 1, "one forced re-read")
-        // The re-read is still out: nothing answered, nothing asked again. (A
-        // window, not a wait: a busy machine can only make it pass for less.)
-        try? await Task.sleep(nanoseconds: 300_000_000)
-        #expect(refreshes == 1)
-        current = try balance([("xDAI", "0.5", 1.0)], failed: [1])
-        round = 2
-        let answer = try CoreJSON.object(await asked.value)
+        let answer = try CoreJSON.object(await send.perform(["type": "fetch_tokens", "address": golden]))
         let tokens = try #require(answer["tokens"] as? [[String: Any]], "the next load answers: \(answer)")
         #expect(tokens.count == 1)
-        #expect(refreshes == 1)
+        #expect(looksSinceTheReRead >= 2, "answered while the re-read was still out")
+        #expect(refreshes == 1, "one forced re-read, and nothing asked again while it was out")
     }
 
     /// Only a SECOND load that reached nothing is "could not load".
