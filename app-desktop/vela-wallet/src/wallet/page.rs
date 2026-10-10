@@ -6289,14 +6289,22 @@ impl WalletPage {
     /// fiat input's precision.
     fn send_display(&self, cx: &mut Context<Self>) -> SendDisplayContext {
         let view = resident::resident::<DisplayCurrency>(cx).read(cx).view();
-        SendDisplayContext {
-            fiat_decimals: if matches!(view.code.as_str(), "JPY" | "KRW" | "VND" | "IDR") {
-                0
-            } else {
-                2
-            },
-            rate: view.rate,
-            code: view.code,
+        money::send_display_context(&view)
+    }
+
+    /// Tell the open send journey the display currency when it commits or
+    /// changes under it (PR 3 final note F25; the web's `display_changed`
+    /// effect). Once per frame beside `watch_money`, and cheap: it compares
+    /// one small struct with what the journey was last told, and says
+    /// nothing when they agree. A journey whose column went while its submit
+    /// runs (`send_background`) is past every figure that depends on this.
+    fn watch_send_display(&mut self, cx: &mut Context<Self>) {
+        let Some(host) = self.send_host.clone() else {
+            return;
+        };
+        let display = self.send_display(cx);
+        if host.read(cx).display_is_news(&display) {
+            host.update(cx, |host, cx| host.display_changed(&display, cx));
         }
     }
 
@@ -20793,6 +20801,7 @@ impl Render for WalletPage {
         }
         self.watch_field_blurs(window, cx);
         self.watch_money(cx);
+        self.watch_send_display(cx);
         // An identicon somewhere was pressed (078 H-02): open the viewer on
         // its address. The artwork raised the request; the viewer lives here.
         if let Some(address) = cx
