@@ -114,14 +114,22 @@
 					badgeHidden={model.result.mark.badgeHidden}
 				/>
 				<span class="name">{model.result.name}</span>
-				<StatusChip chip={model.result.chip} />
+				{#if model.result.chip !== undefined}<StatusChip chip={model.result.chip} />{/if}
 			</div>
-			{#if model.result.link !== undefined}
-				<p class="link">{model.result.link}</p>
+			{#if model.result.note !== undefined}
+				<p class="reason">{model.result.note}</p>
 			{/if}
 			{#each model.result.facts as fact (fact.label)}
 				<FactRow {fact} />
 			{/each}
+			{#if model.result.setup !== undefined}
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- an external page (Chain Setup), never an app route -->
+				<a class="setup" href={model.result.setup.href} target="_blank" rel="noreferrer noopener">
+					<span>{model.result.setup.label}</span>
+					<Icon icon={UTILITY_ICONS['external-link']} size="sm" />
+				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			{/if}
 		</div>
 	{/if}
 
@@ -204,10 +212,30 @@
 		color: var(--color-fg-muted);
 	}
 
-	.link {
+	/* Why it is refused, or why the wizard stopped: a sentence, read in full. */
+	.reason {
 		margin: 0;
+		padding-bottom: var(--space-md);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 		color: var(--color-fg-muted);
+	}
+
+	/* A real link out of the app, where the core gave it somewhere to go. */
+	.setup {
+		display: inline-flex;
+		align-items: center;
+		align-self: flex-start;
+		gap: var(--space-xs);
+		min-height: var(--size-control-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-medium);
+		color: var(--color-info-base);
+		text-decoration: none;
+	}
+
+	.setup:hover {
+		text-decoration: underline;
 	}
 
 	.note {

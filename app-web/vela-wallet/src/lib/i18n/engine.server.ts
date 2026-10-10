@@ -28,10 +28,12 @@ import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
 	BACKUP_ROW_KEYS,
 	NET_HINT_KEYS,
+	NET_STOP_KEYS,
 	UNREACHABLE_LINE_KEYS,
 	VENUE_BLOCK_KEYS,
 	type BackupRowKey,
 	type NetHintKey,
+	type NetStopKey,
 	type SettingsMessages,
 	type VenueBlockKey
 } from '$lib/settings/messages';
@@ -543,6 +545,11 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			// By corpus key: the core names which line a refusal says.
 			hints: Object.fromEntries(NET_HINT_KEYS.map((key) => [key, k(key)])) as Record<
 				NetHintKey,
+				string
+			>,
+			// …and which sentence a stopped wizard says (`error_key`).
+			stops: Object.fromEntries(NET_STOP_KEYS.map((key) => [key, k(key)])) as Record<
+				NetStopKey,
 				string
 			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),

@@ -11,7 +11,7 @@
  * happen where the fixture knows the value, through spec 015's `fill`.
  */
 
-import { VENUE_BLOCK_KEYS } from '$lib/settings/messages';
+import { NET_HINT_KEYS, NET_STOP_KEYS, VENUE_BLOCK_KEYS } from '$lib/settings/messages';
 
 /**
  * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082
@@ -178,14 +178,19 @@ export const WALLET_FLOW_KEYS = [
 	'addToken.notCompatible',
 	'addToken.networkAdded',
 	'addToken.addNetworkBtn',
-	'addToken.deployContracts',
-	'addToken.errorNotCompatible',
 	// The live add-token sheet (spec 028 T442): the probe in flight, and a
 	// write that failed — both existed in the corpus, neither was on a mock.
 	'addToken.searchingNetworks',
 	'addToken.errorSaveToken',
-	// T3b live: an inconclusive probe is never worded as incompatible (024 invariant ③).
-	'settingsModals.addNetwork.unableToVerify',
+	// T3b live. Why a network is refused, and why the wizard stopped, are the
+	// core's sentences by key (`NetCompatibility.hint_key`,
+	// `NetWizardView.error_key`): the check's two reasons, and the five stops —
+	// among them "unable to verify", which is never worded as incompatible
+	// (024 invariant ③). The card used to say "Not compatible · Deploy missing
+	// contracts ↗" under every one of them, as text that went nowhere.
+	...NET_HINT_KEYS,
+	...NET_STOP_KEYS,
+	'settingsModals.addNetwork.openChainSetupTool',
 
 	// ------------------------------------------------------------------ send
 	'send.selectTokenTitle',

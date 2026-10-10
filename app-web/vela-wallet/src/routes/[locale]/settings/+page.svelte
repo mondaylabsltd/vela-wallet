@@ -666,6 +666,17 @@
 	});
 
 	/**
+	 * Check the wizard's candidate again, with whatever RPC is typed — the
+	 * panel's "Re-check with this RPC", and its "Retry" over a check that
+	 * could not be made.
+	 */
+	function recheckCandidate(): void {
+		const chainId = net.wizard.chain_info?.chain_id;
+		if (chainId === undefined) return;
+		networkAdmin.dispatch({ type: 'chain_selected', chain_id: chainId, keep_custom_rpc: true });
+	}
+
+	/**
 	 * The one translation table: what the person did → what the core is told.
 	 * No decisions — the core refuses, coalesces, or persists as its rules say.
 	 */
@@ -724,19 +735,20 @@
 				networkAdmin.dispatch({ type: 'custom_rpc_edited', value: event.value });
 				return;
 			case 'confirm-add':
+				// The panel's primary is "Add network" only when the core says the
+				// candidate may be added (`can_add`). Over an inconclusive check it
+				// reads "Retry" — and it did nothing: `add_confirmed` is dropped
+				// unless the check passed. Retry is the check, made again.
+				if (!net.wizard.can_add) {
+					recheckCandidate();
+					return;
+				}
 				addingChain = net.wizard.chain_info?.chain_id ?? null;
 				networkAdmin.dispatch({ type: 'add_confirmed', now_iso: new Date().toISOString() });
 				return;
-			case 'recheck': {
-				const chainId = net.wizard.chain_info?.chain_id;
-				if (chainId !== undefined)
-					networkAdmin.dispatch({
-						type: 'chain_selected',
-						chain_id: chainId,
-						keep_custom_rpc: true
-					});
+			case 'recheck':
+				recheckCandidate();
 				return;
-			}
 			case 'endpoints-open':
 				networkAdmin.dispatch({ type: 'endpoints_opened' });
 				return;

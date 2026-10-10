@@ -377,6 +377,11 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				if (result.reason === 'not-found') {
 					return { type: 'network_added', outcome: { type: 'not_found' } };
 				}
+				// A check that could not be made is not a refusal: the add did not
+				// happen, and nothing is said against the network (invariant ③).
+				if (result.reason === 'unverified') {
+					return { type: 'network_added', outcome: { type: 'error' } };
+				}
 				return {
 					type: 'network_added',
 					outcome: { type: 'not_compatible', detail: result.error ?? null }

@@ -198,6 +198,27 @@ describe('FetchTokens — one list with the asset screen (spec 078)', () => {
 		await executor.execute(fetchTokens);
 		expect(seams.fetchTokens).toHaveBeenCalledTimes(1);
 	});
+
+	it('a network that could not be checked is not told to the machine as incompatible', async () => {
+		const executor = createSendExecutor(ports({}));
+		const add = { id: 1, operation: { type: 'add_network', chain_id: 196 } } as const;
+		seams.addNetwork.mockResolvedValue({ ok: false, reason: 'unverified' });
+		expect(await executor.execute(add)).toEqual({
+			type: 'network_added',
+			outcome: { type: 'error' }
+		});
+		// A refusal still is one, and an unknown chain still is that.
+		seams.addNetwork.mockResolvedValue({ ok: false, reason: 'not-compatible' });
+		expect(await executor.execute(add)).toEqual({
+			type: 'network_added',
+			outcome: { type: 'not_compatible', detail: null }
+		});
+		seams.addNetwork.mockResolvedValue({ ok: false, reason: 'not-found' });
+		expect(await executor.execute(add)).toEqual({
+			type: 'network_added',
+			outcome: { type: 'not_found' }
+		});
+	});
 });
 
 describe('PrewarmFees — the fee caches read ahead while the person chooses', () => {

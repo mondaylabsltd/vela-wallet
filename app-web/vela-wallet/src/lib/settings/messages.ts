@@ -199,6 +199,15 @@ export interface SettingsMessages {
 		 */
 		hints: Record<NetHintKey, string>;
 		/**
+		 * The sentence for a wizard that STOPPED, BY CORPUS KEY — the core
+		 * names which (`NetWizardView.error_key`, PR 3 notes 5, 10 and 18):
+		 * already added, chain not found, no RPC endpoint listed, a check that
+		 * could not be made, a refusal with no reason kept. A refusal that kept
+		 * its check names one of `hints` instead. No shell words a stop itself:
+		 * three of these read "Incompatible" here until the core said them.
+		 */
+		stops: Record<NetStopKey, string>;
+		/**
 		 * Spec 081 FR-009: the chain works, and a wallet with more than one
 		 * passkey still cannot be created on it. Said beside a green
 		 * "Compatible", which without this reads as a contradiction of the two
@@ -580,6 +589,24 @@ export const NET_HINT_KEYS = [
 export type NetHintKey = (typeof NET_HINT_KEYS)[number];
 
 /**
+ * The sentences a stopped wizard can say that are not a check's own reason —
+ * every other key `network_admin`'s `wizard_error_key` answers with
+ * (`WIZARD_ALREADY_ADDED`, `WIZARD_NOT_FOUND`, `WIZARD_NO_RPC_ENDPOINT`,
+ * `WIZARD_CHECK_FAILED`, `WIZARD_NOT_COMPATIBLE`). Together with
+ * {@link NET_HINT_KEYS} this is everything `NetWizardView.error_key` can be;
+ * `net-refusal.test.ts` holds both lists to the core's source.
+ */
+export const NET_STOP_KEYS = [
+	'addToken.errorAlreadyAdded',
+	'addToken.errorChainNotFound',
+	'settingsModals.addNetwork.noRpcEndpoint',
+	'settingsModals.addNetwork.unableToVerify',
+	'addToken.errorNotCompatible'
+] as const;
+
+export type NetStopKey = (typeof NET_STOP_KEYS)[number];
+
+/**
  * Every corpus key the core's backup row can name
  * (`vela_core::registry_backup`: `TITLE_KEY`, `CHECKING_KEY` and each
  * `BackupState::row()` second line). `ethereum-backup-row.test.ts` reads the
@@ -741,6 +768,11 @@ export const SETTINGS_KEYS = [
 	'settingsModals.addNetwork.addNetworkBtn',
 	'settingsModals.addNetwork.incompatibleHint',
 	'settingsModals.addNetwork.noP256Hint',
+	// A stopped wizard's own sentences (`NetWizardView.error_key`).
+	'addToken.errorAlreadyAdded',
+	'addToken.errorChainNotFound',
+	'addToken.errorNotCompatible',
+	'settingsModals.addNetwork.noRpcEndpoint',
 	'settingsModals.addNetwork.singleKeyOnly',
 	'settingsModals.addNetwork.openChainSetupTool',
 	'settingsModals.addNetwork.recheckWithRpc',

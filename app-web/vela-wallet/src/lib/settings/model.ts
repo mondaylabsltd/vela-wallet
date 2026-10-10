@@ -414,7 +414,12 @@ export interface AddNetworkModel {
 		mark: ChainMarkModel;
 		name: string;
 		meta: string;
-		badge: StatusPillModel;
+		/**
+		 * The verdict, as a pill. Absent on a stop that is not a verdict (no
+		 * RPC endpoint listed, a check that could not be made): the callout
+		 * under the header says what happened, in the core's sentence.
+		 */
+		badge?: StatusPillModel;
 	};
 	checksTitle?: string;
 	checks?: CheckItemModel[];
