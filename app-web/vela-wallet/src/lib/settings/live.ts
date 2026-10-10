@@ -1447,18 +1447,20 @@ export function liveBalanceDetail(
 		status: m.balanceDetail.statusRetrying,
 		tone: 'neutral'
 	}));
-	for (const { chain_id: id, rpc_fixable: rpcFailed } of view.unreachable_networks) {
+	for (const { chain_id: id, status_key: statusKey } of view.unreachable_networks) {
 		if (pending.some((row) => row.id === String(id))) continue;
 		pending.push({
 			id: String(id),
 			mark: rescueMark(id),
 			name: chainName(id),
-			// "RPC unavailable" is only true of a network that did not answer.
-			// One whose token list could not be loaded (PR 3 note 4) says that,
-			// in the core's own sentence; reading again is still the way out.
-			status: rpcFailed
-				? m.balanceDetail.statusFailed
-				: fill(m.rescue.tokenListUnreachable, { name: chainName(id) }),
+			// The row's short status is the core's to name (`status_key`, PR 3
+			// final note F21): "RPC unavailable" is only true of a network that
+			// did not answer, and one whose token list could not be loaded says
+			// "Token list unavailable" — a status as short as its neighbours',
+			// where this shell had borrowed the home line's whole sentence. A
+			// key this build has no words for reads as the one status there
+			// was, never a dotted path. Reading again is the way out of both.
+			status: m.balanceDetail.statuses[statusKey] ?? m.balanceDetail.statusFailed,
 			tone: 'error',
 			action: m.balanceDetail.retry
 		});

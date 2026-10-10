@@ -32,6 +32,7 @@ import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
 	BACKUP_EXPLAIN_KEYS,
 	BACKUP_ROW_KEYS,
+	BALANCE_STATUS_KEYS,
 	NET_HINT_KEYS,
 	NET_STOP_KEYS,
 	UNREACHABLE_LINE_KEYS,
@@ -745,6 +746,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			networksNote: k('home.balanceDetailNetworksNote'),
 			statusRetrying: k('home.balanceDetailStatusRetrying'),
 			statusFailed: k('home.balanceDetailStatusFailed'),
+			statuses: Object.fromEntries(BALANCE_STATUS_KEYS.map((key) => [key, k(key)])),
 			updatedLabel: k('home.balanceDetailUpdatedLabel'),
 			retry: k('home.balanceDetailRetry')
 		},

@@ -450,6 +450,13 @@ export interface SettingsMessages {
 		networksNote: string;
 		statusRetrying: string;
 		statusFailed: string;
+		/**
+		 * A row's short status BY CORPUS KEY — the one the core names for a
+		 * network out of reach (`UnreachableNetwork.status_key`,
+		 * {@link BALANCE_STATUS_KEYS}): "RPC unavailable", or "Token list
+		 * unavailable" where the RPC is answering (PR 3 final note F21).
+		 */
+		statuses: Readonly<Record<string, string>>;
 		updatedLabel: string;
 		retry: string;
 	};
@@ -562,6 +569,17 @@ export const UNREACHABLE_LINE_KEYS = [
 	'assets.lastSeenUnpriced',
 	'assets.lastSeenEmpty',
 	'assets.notReadYet'
+] as const;
+
+/**
+ * The short status of a network out of reach in the balance breakdown — every
+ * `status_key` `balance_dashboard` names (`STATUS_RPC_UNAVAILABLE`,
+ * `STATUS_TOKEN_LIST_UNAVAILABLE`). `live.test.ts` holds the list to the
+ * core's source.
+ */
+export const BALANCE_STATUS_KEYS = [
+	'home.balanceDetailStatusFailed',
+	'home.balanceDetailStatusTokenList'
 ] as const;
 
 /**
@@ -951,6 +969,7 @@ export const SETTINGS_KEYS = [
 	'home.balanceDetailNetworksNote',
 	'home.balanceDetailStatusRetrying',
 	'home.balanceDetailStatusFailed',
+	'home.balanceDetailStatusTokenList',
 	'home.balanceDetailUpdatedLabel',
 	'home.balanceDetailRetry',
 	'componentsUi.treasuryBootstrap.title',

@@ -9,11 +9,18 @@
  * answers it; the drawn line through the real builder and the real corpus.
  */
 import '$lib/i18n/wasm-init.server';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BalanceDashboardCore } from '$lib/core/client';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
-import { resolveSettingsMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
+import {
+	rawResolve,
+	resolveSettingsMessages,
+	resolveWalletMessages
+} from '$lib/i18n/engine.server';
+import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { BALANCE_STATUS_KEYS } from '$lib/settings/messages';
 import { liveBalance, withLiveWallet } from '$lib/wallet/live';
 import {
 	liveBalanceDetail,
@@ -239,10 +246,60 @@ describe('a token list that cannot be loaded is not a network out of reach (PR 3
 		}));
 		const detail = liveBalanceDetail(view, USD, rescue, m.balance.unpriced);
 		const status = Object.fromEntries(detail.pending.map((row) => [row.name, row.status]));
-		expect(status).toEqual({
-			Ethereum: rescue.balanceDetail.statusFailed,
-			Tempo: "Can't load Tempo's token list right now"
+		// PR 3 final note F21: each row's short status is the one the core names
+		// (`status_key`) — this shell borrowed the home line's whole sentence
+		// for the token-list row.
+		expect(view.unreachable_networks.map((row) => [row.chain_id, row.status_key])).toEqual([
+			[1, 'home.balanceDetailStatusFailed'],
+			[TEMPO, 'home.balanceDetailStatusTokenList']
+		]);
+		expect(status).toEqual({ Ethereum: 'RPC unavailable', Tempo: 'Token list unavailable' });
+	});
+
+	it('every status the core’s source names has words here, in every language', () => {
+		const source = readFileSync('../../rust/crates/vela-core/src/app/balance_dashboard.rs', 'utf8');
+		const named = ['STATUS_RPC_UNAVAILABLE', 'STATUS_TOKEN_LIST_UNAVAILABLE'].map(
+			(constant) => new RegExp(`pub const ${constant}: &str = "([^"]+)";`).exec(source)?.[1]
+		);
+		expect(named).toEqual([...BALANCE_STATUS_KEYS]);
+		for (const locale of SUPPORTED_LOCALES) {
+			const statuses = resolveSettingsMessages(locale).balanceDetail.statuses;
+			for (const key of BALANCE_STATUS_KEYS) {
+				expect(statuses[key], `${key} in ${locale}`).toBe(rawResolve(locale, key));
+				expect(statuses[key]).not.toBe(key);
+			}
+		}
+	});
+
+	it('the breakdown’s status is the core’s key, looked up — in Chinese too', () => {
+		const view = homeAfter(() => ({
+			...settled([1, TEMPO], [], [TEMPO]),
+			read_chain_ids: [1, 100, TEMPO]
+		}));
+		const zh = pickRescueMessages(resolveSettingsMessages('zh'));
+		const detail = liveBalanceDetail(view, USD, zh, m.balance.unpriced);
+		expect(Object.fromEntries(detail.pending.map((row) => [row.name, row.status]))).toEqual({
+			Ethereum: 'RPC 无法连接',
+			Tempo: '代币列表无法读取'
 		});
+		// A key this build has no words for is the one status there was, never
+		// a dotted path on the screen.
+		const unknown = liveBalanceDetail(
+			{
+				...view,
+				unreachable_networks: view.unreachable_networks.map((row) => ({
+					...row,
+					status_key: 'home.balanceDetailStatusSomethingNew'
+				}))
+			},
+			USD,
+			rescue,
+			m.balance.unpriced
+		);
+		expect(unknown.pending.map((row) => row.status)).toEqual([
+			'RPC unavailable',
+			'RPC unavailable'
+		]);
 	});
 
 	it('a chain named in the set that did not fail is not in the list at all', () => {
