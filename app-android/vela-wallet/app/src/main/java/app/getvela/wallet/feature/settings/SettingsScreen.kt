@@ -1071,6 +1071,14 @@ private fun SettingsPageBody(
                     keyboard = KeyboardType.Text,
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                // A stop that named no network to show — it is already in the
+                // list, or nobody could find it — is said here, under what
+                // was typed. It used to be said nowhere: the tap emptied the
+                // list and the screen gave no reason.
+                if (add.callout != null) {
+                    VelaCallout(add.callout)
+                    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                }
                 add.results.forEach { row ->
                     VelaNetworkRow(row = row, onClick = onPickNetwork)
                 }
@@ -2583,7 +2591,9 @@ private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) 
                 Text(text = row.name, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
                 Text(text = row.line, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
             }
-            UnreachableFixAction(row.action) { onFix(row.chainId) }
+            // No "Fix" where there is no RPC to fix (the core's `rpc_fixable`):
+            // the row is its name and what was last read there.
+            row.action?.let { action -> UnreachableFixAction(action) { onFix(row.chainId) } }
         }
     }
 }

@@ -286,8 +286,22 @@ data class NetWizardView(
     val custom_rpc: String = "",
     val suggestions: List<NetChainIndexEntry> = emptyList(),
     val chain_info: NetChainInfo? = null,
+    /**
+     * The last check's result. Present beside [phase] `checked` — and beside
+     * `error` too when the check itself raised it (the scan / auto-add path:
+     * `not_compatible`, `check_failed`), so the reason ([NetCompatibility.hint_key])
+     * and the Chain Setup link ([NetCompatibility.setup_url]) are drawn on
+     * every path a network is added by.
+     */
     val compat: NetCompatibility? = null,
     val error: NetWizardErrorKind? = null,
+    /**
+     * The corpus key of the sentence for [error] — the core words every stop
+     * (already added, not found, no RPC endpoint listed, unable to verify,
+     * and a refusal by the check's own reason). `null` with no error, and
+     * from a core that predates the field.
+     */
+    val error_key: String? = null,
     val can_add: Boolean = false,
 )
 

@@ -32,6 +32,19 @@ enum class SettingsScreenState {
      * this network — and there is no button.
      */
     ST10D,
+
+    /**
+     * The wizard's STOPS, each through the live builder from a view the real
+     * `network_admin` machine wrote (`NetBoards`), so a board says the core's
+     * own sentence (`NetWizardView.error_key`): the scan path — a chain added
+     * by id, with no confirm step — refused for missing contracts, the check
+     * kept beside the stop, so its reason and Chain Setup show (ST10E), for
+     * no P-256 verifier, nothing to deploy (ST10F), and unable to verify
+     * (ST10G); a network that is already added (ST10H), one nobody could find
+     * (ST10I), and one the catalog lists no RPC for — the box to type one in
+     * is there (ST10J).
+     */
+    ST10E, ST10F, ST10G, ST10H, ST10I, ST10J,
     ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
     /**
      * Spec 102, the web's boards: "Where you review and sign" for an account
@@ -45,6 +58,15 @@ enum class SettingsScreenState {
     SR1, SR2, SR2B, SR3, SR4, SR5,
     /** Spec 092: every network the wallet cannot reach, in one list. */
     SR6,
+
+    /**
+     * The same list when the one network on it is there for its TOKEN LIST
+     * (Tempo: its RPC answers, the document that names its stablecoins did
+     * not load) — the real balance machine's view through the live builder:
+     * the title says the list, and the row offers no "Fix", because there is
+     * no RPC to fix.
+     */
+    SR7,
 
     /**
      * The Keys block over the home, with its "Copy this wallet's record to
@@ -694,7 +716,13 @@ data class UnreachableRowModel(
     val name: String,
     /** "Last seen $1,234.50", "Not read yet", … */
     val line: String,
-    val action: String,
+    /**
+     * "Fix" — the row's way to its network's RPC editor. `null` where the
+     * core says there is no RPC to fix (`UnreachableNetwork.rpc_fixable`: the
+     * network answers, its token list is what could not be loaded): no
+     * action is drawn.
+     */
+    val action: String?,
 )
 
 /** SR4: fund this chain's bundler treasury. */

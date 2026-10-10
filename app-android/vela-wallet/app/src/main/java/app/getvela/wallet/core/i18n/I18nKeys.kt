@@ -305,6 +305,12 @@ object I18nKeys {
         const val UNREACHABLE_ONE = "assets.unreachableOne"
         const val UNREACHABLE_MANY = "assets.unreachableMany"
         /**
+         * The same line when the one network's RPC is fine and its token list
+         * (the document that names what to read there) could not be loaded —
+         * `{{name}}`. The core picks it (`BalanceView.unreachable_key`).
+         */
+        const val TOKEN_LIST_UNREACHABLE = "assets.tokenListUnreachable"
+        /**
          * The hero's reason when a first load could read nothing and nothing is
          * cached (#188, spec 038 finding 15). Borrowed from the onboarding
          * flow's network line — the same key the web and desktop shells bind

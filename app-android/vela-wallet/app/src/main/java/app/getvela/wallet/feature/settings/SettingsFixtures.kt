@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.settings
 
 import app.getvela.wallet.feature.settings.core.WalletKeys
 import app.getvela.wallet.feature.settings.core.RegistryBackup
+import app.getvela.wallet.feature.settings.core.NetBoards
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.core.data.DebugMode
@@ -1010,7 +1011,9 @@ object SettingsFixtures {
         SettingsScreenState.ST8 -> Shape(SettingsPage.Home, SettingsOverlay.TimeFormat)
         SettingsScreenState.ST9 -> Shape(SettingsPage.Networks, SettingsOverlay.None)
         SettingsScreenState.ST9B -> Shape(SettingsPage.NetworkDetail, SettingsOverlay.None)
-        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C, SettingsScreenState.ST10D ->
+        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C, SettingsScreenState.ST10D,
+        SettingsScreenState.ST10E, SettingsScreenState.ST10F, SettingsScreenState.ST10G,
+        SettingsScreenState.ST10H, SettingsScreenState.ST10I, SettingsScreenState.ST10J ->
             Shape(SettingsPage.AddNetwork, SettingsOverlay.None)
         SettingsScreenState.ST11 -> Shape(SettingsPage.RpcProviders, SettingsOverlay.None)
         SettingsScreenState.ST12 -> Shape(SettingsPage.Endpoints, SettingsOverlay.None)
@@ -1030,7 +1033,7 @@ object SettingsFixtures {
         SettingsScreenState.SR4 ->
             Shape(SettingsPage.Home, SettingsOverlay.Relayer, rescue = true, backdrop = "send")
         SettingsScreenState.SR5 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
-        SettingsScreenState.SR6 ->
+        SettingsScreenState.SR6, SettingsScreenState.SR7 ->
             Shape(SettingsPage.Home, SettingsOverlay.Unreachable, rescue = true, backdrop = "wallet")
         SettingsScreenState.SK1, SettingsScreenState.SK2, SettingsScreenState.SK3, SettingsScreenState.SK4 ->
             Shape(SettingsPage.Home, SettingsOverlay.None)
@@ -1187,7 +1190,29 @@ object SettingsFixtures {
     }
 
     fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel =
-        withKeys(withSigning(baseState(state, s), state, s), state, s)
+        withWizardStop(withKeys(withSigning(baseState(state, s), state, s), state, s), state, s)
+
+    /** Which of the wizard's stops a board draws; `null` on every other board. */
+    fun wizardStop(state: SettingsScreenState): NetBoards.Stop? = when (state) {
+        SettingsScreenState.ST10E -> NetBoards.Stop.ScanMissingContracts
+        SettingsScreenState.ST10F -> NetBoards.Stop.ScanNoP256
+        SettingsScreenState.ST10G -> NetBoards.Stop.ScanCheckFailed
+        SettingsScreenState.ST10H -> NetBoards.Stop.AlreadyAdded
+        SettingsScreenState.ST10I -> NetBoards.Stop.NotFound
+        SettingsScreenState.ST10J -> NetBoards.Stop.NoRpcEndpoint
+        else -> null
+    }
+
+    /**
+     * ST10E–ST10J: the wizard stopped — the real machine's view of it
+     * (`NetBoards`) through [SettingsLive.withWizard], the builder a session
+     * draws with. Nothing here words a stop.
+     */
+    private fun withWizardStop(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+        val stop = wizardStop(state) ?: return model
+        val search = addNetwork(s, "search").copy(results = emptyList())
+        return SettingsLive.withWizard(model.copy(addNetwork = search), NetBoards.view(stop), s)
+    }
 
     private fun baseState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
         val shape = shape(state)
@@ -1311,12 +1336,23 @@ object SettingsFixtures {
             balanceDetail = balanceDetail(s),
             // SR6 is drawn through the live builder, from a view shaped like
             // the core's: what the gallery shows is what a session would.
-            unreachable = SettingsLive.unreachable(
-                UNREACHABLE_VIEW,
-                CurrencyView(code = "USD", rate = 1.0, committed = true),
-                UNREACHABLE_NAMES,
-                s,
-            ),
+            unreachable = if (state == SettingsScreenState.SR7) {
+                // SR7: the real machine's round in which Tempo's token list
+                // did not load — one row, what was last read there, no Fix.
+                SettingsLive.unreachable(
+                    app.getvela.wallet.feature.wallet.core.BalanceBoards.tokenListUnreachable(ADDRESS_FULL, System.currentTimeMillis().toDouble()),
+                    CurrencyView(code = "USD", rate = 1.0, committed = true),
+                    app.getvela.wallet.feature.wallet.WalletFixtures.TOKEN_LIST_CHAINS,
+                    s,
+                )
+            } else {
+                SettingsLive.unreachable(
+                    UNREACHABLE_VIEW,
+                    CurrencyView(code = "USD", rate = 1.0, committed = true),
+                    UNREACHABLE_NAMES,
+                    s,
+                )
+            },
             relayer = relayer(s),
             indexDown = indexDown(s),
             backdropTitle = backdropTitle,

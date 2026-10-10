@@ -190,6 +190,24 @@ class WalletFixturesTest {
         assertFalse("no dollar figure anywhere: $drawn", drawn.contains("$") || drawn.contains("794"))
     }
 
+    /**
+     * H14 (the integration's note 4): Tempo's token list did not load — the
+     * real balance machine's view through the live builder. The hero keeps
+     * what it could read and says the LIST is what failed, in the core's
+     * sentence, in both languages.
+     */
+    @Test
+    fun h14SaysTheTokenListNotTheNetwork() {
+        val english = I18nRuntime { tag -> File(repoRoot, "assets/i18n/$tag.json").readBytes() }.apply { initialize("en") }
+        val en = WalletFixtures.buildMobileState(WalletScreenState.H14, english)
+        assertEquals(WalletScreenState.H14, en.state)
+        assertEquals(BalanceStateKind.Normal, en.balance.state)
+        assertEquals(BalanceStatusKind.Warning, en.balance.status?.kind)
+        assertEquals("Can't load Tempo's token list right now", en.balance.status?.text)
+        assertEquals("暂时读不到 Tempo 的代币列表", WalletFixtures.buildMobileState(WalletScreenState.H14, zhStrings()).balance.status?.text)
+        assertTrue("what could be read is shown", en.assetRows.isNotEmpty())
+    }
+
     @Test
     fun h6IsRefreshingOnCachedTotals() {
         val model = WalletFixtures.buildMobileState(WalletScreenState.H6, zhStrings())

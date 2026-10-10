@@ -582,17 +582,19 @@ object WalletLive {
      */
     fun unreachableLine(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): String? {
         val first = view.unreachable_networks.firstOrNull() ?: return null
-        return when (view.unreachable_key) {
-            I18nKeys.Wallet.UNREACHABLE_ONE -> strings.t(
-                I18nKeys.Wallet.UNREACHABLE_ONE,
-                mapOf("name" to (chainNames[first.chain_id] ?: first.chain_id.toString())),
-            )
-            I18nKeys.Wallet.UNREACHABLE_MANY -> strings.t(
-                I18nKeys.Wallet.UNREACHABLE_MANY,
-                mapOf("n" to view.unreachable_networks.size.toString()),
-            )
-            else -> null
-        }
+        // Whichever sentence the core chose, filled the one way: `{{name}}` is
+        // the first network's name ("Can't reach Polygon", "Can't load
+        // Tempo's token list" — its RPC is fine, the list that names what to
+        // read there is what could not be loaded), `{{n}}` how many there
+        // are. It switched on the two keys it knew, so a third said nothing.
+        val key = view.unreachable_key ?: return null
+        return strings.t(
+            key,
+            mapOf(
+                "name" to (chainNames[first.chain_id] ?: first.chain_id.toString()),
+                "n" to view.unreachable_networks.size.toString(),
+            ),
+        )
     }
 
     /**

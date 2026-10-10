@@ -455,7 +455,25 @@ object WalletFixtures {
             WalletScreenState.H11 -> liveInternalFault(base, strings)
             WalletScreenState.H12 -> liveInternalFault(base, strings, everyChain = true)
             WalletScreenState.H13 -> liveCurrencyOnItsWay(base, strings)
+            WalletScreenState.H14 -> liveTokenListUnreachable(base, strings)
         }
+    }
+
+    /** The names H14 and Settings' SR7 call their networks by. */
+    val TOKEN_LIST_CHAINS = mapOf(100 to "Gnosis", app.getvela.wallet.feature.wallet.core.BalanceBoards.TEMPO to "Tempo")
+
+    /**
+     * H14 — Tempo's token list could not be loaded: the real balance
+     * machine's view of that round (`BalanceBoards.tokenListUnreachable`)
+     * through [WalletLive.home]. The hero keeps its figure and says what the
+     * core says — the list, not the network.
+     */
+    private fun liveTokenListUnreachable(base: WalletHomeModel, strings: VelaStrings): WalletHomeModel {
+        val now = System.currentTimeMillis()
+        val view = app.getvela.wallet.feature.wallet.core.BalanceBoards.tokenListUnreachable(ADDRESS_FULL, now - 120_000.0)
+        return WalletLive.home(
+            base, view, app.getvela.wallet.feature.wallet.core.FeedView(), app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true), strings, TOKEN_LIST_CHAINS, now = now,
+        ).copy(state = WalletScreenState.H14)
     }
 
     /**
