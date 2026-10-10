@@ -707,7 +707,7 @@ object SettingsFixtures {
 
     private fun accountsSheet(s: VelaStrings) = AccountsSheetModel(
         title = s.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
-        summary = s.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to ACCOUNTS.size.toString())) +
+        summary = s.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, ACCOUNTS.size) +
             s.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to TOTAL_BALANCE)),
         rows = ACCOUNTS.mapIndexed { i, a ->
             AccountsSheetRowModel(a.name, a.addressDisplay, a.addressFull, a.amount, i == 0)

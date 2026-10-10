@@ -671,7 +671,10 @@ object WalletLive {
         val total = switcher.balances.sumOf { it.usd }
         val known = switcher.balances.isNotEmpty()
         val hidden = switcher.hidden
-        val count = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString()))
+        // A PLURAL family (F15): the number goes to the core as the count, so
+        // the core picks the form by the language's rule — "1 account · ",
+        // "2 accounts · ". As a text variable it read "1 accounts · Total".
+        val count = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, accounts.size)
         return AccountsSheetModel(
             title = strings.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
             summary = when {

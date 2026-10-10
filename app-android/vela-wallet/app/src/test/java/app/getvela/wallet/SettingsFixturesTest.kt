@@ -43,10 +43,40 @@ class SettingsFixturesTest {
         for (locale in SHIPPED_LOCALES) {
             val s = strings(locale)
             for (key in keys) {
-                val value = s.t(key)
-                assertTrue("$key did not resolve in $locale", value != key && value.isNotBlank())
+                // A plural family has no bare key: every count a language
+                // tells apart resolves, through the count.
+                val values = if (key in PLURAL_KEYS) listOf(1, 2, 5, 21).map { s.t(key, it) } else listOf(s.t(key))
+                for (value in values) {
+                    assertTrue("$key did not resolve in $locale", value != key && value.isNotBlank() && !value.startsWith(key))
+                }
             }
         }
+    }
+
+    /** PR 3 final note F15: "1 accounts · Total" — the count picks the form, in the core. */
+    @Test
+    fun `the switcher counts its accounts in the plural form the count takes`() {
+        val en = strings("en")
+        assertEquals("1 account · ", en.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1))
+        assertEquals("2 accounts · ", en.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 2))
+        val money = app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true)
+        val totals = app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(
+            balances = listOf(app.getvela.wallet.feature.wallet.core.BalanceCacheEntry("0xa1", 5.65)),
+        )
+        fun summary(accounts: Int, strings: I18nRuntime) = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(
+            List(accounts) { "Account ${it + 1}" to "0xa${it + 1}" }, 0, totals, money, strings,
+        ).summary
+        assertEquals("1 account · Total \$5.65", summary(1, en))
+        assertEquals("2 accounts · Total \$5.65", summary(2, en))
+        // Never this shell's `count == 1`: the core picks the form by the
+        // language's own rule, and a language with one form has one.
+        val es = strings("es-MX")
+        assertEquals("1 cuenta · ", es.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1))
+        assertEquals("2 cuentas · ", es.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 2))
+        assertEquals("1 个账户 · ", strings("zh").t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1))
+        // The gallery's sheet counts the same way.
+        val sheet = SettingsFixtures.buildState(SettingsScreenState.ST1, en).accountsSheet
+        assertTrue(sheet.summary, sheet.summary.startsWith("${sheet.rows.size} accounts · "))
     }
 
     /** Spec 095 (App Review 5.1.1(i)): About links the policy, the terms and support. */
@@ -318,6 +348,9 @@ class SettingsFixturesTest {
     }
 
     private companion object {
+        /** The settings keys that are plural families: resolved with a count, never bare. */
+        val PLURAL_KEYS = setOf(I18nKeys.SettingsUi.ACCOUNTS_COUNT)
+
         val SHIPPED_LOCALES = listOf(
             "en", "zh", "zh-TW", "zh-HK", "ja", "ko", "vi", "id",
             "tr", "es-MX", "pt-BR", "fr", "de", "ru", "it",

@@ -1142,6 +1142,11 @@ object I18nKeys {
         // Account switcher + sign out + erase.
         const val ACCOUNTS_TITLE = "settingsModals.account.modalTitle"
         const val ACCOUNTS_TOTAL = "settingsModals.account.total"
+        /**
+         * Plural (`_one`/`_few`/`_many`/`_other`): resolve with
+         * [VelaStrings.t] and a COUNT — "1 account · ", "2 accounts · " (PR 3
+         * final note F15). Filled as a text variable it read "1 accounts ·".
+         */
         const val ACCOUNTS_COUNT = "home.switcherAccountCount"
         const val ACCOUNT_CREATE = "settingsModals.account.createNew"
         const val ACCOUNT_SIGN_IN = "settingsModals.account.signInExisting"
