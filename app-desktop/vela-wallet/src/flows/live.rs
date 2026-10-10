@@ -6950,7 +6950,11 @@ mod tests {
             assert_eq!(chip.text, s.status_pending);
             assert!(matches!(chip.tone, StatusTone::Info));
 
-            // Privacy masks the figure here as everywhere.
+            // Privacy masks the figure here as everywhere — and keeps its
+            // unit (PR 3 item 12, the core's `privacy::masked_amount`): the
+            // detail reads "•••• xDAI", what kind of money without how much,
+            // as the row it was opened from does. Not the digits, not the
+            // sign, not a bare mask.
             let hidden = tx_detail(
                 &view,
                 "a",
@@ -6961,7 +6965,13 @@ mod tests {
                 crate::wallet::live::Money::usd(),
             )
             .unwrap_or_else(|| unreachable!("row a exists"));
-            assert_eq!(hidden.amount, crate::wallet::fixtures::MASK);
+            assert_eq!(hidden.amount, "•••• xDAI");
+            assert_eq!(
+                hidden.amount,
+                vela_core::app::privacy::masked_amount("xDAI"),
+                "the core's rule, not this shell's"
+            );
+            assert!(!hidden.amount.contains("1.5"));
             assert_eq!(hidden.fiat, "");
 
             // A row that no longer exists has no detail — the panel closes

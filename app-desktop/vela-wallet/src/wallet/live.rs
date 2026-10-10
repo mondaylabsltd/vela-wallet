@@ -2529,6 +2529,39 @@ mod tests {
         });
     }
 
+    /// PR 3 item 12: a hidden amount keeps its unit — the core's
+    /// `privacy::masked_amount`. A token's detail reads "•••• ETH" where it
+    /// read a bare "••••": what is held, never how much.
+    #[test]
+    fn a_hidden_token_detail_keeps_its_unit() {
+        crate::executor::storage::tests::with_temp_state("hidden-unit", || {
+            use vela_core::app::balance_dashboard::BalanceToken;
+            let mut held = view(Some(1234.5));
+            held.tokens = vec![BalanceToken {
+                chain_id: 1,
+                symbol: "ETH".to_owned(),
+                name: "Ether".to_owned(),
+                balance: "0.5".to_owned(),
+                decimals: 18,
+                token_address: None,
+                price_usd: Some(2_469.0),
+                spam: false,
+            }];
+            let feed = feed_with(Vec::new(), Vec::new());
+            let s = strings();
+            let shown = asset_detail(&held, &feed, 0, &s, "en-US", &Money::default())
+                .unwrap_or_else(|| unreachable!("the token is there"));
+            assert_eq!(shown.amount.as_ref(), "0.5 ETH");
+
+            held.hidden = true;
+            let hidden = asset_detail(&held, &feed, 0, &s, "en-US", &Money::default())
+                .unwrap_or_else(|| unreachable!("the token is there"));
+            assert_eq!(hidden.amount.as_ref(), "•••• ETH");
+            assert!(!hidden.amount.contains("0.5"));
+            assert!(!hidden.sub.contains("1,234"), "{}", hidden.sub);
+        });
+    }
+
     /// The home strip lists the core's holdings, in the core's order, and says
     /// nothing about a chain nobody holds anything on.
     #[test]
@@ -3087,8 +3120,10 @@ pub fn asset_detail(
         ),
         ticker: SharedString::from(token.symbol.clone()),
         badge: badge(token.chain_id),
+        // Hidden, the figure keeps its unit as the shown one does (the
+        // core's `privacy::masked_amount`): "•••• BNB".
         amount: if view.hidden {
-            SharedString::from(crate::wallet::fixtures::MASK)
+            SharedString::from(vela_core::app::privacy::masked_amount(&token.symbol))
         } else {
             SharedString::from(format!(
                 "{} {}",
@@ -3537,7 +3572,16 @@ pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> S
     // no coin has no figure (083 H2) — and nothing to mask either: "••••"
     // would say there is one (083 H2 review).
     if hidden && item.figure_maskable {
-        return SharedString::from(crate::wallet::fixtures::MASK);
+        // …and the core's other rule (`privacy::masked_amount`): the mask
+        // hides the number and KEEPS the unit — "•••• xDAI", as the row
+        // beside it reads, and as every shell draws a hidden transfer's
+        // detail. A bare "••••" here said less than its own row did. A
+        // mixed-token batch has no figure and so no unit: the mask alone.
+        return SharedString::from(if item.value.is_some() {
+            vela_core::app::privacy::masked_amount(&item.symbol)
+        } else {
+            crate::wallet::fixtures::MASK.to_owned()
+        });
     }
     let amount = amount_text(item, incoming);
     // Nothing, not a stray space where a figure would be.
