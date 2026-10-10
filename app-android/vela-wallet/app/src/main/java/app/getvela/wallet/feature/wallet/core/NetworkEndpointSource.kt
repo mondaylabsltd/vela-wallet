@@ -64,9 +64,17 @@ class NetworkEndpointSource(
             VelaLog.event("rpc.seeds", "chain $chainId", "rows" to networks().networks.size, "answer" to "no row")
             return RpcSeeds()
         }
-        VelaLog.event("rpc.seeds", "chain $chainId", "rpc" to row.rpc_url.takeIf { it.isNotBlank() }?.let { runCatching { java.net.URI(it).host }.getOrNull() }, "bundler" to row.bundler_url.takeIf { it.isNotBlank() })
 
         val own = row.rpc_url.takeIf { it.isNotBlank() }
+        // After the chain's own endpoint, the core's public tier — the same
+        // place every shell collects it. One already listed is not listed twice.
+        val public = publicRpcs(chainId).filter { it.trimEnd('/') != own?.trimEnd('/') }
+        VelaLog.event(
+            "rpc.seeds", "chain $chainId",
+            "rpc" to own?.let { runCatching { java.net.URI(it).host }.getOrNull() },
+            "public" to public.size,
+            "bundler" to row.bundler_url.takeIf { it.isNotBlank() },
+        )
         return RpcSeeds(
             rpc = listOfNotNull(
                 own?.let { url ->
@@ -78,13 +86,7 @@ class NetworkEndpointSource(
                         source = if (row.is_custom) RpcSource.User else RpcSource.Default,
                     )
                 },
-            ) +
-                // After the chain's own endpoint, the core's public tier — the
-                // same place every shell collects it. One already listed above
-                // is not listed twice.
-                publicRpcs(chainId)
-                    .filter { it.trimEnd('/') != own?.trimEnd('/') }
-                    .map { RpcEndpointSeed(url = it, source = RpcSource.Public) },
+            ) + public.map { RpcEndpointSeed(url = it, source = RpcSource.Public) },
             bundler = listOfNotNull(
                 row.bundler_url.takeIf { it.isNotBlank() }
                     ?.let { RpcEndpointSeed(url = it, source = RpcSource.Builtin) },
