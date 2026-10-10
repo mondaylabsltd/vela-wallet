@@ -815,6 +815,58 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
     vec![swap, permit, sign_in]
 }
 
+/// Two transfers through the real feed core — 1.5 xDAI received, 12 USDC
+/// sent — with the feed's privacy as asked. What `VELA_ACTIVITY_FIXTURE`
+/// draws: the home's rows and a transfer's detail from the LIVE builders,
+/// shown or hidden, so the masked figure ("•••• xDAI", the core's
+/// `privacy::masked_amount`) can be looked at without a wallet that has a
+/// history.
+#[must_use]
+pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
+    use vela_core::app::activity_feed::{Event, FeedTxKind, FeedTxRecord, FeedTxStatus};
+    // A fixed afternoon: the rows read the same on every run.
+    const DAY_MS: f64 = 1_756_000_000_000.0 - 1_756_000_000_000.0 % 86_400_000.0;
+    let record = |id: &str, kind: FeedTxKind, value: &str, symbol: &str, chain_id: u32| {
+        let incoming = kind == FeedTxKind::Receive;
+        let other = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE".to_owned();
+        FeedTxRecord {
+            id: id.to_owned(),
+            user_op_hash: String::new(),
+            tx_hash: format!("0x{}", id.repeat(8)),
+            from: if incoming {
+                other.clone()
+            } else {
+                "0xme".to_owned()
+            },
+            to: if incoming { "0xme".to_owned() } else { other },
+            to_name: None,
+            value: value.to_owned(),
+            symbol: symbol.to_owned(),
+            decimals: 18,
+            logo_urls: None,
+            chain_id,
+            timestamp: DAY_MS / 1000.0 + if incoming { 50_400.0 } else { 40_500.0 },
+            day_start_ms: DAY_MS,
+            status: FeedTxStatus::Confirmed,
+            kind: Some(kind),
+            usd: None,
+            dapp_url: None,
+            intent: None,
+            balance_changes: None,
+            calldata: None,
+            call_data: None,
+            summary: None,
+            settlement: None,
+        }
+    };
+    let mut host = core_feed_host(vec![
+        record("a1", FeedTxKind::Receive, "1.5", "xDAI", 100),
+        record("b2", FeedTxKind::Send, "12", "USDC", 8_453),
+    ]);
+    let _ = host.dispatch(Event::PrivacyChanged { hidden });
+    host.view()
+}
+
 /// The REAL feed core over `records`, loaded the way the executor answers it
 /// for the account `0xme` — what Activity draws from those records.
 #[cfg(test)]
@@ -824,9 +876,9 @@ pub fn core_feed(
     core_feed_host(records).view()
 }
 
-/// [`core_feed`]'s machine itself, for a test that tells it more (a contact
-/// page opening).
-#[cfg(test)]
+/// The real feed machine over `records`, loaded the way the executor
+/// answers it — for a test that tells it more (a contact page opening), and
+/// for [`transfer_feed`].
 pub fn core_feed_host(
     records: Vec<vela_core::app::activity_feed::FeedTxRecord>,
 ) -> crate::core_host::CoreHost<vela_core::app::activity_feed::ActivityFeed> {

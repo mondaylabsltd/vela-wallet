@@ -1525,7 +1525,11 @@ impl WalletPage {
             celebrating: false,
             chain_filter: None,
             feed_privacy: None,
-            tx_detail: None,
+            // `VELA_ACTIVITY_FIXTURE`: the detail opens on the fixture's
+            // newest transfer.
+            tx_detail: Self::pinned_feed()
+                .as_ref()
+                .and_then(|feed| wallet_live::history_item_ids(feed).into_iter().next()),
             tx_technical: None,
             asset_detail: None,
             add_token_focus: cx.focus_handle(),
@@ -3723,7 +3727,9 @@ impl WalletPage {
         // The ids behind the preview rows, in the same order they draw. The
         // home drops the core's day headers, so row N here is feed item N.
         let home_tx_ids: Vec<String> = if self.identity.is_some() {
-            wallet_live::history_item_ids(&resident::resident::<ActivityFeed>(cx).read(cx).view())
+            // The same view the rows were built from (`feed_view`), so row N
+            // and id N cannot come from two feeds.
+            wallet_live::history_item_ids(&self.feed_view(cx))
         } else {
             Vec::new()
         };
@@ -4325,7 +4331,23 @@ impl WalletPage {
     /// and a dApp's detail) masks on the feed's own `hidden`, which the core
     /// keeps from `PrivacyChanged` — so it is told before anyone reads it,
     /// and a relaunch with the balance hidden never shows a figure first.
+    /// `VELA_ACTIVITY_FIXTURE=shown|hidden` (developer builds): the feed is
+    /// `fixtures::transfer_feed` — two transfers through the real feed core,
+    /// its privacy as asked — so the home's rows and a transfer's detail
+    /// (`VELA_FLOW=DA2`) can be looked at shown and hidden without a wallet
+    /// that has a history. The same env-pin family as `VELA_FLOW`.
+    fn pinned_feed() -> Option<vela_core::app::activity_feed::FeedView> {
+        match crate::dev_env::var!("VELA_ACTIVITY_FIXTURE").as_deref() {
+            Some("hidden") => Some(fixtures::transfer_feed(true)),
+            Some("shown") => Some(fixtures::transfer_feed(false)),
+            _ => None,
+        }
+    }
+
     fn feed_view(&mut self, cx: &mut Context<Self>) -> vela_core::app::activity_feed::FeedView {
+        if let Some(pinned) = Self::pinned_feed() {
+            return pinned;
+        }
         self.sync_feed_privacy(cx);
         resident::resident::<ActivityFeed>(cx).read(cx).view()
     }
