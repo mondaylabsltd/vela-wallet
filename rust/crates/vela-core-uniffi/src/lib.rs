@@ -900,6 +900,17 @@ pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
     vela_core::app::network_admin::public_rpc_urls(chain_id)
 }
 
+/// A hidden amount as every shell draws it: the mask, then the unit the
+/// shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
+/// for whether a hidden amount keeps its unit: it does. An empty `unit` (a
+/// figure with no unit of its own) is the mask alone, never a trailing
+/// space. Each phone used to spell this itself, and one of them dropped the
+/// unit.
+#[uniffi::export]
+pub fn masked_amount(unit: String) -> String {
+    vela_core::app::privacy::masked_amount(&unit)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where
