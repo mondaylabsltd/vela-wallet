@@ -323,10 +323,45 @@ object SendLive {
 
     // -- SD2c: the batch sheet (spec 045 US3) --------------------------------------
 
-    /** The web's `liveBatchImport`, word for word: the core parsed, priced and gated; this only says so. */
-    internal fun batchImport(fallback: BatchImportModel, batch: BatchView, view: SendView, ctx: Context, replaces: Boolean = false): BatchImportModel {
+    /** What stands where the importer's currency code will be while the person's currency is not known ([batchImport]). */
+    internal const val BATCH_CURRENCY_PENDING = "…"
+
+    /**
+     * The currency the importer's figures are read as, as it is TOLD the
+     * importer (PR 3 final note F8): the committed code — dollars when the
+     * committed choice has no rate, as every figure then is — else the stored
+     * choice on its way; and `null` while neither is known, when the importer
+     * keeps the placeholder it needs to exist at all and its sheet names no
+     * currency.
+     */
+    fun batchCurrency(currency: app.getvela.wallet.feature.settings.core.CurrencyView): String? = when {
+        currency.committed -> WalletLive.Money.of(currency).code
+        else -> currency.pending?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * The web's `liveBatchImport`, word for word: the core parsed, priced and gated; this only says so.
+     *
+     * [currencyUnknown] is the core's withhold rule on this surface (F8):
+     * nothing has been read of the person's display currency yet, so the code
+     * the importer was opened with is the placeholder's "USD" — nobody's
+     * choice — and it is not SAID anywhere. The unit, the rate, its hint and
+     * the sheet's sum carry [BATCH_CURRENCY_PENDING] where the code will be,
+     * on the same lines, until the importer is told the real one
+     * (`SendController.batchFiatCode`). It read "In USD" over a sheet of yuan.
+     */
+    internal fun batchImport(
+        fallback: BatchImportModel,
+        batch: BatchView,
+        view: SendView,
+        ctx: Context,
+        replaces: Boolean = false,
+        currencyUnknown: Boolean = false,
+    ): BatchImportModel {
         val s = ctx.strings
         val symbol = view.selected_token?.symbol ?: ""
+        // The currency the sheet's figures are in, as it may be said.
+        val code = if (currencyUnknown) BATCH_CURRENCY_PENDING else batch.fiat_code
         val count = batch.recipient_count
         // Lines READ — the ones that became rows and the ones the parser refused
         // (the web's `seen`): the count above a list is the length of that list.
@@ -334,7 +369,7 @@ object SendLive {
         // Someone is already on the form (the core's own count, as `merge` reads it).
         val formHasRows = view.split_import_room < BATCH_MAX_RECIPIENTS
         return fallback.copy(
-            unitFiat = s.t(I18nKeys.Flows.BATCH_UNIT_FIAT, mapOf("code" to batch.fiat_code)),
+            unitFiat = s.t(I18nKeys.Flows.BATCH_UNIT_FIAT, mapOf("code" to code)),
             unitToken = s.t(I18nKeys.Flows.BATCH_UNIT_TOKEN, mapOf("sym" to symbol)),
             unit = if (batch.unit == WireBatchUnit.Fiat) BatchUnit.Fiat else BatchUnit.Token,
             pasteValue = batch.raw_text,
@@ -342,12 +377,12 @@ object SendLive {
             // A token-denominated sheet converts nothing (the web's `unitHint`): it
             // says so instead of explaining a rate the core ignores in that mode.
             rateHint = if (batch.unit == WireBatchUnit.Fiat) {
-                s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to batch.fiat_code, "sym" to symbol))
+                s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to code, "sym" to symbol))
             } else {
                 s.t(I18nKeys.Flows.BATCH_TOKEN_HINT, mapOf("sym" to symbol))
             },
             rateValue = when (batch.rate_status) {
-                BatchRateStatus.Ok -> "${batch.rate_input} ${batch.fiat_code}"
+                BatchRateStatus.Ok -> "${batch.rate_input} $code"
                 BatchRateStatus.Loading -> s.t(I18nKeys.Flows.BATCH_RATE_LOADING)
                 // Unknown, and said so: the core has already refused to apply.
                 BatchRateStatus.Failed -> s.t(I18nKeys.Flows.BATCH_RATE_FAILED)
@@ -399,7 +434,7 @@ object SendLive {
                 SummaryLineModel(
                     label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(if (count == 1) I18nKeys.Flows.RECIPIENT_COUNT_ONE else I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to count.toString()))}",
                     value = "${Formats.current.plain(batch.total_token)} $symbol".trim() +
-                        (batch.total_fiat?.let { " · ${Formats.current.plain(it)} ${batch.fiat_code}" } ?: ""),
+                        (batch.total_fiat?.let { " · ${Formats.current.plain(it)} $code" } ?: ""),
                     over = batch.over_balance,
                     // Adding to people already on the form draws from what the form
                     // has not given out yet (`split_remaining`), not the whole balance.

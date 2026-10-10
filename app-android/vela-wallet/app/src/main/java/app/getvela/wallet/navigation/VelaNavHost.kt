@@ -1029,6 +1029,16 @@ fun VelaNavHost(
                 // says it only to an open Send, and only when it is news.
                 val displayNow = sendDisplay()
                 LaunchedEffect(displayNow) { send.displayChanged(displayNow) }
+                // F8: and the open batch importer hears the person's currency the same
+                // way — the moment it is known, or changes — beside Send's own word.
+                // The core asks for THAT currency's rate and holds the import until it
+                // lands. Opened before it was known, the importer kept the
+                // placeholder's "USD" for as long as it stayed open: a sheet of yuan
+                // summed as dollars.
+                val batchCurrency = SendLive.batchCurrency(currency)
+                LaunchedEffect(batchCurrency, batchView.opened) {
+                    if (batchView.opened && batchCurrency != null && batchCurrency != batchView.fiat_code) send.batchFiatCode(batchCurrency)
+                }
                 LaunchedEffect(sendClosed) {
                     if (sendClosed && flows.top in SEND_STATES) flows.close()
                 }
@@ -1160,7 +1170,8 @@ fun VelaNavHost(
                         val sheet = when (val sheet = drawn.sheet) {
                             is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, sendView, ctx))
                             is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
-                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx, importReplaces))
+                            // No currency is named before the person's is known (F8).
+                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx, importReplaces, currencyUnknown = SendLive.batchCurrency(currency) == null))
                             else -> sheet
                         }
                         drawn.copy(base = base, sheet = sheet)

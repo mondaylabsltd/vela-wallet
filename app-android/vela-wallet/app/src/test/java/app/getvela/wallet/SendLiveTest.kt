@@ -1635,6 +1635,52 @@ class SendLiveTest {
 
     // -- Spec 045 US3: the batch sheet ---------------------------------------
 
+    /**
+     * PR 3 final note F8 — the core's withhold rule on the importer. Opened
+     * before the display currency has been read, the importer holds the
+     * placeholder's "USD": nobody's choice, and it is not said anywhere.
+     */
+    @Test
+    fun `the batch sheet names no currency while the person's is not known`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, split_mode = true, show_batch_import = true)
+        val opened = BatchView(
+            opened = true, unit = WireBatchUnit.Fiat, fiat_code = "USD", raw_text = "a,5000", rate_status = BatchRateStatus.Ok, rate_input = "1",
+            preview = listOf(BatchPreviewRow(line = 1, address = recipient, valid = true, raw_amount = "5000", token_amount = "5000", ok = true)),
+            recipient_count = 1, total_token = "5000", total_fiat = "5000", can_apply = true,
+            recipients = listOf(BatchRecipient(recipient, "5000")),
+        )
+        val unknown = SendLive.batchImport(drawn.model, opened, view, ctx(), currencyUnknown = true)
+        val mark = SendLive.BATCH_CURRENCY_PENDING
+        assertEquals("In $mark", unknown.unitFiat)
+        assertEquals("1 $mark", unknown.rateValue)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to mark, "sym" to "XDAI")), unknown.rateHint)
+        assertTrue(unknown.total!!.value, unknown.total!!.value.endsWith("5000 $mark"))
+        val said = listOfNotNull(unknown.unitFiat, unknown.rateValue, unknown.rateHint, unknown.total?.value, unknown.total?.label) + unknown.rows.flatMap { listOfNotNull(it.conversion, it.note) }
+        assertTrue("the placeholder's code is said nowhere: $said", said.none { it.contains("USD") })
+        // Its own unit is still a unit: the token is the token.
+        assertEquals("In XDAI", unknown.unitToken)
+
+        // Known: the code the importer holds is said, on the same lines.
+        val known = SendLive.batchImport(drawn.model, opened.copy(fiat_code = "CNY", rate_input = "7.1"), view, ctx())
+        assertEquals("In CNY", known.unitFiat)
+        assertEquals("7.1 CNY", known.rateValue)
+        assertTrue(known.total!!.value.endsWith("5000 CNY"))
+    }
+
+    /** F8: what the importer is told its currency is — and when there is nothing to tell. */
+    @Test
+    fun `the importer's currency is the person's committed code, else the stored choice, else none`() {
+        assertEquals("CNY", SendLive.batchCurrency(CurrencyView(code = "CNY", rate = 7.1, committed = true)))
+        // The stored choice on its way: known before its rate is.
+        assertEquals("CNY", SendLive.batchCurrency(CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")))
+        // Nothing read yet: the placeholder is nobody's.
+        assertNull(SendLive.batchCurrency(CurrencyView(code = "USD", rate = null, committed = false)))
+        assertNull(SendLive.batchCurrency(CurrencyView(code = "USD", rate = null, committed = false, pending = "")))
+        // A committed choice nothing could price is dollars, as every figure then is.
+        assertEquals("USD", SendLive.batchCurrency(CurrencyView(code = "CNY", rate = null, committed = true)))
+    }
+
     @Test
     fun `the batch sheet says what the core parsed, priced and gated`() {
         val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport

@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.core.format.Formats
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.getvela.wallet.feature.settings.SettingsPage
@@ -495,7 +496,11 @@ class AppContainer(private val app: Application) {
             // now, so the pending row shows at submit, not at the next tick.
             feedChanged = { wallet.feedReconciled(1) },
             identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
-            currencyCode = { settings.currency.value.code },
+            // The importer is opened in the person's currency when that is known —
+            // committed, or the stored choice on its way (F8); only before either
+            // does it get the placeholder it needs to exist, which its sheet does
+            // not say and the wallet route replaces the moment the real one is known.
+            currencyCode = { settings.currency.value.let { SendLive.batchCurrency(it) ?: it.code } },
             fiatRate = { code -> settings.fiatRate(code) },
             documents = { documents },
             addNetwork = { chainId ->
