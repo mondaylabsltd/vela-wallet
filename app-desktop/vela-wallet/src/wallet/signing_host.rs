@@ -126,6 +126,20 @@ fn back_on_form_of(view: &SignView, responded: bool) -> bool {
         && !responded
 }
 
+/// Whether the core took the approve it was just sent: a pipeline runs, or
+/// has already ended somewhere other than the form (an error on the sheet,
+/// an answer).
+///
+/// The core takes none while its gate is shut — the fee not priced, the
+/// simulation's verdict not on the sheet, the account's previous transaction
+/// still going through — and says nothing: the confirm it was drawn from is
+/// shut, with the line that says why. A click can still land on a frame
+/// drawn before the gate shut. The form it leaves is the form as it was, so
+/// "still on the form" is "nothing was approved", whatever the reason.
+fn approve_taken(view: &SignView, responded: bool) -> bool {
+    !back_on_form_of(view, responded)
+}
+
 /// How often the column looks at its ceremony while a pipeline runs — the
 /// cadence the send and onboarding already poll theirs at (083).
 const CEREMONY_TICK_MS: u64 = 120;
@@ -706,6 +720,14 @@ impl SigningHost {
         // the simulation reverted or could not run (its notice stood there).
         opts.balance_changes = approved_changes(&self.sim.judgments, self.sim.notice.is_some());
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
+        // An approve the core did not take approved nothing (`approve_taken`),
+        // and this host must not go on saying it did: `approved` turns the
+        // fee's refresh off (`on_form`) and keeps the request running unseen
+        // after its column closes (`owed_unseen`), and only a pipeline coming
+        // back clears it — none ran. The confirm is still there to press.
+        if !self.closed && !approve_taken(&self.view, self.responded) {
+            self.approved = false;
+        }
     }
 
     // -- the ceremony, in the column (083) -----------------------------------
@@ -3032,6 +3054,8 @@ mod approve_tests {
         let signing = sign.dispatch(SignEvent::ApproveTapped {
             opts: SignApproveOpts::default(),
         });
+        // The core took it: the host's `approved` stands (`approve_taken`).
+        assert!(approve_taken(&sign.view(), false));
         match signing.as_slice() {
             [
                 Pending {
@@ -3753,6 +3777,9 @@ mod sim_wait_tests {
         });
         assert_eq!(sheet.asked.len(), before, "no pipeline started");
         assert!(!sheet.sign.view().is_signing && !sheet.sign.view().is_submitting);
+        // …and the host says so: nothing was approved, so its refresh
+        // control and its close are the form's still (`SigningHost::approve`).
+        assert!(!approve_taken(&sheet.sign.view(), false));
 
         // The verdict lands — drawn and told in one step.
         sheet.lands(a_send());
