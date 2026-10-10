@@ -37,6 +37,17 @@ enum class SettingsScreenState {
     SR1, SR2, SR2B, SR3, SR4, SR5,
     /** Spec 092: every network the wallet cannot reach, in one list. */
     SR6,
+
+    /**
+     * The Keys block over the home, with its "Copy this wallet's record to
+     * Ethereum" row in each state the core has a row for — through the LIVE
+     * builder: not copied yet (SK1, the one a tap opens the sheet from),
+     * copied (SK2), couldn't check (SK3, a tap asks again) and an older
+     * wallet that can never be copied (SK4, a calm end). The block was live
+     * only, so none of its states could be looked at without a wallet in
+     * each.
+     */
+    SK1, SK2, SK3, SK4,
 }
 
 /** Which page the settings surface is showing (`Home` plus the pushed pages). */
@@ -143,6 +154,11 @@ data class SettingsRowModel(
     val title: String,
     val icon: SettingsIcon? = null,
     val subtitle: String? = null,
+    /**
+     * The second line says something went WELL ("Copied to Ethereum" — the
+     * core's `BackupTone::Positive`) and is drawn in the success colour.
+     */
+    val subtitlePositive: Boolean = false,
     /** Right-aligned current value — "简体中文 · 系统", "12 个网络". */
     val value: String? = null,
     val trailing: RowTrailing = RowTrailing.Chevron,
@@ -708,7 +724,12 @@ data class WalletKeysModel(
     val backup: SettingsRowModel?,
     /** Spec 102: "Keys on {{domain}}" — only for a wallet on its own signing domain. */
     val domain: String? = null,
-    /** Under the backup: PUBLIC keys only; private keys never leave the device. */
+    /**
+     * Under the copy's row, the core's words: what becomes public (the
+     * address and name, each key's name, public key, credential ID and
+     * authenticator model), that it costs a network fee, and that a copy
+     * moves no money and brings back no lost passkey.
+     */
     val backupExplain: String,
     val copyLabel: String,
     val copiedLabel: String,

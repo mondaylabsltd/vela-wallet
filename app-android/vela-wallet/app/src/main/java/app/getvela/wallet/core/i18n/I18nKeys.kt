@@ -991,10 +991,13 @@ object I18nKeys {
         const val HEALTH_HTTPS_REQUIRED = "settingsModals.health.httpsRequired"
         const val HEALTH_INVALID = "settingsModals.health.invalid"
 
-        /** The Ethereum backup row (spec 062). */
+        /**
+         * The Ethereum copy's row (spec 062). Its states' words are the
+         * core's — the row arrives with its keys (`BackupState::row`) — so
+         * only what is said BEFORE the core answers is named here: the title
+         * and "Checking…", and the transport's own "couldn't check".
+         */
         const val BACKUP_TITLE = "settingsModals.backup.title"
-        const val BACKUP_BACKED_UP = "settingsModals.backup.backedUp"
-        const val BACKUP_NOT_BACKED_UP = "settingsModals.backup.notBackedUp"
         const val BACKUP_COULD_NOT_CHECK = "settingsModals.backup.couldNotCheck"
         const val BACKUP_CHECKING = "componentsUi.funding.checking"
         const val KEYS_TITLE = "settingsModals.keys.title"

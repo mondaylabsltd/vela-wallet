@@ -1,5 +1,9 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.feature.settings.core.WalletKeys
+import app.getvela.wallet.feature.settings.core.RegistryBackup
+import app.getvela.wallet.feature.onboarding.core.KeyMethod
+import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.core.data.DebugMode
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.core.BalanceView
@@ -1020,6 +1024,56 @@ object SettingsFixtures {
         SettingsScreenState.SR5 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR6 ->
             Shape(SettingsPage.Home, SettingsOverlay.Unreachable, rescue = true, backdrop = "wallet")
+        SettingsScreenState.SK1, SettingsScreenState.SK2, SettingsScreenState.SK3, SettingsScreenState.SK4 ->
+            Shape(SettingsPage.Home, SettingsOverlay.None)
+    }
+
+    // -- the Keys block and its copy-to-Ethereum row ---------------------------
+
+    /**
+     * What the core's backup walk ends on for each SK board: the state and the
+     * row that rides with it (`BackupState::row` — its words, tone and tap).
+     * Written out here because a board has no chain to ask; the live screen
+     * reads the row off the step and maps nothing.
+     */
+    fun backupCheck(state: SettingsScreenState): RegistryBackup.Check? {
+        fun row(subtitle: String, tone: RegistryBackup.Tone, action: RegistryBackup.Action) =
+            RegistryBackup.Row("settingsModals.backup.title", "settingsModals.backup.$subtitle", tone, action)
+        return when (state) {
+            SettingsScreenState.SK1 -> RegistryBackup.Check(
+                RegistryBackup.State.NotBackedUp,
+                RegistryBackup.Call(1, "0x0000000000000000000000000000000000000000", "0x"),
+                row("notBackedUp", RegistryBackup.Tone.Neutral, RegistryBackup.Action.Copy),
+            )
+            SettingsScreenState.SK2 -> RegistryBackup.Check(
+                RegistryBackup.State.BackedUp, null,
+                row("backedUp", RegistryBackup.Tone.Positive, RegistryBackup.Action.None),
+            )
+            SettingsScreenState.SK3 -> RegistryBackup.COULD_NOT
+            SettingsScreenState.SK4 -> RegistryBackup.Check(
+                RegistryBackup.State.NotCopyable, null,
+                row("cannotCopy", RegistryBackup.Tone.Neutral, RegistryBackup.Action.None),
+            )
+            else -> null
+        }
+    }
+
+    /** The SK boards' keys: one synced in a vault the catalog names, one bound to a security key. */
+    private fun withKeys(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+        val check = backupCheck(state) ?: return model
+        fun key(name: String, provider: String, method: KeyMethod, synced: Boolean, body: String) = WalletKeys.Row(
+            key = CreateKeyRow(name, "platform", "internal", true, synced, "", provider, method),
+            synced = synced,
+            publicKeyHex = "04" + body.repeat(64),
+        )
+        val keys = WalletKeys.Result(
+            WalletKeys.Source.Registry,
+            listOf(
+                key(ACCOUNT_NAME, "Google Password Manager", KeyMethod.Platform, true, "3a"),
+                key("", "", KeyMethod.SecurityKey, false, "c5"),
+            ),
+        )
+        return SettingsLive.withWalletKeys(model, keys, check, s)
     }
 
     // -- spec 102: where you review and sign, and the signing pages ----------
@@ -1125,7 +1179,7 @@ object SettingsFixtures {
     }
 
     fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel =
-        withSigning(baseState(state, s), state, s)
+        withKeys(withSigning(baseState(state, s), state, s), state, s)
 
     private fun baseState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
         val shape = shape(state)

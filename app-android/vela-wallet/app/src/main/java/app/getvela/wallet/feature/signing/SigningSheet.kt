@@ -281,7 +281,7 @@ fun SigningSheetContent(
             )
         } else if (action != null) {
             // Issue #461: a tap, like the Send screen's Confirm — the same
-            // button, saying the action alone ("确认兑换", "签名", "备份公钥").
+            // button, saying the action alone ("确认兑换", "签名", "复制钱包记录").
             // Shut (dimmed) only while the core says so; once approved, the
             // receipt takes the form's place, so busy never looks shut.
             VelaPrimaryButton(

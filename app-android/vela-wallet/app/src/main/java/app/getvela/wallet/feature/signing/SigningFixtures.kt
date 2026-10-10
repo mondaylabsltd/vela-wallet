@@ -180,9 +180,11 @@ object SigningFixtures {
     )
 
     /**
-     * CS36: the wallet's own key backup, as the live sheet draws it — no
-     * requester to name, so the header is the intent and the ✕; the core's
-     * rows (network first); "Technical details" with no contract name; the
+     * CS36: "Copy this wallet's record" — the wallet's own copy of its
+     * registry record to Ethereum, as the live sheet draws it. No requester
+     * to name, so the header is the intent and the ✕; the core's rows
+     * (network first, and the wallet's NAME — it becomes public there, so the
+     * sheet says it); "Technical details" with no contract name; the
      * fee's speed control open, the slow tier still measuring, its gas-bid
      * line held so nothing moves when it lands; the confirm says the intent.
      */
@@ -195,6 +197,7 @@ object SigningFixtures {
                     listOf(
                         SigningRow(sg("labelNetwork"), NETWORK),
                         SigningRow(sg("labelAddress"), WalletFixtures.ADDRESS_DISPLAY, mono = true),
+                        SigningRow(sg("labelWalletName"), WalletFixtures.NAME),
                         SigningRow(sg("labelPublicKeys"), "3"),
                     ),
                 ),

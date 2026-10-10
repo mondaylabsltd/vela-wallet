@@ -2301,7 +2301,7 @@ fun VelaNavHost(
                     }
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
                     m = SettingsLive.withConnections(m, connectedSites.sites, strings)
-                    m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings, sessionView.activeRow?.signingDomain ?: "getvela.app")
+                    m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck, strings, sessionView.activeRow?.signingDomain ?: "getvela.app")
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
                     m = SettingsLive.withFeedback(m, feedbackFacts, strings)
                     m = SettingsLive.withFeedbackStatus(m, feedbackState.sending, feedbackState.outcome)
@@ -2456,18 +2456,20 @@ fun VelaNavHost(
                         // "checking…" once more) and the effect above re-runs (#8).
                         onEthereumBackup = {
                             val check = backupCheck
-                            val call = check?.call
-                            when {
-                                call != null -> {
+                            // The tap is the core's (`BackupRow.action`): the sheet,
+                            // another attempt, or — a wallet copied already, or one
+                            // that never can be — nothing at all.
+                            when (check?.row?.action) {
+                                RegistryBackup.Action.Copy -> check.call?.let { call ->
                                     selectFromPushed(VelaTab.Wallet)
                                     application.container.openEthereumBackup(call)
                                 }
-                                check?.state == RegistryBackup.State.CouldNotCheck -> {
+                                RegistryBackup.Action.Retry -> {
                                     settingsHaptic(VelaHaptic.Select)
                                     backupCheck = null
                                     backupAttempt += 1
                                 }
-                                else -> Unit
+                                RegistryBackup.Action.None, null -> Unit
                             }
                         },
                         onSheetSelect = { sheet, id ->

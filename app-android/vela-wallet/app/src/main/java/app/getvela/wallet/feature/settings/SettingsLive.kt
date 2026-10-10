@@ -1154,7 +1154,7 @@ object SettingsLive {
     fun withWalletKeys(
         model: SettingsScreenModel,
         keys: app.getvela.wallet.feature.settings.core.WalletKeys.Result?,
-        backup: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        backup: app.getvela.wallet.feature.settings.core.RegistryBackup.Check?,
         strings: VelaStrings,
         /** Spec 102: the account's signing domain — said only when it is not `getvela.app`. */
         signingDomain: String = "getvela.app",
@@ -1214,38 +1214,40 @@ object SettingsLive {
     }
 
     /**
-     * The backup as a row: one line, four states, and an affordance only where
-     * a tap does something.
+     * The backup as a row — the core's words, tone and tap (`BackupState::row`),
+     * drawn and not re-mapped: every shell used to map the state itself, and
+     * they disagreed.
      *
-     * Two of those states have nothing to offer — the check is still running,
-     * or it came back "backed up" — so the row is inert there: no chevron, and
-     * (dead-controls #8) no ripple either, because it took taps in every state
-     * while only `NotBackedUp` carried an action.
+     * - still asking ([check] `null`): the title and "Checking…", inert;
+     * - "Copied to Ethereum": said in the positive tone, inert;
+     * - "Not copied yet (optional)": a plain state, never a caution — a copy
+     *   is optional and costs a fee — and a tap opens the sheet (the chevron);
+     * - "Couldn't check. Tap to try again.": a tap asks again, with the glyph
+     *   that says so rather than a chevron that would promise a page (the
+     *   founder's ruling, 2026-09-23);
+     * - "This older wallet can't be copied": a calm end, nothing to tap;
+     * - no row from the core (no registry on Ethereum, no record): not drawn.
      *
-     * "Could not check" is the state a person actually taps, and what they
-     * want is another attempt (founder's ruling, 2026-09-23). So it is
-     * actionable, with the glyph that says "ask again" rather than the chevron
-     * that promises a page: the tap re-runs the very check this screen runs
-     * when it opens.
+     * A row with nothing to do takes no taps at all (dead-controls #8): no
+     * chevron and no ripple.
      */
     fun ethereumBackupRow(
-        state: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        check: app.getvela.wallet.feature.settings.core.RegistryBackup.Check?,
         strings: VelaStrings,
     ): SettingsRowModel? {
         val k = I18nKeys.SettingsUi
-        val (subtitle, trailing) = when (state) {
-            null -> strings.t(k.BACKUP_CHECKING) to RowTrailing.None
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.BackedUp -> strings.t(k.BACKUP_BACKED_UP) to RowTrailing.None
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotBackedUp -> strings.t(k.BACKUP_NOT_BACKED_UP) to RowTrailing.Chevron
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.CouldNotCheck -> strings.t(k.BACKUP_COULD_NOT_CHECK) to RowTrailing.Retry
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.Unavailable,
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotRegistered -> return null
+        val row = if (check == null) null else check.row ?: return null
+        val trailing = when (row?.action) {
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.Copy -> RowTrailing.Chevron
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.Retry -> RowTrailing.Retry
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.None, null -> RowTrailing.None
         }
         return SettingsRowModel(
             id = ETHEREUM_BACKUP_ROW,
-            title = strings.t(k.BACKUP_TITLE),
+            title = strings.t(row?.titleKey ?: k.BACKUP_TITLE),
             icon = SettingsIcon.Upload,
-            subtitle = subtitle,
+            subtitle = strings.t(row?.subtitleKey ?: k.BACKUP_CHECKING),
+            subtitlePositive = row?.tone == app.getvela.wallet.feature.settings.core.RegistryBackup.Tone.Positive,
             trailing = trailing,
             actionable = trailing != RowTrailing.None,
         )

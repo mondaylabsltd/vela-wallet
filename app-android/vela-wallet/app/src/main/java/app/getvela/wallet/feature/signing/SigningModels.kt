@@ -399,7 +399,7 @@ data class SigningScreenModel(
      */
     val dappOwn: Boolean = false,
     /**
-     * The wallet's own request: what it does ("备份公钥"), drawn as the
+     * The wallet's own request: what it does ("复制钱包记录"), drawn as the
      * header's title beside the ✕. The intent block it comes from is not
      * repeated below. `null` for a site's request, whose header names the site.
      */
@@ -424,7 +424,7 @@ data class SigningScreenModel(
     val signerName: String,
     val signerSeed: String,
     /**
-     * The confirm's words — the action alone ("确认兑换", "签名", "备份公钥"),
+     * The confirm's words — the action alone ("确认兑换", "签名", "复制钱包记录"),
      * on a tap button (issue #461: the Send screen's Confirm, not a slide).
      * There is no reject BUTTON anywhere in this vocabulary; the header's ✕ is
      * the explicit refusal, and since spec 079 nothing else closes the sheet

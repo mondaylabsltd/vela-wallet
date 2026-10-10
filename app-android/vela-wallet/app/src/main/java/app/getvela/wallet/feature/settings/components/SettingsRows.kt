@@ -142,7 +142,7 @@ fun VelaSettingsRow(
                     if (row.subtitle != null) {
                         Text(
                             text = row.subtitle,
-                            color = colors.fgSubtle,
+                            color = if (row.subtitlePositive) colors.successBase else colors.fgSubtle,
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.base,
                             maxLines = 2,

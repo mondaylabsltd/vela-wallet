@@ -216,9 +216,10 @@ class SigningFixturesTest {
         assertEquals(model.headline, model.confirmAction)
         val rows = (model.blocks.single() as SigningBlock.Rows).rows.map { it.label }
         assertEquals(
-            listOf("labelNetwork", "labelAddress", "labelPublicKeys").map { zh.t("componentsUi.signing.$it") },
+            listOf("labelNetwork", "labelAddress", "labelWalletName", "labelPublicKeys").map { zh.t("componentsUi.signing.$it") },
             rows,
         )
+        assertEquals("复制钱包记录", model.headline)
         assertEquals(null, model.tech.summary)
         val speed = (model.fee as FeeModel.OnChain).speed!!
         assertTrue(speed.open && speed.gasPriceLine)

@@ -748,13 +748,20 @@ class SigningLiveTest {
         )
         fun term(leaf: String) = zh.t("componentsUi.signing.$leaf")
         val rows = sheet.blocks.filterIsInstance<SigningBlock.Rows>().single().rows
+        // The wallet's NAME is on the sheet: the copy makes it public on
+        // Ethereum too, so the person sees it before confirming.
         assertEquals(
-            listOf(term("labelNetwork") to "Ethereum", term("labelAddress") to "0x88cCA0…266894", term("labelPublicKeys") to "3"),
+            listOf(
+                term("labelNetwork") to "Ethereum", term("labelAddress") to "0x88cCA0…266894",
+                term("labelWalletName") to "Interleave", term("labelPublicKeys") to "3",
+            ),
             rows.map { it.label to it.value },
         )
+        assertEquals(listOf("网络", "地址", "钱包名称", "包含的钥匙"), rows.map { it.label })
+        assertEquals("复制钱包记录", sheet.confirmAction)
         assertEquals(term("intentBackUpPublicKeys"), sheet.confirmAction)
         assertEquals("the header's title is the intent", term("intentBackUpPublicKeys"), sheet.headline)
-        listOf("labelNetwork", "labelAddress", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
+        listOf("labelNetwork", "labelAddress", "labelWalletName", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
             assertFalse("$leaf is said in Chinese", term(leaf).startsWith("componentsUi.") || term(leaf) == strings.t("componentsUi.signing.$leaf"))
         }
     }

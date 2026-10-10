@@ -133,7 +133,8 @@ fun VelaWalletKeysBlock(model: WalletKeysModel, onRow: (String) -> Unit) {
 
         model.backup?.let {
             VelaSettingsRow(row = it, divider = false, onClick = onRow)
-            // PUBLIC keys: "back up keys" read as handing over the keys themselves.
+            // What the copy makes public and what it costs, in the core's
+            // words — "back up keys" read as handing over the keys themselves.
             Text(
                 text = model.backupExplain,
                 color = colors.fgSubtle,

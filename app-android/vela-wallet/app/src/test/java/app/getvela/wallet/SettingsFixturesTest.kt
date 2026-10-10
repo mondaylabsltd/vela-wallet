@@ -70,9 +70,11 @@ class SettingsFixturesTest {
         val states = SettingsScreenState.entries
         // ST14B (spec 091) has no mock: About with the debug-mode switch revealed.
         // ST17–ST18B are spec 102's: where you review and sign, and the signing pages.
-        assertEquals(35, states.size)
+        // SK1–SK4: the Keys block with its copy-to-Ethereum row in each state.
+        assertEquals(39, states.size)
         assertEquals(28, states.count { it.name.startsWith("ST") })
         assertEquals(7, states.count { it.name.startsWith("SR") })
+        assertEquals(4, states.count { it.name.startsWith("SK") })
     }
 
     /** Spec 092: SR6 is the unreachable list, drawn through the live builder. */
