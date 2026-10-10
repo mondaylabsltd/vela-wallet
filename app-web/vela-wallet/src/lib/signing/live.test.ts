@@ -32,6 +32,8 @@ import { txKickoff } from './core/tx-params';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
 import { fill } from '$lib/wallet/messages';
+import { MONEY_PENDING } from '$lib/wallet/live';
+import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
 import { tokenMarkFor } from '$lib/flows/marks';
 import { feeRowTap } from '$lib/flows/fee-failure';
 import { wouldFailView } from '$lib/flows/testing/fee-core';
@@ -2826,5 +2828,79 @@ describe('a fee that would fail, on the sheet (PR 2 polish)', () => {
 		// No failure: two coins open their list; one is the host's.
 		expect(feeRowTap(QUOTED_FEE, 2)).toBe('toggle_coins');
 		expect(feeRowTap(QUOTED_FEE, 1)).toBe('host');
+	});
+});
+
+/**
+ * 0.8 — no fiat figure before the display currency commits, on the signing
+ * sheet: the fee's money, each coin's fee in the selector, and the worth
+ * under the amount (a balance change's). The extension's request window
+ * mounts only this sheet and starts cold on every request, so this is the
+ * surface where "$" before "¥" would be seen most.
+ */
+describe('no fiat figure before the display currency commits — the signing sheet', () => {
+	const PRICED_FEE = {
+		...QUOTED_FEE,
+		options: [
+			{
+				symbol: 'ETH',
+				contract: null,
+				decimals: 18,
+				balance: '1500000000000000000',
+				recipient: '0x1',
+				usd_balance: '4500',
+				usd_price: '3000',
+				amount: '2100000000000000',
+				insufficient: false,
+				selected: true,
+				spent_by_operation: false,
+				short: null
+			}
+		]
+	};
+
+	it('signing_sheet: the fee’s money and the amount’s worth wait; the coin figures do not', () => {
+		expectWithheld('signing_sheet', (currency) => {
+			const model = buildSigningModel(inputs({ fee: PRICED_FEE, currency }))!;
+			return [model.fee, model.blocks];
+		});
+		const model = buildSigningModel(inputs({ fee: PRICED_FEE, currency: ON_ITS_WAY }))!;
+		// The fee in its coin is a token amount: drawn. Its money: withheld.
+		expect(model.fee).toMatchObject({ kind: 'onchain', value: `0.0021 ETH · ≈${MONEY_PENDING}` });
+		// The amount is what is being signed: drawn. Its worth: withheld, on
+		// the line it will stand on.
+		const amount = model.blocks.find((block) => block.kind === 'amount');
+		expect(JSON.stringify(amount)).toContain('100 USDC');
+		expect(JSON.stringify(amount)).toContain(`≈ ${MONEY_PENDING}`);
+		const landed = buildSigningModel(inputs({ fee: PRICED_FEE, currency: COMMITTED }))!;
+		expect(landed.fee).toMatchObject({ value: '0.0021 ETH · ≈¥45.36' });
+		expect(JSON.stringify(landed.blocks)).toContain('≈ ¥720.00');
+	});
+
+	it('signing_sheet: with the fee coins open, no coin’s fee is priced in a placeholder', () => {
+		// Two coins can pay, so the row opens onto the list.
+		const twoCoins = {
+			...PRICED_FEE,
+			options: [
+				PRICED_FEE.options[0],
+				{
+					...PRICED_FEE.options[0],
+					symbol: 'USDC',
+					contract: '0x' + 'a0'.repeat(20),
+					decimals: 6,
+					balance: '500000000',
+					usd_balance: '500',
+					usd_price: '1',
+					amount: '6300000',
+					selected: false
+				}
+			]
+		};
+		const open = (currency: SigningLiveInputs['currency']) =>
+			buildSigningModel(inputs({ fee: twoCoins, currency, feeOpen: true }))!.fee;
+		const selector = open(COMMITTED);
+		expect(selector).toMatchObject({ kind: 'onchain' });
+		expect(selector.kind === 'onchain' && selector.selector?.options).toHaveLength(2);
+		expectWithheld('signing_sheet', open);
 	});
 });

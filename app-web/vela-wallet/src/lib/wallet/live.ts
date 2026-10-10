@@ -180,13 +180,14 @@ export function fixedTwo(value: number): [string, string] {
  * What stands where a money figure WILL be, while the display currency is not
  * the person's yet.
  *
- * The core's rule (`CurrencyView.committed`): while it is false the pair on
- * the wire is the USD/1 placeholder, and no money figure is drawn in it — a
- * home that showed "$1,234" for a few seconds and then jumped to "¥8,876" is
- * what this rule ends (the 102 device run). The hero keeps its skeleton
- * (`liveBalance`); every other figure is this mark, from `moneyText`, so no
- * surface has to remember the rule and the line it stands on is already the
- * height the figure will be. The figure appears once, in the right money.
+ * The core's rule (`CurrencyView.committed`, and the module doc of
+ * `display_currency.rs`): while it is false the pair on the wire is the USD/1
+ * placeholder, and no fiat figure is drawn in it — on ANY surface. A home that
+ * showed "$1,234" for a few seconds and then jumped to "¥8,876" is what the
+ * rule ends (the 102 device run). The hero keeps its skeleton (`liveBalance`);
+ * every other figure is this mark, so the line it stands on is already there
+ * and already the height the figure will be. The figure appears once, in the
+ * right money, where its room was kept.
  */
 export const MONEY_PENDING = '…';
 
@@ -204,18 +205,32 @@ export function figureCurrency(currency: CurrencyView): string | undefined {
 	return currency.rate !== null ? currency.code : 'USD';
 }
 
+/** A fiat figure, in the pieces a surface draws it from. */
+export interface MoneyParts {
+	code: string;
+	glyph: string;
+	integer: string;
+	decimals: string;
+}
+
 /**
- * A USD amount in the display currency: converted at the committed rate, or
- * the USD figure itself when the shell could not price the currency —
- * `rate: null` is NOT 1 (024's rule; a defaulted 1 under a ¥ is a lie).
+ * THE ONE PLACE A FIAT FIGURE IS MADE — a USD amount in the display currency,
+ * or `null`: WITHHELD, because the display currency has not committed.
  *
- * Pure formatting: whether a figure may be drawn at all (`committed`) is
- * `moneyText`'s and `liveBalance`'s to rule, before they come here.
+ * Every figure the web draws in the display currency comes through here (by
+ * way of `moneyText`, or directly for the hero's two-size figure), so no
+ * surface has to remember the withhold rule and none can forget it: there is
+ * no other formatter to reach for, and this one answers "withheld" before it
+ * answers anything else. `fiat-withheld.test.ts` holds every surface the core
+ * names (`FIAT_SURFACES`) to it.
+ *
+ * Committed: converted at the committed rate, or the USD figure itself when
+ * the shell could not price the currency — `rate: null` is NOT 1 (024's rule;
+ * a defaulted 1 under a ¥ is a lie).
  */
-export function moneyParts(
-	usd: number,
-	currency: CurrencyView
-): { code: string; glyph: string; integer: string; decimals: string } {
+export function moneyParts(usd: number, currency: CurrencyView): MoneyParts | null {
+	// Not the person's currency yet: no figure, in any money.
+	if (!currency.committed) return null;
 	const convertible = currency.rate !== null;
 	const code = convertible ? currency.code : 'USD';
 	const amount = convertible ? usd * (currency.rate as number) : usd;
@@ -229,10 +244,10 @@ export function moneyParts(
 	return { code, glyph, integer: `${glyph}${grouped}`, decimals: frac };
 }
 
+/** A fiat figure as one string — or the pending mark while it is withheld. */
 export function moneyText(usd: number, currency: CurrencyView): string {
-	// Not the person's currency yet: no figure, in any money (`MONEY_PENDING`).
-	if (!currency.committed) return MONEY_PENDING;
 	const parts = moneyParts(usd, currency);
+	if (parts === null) return MONEY_PENDING;
 	return `${parts.integer}${numberSeparators().decimal}${parts.decimals}`;
 }
 
@@ -527,6 +542,9 @@ export function liveBalance(
 	}
 
 	const parts = moneyParts(total, currency);
+	// Withheld: the skeleton (the early return above is this same answer,
+	// said first so the label can name the currency on its way).
+	if (parts === null) return { ...base, currency: figureCurrency(currency), state: 'loading' };
 	// A zero is "live" only once EVERY chain has answered: a partial zero (some
 	// chain unreachable) is not a listening wallet, it is an unknown one.
 	const zeroLive =

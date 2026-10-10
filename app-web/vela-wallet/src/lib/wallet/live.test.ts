@@ -111,6 +111,16 @@ describe('moneyParts', () => {
 	it('a null rate shows the USD figure, never a defaulted 1 under a ¥ (024 rule)', () => {
 		expect(moneyParts(4500, UNPRICED_JPY)).toMatchObject({ code: 'USD', integer: '$4,500' });
 	});
+	// The one place a fiat figure is made answers "withheld" first (0.8): no
+	// surface can format money around the rule, because there is nothing else
+	// to format it with.
+	it('answers nothing at all — withheld — before the display currency commits', () => {
+		expect(moneyParts(4500, { code: 'USD', rate: 1, committed: false, pending: null })).toBeNull();
+		expect(moneyParts(4500, { code: 'USD', rate: 1, committed: false, pending: 'CNY' })).toBeNull();
+		expect(moneyText(4500, { code: 'USD', rate: 1, committed: false, pending: 'CNY' })).toBe(
+			MONEY_PENDING
+		);
+	});
 });
 
 /**
