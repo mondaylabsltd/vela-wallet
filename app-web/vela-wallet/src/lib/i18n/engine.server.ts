@@ -16,7 +16,11 @@ import { I18n as WasmI18n, i18nPluralSuffixes } from '../../../../../rust/pkg-we
 import './wasm-init.server';
 import { FALLBACK_LOCALE, type Locale } from './locales';
 import { FLOW_KEYS, FLOW_PLURAL_KEYS, type FlowMessages, type WelcomeMessages } from './messages';
-import { BALANCE_INTERNAL_KEYS, type WalletMessages } from '$lib/wallet/messages';
+import {
+	BALANCE_INTERNAL_KEYS,
+	BALANCE_SAID_KEYS,
+	type WalletMessages
+} from '$lib/wallet/messages';
 import type { ContactsMessages } from '$lib/contacts/messages';
 import { INTRO_KEYS } from '$lib/intro/slides';
 import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
@@ -155,6 +159,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 		balance: {
 			totalLabel: k('home.totalBalance'),
 			liveIndicator: k('home.liveIndicator'),
+			said: Object.fromEntries(BALANCE_SAID_KEYS.map((key) => [key, k(key)])),
 			stale: k('home.balanceStale'),
 			unpriced: k('home.balanceUnpriced'),
 			unreachable: k('onboarding.common.networkBody'),

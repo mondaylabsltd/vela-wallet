@@ -163,7 +163,15 @@
 		presses never moves, and a status lands in room that was already there.
 	-->
 	<div class="said">
-		{#if balance.status !== undefined}
+		{#if balance.checkingText !== undefined}
+			<!-- The first read is still out (F19): said quietly, where "Live" or
+			     "Can't reach…" will stand once a round has ended. The dot is the
+			     live line's own, not yet green — the words start where they will. -->
+			<p class="live checking">
+				<span class="live-dot" aria-hidden="true"></span>
+				{balance.checkingText}
+			</p>
+		{:else if balance.status !== undefined}
 			<button type="button" class="status {balance.status.kind}" onclick={onstatus}>
 				<Icon
 					icon={balance.status.kind === 'warning'
@@ -314,6 +322,11 @@
 		border-radius: var(--radius-full);
 		background: var(--color-success-base);
 		animation: pulse calc(var(--motion-entrance-fadeUp) * 2) ease-in-out infinite alternate;
+	}
+
+	/* Not live yet: the same dot, in the line's own quiet ink. */
+	.checking .live-dot {
+		background: var(--color-fg-subtle);
 	}
 
 	@keyframes pulse {

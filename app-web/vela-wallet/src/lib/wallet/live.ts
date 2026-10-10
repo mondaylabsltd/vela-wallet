@@ -502,13 +502,23 @@ export function liveBalance(
 		};
 	}
 
+	// PR 3 final note F19: the first read of this account is still out
+	// (`checking_key`, the core's): the status line says "Checking…" from the
+	// first frame — under the skeleton and under a cached figure alike — and
+	// in place of anything else that line could say. Until a round has ended
+	// no chain has said the wallet is live and none has failed to answer; a
+	// cached zero drew "Live · listening for payments" over a wallet nothing
+	// had read, and then swapped it for "Can't reach 24 networks".
+	const checkingText = view.checking_key ? m.balance.said[view.checking_key] : undefined;
+	const checking = checkingText === undefined ? {} : { checkingText };
+
 	// The display currency is not the person's yet (`CurrencyView.committed`):
 	// the skeleton, whatever the balance already knows. The cached total is
 	// ready in milliseconds and the rate takes a round trip, so this is the
 	// frame that drew "$1,234" and then jumped to "¥8,876". The label names
 	// the stored choice on its way (`pending`) or no currency at all.
 	if (!currency.committed) {
-		return { ...base, currency: figureCurrency(currency), state: 'loading' };
+		return { ...base, ...checking, currency: figureCurrency(currency), state: 'loading' };
 	}
 
 	// The core withholds the display total while the skeleton shows; the
@@ -522,6 +532,7 @@ export function liveBalance(
 	if (total === null || view.unreachable) {
 		return {
 			...base,
+			...checking,
 			currency: figureCurrency(currency),
 			state: 'loading',
 			// Spec 038 finding 15: a first launch with no network is
@@ -544,11 +555,15 @@ export function liveBalance(
 	const parts = moneyParts(total, currency);
 	// Withheld: the skeleton (the early return above is this same answer,
 	// said first so the label can name the currency on its way).
-	if (parts === null) return { ...base, currency: figureCurrency(currency), state: 'loading' };
-	// A zero is "live" only once EVERY chain has answered: a partial zero (some
-	// chain unreachable) is not a listening wallet, it is an unknown one.
-	const zeroLive =
-		total === 0 && !view.balance_unknown && !view.balance_partial && view.tokens.length === 0;
+	if (parts === null) {
+		return { ...base, ...checking, currency: figureCurrency(currency), state: 'loading' };
+	}
+	// "Zero, live" is the core's to say (`live_key`, F19) and nothing else
+	// here decides it: the last round settled, every chain it asked answered,
+	// and the wallet holds nothing. This shell used to derive it from the
+	// total and the partial flag, which a cached zero satisfies before
+	// anything has been read.
+	const zeroLive = (view.live_key ?? null) !== null;
 	const onCache = view.display_total_usd === null && view.cached_total_usd !== null;
 
 	// One status line, most actionable first: the networks the wallet cannot
@@ -562,16 +577,21 @@ export function liveBalance(
 	// and a figure re-read on request is current, not "still updating".
 	const unreachable = unreachableLine(view, m.assets);
 	const status: BalanceModel['status'] =
-		unreachable !== undefined
-			? { kind: 'warning', text: unreachable }
-			: onCache || view.notice === 'still_updating'
-				? { kind: 'refreshing', text: m.balance.stale }
-				: view.notice === 'unpriced'
-					? { kind: 'warning', text: m.balance.unpriced }
-					: undefined;
+		// "Checking…" stands alone on the line (F19): a cached figure under a
+		// first read is not "still updating" yet — nothing has been read at all.
+		checkingText !== undefined
+			? undefined
+			: unreachable !== undefined
+				? { kind: 'warning', text: unreachable }
+				: onCache || view.notice === 'still_updating'
+					? { kind: 'refreshing', text: m.balance.stale }
+					: view.notice === 'unpriced'
+						? { kind: 'warning', text: m.balance.unpriced }
+						: undefined;
 
 	return {
 		...base,
+		...checking,
 		currency: parts.code,
 		state: zeroLive ? 'zero-live' : 'normal',
 		integer: parts.integer,
@@ -580,7 +600,7 @@ export function liveBalance(
 		// grouped the integer by it, and a `.` drawn after `1.575` read as a
 		// second thousands separator.
 		decimalMark: numberSeparators().decimal,
-		liveText: zeroLive ? m.balance.liveIndicator : undefined,
+		liveText: view.live_key ? m.balance.said[view.live_key] : undefined,
 		status
 	};
 }

@@ -49,6 +49,13 @@ export interface BalanceModel {
 	 */
 	decimalMark?: string;
 	liveText?: string;
+	/**
+	 * "Checking…" — the first read of this account is still out
+	 * (`BalanceView.checking_key`). Said on the status line, quietly, and in
+	 * place of anything else there: until a round has ended no chain has said
+	 * the wallet is live, and none has failed to answer.
+	 */
+	checkingText?: string;
 	status?: { kind: 'warning' | 'refreshing'; text: string };
 	/**
 	 * Issue 462: the hero's own refresh, "↻ Updated 2m" — the same control on
