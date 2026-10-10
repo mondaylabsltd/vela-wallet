@@ -144,7 +144,7 @@
       "ack2Period": ".",
       "ack2PrivacyPolicy": "개인정보 처리방침",
       "ack2Terms": "서비스 약관",
-      "addKeyBtn": "패스키 추가",
+      "keyPlaceHeading": "보관할 곳 선택",
       "addMethodLabel": "하나 더 추가",
       "addSecondKeyBtn": "두 번째 키를 먼저 추가",
       "alertErrorTitle": "오류",

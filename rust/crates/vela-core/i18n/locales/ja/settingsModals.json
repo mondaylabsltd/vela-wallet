@@ -63,6 +63,7 @@
       "bestRpc": "最速の RPC: {{latencyMs}}ms",
       "compatibilityCheck": "互換性チェック",
       "unableToVerify": "確認できません — RPC リクエストに失敗しました",
+      "noRpcEndpoint": "このネットワークには RPC エンドポイントが登録されていません。入力して再確認してください。",
       "retry": "再試行",
       "addNetworkBtn": "ネットワークを追加",
       "incompatibleHint": "このネットワークには、Vela に必要なコントラクトの一部がまだありません。チェーンセットアップツールで、どれが足りないか、誰がデプロイできるかを確認できます。",

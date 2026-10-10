@@ -144,7 +144,7 @@
       "ack2Period": ".",
       "ack2PrivacyPolicy": "Политику конфиденциальности",
       "ack2Terms": "Условия использования",
-      "addKeyBtn": "Добавить passkey",
+      "keyPlaceHeading": "Выберите, где его хранить",
       "addMethodLabel": "Добавить ещё один",
       "addSecondKeyBtn": "Сначала добавьте второй ключ",
       "alertErrorTitle": "Ошибка",

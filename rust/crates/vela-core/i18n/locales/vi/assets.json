@@ -5,6 +5,7 @@
     "searchPlaceholder": "Tìm token...",
     "unreachableOne": "Hiện không kết nối được với {{name}}",
     "unreachableMany": "Hiện không kết nối được với {{n}} mạng",
+    "tokenListUnreachable": "Hiện không tải được danh sách token của {{name}}",
     "unreachableBody": "Tài sản của bạn không bị ảnh hưởng — chỉ là hiện chưa đọc được.",
     "unreachableNone": "Đã kết nối lại với tất cả các mạng.",
     "lastSeen": "Lần đọc gần nhất: {{amount}}",

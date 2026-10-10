@@ -63,6 +63,7 @@
       "bestRpc": "RPC terbaik: {{latencyMs}}ms",
       "compatibilityCheck": "Pemeriksaan Kompatibilitas",
       "unableToVerify": "Tidak dapat memverifikasi — permintaan RPC gagal",
+      "noRpcEndpoint": "Jaringan ini tidak punya endpoint RPC terdaftar. Masukkan satu, lalu periksa ulang.",
       "retry": "Coba Lagi",
       "addNetworkBtn": "Tambah Jaringan",
       "incompatibleHint": "Beberapa kontrak yang dibutuhkan Vela belum ada di jaringan ini. Alat Chain Setup menunjukkan mana yang kurang dan siapa yang bisa men-deploy-nya.",

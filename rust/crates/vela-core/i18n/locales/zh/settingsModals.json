@@ -63,6 +63,7 @@
       "bestRpc": "最优 RPC：{{latencyMs}}ms",
       "compatibilityCheck": "兼容性检查",
       "unableToVerify": "无法验证 — RPC 请求失败",
+      "noRpcEndpoint": "这个网络没有列出 RPC 节点。请填写一个，再重新检查。",
       "retry": "重试",
       "addNetworkBtn": "添加网络",
       "incompatibleHint": "这个网络上还缺少 Vela 需要的部分合约。链配置工具会列出缺哪些、谁能部署。",

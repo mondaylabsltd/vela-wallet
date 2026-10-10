@@ -144,7 +144,7 @@
       "ack2Period": ".",
       "ack2PrivacyPolicy": "Política de Privacidade",
       "ack2Terms": "Termos de Serviço",
-      "addKeyBtn": "Adicionar passkey",
+      "keyPlaceHeading": "Escolha onde guardá-la",
       "addMethodLabel": "Adicionar mais uma",
       "addSecondKeyBtn": "Adicione primeiro uma segunda chave",
       "alertErrorTitle": "Erro",

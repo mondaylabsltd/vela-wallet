@@ -63,6 +63,7 @@
       "bestRpc": "En iyi RPC: {{latencyMs}}ms",
       "compatibilityCheck": "Uyumluluk Kontrolü",
       "unableToVerify": "Doğrulanamıyor — RPC isteği başarısız oldu",
+      "noRpcEndpoint": "Bu ağ için listelenmiş bir RPC uç noktası yok. Bir tane girip yeniden kontrol edin.",
       "retry": "Yeniden Dene",
       "addNetworkBtn": "Ağ Ekle",
       "incompatibleHint": "Vela'nın ihtiyaç duyduğu bazı sözleşmeler bu ağda henüz yok. Chain Setup aracı hangilerinin eksik olduğunu ve kimlerin dağıtabileceğini gösterir.",

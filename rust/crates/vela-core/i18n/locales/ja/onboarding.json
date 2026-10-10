@@ -144,7 +144,7 @@
       "ack2Period": "。",
       "ack2PrivacyPolicy": "プライバシーポリシー",
       "ack2Terms": "利用規約",
-      "addKeyBtn": "パスキーを追加",
+      "keyPlaceHeading": "保存先を選ぶ",
       "addMethodLabel": "もう 1 本追加",
       "addSecondKeyBtn": "先に 2 本目を追加",
       "alertErrorTitle": "エラー",

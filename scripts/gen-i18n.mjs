@@ -757,8 +757,23 @@ for (let i = 1; i < PATHS.length; i++) {
 //   deploy, money would be stuck), + `onboarding.common.insertKeyAppleSheet
 //   {,Hint}` (iOS: a key that does not answer over USB goes through Apple's
 //   sheet). 1772 − 5 + 5 = 1772 leaves, 101 branches; 1873 paths.
-if (PATHS.length !== 1873) fail(`expected 1873 paths (1772 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1772) fail(`expected 1772 leaf paths, got ${leafSet.size}`);
+// 1875 (UI batch integration, 2026-10-10): + `assets.tokenListUnreachable`
+//   (the home line when the one network that was not read has an RPC that
+//   is fine — its token list could not be loaded: "Can't reach Tempo" named
+//   the wrong thing and offered an RPC fix), + `settingsModals.addNetwork.
+//   noRpcEndpoint` (the add-network wizard stopped because the chain lists
+//   no endpoint; the core now names every stop's sentence —
+//   `NetWizardView.error_key` — and this one had none: the desktop borrowed
+//   "Can't reach {{name}}", the web said "Incompatible"). Renamed:
+//   `onboarding.create.addKeyBtn` → `keyPlaceHeading`, reworded "Choose
+//   where it lives" — its only reader is the keys screen's zero-key
+//   heading, which repeated the screen's own title (zh 「添加通行密钥」 twice;
+//   the "+ Add a passkey" button it was written for is gone, issue #475).
+//   Shortened in place: `onboarding.create.methodHybridBody` in de, fr, it
+//   and es-MX (52–55 characters only fit a 375 pt phone's row at 80 %).
+//   1772 − 1 + 3 = 1774 leaves, 101 branches.
+if (PATHS.length !== 1875) fail(`expected 1875 paths (1774 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1774) fail(`expected 1774 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

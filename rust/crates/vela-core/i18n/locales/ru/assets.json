@@ -5,6 +5,7 @@
     "searchPlaceholder": "Поиск токенов…",
     "unreachableOne": "Сейчас нет связи с {{name}}",
     "unreachableMany": "Сейчас нет связи с сетями: {{n}}",
+    "tokenListUnreachable": "Сейчас не удаётся загрузить список токенов {{name}}",
     "unreachableBody": "Ваши активы не затронуты — просто сейчас мы не можем их прочитать.",
     "unreachableNone": "Связь со всеми сетями восстановлена.",
     "lastSeen": "В последний раз: {{amount}}",

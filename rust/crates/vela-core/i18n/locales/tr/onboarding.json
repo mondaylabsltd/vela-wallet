@@ -144,7 +144,7 @@
       "ack2Period": ".",
       "ack2PrivacyPolicy": "Gizlilik Politikası",
       "ack2Terms": "Hizmet Şartları",
-      "addKeyBtn": "Passkey ekle",
+      "keyPlaceHeading": "Nerede duracağını seçin",
       "addMethodLabel": "Bir tane daha ekleyin",
       "addSecondKeyBtn": "Önce ikinci anahtarı ekleyin",
       "alertErrorTitle": "Hata",

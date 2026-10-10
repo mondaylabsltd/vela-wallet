@@ -144,7 +144,7 @@
       "ack2Period": ".",
       "ack2PrivacyPolicy": "Kebijakan Privasi",
       "ack2Terms": "Ketentuan Layanan",
-      "addKeyBtn": "Tambah passkey",
+      "keyPlaceHeading": "Pilih tempat menyimpannya",
       "addMethodLabel": "Tambah satu lagi",
       "addSecondKeyBtn": "Tambah kunci kedua dulu",
       "alertErrorTitle": "Kesalahan",

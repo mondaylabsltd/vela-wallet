@@ -63,6 +63,7 @@
       "bestRpc": "Melhor RPC: {{latencyMs}}ms",
       "compatibilityCheck": "Verificação de compatibilidade",
       "unableToVerify": "Não foi possível verificar — a solicitação ao RPC falhou",
+      "noRpcEndpoint": "Esta rede não tem nenhum endpoint de RPC listado. Informe um e verifique de novo.",
       "retry": "Tentar de novo",
       "addNetworkBtn": "Adicionar rede",
       "incompatibleHint": "Alguns contratos de que a Vela precisa ainda não estão nesta rede. A ferramenta Chain Setup mostra quais faltam e quem pode implantá-los.",

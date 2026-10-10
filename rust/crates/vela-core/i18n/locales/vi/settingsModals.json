@@ -63,6 +63,7 @@
       "bestRpc": "RPC tốt nhất: {{latencyMs}}ms",
       "compatibilityCheck": "Kiểm tra tương thích",
       "unableToVerify": "Không thể xác minh — yêu cầu RPC thất bại",
+      "noRpcEndpoint": "Mạng này chưa có điểm cuối RPC nào. Hãy nhập một cái rồi kiểm tra lại.",
       "retry": "Thử lại",
       "addNetworkBtn": "Thêm mạng",
       "incompatibleHint": "Mạng này chưa có một số hợp đồng mà Vela cần. Công cụ Chain Setup cho biết thiếu những hợp đồng nào và ai có thể triển khai.",

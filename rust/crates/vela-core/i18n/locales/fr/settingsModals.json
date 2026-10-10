@@ -63,6 +63,7 @@
       "bestRpc": "Meilleur RPC : {{latencyMs}} ms",
       "compatibilityCheck": "Vérification de compatibilité",
       "unableToVerify": "Vérification impossible — la requête RPC a échoué",
+      "noRpcEndpoint": "Aucun point d'accès RPC n'est répertorié pour ce réseau. Saisissez-en un, puis revérifiez.",
       "retry": "Réessayer",
       "addNetworkBtn": "Ajouter le réseau",
       "incompatibleHint": "Certains contrats dont Vela a besoin ne sont pas encore sur ce réseau. L'outil Chain Setup indique lesquels et qui peut les déployer.",

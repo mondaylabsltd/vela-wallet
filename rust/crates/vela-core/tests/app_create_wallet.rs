@@ -702,6 +702,33 @@ fn the_keys_screen_heading_follows_the_count() {
     assert_eq!(add_heading_key(8), ADD_HEADING_FULL);
 }
 
+/// The zero-key heading is not the screen's title said twice: in every
+/// language it differs from "Add passkeys", and from the fold's "Add another".
+#[test]
+fn the_first_heading_does_not_repeat_the_screens_title() {
+    use vela_core::i18n::{Catalog, I18n, Options, SUPPORTED};
+    for language in SUPPORTED {
+        let mut i18n =
+            I18n::new(Catalog::embedded("en").expect("en is compiled in")).expect("en constructs");
+        if language != "en" {
+            i18n.load_catalog(Catalog::embedded(language).expect("compiled in"));
+        }
+        i18n.change_language(language);
+        let say = |key: &str| i18n.t(key, &Options::default()).unwrap_or_default();
+        let heading = say(ADD_HEADING_FIRST);
+        assert!(
+            !heading.is_empty() && heading != ADD_HEADING_FIRST,
+            "{language}: no words"
+        );
+        assert_ne!(
+            heading.to_lowercase(),
+            say("onboarding.create.keysTitle").to_lowercase(),
+            "{language}: the heading repeats the title"
+        );
+        assert_ne!(heading, say(ADD_HEADING_ANOTHER), "{language}");
+    }
+}
+
 /// Mid-registration of the first key nothing can be added; the heading
 /// still names what the list is for, and the list is not pinned open over
 /// the ceremony.

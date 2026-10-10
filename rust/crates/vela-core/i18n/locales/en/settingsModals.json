@@ -63,6 +63,7 @@
       "bestRpc": "Best RPC: {{latencyMs}}ms",
       "compatibilityCheck": "Compatibility Check",
       "unableToVerify": "Unable to verify — RPC request failed",
+      "noRpcEndpoint": "No RPC endpoint is listed for this network. Enter one, then re-check.",
       "retry": "Retry",
       "addNetworkBtn": "Add Network",
       "incompatibleHint": "Some contracts Vela needs aren't on this network yet. Chain Setup shows which ones and who can deploy them.",

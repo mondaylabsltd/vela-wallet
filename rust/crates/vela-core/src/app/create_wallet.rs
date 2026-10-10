@@ -78,8 +78,11 @@ use ts_rs::TS;
 pub const ACK_COUNT: usize = 3;
 
 /// The keys screen's heading over the three places (issue 475), with no key
-/// yet: the list is the only way forward, so it is open and says what it is.
-pub const ADD_HEADING_FIRST: &str = "onboarding.create.addKeyBtn";
+/// yet: the list is the only way forward, so it is open and says what it is
+/// — "Choose where it lives". It used to repeat the screen's own title
+/// ("Add passkeys" over "Add a passkey"; in Chinese the same four words
+/// twice): the heading says what the three rows ARE, places a key can live.
+pub const ADD_HEADING_FIRST: &str = "onboarding.create.keyPlaceHeading";
 /// … with a key or more and room for another: the list folds under this.
 pub const ADD_HEADING_ANOTHER: &str = "onboarding.create.addMethodLabel";
 /// … with the set full.
@@ -490,7 +493,7 @@ pub struct CreateView {
     /// The places a key may be minted in — always the three.
     pub add_methods: Vec<KeyMethod>,
     /// The corpus key of the heading over them (issue 475):
-    /// [`ADD_HEADING_FIRST`] ("Add a passkey") with no key yet,
+    /// [`ADD_HEADING_FIRST`] ("Choose where it lives") with no key yet,
     /// [`ADD_HEADING_ANOTHER`] ("Add another") with room for one more,
     /// [`ADD_HEADING_FULL`] ("Limit of 7 reached") at the cap. It is the
     /// screen's only add affordance — no "+ Add a passkey" row beside it.

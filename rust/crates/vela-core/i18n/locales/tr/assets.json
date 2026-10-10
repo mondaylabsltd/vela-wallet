@@ -5,6 +5,7 @@
     "searchPlaceholder": "Token ara...",
     "unreachableOne": "{{name}} ağına şu an ulaşılamıyor",
     "unreachableMany": "{{n}} ağa şu an ulaşılamıyor",
+    "tokenListUnreachable": "{{name}} token listesi şu an yüklenemiyor",
     "unreachableBody": "Varlıklarınız etkilenmez — yalnızca şu an okunamıyor.",
     "unreachableNone": "Tüm ağlara yeniden ulaşılabiliyor.",
     "lastSeen": "Son görülen: {{amount}}",

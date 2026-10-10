@@ -5,6 +5,7 @@
     "searchPlaceholder": "搜尋代幣…",
     "unreachableOne": "暫時連不上 {{name}}",
     "unreachableMany": "{{n}} 個網路暫時連不上",
+    "tokenListUnreachable": "暫時讀不到 {{name}} 的代幣清單",
     "unreachableBody": "資產不受影響，只是現在讀不到。",
     "unreachableNone": "所有網路都已連上。",
     "lastSeen": "上次讀到 {{amount}}",
