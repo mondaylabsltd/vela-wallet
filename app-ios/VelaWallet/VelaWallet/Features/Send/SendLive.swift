@@ -722,19 +722,25 @@ enum SendLive {
     }
 
     /// The ≈ line beside a token-denominated figure.
-    private static func fiatLine(
+    ///
+    /// A fiat figure, so the one formatter writes it (`Display.fiat`, PR 3
+    /// notes 9/27): while the person's currency is not known yet the line
+    /// keeps its height and draws nothing — the form under it does not move
+    /// when "≈ ¥…" lands. (The send form and the confirm drew "≈ $…" for
+    /// the first seconds, then changed.)
+    static func fiatLine(
         _ view: SendViewWire, token: SendTokenWire?, display: WalletLive.Display
     ) -> String {
         guard let price = token?.priceUsd, let typed = Double(view.tokenAmount) else { return "" }
-        let converted = typed * price * display.rate
+        let usd = typed * price
         // A figure this large is not a price, it is a parse going wrong
         // somewhere upstream — a device run typed an address into the amount
         // field and this line rendered ¥1.9e49. A fiat line nobody could read
         // is worse than none, and printing it lends the garbage authority.
-        guard converted.isFinite, converted < 1e15 else { return "" }
+        guard usd.isFinite, usd < 1e13 else { return "" }
         // No rate means the figure is still USD, and it says so rather than
         // wearing another currency's glyph (FR-009, since 050).
-        return "≈ \(display.glyph)\(Formats.number(converted, minimumFractionDigits: 2, maximumFractionDigits: 2))"
+        return display.fiatLine(usd, prefix: "≈ ")
     }
 
     private static func feeRow(
@@ -957,8 +963,13 @@ enum SendLive {
         else { return coin }
         let usd = units * price
         guard usd >= feeFiatMinUSD, usd.isFinite else { return coin }
-        let money = usd * display.rate
-        return "\(coin) · ≈\(display.glyph)\(Formats.number(money, minimumFractionDigits: 2, maximumFractionDigits: 2))"
+        // The fee's fiat half is a fiat figure like any other (PR 3 notes
+        // 9/27 — the send form, the confirm and the signing sheet drew it in
+        // dollars before the person's currency was known). Withheld, the row
+        // is the coin amount — which is what is signed — on the same line;
+        // the "≈" half joins it there when the currency commits.
+        guard let money = display.fiat(usd) else { return coin }
+        return "\(coin) · ≈\(money)"
     }
 
     /// The coin the fee row names, in the core's token mark — the core's
@@ -1145,11 +1156,12 @@ enum SendLive {
             breakdown = sweep.rows
             amount = loc.t("componentsTx.receipt.assetsCount", vars: ["n": String(sweep.rows.count)])
             amountUnit = nil
-            subline = loc.t("send.confirmTotalLine", vars: [
-                "fiat": money(sweep.totalUsd, display: display),
-                "network": view.multiChainId
-                    .flatMap { networks.meta($0)?.displayName } ?? chain,
-            ])
+            let network = view.multiChainId.flatMap { networks.meta($0)?.displayName } ?? chain
+            // "Total ≈ ¥200.90 · Ethereum" — withheld, the network alone on
+            // the same line: the total joins it when the currency commits.
+            subline = money(sweep.totalUsd, display: display).map { fiat in
+                loc.t("send.confirmTotalLine", vars: ["fiat": fiat, "network": network])
+            } ?? network
         } else if view.splitMode, !view.recipients.isEmpty {
             // A split: every payee by name and face, and how many there are.
             // The single "To" row has no one address to name, so it goes —
@@ -1164,7 +1176,7 @@ enum SendLive {
                 Double(view.confirmAmount).map { $0 * price }
             }
             subline = [count, chain].filter { !$0.isEmpty }.joined(separator: " · ")
-                + (fiat.map { " · ≈ \(money($0, display: display))" } ?? "")
+                + (fiat.flatMap { money($0, display: display) }.map { " · ≈ \($0)" } ?? "")
         }
 
         return SendConfirmModel(
@@ -1289,18 +1301,19 @@ enum SendLive {
             return BreakdownRowModel(
                 lead: coinMark(token),
                 label: token.symbol,
-                value: usd.map { "\(value) · ≈\(money($0, display: display))" } ?? value
+                value: usd.flatMap { money($0, display: display) }.map { "\(value) · ≈\($0)" } ?? value
             )
         }
         return (rows, total)
     }
 
     /// A USD figure in the display currency, glyph first — the form's own
-    /// "≈" arithmetic, without the "≈".
-    private static func money(_ usd: Double, display: WalletLive.Display) -> String {
-        let converted = usd * display.rate
-        guard converted.isFinite else { return "" }
-        return "\(display.glyph)\(Formats.number(converted, minimumFractionDigits: 2, maximumFractionDigits: 2))"
+    /// "≈" arithmetic, without the "≈". `nil` for a figure that is not one,
+    /// and while the person's currency is not known yet (`Display.fiat`
+    /// withholds it): each caller then leaves the fiat half off its line.
+    private static func money(_ usd: Double, display: WalletLive.Display) -> String? {
+        guard usd.isFinite else { return nil }
+        return display.fiat(usd)
     }
 
     /// What stopped the confirm page: the relay's treasury, or a submit the

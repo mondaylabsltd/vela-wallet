@@ -621,11 +621,6 @@ enum SettingsLive {
         guard session.hasWallet else { return model }
         let k = I18nKeys.SettingsUi.self
 
-        func money(_ usd: Double) -> String {
-            display.glyph + Formats.number(usd * display.rate,
-                                           minimumFractionDigits: 2,
-                                           maximumFractionDigits: 2)
-        }
         /// The header's own truncation, so a row and the header above it
         /// never disagree about the same address.
         func shortenAddress(_ address: String) -> String {
@@ -648,7 +643,8 @@ enum SettingsLive {
                 // never a figure, never a blank that reads as "unknown".
                 // …and while the display currency is not known yet (PR 3),
                 // the empty cell an unpriced account shows: no dollars first.
-                amount: hidden ? WalletFixtures.mask : (display.settled ? usd.map(money) ?? "" : ""),
+                // The one formatter withholds it (`Display.fiat`).
+                amount: hidden ? WalletFixtures.mask : usd.flatMap(display.fiat) ?? "",
                 selected: index == session.activeIndex
             )
         }
@@ -659,12 +655,12 @@ enum SettingsLive {
         copy.accountsSheet.removeCancel = loc.t("settings.signOut.cancel")
         copy.accountsSheet.summary =
             loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
-            // No total while the currency is not known: the count alone.
-            + (hidden || display.settled ? loc.t(k.accountsTotal, vars: [
-                "amount": hidden
-                    ? WalletFixtures.mask
-                    : money(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
-            ]) : "")
+            // No total while the currency is not known: the count alone
+            // (Settings' total is one of the withheld surfaces).
+            + ((hidden
+                ? WalletFixtures.mask
+                : display.fiat(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
+            ).map { loc.t(k.accountsTotal, vars: ["amount": $0]) } ?? "")
         return copy
     }
 
@@ -744,9 +740,13 @@ enum SettingsLive {
             // alone — their choice and no figure yet — never "USD · $…" for
             // the seconds before its rate arrives.
             if let pending = view.pending, !pending.isEmpty { return pending }
-            // Nothing chosen: the USD placeholder is what is in force.
-            let usd = CurrencyCatalog.entry("USD")
-            return "USD · \(usd?.glyph ?? "$")\(format(sample))"
+            // Nothing committed and nothing known to be on its way: the
+            // machine is still reading (a first launch may be about to seed
+            // the device's currency). No figure, and no "USD" that turns
+            // into another code a moment later — the withhold rule has no
+            // surface it skips (PR 3 notes 9/27). The row keeps its place;
+            // its value lands with the commit.
+            return ""
         }
         guard let rate = view.rate, rate > 0, let entry = CurrencyCatalog.entry(view.code) else {
             return view.code
@@ -1114,15 +1114,14 @@ enum SettingsLive {
         networks: WalletNetworks = .builtin
     ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
-        let mask = "••••"
-        // The same figure the hero prints, through the same two decisions: the
-        // display currency's glyph and `Formats`' number shape. A second
-        // formatter here would eventually disagree with the total above it.
-        func money(_ usd: Double) -> String {
-            display.glyph + Formats.number(usd * display.rate,
-                                           minimumFractionDigits: 2,
-                                           maximumFractionDigits: 2)
-        }
+        let mask = WalletFixtures.mask
+        // The same figure the hero prints, through the same ONE formatter
+        // (`Display.fiat`): the display currency's glyph and `Formats`' number
+        // shape — and nothing at all while that currency is not known yet
+        // (PR 3 notes 9/27: this sheet drew "$" for the first seconds). A
+        // second formatter here would eventually disagree with the total
+        // above it.
+        func money(_ usd: Double) -> String? { display.fiat(usd) }
 
         func chainName(_ id: Int) -> String {
             networks.meta(id)?.displayName ?? chainMeta(loc, id)
@@ -1177,6 +1176,8 @@ enum SettingsLive {
             .map { id, usd in
                 BalanceDetailRowModel(
                     id: String(id), mark: row(id), name: chainName(id),
+                    // Withheld: the row is its mark and its name, at the same
+                    // height — the figure lands beside them.
                     amount: balance.hidden ? mask : money(usd)
                 )
             }
@@ -1184,11 +1185,12 @@ enum SettingsLive {
         var live = model
         live.balanceDetail = BalanceDetailModel(
             title: model.balanceDetail.title,
-            summary: loc.t(k.balanceDetailTotal, vars: [
-                "amount": balance.hidden || balance.displayTotalUsd == nil
-                    ? mask
-                    : money(balance.displayTotalUsd ?? 0),
-            ]),
+            // "Total ¥8,876.00" — or, while the currency is on its way, the
+            // line's own height with nothing on it: the total lands in place.
+            summary: (balance.hidden || balance.displayTotalUsd == nil
+                ? mask
+                : money(balance.displayTotalUsd ?? 0)
+            ).map { loc.t(k.balanceDetailTotal, vars: ["amount": $0]) } ?? WalletLive.Display.withheldLine,
             sectionPending: model.balanceDetail.sectionPending,
             pendingNote: model.balanceDetail.pendingNote,
             pending: pending,
@@ -1216,17 +1218,23 @@ enum SettingsLive {
         let rows = balance.unreachableNetworks.map { network -> UnreachableRowModel in
             let name = networks.meta(network.chainId)?.displayName
                 ?? chainMeta(loc, network.chainId)
-            let amount = balance.hidden || network.lastSeenUsd == nil
-                ? "••••"
-                : display.glyph + Formats.number((network.lastSeenUsd ?? 0) * display.rate,
-                                                 minimumFractionDigits: 2,
-                                                 maximumFractionDigits: 2)
+            // "Last seen ¥1,234.50" is a fiat figure like any other: the one
+            // formatter writes it, and while the currency is not known yet
+            // the row keeps its line with nothing on it (PR 3 notes 9/27).
+            let amount: String? = balance.hidden || network.lastSeenUsd == nil
+                ? WalletFixtures.mask
+                : display.fiat(network.lastSeenUsd ?? 0)
             return UnreachableRowModel(
                 id: String(network.chainId),
                 chainId: network.chainId,
                 mark: mark(chainId: network.chainId, name: name),
                 name: name,
-                line: loc.t(network.lineKey, vars: ["amount": amount]),
+                line: amount.map { loc.t(network.lineKey, vars: ["amount": $0]) }
+                    // Only the line that states a worth waits; the others
+                    // ("Not read yet", "Held nothing…") have no figure.
+                    ?? (network.lineKey == k.lastSeen
+                        ? WalletLive.Display.withheldLine
+                        : loc.t(network.lineKey)),
                 action: network.rpcFixable ? loc.t(k.rpcFix) : nil
             )
         }

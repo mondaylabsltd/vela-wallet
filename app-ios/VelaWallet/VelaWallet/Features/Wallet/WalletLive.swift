@@ -71,7 +71,57 @@ enum WalletLive {
         /// code itself is already stated in the line above the figure, so a
         /// currency the catalog has never heard of shows the number bare rather
         /// than borrowing somebody else's `$`.
-        var glyph: String { CurrencyCatalog.entry(code)?.glyph ?? "" }
+        ///
+        /// Private to this file ON PURPOSE: nothing else may glue it to a
+        /// number — every fiat figure is written by `fiat(_:)` below.
+        fileprivate var glyph: String { CurrencyCatalog.entry(code)?.glyph ?? "" }
+
+        // MARK: THE fiat formatter (PR 3 notes 9, 27)
+
+        /// A USD figure in the person's currency — "¥8,876.00" — or `nil`
+        /// while that currency is not known: **withheld**.
+        ///
+        /// The core's rule (`display_currency.rs`, "no fiat figure before the
+        /// currency commits"): until `CurrencyView.committed` the view is the
+        /// USD/1 placeholder, which is not the person's currency, and NO fiat
+        /// figure is drawn on any surface — `FIAT_SURFACES`: the home total,
+        /// the holdings, the account switcher, the token page (worth and
+        /// price), Assets, the balance detail sheet (and the unreachable
+        /// list's "last seen"), an activity row and its detail, Send's coin
+        /// list, the send form ("≈" under the amount, the confirm's fiat),
+        /// the signing sheet (the fee's fiat), Settings' total. The rule was
+        /// once applied to five of those and missed the rest, because each
+        /// surface multiplied by the rate itself. So this is the ONE place a
+        /// rate meets a glyph: every surface asks here and gets a figure or
+        /// `nil`, and a surface that is handed `nil` keeps the figure's room
+        /// (`withheldLine`, or the line without its fiat half) so nothing
+        /// moves when the figure lands.
+        ///
+        /// A token amount ("0.5 ETH") is not fiat and never comes through here.
+        func fiat(_ usd: Double) -> String? {
+            guard settled else { return nil }
+            return glyph + Formats.number(usd * rate, minimumFractionDigits: 2, maximumFractionDigits: 2)
+        }
+
+        /// The hero's figure in its two parts — `("¥8,876", "00")`, the
+        /// decimals subordinated — or `nil` while withheld, as `fiat(_:)`.
+        func fiatParts(_ usd: Double) -> (integer: String, decimals: String)? {
+            guard settled else { return nil }
+            let (integer, decimals) = WalletLive.split(usd * rate)
+            return (glyph + integer, decimals)
+        }
+
+        /// What a WITHHELD figure's own line draws: nothing, at the line's
+        /// height (a no-break space — an empty `Text` has no height at all,
+        /// and the rows under it would move up, then down when the figure
+        /// lands). For a figure that is a line of its own; a figure inside a
+        /// longer line is simply left off it.
+        static let withheldLine = "\u{00A0}"
+
+        /// `fiat(_:)` as a line of its own: the figure, or its empty line.
+        func fiatLine(_ usd: Double, prefix: String = "") -> String {
+            fiat(usd).map { prefix + $0 } ?? Self.withheldLine
+        }
 
         /// A committed currency without a rate degrades to USD. `rate: nil`
         /// is **not** 1: the difference is whether the digits get relabelled.
@@ -213,9 +263,11 @@ enum WalletLive {
               let total = view.displayTotalUsd ?? view.cachedTotalUsd
         else { return model }
 
-        let (integer, decimals) = split(total * display.rate)
-        model.integer = display.glyph + integer
-        model.decimals = decimals
+        // `state` is `.loading` while the currency is withheld, so there is
+        // always a figure here; were there not, the hero draws none.
+        guard let parts = display.fiatParts(total) else { return model }
+        model.integer = parts.integer
+        model.decimals = parts.decimals
         return model
     }
 
@@ -476,15 +528,12 @@ enum WalletLive {
             return .noPrice("")
         }
         // The currency is not known yet: the line waits, at its own height,
-        // rather than print dollars and then change (PR 3).
-        guard display.settled else { return .pending }
-        // The person's own preset, with the currency's glyph in front of it —
-        // a system currency formatter would put both the marks and the symbol
+        // rather than print dollars and then change (PR 3). Otherwise the
+        // person's own preset, with the currency's glyph in front of it — a
+        // system currency formatter would put both the marks and the symbol
         // wherever the DEVICE's locale says, which is not what they chose.
-        let value = amount * price * display.rate
-        return .value(display.glyph + Formats.number(
-            value, minimumFractionDigits: 2, maximumFractionDigits: 2
-        ))
+        guard let figure = display.fiat(amount * price) else { return .pending }
+        return .value(figure)
     }
 
     /// What the account holds on each network, in the display currency, from
@@ -493,18 +542,15 @@ enum WalletLive {
     /// failed, an unpriced or spam token, a total under half a cent, or a
     /// hidden balance shows NOTHING rather than a made-up zero.
     static func networkHoldings(_ balance: BalanceViewWire?, display: Display) -> [Int: String] {
-        // Nothing while the currency is not known yet, as for a hidden balance.
-        guard let balance, !balance.hidden, display.settled else { return [:] }
+        // Nothing while the currency is not known yet (`fiat` withholds), as
+        // for a hidden balance.
+        guard let balance, !balance.hidden else { return [:] }
         var usd: [Int: Double] = [:]
         for token in balance.tokens where !token.spam && !balance.failedChainIds.contains(token.chainId) {
             guard let price = token.priceUsd, let amount = Double(token.balance) else { continue }
             usd[token.chainId, default: 0] += amount * price
         }
-        return usd.filter { $0.value >= 0.005 }.mapValues { value in
-            display.glyph + Formats.number(
-                value * display.rate, minimumFractionDigits: 2, maximumFractionDigits: 2
-            )
-        }
+        return usd.filter { $0.value >= 0.005 }.compactMapValues { display.fiat($0) }
     }
 
     /// The same brand colours the settings list uses, and the same neutral for a

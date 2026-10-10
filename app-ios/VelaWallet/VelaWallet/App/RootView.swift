@@ -2284,6 +2284,8 @@ struct RootView: View {
                 record: feed.transactions.first { $0.id == item.id },
                 on: detail, loc: loc,
                 hidden: feed.hidden,
+                // No fiat before the person's currency is known (PR 3).
+                display: WalletLive.Display.live(settings.currency),
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
