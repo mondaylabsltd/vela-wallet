@@ -16,7 +16,9 @@
  *
  * **For the sheet.** The same read says when nothing of the person's moves,
  * and the sheet says so in the core's line ("No asset changes",
- * `SimVerdict.no_change_key`) — the one thing it draws from this simulation.
+ * `SimVerdict.no_change_key`); and when nothing could be checked, which the
+ * sheet says as the core's caution (`SimVerdict.notice_key`, PR 3). Those
+ * two lines are all it draws from this simulation.
  *
  * What the reply MEANS is the core's (`simOutcome` → `sim_outcome::verdict`),
  * the same on every client: the moves are native value from the node's trace
@@ -24,8 +26,7 @@
  * — nothing a site's contract can emit on a coin's behalf. Only a check
  * (`kind: 'deltas'`) is a measurement: a run that reverted, or that nobody
  * could check — a status neither 0 nor 1 among them, which this shell's own
- * port read as a success — tells the fee machine nothing and the sheet
- * nothing.
+ * port read as a success — tells the fee machine nothing.
  */
 import { simOutcome } from '$lib/core/kernels';
 import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';

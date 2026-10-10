@@ -27,7 +27,7 @@ import type { SignView } from '$lib/core/generated/SignView';
 import { rawResolve, resolveSigningMessages } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { simOutcome } from '$lib/core/kernels';
-import { SIM_SAID_KEYS, SIM_WAITED_OUT_KEY } from './messages';
+import { SIM_SAID_KEYS, SIM_COULD_NOT_CHECK_KEY } from './messages';
 import { CLEAR_TERMS } from './terms';
 import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
@@ -3016,12 +3016,25 @@ describe('the sheet says the core’s "No asset changes" (device round, item 3)'
 		});
 	});
 
-	it('nothing else is drawn from the simulation: no rows, no revert line, no could-not-check line (RG6)', () => {
+	it('no balance rows and no revert line are drawn from the simulation (RG6)', () => {
 		const before = buildSigningModel(inputs())!;
-		for (const sim of [SOMETHING_MOVES, REVERTS, UNREADABLE, NOT_OFFERED, UNREACHABLE, null]) {
+		for (const sim of [SOMETHING_MOVES, REVERTS, null]) {
 			const model = buildSigningModel(inputs({ sim }))!;
 			expect(model.blocks, JSON.stringify(sim)).toEqual(before.blocks);
 			expect(model.tech).toEqual(before.tech);
+		}
+	});
+
+	it('a node that could not check is neither "No asset changes" nor nothing: it is the caution (PR 3)', () => {
+		for (const sim of [UNREADABLE, NOT_OFFERED, UNREACHABLE]) {
+			const model = buildSigningModel(inputs({ sim }))!;
+			expect(cards(model), sim.kind).toHaveLength(1);
+			expect(cards(model)[0], sim.kind).toMatchObject({
+				note: m.warnSimUnavailable,
+				noteTone: 'caution'
+			});
+			expect(JSON.stringify(model.blocks)).not.toContain(LINE);
+			expect(model.tech.simResult).toBeUndefined();
 		}
 	});
 
@@ -3123,8 +3136,13 @@ describe('the sheet says the core’s "No asset changes" (device round, item 3)'
  * PR 3 — the confirm waits for the simulation's verdict, four seconds at
  * most. The gate is the core's (`signConfirmState`, real here) and so is the
  * wait (`SignView.sim_checking`, `sim_waited_out_key`); what this builder
- * does is look two keys up: the line under the held confirm, and — once the
- * deadline has passed with no verdict — the caution in the verdict's place.
+ * does is look keys up: the line under the held confirm, and the caution in
+ * the verdict's place when nothing could be checked — because the deadline
+ * passed with no verdict, or because the verdict itself is a not-checked
+ * answer. The second was not drawn at first, and the caution then left the
+ * sheet the moment the pool gave up: said, and taken back.
+ *
+ * The verdicts are the REAL core's, over `eth_simulateV1` envelopes.
  */
 describe('the simulation’s verdict: waited for, and said when it could not be had (PR 3)', () => {
 	const CHECKING = 'componentsUi.signing.confirmBlock.simChecking';
@@ -3136,8 +3154,44 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 		identity.address,
 		JSON.stringify({ result: [{ calls: [{ status: '0x0', error: { code: 3, message: 'no' } }] }] })
 	)!;
+	const SOMETHING_MOVES = simOutcome(
+		identity.address,
+		JSON.stringify({
+			result: [
+				{
+					calls: [
+						{
+							status: '0x1',
+							logs: [
+								{
+									address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+									topics: [
+										'0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+										'0x' + identity.address.slice(2).toLowerCase().padStart(64, '0'),
+										'0x' + '11'.repeat(20).padStart(64, '0')
+									],
+									data: '0x' + 1_000_000n.toString(16).padStart(64, '0')
+								}
+							]
+						}
+					]
+				}
+			]
+		})
+	)!;
+	/** The three answers that are no check: the node does not offer it, says what nobody can read, or nobody answered. */
+	const NOT_OFFERED = simOutcome(
+		identity.address,
+		JSON.stringify({ error: { code: -32601, message: 'the method eth_simulateV1 does not exist' } })
+	)!;
+	const UNREADABLE = simOutcome(
+		identity.address,
+		JSON.stringify({ result: [{ calls: [{ status: '0x2', logs: [] }] }] })
+	)!;
+	const UNREACHABLE = simOutcome(identity.address, JSON.stringify({ unreachable: true }))!;
+	const NOT_CHECKED = [NOT_OFFERED, UNREADABLE, UNREACHABLE];
 	const checking: SignView = { ...OPEN_SIGN, sim_checking: true };
-	const waitedOut: SignView = { ...OPEN_SIGN, sim_waited_out_key: SIM_WAITED_OUT_KEY };
+	const waitedOut: SignView = { ...OPEN_SIGN, sim_waited_out_key: SIM_COULD_NOT_CHECK_KEY };
 	const own = (sign: SignView): SignView => ({
 		...sign,
 		request: { ...REQUEST, first_party: true }
@@ -3226,9 +3280,72 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 		}
 	});
 
-	it('a late answer this sheet draws nothing for leaves the place empty again (RG6)', () => {
+	it('the real core calls a not-checked answer a caution, and names the sentence', () => {
+		for (const sim of NOT_CHECKED) {
+			expect(sim, sim.kind).toMatchObject({
+				deltas: [],
+				notice_risk: 'caution',
+				notice_key: SIM_COULD_NOT_CHECK_KEY,
+				no_change_key: null
+			});
+		}
+		expect(NOT_CHECKED.map((sim) => sim.kind)).toEqual([
+			'not_offered',
+			'not_offered',
+			'unreachable'
+		]);
+		// A revert's notice is another one, in another tone.
+		expect(REVERTS).toMatchObject({ kind: 'reverts', notice_risk: 'danger' });
+		expect(REVERTS.notice_key).not.toBe(SIM_COULD_NOT_CHECK_KEY);
+	});
+
+	it('a not-checked answer draws the caution — and it stays: nothing about the wait puts it there or takes it away', () => {
 		const ready = buildSigningModel(inputs())!;
-		expect(buildSigningModel(inputs({ sim: REVERTS }))!.blocks).toEqual(ready.blocks);
+		for (const sim of NOT_CHECKED) {
+			// Settled at once (the node said "not offered"): no wait was ever over.
+			const model = buildSigningModel(inputs({ sim }))!;
+			expect(model.blocks.slice(0, -1), sim.kind).toEqual(ready.blocks);
+			expect(model.blocks.at(-1), sim.kind).toEqual(CAUTION);
+			// The confirm is the core's and is open: a caution informs.
+			expect(model.confirm).toEqual(ready.confirm);
+			expect(model.tech.simResult).toBeUndefined();
+			// The wallet's own request the same — on the sheet.
+			const mine = buildSigningModel(inputs({ sign: own(OPEN_SIGN), sim }))!;
+			expect(cards(mine), sim.kind).toEqual([CAUTION]);
+			expect(mine.tech.simResult).toBeUndefined();
+		}
+	});
+
+	it('the deadline, and then the pool gives up: the card that was there is the card that is there', () => {
+		// At the deadline: no verdict, the core's waited-out key.
+		const atDeadline = buildSigningModel(inputs({ sign: waitedOut }))!;
+		// The answer arrives as "nobody reachable", in the step before the
+		// core hears it has settled: both say the same thing.
+		const between = buildSigningModel(inputs({ sign: waitedOut, sim: UNREACHABLE }))!;
+		// Settled: the key is gone, the verdict is what is left.
+		const after = buildSigningModel(inputs({ sim: UNREACHABLE }))!;
+		expect(cards(atDeadline)).toEqual([CAUTION]);
+		// Block for block the same sheet — so nothing lands anew, and nothing moves.
+		expect(JSON.stringify(between.blocks)).toBe(JSON.stringify(atDeadline.blocks));
+		expect(JSON.stringify(after.blocks)).toBe(JSON.stringify(atDeadline.blocks));
+		expect(after.confirm).toEqual(atDeadline.confirm);
+	});
+
+	it('a revert, or a check that moves something, still draws no line of its own (RG6)', () => {
+		const ready = buildSigningModel(inputs())!;
+		for (const sim of [REVERTS, SOMETHING_MOVES]) {
+			// Landing first…
+			expect(buildSigningModel(inputs({ sim }))!.blocks, sim.kind).toEqual(ready.blocks);
+			// …or after the deadline's caution, which it then takes away: a
+			// check did happen. (While the core still says none has, it stands.)
+			expect(cards(buildSigningModel(inputs({ sign: waitedOut, sim }))!)).toEqual([CAUTION]);
+			for (const first_party of [false, true]) {
+				const sign = first_party ? own(OPEN_SIGN) : OPEN_SIGN;
+				const model = buildSigningModel(inputs({ sign, sim }))!;
+				expect(cards(model), sim.kind).toEqual([]);
+				expect(model.tech.simResult).toBeUndefined();
+			}
+		}
 	});
 
 	it('the sentence is the core’s: no key, or a key this build has no words for, draws nothing', () => {
@@ -3236,7 +3353,37 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 		for (const key of [null, 'componentsUi.signing.somethingNew', '']) {
 			const model = buildSigningModel(inputs({ sign: { ...OPEN_SIGN, sim_waited_out_key: key } }))!;
 			expect(model.blocks, String(key)).toEqual(ready.blocks);
+			// The same for a verdict's own key.
+			const named = buildSigningModel(inputs({ sim: { ...NOT_OFFERED, notice_key: key } }))!;
+			expect(named.blocks, String(key)).toEqual(ready.blocks);
 		}
+		// The tone is the core's too: the sentence under a tone that is not a
+		// caution's is not this line, and a caution with no key says nothing.
+		for (const notice_risk of ['danger', 'normal', 'safe', null] as const) {
+			const model = buildSigningModel(inputs({ sim: { ...NOT_OFFERED, notice_risk } }))!;
+			expect(model.blocks, String(notice_risk)).toEqual(ready.blocks);
+		}
+	});
+
+	it('a batch says it too; a message never does', () => {
+		const batch: SignView = {
+			...OPEN_SIGN,
+			request: {
+				...REQUEST,
+				method: 'wallet_sendCalls',
+				kind: 'batch',
+				params_json: JSON.stringify([
+					{ calls: [{ to: '0x' + 'de'.repeat(20), data: '0x', value: '0x0' }] }
+				])
+			}
+		};
+		expect(cards(buildSigningModel(inputs({ sign: batch, sim: UNREACHABLE }))!)).toEqual([CAUTION]);
+		// Nobody simulates a message; a verdict handed beside one is not its.
+		const message: SignView = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' }
+		};
+		expect(cards(buildSigningModel(inputs({ sign: message, sim: UNREACHABLE }))!)).toEqual([]);
 	});
 
 	it('a refused request says only its refusal', () => {
@@ -3249,19 +3396,21 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 			const model = buildSigningModel(inputs({ sign }))!;
 			expect(model.dismissOnly).toBe(m.close);
 			expect(cards(model)).toEqual([]);
+			const answered = { ...sign, sim_waited_out_key: null };
+			expect(cards(buildSigningModel(inputs({ sign: answered, sim: UNREACHABLE }))!)).toEqual([]);
 		}
 	});
 
 	it('the key this sheet has words for is the one the core’s source names, in every language', () => {
 		const source = readFileSync('../../rust/crates/vela-core/src/app/sim_outcome.rs', 'utf8');
 		expect(/pub const KEY_UNAVAILABLE: &str = "([^"]+)";/.exec(source)?.[1]).toBe(
-			SIM_WAITED_OUT_KEY
+			SIM_COULD_NOT_CHECK_KEY
 		);
 		for (const locale of SUPPORTED_LOCALES) {
 			const words = resolveSigningMessages(locale).warnSimUnavailable;
-			expect(words, locale).toBe(rawResolve(locale, SIM_WAITED_OUT_KEY));
+			expect(words, locale).toBe(rawResolve(locale, SIM_COULD_NOT_CHECK_KEY));
 			expect(words.trim(), locale).not.toBe('');
-			expect(words, locale).not.toBe(SIM_WAITED_OUT_KEY);
+			expect(words, locale).not.toBe(SIM_COULD_NOT_CHECK_KEY);
 		}
 	});
 });

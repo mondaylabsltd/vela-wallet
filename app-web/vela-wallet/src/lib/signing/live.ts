@@ -48,7 +48,7 @@ import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
 import { failedFeeTappable } from '$lib/flows/fee-failure';
-import { SIM_WAITED_OUT_KEY, type SigningMessages } from './messages';
+import { SIM_COULD_NOT_CHECK_KEY, type SigningMessages } from './messages';
 import type {
 	AllowanceChip,
 	AmountLine,
@@ -909,42 +909,61 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
  * message moves nothing by nature (and nobody simulates one), and a refused
  * request says only its refusal.
  *
- * That is ALL this sheet draws from the simulation's ANSWER (spec 082 RG6
- * stands): no balance rows, and no could-not-check or revert line for what a
- * node replied — the relay's own estimate stays the one voice that says "will
- * fail" (`withEstimateVerdict`). The one other line in the verdict's place is
- * not an answer's but the lack of one (`waitedOutLine`).
+ * Two things of the simulation's answer are still NOT drawn here (spec 082
+ * RG6 stands): the balance rows of a check that moves something, and a
+ * revert's line — the relay's own estimate stays the one voice that says
+ * "will fail" (`withEstimateVerdict`).
  *
- * Nothing while the core says the simulation ran past its deadline: no
- * verdict is on the sheet then, by the core's own word.
+ * Nothing while the core says nothing could be checked (`couldNotCheckLine`):
+ * that sentence has the verdict's place then, and never both at once.
  */
 function noChangeLine(inputs: SigningLiveInputs): string | undefined {
 	const { sign, sim, m } = inputs;
 	const request = sign.request;
 	if (!request || sign.blocked) return undefined;
 	if (request.kind !== 'transaction' && request.kind !== 'batch') return undefined;
-	if (waitedOutLine(inputs) !== undefined) return undefined;
+	if (couldNotCheckLine(inputs) !== undefined) return undefined;
 	const key = sim?.no_change_key ?? null;
 	return key === null ? undefined : m.simSaid[key] || undefined;
 }
 
 /**
- * PR 3 — the confirm waits for the simulation's verdict, four seconds at
- * most. When that deadline passes with no verdict the confirm opens, and the
- * verdict's place says so: the core names the sentence
- * (`SignView.sim_waited_out_key`, "Vela couldn't check what this transaction
- * does…") and this looks its words up. A person who confirms then does it
- * knowing nothing was checked — never under an empty place that reads as
- * "nothing to report". The key clears when a verdict lands after all.
+ * PR 3 — nothing could be checked, and the verdict's place says so, as a
+ * caution: "Vela couldn't check what this transaction does…". A person who
+ * confirms then does it knowing — never under an empty place that reads as
+ * "nothing to report".
  *
- * No key, no line; and a key this build has no words for is never drawn as a
- * dotted path. A refused request says only its refusal.
+ * The core says it two ways, and names the sentence both times:
+ *
+ * - the simulation's deadline passed with no verdict at all
+ *   (`SignView.sim_waited_out_key` — the confirm waits four seconds at most,
+ *   then opens beside this line);
+ * - this request's own verdict is a not-checked answer
+ *   (`SimVerdict.notice_risk === 'caution'`, its `notice_key`): the node does
+ *   not offer the simulation, answered what nobody can read, or no node
+ *   answered.
+ *
+ * The first was once the only one drawn, and the line then left the sheet the
+ * moment the pool gave up: "could not check" taken back, over an open
+ * confirm, when "could not check" was the final verdict. Both are the same
+ * card, so the one becoming the other moves nothing and lands nothing anew.
+ *
+ * No key, no line; a key this build has no words for is never drawn as a
+ * dotted path; a revert's notice (`danger`) is not this one. A refused
+ * request says only its refusal.
  */
-function waitedOutLine({ sign, m }: SigningLiveInputs): string | undefined {
-	if (!sign.request || sign.blocked) return undefined;
-	return sign.sim_waited_out_key === SIM_WAITED_OUT_KEY
-		? m.warnSimUnavailable || undefined
-		: undefined;
+function couldNotCheckLine({ sign, sim, m }: SigningLiveInputs): string | undefined {
+	const request = sign.request;
+	if (!request || sign.blocked) return undefined;
+	const waitedOut = cautionWords(sign.sim_waited_out_key, m);
+	if (waitedOut !== undefined) return waitedOut;
+	if (request.kind !== 'transaction' && request.kind !== 'batch') return undefined;
+	return sim?.notice_risk === 'caution' ? cautionWords(sim.notice_key, m) : undefined;
+}
+
+/** The words of the caution the core named for the verdict's place, by its key — or none. */
+function cautionWords(key: string | null | undefined, m: SigningMessages): string | undefined {
+	return key === SIM_COULD_NOT_CHECK_KEY ? m.warnSimUnavailable || undefined : undefined;
 }
 
 /**
@@ -961,7 +980,7 @@ function waitedOutLine({ sign, m }: SigningLiveInputs): string | undefined {
  */
 function withSimVerdict(blocks: Block[], inputs: SigningLiveInputs, own: boolean): Block[] {
 	const title = inputs.m.balancesTitle;
-	const caution = waitedOutLine(inputs);
+	const caution = couldNotCheckLine(inputs);
 	if (caution !== undefined) {
 		return [
 			...blocks,

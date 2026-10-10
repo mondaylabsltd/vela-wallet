@@ -99,8 +99,9 @@
 	 * This sheet keeps no room for a verdict (spec 082 RG6). Two can land
 	 * late: the relay's own estimate answering that the operation will revert
 	 * (RJ19), a danger line under the intent, and the sheet's own simulation
-	 * saying nothing of the person's moves, the "No asset changes" card under
-	 * the request. Each is drawn whole, at its own height: nothing in the
+	 * in the balance-changes card under the request — "No asset changes" when
+	 * nothing of the person's moves, or the caution that nothing could be
+	 * checked (PR 3). Each is drawn whole, at its own height: nothing in the
 	 * sheet clips or scrolls a block by itself.
 	 *
 	 * The confirm stands in the sheet's foot, outside the scroll, so on the

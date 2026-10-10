@@ -29,7 +29,7 @@ import type { RequestMessages } from '$lib/dapp/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
 import {
 	SIM_SAID_KEYS,
-	SIM_WAITED_OUT_KEY,
+	SIM_COULD_NOT_CHECK_KEY,
 	type HandoffMessages,
 	type SigningMessages
 } from '$lib/signing/messages';
@@ -1177,7 +1177,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnVerifiedAbi: k('componentsUi.signing.verifiedAbiWarning'),
 		warnDescriptorFetched: k('componentsUi.signing.descriptorFetchedWarning'),
 		warnOrderTerms: k('componentsUi.signing.warnOrderTerms'),
-		warnSimUnavailable: k(SIM_WAITED_OUT_KEY),
+		warnSimUnavailable: k(SIM_COULD_NOT_CHECK_KEY),
 		warnDrain: k('componentsUi.signing.drainWarning'),
 		okSelfTransfer: k('componentsUi.signing.balanceSelfTransfer'),
 		okNoNetworkFee: k('componentsUi.signing.noNetworkFee'),
