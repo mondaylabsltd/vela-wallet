@@ -11,6 +11,7 @@
 	 */
 	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { PLACEHOLDER_MODULES, PLACEHOLDER_SEED, qrPattern } from '$lib/wallet/qr-pattern';
 	import type { ScanModel } from '../model';
 
 	interface Props {
@@ -18,9 +19,11 @@
 		/** Desktop draws a titled modal; the phone goes edge to edge. */
 		variant?: 'screen' | 'modal';
 		/**
-		 * What fills the frame (spec 028 T422). Absent = the inert surface the
-		 * gallery draws; a live screen passes a `<video>`. The component stays
-		 * pure either way — it owns no camera and knows of none.
+		 * What fills the frame (spec 028 T422). Absent = the FIXTURE frame a
+		 * board draws — a sample code in the viewfinder, a picture and nothing
+		 * else (PR 3 note 7: a board never opens a camera); a live screen passes
+		 * a `<video>`. The component stays pure either way — it owns no camera
+		 * and knows of none.
 		 */
 		feed?: Snippet;
 		/**
@@ -40,6 +43,13 @@
 		torch: 'zap',
 		flip: 'rotate-ccw'
 	};
+
+	/**
+	 * The sample code in the fixture frame: the galleries' own placeholder
+	 * pattern (`qr-pattern.ts`) — three finder squares and seeded noise, the
+	 * same on every run, and plainly not a code that encodes anything.
+	 */
+	const SAMPLE = qrPattern(PLACEHOLDER_MODULES, PLACEHOLDER_SEED);
 </script>
 
 <div class="scan {variant}">
@@ -62,7 +72,20 @@
 		{#if feed}
 			{@render feed()}
 		{:else}
-			<span class="feed" aria-hidden="true"></span>
+			<!-- The fixture frame: what a board shows where a camera would look. -->
+			<span class="feed" aria-hidden="true" data-testid="scan-fixture-frame">
+				<svg
+					class="sample"
+					viewBox="0 0 {PLACEHOLDER_MODULES} {PLACEHOLDER_MODULES}"
+					shape-rendering="crispEdges"
+				>
+					{#each SAMPLE as row, r (r)}
+						{#each row as on, c (c)}
+							{#if on}<rect x={c} y={r} width="1" height="1" />{/if}
+						{/each}
+					{/each}
+				</svg>
+			</span>
 		{/if}
 		<span class="corner tl" aria-hidden="true"></span>
 		<span class="corner tr" aria-hidden="true"></span>
@@ -155,8 +178,26 @@
 	.feed {
 		position: absolute;
 		inset: 0;
+		display: grid;
+		place-items: center;
 		border-radius: var(--radius-md);
 		background: var(--color-bg-sunken);
+	}
+
+	/* The sample code, sitting inside the brackets with room around it — a
+	   code held up to a viewfinder, drawn quietly: it is a picture of a scan,
+	   not a code to scan. */
+	.sample {
+		width: 56%;
+		aspect-ratio: 1;
+		fill: var(--color-fg-muted);
+		opacity: var(--opacity-dim);
+	}
+
+	/* The desktop's viewfinder is landscape: size the code by its height. */
+	.modal .sample {
+		width: auto;
+		height: 64%;
 	}
 
 	/* Brackets, not a border: the frame aims the camera, and a closed

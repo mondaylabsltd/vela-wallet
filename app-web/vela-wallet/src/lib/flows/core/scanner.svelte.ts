@@ -32,7 +32,34 @@ export type ScanStatus =
 	/** `getUserMedia` does not exist off HTTPS, so the page itself is the problem. */
 	| 'insecure'
 	/** The camera exists and something else has it, or it failed to open. */
-	| 'unavailable';
+	| 'unavailable'
+	/**
+	 * A board session ({@link boardSession}): the scanner is a picture. No
+	 * camera was asked for and none will be; the surface draws its fixture
+	 * frame — a viewfinder over a sample code — where a feed would be.
+	 */
+	| 'fixture';
+
+/**
+ * Is this page a BOARD — a gallery or dev page, where every screen is a
+ * picture built from fixtures and nothing on it is a person's own?
+ *
+ * The one signal those pages share is where they live: `/dev/…` (the
+ * onboarding gallery) and `/<locale>/gallery/…` (the component boards and the
+ * full-screen states). It is asked HERE, where the camera is started, rather
+ * than by each board remembering to say so — a board that forgot is exactly
+ * the failure this exists for (PR 3 note 7): a sweep of the desktop's gallery
+ * walked onto its scanner state, the real camera started, and a frame of the
+ * person at the machine was captured. On the web the same door stood open on
+ * the Explore boards, whose scan button reached `getUserMedia`.
+ *
+ * `pathname` is a parameter for the tests; the app passes none.
+ */
+export function boardSession(
+	pathname: string = typeof location === 'undefined' ? '' : location.pathname
+): boolean {
+	return /^\/dev(?:\/|$)/.test(pathname) || /^\/[^/]+\/gallery(?:\/|$)/.test(pathname);
+}
 
 class Scanner {
 	status = $state<ScanStatus>('idle');
@@ -67,6 +94,13 @@ class Scanner {
 		this.#stopped = false;
 		this.result = null;
 		this.nothingFound = false;
+		// A board never opens a camera (PR 3 note 7). Decided before anything
+		// here so much as looks at `navigator.mediaDevices`: no prompt, no
+		// stream, no decoder fetched for frames that will never come.
+		if (boardSession()) {
+			this.status = 'fixture';
+			return;
+		}
 		if (!Scanner.supported()) {
 			// `getUserMedia` is undefined off a secure origin, so "no camera API"
 			// and "not on HTTPS" are the same symptom with different fixes.
@@ -227,8 +261,9 @@ export function scanNotice(
 		case 'unavailable':
 			return m['componentsUi.scanner.cameraUnavailable'];
 		default:
-			// idle, starting, live: the hint ("point the camera at a code") is
-			// exactly right, and replacing it would be noise.
+			// idle, starting, live — and a board's fixture frame: the hint
+			// ("point the camera at a code") is exactly right, and replacing it
+			// would be noise.
 			return undefined;
 	}
 }

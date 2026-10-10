@@ -5,7 +5,12 @@
 	import type { SigningModel } from '$lib/signing/model';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
 	import type { ScanModel } from '$lib/flows/model';
-	import { scanner, scanNotice, type ScanNoticeMessages } from '$lib/flows/core/scanner.svelte';
+	import {
+		boardSession,
+		scanner,
+		scanNotice,
+		type ScanNoticeMessages
+	} from '$lib/flows/core/scanner.svelte';
 	import { exploreScanUrl } from './scan';
 	import AddressBar from './ui/AddressBar.svelte';
 	import ConnectionPanel from './ui/ConnectionPanel.svelte';
@@ -198,9 +203,13 @@
 
 <div class="explore">
 	{#if scanning && scan}
+		<!-- On a board (the only place this screen is mounted today) the frame
+		     is the surface's own fixture: no `<video>`, so nothing here starts
+		     the scanner — and `scanner.start` refuses on a board in any case
+		     (PR 3 note 7). -->
 		<ScanSurface
 			model={scan.model}
-			feed={scanFeed}
+			feed={boardSession() ? undefined : scanFeed}
 			notice={scanCopy}
 			ontool={scanTool}
 			onclose={() => (scanning = false)}
