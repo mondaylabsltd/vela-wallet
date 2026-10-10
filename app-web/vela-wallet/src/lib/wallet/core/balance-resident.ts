@@ -67,6 +67,7 @@ export const INITIAL_VIEW: BalanceView = {
 	internal_key: null,
 	checking_key: null,
 	live_key: null,
+	empty_key: null,
 	holdings_loading: false,
 	cached_total_usd: null,
 	switcher: { open: false, loading: false, balances: [], hidden: false }

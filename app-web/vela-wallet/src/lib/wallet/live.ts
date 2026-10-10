@@ -636,11 +636,13 @@ export function liveAssetRow(
 
 function assetsMode(view: BalanceView): SectionModel['mode'] {
 	if (view.tokens.length > 0) return 'rows';
-	// Nothing held yet — a skeleton while the first fetch is out, an empty
-	// state once the core has actually looked. A look that reached nothing
-	// (`unreachable`) is no look: never "Deposit your first asset" under a
-	// line saying nothing could be read.
-	return view.holdings_loading || view.balance_unknown || view.unreachable ? 'loading' : 'empty';
+	// "Deposit your first asset" is the core's to say (`empty_key`, PR 3
+	// device round) and nothing here decides it: a read has ended and found
+	// nothing held. This shell used to take "no tokens, a known total" for an
+	// empty wallet — which a cached total of 0 satisfies before anything has
+	// been read, so it invited a first deposit under "Checking…". With no
+	// tokens and no key the list is still being read: the skeleton.
+	return (view.empty_key ?? null) !== null ? 'empty' : 'loading';
 }
 
 // ---------------------------------------------------------------------------
@@ -971,6 +973,9 @@ function liveSections(inputs: WalletLiveInputs) {
 	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
 	return {
 		balance: liveBalance(view, currency, m, inputs.refresh),
+		// The filter's own case, not the core's empty wallet (`empty_key` is
+		// about the whole account, and this one HOLDS tokens): none of them is
+		// on the network picked.
 		assetsMode:
 			filter !== null && tokens.length === 0 && view.tokens.length > 0
 				? ('empty' as const)

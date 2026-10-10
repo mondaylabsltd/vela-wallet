@@ -19,7 +19,8 @@ import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
 import { rawResolve, resolveWalletMessages } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { liveBalance } from '$lib/wallet/live';
+import { buildMobileState } from '$lib/wallet/fixtures';
+import { liveBalance, withLiveWallet } from '$lib/wallet/live';
 import { BALANCE_SAID_KEYS } from '$lib/wallet/messages';
 
 const ADDRESS = '0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c';
@@ -196,6 +197,99 @@ describe('the hero’s status line before and after the first read (F19)', () =>
 		const model = liveBalance({ ...wallet.before, hidden: true }, USD, m);
 		expect(model.state).toBe('hidden');
 		expect(model.checkingText).toBeUndefined();
+	});
+});
+
+/**
+ * PR 3 device round, item 2: the same wallet — nothing held last session, a
+ * cached total of 0 — drew "Deposit your first asset" under "Checking…",
+ * because this shell took "no tokens, a known total" for an empty wallet.
+ * The Assets list's empty state is the core's now (`BalanceView.empty_key`):
+ * drawn exactly when the key is set, and derived from nothing else.
+ */
+describe('the Assets list’s empty state before and after the first read', () => {
+	const base = buildMobileState('h1', m, (seed) => `<svg data-seed="${seed}"></svg>`);
+	const assets = (view: BalanceView) =>
+		withLiveWallet(base, { balance: view, currency: USD, m }).assetsSection;
+	/** What the section draws: its empty title, or nothing but the skeleton. */
+	const drawn = (view: BalanceView) => {
+		const section = assets(view);
+		return section.mode === 'empty' ? section.empty?.title : section.mode;
+	};
+
+	it('a cached zero before the first settle: "Checking…", and no "Deposit your first asset"', () => {
+		const wallet = firstRead(0);
+		// The old rule's every input says "empty": no tokens, a total of 0
+		// that is known, nothing loading, nothing unreachable.
+		expect(wallet.before).toMatchObject({
+			tokens: [],
+			balance_unknown: false,
+			holdings_loading: false,
+			unreachable: false
+		});
+		expect(wallet.before.empty_key).toBeNull();
+		expect(liveBalance(wallet.before, USD, m).checkingText).toBe('Checking…');
+		expect(drawn(wallet.before)).toBe('loading');
+		expect(JSON.stringify(assets(wallet.before).mode)).not.toContain('empty');
+	});
+
+	it('after a settle that found nothing: the empty state, in the core’s words', () => {
+		const wallet = firstRead(0);
+		const settled = wallet.settle({});
+		expect(settled.empty_key).toBe('assets.emptyTitle');
+		expect(drawn(settled)).toBe('Deposit your first asset');
+		expect(assets(settled).empty).toEqual({
+			title: m.assets.emptyTitle,
+			caption: m.assets.emptyCaption
+		});
+		// A later refresh does not take it back: what the last round found stands.
+		const again = wallet.dispatch({ type: 'refresh_requested', force: true, pull: true });
+		expect(drawn(again)).toBe('Deposit your first asset');
+	});
+
+	it('nothing cached, the first read out: the skeleton', () => {
+		const wallet = firstRead(null);
+		expect(wallet.before.empty_key).toBeNull();
+		expect(drawn(wallet.before)).toBe('loading');
+	});
+
+	it('whatever the first round ends as, the section follows the key — it is never this shell’s call', () => {
+		const ends = [
+			firstRead(0).settle({ failed_chain_ids: [1] }),
+			firstRead(0).settle({ failed_chain_ids: [1, 100] }),
+			firstRead(0).settle('threw'),
+			firstRead(null).settle({ failed_chain_ids: [1, 100] }),
+			firstRead(null).settle('threw'),
+			firstRead(1383.28).settle({})
+		];
+		for (const view of ends) {
+			expect(view.checking_key).toBeNull();
+			expect(drawn(view), JSON.stringify(view)).toBe(
+				view.empty_key === null ? 'loading' : 'Deposit your first asset'
+			);
+		}
+		// Nothing could be read and nothing is known: a reason, never an invitation.
+		const nothingRead = ends[4];
+		expect(nothingRead.unreachable).toBe(true);
+		expect(nothingRead.empty_key).toBeNull();
+		expect(drawn(nothingRead)).toBe('loading');
+	});
+
+	it('something held: the rows, and no key', () => {
+		const held = firstRead(0).settle({ tokens: [XDAI] });
+		expect(held.empty_key).toBeNull();
+		expect(assets(held).mode).toBe('rows');
+	});
+
+	it('the key the core names is the title this shell draws, in every language', () => {
+		const source = readFileSync('../../rust/crates/vela-core/src/app/balance_dashboard.rs', 'utf8');
+		const key = /pub const ASSETS_EMPTY: &str = "([^"]+)";/.exec(source)?.[1];
+		expect(key).toBe('assets.emptyTitle');
+		for (const locale of SUPPORTED_LOCALES) {
+			const title = resolveWalletMessages(locale).assets.emptyTitle;
+			expect(title, locale).toBe(rawResolve(locale, key!));
+			expect(title.trim(), locale).not.toBe('');
+		}
 	});
 });
 

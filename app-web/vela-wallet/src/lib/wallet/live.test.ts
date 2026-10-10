@@ -74,6 +74,7 @@ const PRISTINE: BalanceView = {
 	internal_key: null,
 	checking_key: null,
 	live_key: null,
+	empty_key: null,
 	holdings_loading: false,
 	cached_total_usd: null,
 	switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -562,13 +563,30 @@ describe('withLiveWallet', () => {
 		expect(JSON.stringify(model)).not.toContain('$1,383');
 	});
 
-	it('nothing held after the core has looked is the empty state, not a skeleton', () => {
+	it('the empty state is the core’s key and nothing else: a known zero alone is still being read', () => {
+		// A read ended and found nothing held: the core says so (`empty_key`).
+		const looked = { ...PRISTINE, balance_unknown: false, display_total_usd: 0 };
 		const model = withLiveWallet(base, {
-			balance: { ...PRISTINE, balance_unknown: false, display_total_usd: 0 },
+			balance: { ...looked, empty_key: 'assets.emptyTitle' },
 			currency: USD,
 			m
 		});
 		expect(model.assetsSection.mode).toBe('empty');
+		expect(model.assetsSection.empty).toEqual({
+			title: m.assets.emptyTitle,
+			caption: m.assets.emptyCaption
+		});
+		// Everything this shell's old rule read — no tokens, a known total, not
+		// loading, not unknown, reachable — with the core's word taken away
+		// (a cached zero under the first read): the skeleton, no invitation.
+		const cachedZero = withLiveWallet(base, { balance: looked, currency: USD, m });
+		expect(cachedZero.assetsSection.mode).toBe('loading');
+		// A view from before the key existed carries none: not empty.
+		const older = { ...looked } as Partial<BalanceView>;
+		delete older.empty_key;
+		expect(
+			withLiveWallet(base, { balance: older as BalanceView, currency: USD, m }).assetsSection.mode
+		).toBe('loading');
 	});
 
 	it('a first load streams the list under a skeleton hero (issue 188)', () => {
@@ -627,7 +645,12 @@ describe('empty activity, chosen by the core', () => {
 		history_empty_key: 'history.emptyFilter',
 		home_empty_key: 'home.emptyNoActivityNetwork'
 	};
-	const LOOKED = { ...PRISTINE, balance_unknown: false, display_total_usd: 0 };
+	const LOOKED = {
+		...PRISTINE,
+		balance_unknown: false,
+		display_total_usd: 0,
+		empty_key: 'assets.emptyTitle'
+	};
 
 	it('all networks → "no activity"; filtered → "none on this network"', () => {
 		const base = buildMobileState('h1', m, IDENT);
