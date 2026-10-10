@@ -104,6 +104,31 @@ test("tap-to-hide masks every figure and survives a reload (privacy is the core'
 	await expect(page.getByText('••••••').first()).toBeVisible();
 	await expect(page.getByText('$4,500')).toHaveCount(0);
 
+	// The mask is drawn from the core's view at once; the flag reaches the
+	// store a transaction later. Reloading in between tests the race, not the
+	// rule: with the machine loaded the write had not landed, the page came
+	// back shown, and this failed about one full run in three. So the reload
+	// waits for what "survives a reload" means — the flag being stored.
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					new Promise<unknown>((resolve) => {
+						const open = indexedDB.open('vela', 1);
+						open.onerror = () => resolve(null);
+						open.onsuccess = () => {
+							const read = open.result
+								.transaction('kv', 'readonly')
+								.objectStore('kv')
+								.get('vela.balanceHidden');
+							read.onsuccess = () => resolve(read.result ?? null);
+							read.onerror = () => resolve(null);
+						};
+					})
+			)
+		)
+		.toBe('1');
+
 	await page.reload();
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await expect(page.getByText('••••••').first()).toBeVisible({ timeout: 20_000 });
