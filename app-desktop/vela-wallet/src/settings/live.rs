@@ -636,7 +636,8 @@ mod tests {
     /// PR 3 item 10: before the core commits a currency, nothing on this
     /// page is drawn in the USD/1 placeholder. The row names the stored
     /// choice on its way (its code alone) or nothing; an account's total is
-    /// the withheld dash, and a row in the switcher has no figure.
+    /// withheld (empty, its place kept), and a row in the switcher has no
+    /// figure.
     #[test]
     fn nothing_is_drawn_in_the_placeholder_before_the_currency_commits() {
         let waiting = |pending: Option<&str>| CurrencyView {

@@ -4635,7 +4635,7 @@ impl WalletPage {
         if self.identity.is_none() {
             // `VELA_CURRENCY_PENDING`: a held wallet through the live
             // builder, its worth waiting on the currency.
-            if let Some(money) = Self::pinned_pending_currency() {
+            if let Some(money) = Self::pinned_currency() {
                 return wallet_live::asset_rows(
                     &fixtures::held_view(),
                     &self.strings,
@@ -4705,7 +4705,7 @@ impl WalletPage {
         // through the live builder — its worth and its price in the pinned
         // currency, withheld or landed.
         if self.identity.is_none()
-            && let Some(money) = Self::pinned_pending_currency()
+            && let Some(money) = Self::pinned_currency()
         {
             let view = fixtures::held_view();
             let eth = view
@@ -4795,7 +4795,7 @@ impl WalletPage {
             }
             // `VELA_CURRENCY_PENDING`: the same held wallet, its total
             // waiting on the currency.
-            if let Some(money) = Self::pinned_pending_currency() {
+            if let Some(money) = Self::pinned_currency() {
                 return wallet_live::balance(
                     &fixtures::held_view(),
                     &self.strings,
@@ -6739,7 +6739,7 @@ impl WalletPage {
         let body = crate::gallery::net_stop_pin(body, &self.flow_strings);
         // `VELA_CURRENCY_PENDING`: the send's form and confirm through the
         // live builders, in the pinned currency.
-        let body = match Self::pinned_pending_currency() {
+        let body = match Self::pinned_currency() {
             Some(money) => {
                 crate::gallery::currency_pin_flow(body, &money, &self.flow_strings, &self.strings)
             }
@@ -10912,7 +10912,7 @@ impl WalletPage {
     /// Signed out there is no committed pair and nothing to convert, so it is
     /// USD — the same thing every fixture board shows.
     fn money(&self, cx: &mut Context<Self>) -> wallet_live::Money {
-        if let Some(pending) = Self::pinned_pending_currency() {
+        if let Some(pending) = Self::pinned_currency() {
             return pending;
         }
         if self.identity.is_none() {
@@ -10939,7 +10939,7 @@ impl WalletPage {
     /// committed, at a fixed rate — the frame to hold beside the waiting
     /// one, to see that nothing but the figures arrived.
     /// The same env-pin family as `VELA_SETTINGS_STATE`.
-    fn pinned_pending_currency() -> Option<wallet_live::Money> {
+    fn pinned_currency() -> Option<wallet_live::Money> {
         let want = crate::dev_env::var!("VELA_CURRENCY_PENDING")?;
         let want = want.trim();
         if let Some(code) = want.strip_suffix(":landed") {
@@ -17624,7 +17624,7 @@ impl WalletPage {
         // it where money goes — the fee row through the live builder, in the
         // pinned currency (the fee in its coin, and the money beside it only
         // once the currency has landed), and no mock worth under an amount.
-        if self.gallery && self.no_signing_host() && Self::pinned_pending_currency().is_some() {
+        if self.gallery && self.no_signing_host() && Self::pinned_currency().is_some() {
             signing_fixtures::in_display_currency(&mut model, &self.signing, &currency);
         }
         // `VELA_SIGNING_REFUSAL`: the sheet after the relay did not take the

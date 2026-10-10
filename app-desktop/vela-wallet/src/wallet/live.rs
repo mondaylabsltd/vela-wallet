@@ -2623,7 +2623,8 @@ mod tests {
     /// it said "$1,234" for a moment and then "¥8,876". Until the commit the
     /// hero is its skeleton with NO figure (the label naming the person's own
     /// choice on its way, or nothing — never "USD"), a holding's worth is its
-    /// waiting bar, and every other figure is the withheld dash. Once
+    /// waiting bar, and every other figure is withheld with its place kept
+    /// — never a dash, which reads as a figure that is missing. Once
     /// committed, each figure appears once, in the right money.
     #[test]
     fn no_figure_is_drawn_before_the_display_currency_commits() {
