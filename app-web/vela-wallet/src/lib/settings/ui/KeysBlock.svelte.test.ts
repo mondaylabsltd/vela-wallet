@@ -32,6 +32,7 @@ const row = (name: string, pills: WalletKeyRowModel['pills']): WalletKeyRowModel
 	holderFallback: 'Built-in passkey',
 	fingerprint: '197d…647b',
 	pills,
+	pillRoom: [],
 	details: [],
 	key: { ...key, name }
 });
@@ -41,6 +42,8 @@ const model: WalletKeysModel = {
 	subtitle: 'Any one of these passkeys can sign for this wallet, on every network.',
 	count: '3',
 	loading: false,
+	asking: false,
+	backupLines: [],
 	rows: [
 		row('Parallel One', [{ text: 'Device-bound', tone: 'local' }]),
 		row('Parallel Two', [

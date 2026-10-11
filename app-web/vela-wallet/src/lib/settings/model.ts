@@ -1000,15 +1000,29 @@ export interface EthereumBackupRowModel {
  * The keys that control this wallet (spec 062) — drawn above the backup, because
  * a person offered "back up your keys" is owed the sight of them first.
  *
- * `rows` is empty while the first answer is in flight; `note` is set when the
+ * `rows` is empty only before the device's record is read; while the registry
+ * is being asked they are that record's (`asking`). `note` is set when the
  * registry did not answer and the rows are only what this device remembers.
  */
 export interface WalletKeysModel {
 	title: string;
 	subtitle: string;
-	/** "3" — how many keys, beside the title. Empty while loading. */
+	/**
+	 * "3" — how many keys, beside the title. The device's own record says it,
+	 * so it is there while the registry is still being asked; empty only before
+	 * that record is read.
+	 */
 	count: string;
+	/** Before the device's record is read: one row's shape, nothing else. */
 	loading: boolean;
+	/**
+	 * The registry is still being asked (device walk, item 13.1). The rows are
+	 * the device's record and stand where they will stand: a key's own name
+	 * and short id are drawn; who holds it, its mark and the badges nobody has
+	 * vouched for yet are quiet room of the same size — never a word the
+	 * registry may contradict a moment later.
+	 */
+	asking: boolean;
 	note?: string;
 	/**
 	 * Spec 102 (P2-10): "Keys on sign.example.com" — for an account on its own
@@ -1021,11 +1035,27 @@ export interface WalletKeysModel {
 	 * absent = nothing to draw.
 	 */
 	backup?: EthereumBackupRowModel;
+	/**
+	 * Every second line the copy's row can say, in this language. The line
+	 * keeps the room of the tallest, so the row is one height through
+	 * "Checking…" and whatever the chain answers (ru: "couldn't check" is two
+	 * lines on a phone where "checking" is one).
+	 */
+	backupLines: string[];
 	copy: { action: string; done: string };
 }
 
+export interface WalletKeyPillModel {
+	text: string;
+	tone: 'signs_here' | 'verified' | 'synced' | 'local';
+}
+
 export interface WalletKeyRowModel {
-	/** The owner's label, or "Key n" when nobody recorded one. */
+	/**
+	 * The owner's label, or "Key n" when nobody recorded one. EMPTY while the
+	 * registry is being asked about a key the device has no name for: the
+	 * registry's record may name it, and "Key 2" would then have been wrong.
+	 */
 	name: string;
 	/** Who holds it when the core's catalog knows; else the method's generic line. */
 	holderFallback: string;
@@ -1036,7 +1066,15 @@ export interface WalletKeyRowModel {
 	 * explorer's way. First, and the only filled one, `signs_here`: the key this
 	 * device signs with (founder, 2026-09-26: it must stand out).
 	 */
-	pills: { text: string; tone: 'signs_here' | 'verified' | 'synced' | 'local' }[];
+	pills: WalletKeyPillModel[];
+	/**
+	 * The fullest sets of badges this row can end with — one per answer to
+	 * "synced?" — and the room the row keeps for them whatever it is showing:
+	 * three badges wrap to two lines on a phone, and a row that grew by a line
+	 * when its badges arrived moved everything under it. While the registry is
+	 * being asked, the first set is what is drawn, quietly.
+	 */
+	pillRoom: WalletKeyPillModel[][];
 	/**
 	 * What the row opens onto: the registry explorer's facts, each copyable.
 	 * Empty when only the device answered — then there is nothing to open.
