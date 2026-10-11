@@ -5,8 +5,9 @@
 //  BalanceDisplay + BalanceStatusLine (spec 015 vocabulary #4/#5): label
 //  line (总余额 · USD), hero amount with de-emphasised decimals, exactly
 //  one of normal / zero-live (pulsing dot + 实时·监听收款中) / loading
-//  (skeleton block) / hidden (six dots + eye-off), plus an optional
-//  warning/refreshing status line, then the refresh control (issue 462).
+//  (skeleton block) / hidden (six dots + eye-off), then ONE line: what the
+//  wallet has to say — or, when it has nothing to say, when the figure was
+//  read — with the refresh control (issue 462) at its end.
 //
 
 import SwiftUI
@@ -43,11 +44,65 @@ struct BalanceDisplay: View {
             if let live = model.liveText, model.status != nil {
                 liveRow(live)
             }
+            statusLine
+        }
+    }
+
+    /// The hero's last line: the status's place, and the refresh control at
+    /// its end — ONE line, one height, in every state.
+    ///
+    /// They were two (device walks 2026-10-10 / 10-11): the status's kept
+    /// place, and under it the control's own row. On a cold start that was a
+    /// lone ⟳ on a line of its own under 「● 正在检查…」, and once the read had
+    /// settled an empty line between the figure and 「⟳ 上次更新 · 刚刚」: at
+    /// any moment one of the two rows was mostly empty.
+    ///
+    /// - The place takes the line. It says the most pressing thing there is:
+    ///   the first read's "Checking…", a status, the empty wallet's live
+    ///   line — or, when none of those, the control's own words ("Updated
+    ///   2m", "Updating…"), which a tap refreshes from too.
+    /// - The control is its glyph at the line's END, in a box of one size
+    ///   whatever the line says: it is where the finger left it.
+    /// - The line is the control's height, there from the first frame, with
+    ///   or without a control (a drawn board): nothing that arrives on it or
+    ///   leaves it moves the page.
+    private var statusLine: some View {
+        HStack(spacing: Tokens.Space.s8) {
             statusSlot
+                .frame(maxWidth: .infinity, alignment: .leading)
             if let refresh = model.refresh {
                 BalanceRefreshControl(model: refresh, onRefresh: onRefresh)
             }
         }
+        .frame(height: Tokens.Control.sm)
+    }
+
+    /// What stands in the line's place.
+    enum LinePlace: Equatable {
+        /// "Checking…" — the first read is out.
+        case checking(String)
+        /// A status: a network out of reach, balances still updating, a fault.
+        case status(String)
+        /// The empty wallet's "Live · listening for payments".
+        case live(String)
+        /// Nothing more pressing: the refresh control's own words — "Updated
+        /// 2m", or "Updating…" while a refresh the person asked for is out.
+        case stamp(String)
+        /// Nothing to say and nothing read yet: the place is kept, empty.
+        case empty
+    }
+
+    /// The ONE thing the line says, most pressing first. The view draws
+    /// exactly this, so what a test reads here is what is on the line.
+    static func linePlace(_ model: BalanceModel) -> LinePlace {
+        if let checking = model.checkingText { return .checking(checking) }
+        if let status = model.status { return .status(status.text) }
+        if let live = model.liveText { return .live(live) }
+        if let refresh = model.refresh {
+            let words = BalanceRefreshStamp.shown(refresh)
+            return words.isEmpty ? .empty : .stamp(words)
+        }
+        return .empty
     }
 
     /// The ONE line under the figure, held from the first frame (PR 3 note
@@ -76,12 +131,20 @@ struct BalanceDisplay: View {
                 .accessibilityHidden(true)
             // "Checking…" stands alone (final note F19): the first read is
             // out, so there is no reason to give yet and no "live" to claim.
-            if let checking = model.checkingText {
-                checkingRow(checking)
-            } else if let status = model.status {
-                statusDoor(status)
-            } else if let live = model.liveText {
-                liveRow(live)
+            switch Self.linePlace(model) {
+            case .checking(let text):
+                checkingRow(text)
+            case .status:
+                if let status = model.status { statusDoor(status) }
+            case .live(let text):
+                liveRow(text)
+            case .stamp:
+                // Nothing more pressing: when the figure was read.
+                if let refresh = model.refresh {
+                    BalanceRefreshStamp(model: refresh, onRefresh: onRefresh)
+                }
+            case .empty:
+                EmptyView()
             }
         }
     }
@@ -231,27 +294,28 @@ private struct BalanceToggleA11y: ViewModifier {
     }
 }
 
-/// The hero's "↻ Updated 2m" (issue 462) — the same control on all four
-/// shells, under the total and its status line.
+/// The hero's refresh control (issue 462) — the same control on all four
+/// shells: the glyph at the END of the hero's one line.
 ///
 /// Tapping it reads every chain again (the caller's `onRefresh`:
 /// `RefreshRequested{force, pull}` plus the activity tick). While that is out
 /// (`model.refreshing`, which the store holds for at least 650 ms) the glyph
-/// turns, the words read "Updating…", and a second tap does nothing. Under
-/// Reduce Motion the glyph stays still and the words alone say it is reading,
-/// as on the web. At rest
-/// before any read has settled it draws the glyph alone, and is called
-/// "Refresh balance" (`home.refreshBalance`) — never "Updating…" over a
-/// control that is not.
+/// turns and a second tap does nothing. Under Reduce Motion the glyph stays
+/// still and the words alone say it is reading, as on the web.
 ///
-/// **Nothing moves.** Both labels are laid out in one box, the one not
-/// showing invisible, so the box is the wider one's width in both states and
-/// its height never changes: the control does not slide out from under the
-/// finger that tapped it. Quiet ink like the status line — a fresh figure is
-/// the normal case.
+/// Its words — "Updated 2m", "Updating…" — are drawn in the line's own place
+/// when nothing more pressing stands there (`BalanceRefreshStamp`), and on
+/// screen or not they are what the control is CALLED: "Updating…" only while
+/// it turns, "Updated 2m" at rest, and "Refresh balance"
+/// (`home.refreshBalance`) before any read has settled — never "Updating…"
+/// over a control that is not.
+///
+/// **Nothing moves.** The box is one size in every state — a finger's width,
+/// the line's height — with the glyph on its trailing edge, so the control is
+/// where the finger left it whatever the line says. Quiet ink like the
+/// status line: a fresh figure is the normal case.
 struct BalanceRefreshControl: View {
     @Environment(\.theme) private var theme
-    @Environment(\.walletTextScale) private var textScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let model: BalanceRefreshModel
@@ -262,19 +326,9 @@ struct BalanceRefreshControl: View {
 
     var body: some View {
         Button { if !model.refreshing { onRefresh?() } } label: {
-            HStack(spacing: Tokens.Space.s8) {
-                glyph
-                ZStack(alignment: .leading) {
-                    label(model.updated ?? "", shown: !model.refreshing)
-                    label(model.updating, shown: model.refreshing)
-                }
-            }
-            // The words swap at once. The press's spring rides the same
-            // transaction as the tap's state change, and cross-faded the two
-            // labels into each other ("更新中新 · 刚刚") — on a simulator run.
-            .transaction { $0.animation = nil }
-            .frame(minHeight: Tokens.Control.sm)
-            .contentShape(Rectangle())
+            glyph
+                .frame(width: Tokens.Control.md, height: Tokens.Control.sm, alignment: .trailing)
+                .contentShape(Rectangle())
         }
         // Inert while it turns — and in the gallery — without dimming: a
         // refresh in flight is busy, not disabled. The tap is still taken
@@ -319,12 +373,56 @@ struct BalanceRefreshControl: View {
                 .foregroundStyle(theme.fgSubtle)
         }
     }
+}
+
+/// The refresh control's words, in the hero's line: "Updated 2m", and
+/// "Updating…" while a refresh the person asked for is out. Drawn only when
+/// the line has nothing more pressing to say; a tap refreshes, as a tap on
+/// the glyph does. Not read on its own — the control at the line's end is
+/// called by these same words, once.
+///
+/// Both labels are laid out in one box, the one not showing invisible, so
+/// the words swap without the line re-measuring.
+struct BalanceRefreshStamp: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let model: BalanceRefreshModel
+    var onRefresh: (() -> Void)?
+
+    /// The stamp's test hook.
+    static let testId = "balance-refresh-stamp"
+
+    var body: some View {
+        Button { if !model.refreshing { onRefresh?() } } label: {
+            ZStack(alignment: .leading) {
+                label(model.updated ?? "", shown: !model.refreshing)
+                label(model.updating, shown: model.refreshing)
+            }
+            // The words swap at once. The press's spring rides the same
+            // transaction as the tap's state change, and cross-faded the two
+            // labels into each other ("更新中新 · 刚刚") — on a simulator run.
+            .transaction { $0.animation = nil }
+            .frame(minHeight: Tokens.Control.sm, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(RefreshPressStyle(live: onRefresh != nil && !model.refreshing))
+        // Said once, by the control.
+        .accessibilityHidden(true)
+        .accessibilityIdentifier(Self.testId)
+    }
+
+    /// What the stamp shows right now.
+    static func shown(_ model: BalanceRefreshModel) -> String {
+        model.refreshing ? model.updating : (model.updated ?? "")
+    }
 
     private func label(_ text: String, shown: Bool) -> some View {
         Text(verbatim: text)
             .typeRole(Typography.rowSub.scaled(textScale))
             .foregroundStyle(theme.fgSubtle)
             .lineLimit(1)
+            .minimumScaleFactor(WalletGeometry.statusMinScale)
             .opacity(shown ? 1 : 0)
     }
 }
