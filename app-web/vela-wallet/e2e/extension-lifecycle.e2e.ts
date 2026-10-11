@@ -35,6 +35,7 @@ import {
 	sidePanelView,
 	confirmSigning
 } from './extension-helpers';
+import { NATIVE_SENTINEL, TRANSFER_TOPIC } from '../src/lib/signing/sim-replies';
 import { abiWord, aggregate3CallCount, encodeAggregate3Result, happyRelay } from './stub-chain';
 
 const APP_ROOT = join(import.meta.dirname, '..');
@@ -255,6 +256,36 @@ function chainAnswer(chainId: number, method: string, params: unknown[]): unknow
 			return '0x5208';
 		case 'eth_getLogs':
 			return [];
+		case 'eth_simulateV1': {
+			// The node runs the calls, and traces the coin each one carries from
+			// the account to whoever it pays — what the panel's sheet lists as
+			// the transaction's balance changes.
+			type Asked = {
+				blockStateCalls?: { calls?: { from: string; to: string; value?: string }[] }[];
+			};
+			const topic = (address: string) => '0x' + address.slice(2).toLowerCase().padStart(64, '0');
+			const calls = (params[0] as Asked | undefined)?.blockStateCalls?.[0]?.calls ?? [];
+			return [
+				{
+					calls: calls.map((call) => {
+						const value = BigInt(call.value ?? '0x0');
+						return {
+							status: '0x1',
+							logs:
+								value === 0n
+									? []
+									: [
+											{
+												address: NATIVE_SENTINEL,
+												topics: [TRANSFER_TOPIC, topic(call.from), topic(call.to)],
+												data: '0x' + abiWord(value)
+											}
+										]
+						};
+					})
+				}
+			];
+		}
 		case 'eth_call': {
 			const call = params[0] as { data?: string } | undefined;
 			const n = call?.data?.startsWith('0x82ad56cb') ? aggregate3CallCount(call.data) : 0;
@@ -451,6 +482,30 @@ async function hermeticPanel(wallet: Page): Promise<void> {
 /** Is the side panel still the one `hermeticPanel` fenced (no reload since)? */
 const panelFenced = (wallet: Page) =>
 	inSidePanel<boolean>(wallet, 'return Array.isArray(panel.__velaRefused);');
+
+/**
+ * What the verdict's place on the panel's sheet says: whether a verdict has
+ * landed in it, the balance card's rows ("xDAI −0.000001") and its one line
+ * (the card's, or the core's notice). Never a room: a room holds no words.
+ */
+const panelVerdict = (wallet: Page) =>
+	inSidePanel<{ stage: string | null; rows: string[]; line: string | null }>(
+		wallet,
+		`
+		const place = panel.document.querySelector('[role="dialog"] [data-testid="signing-verdict"]');
+		const said = place && place.querySelector('.said');
+		const line = said && (said.querySelector('.banner p') || said.querySelector('.note'));
+		return {
+			stage: place ? place.dataset.stage : null,
+			rows: said
+				? [...said.querySelectorAll('section.balances .row')].map((row) =>
+						row.textContent.replace(/\\s+/g, ' ').trim()
+					)
+				: [],
+			line: line ? line.textContent.trim() : null
+		};
+		`
+	);
 
 /** Tap the panel's sheet's confirm (issue 461) — the same `onconfirm` — once it arms. */
 async function confirmInPanel(wallet: Page): Promise<void> {
@@ -885,6 +940,17 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			);
 			asked.catch(() => {});
 			await sidePanelView(wallet, 30_000);
+			// The panel's sheet draws what the transaction does, as the site's
+			// own sheet does: the verdict's place is there, and what the chain
+			// said this send moves has landed in it — the dust that leaves, in
+			// the chain's own coin, and nothing else — before the confirm is
+			// pressed.
+			await expect
+				.poll(() => panelVerdict(wallet), { timeout: 60_000 })
+				.toMatchObject({ stage: 'landed', line: null });
+			const verdict = await panelVerdict(wallet);
+			expect(verdict.rows).toHaveLength(1);
+			expect(verdict.rows[0]).toMatch(/^\S+ −0\.000001$/);
 			await confirmInPanel(wallet);
 			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
 			const answer = (await asked) as AskResult;

@@ -320,6 +320,56 @@ test.describe('signing for a dApp', () => {
 	});
 
 	/**
+	 * The verdict's place, in the extension's request WINDOW. A transaction a
+	 * site asks for keeps the simulation verdict's place on its sheet from the
+	 * first frame, in this window as on the site; here no chain can be reached
+	 * at all (the suite refuses everything that is not the extension's own),
+	 * so what lands in it is the core's caution that nothing could be checked
+	 * — said, never a blank a person could read as "nothing to report".
+	 */
+	test('a transaction’s sheet keeps the verdict’s place in the request window, and says when nothing could be checked', async () => {
+		const context = await loadExtension();
+		await seedWallet(context, extensionId());
+		await context.route(/^https?:\/\/(?!localhost[:/]|127\.0\.0\.1[:/])/, (route) =>
+			route.abort('blockedbyclient')
+		);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		await connect(context, page);
+
+		const asked = page.evaluate(() =>
+			window.__ask('eth_sendTransaction', [
+				{
+					from: window.ethereum.selectedAddress,
+					to: '0x3333333333333333333333333333333333333333',
+					value: '0x0'
+				}
+			])
+		) as Promise<AskResult>;
+		asked.catch(() => {});
+
+		const win = await requestWindow(context);
+		await expect(win.getByTestId('signing-confirm')).toBeVisible({ timeout: 30_000 });
+		const place = win.locator('[role="dialog"] [data-testid="signing-verdict"]');
+		await expect(place).toBeVisible();
+		// "Checking…" while it is out — and then the caution, in the place.
+		const caution = place.locator('.said .banner');
+		await expect(caution).toHaveAttribute('data-tone', 'caution', { timeout: 30_000 });
+		await expect(caution).toContainText(/couldn’t check what this transaction does/i);
+		await expect(place).toHaveAttribute('data-stage', 'landed');
+		await expect(place.locator('.said section.balances')).toHaveCount(0);
+		// Whole, with the confirm still on screen under it.
+		await expect(caution).toBeInViewport({ ratio: 1 });
+		await expect(win.getByTestId('signing-confirm')).toBeInViewport({ ratio: 1 });
+
+		// The ✕ refuses it: the site is told the person said no.
+		await win.getByRole('button', { name: /^close$/i }).click();
+		const answer = await asked;
+		expect(answer).toMatchObject({ ok: false, code: 4001 });
+		await context.close();
+	});
+
+	/**
 	 * Spec 089: a transaction whose `from` names another account was signed by
 	 * the granted one — the window's by-shape guess at "the address the request
 	 * names" read only top-level strings. The core reads it now, as every
