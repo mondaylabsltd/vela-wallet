@@ -10,13 +10,19 @@
  *      a real hazard, not a tidiness question.
  */
 import { expect, test } from '@playwright/test';
-import { readKv } from './stub-chain';
+import { denyOffOrigin, readKv } from './stub-chain';
 import { chunksCarrying, collectScripts, en, seedSignedIn } from './live-helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 /** The multi-key golden Safe — derived, never stored (spec 019 invariant ②). */
 const GOLDEN_SAFE = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+
+// Nothing in this file is about a chain's answer, and nothing in it may
+// depend on one: every off-origin request is refused before it leaves.
+test.beforeEach(async ({ page }) => {
+	await denyOffOrigin(page);
+});
 
 test('entering swaps in the fixture wallet and marks it; leaving gives the real one back', async ({
 	page
@@ -84,9 +90,28 @@ test('a normal visit never loads the fixture keys', async ({ page }) => {
 	const scripts = collectScripts(page);
 
 	await seedSignedIn(page);
+	// Nothing leaves the machine (`beforeEach`). This visit used to talk to
+	// the live chains and then wait for the NETWORK to go quiet — which it
+	// does only when every live endpoint answers promptly: behind a proxy that
+	// drops them the wallet goes on asking (as it should), "idle" never comes,
+	// and the wait ate the test's whole budget (2 runs in 3 on Firefox here).
+	// What the test needs to know is narrower, and is its own to observe: that
+	// the page has stopped loading SCRIPTS.
 	await page.goto('/en/wallet');
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
-	await page.waitForLoadState('networkidle');
+	// Every chunk this visit pays for: the first paint's, and the routes the
+	// wallet warms behind it — until a look finds no new one.
+	let loaded = -1;
+	await expect
+		.poll(
+			() => {
+				const still = scripts.length === loaded;
+				loaded = scripts.length;
+				return still;
+			},
+			{ timeout: 20_000, intervals: [1_000] }
+		)
+		.toBe(true);
 	expect(scripts.length).toBeGreaterThan(0);
 
 	// The first fixture private key, verbatim. It must appear in NOTHING this
