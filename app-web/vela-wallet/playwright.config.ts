@@ -81,7 +81,23 @@ export default defineConfig({
 		// parallel space performs in localStorage and gives back byte-for-byte.
 		// Money that survives a crash is the promise that must not be one
 		// engine's.
-		{ name: 'firefox', use: { browserName: 'firefox' }, testMatch: STORAGE_SUITES },
+		//
+		// Firefox is told to use NO proxy. Playwright's Firefox lets a proxy take
+		// `localhost` (`network.proxy.allow_hijacking_localhost`), and it reads
+		// the machine's proxy settings: on a Mac with an HTTP proxy set and no
+		// exception for localhost, every `page.goto` to the suites' own server
+		// went to that proxy and came back `NS_ERROR_NET_RESET` — all 38 Firefox
+		// tests, the morning somebody changed the Mac's network settings.
+		// Chromium and WebKit never proxy localhost. A suite that depends on what
+		// another host answers stubs it; none needs the proxy to reach one.
+		{
+			name: 'firefox',
+			use: {
+				browserName: 'firefox',
+				launchOptions: { firefoxUserPrefs: { 'network.proxy.type': 0 } }
+			},
+			testMatch: STORAGE_SUITES
+		},
 		{ name: 'webkit', use: { browserName: 'webkit' }, testMatch: STORAGE_SUITES }
 	]
 });
