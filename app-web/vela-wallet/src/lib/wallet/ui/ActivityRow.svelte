@@ -40,7 +40,30 @@
 		</span>
 	</span>
 	<span class="text">
-		<span class="title">{row.title}</span>
+		{#if row.titleParts !== undefined}
+			<!-- A dApp's title, in the two parts it may be broken between: what
+			     was done, and where (device walk of 2026-10-11, item 1). As one
+			     wrapping text it broke wherever the width ran out — 「在
+			     arcorbs.game3.app 合 / 约交互」. Each part is one line; a line
+			     ends only between them; the place alone may be cut, in its
+			     middle. The white space is the parts' own (`pre`), so the text
+			     here is the title exactly — to a reader, and to a screen reader. -->
+			<span class="title parts">
+				{#each row.titleParts as part, i (i)}
+					{#if part.kind === 'action'}
+						<span class="action">{part.text}</span>
+					{:else}
+						<span class="place"
+							><span class="join">{part.before}</span><span class="head">{part.head}</span><span
+								class="join">{part.tail}{part.after}</span
+							></span
+						>
+					{/if}
+				{/each}
+			</span>
+		{:else}
+			<span class="title">{row.title}</span>
+		{/if}
 		<span class="subtitle">{row.subtitle}</span>
 	</span>
 	<!-- 087 F11: a dApp call that moved no coin of ours has no figure, and
@@ -144,6 +167,46 @@
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		color: var(--color-fg-base);
+	}
+
+	/* The two parts, side by side while both fit, else one over the other:
+	   a line is ended between them and nowhere else. */
+	.title.parts {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		min-width: 0;
+	}
+
+	/* What was done: whole, on one line. Only an action that alone is wider
+	   than the row gives (it may then break between its own words — never
+	   inside one, and never inside a word written without spaces). */
+	.action {
+		flex: 0 1 auto;
+		min-width: min-content;
+		white-space: pre-wrap;
+		word-break: keep-all;
+	}
+
+	/* Where: one line, as wide as it is while its line has the room, and cut
+	   in its middle when it has not — the head gives way and ends in "…", the
+	   joining words and the end of the host keep their width. */
+	.place {
+		display: flex;
+		flex: 0 1 auto;
+		min-width: 0;
+		white-space: pre;
+	}
+
+	.join {
+		flex: none;
+	}
+
+	.head {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.subtitle {

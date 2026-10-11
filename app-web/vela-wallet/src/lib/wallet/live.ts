@@ -51,6 +51,7 @@ export type RowMessages = Pick<WalletMessages, 'activity'>;
 import type {
 	ActivityGroupModel,
 	ActivityRowModel,
+	ActivityTitlePart,
 	AssetDetailPanelModel,
 	AssetRowModel,
 	BalanceModel,
@@ -737,6 +738,7 @@ export function liveActivityRow(
 	// unlimited allowance or a figureless signature does not.
 	const masked = hidden && item.figure_maskable;
 	const back = item.dapp?.received ?? null;
+	const titleParts = item.dapp ? dappTitleParts(item.dapp, m) : undefined;
 	return {
 		id: item.id,
 		kind,
@@ -747,6 +749,8 @@ export function liveActivityRow(
 				: kind === 'sent'
 					? m.activity.sent
 					: m.activity.dapp,
+		// Where the title may be broken (item 1 of the 2026-10-11 walk).
+		...(titleParts === undefined ? {} : { titleParts }),
 		// The core's second line (spec 093), worded: status first when the
 		// tracker has not closed the row (RG2, 087 F04), then the site, the
 		// network, or whom a transfer went to — in the core's order.
@@ -877,6 +881,84 @@ function dappVerb(dapp: FeedDapp, m: RowMessages): string {
 export function dappTitle(dapp: FeedDapp, m: RowMessages): string {
 	const intent = dappVerb(dapp, m);
 	return dapp.place != null ? fill(m.activity.dappRowTitle, { intent, place: dapp.place }) : intent;
+}
+
+/**
+ * The same title, in the two parts a row may break it between (device walk of
+ * 2026-10-11, item 1).
+ *
+ * The owner's row read 「在 arcorbs.game3.app 合 / 约交互」 on the phone: the
+ * title was one wrapping text, and a wrapping text breaks wherever the width
+ * runs out — inside the action, in a language written without spaces. The
+ * rule: a title wraps only BETWEEN what was done and where; the action is
+ * never broken; the site is cut in its middle if it must be.
+ *
+ * The parts are read off the corpus's own template (`history.dappRowTitle`,
+ * "{{intent}} on {{place}}" / 「在 {{place}} {{intent}}」 / 「{{place}}で
+ * {{intent}}」), so the order and the joining words are each language's. What
+ * joins them stays with the place — 「在 arcorbs.game3.app」 over 「合约交互」,
+ * "Contract interaction" over "on arcorbs.game3.app" — and the white space
+ * between the two parts ends the first, so the parts joined are the title
+ * exactly. `undefined` when there is no place, or the template is not the two
+ * placeholders this reads: the title is then drawn as one text.
+ */
+export function dappTitleParts(dapp: FeedDapp, m: RowMessages): ActivityTitlePart[] | undefined {
+	if (dapp.place == null) return undefined;
+	const template = m.activity.dappRowTitle;
+	const INTENT = '{{intent}}';
+	const PLACE = '{{place}}';
+	const i = template.indexOf(INTENT);
+	const p = template.indexOf(PLACE);
+	if (i < 0 || p < 0) return undefined;
+	const intent = dappVerb(dapp, m);
+	const { head, tail } = middleCut(dapp.place);
+	if (i < p) {
+		// "<a>{{intent}}<b>{{place}}<c>": the space that opens <b> ends the action.
+		const between = template.slice(i + INTENT.length, p);
+		const space = /^\s*/.exec(between)?.[0] ?? '';
+		return [
+			{ kind: 'action', text: template.slice(0, i) + intent + space },
+			{
+				kind: 'place',
+				before: between.slice(space.length),
+				head,
+				tail,
+				after: template.slice(p + PLACE.length)
+			}
+		];
+	}
+	// "<a>{{place}}<b>{{intent}}<c>": <b> stays with the place, its space included.
+	return [
+		{
+			kind: 'place',
+			before: template.slice(0, p),
+			head,
+			tail,
+			after: template.slice(p + PLACE.length, i)
+		},
+		{ kind: 'action', text: intent + template.slice(i + INTENT.length) }
+	];
+}
+
+/**
+ * Where a place gives way when its line is too short for it: `head` is cut
+ * (and ends in "…"), `tail` is kept. A site's host keeps its end — the
+ * registrable domain, the part that says whose site it is
+ * (`app.uniswap.org.evil.xyz` must never read as `app.uniswap.org…`): its
+ * last two labels, when they are short enough to leave the head something.
+ * Anything else — a protocol's name — keeps its last few characters. A place
+ * too short to be worth cutting in two is all head.
+ */
+export function middleCut(place: string): { head: string; tail: string } {
+	const KEPT = 6;
+	const LONGEST_KEPT = 18;
+	if (place.length <= KEPT * 2) return { head: place, tail: '' };
+	const labels = place.split('.');
+	const host = labels.length >= 3 && !/\s/.test(place);
+	const domain = host ? '.' + labels.slice(-2).join('.') : '';
+	const at =
+		host && domain.length <= LONGEST_KEPT ? place.length - domain.length : place.length - KEPT;
+	return { head: place.slice(0, at), tail: place.slice(at) };
 }
 
 /**
