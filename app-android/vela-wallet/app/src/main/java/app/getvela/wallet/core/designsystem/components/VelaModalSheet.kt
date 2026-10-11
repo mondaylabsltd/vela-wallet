@@ -112,10 +112,18 @@ fun VelaModalSheet(
         // (`contentWindowInsets`), so it is height the sheet has all the same:
         // left out of the cap, a capped sheet stood that much ABOVE the status
         // bar's lower edge — its handle under the clock on a 3-button phone.
+        //
+        // The handle's room is taken off for a sheet that HAS a handle. An
+        // undismissible sheet has none (its top padding is inside this
+        // column), so its cap is the whole room: its top edge stands at the
+        // status bar's lower edge, as a handled sheet's does. Taking the
+        // handle's 48dp off it as well left the signing sheet — the tallest
+        // one — that much shorter than the screen allows.
         val statusBar = WindowInsets.statusBars.getTop(sheetDensity)
         val below = WindowInsets.safeDrawing.getBottom(sheetDensity)
         val window = LocalWindowInfo.current.containerSize.height
-        val cap = with(sheetDensity) { (window - statusBar - below).coerceAtLeast(0).toDp() } - SHEET_CHROME
+        val chrome = if (dismissible) SHEET_CHROME else 0.dp
+        val cap = with(sheetDensity) { (window - statusBar - below).coerceAtLeast(0).toDp() } - chrome
         Column(
             modifier = Modifier
                 .fillMaxWidth()
