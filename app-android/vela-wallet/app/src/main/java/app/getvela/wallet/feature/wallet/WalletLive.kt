@@ -69,12 +69,17 @@ object WalletLive {
     const val BALANCE_MASK = "••••••"
 
     // A masked amount written WITH its unit ("•••• xDAI") is the core's own
-    // function now — `maskedAmount(unit)`, the export of `privacy::masked_amount`
-    // — called wherever one is drawn (a dApp row's "received" here, a
-    // detail's figures in `FlowLive`). This file used to spell the rule
-    // itself, and before that a transfer's detail dropped the unit while iOS
-    // kept it. A figure with no unit of its own — a holding under its ticker,
-    // a worth in the display currency — is [MASK] alone.
+    // function — `maskedAmount(unit)`, the export of `privacy::masked_amount`
+    // — called wherever a coin amount is drawn hidden: a holdings row (home
+    // and Assets), the token's own page, a dApp row's "received" here, a
+    // detail's figures in `FlowLive`. One rule: a row that reads "0.0003 BNB"
+    // shown reads "•••• BNB" hidden — hiding turns digits into dots and moves
+    // nothing else. This file used to spell the rule itself, a transfer's
+    // detail then dropped the unit while iOS kept it, and the holdings rows
+    // and the token page went on dropping it until the 2026-10-11 walk
+    // (shown 「0.0003 BNB」, hidden 「••••」). A worth in the display currency
+    // is [MASK] alone: its unit is the currency every figure on the screen
+    // shares.
 
     /**
      * The home screen, from the person's own holdings.
@@ -614,7 +619,7 @@ object WalletLive {
         token: BalanceToken,
         chainNames: Map<Int, String>,
         money: Money,
-        /** Balance privacy: the amount AND its worth draw the mask (`privacy`). */
+        /** Balance privacy (`privacy`): the amount is the mask and its coin, its worth the mask alone. */
         hidden: Boolean,
     ): AssetRowModel {
         val mark = mark(token.chain_id, token.symbol, token.token_address)
@@ -630,7 +635,9 @@ object WalletLive {
             badgeHidden = mark.badgeHidden,
             // The ONE token-amount rule (spec 078): Send's picker, token card,
             // confirm and receipt call the same function on the same holding.
-            balance = if (hidden) MASK else "${tokenAmountText(token.balance)} ${token.symbol}",
+            // Hidden, the coin stays (the core's `maskedAmount`): how much is
+            // hidden, what kind of money is not.
+            balance = if (hidden) maskedAmount(token.symbol) else "${tokenAmountText(token.balance)} ${token.symbol}",
             fiat = when {
                 hidden -> AssetFiatModel.Masked
                 // A holding's worth is a figure in the display currency: it
