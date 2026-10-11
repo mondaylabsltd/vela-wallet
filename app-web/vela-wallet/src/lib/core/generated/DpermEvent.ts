@@ -62,4 +62,11 @@ current_addresses: Array<string> | null,
 /**
  * The account the wallet switched TO.
  */
-active_address: string, now_ms: number, };
+active_address: string, now_ms: number, 
+/**
+ * The wallet is in a dev space (the parallel space): the accounts in
+ * `current_addresses` are the space's, and the person's own are set
+ * aside, not gone ([`space_keeps_grant`]). Absent = the person's own
+ * wallet.
+ */
+space: boolean, };

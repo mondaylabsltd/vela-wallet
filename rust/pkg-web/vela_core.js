@@ -3251,6 +3251,29 @@ export function create2Address(deployer_hex, salt, init_code_hash) {
 }
 
 /**
+ * An exact token figure cut to the precision a person reads
+ * (`l10n::cut_token_amount`): the token ladder, never rounded up, dust kept
+ * at its first significant digit. Dot-decimal in, dot-decimal out; text
+ * that is not a figure comes back unchanged.
+ * @param {string} plain
+ * @returns {string}
+ */
+export function cutTokenAmount(plain) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(plain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.cutTokenAmount(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * EIP-3085 `wallet_addEthereumChain` (spec 100): the page's ask as Vela reads
  * it, as JSON — `{"ok": DappChainAsk}` or `{"error": "<the -32602 words>"}`.
  * `debug_mode` is Settings' debug mode: which http RPC URLs a page may give.
@@ -3310,6 +3333,29 @@ export function dappOffersWallet(origin, debug_mode) {
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.dappOffersWallet(ptr0, len0, debug_mode);
     return ret !== 0;
+}
+
+/**
+ * What the address bar's mark says about the connection to a page at
+ * `origin` (`dapp_permissions::origin_lock`): `secure` — https, the only
+ * padlock; `local` — http on this device or the person's own network;
+ * `insecure` — public http, the warning.
+ * @param {string} origin
+ * @returns {string}
+ */
+export function dappOriginLock(origin) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.dappOriginLock(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
 }
 
 /**
@@ -3717,6 +3763,33 @@ export function feeRequoteTimeoutMs() {
 export function feeSignalsCacheTtlMs() {
     const ret = wasm.feeSignalsCacheTtlMs();
     return ret >>> 0;
+}
+
+/**
+ * The symbol a fiat figure is written with (`l10n::fiat_symbol`): ONE table
+ * for all four shells. `$` alone is the US dollar's; `¥` alone is the yuan
+ * in Chinese and the yen in every other language, the other one carrying
+ * its country (`JP¥` / `CN¥`); a currency with no glyph of its own is its
+ * code. `language` is the app's language tag.
+ * @param {string} code
+ * @param {string} language
+ * @returns {string}
+ */
+export function fiatSymbol(code, language) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(code, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(language, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.fiatSymbol(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**

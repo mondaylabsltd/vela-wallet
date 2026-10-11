@@ -728,6 +728,14 @@ export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): stri
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
 
 /**
+ * An exact token figure cut to the precision a person reads
+ * (`l10n::cut_token_amount`): the token ladder, never rounded up, dust kept
+ * at its first significant digit. Dot-decimal in, dot-decimal out; text
+ * that is not a figure comes back unchanged.
+ */
+export function cutTokenAmount(plain: string): string;
+
+/**
  * EIP-3085 `wallet_addEthereumChain` (spec 100): the page's ask as Vela reads
  * it, as JSON — `{"ok": DappChainAsk}` or `{"error": "<the -32602 words>"}`.
  * `debug_mode` is Settings' debug mode: which http RPC URLs a page may give.
@@ -748,6 +756,14 @@ export function dappAddOutcomeError(outcome_json: string, chain_id: number): str
  * injected script's host test to it.
  */
 export function dappOffersWallet(origin: string, debug_mode: boolean): boolean;
+
+/**
+ * What the address bar's mark says about the connection to a page at
+ * `origin` (`dapp_permissions::origin_lock`): `secure` — https, the only
+ * padlock; `local` — http on this device or the person's own network;
+ * `insecure` — public http, the warning.
+ */
+export function dappOriginLock(origin: string): string;
 
 /**
  * The document-start script an in-app browser injects, for `host`
@@ -873,6 +889,15 @@ export function feeRequoteDelayMs(failure: string, attempt: number): number | un
 export function feeRequoteTimeoutMs(): number;
 
 export function feeSignalsCacheTtlMs(): number;
+
+/**
+ * The symbol a fiat figure is written with (`l10n::fiat_symbol`): ONE table
+ * for all four shells. `$` alone is the US dollar's; `¥` alone is the yuan
+ * in Chinese and the yen in every other language, the other one carrying
+ * its country (`JP¥` / `CN¥`); a currency with no glyph of its own is its
+ * code. `language` is the app's language tag.
+ */
+export function fiatSymbol(code: string, language: string): string;
 
 /**
  * The core's compact relative time — `"now"`, `"2m"`, `"3h"`, a short
@@ -1683,9 +1708,11 @@ export interface InitOutput {
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
+    readonly cutTokenAmount: (a: number, b: number) => [number, number];
     readonly dappAddChainAsk: (a: number, b: number, c: number) => [number, number];
     readonly dappAddOutcomeError: (a: number, b: number, c: number) => [number, number];
     readonly dappOffersWallet: (a: number, b: number, c: number) => number;
+    readonly dappOriginLock: (a: number, b: number) => [number, number];
     readonly dappProviderScript: (a: number, b: number, c: number) => [number, number];
     readonly dappReceiptWaitMs: (a: number) => number;
     readonly dappRequestCalls: (a: number, b: number, c: number, d: number) => [number, number];
@@ -1735,6 +1762,7 @@ export interface InitOutput {
     readonly feetierprefcore_new: () => number;
     readonly feetierprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly feetierprefcore_view: (a: number) => [number, number, number, number];
+    readonly fiatSymbol: (a: number, b: number, c: number, d: number) => [number, number];
     readonly formatRelativeTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly formatSignedTokenAmount: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly fromBase64Url: (a: number, b: number) => [number, number, number, number];

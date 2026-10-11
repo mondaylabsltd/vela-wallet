@@ -2,13 +2,22 @@
 import type { DbrFailureNote } from "./DbrFailureNote";
 import type { DbrPageState } from "./DbrPageState";
 import type { DbrProviderState } from "./DbrProviderState";
+import type { OriginLock } from "./OriginLock";
 
 export type DbrTabView = { tab: string, origin: string | null, connected_address: string | null, chain_id: number, 
 /**
- * https, or a loopback / private-network http host — the lock tells the
- * truth from this.
+ * Not a public `http` page: https, or a loopback / private-network
+ * http host. Whether the page is SAFE to use the wallet from — not what
+ * the address bar's mark draws; that is [`Self::lock`].
  */
-secure: boolean, crashed: boolean, 
+secure: boolean, 
+/**
+ * The address bar's mark ([`OriginLock`]): a padlock for `https` only,
+ * a neutral "local" mark for `http` on this device or the person's own
+ * network, the warning for public `http`. A tab with no page yet has no
+ * connection to mark (`insecure`, drawn by `secure` as before).
+ */
+lock: OriginLock, crashed: boolean, 
 /**
  * Something of this tab's is open — a request, a read, a consent, a
  * signature: its engine is never suspended (spec 099 R2).
