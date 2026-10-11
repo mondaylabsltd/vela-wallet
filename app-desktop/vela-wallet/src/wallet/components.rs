@@ -422,24 +422,39 @@ pub fn balance_display(
     // stays still and its words say it is reading.
     reduce_motion: bool,
 ) -> Div {
-    let mut root = div().flex().flex_col().gap(px(8.)).child(
-        div()
-            .text_size(theme::text_label())
-            .line_height(gpui::relative(LINE_BODY))
-            .font_weight(gpui::FontWeight::MEDIUM)
-            .text_color(theme.fg_subtle)
-            // The code the figure beneath is DRAWN in, not a constant: the
-            // hero said `总余额 · USD` over `ZAR 157.34` until 2026-09-23.
-            // …and no code at all while the display currency is not
-            // committed and nobody's choice is on its way: the placeholder's
-            // "USD" is not the person's currency.
-            .child(if model.currency.is_empty() {
-                model.label.clone()
-            } else {
-                SharedString::from(format!("{} · {}", model.label, model.currency))
-            }),
-    );
+    // The hero's boxes say where they are to a measurement pass
+    // (`crate::dev_probe`): the hero, its figure, its status line and the
+    // refresh control on it.
+    let mut root = div()
+        .relative()
+        .flex()
+        .flex_col()
+        .gap(px(8.))
+        .children(crate::dev_probe::mark("hero"))
+        .child(
+            div()
+                .text_size(theme::text_label())
+                .line_height(gpui::relative(LINE_BODY))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(theme.fg_subtle)
+                // The code the figure beneath is DRAWN in, not a constant: the
+                // hero said `总余额 · USD` over `ZAR 157.34` until 2026-09-23.
+                // …and no code at all while the display currency is not
+                // committed and nobody's choice is on its way: the
+                // placeholder's "USD" is not the person's currency.
+                .child(if model.currency.is_empty() {
+                    model.label.clone()
+                } else {
+                    SharedString::from(format!("{} · {}", model.label, model.currency))
+                }),
+        );
 
+    let figure = |figure: Div| {
+        div()
+            .relative()
+            .child(figure)
+            .children(crate::dev_probe::mark("hero-figure"))
+    };
     root = match model.state {
         // The web's `SkeletonRow variant="block"` (078 H-10): 55 % of the
         // column, one `--text-4xl` tall, radius 8, breathing 1 → .4 → 1.
@@ -450,7 +465,7 @@ pub fn balance_display(
         // The figure now lands where the bar was, and nothing moves — which
         // is the whole point of waiting for the display currency (PR 3 item
         // 10) instead of drawing dollars first.
-        BalanceState::Loading => root.child(
+        BalanceState::Loading => root.child(figure(
             div()
                 .h(theme::text_balance_hero() * 1.12)
                 .flex()
@@ -474,8 +489,8 @@ pub fn balance_display(
                             },
                         ),
                 ),
-        ),
-        BalanceState::Hidden => root.child(pressable(
+        )),
+        BalanceState::Hidden => root.child(figure(pressable(
             div()
                 .flex()
                 .items_center()
@@ -493,7 +508,7 @@ pub fn balance_display(
                 // has lost their money rather than that they hid it.
                 .child(icon_img(icons, Icon::EyeOff, false, theme.fg_subtle, 20.)),
             on_toggle,
-        )),
+        ))),
         BalanceState::Normal | BalanceState::ZeroLive => {
             // `--leading-amountHero` 1.12: gpui's default line is ~1.6, and
             // at 40 px that pushed everything below the hero 10 px down.
@@ -526,33 +541,80 @@ pub fn balance_display(
                         ))),
                 );
             }
-            root.child(pressable(amount, on_toggle))
+            root.child(figure(pressable(amount, on_toggle)))
         }
     };
 
-    // Issue #443: the hero's own refresh — the glyph and when the figure was
-    // last read ("Updated 2m"). A deposit made from another device had no
-    // sign here until the ten-minute poll or a restart; now the person can
-    // ask, and can see how fresh what they are looking at is. Quiet: subtle
-    // ink, fuller on hover. Drawn without a press behind it where a board
-    // shows its states.
-    //
-    // Directly under the figure, and always in that place: the line that
-    // comes and goes ([`status_slot`]) is BELOW it, so nothing that arrives
-    // can push the control down under a pointer that is pressing it (issue
-    // 462) — and nothing can push the page (PR 3 note 26b).
-    if on_refresh.is_some() || model.updated.is_some() {
-        root = root.child(div().flex().child(refresh_control(
-            theme,
-            icons,
-            model,
-            on_refresh,
-            reduce_motion,
-        )));
-    }
-
-    root.child(status_slot(theme, icons, model, on_status))
+    root.child(status_line(
+        theme,
+        icons,
+        model,
+        on_status,
+        on_refresh,
+        reduce_motion,
+    ))
 }
+
+/// How wide the hero's line under the figure may be: the home's row measure
+/// (`--layout-rowMeasure`), the width of every two-ended row below it — so
+/// the refresh control at its trailing edge stands over their trailing
+/// actions ("All ›", "Add ›"), and no farther than the eye can cross.
+pub const HERO_LINE_MEASURE: f32 = theme::WALLET_ROW_MEASURE;
+
+/// The hero's ONE line under the figure (PR 4 item 4): what the wallet has
+/// to say on its leading side ([`status_slot`]) and, at its trailing edge,
+/// the control that reads the figure again with when it was last read
+/// ([`refresh_control`], issue #443).
+///
+/// They were two lines. The control had the first to itself — before the
+/// first read that is a lone ↻ over "Checking…" — and the slot under it
+/// stood empty whenever the wallet had nothing to say, which is nearly
+/// always: a line with one glyph on it, or a blank one, in every state.
+///
+/// One height ([`status_slot_height`]) whatever either half says, and it is
+/// always there: nothing that arrives, changes or goes moves the page under
+/// the hero (PR 3 note 26b). The control keeps the trailing edge in every
+/// state — its glyph is the last thing on the line, so nothing said beside
+/// it and no change of its own words moves it under a pointer that is
+/// pressing it (issue 462). The words take what the control leaves: a
+/// sentence longer than that ends in an ellipsis (F16).
+fn status_line(
+    theme: &Theme,
+    icons: &mut IconCache,
+    model: &BalanceModel,
+    on_status: Option<BalanceToggle>,
+    on_refresh: Option<BalanceToggle>,
+    reduce_motion: bool,
+) -> Div {
+    // Drawn without a press behind it where a board shows its states; not
+    // at all where there is neither a press nor a reading to tell of.
+    let refresh = (on_refresh.is_some() || model.updated.is_some()).then(|| {
+        div()
+            .relative()
+            .flex_none()
+            .child(refresh_control(
+                theme,
+                icons,
+                model,
+                on_refresh,
+                reduce_motion,
+            ))
+            .children(crate::dev_probe::mark("hero-refresh"))
+    });
+    div()
+        .relative()
+        .h(status_slot_height())
+        .max_w(px(HERO_LINE_MEASURE))
+        .flex()
+        .items_center()
+        .gap(px(HERO_LINE_GAP))
+        .child(status_slot(theme, icons, model, on_status))
+        .children(refresh)
+        .children(crate::dev_probe::mark("hero-status"))
+}
+
+/// Between what the line says and the refresh control.
+const HERO_LINE_GAP: f32 = 16.;
 
 /// The height of the hero's status slot: one line of its text at the body
 /// leading, and the 4 px above and below that make the line a button.
@@ -598,20 +660,20 @@ impl SlotLine {
     }
 }
 
-/// The hero's one line under the figure, IN A SLOT THAT IS ALWAYS THERE
-/// (PR 3 note 26b): [`status_slot_height`] tall whether or not anything is
-/// said in it ([`SlotLine`]). "Can't reach …", "Updating…", the zero
-/// wallet's "listening" line and the unpriced notice all arrive, change and
-/// go in this room — a cached total with its grey "still updating" line
-/// gives way to the fresh one on every launch — and the page under the hero
-/// never moves for it. The line used to be added and removed, and everything
-/// below it jumped a row each time.
+/// What the hero's line says, IN A SLOT THAT IS ALWAYS THERE (PR 3 note
+/// 26b): the leading side of [`status_line`], as tall as the line whether
+/// or not anything is said in it ([`SlotLine`]). "Can't reach …",
+/// "Updating…", the zero wallet's "listening" line and the unpriced notice
+/// all arrive, change and go in this room — a cached total with its grey
+/// "still updating" line gives way to the fresh one on every launch — and
+/// the page under the hero never moves for it. The line used to be added
+/// and removed, and everything below it jumped a row each time.
 ///
-/// One line, never two (PR 3 final note F16): it is as wide as the home
-/// column, and a sentence longer than that ends in an ellipsis rather than
-/// wrapping or growing the slot. The whole sentence is the line's accessible
-/// name, and what the line opens says it in full at its top — the
-/// unreachable list as its title, the breakdown as its subtitle
+/// One line, never two (PR 3 final note F16): it takes the room the refresh
+/// control leaves, and a sentence longer than that ends in an ellipsis
+/// rather than wrapping or growing the slot. The whole sentence is the
+/// line's accessible name, and what the line opens says it in full at its
+/// top — the unreachable list as its title, the breakdown as its subtitle
 /// (`wallet::live::breakdown_lead`).
 fn status_slot(
     theme: &Theme,
@@ -619,7 +681,7 @@ fn status_slot(
     model: &BalanceModel,
     on_status: Option<BalanceToggle>,
 ) -> Div {
-    let slot = div().h(status_slot_height()).flex().items_center();
+    let slot = div().flex_1().min_w(px(0.)).h_full().flex().items_center();
     // The line's accessible name is its whole sentence — on the ONE hero a
     // session draws. A board draws several heroes side by side, and an id
     // (which a name needs) on each would be the same id many times over.
@@ -771,16 +833,20 @@ pub fn refresh_words(model: &BalanceModel) -> Option<SharedString> {
     }
 }
 
-/// The hero's "↻ Updated 2m" (issue 462). While a read the person asked
-/// for is out the ↻ turns, the words read "Updating…", and the control
-/// takes no press: a second press would only start a second round.
+/// The hero's "Updated 2m ↻" (issue 462), at the trailing edge of its line
+/// ([`status_line`]). While a read the person asked for is out the ↻ turns,
+/// the words read "Updating…", and the control takes no press: a second
+/// press would only start a second round.
 ///
-/// One box for both states, so a press moves nothing — the reason the
-/// grey status line no longer comes and goes above it either: the glyph
-/// is the same 14 square turning or still, and the words sit in a one-line
-/// slot as wide as the LONGER of the two labels — the one not shown is laid
-/// out under it, clipped, invisible. Under Reduce Motion the glyph stays
-/// still ([`refresh_turns`]); the words still change.
+/// One box for both states, so a press moves nothing: the glyph is the same
+/// 14 square turning or still, and it is the LAST thing in the box — the
+/// line's trailing edge, where it stays whatever the words beside it say.
+/// The words lead it, set against it, in a one-line slot as wide as the
+/// LONGER of the two labels — the one not shown is laid out under it,
+/// clipped, invisible. Before the first read there are no words, and the
+/// glyph stands alone at the end of the line that says "Checking…". Under
+/// Reduce Motion the glyph stays still ([`refresh_turns`]); the words still
+/// change.
 fn refresh_control(
     theme: &Theme,
     icons: &mut IconCache,
@@ -824,8 +890,11 @@ fn refresh_control(
     let mut words = div()
         .flex()
         .flex_col()
+        // Set against the glyph that follows them.
+        .items_end()
         .h(line)
         .line_height(line)
+        .whitespace_nowrap()
         .overflow_hidden();
     if let Some(shown) = shown {
         words = words.child(shown);
@@ -842,8 +911,8 @@ fn refresh_control(
         .py(px(4.))
         .text_size(theme::text_row_sub())
         .text_color(theme.fg_subtle)
-        .child(glyph)
-        .child(words);
+        .child(words)
+        .child(glyph);
     match on_refresh.filter(|_| !model.refreshing) {
         Some(on_refresh) => control
             .cursor_pointer()
@@ -1747,6 +1816,107 @@ mod tests {
         let at_rest = crate::wallet::fixtures::balance_refresh(&en, false);
         assert!(!refresh_turns(&at_rest, false), "still at rest");
         assert!(!refresh_turns(&at_rest, true));
+    }
+
+    /// PR 4 item 4: under the figure the hero has ONE line — what the wallet
+    /// has to say, and the refresh control at its trailing edge — where it
+    /// had two: the control alone on the first (a lone ↻ over "Checking…"
+    /// before the first read) and a slot under it that stood empty whenever
+    /// there was nothing to say. The line is one fixed height in every
+    /// state, a row as wide as the home's rows; what it says takes the room
+    /// the control leaves and may shrink; the control never does. Where gpui
+    /// puts the boxes is measured on the real window by
+    /// `scripts/check-hero-line.sh`.
+    #[test]
+    fn the_heros_status_and_its_refresh_are_one_line_of_one_height() {
+        use crate::wallet::fixtures::BalanceState;
+        let theme = Theme::light();
+        let mut icons = IconCache::default();
+        let hero = |checking: Option<&str>,
+                    status: Option<&str>,
+                    updated: Option<&str>,
+                    refreshing: bool,
+                    state: BalanceState| BalanceModel {
+            label: SharedString::from("Total balance"),
+            currency: SharedString::from("USD"),
+            state,
+            integer: SharedString::from("$1"),
+            decimals: None,
+            live: None,
+            checking: checking.map(SharedString::from),
+            status: status.map(|text| (StatusKind::Warning, SharedString::from(text))),
+            updated: updated.map(SharedString::from),
+            refreshing,
+            updating: SharedString::from("Updating…"),
+        };
+        let long = "Something went wrong inside Vela. If it keeps happening, reopen the app.";
+        let states = [
+            // Checking: nothing read yet, so the control has no words.
+            hero(Some("Checking…"), None, None, false, BalanceState::Normal),
+            // Updated, with nothing to say.
+            hero(None, None, Some("Updated 2m"), false, BalanceState::Normal),
+            // A read the person asked for is out.
+            hero(None, None, Some("Updated 2m"), true, BalanceState::Normal),
+            // Failed inside Vela, and out of reach: a sentence, a button.
+            hero(
+                None,
+                Some(long),
+                Some("Updated 2m"),
+                false,
+                BalanceState::Normal,
+            ),
+            hero(
+                None,
+                Some("Can't reach 3 networks right now"),
+                Some("Updated 2m"),
+                false,
+                BalanceState::Normal,
+            ),
+            // Hidden, and a total not yet known.
+            hero(None, None, Some("Updated 2m"), false, BalanceState::Hidden),
+            hero(None, None, None, false, BalanceState::Loading),
+        ];
+        for model in &states {
+            for pressable in [true, false] {
+                let press = || -> Option<BalanceToggle> {
+                    pressable.then(|| {
+                        Box::new(|_: &gpui::ClickEvent, _: &mut gpui::Window, _: &mut gpui::App| {})
+                            as BalanceToggle
+                    })
+                };
+                let mut line = status_line(&theme, &mut icons, model, None, press(), false);
+                let style = line.style();
+                assert_eq!(
+                    style.size.height,
+                    Some(status_slot_height().into()),
+                    "one height, whatever it says"
+                );
+                assert_eq!(style.max_size.width, Some(px(HERO_LINE_MEASURE).into()));
+                assert_eq!(style.display, Some(gpui::Display::Flex));
+                assert_ne!(
+                    style.flex_direction,
+                    Some(gpui::FlexDirection::Column),
+                    "a row: the words and the control side by side"
+                );
+                // What it says: the room the control leaves, and it may
+                // shrink to nothing rather than push the control.
+                let mut slot = status_slot(&theme, &mut icons, model, None);
+                assert_eq!(slot.style().flex_grow, Some(1.));
+                assert_eq!(slot.style().min_size.width, Some(px(0.).into()));
+            }
+        }
+        assert!(
+            (HERO_LINE_MEASURE - theme::WALLET_ROW_MEASURE).abs() < f32::EPSILON,
+            "the control stands over the rows' trailing actions"
+        );
+        // Before the first read the control is the glyph alone — there is
+        // no "Updated" to say — and it is still drawn, on the line that says
+        // "Checking…", wherever a press is behind it.
+        assert_eq!(refresh_words(&states[0]), None);
+        assert_eq!(
+            SlotLine::of(&states[0]),
+            SlotLine::Checking("Checking…".into())
+        );
     }
 
     /// PR 3 note 26b: the hero keeps ONE slot under its figure, always the same

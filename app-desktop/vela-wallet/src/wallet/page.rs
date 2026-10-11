@@ -988,6 +988,8 @@ pub struct WalletPage {
     /// `VELA_SIM=<first>><then>` (developer builds): the drawn request's
     /// pinned answer has landed on its second one.
     sim_pin_landed: bool,
+    /// `VELA_SIGN_FEE=a>b`: the pinned fee has landed on its second state.
+    fee_pin_landed: bool,
     /// The sidebar's network list — twenty-odd chains outgrow a short window.
     networks_scroll: crate::ui::SmoothScroll,
     /// The settings panel's, for the same bar.
@@ -1343,6 +1345,20 @@ impl WalletPage {
                         .await;
                     let _ = page.update(cx, |page, cx| {
                         page.sim_pin_landed = true;
+                        cx.notify();
+                    });
+                })
+                .detach();
+            }
+            // `VELA_SIGN_FEE=estimating>failed`: the pinned fee lands the
+            // same moment after the window opens, as a quote does.
+            if signing_fixtures::fee_pin_lands().is_some() {
+                cx.spawn(async move |page, cx| {
+                    cx.background_executor()
+                        .timer(signing_fixtures::SIM_PIN_LANDS_AFTER)
+                        .await;
+                    let _ = page.update(cx, |page, cx| {
+                        page.fee_pin_landed = true;
                         cx.notify();
                     });
                 })
@@ -1717,6 +1733,7 @@ impl WalletPage {
             verdict_seen: None,
             verdict_reveal: std::rc::Rc::default(),
             sim_pin_landed: false,
+            fee_pin_landed: false,
             networks_scroll: crate::ui::SmoothScroll::new(),
             settings_scroll: crate::ui::SmoothScroll::new(),
             text_scale_slider: crate::ui::StepSlider::new(),
@@ -3782,6 +3799,9 @@ impl WalletPage {
         self.keep_hero_clock(cx);
 
         let pills = div()
+            .relative()
+            // The first row under the hero, for a measurement pass.
+            .children(crate::dev_probe::mark("home-actions"))
             .flex()
             .gap(px(12.))
             .max_w(px(600.))
@@ -4010,12 +4030,16 @@ impl WalletPage {
                         // and the incoming scan, as coming back to the window
                         // does. There was no way to ask; the next look was up to
                         // ten minutes away. Issue 462: as the person's own read.
-                        self.identity.is_some().then(|| {
-                            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                this.refresh_by_hand(cx);
-                            }))
-                                as crate::wallet::components::BalanceToggle
-                        }),
+                        // (`VELA_HERO` draws the control as a session does;
+                        // with no session behind it, the press does nothing.)
+                        (self.identity.is_some() || fixtures::HeroBoard::pinned().is_some()).then(
+                            || {
+                                Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                    this.refresh_by_hand(cx);
+                                }))
+                                    as crate::wallet::components::BalanceToggle
+                            },
+                        ),
                         reduce_motion,
                     ))
                     .child(
@@ -4852,6 +4876,24 @@ impl WalletPage {
     /// the app showing somebody a stranger's money and calling it theirs.
     fn balance_model(&mut self, cx: &mut Context<Self>) -> fixtures::BalanceModel {
         if self.identity.is_none() {
+            // `VELA_HERO`: the hero as a session draws it, in one of the
+            // states its line can be in — when it was read beside its
+            // refresh control, as `model.updated` is filled below.
+            if let Some(board) = fixtures::HeroBoard::pinned() {
+                let money = self.money(cx);
+                let mut model =
+                    wallet_live::balance(&board.view(), &self.strings, &self.locale, &money);
+                if board.read_before() {
+                    let now = crate::executor::now_ms();
+                    model.updated = Some(SharedString::from(crate::wallet::fill(
+                        &self.strings.last_updated,
+                        "ago",
+                        &self.loc.relative_time(now - 120_000., now),
+                    )));
+                }
+                model.refreshing = board == fixtures::HeroBoard::Updating;
+                return model;
+            }
             if self.tab == GalleryTab::Dsr6 {
                 let money = self.money(cx);
                 return wallet_live::balance(
@@ -5867,7 +5909,12 @@ impl WalletPage {
                 .text_color(theme.fg_base)
                 .child(title),
         );
+        // The column, its header and its ✕ say where they are to a
+        // measurement pass (`crate::dev_probe`): none of them may move for
+        // anything the body under them comes to say.
         let mut bar = div()
+            .relative()
+            .children(crate::dev_probe::mark("panel-header"))
             .flex()
             .items_center()
             .gap(px(8.))
@@ -5878,6 +5925,8 @@ impl WalletPage {
             bar = bar.border_b_1().border_color(theme.divider);
         }
         div()
+            .relative()
+            .children(crate::dev_probe::mark("panel"))
             .w(px(THIRD_PANEL_W))
             .h_full()
             .flex_none()
@@ -5890,6 +5939,8 @@ impl WalletPage {
                 bar.child(heading).child(
                     div()
                         .id("panel-close")
+                        .relative()
+                        .children(crate::dev_probe::mark("panel-close"))
                         .flex_none()
                         .size(px(36.))
                         .rounded_full()
@@ -17886,6 +17937,21 @@ impl WalletPage {
         if self.gallery && self.no_signing_host() && Self::pinned_currency().is_some() {
             signing_fixtures::in_display_currency(&mut model, &self.signing, &currency);
         }
+        // `VELA_SIGN_FEE`: the fee card on the drawn request as the live
+        // sheet says it in the pinned state — the row by the live builder
+        // over the real fee core's view, the speed control folded under it.
+        let pinned_fee = (self.gallery && self.no_signing_host())
+            .then(|| {
+                if self.fee_pin_landed {
+                    signing_fixtures::fee_pin_lands()
+                } else {
+                    signing_fixtures::fee_pin()
+                }
+            })
+            .flatten();
+        if let Some(pin) = pinned_fee {
+            model.fee = signing_fixtures::fee_pin_row(pin, &self.signing, &currency);
+        }
         // `VELA_SIM`: the verdict's place on the drawn request, holding the
         // answer the pin names — where the live sheet puts it, after what
         // the request says of itself.
@@ -17912,7 +17978,12 @@ impl WalletPage {
             if model.confirm_enabled
                 && !model.confirm_label.is_empty()
                 && crate::gallery::handoff_pin().is_none()
-                && let Some(gate) = signing_fixtures::sim_pin_confirm(pin)
+                // …over the pinned fee, when there is one: the gate then
+                // says the fee's own line.
+                && let Some(gate) = match pinned_fee {
+                    Some(fee) => signing_fixtures::pin_confirm(pin, &fee.view()),
+                    None => signing_fixtures::sim_pin_confirm(pin),
+                }
             {
                 model.confirm_enabled = gate.enabled;
                 let key = gate
@@ -18724,20 +18795,32 @@ impl WalletPage {
             }
             column = column.child(row_divider(theme)).child(section);
         }
-        column = column.children(self.signing_fee_block(
-            theme,
-            &model.fee,
-            signing_speed.as_ref(),
-            &speed_tiers,
-            cx,
-        ));
-        column = column.child(signing_components::signer_row(
-            theme,
-            &mut self.identicons,
-            model.signer_label.clone(),
-            model.signer_name.clone(),
-            &model.signer_seed,
-        ));
+        // `VELA_SIGN_FEE`: the speed control under the pinned fee, folded
+        // as the live sheet opens it.
+        if signing_speed.is_none()
+            && let Some(pin) = pinned_fee
+        {
+            signing_speed = Some(signing_fixtures::fee_pin_speed(pin, &self.flow_strings));
+        }
+        column = column.children(
+            self.signing_fee_block(theme, &model.fee, signing_speed.as_ref(), &speed_tiers, cx)
+                .map(|block| {
+                    block
+                        .relative()
+                        .children(crate::dev_probe::mark("signing-fee"))
+                }),
+        );
+        column = column.child(
+            signing_components::signer_row(
+                theme,
+                &mut self.identicons,
+                model.signer_label.clone(),
+                model.signer_name.clone(),
+                &model.signer_seed,
+            )
+            .relative()
+            .children(crate::dev_probe::mark("signing-signer")),
+        );
         // The column's one action and the line under it are its FOOT, not
         // its last blocks: pinned at the bottom, where nothing above can
         // move them.

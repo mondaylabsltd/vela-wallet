@@ -390,6 +390,77 @@ pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
     host.view()
 }
 
+/// `VELA_HERO=checking|updated|updating|failed|offline|hidden` (developer
+/// builds, with `VELA_PAGE=gallery`): the home's hero AS A SESSION DRAWS IT —
+/// its refresh control with it — in each state its one line under the figure
+/// can be in, every view the real balance core's. A session cannot be held in
+/// the half second its first read takes, nor made to fail on request; and the
+/// states have to be measured side by side (PR 4 item 4: the line and the
+/// control are one line of one height in all of them). The same env-pin
+/// family as `VELA_FIRST_READ`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeroBoard {
+    /// The first read is still out: "Checking…", and nothing read yet.
+    Checking,
+    /// A wallet that holds something, read a moment ago: nothing to say.
+    Updated,
+    /// The same, while a read the person asked for is out.
+    Updating,
+    /// A read failed inside Vela: its sentence, a button.
+    Failed,
+    /// Networks out of reach: "Can't reach 3 networks".
+    Offline,
+    /// The balance hidden.
+    Hidden,
+}
+
+impl HeroBoard {
+    pub const ALL: [(Self, &'static str); 6] = [
+        (Self::Checking, "checking"),
+        (Self::Updated, "updated"),
+        (Self::Updating, "updating"),
+        (Self::Failed, "failed"),
+        (Self::Offline, "offline"),
+        (Self::Hidden, "hidden"),
+    ];
+
+    /// The board a pin's value names (`VELA_HERO`).
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(board, name)| (name == want.trim()).then_some(board))
+    }
+
+    /// The board `VELA_HERO` pins, if it pins one.
+    #[must_use]
+    pub fn pinned() -> Option<Self> {
+        Self::named(&crate::dev_env::var!("VELA_HERO")?)
+    }
+
+    /// The balance core's view on this board.
+    #[must_use]
+    pub fn view(self) -> vela_core::app::balance_dashboard::BalanceView {
+        match self {
+            Self::Checking => first_read_view(FirstRead::Checking),
+            Self::Updated | Self::Updating => held_view(),
+            Self::Failed => internal_view(),
+            Self::Offline => unreachable_view(),
+            Self::Hidden => {
+                let mut view = held_view();
+                view.hidden = true;
+                view
+            }
+        }
+    }
+
+    /// Whether the figure has been read at all — the control then says when.
+    #[must_use]
+    pub fn read_before(self) -> bool {
+        self != Self::Checking
+    }
+}
+
 /// Where the first read of a wallet that held nothing last session stands —
 /// the three things the hero's one line says about a zero (PR 3 final note
 /// F19), each a view the real balance core produced.

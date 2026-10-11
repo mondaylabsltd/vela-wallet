@@ -536,6 +536,18 @@ pub fn sim_pin_sign_view(pin: SimPin) -> Option<vela_core::app::sign_request::Si
 /// answer is out, open once it is in or the wait has run out.
 #[must_use]
 pub fn sim_pin_confirm(pin: SimPin) -> Option<vela_core::app::sign_confirm::ConfirmState> {
+    pin_confirm(pin, &settled_fee())
+}
+
+/// [`sim_pin_confirm`] over a given fee — what the gate says of a sheet
+/// whose simulation stands at `pin` and whose fee card says `fee`
+/// (`VELA_SIGN_FEE`): shut with the fee's own line while it is out, failed,
+/// or more than any coin can pay.
+#[must_use]
+pub fn pin_confirm(
+    pin: SimPin,
+    fee: &vela_core::app::fee_policy::FeeView,
+) -> Option<vela_core::app::sign_confirm::ConfirmState> {
     use crate::core_host::CoreHost;
     use vela_core::app::approval_guard::ApprovalGuard;
     use vela_core::app::clear_signing::{ClearSigning, ClearSurface};
@@ -546,10 +558,9 @@ pub fn sim_pin_confirm(pin: SimPin) -> Option<vela_core::app::sign_confirm::Conf
     let mut clear = CoreHost::<ClearSigning>::new().view();
     clear.resolving = false;
     clear.surface = ClearSurface::BlindTransaction;
-    let fee = settled_fee();
     let tier = fee.fee.as_ref().map(|estimate| estimate.tier);
     Some(crate::signing::live::confirm_state(
-        &sign, &guard, &clear, &fee, tier,
+        &sign, &guard, &clear, fee, tier,
     ))
 }
 
@@ -2396,8 +2407,24 @@ fn fee_quote_row(native: bool) -> vela_core::app::fee_policy::FeeAssetQuote {
 /// 083 fee: it ANSWERED that the operation fails with the coin in force).
 fn answer_fee(
     host: &mut crate::core_host::CoreHost<vela_core::app::fee_policy::FeePolicy>,
+    pending: Vec<crate::core_host::Pending<vela_core::app::fee_policy::FeeOperation>>,
+    refused: bool,
+) {
+    answer_fee_rows(
+        host,
+        pending,
+        refused,
+        &[fee_quote_row(true), fee_quote_row(false)],
+    );
+}
+
+/// [`answer_fee`], with the relay's in-band rows — the coins on offer and
+/// what the account holds of each — given.
+fn answer_fee_rows(
+    host: &mut crate::core_host::CoreHost<vela_core::app::fee_policy::FeePolicy>,
     mut pending: Vec<crate::core_host::Pending<vela_core::app::fee_policy::FeeOperation>>,
     refused: bool,
+    rows: &[vela_core::app::fee_policy::FeeAssetQuote],
 ) {
     use vela_core::app::fee_policy::{
         DeploymentRead, FeeBundlerQuote, FeeGasOutcome, FeeOperation, FeeShellResult as Res,
@@ -2422,7 +2449,7 @@ fn answer_fee(
                 }),
             },
             FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {
-                quotes: Some(vec![fee_quote_row(true), fee_quote_row(false)]),
+                quotes: Some(rows.to_vec()),
             },
             FeeOperation::EstimateUserOpGas { .. } if refused => Res::UserOpGas {
                 outcome: FeeGasOutcome::Refused,
@@ -2545,6 +2572,132 @@ pub fn fee_coin_switch() -> [vela_core::app::fee_policy::FeeView; 3] {
     let provisional = host.view();
     answer_fee(&mut host, pending, false);
     [quoted, provisional, host.view()]
+}
+
+/// A fee priced that not one coin on offer can pay (issue #408,
+/// `FeeView.no_coin_pays`), through the real `fee_policy` core: the same
+/// quote as [`settled_fee`], over an account that holds a thousandth of the
+/// ETH it costs and no USDC.
+#[must_use]
+pub fn fee_no_coin_pays() -> vela_core::app::fee_policy::FeeView {
+    let short = |native: bool| {
+        let mut row = fee_quote_row(native);
+        row.balance = if native { "1000" } else { "0" }.to_owned();
+        row.usd_balance = "0".to_owned();
+        row
+    };
+    let (mut host, pending) = fee_quote(true, "0x");
+    answer_fee_rows(&mut host, pending, false, &[short(true), short(false)]);
+    host.view()
+}
+
+/// One thing a request's fee card can say, as `VELA_SIGN_FEE` names it
+/// ([`fee_pin`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FeePin {
+    /// The quote is out: "Estimating…".
+    Estimating,
+    /// Priced, and the coin in force can pay.
+    Priced,
+    /// Priced, and the speed under it says why it is the fastest.
+    PricedNote,
+    /// Priced, and no coin the account holds can pay it.
+    CantPay,
+    /// The fee could not be worked out — the chain's nodes did not answer.
+    Failed,
+}
+
+impl FeePin {
+    pub const ALL: [(Self, &'static str); 5] = [
+        (Self::Estimating, "estimating"),
+        (Self::Priced, "priced"),
+        (Self::PricedNote, "priced-note"),
+        (Self::CantPay, "cant-pay"),
+        (Self::Failed, "failed"),
+    ];
+
+    /// The pin a name names.
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(pin, name)| (name == want.trim()).then_some(pin))
+    }
+
+    /// The fee core's view under this pin — every one the real machine's,
+    /// for cs1's transfer on Ethereum.
+    #[must_use]
+    pub fn view(self) -> vela_core::app::fee_policy::FeeView {
+        match self {
+            Self::Estimating => fee_quote(false, "0x").0.view(),
+            Self::Priced | Self::PricedNote => settled_fee(),
+            Self::CantPay => fee_no_coin_pays(),
+            Self::Failed => fee_failures().down,
+        }
+    }
+}
+
+/// `VELA_SIGN_FEE=estimating|priced|priced-note|cant-pay|failed` (developer
+/// builds), with `VELA_PAGE=gallery` and a drawn request: its fee card as
+/// the LIVE sheet says it in that state — the row through `live::fee_model`
+/// over the real fee core's view, the speed control folded under it, and the
+/// confirm as the core's gate holds it. A real quote lands in a second and
+/// only one way per request; what the card says, and what moves when it says
+/// it, has to be looked at and measured under each (PR 4 item 2).
+///
+/// `VELA_SIGN_FEE=estimating>failed` is a quote that LANDS: the first while
+/// the window opens, the second ([`fee_pin_lands`]) a moment later
+/// ([`SIM_PIN_LANDS_AFTER`]) — offline, the estimate that gives up.
+/// Same env-pin family as `VELA_SIM`.
+#[must_use]
+pub fn fee_pin() -> Option<FeePin> {
+    let want = crate::dev_env::var!("VELA_SIGN_FEE")?;
+    FeePin::named(want.split('>').next().unwrap_or_default())
+}
+
+/// The state `VELA_SIGN_FEE=<first>><then>` lands on, if it names one.
+#[must_use]
+pub fn fee_pin_lands() -> Option<FeePin> {
+    let want = crate::dev_env::var!("VELA_SIGN_FEE")?;
+    FeePin::named(want.split_once('>')?.1)
+}
+
+/// [`fee_pin`]'s fee row, by the live builder.
+#[must_use]
+pub fn fee_pin_row(
+    pin: FeePin,
+    s: &SigningStrings,
+    currency: &crate::wallet::live::Money,
+) -> FeeModel {
+    let clear =
+        crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+    crate::signing::live::fee_model(&clear, &pin.view(), 1, false, s, "en", None, currency)
+}
+
+/// The speed control under [`fee_pin_row`], folded as every sheet opens —
+/// and, under `priced-note`, with the line that says why the speed in force
+/// is the fastest (`FeeSpeedModel.free_note`).
+#[must_use]
+pub fn fee_pin_speed(
+    pin: FeePin,
+    s: &crate::flows::FlowStrings,
+) -> crate::flows::fixtures::FeeSpeedModel {
+    let note = pin == FeePin::PricedNote;
+    crate::flows::fixtures::FeeSpeedModel {
+        label: s.fee_speed_label.clone(),
+        value: if note {
+            s.gas_tier_fast.clone()
+        } else {
+            s.gas_tier_standard.clone()
+        },
+        open: false,
+        once_note: s.fee_speed_once.clone(),
+        free_note: note.then(|| s.fee_speed_free.clone()),
+        single_note: None,
+        gas_price_label: s.gas_price_label.clone(),
+        gas_price_line: false,
+        options: Vec::new(),
+    }
 }
 
 /// The relay answered that a contract call fails (spec 083 fee,
