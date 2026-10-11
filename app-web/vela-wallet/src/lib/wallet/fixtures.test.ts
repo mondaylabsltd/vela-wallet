@@ -3,6 +3,7 @@
  * fixture canon carries the mock content verbatim (FR-012).
  */
 import { describe, expect, it } from 'vitest';
+import { maskedAmount } from '$lib/core/client';
 import { rawResolve, resolveWalletMessages } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { buildDesktopState, buildMobileState, MOBILE_STATES } from './fixtures';
@@ -82,6 +83,15 @@ describe('fixture canon (zh mock verbatim)', () => {
 		expect(rows.every((r) => r.masked && r.amount === '••••')).toBe(true);
 		expect(rows[0].unit).toBe('POL');
 		expect(m.assetRows.every((r) => r.masked)).toBe(true);
+		// A holding keeps its coin too (device walk of 2026-10-11, item 3),
+		// and the string the board writes out is the core's own — the board
+		// cannot ask the core (it must stay out of the chunks that read this
+		// file's constants), so it is held to it here.
+		expect(m.assetRows.length).toBeGreaterThan(0);
+		for (const row of m.assetRows) {
+			expect(row.balance).toBe(maskedAmount(row.ticker));
+			expect(row.fiat).toEqual({ kind: 'masked' });
+		}
 	});
 
 	it('h3 has never been read: the refresh is the glyph alone, as live draws it (issue 462)', () => {

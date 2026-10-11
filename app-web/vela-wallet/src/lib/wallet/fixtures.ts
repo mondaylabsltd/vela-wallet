@@ -347,7 +347,13 @@ function assetRow(m: WalletMessages, f: AssetFixture, masked = false): AssetRowM
 		ticker: f.ticker,
 		chain: f.chain,
 		badgeColor: f.badgeColor,
-		balance: masked ? MASK : f.balance,
+		// The drawn hidden home reads what the live one does: the mask and
+		// the coin ("•••• BNB"). The rule is the core's (`masked_amount`) and
+		// the live builders ask it; this file is drawn content and must not
+		// pull the core into every chunk that reads a constant from it, so
+		// the string is written out here and `fixtures.test.ts` holds it to
+		// the core's.
+		balance: masked ? `${MASK} ${f.ticker}` : f.balance,
 		fiat: masked
 			? { kind: 'masked' }
 			: f.fiat === null

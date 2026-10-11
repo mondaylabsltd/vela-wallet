@@ -15,7 +15,7 @@ import { pluralForm } from '$lib/i18n/plural';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
 import { moneyText, trimBalance, unreachableLine } from '$lib/wallet/live';
-import { fiatSymbol } from '$lib/core/client';
+import { fiatSymbol, maskedAmount } from '$lib/core/client';
 import { pageLanguage } from '$lib/i18n/page-language.svelte';
 import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
 import {
@@ -1524,7 +1524,9 @@ export function liveBalanceDetail(
 			id: `${token.chain_id}:${token.token_address ?? token.symbol}`,
 			mark: rescueMark(token.chain_id),
 			name: token.symbol,
-			detail: `${chainName(token.chain_id)} · ${view.hidden ? MASK : trimBalance(token.balance)}`
+			// Hidden, the coin is kept ("•••• BNB") — the one rule for a
+			// hidden coin amount, wherever it is drawn.
+			detail: `${chainName(token.chain_id)} · ${view.hidden ? maskedAmount(token.symbol) : trimBalance(token.balance)}`
 		}))
 	};
 }

@@ -656,7 +656,12 @@ export function liveAssetRow(
 		logoUrls: art.logoUrls,
 		badgeLogoUrl: art.badgeLogoUrl,
 		badgeHidden: art.badgeHidden,
-		balance: hidden ? MASK : tokenAmountText(token.balance),
+		// Hidden, the coin stays (the core's `masked_amount`, device walk of
+		// 2026-10-11, item 3): "•••• BNB" says what kind of money without
+		// saying how much, on this row as on a feed row and the token's own
+		// page. The worth beside it is the bare mask — its unit is the
+		// display currency, which every figure on the screen shares.
+		balance: hidden ? maskedAmount(token.symbol) : tokenAmountText(token.balance),
 		fiat,
 		masked: hidden
 	};
@@ -917,8 +922,15 @@ export function liveAssetDetail(
 	const hidden = view.hidden;
 	const art = balanceTokenMark(token);
 	const held = parseFloat(token.balance) || 0;
+	// A worth that exists is masked in place when hidden, never dropped: the
+	// line read "$496.46 · BNB Chain" shown and "BNB Chain" hidden, as if the
+	// token had no price. One with no price has no worth to hide.
 	const fiat =
-		hidden || token.price_usd === null ? undefined : moneyText(held * token.price_usd, currency);
+		token.price_usd === null
+			? undefined
+			: hidden
+				? MASK
+				: moneyText(held * token.price_usd, currency);
 	const rows = (inputs.feed?.rows ?? [])
 		.flatMap((row) => (row.type === 'item' ? [row.item] : []))
 		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol)

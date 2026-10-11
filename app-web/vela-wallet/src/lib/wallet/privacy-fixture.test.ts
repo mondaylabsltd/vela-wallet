@@ -39,8 +39,16 @@ import {
 	liveUnreachable,
 	pickRescueMessages
 } from '$lib/settings/live';
-import { BALANCE_MASK, MASK } from './fixtures';
-import { liveActivityGroups, liveActivityRow, liveAssetRow, liveBalance } from './live';
+import { BALANCE_MASK, buildDesktopState, buildMobileState, MASK } from './fixtures';
+import {
+	liveActivityGroups,
+	liveActivityRow,
+	liveAssetRow,
+	liveBalance,
+	withLiveWallet,
+	withLiveWalletDesktop
+} from './live';
+import type { AssetRowModel } from './model';
 import { liveTxDetail } from './live-detail';
 
 interface Side {
@@ -57,6 +65,14 @@ const FIXTURE = JSON.parse(
 	masked_surfaces: string[];
 	visible_surfaces: string[];
 	figure_maskable: Record<string, boolean>;
+	/** What each holding reads while hidden, on every surface that draws it. */
+	holdings_masked: {
+		symbol: string;
+		chain_id: number;
+		token_address: string | null;
+		amount: string;
+		worth: string;
+	}[];
 	shown: Side;
 	hidden: Side;
 };
@@ -223,7 +239,9 @@ describe('the shared hidden-balance fixture, through every web surface builder',
 		expect(hero.state).toBe('hidden');
 		expect(hero.integer).toBe(BALANCE_MASK);
 		for (const row of balance.tokens.map((t) => liveAssetRow(t, USD, m, balance.hidden))) {
-			expect(row.balance).toBe(MASK);
+			// The amount keeps its coin (`holdings_masked`, below); the worth
+			// is the bare mask.
+			expect(row.balance.startsWith(`${MASK} `)).toBe(true);
 			expect(row.fiat).toEqual({ kind: 'masked' });
 		}
 		const switcher = JSON.parse(maskedSurfaces(FIXTURE.hidden).account_switcher) as {
@@ -289,6 +307,120 @@ describe('the shared hidden-balance fixture, through every web surface builder',
 			NOW
 		);
 		expect([row.amount, row.unit]).toEqual([MASK, 'USDT']);
+	});
+
+	/**
+	 * Device walk of 2026-10-11, item 3. A hidden holding read a bare "••••"
+	 * on its row — the web's, Android's, the iPhone's — and "No price" for its
+	 * worth on the web's token page. The core's rule had an exception for "a
+	 * figure with no unit beside it" that each shell read its own way; it is
+	 * gone, and the fixture now carries what every holding reads while hidden
+	 * (`holdings_masked`): the amount as `masked_amount(symbol)`, the worth as
+	 * the bare mask. Every surface that draws a holding is held to those two
+	 * strings — none derives its own.
+	 */
+	describe('hidden: every holding reads what the core says it reads', () => {
+		const { balance, feed } = FIXTURE.hidden;
+		const expected = FIXTURE.holdings_masked;
+		const worthOf = (fiat: AssetRowModel['fiat']) =>
+			// The row draws `MASK` for a masked worth (`AssetRow.svelte`).
+			fiat.kind === 'masked' ? MASK : fiat.kind === 'none' ? '' : fiat.text;
+		const flowInputs = { balance, currency: USD, m, emptyCopy: undefined, feed, fm };
+
+		it('the fixture names every held token, in the balance’s own order', () => {
+			expect(expected.map((h) => [h.symbol, h.chain_id, h.token_address])).toEqual(
+				balance.tokens.map((t) => [t.symbol, t.chain_id, t.token_address])
+			);
+			// …and what it says is the core's two functions, not a coincidence.
+			for (const holding of expected) {
+				expect(holding.amount).toBe(maskedAmount(holding.symbol));
+				expect(holding.worth).toBe(maskedAmount(''));
+				expect(holding.worth).toBe(MASK);
+			}
+		});
+
+		it('the home’s holdings rows — the phone’s and the wide layout’s', () => {
+			const phone = withLiveWallet(buildMobileState('h1', m, identicon), {
+				balance,
+				currency: USD,
+				m,
+				feed
+			}).assetRows;
+			const wide = withLiveWalletDesktop(buildDesktopState('d1', m, identicon), {
+				balance,
+				currency: USD,
+				m,
+				feed
+			}).assetRows;
+			for (const rows of [phone, wide]) {
+				expect(rows.map((row) => [row.balance, worthOf(row.fiat)])).toEqual(
+					expected.map((h) => [h.amount, h.worth])
+				);
+			}
+		});
+
+		it('the Assets list', () => {
+			const assets = withLiveFlow(buildFlowState('t1', fm, identicon), flowInputs);
+			if (assets.base.kind !== 'assets') throw new Error('t1 is the Assets list');
+			expect(assets.base.model.rows.map((row) => [row.balance, worthOf(row.fiat)])).toEqual(
+				expected.map((h) => [h.amount, h.worth])
+			);
+		});
+
+		it('the token’s own page on the phone: its balance and its worth', () => {
+			balance.tokens.forEach((selectedToken, i) => {
+				const sheet = withLiveFlow(buildFlowState('t2', fm, identicon), {
+					...flowInputs,
+					selectedToken
+				}).sheet;
+				if (sheet?.kind !== 'token-detail') throw new Error('t2 raises the token detail');
+				expect([sheet.model.balance, sheet.model.fiat], selectedToken.symbol).toEqual([
+					expected[i].amount,
+					expected[i].worth
+				]);
+			});
+		});
+
+		it('the token’s own column on the wide layout: its balance, and its worth leading the line', () => {
+			balance.tokens.forEach((selectedToken, i) => {
+				const panel = withLiveWalletDesktop(buildDesktopState('d1', m, identicon), {
+					balance,
+					currency: USD,
+					m,
+					feed,
+					selectedToken
+				}).panels.assetDetail;
+				expect(panel.token.balance, selectedToken.symbol).toBe(expected[i].amount);
+				expect(panel.token.fiatLine.split(' · ')[0], selectedToken.symbol).toBe(expected[i].worth);
+			});
+		});
+
+		it('shown, the same surfaces draw the figures — so the masks above hide something', () => {
+			const shown = FIXTURE.shown.balance;
+			const rows = shown.tokens.map((t) => liveAssetRow(t, USD, m, shown.hidden));
+			expect(rows.map((row) => row.balance)).toEqual(['418.25', '376.5432']);
+			expect(rows.map((row) => worthOf(row.fiat))).toEqual(['$418.25', '$376.54']);
+		});
+
+		it('a token nothing can price has no worth to hide: it still says so', () => {
+			const unpriced = { ...balance.tokens[0], price_usd: null };
+			const sheet = withLiveFlow(buildFlowState('t2', fm, identicon), {
+				...flowInputs,
+				selectedToken: unpriced
+			}).sheet;
+			if (sheet?.kind !== 'token-detail') throw new Error('t2 raises the token detail');
+			expect(sheet.model.fiat).toBe(m.balance.noPrice);
+			expect(sheet.model.balance).toBe(expected[0].amount);
+		});
+
+		it('an unpriced holding named in the balance sheet keeps its coin too', () => {
+			const withUnpriced: BalanceView = {
+				...balance,
+				unpriced_tokens: [{ ...balance.tokens[0], price_usd: null }]
+			};
+			const detail = liveBalanceDetail(withUnpriced, USD, pickRescueMessages(sm), 'Unpriced');
+			expect(detail.unpriced?.[0]?.detail).toBe(`Gnosis · ${expected[0].amount}`);
+		});
 	});
 
 	it('a row’s figure masks exactly when the core says it is money', () => {

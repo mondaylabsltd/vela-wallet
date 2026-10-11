@@ -608,7 +608,10 @@ describe('liveAssetRow', () => {
 		});
 		const hidden = liveAssetRow(ETH, USD, m, true);
 		expect(hidden.fiat).toEqual({ kind: 'masked' });
-		expect(hidden.balance).toBe('••••');
+		// The coin is kept — the core's `masked_amount` — so the row still
+		// says what kind of money it is hiding.
+		expect(hidden.balance).toBe('•••• ETH');
+		expect(hidden.balance).toBe(maskedAmount('ETH'));
 	});
 });
 

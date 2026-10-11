@@ -62,6 +62,7 @@ import {
 	tokenExplorerURL
 } from '$lib/wallet/live';
 import { addressLines } from './fixtures';
+import { MASK } from '$lib/wallet/fixtures';
 import { liveBatchImport, type BatchLiveInputs } from './live-batch';
 import {
 	liveContactPick,
@@ -375,10 +376,15 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 	const { balance: view, currency, m } = inputs;
 	const hidden = view.hidden;
 	const held = parseFloat(token.balance) || 0;
+	// Hidden, a worth that exists reads the mask — it read "No price", which
+	// is a claim about the token, and a false one (device walk of 2026-10-11,
+	// item 3). A token with no price has no worth to hide and still says so.
 	const fiat =
-		hidden || token.price_usd === null
+		token.price_usd === null
 			? m.balance.noPrice
-			: moneyText(held * token.price_usd, currency);
+			: hidden
+				? MASK
+				: moneyText(held * token.price_usd, currency);
 	const items = (inputs.feed?.rows ?? [])
 		.flatMap((row) => (row.type === 'item' ? [row.item] : []))
 		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol);
