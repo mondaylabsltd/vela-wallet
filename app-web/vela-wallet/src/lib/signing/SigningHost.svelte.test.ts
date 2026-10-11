@@ -78,10 +78,14 @@ vi.mock('$lib/settings/core/currency.svelte', () => ({
 	}
 }));
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
-vi.mock('$lib/services/networks', () => ({ explorerBaseURL: () => null }));
+vi.mock('$lib/services/networks', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/networks')>()),
+	explorerBaseURL: () => null
+}));
 vi.mock('$lib/signing/fee-calls', () => ({ feeCallsOf: () => fake.calls }));
-// The node's reply to the sheet's one simulation. `checkRequest` and the
-// core's reading of the reply (`simOutcome`) are real.
+// The node's reply to the sheet's one simulation. `simulateRequest`, the
+// core's reading of the reply (`simOutcome`) and the trust machine's judgment
+// of a check's moves (the resident `token_trust` session) are real.
 vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
 	rpcSimulateReply: (from: string, calls: unknown[], chainId: number) => {
 		fake.simulated.push({ from, calls, chainId });
@@ -144,14 +148,27 @@ vi.mock('$lib/signing/live', () => ({
 			blocks: [
 				{ kind: 'intent', text: 'Send 0.001 xDAI', tone: 'neutral' },
 				// The builder's own rule is `signing/live.test.ts`'s; here, only
-				// that the host hands it this request's verdict.
-				...(raw.sim?.no_change_key
+				// WHAT the host hands it for this request, written out: no reply
+				// to read, a verdict that is no check, a check nobody judged, the
+				// judged view's word that nothing moves — or its judgments.
+				...(raw.sim
 					? [
 							{
 								kind: 'balances',
 								title: 'Balance changes',
 								rows: [],
-								note: `said:${raw.sim.no_change_key}`,
+								note: `said:${
+									raw.sim.verdict === null
+										? 'unread'
+										: raw.sim.verdict.kind !== 'deltas'
+											? raw.sim.verdict.kind
+											: raw.sim.judged === null
+												? 'unjudged'
+												: (raw.sim.judged.no_change_key ??
+													raw.sim.judged.judgments
+														.map((j: any) => `${j.type}:${j.delta ?? j.direction}`)
+														.join(','))
+								}`,
 								verdict: true
 							}
 						]
@@ -409,17 +426,40 @@ describe('the sheet’s fee session ends with its request (PR 2 note 1)', () => 
 });
 
 /**
- * PR 3 device round, item 3: the read the host already runs for the fee
- * (`eth_simulateV1`, issue 411) is the sheet's too. What it means is the
- * core's (`simOutcome`, real here): a check under which nothing of the
- * person's moves hands the sheet the core's "No asset changes" key — for the
- * request it was measured for, and no other.
+ * The read the host already runs for the fee (`eth_simulateV1`, issue 411)
+ * is the sheet's verdict too. What it means is the core's, real here: the
+ * reply read by `simOutcome`, and a check's moves judged by the trust machine
+ * — and the host hands the sheet all of it, whatever it says, for the request
+ * it was run for and no other.
  */
 describe('the sheet’s one simulation, read by the core (device round, item 3)', () => {
 	const CALLS = [{ to: '0x' + '22'.repeat(20), value: '0', data: '0x095ea7b3' }];
 	const ME = '0x1111111111111111111111111111111111111111';
 	const NOTHING_MOVES = JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] });
 	const REVERTS = JSON.stringify({ result: [{ calls: [{ status: '0x0', logs: [] }] }] });
+	/** One xDAI leaves the account: the node's trace of native value. */
+	const SENDS_ONE = JSON.stringify({
+		result: [
+			{
+				calls: [
+					{
+						status: '0x1',
+						logs: [
+							{
+								address: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+								topics: [
+									'0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+									'0x' + ME.slice(2).padStart(64, '0'),
+									'0x' + '22'.repeat(20).padStart(64, '0')
+								],
+								data: '0x' + (10n ** 18n).toString(16).padStart(64, '0')
+							}
+						]
+					}
+				]
+			}
+		]
+	});
 	const raise = (id: string, kind = 'transaction') => {
 		fake.sign.view = {
 			...INITIAL_SIGN_VIEW,
@@ -499,22 +539,73 @@ describe('the sheet’s one simulation, read by the core (device round, item 3)'
 		await view.screen.unmount();
 	});
 
-	it('a revert, or a node that cannot check: no card, and the fee is told nothing', async () => {
+	it('something moves: the fee is told what, and the sheet is handed the moves as the trust machine judged them', async () => {
 		fake.calls = CALLS;
-		for (const reply of [REVERTS, undefined]) {
+		fake.nodeReply = async () => SENDS_ONE;
+		const view = mount();
+		raise('tx:1');
+		await settle();
+		await read();
+		await landed();
+		// The judged view's own judgment: the native coin, with its figure.
+		expect(card()?.textContent).toContain('said:native:-1000000000000000000');
+		expect(fake.told).toEqual([
+			{ calls: CALLS, changes: [{ token: null, delta: '-1000000000000000000' }] }
+		]);
+		expect(asked()).toHaveLength(1);
+		await view.screen.unmount();
+	});
+
+	it('a revert, or a node that cannot check: the sheet is handed THAT verdict, and the fee is told nothing', async () => {
+		fake.calls = CALLS;
+		for (const [reply, kind] of [
+			[REVERTS, 'reverts'],
+			[undefined, 'not_offered']
+		] as const) {
 			if (reply) fake.nodeReply = async () => reply;
 			const view = mount();
 			raise('tx:1');
 			await settle();
 			expect(view.sheet()).not.toBeNull();
 			await read();
-			await settle();
-			expect(card()).toBeNull();
+			await landed();
+			// Never "nothing moves", and never nothing at all.
+			expect(card()?.textContent).toContain(`said:${kind}`);
 			expect(fake.told).toEqual([]);
 			await view.screen.unmount();
 			fake = new Fake();
 			fake.calls = CALLS;
 		}
+	});
+
+	it('a simulation that throws has ended too: the sheet is told there was no reply to read', async () => {
+		fake.calls = CALLS;
+		fake.nodeReply = () => Promise.reject(new Error('every endpoint failed'));
+		const view = mount();
+		raise('tx:1');
+		await settle();
+		await read();
+		await landed();
+		// The pool giving up is the core's "unreachable": a verdict, not silence.
+		expect(card()?.textContent).toContain('said:unreachable');
+		expect(fake.told).toEqual([]);
+		await view.screen.unmount();
+	});
+
+	it('a transaction whose calls do not read is simulated by nobody — and its sheet is told so at once', async () => {
+		// `feeCallsOf` has nothing on chain to price.
+		fake.calls = null;
+		const view = mount();
+		raise('tx:1');
+		await settle();
+		await landed();
+		expect(card()?.textContent).toContain('said:unread');
+		expect(fake.simulated).toEqual([]);
+		// The core was told of no simulation: there is no wait to hold a confirm.
+		expect(
+			fake.dispatched.filter((event) => String((event as { type: string }).type).startsWith('sim_'))
+		).toEqual([]);
+		await view.screen.unmount();
 	});
 
 	it('it belongs to its request: the next request starts with none, and a late answer lands on nobody', async () => {
@@ -528,14 +619,16 @@ describe('the sheet’s one simulation, read by the core (device round, item 3)'
 		answers[0](NOTHING_MOVES);
 		await landed();
 
-		// Another request takes the sheet: no card until ITS simulation says so.
+		// Another request takes the sheet: nothing until ITS simulation ends —
+		// and then its own verdict, not its predecessor's.
 		raise('tx:2');
 		await settle();
 		await read(2);
 		expect(card()).toBeNull();
 		answers[1](REVERTS);
-		await settle();
-		expect(card()).toBeNull();
+		await landed();
+		expect(card()?.textContent).toContain('said:reverts');
+		expect(card()?.textContent).not.toContain('simResultNoChange');
 
 		// A third, while the second's sheet went: its predecessor's late "nothing
 		// moves" is not this one's.

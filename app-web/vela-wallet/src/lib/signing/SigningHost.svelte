@@ -437,12 +437,13 @@
 		if (quotedFor === request.id) return;
 		const calls = feeCallsOf(request.kind, request.params_json);
 		if (calls === null) {
-			// Nothing on chain to ask about: a message — which has no verdict's
-			// place at all — or a transaction whose calls do not read. For that
-			// one nothing is simulated and the core is told of no simulation, so
-			// its place says from the first frame that nothing was checked,
+			// Nothing on chain to ask about. A message is simulated by nobody and
+			// has no verdict at all. A transaction whose calls do not read is not
+			// simulated either, and the core is told of no simulation — so its
+			// verdict's place says from the first frame that nothing was checked,
 			// never "Checking…" for a check nobody is making.
-			if (untrack(() => checked?.requestId) !== request.id) {
+			const onChain = request.kind === 'transaction' || request.kind === 'batch';
+			if (onChain && untrack(() => checked?.requestId) !== request.id) {
 				checked = { requestId: request.id, sim: UNREAD };
 			}
 			return;

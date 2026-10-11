@@ -3105,7 +3105,14 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 
 	it('whatever lands, lands IN the place: the request’s own blocks, the fee and the confirm are what they were', () => {
 		const before = buildSigningModel(inputs())!;
-		for (const sim of [NOTHING_MOVES, SOMETHING_MOVES, REVERTS, UNREADABLE, NOT_OFFERED, UNREACHABLE]) {
+		for (const sim of [
+			NOTHING_MOVES,
+			SOMETHING_MOVES,
+			REVERTS,
+			UNREADABLE,
+			NOT_OFFERED,
+			UNREACHABLE
+		]) {
 			const model = buildSigningModel(inputs({ sim: ended(sim) }))!;
 			expect(own(model), sim.kind).toEqual(own(before));
 			expect(model.blocks.length, sim.kind).toBe(before.blocks.length);
@@ -3236,7 +3243,9 @@ describe('the simulation’s verdict is drawn in its place (the web signing verd
 			const model = buildSigningModel(inputs({ sim: ended(REVERTS) }))!;
 			const dangers = JSON.stringify(model.blocks).split('expected to fail').length - 1;
 			expect(dangers).toBe(1);
-			expect(own(model)).toEqual(own(buildSigningModel(inputs())!).filter((b) => !('verdict' in b)));
+			expect(own(model)).toEqual(
+				own(buildSigningModel(inputs())!).filter((b) => !('verdict' in b))
+			);
 			expect(placeOf(model)!.inner).toEqual([
 				{ kind: 'warning', tone: 'danger', text: m.warnWillFail }
 			]);
@@ -3396,7 +3405,9 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 	const REVERTS = ended(
 		simOutcome(
 			identity.address,
-			JSON.stringify({ result: [{ calls: [{ status: '0x0', error: { code: 3, message: 'no' } }] }] })
+			JSON.stringify({
+				result: [{ calls: [{ status: '0x0', error: { code: 3, message: 'no' } }] }]
+			})
 		)!
 	);
 	/** The three answers that are no check: the node does not offer it, says what nobody can read, or nobody answered. */
@@ -3578,7 +3589,10 @@ describe('the simulation’s verdict: waited for, and said when it could not be 
 		expect(placeOf(named)!.inner).toEqual([CAUTION]);
 		const danger = buildSigningModel(
 			inputs({
-				sim: { verdict: { ...NOT_OFFERED, notice_key: 'x.y.z', notice_risk: 'danger' }, judged: null }
+				sim: {
+					verdict: { ...NOT_OFFERED, notice_key: 'x.y.z', notice_risk: 'danger' },
+					judged: null
+				}
 			})
 		)!;
 		expect(placeOf(danger)!.inner).toEqual([{ ...CAUTION, tone: 'danger' }]);

@@ -39,7 +39,10 @@ export function errorString(reason: string): string {
 	const bytes = new TextEncoder().encode(reason);
 	const text = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 	return (
-		'0x08c379a0' + word(32) + word(bytes.length) + text.padEnd(Math.ceil(text.length / 64) * 64, '0')
+		'0x08c379a0' +
+		word(32) +
+		word(bytes.length) +
+		text.padEnd(Math.ceil(text.length / 64) * 64, '0')
 	);
 }
 
