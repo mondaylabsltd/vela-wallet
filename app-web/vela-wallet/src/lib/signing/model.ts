@@ -425,6 +425,13 @@ export interface SigningModel {
 	 */
 	headline?: { text: string; tone: Tone };
 	blocks: Block[];
+	/**
+	 * The request is still being read (spec 096 F7's "Loading…" stands where
+	 * its blocks will). The sheet is told for one reason: what the reading
+	 * adds stands ABOVE the simulation verdict's place, and a verdict that
+	 * landed first must still be in sight once it has. Absent once read.
+	 */
+	reading?: 'out';
 	tech: TechModel;
 	/** cs29 ships the disclosure open — the whole point of that mock. */
 	techOpen: boolean;

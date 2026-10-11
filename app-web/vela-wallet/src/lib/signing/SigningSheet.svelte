@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import SigningHeader from './ui/SigningHeader.svelte';
 	import SigningAction from './ui/SigningAction.svelte';
 	import SigningBody from './ui/SigningBody.svelte';
@@ -153,6 +153,26 @@
 		// danger line — is the one it ends on.
 		void tick().then(() => {
 			for (const nth of landed.reverse()) sheet?.reveal(VERDICT, { nth, under: HEADER });
+		});
+	});
+	/**
+	 * The other order: the verdict lands FIRST, and the request is read after
+	 * it (a descriptor that takes longer than the simulation — spec 096 F7 saw
+	 * an Aave supply read for seconds). What the reading adds stands above the
+	 * verdict's place, and can push a verdict that was in sight under the fold
+	 * — over a confirm that the same reading opens. Nothing landed, so nothing
+	 * above brings it back: it is done here, once the reading is in. `reveal`
+	 * moves nothing when the verdict is still in sight.
+	 */
+	let readingWasOut = false;
+	$effect(() => {
+		const out = model.reading === 'out';
+		const read = readingWasOut && !out;
+		readingWasOut = out;
+		if (!read) return;
+		const said = untrack(() => verdicts.length);
+		void tick().then(() => {
+			for (let nth = said - 1; nth >= 0; nth--) sheet?.reveal(VERDICT, { nth, under: HEADER });
 		});
 	});
 	// The form gives way to the status (or comes back): another sheet's worth

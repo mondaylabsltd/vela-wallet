@@ -479,6 +479,14 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	return blocks;
 }
 
+/**
+ * Spec 096 F7: the request is still being read. Its blocks are not there
+ * yet — "Loading…" stands in their place — and the sheet is told so
+ * (`SigningModel.reading`).
+ */
+const stillReading = (clear: ClearSigningView): boolean =>
+	clear.surface === 'loading' || clear.resolving;
+
 function blocksFor(inputs: SigningLiveInputs): Block[] {
 	const { sign, clear, guard, m } = inputs;
 	const bytes = calldataBytes(sign.request?.params_json ?? '[]');
@@ -500,7 +508,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	// Spec 096 F7: still reading — a neutral "Loading…", and the confirm stays
 	// shut (`buildSigningModel`). This said the cap editor's "Set a finite
 	// amount to continue." over an Aave supply for seconds.
-	if (clear.surface === 'loading' || clear.resolving) {
+	if (stillReading(clear)) {
 		blocks.push({ kind: 'sentence', text: m.loading, tone: 'neutral' });
 		return blocks;
 	}
@@ -1464,6 +1472,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		},
 		...(headline ? { headline } : {}),
 		blocks,
+		...(!sign.blocked && stillReading(clear) ? { reading: 'out' as const } : {}),
 		tech: techModel(inputs, own, shown),
 		techOpen: false,
 		fee: sign.blocked ? { kind: 'hidden' } : feeModel(inputs),

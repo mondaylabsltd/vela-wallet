@@ -1668,6 +1668,40 @@ describe('the verdict’s place: there from the first frame, and nothing moves f
 		await tall.screen.unmount();
 	});
 
+	it('the other order — the verdict lands first, the request is read after it: what the reading pushes under the fold is brought back', async () => {
+		// The simulation answered before the request was read: "Loading…" where
+		// its blocks will be, and the verdict already in its place, in sight.
+		const unread = (inner: Said) =>
+			model({
+				fee,
+				reading: 'out',
+				blocks: [
+					{ kind: 'sentence', text: 'Loading…', tone: 'neutral' },
+					{ kind: 'verdict', inner: [inner], rooms, landed: true }
+				] as Blocks
+			});
+		const view = await open(390, 520, unread(CAUTION));
+		const scroller = scrollerOf(view.sheet);
+		expect(inSight(view.sheet, saidOf(view.sheet))).toBe(true);
+		expect(view.rest.scrolled).toBe(0);
+		// The request is read: more above the place than the window shows. The
+		// same verdict, said the same — nothing "landed" — and it is in sight.
+		const after = await land(view, sheetWith(CAUTION, true, true));
+		expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+		expect(after.scrolled).toBeGreaterThan(0);
+		expect(inSight(view.sheet, saidOf(view.sheet))).toBe(true);
+		expect(after.confirm).toBe(view.rest.confirm);
+		expectConfirmPinned(view.sheet);
+		expectCloseReachable(view.sheet);
+		await view.screen.unmount();
+
+		// Read in a window that still shows the verdict: nothing is scrolled.
+		const tall = await open(390, 844, unread(SWAP));
+		expect((await land(tall, sheetWith(SWAP, true))).scrolled).toBe(0);
+		expect(inSight(tall.sheet, saidOf(tall.sheet))).toBe(true);
+		await tall.screen.unmount();
+	});
+
 	it('in a larger text size the place is taller, by its rooms, before anything lands', async () => {
 		const view = await open(390, 844);
 		const usual = view.rest.placeHeight;

@@ -2519,6 +2519,10 @@ describe('the readable part says what the call does (096)', () => {
 		};
 		const model = buildSigningModel(inputs({ clear: loading }))!;
 		expect(requestBlocks(model)).toEqual([{ kind: 'sentence', text: m.loading, tone: 'neutral' }]);
+		// The sheet is told the reading is out (a verdict that lands first is
+		// brought back into sight once it is in) — and no longer, once read.
+		expect(model.reading).toBe('out');
+		expect(buildSigningModel(inputs())!.reading).toBeUndefined();
 		expect(model.blocks.some((b) => JSON.stringify(b).includes(m.chipCustom))).toBe(false);
 		// Every other machine says yes: the gate, the guard, the fee.
 		expect(OPEN_SIGN.confirm_gate_open && INITIAL_GUARD_VIEW.confirm_allowed).toBe(true);
