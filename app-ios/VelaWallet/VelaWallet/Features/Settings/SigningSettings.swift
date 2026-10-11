@@ -376,13 +376,9 @@ struct VenueSheetBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-                Text(model.title)
-                    .typeRole(Typography.title)
-                    .foregroundStyle(theme.fgBase)
-                Text(model.subtitle)
-                    .typeRole(Typography.flowCaption)
-                    .foregroundStyle(theme.fgSubtle)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Pinned by the sheet's host, with its ✕: the rows scroll
+                // under the title instead of through the ✕.
+                SheetTitle(title: model.title, subtitle: model.subtitle, bottom: Tokens.Space.s0)
                 HStack(spacing: Tokens.Space.s4) {
                     LucideIcon(.lock, size: LucideIconSize.smallChevron).foregroundStyle(theme.fgMuted)
                     Text(model.domainLine)
