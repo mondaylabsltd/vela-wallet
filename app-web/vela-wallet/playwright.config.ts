@@ -22,7 +22,10 @@ export default defineConfig({
 	webServer: {
 		// The extension suite reads the PACKAGED artifact, so building it is part
 		// of standing the suite up — not a step someone has to remember (spec 027).
-		command: 'npm run build && npm run build:extension && npm run preview',
+		// The server is `e2e/preview.mjs` — the deploy bundle on workerd — and not
+		// `npm run preview`: `wrangler dev` exits when one request it forwards is
+		// lost, and takes the rest of the run with it (the reasons are in that file).
+		command: 'npm run build && npm run build:extension && node e2e/preview.mjs 4173',
 		port: 4173,
 		timeout: 180_000,
 		reuseExistingServer: true
@@ -39,6 +42,11 @@ export default defineConfig({
 	 *
 	 * Measured: 6 workers → the preview dies; 3 workers → 123/123, twelve seconds
 	 * slower. Pinning it is cheaper than re-diagnosing this a third time.
+	 *
+	 * The third time found what "dies" was: `wrangler dev`'s proxy ending the
+	 * session over one lost forward (`e2e/preview.mjs`). The suites no longer run
+	 * behind that proxy. The server is still one single-threaded `workerd`, and
+	 * the pin stays — nothing here was measured again with more workers.
 	 */
 	workers: 3,
 	testMatch: '**/*.e2e.{ts,js}',

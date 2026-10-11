@@ -16,15 +16,22 @@ import base from './playwright.config';
 export const ISOLATED_EXTENSION_DIST = 'node_modules/.cache/vela-extension-e2e';
 process.env.VELA_EXTENSION_DIST ||= ISOLATED_EXTENSION_DIST;
 
+/**
+ * 4174 — or `VELA_E2E_PORT`, for a machine where a second session already has
+ * 4174 (several worktrees are tested at once here). The server is never
+ * reused: a port somebody else holds fails the run at once, instead of the
+ * suites quietly running against another worktree's build.
+ */
+const PORT = Number(process.env.VELA_E2E_PORT ?? 4174);
+
 export default {
 	...base,
 	webServer: {
 		...base.webServer,
-		command:
-			'npm run build && npm run build:extension && npx wrangler dev .svelte-kit/cloudflare/_worker.js --port 4174',
-		port: 4174,
+		command: `npm run build && npm run build:extension && node e2e/preview.mjs ${PORT}`,
+		port: PORT,
 		timeout: 600_000,
 		reuseExistingServer: false
 	},
-	use: { ...base.use, baseURL: 'http://localhost:4174' }
+	use: { ...base.use, baseURL: `http://localhost:${PORT}` }
 };
