@@ -770,7 +770,7 @@ impl OnboardingPage {
                     .text_size(theme::text_flow_sub())
                     .line_height(theme::line_height_flow_sub())
                     .text_color(theme.fg_muted)
-                    .child(subtitle)
+                    .child(crate::ui::prose(subtitle))
             });
 
         // The registry is unreachable. Sign-in stays attemptable — the CORE
@@ -787,7 +787,9 @@ impl OnboardingPage {
                     .text_size(theme::text_flow_caption())
                     .line_height(theme::line_height_body())
                     .text_color(theme.warning_base)
-                    .child(self.loc.t("onboarding.common.networkBody")),
+                    .child(crate::ui::prose(
+                        self.loc.t("onboarding.common.networkBody"),
+                    )),
             );
         } else if self.login_view.endpoint_unreachable {
             top = top.child(
@@ -798,7 +800,9 @@ impl OnboardingPage {
                     .line_height(theme::line_height_body())
                     .text_color(theme.warning_base)
                     .on_click(cx.listener(|this, _, _, cx| this.open_endpoint(false, cx)))
-                    .child(self.loc.t("onboarding.settings.warningText")),
+                    .child(crate::ui::prose(
+                        self.loc.t("onboarding.settings.warningText"),
+                    )),
             );
         }
 
@@ -1126,7 +1130,7 @@ impl OnboardingPage {
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.error_base)
-                    .child(refused),
+                    .child(crate::ui::prose(refused)),
             );
         }
         let on_pick: crate::signing::pages::PickPage = {
@@ -1312,7 +1316,9 @@ impl OnboardingPage {
                     .text_size(theme::text_body())
                     .line_height(theme::line_height_body())
                     .text_color(theme.warning_base)
-                    .child(self.loc.t("onboarding.settings.warningText")),
+                    .child(crate::ui::prose(
+                        self.loc.t("onboarding.settings.warningText"),
+                    )),
             );
         }
 

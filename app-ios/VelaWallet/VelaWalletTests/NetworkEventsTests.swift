@@ -24,7 +24,7 @@ import Testing
 @testable import VelaWallet
 
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(5)))
+@Suite(.serialized, .hangLimit)
 struct NetworkEventsTests {
 
     /// Which operations the machine asked for, in order, and of which URLs.
@@ -49,7 +49,9 @@ struct NetworkEventsTests {
     private func world(
         seed: (VelaStore) -> Void = { _ in },
         reported: @escaping (String) -> Int? = { _ in nil },
-        chains: [Int: [String: Any]] = [:]
+        chains: [Int: [String: Any]] = [:],
+        code: @escaping (String) -> String? = { _ in nil },
+        p256: String? = nil
     ) async -> World {
         let defaults = UserDefaults(suiteName: "vela.tests.netevents.\(UUID().uuidString)")!
         let shelf = VelaStore(defaults: defaults)
@@ -61,7 +63,7 @@ struct NetworkEventsTests {
             store: shelf, accounts: accounts,
             pool: RpcPool(store: shelf, accounts: accounts, offline: true),
             networkPerform: NetworkAdminStub.perform(
-                executor: executor, reported: reported, chains: chains,
+                executor: executor, reported: reported, chains: chains, code: code, p256: p256,
                 asked: { type, url in
                     asked.types.append(type)
                     if !url.isEmpty { asked.urls.append(url) }
@@ -252,6 +254,149 @@ struct NetworkEventsTests {
         #expect(world.settings.networkAdmin?.wizard.error == .notFound(chainId: 7_777_777))
     }
 
+    // MARK: - Every stop says why (PR 3 notes 5, 10, 18)
+
+    /// Zora as the chain index lists it; `rpc` empty is a chain that lists
+    /// no endpoint to check it through.
+    private func zora(rpc: [String] = ["https://rpc.zora.energy"]) -> [Int: [String: Any]] {
+        [7_777_777: [
+            "chain_id": 7_777_777, "name": "Zora", "short_name": "zora",
+            "native_currency_name": "Ether", "native_currency_symbol": "ETH",
+            "native_currency_decimals": 18,
+            "rpc": rpc, "explorers": ["https://explorer.zora.energy"], "testnet": false,
+        ]]
+    }
+
+    private var loc: Loc { Loc(overrideTag: "en", preferredLanguages: []) }
+
+    /// The add-network page as Settings draws it over the machine's wizard.
+    private func drawn(_ world: World) throws -> AddNetworkModel {
+        let wizard = try #require(world.settings.networkAdmin?.wizard)
+        return SettingsLive.wizard(wizard, loc: loc, fallback: SettingsFixtures.build(.st10, loc: loc).addNetwork)
+    }
+
+    /// The scan / auto-add path (`add_by_chain_id_requested`) has no confirm
+    /// step, so when it stops the stop is all there is to read. The REAL
+    /// machine names the sentence for each one (`error_key`) and this shell
+    /// draws exactly it — the three that used to have no words of their own
+    /// (already added, not found, no RPC endpoint) and "unable to verify",
+    /// which is never worded as a refusal and offers the re-check.
+    @Test func everyWizardStopIsSaidInTheCoresSentence() async throws {
+        // Not in the chain index.
+        let unknown = await world()
+        unknown.settings.addByChainId(7_777_777)
+        await settle(unknown.settings) { unknown.settings.networkAdmin?.wizard.error != nil }
+        #expect(unknown.settings.networkAdmin?.wizard.error == .notFound(chainId: 7_777_777))
+        #expect(unknown.settings.networkAdmin?.wizard.errorKey == I18nKeys.SettingsUi.addChainNotFound)
+        #expect(try drawn(unknown).callout?.text == "Chain info not found")
+
+        // Already in the wallet's list.
+        let known = await world()
+        known.settings.addByChainId(100)
+        await settle(known.settings) { known.settings.networkAdmin?.wizard.error != nil }
+        #expect(known.settings.networkAdmin?.wizard.error == .alreadyAdded(chainId: 100))
+        #expect(known.settings.networkAdmin?.wizard.errorKey == I18nKeys.SettingsUi.addAlreadyAdded)
+        #expect(try drawn(known).callout?.text == "This network is already added")
+
+        // Known, and it lists no endpoint (the wizard's own path — picked
+        // from the list): its OWN sentence — this shell used to borrow
+        // "Unable to verify" for it — and the field to enter one in.
+        let noRpc = await world(chains: zora(rpc: []))
+        noRpc.settings.selectChain(7_777_777)
+        await settle(noRpc.settings) { noRpc.settings.networkAdmin?.wizard.error != nil }
+        #expect(noRpc.settings.networkAdmin?.wizard.error == .noRpcEndpoint)
+        #expect(noRpc.settings.networkAdmin?.wizard.errorKey == I18nKeys.SettingsUi.addNoRpcEndpoint)
+        let noRpcPage = try drawn(noRpc)
+        #expect(noRpcPage.callout?.text == "No RPC endpoint is listed for this network. Enter one, then re-check.")
+        #expect(noRpcPage.callout?.text != loc.t(I18nKeys.SettingsUi.addUnableToVerify))
+        #expect(noRpcPage.recheck != nil, "the sentence says to re-check, and there is nothing to re-check with")
+        #expect(noRpcPage.customRpc != nil, "the sentence says to enter one, and there is no field")
+        #expect(noRpcPage.secondary == nil)
+        // The core's rule (final note F4): the field is REQUIRED here, and
+        // called "RPC URL" — never "(optional)" under a sentence asking for it.
+        #expect(noRpc.settings.networkAdmin?.wizard.rpcField == .required)
+        #expect(noRpc.settings.networkAdmin?.wizard.rpcFieldLabelKey == I18nKeys.SettingsUi.fieldRpcUrl)
+        #expect(noRpcPage.customRpc?.label == "RPC URL")
+        #expect(noRpcPage.calloutLeads, "the stop says why above its field")
+        // No chain to check: no field and no re-check.
+        #expect(unknown.settings.networkAdmin?.wizard.rpcField == NetRpcFieldWire.none)
+        #expect(try drawn(unknown).customRpc == nil && drawn(unknown).recheck == nil)
+        #expect(known.settings.networkAdmin?.wizard.rpcField == NetRpcFieldWire.none)
+        #expect(try drawn(known).customRpc == nil && drawn(known).recheck == nil)
+
+        // Known, and nobody answers: nothing was learned — never a refusal,
+        // no reason and no link, and the check can run again.
+        let silent = await world(chains: zora())
+        silent.settings.addByChainId(7_777_777)
+        await settle(silent.settings) { silent.settings.networkAdmin?.wizard.error != nil }
+        #expect(silent.settings.networkAdmin?.wizard.error == .checkFailed(chainId: 7_777_777))
+        #expect(silent.settings.networkAdmin?.wizard.errorKey == I18nKeys.SettingsUi.addUnableToVerify)
+        let silentPage = try drawn(silent)
+        #expect(silentPage.callout?.text == "Unable to verify — RPC request failed")
+        #expect(silentPage.secondary == nil && silentPage.secondaryUrl == nil, "an unverified chain is offered Chain Setup")
+        #expect(silentPage.recheck != nil)
+        #expect(silent.settings.networkAdmin?.wizard.rpcField == .optional)
+        #expect(silentPage.customRpc?.label == "Custom RPC (optional)")
+        #expect(silentPage.checks.isEmpty && silentPage.candidate?.badge == nil, "a verdict is drawn for a check that never ran")
+    }
+
+    /// A REFUSAL on the scan / auto-add path keeps its check (PR 3 notes 5,
+    /// 10 — the path used to drop it, so the page could only say "Not
+    /// compatible"). No P-256 verifier: said plainly — Vela wallets cannot
+    /// work there and money sent would be stuck — with NO Chain Setup
+    /// button. Missing contracts: its line, and Chain Setup for THIS chain.
+    /// The same reason line and button the wizard's own checked phase draws.
+    @Test func aRefusalOnTheScanPathSaysWhyAndOffersSetupOnlyWhereItHelps() async throws {
+        let deployed = "0x6080604052"
+
+        // Every contract is there; the chain has no P-256 verifier.
+        let noP256 = await world(reported: { _ in 7_777_777 }, chains: zora(),
+                                 code: { address in
+                                     // The precompile's own address has no code either.
+                                     address.lowercased().hasSuffix("0100") ? nil : deployed
+                                 })
+        noP256.settings.addByChainId(7_777_777)
+        await settle(noP256.settings) { noP256.settings.networkAdmin?.wizard.error != nil }
+        let refused = try #require(noP256.settings.networkAdmin?.wizard)
+        #expect(refused.phase == .error)
+        #expect(refused.error == .notCompatible(chainId: 7_777_777))
+        #expect(refused.compat?.blocker == "no_p256", "the check was dropped beside the error: \(String(describing: refused.compat))")
+        #expect(refused.errorKey == I18nKeys.SettingsUi.addNoP256Hint)
+        let noP256Page = try drawn(noP256)
+        #expect(noP256Page.callout?.text == loc.t(I18nKeys.SettingsUi.addNoP256Hint))
+        #expect(noP256Page.callout?.text.contains("P-256") == true, "\(String(describing: noP256Page.callout?.text))")
+        #expect(noP256Page.callout?.text != loc.t(I18nKeys.SettingsUi.addNotCompatible))
+        #expect(noP256Page.secondary == nil && noP256Page.secondaryUrl == nil, "a button to a tool that cannot help")
+        #expect(noP256Page.primary == nil, "a refused chain is offered Add")
+        #expect(noP256.shelf.readList(VelaStore.Key.customNetworks).isEmpty, "a refused chain was saved")
+        // Final note F22: a refusal is `rpc_field: none` — another endpoint
+        // would not change it — so no field, and no "Re-check with this RPC"
+        // with nothing to read.
+        #expect(refused.rpcField == NetRpcFieldWire.none && refused.rpcFieldLabelKey == nil)
+        #expect(noP256Page.customRpc == nil && noP256Page.recheck == nil)
+
+        // The verifier is there; nothing else is deployed.
+        let missing = await world(reported: { _ in 7_777_777 }, chains: zora(),
+                                  p256: "0x" + String(repeating: "0", count: 63) + "1")
+        missing.settings.addByChainId(7_777_777)
+        await settle(missing.settings) { missing.settings.networkAdmin?.wizard.error != nil }
+        let lacking = try #require(missing.settings.networkAdmin?.wizard)
+        #expect(lacking.error == .notCompatible(chainId: 7_777_777))
+        #expect(lacking.compat?.blocker == "missing_contracts")
+        #expect(lacking.errorKey == I18nKeys.SettingsUi.addIncompatibleHint)
+        let missingPage = try drawn(missing)
+        #expect(missingPage.callout?.text == loc.t(I18nKeys.SettingsUi.addIncompatibleHint))
+        #expect(missingPage.secondary == "Open Chain Setup Tool")
+        #expect(missingPage.secondaryUrl == "https://getvela.app/chain-setup?chain=7777777")
+        #expect(missingPage.primary == nil)
+        // No verdict badge and no check list on this path: the sentence and
+        // the one button are the whole answer.
+        #expect(missingPage.checks.isEmpty)
+        #expect(missing.shelf.readList(VelaStore.Key.customNetworks).isEmpty)
+        #expect(lacking.rpcField == NetRpcFieldWire.none)
+        #expect(missingPage.customRpc == nil && missingPage.recheck == nil)
+    }
+
     /// The bin's "yes" removes the custom network, from the list and the disk.
     @Test func aCustomNetworkIsRemoved() async {
         let world = await world(seed: { shelf in
@@ -291,6 +436,12 @@ struct NetworkEventsTests {
         // Nothing answered, so nothing was learned: unverified, not a verdict.
         #expect(world.settings.networkAdmin?.wizard.compat?.rpcFailure != nil)
         #expect(!world.asked.urls.contains(mine))
+        // An inconclusive check: the field (optional) and its re-check.
+        #expect(world.settings.networkAdmin?.wizard.rpcField == .optional)
+        let unverified = world.settings.networkAdmin.map {
+            SettingsLive.wizard($0.wizard, loc: loc, fallback: SettingsFixtures.build(.st10, loc: loc).addNetwork)
+        }
+        #expect(unverified?.customRpc?.label == "Custom RPC (optional)" && unverified?.recheck != nil)
 
         world.settings.recheck(customRpc: mine)
         await settle(world.settings) { world.settings.networkAdmin?.wizard.compat?.rpcFailure == nil
@@ -301,6 +452,13 @@ struct NetworkEventsTests {
         // A verdict now — reached through the RPC the person typed.
         #expect(world.settings.networkAdmin?.wizard.compat?.rpcFailure == nil)
         #expect(world.settings.networkAdmin?.wizard.compat?.bestRpcUrl == mine)
+        // Whatever the verdict, the page follows the core: the field and the
+        // re-check together, or neither.
+        if let wizard = world.settings.networkAdmin?.wizard {
+            let page = SettingsLive.wizard(wizard, loc: loc, fallback: SettingsFixtures.build(.st10, loc: loc).addNetwork)
+            #expect((page.customRpc != nil) == (wizard.rpcField != .none))
+            #expect((page.recheck != nil) == (page.customRpc != nil))
+        }
     }
 
     /// Opening the wizard clears what the last visit found.

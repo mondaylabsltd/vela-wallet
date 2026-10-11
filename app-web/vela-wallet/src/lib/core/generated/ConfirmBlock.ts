@@ -3,4 +3,4 @@
 /**
  * Which part of the gate is shut.
  */
-export type ConfirmBlock = "no_request" | "refused" | "in_flight" | "funding" | "account_switching" | "answered" | "previous_pending" | "reading" | "approval_choice" | "batch_unsettled" | "fee_measuring" | "fee_failed" | "fee_short";
+export type ConfirmBlock = "no_request" | "refused" | "in_flight" | "funding" | "account_switching" | "answered" | "previous_pending" | "reading" | "approval_choice" | "batch_unsettled" | "fee_measuring" | "fee_failed" | "fee_short" | "sim_checking";

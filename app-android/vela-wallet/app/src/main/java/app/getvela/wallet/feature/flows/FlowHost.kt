@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import androidx.compose.foundation.layout.BoxWithConstraints
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import app.getvela.wallet.feature.scan.ScanCallbacks
 import app.getvela.wallet.core.diagnostics.VelaLog
@@ -160,8 +161,11 @@ private fun FlowHostContent(
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
+            // With no live send behind it this is a board (the gallery's S1,
+            // a preview): the brackets hold the fixture's sample code, and
+            // no camera is ever involved.
             is FlowBase.Scan -> send?.scan?.let { live -> LiveScanSurface(model = base.model, callbacks = live) }
-                ?: ScanSurface(model = base.model, onClose = onBack)
+                ?: ScanSurface(model = base.model, onClose = onBack, preview = { app.getvela.wallet.feature.scan.ScanFixtureFrame() })
             is FlowBase.Share -> Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -245,7 +249,10 @@ private fun FlowHostContent(
                     onRemoveRecipient = { index -> send?.onRemoveRecipient?.invoke(index) },
                     onRecipientAmount = send?.let { it.onRecipientAmount },
                     onRecipientAddress = send?.let { it.onRecipientAddress },
-                    onRecipientPick = send?.onRecipientPick,
+                    // The gallery's split board draws each row's two doors (issue
+                    // #471) as the live form does; there they open the boards.
+                    onRecipientPick = if (send == null) { _ -> onNavigate(FlowStep.ContactPick) } else send.onRecipientPick,
+                    onRecipientScan = if (send == null) { _ -> onNavigate(FlowStep.Scan) } else send.onRecipientScan,
                     onFillEmpty = send?.onFillEmpty,
                     onContinue = { send?.onContinue?.invoke() ?: onNavigate(FlowStep.SendConfirm) },
                     // The index is the ROW the chip sits on, and the live form
@@ -318,6 +325,11 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
         containerColor = VelaTheme.colors.bgBase,
         dragHandle = { FlowSheetHandle() },
     ) {
+        // The receive code is the one sheet that must fit a phone screen
+        // whole (issue #321): it is told how much height the sheet has, so
+        // its code can give way before anything scrolls. [room]: that height
+        // in px, less this column's own bottom margin; `null` — unbounded.
+        val body: @Composable (Int?) -> Unit = { room ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -339,6 +351,7 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
             when (sheet) {
                 is FlowSheet.ReceiveQr -> ReceiveQrBody(
                     model = sheet.model,
+                    heightLimit = room,
                     close = { SheetCloseButton(label = sheetClose(sheet)) { dismiss() } },
                     onSave = { onSaveImage?.invoke() },
                     onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) },
@@ -364,7 +377,6 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                 )
                 is FlowSheet.ContactPick -> ContactPickBody(
                     model = sheet.model,
-                    onScan = { if (send == null) onNavigate(FlowStep.Scan) else send.onScanOpen?.invoke() },
                     onGroup = { index -> send?.onGroup?.invoke(index) },
                     onSelect = { address -> send?.onContactSelect?.invoke(address) },
                 )
@@ -384,6 +396,15 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                     onMerge = { send?.onBatchMerge?.invoke() },
                 )
             }
+        }
+        }
+        if (sheet is FlowSheet.ReceiveQr) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val margin = with(LocalDensity.current) { VelaSpacing.xl4.roundToPx() }
+                body(if (constraints.hasBoundedHeight) constraints.maxHeight - margin else null)
+            }
+        } else {
+            body(null)
         }
     }
 }
@@ -520,6 +541,8 @@ class SendCallbacks(
     val onGroup: (Int) -> Unit = {},
     /** Spec 048: a split row's own 通讯录 pick. */
     val onRecipientPick: ((Int) -> Unit)? = null,
+    /** Issue #471: a split row's own scan — the code lands in that row. */
+    val onRecipientScan: ((Int) -> Unit)? = null,
     val scan: ScanCallbacks? = null,
     // Spec 045 US2 — the sweep pick: select-all and the pick's own button.
     val onSelectAll: () -> Unit = {},

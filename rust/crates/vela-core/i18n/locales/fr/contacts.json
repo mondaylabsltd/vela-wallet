@@ -2,7 +2,6 @@
   "contacts": {
     "title": "Contacts",
     "manageSubtitle": "Adresses enregistrées et destinataires récents",
-    "pickerTitle": "Choisir un destinataire",
     "searchPlaceholder": "Rechercher un nom, un ENS ou une adresse",
     "filterAll": "Tous",
     "sectionFavorites": "Favoris",
@@ -11,7 +10,6 @@
     "empty": "Aucun contact pour l'instant",
     "emptyHint": "Ajoutez vos adresses fréquentes pour ne plus les recoller à chaque envoi. Vous pouvez aussi importer un carnet existant depuis un fichier.",
     "emptyPicker": "Aucun destinataire pour l'instant",
-    "pickerEmptyHint": "Collez une adresse ou scannez un QR pour envoyer immédiatement.",
     "noResults": "Aucun résultat pour « {{query}} »",
     "useTyped": "Utiliser cette adresse",
     "addTitle": "Nouveau contact",
@@ -35,7 +33,6 @@
     "sends_other": "{{count}} envois",
     "savedTag": "Enregistré",
     "savedContact": "Contact enregistré",
-    "scanToAdd": "Scanner une adresse",
     "sectionGroups": "Groupes",
     "groupMembers": "{{count}} membres",
     "groupNew": "Nouveau groupe",
@@ -78,7 +75,6 @@
     "recentActivity": "Activité récente",
     "viewAllActivity": "Voir toute l'activité",
     "deleteContact": "Supprimer le contact",
-    "actionQr": "Code QR",
     "edit": "Modifier"
   }
 }

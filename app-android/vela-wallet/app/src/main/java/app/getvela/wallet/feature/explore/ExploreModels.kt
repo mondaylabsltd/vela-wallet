@@ -14,7 +14,13 @@ import app.getvela.wallet.feature.wallet.TabsModel
  * fixture layer that builds them and nothing else.
  */
 
-enum class ExploreScreenState { E1, E2, E3, E4, E5, E6, E7 }
+/**
+ * E1–E7 are the web boards'. E8 and E9 (spec 100, the P-256 batch): a page
+ * asks to add a network this wallet refuses — for missing contracts (E8: the
+ * line and Chain Setup, opened on that chain) and for no P-256 verifier (E9:
+ * Vela wallets cannot work there, and no button).
+ */
+enum class ExploreScreenState { E1, E2, E3, E4, E5, E6, E7, E8, E9 }
 
 /** A site as the browser home draws it — a lettermark, never a fetched icon. */
 @Immutable
@@ -238,16 +244,19 @@ data class AddNetworkModel(
     /** "Add Network" — only where the core says it can act. */
     val add: String?,
     val retry: String?,
-    /** The chain-setup tool, for a chain this wallet refuses. */
-    val setupTool: String?,
+    /**
+     * The chain-setup tool — only for a chain refused for MISSING CONTRACTS,
+     * with the core's link (Chain Setup opened on that chain). A chain with no
+     * P-256 verifier has none: nothing can be deployed to make it work.
+     */
+    val setupTool: SetupToolModel?,
     /** Cancel while a decision is open, Done after a verdict — either way `dapp_add_declined`. */
     val dismiss: String,
-) {
-    companion object {
-        /** Where a chain this wallet refuses can be made ready (iOS and the web link the same page). */
-        const val CHAIN_SETUP_URL = "https://getvela.app/chain-setup"
-    }
-}
+)
+
+/** "Open Chain Setup Tool" and where it goes (`NetCompatibility.setup_url`) — never one without the other. */
+@Immutable
+data class SetupToolModel(val label: String, val url: String)
 
 /** Spec 100: what the add-network sheet's buttons say to the core. */
 enum class AddNetworkAction { Approve, Decline, Retry }

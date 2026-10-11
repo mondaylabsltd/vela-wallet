@@ -15,9 +15,10 @@ const ALL = {
 	intentApproveNft: true,
 	intentApproveAllNfts: true,
 	intentAuthorizeSpending: true,
-	// The wallet's own registry backup: its intent and its three rows
-	// (network, address, public keys) are core terms, so they translate here
-	// like any other — no index relabel in the shell.
+	// The wallet's own copy of its record to Ethereum: its intent ("Copy this
+	// wallet's record") and its four rows (network, address, wallet name, keys
+	// included) are core terms, so they translate here like any other — no
+	// index relabel in the shell. The term keeps its first name on the wire.
 	intentBackUpPublicKeys: true,
 	intentBorrow: true,
 	intentBridge: true,
@@ -73,6 +74,8 @@ const ALL = {
 	labelTokenId: true,
 	labelTokenIds: true,
 	labelValidUntil: true,
+	// The record's name, which the copy makes public on Ethereum too.
+	labelWalletName: true,
 	labelYouPay: true,
 	labelYouPayMax: true,
 	labelYouReceive: true,

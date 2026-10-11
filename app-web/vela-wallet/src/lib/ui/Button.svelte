@@ -41,7 +41,7 @@
 		/**
 		 * A stable hook for tests where the label is no handle: the signing
 		 * sheet's confirm says the request's action ("Sign", "Confirm swap",
-		 * "Back up public keys"), in the person's language (issue 461).
+		 * "Copy this wallet's record"), in the person's language (issue 461).
 		 */
 		testid?: string;
 		onclick?: () => void;

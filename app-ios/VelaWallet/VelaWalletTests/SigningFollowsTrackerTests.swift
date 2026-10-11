@@ -28,7 +28,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct SigningFollowsTrackerTests {
 
     private let fixture = TrustedSignerFixture()
@@ -122,7 +122,11 @@ struct SigningFollowsTrackerTests {
                 },
                 trackWithdrawn: { hash, ids in seen.withdrawn.append((hash, ids)) },
                 knownChains: { [100] }
-            )
+            ),
+            // A scripted world: no time passes in it. The fee's timers, the
+            // simulation's deadline and the write-ahead's five seconds are
+            // held, so a run that waited for the main actor is the same run.
+            timers: .stopped
         )
         seen.controller = controller
         controller.open(SigningController.Incoming(
@@ -132,7 +136,7 @@ struct SigningFollowsTrackerTests {
             grantedAddress: fixture.account
         ))
         await Wait.until { controller.fee?.fee?.feeRecipient != nil && controller.fee?.busy == false }
-        controller.approve()
+        try #require(await controller.approveWhenOpen(), "the request was never approved")
         return Run(controller: controller, seen: seen, scripted: scripted, port: port, store: store)
     }
 

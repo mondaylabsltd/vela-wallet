@@ -30,7 +30,13 @@ export type BalanceStateKind = 'normal' | 'zero-live' | 'loading' | 'hidden';
 
 export interface BalanceModel {
 	label: string;
-	currency: string;
+	/**
+	 * The currency the figure is (or will be) in, drawn after the label.
+	 * Absent while it is not known yet — the display currency has not
+	 * committed and no stored choice is on its way — so the label never names
+	 * the placeholder's "USD" and then changes its mind.
+	 */
+	currency?: string;
 	state: BalanceStateKind;
 	/** e.g. "$1,383" — absent while loading. */
 	integer?: string;
@@ -43,6 +49,13 @@ export interface BalanceModel {
 	 */
 	decimalMark?: string;
 	liveText?: string;
+	/**
+	 * "Checking…" — the first read of this account is still out
+	 * (`BalanceView.checking_key`). Said on the status line, quietly, and in
+	 * place of anything else there: until a round has ended no chain has said
+	 * the wallet is live, and none has failed to answer.
+	 */
+	checkingText?: string;
 	status?: { kind: 'warning' | 'refreshing'; text: string };
 	/**
 	 * Issue 462: the hero's own refresh, "↻ Updated 2m" — the same control on

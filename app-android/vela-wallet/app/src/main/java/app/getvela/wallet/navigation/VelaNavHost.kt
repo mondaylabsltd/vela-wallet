@@ -20,7 +20,6 @@ import app.getvela.wallet.feature.contacts.core.ContactGroupInput
 import app.getvela.wallet.feature.contacts.components.GroupMenuSheet
 import app.getvela.wallet.feature.contacts.components.GroupEditSheet
 import app.getvela.wallet.feature.contacts.components.GroupDeleteConfirmSheet
-import app.getvela.wallet.feature.contacts.components.ContactQrSheet
 import app.getvela.wallet.feature.contacts.components.MultiPickSheet
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.core.platform.VelaHaptic
@@ -692,11 +691,15 @@ fun VelaNavHost(
                 if (rescue.overlay != SettingsOverlay.None) {
                     val rescueBase = remember(strings) { SettingsFixtures.buildState(SettingsScreenState.SR6, strings) }
                     val rescueRow = rescue.chainId?.let { id -> networks.networks.firstOrNull { it.chain_id == id } }
+                    // F16: the home's line is one line, cut with an ellipsis when its
+                    // sentence is longer — so the sheet it opens says the sentence in
+                    // full at its top (the list's title already is its own line).
+                    val heroLine = if (online) WalletLive.heroStatus(balances, strings, chainNames)?.text else strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE)
                     WalletRescueSheet(
                         rescue = rescue,
                         model = rescueBase.copy(
-                            unreachable = SettingsLive.unreachable(balances, currency, chainNames, strings),
-                            balanceDetail = SettingsLive.balanceDetail(rescueBase.balanceDetail, balances, currency, chainNames, strings),
+                            unreachable = SettingsLive.unreachable(balances, currency, chainNames, strings).copy(lead = heroLine),
+                            balanceDetail = SettingsLive.balanceDetail(rescueBase.balanceDetail, balances, currency, chainNames, strings).copy(lead = heroLine),
                             rpcFix = rescueRow?.let { SettingsLive.rpcFix(rescueBase.rpcFix, it, rpcDraft, rpcSaved, strings) }
                                 ?: rescueBase.rpcFix,
                         ),
@@ -779,6 +782,9 @@ fun VelaNavHost(
                 // Spec 071: the Trusted Signer's page, open for whichever signature asked.
                 val trustedSigner = application.container.trustedSigner
                 val trustedSignerState by trustedSigner.state.collectAsStateWithLifecycle()
+                // The pages as Settings keeps them: the hand-off card names its
+                // page as Settings does (the label, 「Vela 官方签名页」).
+                val savedSigningPages by application.container.settings.signingPages.collectAsStateWithLifecycle()
                 val trustedSignerNotice by trustedSigner.notice.collectAsStateWithLifecycle()
                 val trustedSignerWaiting = trustedSignerState is app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel.State.Waiting
                 val trustedSignerUnreachable = (trustedSignerState as? app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel.State.Waiting)?.unreachable == true
@@ -855,6 +861,7 @@ fun VelaNavHost(
                                 page = card.page,
                                 key = card.key,
                                 line = application.container.signerPages.line(card.page),
+                                saved = app.getvela.wallet.feature.signing.SigningLive.savedPage(savedSigningPages.pages, card.page),
                             )
                         },
                     )
@@ -1013,6 +1020,25 @@ fun VelaNavHost(
                         }
                     }
                 }
+                // F25: the money the open Send shows follows the display currency —
+                // committed after the Send opened (a cold start: the rate is a round
+                // trip behind the first tap) or changed while it is open. The Send
+                // machine was told once, at open, and kept the placeholder's dollars
+                // for the whole journey. Declared after the open above, so a Send
+                // opening in this very frame is told by its own open; the controller
+                // says it only to an open Send, and only when it is news.
+                val displayNow = sendDisplay()
+                LaunchedEffect(displayNow) { send.displayChanged(displayNow) }
+                // F8: and the open batch importer hears the person's currency the same
+                // way — the moment it is known, or changes — beside Send's own word.
+                // The core asks for THAT currency's rate and holds the import until it
+                // lands. Opened before it was known, the importer kept the
+                // placeholder's "USD" for as long as it stayed open: a sheet of yuan
+                // summed as dollars.
+                val batchCurrency = SendLive.batchCurrency(currency)
+                LaunchedEffect(batchCurrency, batchView.opened) {
+                    if (batchView.opened && batchCurrency != null && batchCurrency != batchView.fiat_code) send.batchFiatCode(batchCurrency)
+                }
                 LaunchedEffect(sendClosed) {
                     if (sendClosed && flows.top in SEND_STATES) flows.close()
                 }
@@ -1144,7 +1170,8 @@ fun VelaNavHost(
                         val sheet = when (val sheet = drawn.sheet) {
                             is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, sendView, ctx))
                             is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
-                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx, importReplaces))
+                            // No currency is named before the person's is known (F8).
+                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx, importReplaces, currencyUnknown = SendLive.batchCurrency(currency) == null))
                             else -> sheet
                         }
                         drawn.copy(base = base, sheet = sheet)
@@ -1194,6 +1221,7 @@ fun VelaNavHost(
                                     page = card.page,
                                     key = card.key,
                                     line = application.container.signerPages.line(card.page),
+                                    saved = app.getvela.wallet.feature.signing.SigningLive.savedPage(savedSigningPages.pages, card.page),
                                 ),
                                 strings,
                             ),
@@ -1262,6 +1290,7 @@ fun VelaNavHost(
                                 }
                             },
                             onRecipientPick = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowPicker(it) } },
+                            onRecipientScan = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowScanner(it) } },
                             scan = ScanCallbacks(
                                 onDecoded = { text -> send.scanned(text) },
                                 onClose = {
@@ -1713,14 +1742,10 @@ fun VelaNavHost(
                                     }
                                 },
                                 litTab = { onPage -> app.getvela.wallet.feature.browser.core.BrowserTabs.litTab(exploreView, exploreView.selected_tab, onPage) },
-                                onChainSetupTool = {
+                                // The core's link: Chain Setup opened on the refused chain.
+                                onChainSetupTool = { url ->
                                     runCatching {
-                                        context.startActivity(
-                                            android.content.Intent(
-                                                android.content.Intent.ACTION_VIEW,
-                                                android.net.Uri.parse(app.getvela.wallet.feature.explore.AddNetworkModel.CHAIN_SETUP_URL),
-                                            ),
-                                        )
+                                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
                                     }
                                 },
                             ),
@@ -1828,14 +1853,14 @@ fun VelaNavHost(
             // route guard.
             composable(VelaDestinations.EXPLORE) {
                 val strings = LocalVelaStrings.current
-                val model = remember(strings) {
-                    val state = ExploreScreenState.entries.firstOrNull { it.name.equals(exploreState, ignoreCase = true) } ?: ExploreScreenState.E2
-                    ExploreFixtures.buildState(state, strings)
-                }
+                val state = remember { ExploreScreenState.entries.firstOrNull { it.name.equals(exploreState, ignoreCase = true) } ?: ExploreScreenState.E2 }
+                val model = remember(strings) { ExploreFixtures.buildState(state, strings) }
                 val signing = remember(strings) {
                     SigningFixtures.build(SigningScreenState.CS12, strings)
                 }
-                ExploreScreen(model = model, signing = signing)
+                // E8 / E9: the add-network sheet over the page, for a refused chain.
+                val addNetwork = remember(strings) { ExploreFixtures.addNetwork(state, strings) }
+                ExploreScreen(model = model, signing = signing, addNetwork = addNetwork)
             }
 
             composable(VelaDestinations.GALLERY) {
@@ -1891,7 +1916,6 @@ fun VelaNavHost(
 
                 var confirmingDelete by rememberSaveable { mutableStateOf(false) }
                 // Spec 048: the doors the contacts machine had no drawing for on the phone.
-                var contactQr by remember { mutableStateOf<String?>(null) }
                 var groupEdit by remember { mutableStateOf<Pair<String?, String>?>(null) }
                 var groupMenu by remember { mutableStateOf(false) }
                 var confirmingGroupDelete by remember { mutableStateOf(false) }
@@ -1992,16 +2016,6 @@ fun VelaNavHost(
                             contacts.exportBook(format = if (format == "csv") ContactFileFormat.Csv else ContactFileFormat.Json)
                         },
                         onDismiss = { exportChoice = false },
-                    )
-                }
-                contactQr?.let { address ->
-                    ContactQrSheet(
-                        name = book.contacts.firstOrNull { it.address == address }?.name ?: address,
-                        address = address,
-                        copyLabel = strings.t(I18nKeys.Flows.COPY_ADDRESS),
-                        copiedLabel = strings.t(I18nKeys.Flow.COPIED),
-                        closeLabel = strings.t(I18nKeys.Flows.DONE),
-                        onDismiss = { contactQr = null },
                     )
                 }
                 groupEdit?.let { (id, initial) ->
@@ -2137,11 +2151,6 @@ fun VelaNavHost(
                                 if (Clipboard.copy(context, "address", contact.address)) haptic(VelaHaptic.Select)
                             }
                             "contacts.action.Send" -> selected?.let { contact -> openSendTo(contact.address) }
-                            "contacts.action.Receive" -> {
-                                application.container.pendingFlow.value = WalletFlowEntry.Receive
-                                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
-                            }
-                            "contacts.action.Qr" -> contactQr = selected?.address
                             "contacts.batchSend" -> group?.let { g ->
                                 val members = g.members
                                 if (members.size == 1) {
@@ -2317,7 +2326,7 @@ fun VelaNavHost(
                     }
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
                     m = SettingsLive.withConnections(m, connectedSites.sites, strings)
-                    m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings, sessionView.activeRow?.signingDomain ?: "getvela.app")
+                    m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck, strings, sessionView.activeRow?.signingDomain ?: "getvela.app")
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
                     m = SettingsLive.withFeedback(m, feedbackFacts, strings)
                     m = SettingsLive.withFeedbackStatus(m, feedbackState.sending, feedbackState.outcome)
@@ -2472,18 +2481,20 @@ fun VelaNavHost(
                         // "checking…" once more) and the effect above re-runs (#8).
                         onEthereumBackup = {
                             val check = backupCheck
-                            val call = check?.call
-                            when {
-                                call != null -> {
+                            // The tap is the core's (`BackupRow.action`): the sheet,
+                            // another attempt, or — a wallet copied already, or one
+                            // that never can be — nothing at all.
+                            when (check?.row?.action) {
+                                RegistryBackup.Action.Copy -> check.call?.let { call ->
                                     selectFromPushed(VelaTab.Wallet)
                                     application.container.openEthereumBackup(call)
                                 }
-                                check?.state == RegistryBackup.State.CouldNotCheck -> {
+                                RegistryBackup.Action.Retry -> {
                                     settingsHaptic(VelaHaptic.Select)
                                     backupCheck = null
                                     backupAttempt += 1
                                 }
-                                else -> Unit
+                                RegistryBackup.Action.None, null -> Unit
                             }
                         },
                         onSheetSelect = { sheet, id ->
@@ -2697,6 +2708,7 @@ fun VelaNavHost(
             val sendView by handoffSend.send.collectAsStateWithLifecycle()
             val handoffNetworks by application.container.settings.networks.collectAsStateWithLifecycle()
             val handoffCurrency by application.container.settings.currency.collectAsStateWithLifecycle()
+            val handoffPages by application.container.settings.signingPages.collectAsStateWithLifecycle()
             val handoffScope = rememberCoroutineScope()
             val handoffFee = remember(sendFeeJson, sendSpeedJson, sendFee, sendView, handoffNetworks, handoffCurrency, csStrings) {
                 SendLive.handoffFee(
@@ -2717,6 +2729,7 @@ fun VelaNavHost(
                         page = handing.page,
                         key = handing.key,
                         line = application.container.signerPages.line(handing.page),
+                        saved = app.getvela.wallet.feature.signing.SigningLive.savedPage(handoffPages.pages, handing.page),
                     ),
                     csStrings,
                     fee = handoffFee,

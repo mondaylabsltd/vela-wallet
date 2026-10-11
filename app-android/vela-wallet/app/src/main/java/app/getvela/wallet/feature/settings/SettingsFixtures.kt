@@ -1,5 +1,10 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.feature.settings.core.WalletKeys
+import app.getvela.wallet.feature.settings.core.RegistryBackup
+import app.getvela.wallet.feature.settings.core.NetBoards
+import app.getvela.wallet.feature.onboarding.core.KeyMethod
+import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.core.data.DebugMode
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.core.BalanceView
@@ -133,7 +138,14 @@ object SettingsFixtures {
         listOf("1,234,567.89", "1,234,567.89", "1.234.567,89", "1 234 567,89", "12,34,567.89")
     private val DATE_SAMPLES =
         listOf("2026/06/13", "2026/06/13", "06/13/2026", "13/06/2026", "13.06.2026", "2026-06-13")
-    private val TIME_SAMPLES = listOf("13:45", "13:45", "1:45 PM")
+    /**
+     * Automatic, 24-hour, 12-hour — each the CORE's clock in the board's
+     * language (F5), as a session's sheet is: 「下午 1:45」 under Chinese. The
+     * board drew "1:45 PM" in every language.
+     */
+    private fun timeSamples(s: VelaStrings): List<String> =
+        listOf(app.getvela.wallet.core.format.TimeFormatKey.H24, app.getvela.wallet.core.format.TimeFormatKey.H24, app.getvela.wallet.core.format.TimeFormatKey.H12)
+            .map { app.getvela.wallet.core.format.Formats(time = it).timeExample(s.language) }
 
     // --- Helpers -------------------------------------------------------------
 
@@ -194,7 +206,7 @@ object SettingsFixtures {
                     id = "time-format",
                     title = s.t(I18nKeys.SettingsUi.TIME_TITLE),
                     icon = SettingsIcon.Clock,
-                    value = TIME_SAMPLES[0],
+                    value = timeSamples(s)[0],
                 ),
             ),
         ),
@@ -380,13 +392,18 @@ object SettingsFixtures {
         }
 
         val ok = mode == "compatible"
-        // Four rows in both verdicts: "incompatible" is only legible as an
-        // answer if it shows WHICH requirement failed, so the list never
-        // shortens. EntryPoint is deployed everywhere and passes in both.
+        // The two refusals are told apart by the signer row (the core's
+        // `NetBlocker`): a chain with no P-256 verifier is refused for that
+        // and nothing else matters; a chain that has it and lacks contracts
+        // can be made ready.
+        val noP256 = mode == "no-p256"
+        // Four rows in every verdict: a refusal is only legible as an answer
+        // if it shows WHICH requirement failed, so the list never shortens.
+        // EntryPoint is deployed everywhere and passes in all three.
         val checks = listOf(
             CheckItemModel("EntryPoint v0.7", true),
             CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SAFE), ok),
-            CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SIGNER), ok),
+            CheckItemModel(s.t(I18nKeys.SettingsUi.ADD_CHECK_SIGNER), !noP256),
             CheckItemModel(
                 s.t(I18nKeys.SettingsUi.ADD_CHECK_REMAINING, mapOf("count" to "8")),
                 ok,
@@ -419,6 +436,9 @@ object SettingsFixtures {
                     hint = s.t(I18nKeys.SettingsUi.NETWORK_RELAY_NOTICE),
                 ),
                 primary = s.t(I18nKeys.SettingsUi.ADD_BUTTON),
+                // The core's one rule (F4 / F14 / F22): the re-check is drawn
+                // exactly where the RPC field is.
+                recheck = s.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC),
             )
         } else {
             AddNetworkModel(
@@ -437,15 +457,19 @@ object SettingsFixtures {
                 ),
                 checksTitle = checksTitle,
                 checks = checks,
+                // The core's line for the reason (`NetCompatibility.hint_key`).
                 callout = CalloutModel(
                     CalloutTone.Warning,
-                    s.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
+                    s.t(if (noP256) "settingsModals.addNetwork.noP256Hint" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
                 ),
-                // An outline CTA plus a re-check link, not a greyed-out accent
-                // one: an action you cannot take should not be dressed as the
-                // action you came for.
-                secondary = s.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL),
-                recheck = s.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC),
+                // An outline CTA, not a greyed-out accent one: an action you
+                // cannot take should not be dressed as the action you came
+                // for. Chain Setup only where contracts can be deployed — with
+                // the core's link, opened on this chain. And NO "Re-check with
+                // this RPC" under a refusal (F22): another endpoint changes
+                // neither reason, and there is no RPC box for "this" to mean.
+                secondary = if (noP256) null else s.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL),
+                secondaryUrl = if (noP256) null else "https://getvela.app/chain-setup?chain=48900",
             )
         }
     }
@@ -694,7 +718,7 @@ object SettingsFixtures {
 
     private fun accountsSheet(s: VelaStrings) = AccountsSheetModel(
         title = s.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
-        summary = s.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to ACCOUNTS.size.toString())) +
+        summary = s.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, ACCOUNTS.size) +
             s.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to TOTAL_BALANCE)),
         rows = ACCOUNTS.mapIndexed { i, a ->
             AccountsSheetRowModel(a.name, a.addressDisplay, a.addressFull, a.amount, i == 0)
@@ -944,6 +968,61 @@ object SettingsFixtures {
         ),
     )
 
+    /**
+     * SR3B / SR3C: the balance by network through [SettingsLive.balanceDetail]
+     * — two networks read (Ethereum, Gnosis), one busy, one holding — with the
+     * currency on its way and then committed.
+     */
+    private fun liveBalanceDetail(s: VelaStrings, committed: Boolean): BalanceDetailModel {
+        val view = BalanceView(
+            display_total_usd = 794.79,
+            tokens = listOf(
+                app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                app.getvela.wallet.feature.wallet.core.BalanceToken(
+                    chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54", decimals = 6,
+                    token_address = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", price_usd = 1.0,
+                ),
+            ),
+            failed_chain_ids = listOf(137),
+            rate_limited_chain_ids = listOf(137),
+        )
+        val currency = if (committed) {
+            CurrencyView(code = "CNY", rate = 7.1, committed = true)
+        } else {
+            CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+        }
+        return SettingsLive.balanceDetail(balanceDetail(s), view, currency, mapOf(1 to "Ethereum", 100 to "Gnosis", 137 to "Polygon"), s)
+    }
+
+    /**
+     * SR3D / SR3E / SR3F: the balance by network in a round the real balance
+     * machine wrote (`BalanceBoards`), through [SettingsLive.balanceDetail],
+     * with the home line's sentence at its top as a session passes it
+     * ([WalletLive.heroStatus]).
+     */
+    private fun roundBalanceDetail(s: VelaStrings, state: SettingsScreenState): BalanceDetailModel {
+        val now = System.currentTimeMillis().toDouble()
+        val boards = app.getvela.wallet.feature.wallet.core.BalanceBoards
+        val (view, names) = when (state) {
+            SettingsScreenState.SR3D -> boards.tokenListUnreachable(ADDRESS_FULL, now) to app.getvela.wallet.feature.wallet.WalletFixtures.TOKEN_LIST_CHAINS
+            SettingsScreenState.SR3E -> boards.unpriced(ADDRESS_FULL, now) to mapOf(1 to "Ethereum", 100 to "Gnosis")
+            else -> boards.internalFault(ADDRESS_FULL, now) to mapOf(1 to "Ethereum", 100 to "Gnosis")
+        }
+        return SettingsLive.balanceDetail(balanceDetail(s), view, CurrencyView(code = "USD", rate = 1.0, committed = true), names, s)
+            .copy(lead = app.getvela.wallet.feature.wallet.WalletLive.heroStatus(view, s, names)?.text)
+    }
+
+    /** ST2B: the switcher's sheet for a wallet with ONE account, through the live builder. */
+    private fun oneAccountSheet(s: VelaStrings) = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(
+        accounts = listOf(ACCOUNTS.first().let { it.name to it.addressFull }),
+        activeIndex = 0,
+        switcher = app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(
+            balances = listOf(app.getvela.wallet.feature.wallet.core.BalanceCacheEntry(ACCOUNTS.first().addressFull, 1383.28)),
+        ),
+        currency = CurrencyView(code = "USD", rate = 1.0, committed = true),
+        strings = s,
+    )
+
     private fun relayer(s: VelaStrings) = RelayerModel(
         title = s.t(I18nKeys.SettingsUi.RELAYER_TITLE),
         lead = s.t(I18nKeys.SettingsUi.RELAYER_LEAD),
@@ -988,7 +1067,7 @@ object SettingsFixtures {
     private fun shape(state: SettingsScreenState): Shape = when (state) {
         SettingsScreenState.ST1, SettingsScreenState.ST1B ->
             Shape(SettingsPage.Home, SettingsOverlay.None)
-        SettingsScreenState.ST2 -> Shape(SettingsPage.Home, SettingsOverlay.Accounts)
+        SettingsScreenState.ST2, SettingsScreenState.ST2B -> Shape(SettingsPage.Home, SettingsOverlay.Accounts)
         SettingsScreenState.ST3, SettingsScreenState.ST3B ->
             Shape(SettingsPage.Home, SettingsOverlay.SignOut)
         SettingsScreenState.ST4 -> Shape(SettingsPage.Home, SettingsOverlay.Language)
@@ -998,7 +1077,9 @@ object SettingsFixtures {
         SettingsScreenState.ST8 -> Shape(SettingsPage.Home, SettingsOverlay.TimeFormat)
         SettingsScreenState.ST9 -> Shape(SettingsPage.Networks, SettingsOverlay.None)
         SettingsScreenState.ST9B -> Shape(SettingsPage.NetworkDetail, SettingsOverlay.None)
-        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C ->
+        SettingsScreenState.ST10, SettingsScreenState.ST10B, SettingsScreenState.ST10C, SettingsScreenState.ST10D,
+        SettingsScreenState.ST10E, SettingsScreenState.ST10F, SettingsScreenState.ST10G,
+        SettingsScreenState.ST10H, SettingsScreenState.ST10I, SettingsScreenState.ST10J ->
             Shape(SettingsPage.AddNetwork, SettingsOverlay.None)
         SettingsScreenState.ST11 -> Shape(SettingsPage.RpcProviders, SettingsOverlay.None)
         SettingsScreenState.ST12 -> Shape(SettingsPage.Endpoints, SettingsOverlay.None)
@@ -1013,13 +1094,69 @@ object SettingsFixtures {
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
         SettingsScreenState.SR2, SettingsScreenState.SR2B ->
             Shape(SettingsPage.Home, SettingsOverlay.RpcFix, rescue = true, backdrop = "wallet")
-        SettingsScreenState.SR3 ->
+        SettingsScreenState.SR3, SettingsScreenState.SR3B, SettingsScreenState.SR3C,
+        SettingsScreenState.SR3D, SettingsScreenState.SR3E, SettingsScreenState.SR3F ->
             Shape(SettingsPage.Home, SettingsOverlay.BalanceDetail, rescue = true, backdrop = "wallet")
         SettingsScreenState.SR4 ->
             Shape(SettingsPage.Home, SettingsOverlay.Relayer, rescue = true, backdrop = "send")
         SettingsScreenState.SR5 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
-        SettingsScreenState.SR6 ->
+        SettingsScreenState.SR6, SettingsScreenState.SR7 ->
             Shape(SettingsPage.Home, SettingsOverlay.Unreachable, rescue = true, backdrop = "wallet")
+        SettingsScreenState.SK1, SettingsScreenState.SK2, SettingsScreenState.SK3, SettingsScreenState.SK4 ->
+            Shape(SettingsPage.Home, SettingsOverlay.None)
+    }
+
+    // -- the Keys block and its copy-to-Ethereum row ---------------------------
+
+    /**
+     * What the core's backup walk ends on for each SK board: the state and the
+     * row that rides with it (`BackupState::row` — its words, tone and tap).
+     * Written out here because a board has no chain to ask; the live screen
+     * reads the row off the step and maps nothing.
+     */
+    fun backupCheck(state: SettingsScreenState): RegistryBackup.Check? {
+        // The paragraph under the row rides with it, as the core sends it:
+        // every state but the one that can never be copied.
+        fun row(subtitle: String, tone: RegistryBackup.Tone, action: RegistryBackup.Action, explained: Boolean = true) =
+            RegistryBackup.Row(
+                "settingsModals.backup.title", "settingsModals.backup.$subtitle", tone, action,
+                explainKey = I18nKeys.SettingsUi.BACKUP_EXPLAIN.takeIf { explained },
+            )
+        return when (state) {
+            SettingsScreenState.SK1 -> RegistryBackup.Check(
+                RegistryBackup.State.NotBackedUp,
+                RegistryBackup.Call(1, "0x0000000000000000000000000000000000000000", "0x"),
+                row("notBackedUp", RegistryBackup.Tone.Neutral, RegistryBackup.Action.Copy),
+            )
+            SettingsScreenState.SK2 -> RegistryBackup.Check(
+                RegistryBackup.State.BackedUp, null,
+                row("backedUp", RegistryBackup.Tone.Positive, RegistryBackup.Action.None),
+            )
+            SettingsScreenState.SK3 -> RegistryBackup.COULD_NOT
+            SettingsScreenState.SK4 -> RegistryBackup.Check(
+                RegistryBackup.State.NotCopyable, null,
+                row("cannotCopy", RegistryBackup.Tone.Neutral, RegistryBackup.Action.None, explained = false),
+            )
+            else -> null
+        }
+    }
+
+    /** The SK boards' keys: one synced in a vault the catalog names, one bound to a security key. */
+    private fun withKeys(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+        val check = backupCheck(state) ?: return model
+        fun key(name: String, provider: String, method: KeyMethod, synced: Boolean, body: String) = WalletKeys.Row(
+            key = CreateKeyRow(name, "platform", "internal", true, synced, "", provider, method),
+            synced = synced,
+            publicKeyHex = "04" + body.repeat(64),
+        )
+        val keys = WalletKeys.Result(
+            WalletKeys.Source.Registry,
+            listOf(
+                key(ACCOUNT_NAME, "Google Password Manager", KeyMethod.Platform, true, "3a"),
+                key("", "", KeyMethod.SecurityKey, false, "c5"),
+            ),
+        )
+        return SettingsLive.withWalletKeys(model, keys, check, s)
     }
 
     // -- spec 102: where you review and sign, and the signing pages ----------
@@ -1125,13 +1262,36 @@ object SettingsFixtures {
     }
 
     fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel =
-        withSigning(baseState(state, s), state, s)
+        withWizardStop(withKeys(withSigning(baseState(state, s), state, s), state, s), state, s)
+
+    /** Which of the wizard's stops a board draws; `null` on every other board. */
+    fun wizardStop(state: SettingsScreenState): NetBoards.Stop? = when (state) {
+        SettingsScreenState.ST10E -> NetBoards.Stop.ScanMissingContracts
+        SettingsScreenState.ST10F -> NetBoards.Stop.ScanNoP256
+        SettingsScreenState.ST10G -> NetBoards.Stop.ScanCheckFailed
+        SettingsScreenState.ST10H -> NetBoards.Stop.AlreadyAdded
+        SettingsScreenState.ST10I -> NetBoards.Stop.NotFound
+        SettingsScreenState.ST10J -> NetBoards.Stop.NoRpcEndpoint
+        else -> null
+    }
+
+    /**
+     * ST10E–ST10J: the wizard stopped — the real machine's view of it
+     * (`NetBoards`) through [SettingsLive.withWizard], the builder a session
+     * draws with. Nothing here words a stop.
+     */
+    private fun withWizardStop(model: SettingsScreenModel, state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
+        val stop = wizardStop(state) ?: return model
+        val search = addNetwork(s, "search").copy(results = emptyList())
+        return SettingsLive.withWizard(model.copy(addNetwork = search), NetBoards.view(stop), s)
+    }
 
     private fun baseState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
         val shape = shape(state)
         val addMode = when (state) {
             SettingsScreenState.ST10B -> "compatible"
             SettingsScreenState.ST10C -> "incompatible"
+            SettingsScreenState.ST10D -> "no-p256"
             else -> "search"
         }
         val backdropTitle = when (shape.backdrop) {
@@ -1198,7 +1358,7 @@ object SettingsFixtures {
             endpoints = endpoints(s),
             storage = storage(s),
             about = about(s, state),
-            accountsSheet = accountsSheet(s),
+            accountsSheet = if (state == SettingsScreenState.ST2B) oneAccountSheet(s) else accountsSheet(s),
             signOutSheet = signOutSheet(s, warned = state == SettingsScreenState.ST3B),
             languageSheet = languageSheet(s, "zh"),
             currencySheet = currencySheet(s),
@@ -1220,7 +1380,7 @@ object SettingsFixtures {
                 s,
                 s.t(I18nKeys.SettingsUi.TIME_TITLE),
                 s.t(I18nKeys.SettingsUi.TIME_SUBTITLE),
-                TIME_SAMPLES,
+                timeSamples(s),
                 mapOf(
                     1 to s.t(I18nKeys.SettingsUi.NOTE_H24),
                     2 to s.t(I18nKeys.SettingsUi.NOTE_H12),
@@ -1245,15 +1405,31 @@ object SettingsFixtures {
             feedback = feedback(s),
             rpcBanner = if (state == SettingsScreenState.SR1) rpcBanner(s) else null,
             rpcFix = rpcFix(s, restored = state == SettingsScreenState.SR2B),
-            balanceDetail = balanceDetail(s),
+            balanceDetail = when (state) {
+                SettingsScreenState.SR3B -> liveBalanceDetail(s, committed = false)
+                SettingsScreenState.SR3C -> liveBalanceDetail(s, committed = true)
+                SettingsScreenState.SR3D, SettingsScreenState.SR3E, SettingsScreenState.SR3F -> roundBalanceDetail(s, state)
+                else -> balanceDetail(s)
+            },
             // SR6 is drawn through the live builder, from a view shaped like
             // the core's: what the gallery shows is what a session would.
-            unreachable = SettingsLive.unreachable(
-                UNREACHABLE_VIEW,
-                CurrencyView(code = "USD", rate = 1.0, committed = true),
-                UNREACHABLE_NAMES,
-                s,
-            ),
+            unreachable = if (state == SettingsScreenState.SR7) {
+                // SR7: the real machine's round in which Tempo's token list
+                // did not load — one row, what was last read there, no Fix.
+                SettingsLive.unreachable(
+                    app.getvela.wallet.feature.wallet.core.BalanceBoards.tokenListUnreachable(ADDRESS_FULL, System.currentTimeMillis().toDouble()),
+                    CurrencyView(code = "USD", rate = 1.0, committed = true),
+                    app.getvela.wallet.feature.wallet.WalletFixtures.TOKEN_LIST_CHAINS,
+                    s,
+                )
+            } else {
+                SettingsLive.unreachable(
+                    UNREACHABLE_VIEW,
+                    CurrencyView(code = "USD", rate = 1.0, committed = true),
+                    UNREACHABLE_NAMES,
+                    s,
+                )
+            },
             relayer = relayer(s),
             indexDown = indexDown(s),
             backdropTitle = backdropTitle,

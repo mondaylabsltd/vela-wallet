@@ -31,11 +31,17 @@ final class SendStore {
     private var core: CoreStore<SendViewWire>!
     private let executor: SendExecutor
 
-    /// No effect in flight: nothing but a new event can change `view` —
-    /// `CoreDriver.isIdle`. What a test waits on instead of a clock.
-    var isIdle: Bool { core.isIdle }
+    /// No effect in flight — but a bound a stopped clock holds
+    /// (`SendExecutor.heldTimerCount`), which nothing but time could answer:
+    /// only a new event can change `view` — `CoreDriver.isIdle`. What a test
+    /// waits on instead of a clock.
+    var isIdle: Bool { core.inFlight == executor.heldTimerCount }
     /// Whether `Open` has been sent for the journey currently on screen.
     private var entered = false
+    /// The display currency the open journey's machine was last told —
+    /// at `open`, then at every change after it (`displayStands`). `nil`
+    /// with no journey open.
+    private var toldDisplay: String?
     /// How many journeys the CORE has closed — its `back` from the picker, or
     /// `done`. The flow host watches it and takes the send screens away, so
     /// the machine's close and the screen's close are one event (087 F27):
@@ -106,6 +112,7 @@ final class SendStore {
             self?.heardRound = nil
             self?.toldFeeToken = nil
             self?.toldFeeFailed = nil
+            self?.toldDisplay = nil
             self?.trustedSignerNotice = nil
             self?.closes += 1
         }
@@ -138,6 +145,7 @@ final class SendStore {
         heardRound = nil
         toldFeeToken = nil
         toldFeeFailed = nil
+        toldDisplay = nil
         trustedSignerNotice = nil
         alert = nil
     }
@@ -190,6 +198,7 @@ final class SendStore {
         heardRound = nil
         toldFeeToken = nil
         toldFeeFailed = nil
+        toldDisplay = Self.displayKey(code: displayCode, rate: displayRate, decimals: fiatDecimals)
         journey += 1
         if !core.boot(event) { core.dispatch(event) }
         // What is in flight already: a journey opened after the tracker's
@@ -236,6 +245,18 @@ final class SendStore {
             "rate": rate.map { $0 as Any } ?? NSNull(),
             "fiat_decimals": decimals,
         ]
+    }
+
+    private static func displayKey(code: String, rate: Double?, decimals: Int) -> String {
+        "\(code)|\(rate.map { String($0) } ?? "-")|\(decimals)"
+    }
+
+    /// The display currency, as the send machine is told it — at `open` and
+    /// at every change after it (PR 3 final note F25). The rule is the
+    /// formatter's own (`WalletLive.Display.sendContext`): the committed
+    /// pair, or the code on its way and NO rate.
+    static func displayContext(_ currency: CurrencyViewWire?) -> (code: String, rate: Double?) {
+        WalletLive.Display.sendContext(currency)
     }
 
     func dispatch(_ event: [String: Any]) { core.dispatch(CoreJSON.string(event)) }
@@ -297,7 +318,20 @@ final class SendStore {
     /// The viewfinder opens because the CORE says so — the flag is
     /// `show_scanner`, and a shell that pushed its own screen would show a
     /// scanner the machine does not know is open.
-    func openScanner() { dispatch(["type": "open_scanner"]) }
+    ///
+    /// `target` is a split row's id (issue #471): the code lands in THAT row,
+    /// address only. Absent — the single field, the home's 扫码 — the key is
+    /// not sent at all, which the core reads as the targetless scan.
+    func openScanner(target: String? = nil) {
+        // Two literals, so the payload gate reads both shapes.
+        if let target {
+            dispatch(["type": "open_scanner", "target": target])
+        } else {
+            dispatch(["type": "open_scanner"])
+        }
+    }
+    /// The viewfinder went away without a code. The core drops the row it was
+    /// aimed at, so a later scan from elsewhere is not steered into it.
     func closeScanner() { dispatch(["type": "close_scanner"]) }
 
     /// A decoded code. The shell tokenises (it owns the grammar — Hermes has no
@@ -443,5 +477,20 @@ final class SendStore {
             "type": "display_changed",
             "display": Self.display(code: code, rate: rate, decimals: fiatDecimals),
         ])
+    }
+
+    /// The display currency as it stands now (PR 3 final note F25). The
+    /// machine was told once, at `open`, and never again: a Send opened
+    /// before the currency committed kept what it was opened with for as
+    /// long as it stayed open, and one open across a change in Settings kept
+    /// the old currency's rate. The home calls this whenever the currency
+    /// view changes; it reaches the machine only while a journey is open, and
+    /// only when the pair is not the one it was last told.
+    func displayStands(code: String, rate: Double?, fiatDecimals: Int) {
+        guard entered else { return }
+        let key = Self.displayKey(code: code, rate: rate, decimals: fiatDecimals)
+        guard key != toldDisplay else { return }
+        toldDisplay = key
+        displayChanged(code: code, rate: rate, fiatDecimals: fiatDecimals)
     }
 }

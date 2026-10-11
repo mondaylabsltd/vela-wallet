@@ -68,6 +68,12 @@ class SignExecutor(
     private val originSeenByBrowser: () -> Boolean = { false },
     /** Spec 082 RJ1: the write-ahead gate; tests pin its wait. */
     private val writeAhead: WriteAhead = WriteAhead(),
+    /**
+     * How this executor waits out a timer the core asked for (PR 3:
+     * [SignOperation.SimVerdictTimer]). The app sleeps; a test hands in a
+     * clock it can stop, and lets it run when it means the deadline to pass.
+     */
+    private val timer: suspend (ms: Long) -> Unit = { delay(it) },
 ) {
     /** User-op hashes whose pending record has been written — the response never precedes the record. */
     private val persisted = MutableStateFlow<Set<String>>(emptySet())
@@ -204,6 +210,15 @@ class SignExecutor(
             if (!ports.switchAccount(target)) refuseSwitch(operation.index, intended, target)
             SignShellResult.AccountSwitched
         }
+        // PR 3: the deadline of the confirm's wait for the simulation's
+        // verdict. A timer and nothing else — how long, for which request and
+        // what its passing means are the core's; this neither looks at the
+        // simulation nor ends early, and answers whatever became of the
+        // request (the core drops a stale answer).
+        is SignOperation.SimVerdictTimer -> {
+            timer(operation.ms.toLong())
+            SignShellResult.SimVerdictTimerFired(id = operation.id, round = operation.round)
+        }
     }
 
     fun neutralAnswer(operation: SignOperation): SignShellResult = when (operation) {
@@ -217,6 +232,10 @@ class SignExecutor(
         is SignOperation.ClearToPost -> SignShellResult.Responded
         is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
         is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
+        // A timer that could not run is a deadline that has passed: the sheet
+        // says it could not check and the confirm opens. Left unanswered, a
+        // simulation that never lands would hold the confirm for ever.
+        is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(id = operation.id, round = operation.round)
     }
 
     /** A switch that would sign as the wrong account: logged, and deliberately never answered. */

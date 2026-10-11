@@ -5,7 +5,7 @@
  * corpus catalogs, so this is a differential against the translation source.
  */
 import { execSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -223,11 +223,30 @@ test('the DEPLOY bundle contains no wasm (the i18n engine is build-time only)', 
 	   The client-side half of the promise (Welcome itself fetches nothing) is
 	   the test below. */
 	test.setTimeout(120_000);
-	const outdir = mkdtempSync(join(tmpdir(), 'vela-worker-dry-run-'));
-	execSync(`pnpm exec wrangler deploy --dry-run --outdir ${JSON.stringify(outdir)}`, {
-		cwd: APP_ROOT,
-		stdio: 'pipe'
-	});
+	/* The dry-run is given a project directory of its OWN (PR 3 final note
+	   F18). It ran in the app's directory, where the suite's server —
+	   `wrangler dev`, the preview — is running from the same `wrangler.jsonc`
+	   and the same `.wrangler/` working directory; twice, about fifty seconds
+	   after this test, that server died and took every suite after it down.
+	   The same config, with the worker and its assets named by absolute path,
+	   is written into a temp directory: the bundle that comes out is the same
+	   one, and nothing is written beside the running server. */
+	const project = mkdtempSync(join(tmpdir(), 'vela-worker-dry-run-'));
+	const outdir = join(project, 'out');
+	const config = JSON.parse(
+		readFileSync(join(APP_ROOT, 'wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, '')
+	) as { main: string; assets?: { directory?: string }; $schema?: string };
+	delete config.$schema;
+	config.main = join(APP_ROOT, config.main);
+	if (config.assets?.directory !== undefined) {
+		config.assets.directory = join(APP_ROOT, config.assets.directory);
+	}
+	writeFileSync(join(project, 'wrangler.json'), JSON.stringify(config, null, '\t'));
+	execSync(
+		`${JSON.stringify(join(APP_ROOT, 'node_modules', '.bin', 'wrangler'))} deploy --dry-run ` +
+			`--config ${JSON.stringify(join(project, 'wrangler.json'))} --outdir ${JSON.stringify(outdir)}`,
+		{ cwd: project, stdio: 'pipe' }
+	);
 	const bundles = readdirSync(outdir).filter((name) => name.endsWith('.js'));
 	expect(bundles.length).toBeGreaterThan(0);
 	for (const name of bundles) {
@@ -258,17 +277,37 @@ test('the Welcome page loads no wasm until someone commits to a flow', async ({ 
  * prerendered document must still BE the landing page for crawlers.
  */
 test('a first run never paints Welcome before the intro', async ({ page }) => {
+	// The app's own scripts are HELD until the frame before hydration has been
+	// looked at. The test used to read the attribute, then the opacity, in two
+	// round trips with hydration running beside them: on a quick machine the
+	// page hydrated in between, removed the attribute as it should, and the
+	// second read found Welcome at opacity 1 — four runs in six, about a page
+	// that was doing the right thing. With the scripts held, "before
+	// hydration" is a state the test is in, not a moment it hopes to catch.
+	let hydrate: () => void = () => {};
+	const held = new Promise<void>((resolve) => (hydrate = resolve));
+	await page.route(/\/_app\/immutable\/.*\.js(\?.*)?$/, async (route) => {
+		await held;
+		await route.continue();
+	});
 	// A fresh context has no `vela.intro.seen`; the launch animation is
 	// skipped so it cannot mask the frame under test.
 	await page.goto('/en?skipLaunch', { waitUntil: 'commit' });
-	// Before hydration: the attribute is on <html> and Welcome is hidden.
+	// Before hydration: the attribute is on <html> and Welcome is hidden —
+	// polled, because the stylesheet that hides it may still be arriving
+	// (nothing is painted before it has).
 	await expect(page.locator('html')).toHaveAttribute('data-intro', 'pending');
-	const welcomeOpacity = await page
-		.locator('main[data-intro-page]')
-		.evaluate((el) => getComputedStyle(el).opacity)
-		.catch(() => '0');
-	expect(welcomeOpacity).toBe('0');
+	await expect
+		.poll(() =>
+			page
+				.locator('main[data-intro-page]')
+				.evaluate((el) => getComputedStyle(el).opacity)
+				.catch(() => null)
+		)
+		.toBe('0');
+	await expect(page.locator('html')).toHaveAttribute('data-intro', 'pending');
 	// After hydration: the intro is up and the attribute is gone.
+	hydrate();
 	await expect(page.locator('.intro')).toBeVisible();
 	await expect(page.locator('html')).not.toHaveAttribute('data-intro', 'pending');
 });

@@ -63,7 +63,6 @@
       "simWillFail": "이 거래는 실패할 것으로 보입니다 — 그래도 가스는 지불됩니다.",
       "simWillFailReason": "실패할 것으로 보입니다: {{reason}} — 그래도 가스는 지불됩니다.",
       "balanceChangesTitle": "잔액 변동",
-      "balanceNoAssetsMove": "지갑에서 빠져나가는 자산이 없습니다",
       "balanceUnverifiedToken": "검증되지 않은 토큰",
       "balanceSelfTransfer": "내 주소로 전송 · 잔액이 변하지 않습니다",
       "intentContractCall": "컨트랙트 상호작용",
@@ -149,10 +148,11 @@
       "labelYouPayMax": "최대 지불 금액",
       "labelYouReceive": "받는 금액",
       "labelYouReceiveMin": "최소 받는 금액",
-      "intentBackUpPublicKeys": "공개 키 백업",
+      "intentBackUpPublicKeys": "지갑 기록 복사",
       "labelNetwork": "네트워크",
       "labelAddress": "주소",
-      "labelPublicKeys": "공개 키 수",
+      "labelPublicKeys": "포함된 키",
+      "labelWalletName": "지갑 이름",
       "valueUnlimited": "무제한",
       "valueAll": "전액",
       "warnOrderTerms": "이 주문의 금액은 여기에 표시되지 않습니다 — 먼저 사이트에서 확인하세요.",
@@ -228,8 +228,8 @@
       "signerDown": "서명 페이지를 열지 못했습니다. 연결을 확인하세요.",
       "integrity": {
         "checking": "페이지 확인 중…",
-        "matches": "버전 {{version}} · Vela 공개 빌드 목록과 일치 · {{time}} 확인",
-        "trusted": "버전 {{version}} · 이 기기에서 신뢰함 · {{time}} 확인",
+        "matches": "버전 {{version}} · Vela 공개 빌드 목록과 일치 · {{time}} 확인",
+        "trusted": "버전 {{version}} · 이 기기에서 신뢰함 · {{time}} 확인",
         "unchecked": "확인 안 됨: 이 페이지는 확인이 꺼져 있습니다",
         "mismatch": "버전 {{version}}은(는) Vela 공개 빌드 목록에 없습니다. 열지 않았습니다.",
         "blocked": "버전 {{version}}은(는) 이 기기에서 차단되었습니다.",
@@ -249,7 +249,8 @@
         "feeFailed": "수수료를 계산하지 못했습니다 — 눌러서 다시 시도",
         "feeRetrying": "아직 수수료를 계산하지 못했습니다. 자동으로 다시 시도하는 중…",
         "feeWouldFail": "이대로 보내면 실패합니다.",
-        "previousPending": "이 네트워크의 이전 거래가 끝나기를 기다리는 중…"
+        "previousPending": "이 네트워크의 이전 거래가 끝나기를 기다리는 중…",
+        "simChecking": "이 거래의 결과를 확인 중…"
       }
     },
     "signingApprove": {

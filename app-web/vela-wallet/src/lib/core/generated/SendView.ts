@@ -164,7 +164,13 @@ split_remaining: string | null,
  * the rows already started (blank rows do not count — an import drops
  * them). The shell opens the importer with this as ITS cap.
  */
-split_import_room: number, picker_target: string | null, multi_select_mode: boolean, multi_selected_ids: Array<string>, 
+split_import_room: number, 
+/**
+ * The split row the open contact picker or scanner fills (its
+ * `target`), `None` for the single field or a split's first free row.
+ * Set only while one of them is open, and spent by the pick or scan.
+ */
+picker_target: string | null, multi_select_mode: boolean, multi_selected_ids: Array<string>, 
 /**
  * Every held id on the filtered chain that "select all valuable" would
  * sweep. The picker's master tick is `visible ∩ this`, all selected — the

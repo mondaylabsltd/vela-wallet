@@ -40,7 +40,6 @@
       "simWillFail": "這筆交易預計會失敗 — 但仍會扣除 gas。",
       "simWillFailReason": "預計會失敗：{{reason}} — 但仍會扣除 gas。",
       "balanceChangesTitle": "餘額變化",
-      "balanceNoAssetsMove": "沒有資產離開您的錢包",
       "balanceUnverifiedToken": "未驗證代幣",
       "balanceUnderfundedNative": "{{symbol}} 餘額不足以支付這筆轉帳 — 預計會在鏈上失敗。",
       "tokenToContractWarning": "這會把代幣發送到該代幣自己的合約 — 它們將永遠遺失。",
@@ -149,10 +148,11 @@
       "labelYouPayMax": "你最多支付",
       "labelYouReceive": "你收到",
       "labelYouReceiveMin": "你最少收到",
-      "intentBackUpPublicKeys": "備份公鑰",
+      "intentBackUpPublicKeys": "複製錢包紀錄",
       "labelNetwork": "網路",
       "labelAddress": "地址",
-      "labelPublicKeys": "公鑰數量",
+      "labelPublicKeys": "包含的金鑰",
+      "labelWalletName": "錢包名稱",
       "valueUnlimited": "無上限",
       "valueAll": "全部",
       "warnOrderTerms": "這筆訂單的金額不會在這裡顯示 — 請先在網站上核對。",
@@ -228,8 +228,8 @@
       "signerDown": "簽名頁沒能開啟，請檢查網路。",
       "integrity": {
         "checking": "正在檢查頁面…",
-        "matches": "版本 {{version}} · 與 Vela 公布的建置清單一致 · 檢查於 {{time}}",
-        "trusted": "版本 {{version}} · 已在這台裝置上信任 · 檢查於 {{time}}",
+        "matches": "版本 {{version}} · 與 Vela 公布的建置清單一致 · 檢查於 {{time}}",
+        "trusted": "版本 {{version}} · 已在這台裝置上信任 · 檢查於 {{time}}",
         "unchecked": "未檢查：這個頁面已關閉檢查",
         "mismatch": "版本 {{version}} 不在 Vela 公布的建置清單中，未開啟。",
         "blocked": "版本 {{version}} 已在這台裝置上封鎖。",
@@ -249,7 +249,8 @@
         "feeFailed": "沒能算出費用——點費用重試",
         "feeRetrying": "暫時沒能算出費用，正在自動重試…",
         "feeWouldFail": "照現在的方式送出會失敗。",
-        "previousPending": "正在等待這個網路上的上一筆交易完成…"
+        "previousPending": "正在等待這個網路上的上一筆交易完成…",
+        "simChecking": "正在檢查這筆交易的結果…"
       }
     },
     "currency": {

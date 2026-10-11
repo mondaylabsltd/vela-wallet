@@ -249,7 +249,7 @@ function aliceDetail(m: ContactsMessages, identicon: Identicon): ContactDetailMo
 		contact: contact(CONTACTS[0], identicon),
 		chips: [...CONTACTS[0].groups],
 		addChipLabel: m.sectionGroups,
-		actions: { send: m.send, receive: m.receive, qr: m.actionQr },
+		actions: { send: m.send },
 		address: {
 			label: m.addressLabel,
 			lines: [...ALICE_ADDRESS_LINES],
@@ -358,7 +358,6 @@ export function contactContextMenu(m: ContactsMessages): MenuModel {
 		label: m.sectionContacts,
 		items: [
 			{ icon: 'arrow-up-right', label: m.send },
-			{ icon: 'arrow-down-left', label: m.receive },
 			{ icon: 'copy', label: m.copyAddress },
 			{ icon: 'pencil', label: m.edit },
 			{ icon: 'users-round', label: m.moveGroup, dividerAfter: true },

@@ -222,9 +222,10 @@ struct ContactsFixturesTests {
         #expect(model.contact.addressFull == "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE")
         #expect(model.chips == ["家人"])
         #expect(model.addChip == "分组")
+        // Issue #479: the page offers 转账 and nothing else — no 收款, no
+        // 二维码 (they were the wallet's own, on a page about somebody else).
         #expect(model.actions.send == "转账")
-        #expect(model.actions.receive == "收款")
-        #expect(model.actions.qr == "二维码")
+        #expect(Mirror(reflecting: model.actions).children.count == 1)
         #expect(model.addressLabel == "地址")
         #expect(model.addressLines == ContactsFixtures.aliceAddressLines)
         #expect(model.activityTitle == "最近往来")
@@ -348,7 +349,7 @@ struct ContactsFixturesTests {
             home.contactsHeader?.title, home.contactsHeader?.action,
             home.tabs.wallet, home.tabs.contacts, home.tabs.explore, home.tabs.settings,
             detail.addressLabel, detail.activityTitle, detail.activityAction,
-            detail.deleteLabel, detail.actions.qr, detail.copyLabel,
+            detail.deleteLabel, detail.actions.send, detail.copyLabel,
             group.addMemberLabel, group.ctaLabel, group.ctaCaption, group.membersLabel,
         ].compactMap { $0 }
         for s in strings {

@@ -23,8 +23,37 @@ import app.getvela.wallet.feature.wallet.TabsModel
  * ST14B (spec 091, no mock): About with the debug-mode switch revealed.
  */
 enum class SettingsScreenState {
-    ST1, ST1B, ST2, ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
-    ST9, ST9B, ST10, ST10B, ST10C, ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
+    ST1, ST1B, ST2,
+
+    /**
+     * The account switcher with ONE account, through the live builder (PR 3
+     * final note F15): "1 account · Total …" — the count is a plural family
+     * and the core picks its form. It read "1 accounts · Total".
+     */
+    ST2B,
+    ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
+    ST9, ST9B, ST10, ST10B, ST10C,
+    /**
+     * Add network, refused for the OTHER reason: no P-256 verifier. ST10C is
+     * the chain whose contracts are missing (Chain Setup, opened on it); here
+     * nothing can be deployed, so the line says Vela wallets cannot work on
+     * this network — and there is no button.
+     */
+    ST10D,
+
+    /**
+     * The wizard's STOPS, each through the live builder from a view the real
+     * `network_admin` machine wrote (`NetBoards`), so a board says the core's
+     * own sentence (`NetWizardView.error_key`): the scan path — a chain added
+     * by id, with no confirm step — refused for missing contracts, the check
+     * kept beside the stop, so its reason and Chain Setup show (ST10E), for
+     * no P-256 verifier, nothing to deploy (ST10F), and unable to verify
+     * (ST10G); a network that is already added (ST10H), one nobody could find
+     * (ST10I), and one the catalog lists no RPC for — the box to type one in
+     * is there (ST10J).
+     */
+    ST10E, ST10F, ST10G, ST10H, ST10I, ST10J,
+    ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
     /**
      * Spec 102, the web's boards: "Where you review and sign" for an account
      * on `getvela.app` reviewing on the official page (ST17) and for one on
@@ -34,9 +63,53 @@ enum class SettingsScreenState {
      * a page that will not open and an address refused (ST18B).
      */
     ST17, ST17B, ST17C, ST18, ST18B,
-    SR1, SR2, SR2B, SR3, SR4, SR5,
+    SR1, SR2, SR2B, SR3,
+
+    /**
+     * The balance-by-network sheet through the LIVE builder, with the
+     * display currency on its way (SR3B: a cold start with CNY stored — the
+     * total and each network's worth keep their room, nothing drawn in the
+     * placeholder's dollars) and the SAME frame once it commits (SR3C), so
+     * the pair shows that nothing moved.
+     */
+    SR3B, SR3C,
+
+    /**
+     * The same sheet in three rounds the REAL balance machine wrote
+     * (`BalanceBoards`), through the live builder — PR 3 final notes F21, F20
+     * and F16. SR3D: Tempo's token list did not load — its row's short
+     * status is the core's "Token list unavailable", never "RPC unavailable"
+     * over an RPC that answers. SR3E: every network answered and one token
+     * has no price — the sheet a person opens from "Some tokens couldn't be
+     * priced." draws NO "Networks still updating / couldn't be reached" over
+     * an empty list. SR3F: Ethereum's read failed inside the app — the home's
+     * line is one line and cuts that sentence, so the sheet it opens says it
+     * in full at its top.
+     */
+    SR3D, SR3E, SR3F,
+    SR4, SR5,
     /** Spec 092: every network the wallet cannot reach, in one list. */
     SR6,
+
+    /**
+     * The same list when the one network on it is there for its TOKEN LIST
+     * (Tempo: its RPC answers, the document that names its stablecoins did
+     * not load) — the real balance machine's view through the live builder:
+     * the title says the list, and the row offers no "Fix", because there is
+     * no RPC to fix.
+     */
+    SR7,
+
+    /**
+     * The Keys block over the home, with its "Copy this wallet's record to
+     * Ethereum" row in each state the core has a row for — through the LIVE
+     * builder: not copied yet (SK1, the one a tap opens the sheet from),
+     * copied (SK2), couldn't check (SK3, a tap asks again) and an older
+     * wallet that can never be copied (SK4, a calm end). The block was live
+     * only, so none of its states could be looked at without a wallet in
+     * each.
+     */
+    SK1, SK2, SK3, SK4,
 }
 
 /** Which page the settings surface is showing (`Home` plus the pushed pages). */
@@ -93,6 +166,12 @@ enum class SettingsOverlay {
     /** Spec 102: a saved signing page's new name. */
     RenameSigningPage,
 
+    /**
+     * Removing a saved signing page asks first, as iOS does: the page's own
+     * name, "Remove" and Cancel. One tap on the row's "Remove" used to take
+     * it — and its trusted version with it — with nothing in between.
+     */
+    RemoveSigningPage,
 
     /** Spec 072: removing a custom network asks first. */
     RemoveNetwork,
@@ -143,6 +222,11 @@ data class SettingsRowModel(
     val title: String,
     val icon: SettingsIcon? = null,
     val subtitle: String? = null,
+    /**
+     * The second line says something went WELL ("Copied to Ethereum" — the
+     * core's `BackupTone::Positive`) and is drawn in the success colour.
+     */
+    val subtitlePositive: Boolean = false,
     /** Right-aligned current value — "简体中文 · 系统", "12 个网络". */
     val value: String? = null,
     val trailing: RowTrailing = RowTrailing.Chevron,
@@ -251,6 +335,8 @@ data class SigningPagesModel(
     val draft: String = "",
     val save: String = "",
     val remove: String = "",
+    /** The remove question's way out (`common.cancel`). */
+    val cancel: String = "",
     /** The askTrust line's answer (the version is the line's). */
     val trust: String = "",
     /** The list has been read; edits are offered only then. */
@@ -394,8 +480,19 @@ data class AddNetworkModel(
     val checks: List<CheckItemModel> = emptyList(),
     val customRpc: UrlFieldModel? = null,
     val callout: CalloutModel? = null,
+    /**
+     * The callout is the reason the field under it is there ("No RPC
+     * endpoint is listed for this network. Enter one, then re-check.", or
+     * "Unable to verify — RPC request failed"): it is drawn ABOVE
+     * [customRpc] — why, then where, then the re-check — instead of under
+     * it, where it read as a verdict on what was typed.
+     */
+    val calloutAsksForRpc: Boolean = false,
     val primary: String? = null,
+    /** "Open Chain Setup Tool" — drawn only with [secondaryUrl]. */
     val secondary: String? = null,
+    /** Where [secondary] goes: the core's `setup_url`, Chain Setup opened on this chain. */
+    val secondaryUrl: String? = null,
     val recheck: String? = null,
 )
 
@@ -623,6 +720,8 @@ data class BalanceDetailRowModel(
     val tone: SettingsTone = SettingsTone.Neutral,
     val action: String? = null,
     val amount: String? = null,
+    /** [amount] is a fiat figure withheld until the display currency is the person's: its room is kept. */
+    val amountWithheld: Boolean = false,
 )
 
 @Immutable
@@ -637,6 +736,15 @@ data class BalanceDetailModel(
     /** The hero's "couldn't be priced" line, answered by name (holdings in `status`). */
     val sectionUnpriced: String = "",
     val unpriced: List<BalanceDetailRowModel> = emptyList(),
+    /** The total in [summary] is withheld until the display currency is the person's: empty, its line kept. */
+    val summaryWithheld: Boolean = false,
+    /**
+     * The sentence the home's status line said when it opened this sheet, in
+     * FULL (PR 3 final note F16): the line itself is one line and ends in an
+     * ellipsis when the sentence is longer, so the whole of it stands here,
+     * at the top. `null` when the line says nothing.
+     */
+    val lead: String? = null,
 )
 
 /**
@@ -650,6 +758,12 @@ data class UnreachableModel(
     /** Absent once the list is empty. */
     val summary: String? = null,
     val rows: List<UnreachableRowModel> = emptyList(),
+    /**
+     * The home line's sentence in full when it is NOT [title] (F16): the line
+     * said the fault's own sentence, or "Offline", over networks that are also
+     * out of reach. `null` when the title already is the line.
+     */
+    val lead: String? = null,
 )
 
 @Immutable
@@ -659,7 +773,15 @@ data class UnreachableRowModel(
     val name: String,
     /** "Last seen $1,234.50", "Not read yet", … */
     val line: String,
-    val action: String,
+    /**
+     * "Fix" — the row's way to its network's RPC editor. `null` where the
+     * core says there is no RPC to fix (`UnreachableNetwork.rpc_fixable`: the
+     * network answers, its token list is what could not be loaded): no
+     * action is drawn.
+     */
+    val action: String?,
+    /** [line] carries a worth withheld until the display currency is the person's: empty, its line kept. */
+    val lineWithheld: Boolean = false,
 )
 
 /** SR4: fund this chain's bundler treasury. */
@@ -708,8 +830,16 @@ data class WalletKeysModel(
     val backup: SettingsRowModel?,
     /** Spec 102: "Keys on {{domain}}" — only for a wallet on its own signing domain. */
     val domain: String? = null,
-    /** Under the backup: PUBLIC keys only; private keys never leave the device. */
-    val backupExplain: String,
+    /**
+     * Under the copy's row, the core's words: what becomes public (the
+     * address and name, each key's name, public key, credential ID and
+     * authenticator model), that it costs a network fee, and that a copy
+     * moves no money and brings back no lost passkey. Which state it is said
+     * under is the core's too (`BackupRow.explain_key`): `null` — under a
+     * wallet that can never be copied — draws no paragraph and keeps no room
+     * for one.
+     */
+    val backupExplain: String?,
     val copyLabel: String,
     val copiedLabel: String,
 )

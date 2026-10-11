@@ -76,6 +76,11 @@ pub enum Fiat {
     Value(SharedString),
     NoPrice(SharedString),
     Masked,
+    /// The worth is known but the display currency is not committed yet
+    /// (the core's withhold rule): a waiting bar in the figure's place —
+    /// never the placeholder's dollars, which would jump to the person's
+    /// own money a moment later.
+    Pending,
 }
 
 #[derive(Clone)]
@@ -131,7 +136,14 @@ pub struct BalanceModel {
     pub state: BalanceState,
     pub integer: SharedString,
     pub decimals: Option<SharedString>,
+    /// "Live · listening for payments" — the core's `BalanceView::live_key`,
+    /// and nothing the shell works out: `Some` only under a zero a settled
+    /// round found with every chain answering (PR 3 final note F19).
     pub live: Option<SharedString>,
+    /// "Checking…" — the core's `BalanceView::checking_key`: the first read
+    /// of this account is still out, so nothing under the figure has been
+    /// said by a chain yet (F19).
+    pub checking: Option<SharedString>,
     pub status: Option<(StatusKind, SharedString)>,
     /// Issue #443: when the figure was last read — "Updated 2m" — drawn
     /// beside the control that reads it again. `None`: never read yet.
@@ -161,6 +173,7 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
         integer: "$1,383".into(),
         decimals: Some("28".into()),
         live: None,
+        checking: None,
         status: None,
         updated: None,
         refreshing: false,
@@ -175,7 +188,7 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
 pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
     use vela_core::app::balance_dashboard::{
         BalanceSwitcherView, BalanceView, LAST_SEEN, LAST_SEEN_EMPTY, LastKnown, NOT_READ_YET,
-        UNREACHABLE_MANY, UnreachableNetwork,
+        STATUS_RPC_UNAVAILABLE, UNREACHABLE_MANY, UnreachableCause, UnreachableNetwork,
     };
     let row =
         |chain_id: u32, last_known: LastKnown, usd: Option<f64>, key: &str| UnreachableNetwork {
@@ -183,6 +196,9 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
             last_known,
             last_seen_usd: usd,
             line_key: key.to_owned(),
+            cause: UnreachableCause::Network,
+            status_key: STATUS_RPC_UNAVAILABLE.to_owned(),
+            rpc_fixable: true,
         };
     BalanceView {
         address: Some(ADDRESS_FULL.to_owned()),
@@ -206,6 +222,13 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
         unreachable_key: Some(UNREACHABLE_MANY.to_owned()),
         internal_chain_ids: Vec::new(),
         internal_key: None,
+        // A round ended (three chains out of reach), and the wallet holds
+        // money: neither "checking" nor "live".
+        checking_key: None,
+        live_key: None,
+        // Last seen holding $4,500 with three chains unread: not an empty
+        // wallet, so no "Deposit your first asset" under the total.
+        empty_key: None,
         holdings_loading: false,
         cached_total_usd: Some(4_500.0),
         switcher: BalanceSwitcherView {
@@ -254,6 +277,7 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
                 rate_limited_chain_ids: Vec::new(),
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: vec![1],
+                registry_chain_ids: Vec::new(),
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -263,6 +287,189 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
     }
     host.view()
 }
+
+/// PR 3 note 4's gallery state (DSR8), through the real balance core: the
+/// account holds $4,500 on Gnosis, and Tempo's node answered while its token
+/// list could not be loaded (`registry_chain_ids`, as the executor reports a
+/// registry document that is unread for a chain with no native coin). The
+/// hero says the token list — never "Can't reach Tempo" — the list it opens
+/// has the one row with no "Fix", and the Settings banner's chip offers none.
+#[must_use]
+pub fn token_list_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    const TEMPO: u32 = vela_core::app::fee_policy::TEMPO_CHAIN_IDS[0];
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![BalanceToken {
+                    chain_id: 100,
+                    symbol: "XDAI".to_owned(),
+                    name: "xDAI".to_owned(),
+                    balance: "4500".to_owned(),
+                    decimals: 18,
+                    token_address: None,
+                    price_usd: Some(1.0),
+                    spam: false,
+                }],
+                failed_chain_ids: vec![TEMPO],
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![100, TEMPO],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: vec![TEMPO],
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// A wallet that holds something and read every chain it asked, through the
+/// real balance core: $4,500 on Gnosis and half an ETH. What the home draws
+/// from it depends only on the display currency — which is what
+/// `VELA_CURRENCY_PENDING` shows (the core's withhold rule: no figure until
+/// the currency is committed).
+#[must_use]
+pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    let token = |chain_id: u32, symbol: &str, balance: &str, price: f64| BalanceToken {
+        chain_id,
+        symbol: symbol.to_owned(),
+        name: symbol.to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(price),
+        spam: false,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![
+                    token(100, "XDAI", "4500", 1.0),
+                    token(1, "ETH", "0.5", 2_469.0),
+                ],
+                failed_chain_ids: Vec::new(),
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 100],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// Where the first read of a wallet that held nothing last session stands —
+/// the three things the hero's one line says about a zero (PR 3 final note
+/// F19), each a view the real balance core produced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FirstRead {
+    /// The cached zero is on screen and the first round is still out:
+    /// "Checking…".
+    Checking,
+    /// The round settled and every chain answered, holding nothing: "Live ·
+    /// listening for payments".
+    Live,
+    /// The round settled with two chains missing: "Can't reach 2 networks".
+    CantReach,
+}
+
+impl FirstRead {
+    pub const ALL: [(Self, &'static str); 3] = [
+        (Self::Checking, "checking"),
+        (Self::Live, "live"),
+        (Self::CantReach, "cant_reach"),
+    ];
+
+    /// The stage a pin's value names (`VELA_FIRST_READ`).
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(stage, name)| (name == want.trim()).then_some(stage))
+    }
+}
+
+/// A wallet that held nothing last session, at `stage` of its first read,
+/// through the real balance core: the cache answers 0, and the round is
+/// either still out, back with every chain answering, or back with Ethereum
+/// and BNB Chain missing. The figure is the same "$0.00" in all three — what
+/// changes is the one line under it, and only the core says which.
+#[must_use]
+pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, Event,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: Some(0.0),
+            },
+            // The first round, still out: nothing has read this wallet.
+            BalanceOperation::FetchTokens { .. } if stage == FirstRead::Checking => continue,
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: Vec::new(),
+                failed_chain_ids: if stage == FirstRead::CantReach {
+                    vec![1, 56]
+                } else {
+                    Vec::new()
+                },
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 56, 100],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// A network name longer than any column: what a custom network may be
+/// called, for the board that shows the hero's line ending in an ellipsis.
+pub const LONG_NETWORK_NAME: &str =
+    "Example Rollup Testnet With a Name Nobody Shortened Before Adding It";
 
 /// Component-board balance variants (gallery Components tab).
 pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
@@ -275,6 +482,41 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: "$0".into(),
             decimals: Some("00".into()),
             live: Some(s.live_indicator.clone()),
+            checking: None,
+            status: None,
+            updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
+        },
+        // PR 3 final note F16: a status sentence longer than the line. A
+        // custom network is named by whoever added it, so no column is wide
+        // enough for every sentence that names one — it stays ONE line and
+        // ends in an ellipsis, and the list it opens says it in full.
+        BalanceModel {
+            label: s.total_balance.clone(),
+            currency: "USD".into(),
+            state: BalanceState::Normal,
+            integer: "$1,383".into(),
+            decimals: Some("28".into()),
+            live: None,
+            checking: None,
+            status: Some((
+                StatusKind::Warning,
+                crate::wallet::fill(&s.token_list_unreachable, "name", LONG_NETWORK_NAME).into(),
+            )),
+            updated: None,
+            refreshing: false,
+            updating: s.updating.clone(),
+        },
+        // …and the first read's line, in the same slot (F19).
+        BalanceModel {
+            label: s.total_balance.clone(),
+            currency: "USD".into(),
+            state: BalanceState::Normal,
+            integer: "$0".into(),
+            decimals: Some("00".into()),
+            live: None,
+            checking: Some(s.balance_checking.clone()),
             status: None,
             updated: None,
             refreshing: false,
@@ -287,6 +529,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: "".into(),
             decimals: None,
             live: None,
+            checking: None,
             status: None,
             updated: None,
             refreshing: false,
@@ -299,6 +542,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: BALANCE_MASK.into(),
             decimals: None,
             live: None,
+            checking: None,
             status: None,
             updated: None,
             refreshing: false,
@@ -311,6 +555,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: "$1,383".into(),
             decimals: Some("46".into()),
             live: None,
+            checking: None,
             status: Some((StatusKind::Warning, s.balance_unpriced.clone())),
             updated: None,
             refreshing: false,
@@ -323,6 +568,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             integer: "$1,383".into(),
             decimals: Some("28".into()),
             live: None,
+            checking: None,
             status: Some((StatusKind::Refreshing, s.balance_stale.clone())),
             updated: None,
             refreshing: false,
@@ -403,11 +649,12 @@ fn row(
     }
 }
 
-/// The four D1 activity rows, timestamps included (desktop subtitles carry
-/// `· <day> <clock>` per the D1 mock).
+/// The three D1 activity rows, timestamps included (desktop subtitles carry
+/// `· <day> <clock>` per the D1 mock). Three because the home draws the
+/// core's cut, the newest three (`FeedView.home_rows`, issue 469); History
+/// draws every row.
 pub fn activity_default(s: &WalletStrings) -> Vec<ActivityRowModel> {
     let today = s.today.as_ref();
-    let yesterday = s.yesterday.as_ref();
     let mut rows = vec![
         row(
             s,
@@ -439,22 +686,9 @@ pub fn activity_default(s: &WalletStrings) -> Vec<ActivityRowModel> {
             false,
             chain_bnb(),
         ),
-        row(
-            s,
-            ActivityKind::Received,
-            format!(
-                "{} · {yesterday} 20:15",
-                fill(&s.from_name, "name", "Alice")
-            ),
-            "+50",
-            "USDC",
-            true,
-            chain_base(),
-        ),
     ];
     // The web's D1 files them under their days (spec 038 #E3).
     rows[0].day = Some(s.today.clone());
-    rows[3].day = Some(s.yesterday.clone());
     rows
 }
 
@@ -611,7 +845,7 @@ pub struct AssetDetailModel {
     /// `0.8533 BNB`.
     pub amount: SharedString,
     /// `$496.46 · BNB Chain`.
-    pub sub: SharedString,
+    pub sub: AssetSub,
     pub facts: Vec<(SharedString, SharedString)>,
     pub activity: Vec<ActivityRowModel>,
     /// The feed id behind each `activity` row, in drawn order — what a row
@@ -625,6 +859,59 @@ pub struct AssetDetailModel {
     pub contract_copy: Option<SharedString>,
 }
 
+/// The line under a token page's amount: what the holding is worth, then
+/// its network — "¥8,789.64 · Ethereum", the order and the joint the web's
+/// `fiatLine` writes (PR 3 device round, item 4).
+///
+/// Two parts, not one string, because the worth is the part that ARRIVES —
+/// it waits on the display currency — and the network's name stands after
+/// it: drawn as one text, the name slid 70.5 pt to the right when the worth
+/// landed. The worth has a cell of its own, kept while it is out
+/// ([`SubWorth::Waiting`]), and the name starts where the cell ends.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AssetSub {
+    pub worth: SubWorth,
+    pub chain: SharedString,
+}
+
+/// The worth's cell on [`AssetSub`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubWorth {
+    /// "$496.46" — or "No price" for a holding nobody quotes.
+    Said(SharedString),
+    /// Withheld: the display currency is not committed (the core's withhold
+    /// rule), so no figure is drawn — a waiting bar in the figure's place,
+    /// as a holding's row draws ([`Fiat::Pending`]).
+    ///
+    /// `room` is how wide the cell is kept, and it is NEVER drawn: the
+    /// figure as the placeholder pair would write it, laid out invisibly
+    /// under the bar. The figure that lands is not known before its rate
+    /// is, so this is the closest room there is — exactly the figure's when
+    /// the currency that commits is the placeholder's own.
+    Waiting { room: SharedString },
+    /// Hidden: no figure and no room for one — the network alone.
+    Absent,
+}
+
+impl AssetSub {
+    /// Between the worth and the network.
+    pub const JOINT: &'static str = " · ";
+
+    /// Every glyph the line draws, in order — what the tests read: the
+    /// line's own, and the withhold and privacy rules' search for a figure
+    /// that should not be there. A withheld worth draws none: its bar, then
+    /// the joint and the network.
+    #[cfg(test)]
+    #[must_use]
+    pub fn text(&self) -> String {
+        match &self.worth {
+            SubWorth::Said(worth) => format!("{worth}{}{}", Self::JOINT, self.chain),
+            SubWorth::Waiting { .. } => format!("{}{}", Self::JOINT, self.chain),
+            SubWorth::Absent => self.chain.to_string(),
+        }
+    }
+}
+
 /// D3 as the mocks draw it.
 #[must_use]
 pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
@@ -633,7 +920,10 @@ pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
         ticker: "BNB".into(),
         badge: chain_bnb(),
         amount: "0.8533 BNB".into(),
-        sub: "$496.46 · BNB Chain".into(),
+        sub: AssetSub {
+            worth: SubWorth::Said("$496.46".into()),
+            chain: "BNB Chain".into(),
+        },
         facts: bnb_facts(s),
         activity: bnb_activity(s),
         activity_ids: Vec::new(),
@@ -706,6 +996,7 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
         call_data: None,
         summary: Some(summary),
         settlement: None,
+        time_verified: None,
     };
     let swap = FeedTxRecord {
         user_op_hash: "0x5c1e3fa0b2d4c6e8f0a1b3c5d7e9f1a3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3e5"
@@ -771,6 +1062,192 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
     vec![swap, permit, sign_in]
 }
 
+/// The balance breakdown's board (DSR3), through the real balance core:
+/// $4,500 on Gnosis and half an ETH read and priced, and a token on Base
+/// nobody prices — so the sheet has its total, a figure per network and its
+/// "no price" list. What every figure on it is drawn in depends only on the
+/// display currency (`VELA_CURRENCY_PENDING`).
+#[must_use]
+pub fn breakdown_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    let token = |chain_id: u32, symbol: &str, balance: &str, price: Option<f64>| BalanceToken {
+        chain_id,
+        symbol: symbol.to_owned(),
+        name: symbol.to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: (symbol == "LEAF")
+            .then(|| "0x1eAF000000000000000000000000000000001EaF".to_owned()),
+        price_usd: price,
+        spam: false,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![
+                    token(100, "XDAI", "4500", Some(1.0)),
+                    token(1, "ETH", "0.5", Some(2_469.0)),
+                    token(8_453, "LEAF", "1200", None),
+                ],
+                failed_chain_ids: Vec::new(),
+                rate_limited_chain_ids: Vec::new(),
+                read_chain_ids: vec![1, 100, 8_453],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: Vec::new(),
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// The breakdown with every short status a network can carry (PR 3 final
+/// note F21), through the real balance core: Gnosis and Ethereum read,
+/// Polygon rate-limited ("retrying automatically"), BNB Chain's RPC not
+/// answering ("RPC unavailable") and Tempo's node answering while its token
+/// list could not be loaded ("Token list unavailable"). What
+/// `VELA_BREAKDOWN=statuses` draws on DSR3.
+#[must_use]
+pub fn breakdown_statuses_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceDashboard, BalanceOperation, BalanceShellResult as Res, BalanceToken, Event,
+    };
+    const TEMPO: u32 = vela_core::app::fee_policy::TEMPO_CHAIN_IDS[0];
+    let token = |chain_id: u32, symbol: &str, balance: &str, price: f64| BalanceToken {
+        chain_id,
+        symbol: symbol.to_owned(),
+        name: symbol.to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(price),
+        spam: false,
+    };
+    let mut host = crate::core_host::CoreHost::<BalanceDashboard>::new();
+    let mut pending = host.dispatch(Event::AccountChanged {
+        address: ADDRESS_FULL.to_owned(),
+    });
+    while let Some(effect) = pending.pop() {
+        let result = match &effect.operation {
+            BalanceOperation::ReadBalanceCache { address } => Res::CachedTotalLoaded {
+                address: address.clone(),
+                usd: None,
+            },
+            BalanceOperation::FetchTokens { address, pull, .. } => Res::FetchSettled {
+                address: address.clone(),
+                pull: *pull,
+                tokens: vec![
+                    token(100, "XDAI", "4500", 1.0),
+                    token(1, "ETH", "0.5", 2_469.0),
+                ],
+                failed_chain_ids: vec![56, 137, TEMPO],
+                rate_limited_chain_ids: vec![137],
+                read_chain_ids: vec![1, 56, 100, 137, TEMPO],
+                internal_chain_ids: Vec::new(),
+                registry_chain_ids: vec![TEMPO],
+                now_ms: 1.0,
+            },
+            // The cache write and the retry timer: nothing to show.
+            _ => continue,
+        };
+        pending.extend(host.resolve(effect.id, result));
+    }
+    host.view()
+}
+
+/// Three sends through the real feed core — a split of 683.75 USDC between
+/// two people (the newest), 1.5 xDAI received, 12 USDC sent — with the
+/// feed's privacy as asked. What `VELA_ACTIVITY_FIXTURE` draws: the home's
+/// rows and the newest one's detail from the LIVE builders, shown or hidden,
+/// so the masked figures ("•••• USDC" for the split's total AND for each
+/// recipient's share — the core's `privacy::masked_amount`) can be looked at
+/// without a wallet that has a history.
+#[must_use]
+pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
+    use vela_core::app::activity_feed::{Event, FeedTxKind, FeedTxRecord, FeedTxStatus};
+    // A fixed afternoon: the rows read the same on every run.
+    const DAY_MS: f64 = 1_756_000_000_000.0 - 1_756_000_000_000.0 % 86_400_000.0;
+    let record = |id: &str, kind: FeedTxKind, value: &str, symbol: &str, chain_id: u32| {
+        let incoming = kind == FeedTxKind::Receive;
+        let other = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE".to_owned();
+        FeedTxRecord {
+            id: id.to_owned(),
+            user_op_hash: String::new(),
+            tx_hash: format!("0x{}", id.repeat(8)),
+            from: if incoming {
+                other.clone()
+            } else {
+                "0xme".to_owned()
+            },
+            to: if incoming { "0xme".to_owned() } else { other },
+            to_name: None,
+            value: value.to_owned(),
+            symbol: symbol.to_owned(),
+            decimals: 18,
+            logo_urls: None,
+            chain_id,
+            timestamp: DAY_MS / 1000.0 + if incoming { 50_400.0 } else { 40_500.0 },
+            day_start_ms: DAY_MS,
+            status: FeedTxStatus::Confirmed,
+            kind: Some(kind),
+            usd: None,
+            dapp_url: None,
+            intent: None,
+            balance_changes: None,
+            calldata: None,
+            call_data: None,
+            summary: None,
+            settlement: None,
+            time_verified: None,
+        }
+    };
+    // One send to two people: two records of one operation, which the core
+    // folds into one row (PR 3 note 15) — the shared privacy fixture's own
+    // figures.
+    let share = |id: &str, to: &str, name: Option<&str>, value: &str| FeedTxRecord {
+        user_op_hash: format!("0x{}", "ef".repeat(32)),
+        to: to.to_owned(),
+        to_name: name.map(str::to_owned),
+        decimals: 6,
+        timestamp: DAY_MS / 1000.0 + 54_000.0,
+        usd: Some(value.to_owned()),
+        ..record(id, FeedTxKind::Send, value, "USDC", 8_453)
+    };
+    let mut host = core_feed_host(vec![
+        share(
+            "c3",
+            "0xdDdDddDdDdddDDddDDddDDDDdDdDDdDDdDDDDDDd",
+            Some("Bea"),
+            "214.5",
+        ),
+        share(
+            "d4",
+            "0xFAfaFAFAfaFAfAFAFAFAfAfAFaFafAfAFAfaFaFA",
+            None,
+            "469.25",
+        ),
+        record("a1", FeedTxKind::Receive, "1.5", "xDAI", 100),
+        record("b2", FeedTxKind::Send, "12", "USDC", 8_453),
+    ]);
+    let _ = host.dispatch(Event::PrivacyChanged { hidden });
+    host.view()
+}
+
 /// The REAL feed core over `records`, loaded the way the executor answers it
 /// for the account `0xme` — what Activity draws from those records.
 #[cfg(test)]
@@ -780,9 +1257,9 @@ pub fn core_feed(
     core_feed_host(records).view()
 }
 
-/// [`core_feed`]'s machine itself, for a test that tells it more (a contact
-/// page opening).
-#[cfg(test)]
+/// The real feed machine over `records`, loaded the way the executor
+/// answers it — for a test that tells it more (a contact page opening), and
+/// for [`transfer_feed`].
 pub fn core_feed_host(
     records: Vec<vela_core::app::activity_feed::FeedTxRecord>,
 ) -> crate::core_host::CoreHost<vela_core::app::activity_feed::ActivityFeed> {
@@ -815,6 +1292,17 @@ pub fn core_feed_host(
                 FeedShellResult::DeleteCommitted { id: id.clone() }
             }
             FeedOperation::Haptic => FeedShellResult::HapticPlayed,
+            // PR 3: the repair of a receipt's time. A drawing has no chain
+            // to ask — "not read", so its rows keep the times they were
+            // given and nothing is rewritten.
+            FeedOperation::ReadReceiveTime { id, .. } => FeedShellResult::ReceiveTimeRead {
+                id: id.clone(),
+                timestamp_sec: None,
+            },
+            FeedOperation::WriteReceiveTime { id, .. } => FeedShellResult::ReceiveTimeWritten {
+                id: id.clone(),
+                ok: false,
+            },
         };
         pending.extend(host.resolve(next.id, result));
     }
@@ -838,7 +1326,8 @@ mod tests {
         let rows = activity_default(&s);
         assert_eq!(rows[0].title.as_ref(), "已发送");
         assert_eq!(rows[0].subtitle.as_ref(), "至 hold on · 今天 14:02");
-        assert_eq!(rows[3].subtitle.as_ref(), "来自 Alice · 昨天 20:15");
+        assert_eq!(rows.len(), 3, "the home draws the newest three (#469)");
+        assert_eq!(rows[1].subtitle.as_ref(), "来自 0x9F3c…21aE · 今天 11:20");
 
         assert_eq!(receive_network_detail(&s).as_ref(), "BNB Chain · 链 ID 56");
         assert_eq!(

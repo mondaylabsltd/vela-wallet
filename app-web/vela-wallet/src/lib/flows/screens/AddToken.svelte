@@ -26,9 +26,14 @@
 		onsubmit?: () => void;
 		/** T3b live: one of the index's matches was chosen. */
 		onpick?: (id: string) => void;
+		/** T3b live: the RPC field under the network's card was typed in. */
+		oncustomrpc?: (value: string) => void;
+		/** T3b live: "Re-check with this RPC". */
+		onrecheck?: () => void;
 	}
 
-	let { model, ontab, onnetwork, oninput, onsubmit, onpick }: Props = $props();
+	let { model, ontab, onnetwork, oninput, onsubmit, onpick, oncustomrpc, onrecheck }: Props =
+		$props();
 </script>
 
 <div class="add">
@@ -114,15 +119,42 @@
 					badgeHidden={model.result.mark.badgeHidden}
 				/>
 				<span class="name">{model.result.name}</span>
-				<StatusChip chip={model.result.chip} />
+				{#if model.result.chip !== undefined}<StatusChip chip={model.result.chip} />{/if}
 			</div>
-			{#if model.result.link !== undefined}
-				<p class="link">{model.result.link}</p>
+			{#if model.result.note !== undefined}
+				<p class="reason">{model.result.note}</p>
 			{/if}
 			{#each model.result.facts as fact (fact.label)}
 				<FactRow {fact} />
 			{/each}
+			{#if model.result.setup !== undefined}
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- an external page (Chain Setup), never an app route -->
+				<a class="setup" href={model.result.setup.href} target="_blank" rel="noreferrer noopener">
+					<span>{model.result.setup.label}</span>
+					<Icon icon={UTILITY_ICONS['external-link']} size="sm" />
+				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			{/if}
 		</div>
+		<!--
+			The RPC field and "Re-check with this RPC", where the core gives the
+			wizard one (`NetWizardView.rpc_field`) — the two together, under the
+			card whose sentence points at them. "No RPC endpoint is listed for
+			this network. Enter one, then re-check." stood here over nothing to
+			enter it in and nothing to re-check with.
+		-->
+		{#if model.result.rpc !== undefined}
+			<MonoField
+				label={model.result.rpc.label}
+				value={model.result.rpc.value}
+				placeholder={model.result.rpc.placeholder}
+				oninput={oncustomrpc}
+			/>
+			<button type="button" class="recheck" onclick={onrecheck}>
+				<Icon icon={UTILITY_ICONS['refresh-cw']} size="sm" />
+				<span>{model.result.rpc.recheck}</span>
+			</button>
+		{/if}
 	{/if}
 
 	<div class="cta">
@@ -204,10 +236,30 @@
 		color: var(--color-fg-muted);
 	}
 
-	.link {
+	/* Why it is refused, or why the wizard stopped: a sentence, read in full. */
+	.reason {
 		margin: 0;
+		padding-bottom: var(--space-md);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 		color: var(--color-fg-muted);
+	}
+
+	/* A real link out of the app, where the core gave it somewhere to go. */
+	.setup {
+		display: inline-flex;
+		align-items: center;
+		align-self: flex-start;
+		gap: var(--space-xs);
+		min-height: var(--size-control-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-medium);
+		color: var(--color-info-base);
+		text-decoration: none;
+	}
+
+	.setup:hover {
+		text-decoration: underline;
 	}
 
 	.note {
@@ -238,6 +290,22 @@
 		font-family: var(--font-ui);
 		color: var(--color-fg-subtle);
 		text-align: start;
+		cursor: pointer;
+	}
+
+	/* Settings' own re-check, as it is drawn under that wizard's field. */
+	.recheck {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-md);
+		min-height: var(--size-control-md);
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-info-base);
 		cursor: pointer;
 	}
 

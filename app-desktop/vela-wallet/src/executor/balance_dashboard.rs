@@ -168,8 +168,9 @@ fn settle_with_carry_over(
 }
 
 /// One round's answer for the core: what was read, the chains that did not
-/// answer — and of those, the ones the pool saw only rate limits on, and the
-/// ones whose read never left the app (PR 2 note 11).
+/// answer — and of those, the ones the pool saw only rate limits on, the
+/// ones whose read never left the app (PR 2 note 11), and the ones whose
+/// token list could not be loaded while their node answered (PR 3 note 4).
 fn settled_result(
     address: &str,
     pull: bool,
@@ -180,6 +181,7 @@ fn settled_result(
         tokens,
         failed,
         internal,
+        registry,
     } = fetched;
     // A chain that did not answer keeps what the last round knew it held;
     // it is still reported as failed below.
@@ -198,16 +200,24 @@ fn settled_result(
         // Of the chains that failed, the ones the pool saw only rate limits
         // on: "still loading", not "broken" — nobody is sent to swap RPCs
         // over a busy provider (the web's `getRateLimitedChains`, 078 W-08).
+        // A chain whose node answered this round (the token list is what
+        // did not) is not one the pool is being throttled on.
         rate_limited_chain_ids: failed
             .iter()
             .copied()
-            .filter(|chain| limited.contains(chain) && !internal.contains(chain))
+            .filter(|chain| {
+                limited.contains(chain) && !internal.contains(chain) && !registry.contains(chain)
+            })
             .collect(),
         failed_chain_ids: failed,
         read_chain_ids,
         // Of the chains that failed, the ones whose read never left the app:
         // never "Can't reach …" (`BalanceView::internal_key`).
         internal_chain_ids: internal,
+        // Of the chains that failed, the ones whose node answered and whose
+        // token list did not (PR 3 note 4): "can't load its token list",
+        // and no RPC fix offered for an endpoint that is working.
+        registry_chain_ids: registry,
         now_ms: crate::executor::now_ms(),
     }
 }
@@ -826,6 +836,101 @@ mod tests {
             "a newer round is a newer number"
         );
         assert!(second.failed_chain_ids.is_empty());
+    }
+
+    /// PR 3 note 4, end to end from the executor's settle to the core's
+    /// view: Tempo's node answered and its token list did not load. The
+    /// settle reports it in `registry_chain_ids` (and never as rate-limited),
+    /// and the core then says the token list — not "Can't reach Tempo" — and
+    /// offers its row no RPC fix. A chain that really is down beside it is
+    /// still the network's, and still fixable.
+    #[test]
+    fn a_token_list_miss_is_reported_and_the_core_says_so() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::balance_dashboard::{
+            BalanceDashboard, TOKEN_LIST_UNREACHABLE, UNREACHABLE_MANY, UnreachableCause,
+        };
+        const TEMPO: u32 = vela_core::app::fee_policy::TEMPO_CHAIN_IDS[0];
+        let view_of = |address: &str, fetched: balances::Fetched| {
+            let mut host = CoreHost::<BalanceDashboard>::new();
+            let mut pending = host.dispatch(Event::AccountChanged {
+                address: address.to_owned(),
+            });
+            while let Some(effect) = pending.pop() {
+                let result = match &effect.operation {
+                    BalanceOperation::ReadBalanceCache { address } => {
+                        BalanceShellResult::CachedTotalLoaded {
+                            address: address.clone(),
+                            usd: None,
+                        }
+                    }
+                    BalanceOperation::FetchTokens { address, pull, .. } => {
+                        settled_result(address, *pull, vec![56, 100, TEMPO], fetched.clone())
+                    }
+                    _ => continue,
+                };
+                pending.extend(host.resolve(effect.id, result));
+            }
+            host.view()
+        };
+
+        let fetched = balances::Fetched {
+            tokens: vec![held(100, "xDAI", None)],
+            failed: vec![TEMPO],
+            internal: Vec::new(),
+            registry: vec![TEMPO],
+        };
+        match settled_result(
+            "0xTokenListSettle",
+            false,
+            vec![100, TEMPO],
+            fetched.clone(),
+        ) {
+            BalanceShellResult::FetchSettled {
+                failed_chain_ids,
+                registry_chain_ids,
+                rate_limited_chain_ids,
+                internal_chain_ids,
+                ..
+            } => {
+                assert_eq!(failed_chain_ids, vec![TEMPO]);
+                assert_eq!(registry_chain_ids, vec![TEMPO]);
+                assert!(rate_limited_chain_ids.is_empty() && internal_chain_ids.is_empty());
+            }
+            other => unreachable!("wrong variant: {other:?}"),
+        }
+
+        let view = view_of("0xTokenListOne", fetched);
+        assert_eq!(
+            view.unreachable_key.as_deref(),
+            Some(TOKEN_LIST_UNREACHABLE)
+        );
+        let rows: Vec<_> = view
+            .unreachable_networks
+            .iter()
+            .map(|row| (row.chain_id, row.cause, row.rpc_fixable))
+            .collect();
+        assert_eq!(rows, vec![(TEMPO, UnreachableCause::TokenList, false)]);
+
+        // BNB Chain really is down beside it: counted together, told apart.
+        let view = view_of(
+            "0xTokenListTwo",
+            balances::Fetched {
+                tokens: vec![held(100, "xDAI", None)],
+                failed: vec![56, TEMPO],
+                internal: Vec::new(),
+                registry: vec![TEMPO],
+            },
+        );
+        assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_MANY));
+        let fixable = |chain_id: u32| {
+            view.unreachable_networks
+                .iter()
+                .find(|row| row.chain_id == chain_id)
+                .map(|row| row.rpc_fixable)
+        };
+        assert_eq!(fixable(56), Some(true));
+        assert_eq!(fixable(TEMPO), Some(false));
     }
 
     /// Privacy persists as the '1'/'0' string the other clients wrote.

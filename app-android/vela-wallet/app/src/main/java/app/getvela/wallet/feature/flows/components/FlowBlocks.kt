@@ -1,5 +1,9 @@
 package app.getvela.wallet.feature.flows.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeaturesTabular
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
+import app.getvela.wallet.core.designsystem.components.KeptRoom
+import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
@@ -378,12 +382,16 @@ fun AmountInput(
                     .padding(VelaSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Withheld (the display currency is not the person's yet):
+                // the same line, empty, its room kept — the "≈" figure lands
+                // in place and the card under it does not move.
                 Text(
                     text = amount.fiat,
                     color = colors.fgMuted,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.lg,
                     maxLines = 1,
+                    modifier = Modifier.withheldFigure(amount.fiatWithheld, colors.borderBase),
                 )
                 Spacer(modifier = Modifier.width(VelaSpacing.xs))
                 Icon(
@@ -393,14 +401,14 @@ fun AmountInput(
                     modifier = Modifier.size(VelaIconSize.sm),
                 )
             }
-        } else if (amount.fiat.isNotEmpty()) {
+        } else if (amount.fiat.isNotEmpty() || amount.fiatWithheld) {
             Text(
                 text = amount.fiat,
                 color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.lg,
                 maxLines = 1,
-                modifier = Modifier.padding(VelaSpacing.xs),
+                modifier = Modifier.padding(VelaSpacing.xs).withheldFigure(amount.fiatWithheld, colors.borderBase),
             )
         }
     }
@@ -435,6 +443,7 @@ private fun AmountFigure(
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.bold,
         fontSize = VelaAmountHero.figure(rung),
+        fontFeatureSettings = VelaFontFeatures,
         // The first rung's line on EVERY rung, the glyphs centred in it: the
         // block keeps one height whatever is typed.
         lineHeight = VelaAmountHero.line,
@@ -446,6 +455,7 @@ private fun AmountFigure(
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.medium,
         fontSize = VelaAmountHero.unit(rung),
+        fontFeatureSettings = VelaFontFeatures,
         // Its own tight line, lined up on the digits' baseline.
         lineHeight = VelaAmountHero.unit(rung) * VelaLeading.none,
     )
@@ -570,6 +580,8 @@ fun AmountHero(
     danger: Boolean = false,
     /** 083 F1: a swap's one coin back, under the figure. */
     received: String? = null,
+    /** The worth is withheld until the display currency is the person's: [fiat] is empty, its line kept. */
+    fiatWithheld: Boolean = false,
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -607,6 +619,7 @@ fun AmountHero(
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.lg,
             maxLines = 1,
+            modifier = Modifier.withheldFigure(fiatWithheld, colors.borderBase),
         )
     }
 }
@@ -1207,6 +1220,11 @@ fun FeeRow(
     onRefresh: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
+    // The fee's worth is withheld until the display currency commits, and
+    // the line it joins ("0.000123 ETH · ≈CN¥2.24") no longer fits beside
+    // the label: the value takes its own line from the first frame, and
+    // keeps it — the form below does not move when the worth lands.
+    val worthRoom = remember { KeptRoom() }.keep(fee.worthRoom)
     Column(modifier = modifier.fillMaxWidth()) {
         // ONE card (spec 078 round 3, as the web and desktop draw it): the coin
         // opener fills it, and the refresh is a fixed round icon button at its
@@ -1232,6 +1250,7 @@ fun FeeRow(
                 // label rather than floating mid-card (design review).
                 VelaLabelBesideValue(
                     stackedValue = Alignment.Start,
+                    stacked = worthRoom,
                     label = {
                         Text(
                             text = fee.label,
@@ -1389,6 +1408,9 @@ fun FeeSpeedControl(
         // column — never the accent, which on this screen means "moves money".
         val lineOne = VelaTextSize.base * VelaLeading.normal
         val lineOneDp = with(LocalDensity.current) { lineOne.toDp() }
+        // Each speed's fee waits for its worth as the fee row does: the fee
+        // takes its own line from now, so no option grows when it lands.
+        val worthRoom = remember { KeptRoom() }.keep(speed.worthRoom)
         speed.options.forEach { option ->
             Row(
                 modifier = Modifier
@@ -1407,6 +1429,7 @@ fun FeeSpeedControl(
                     // line, whole (spec 078 round 3).
                     VelaLabelBesideValue(
                         gap = VelaSpacing.md,
+                        stacked = worthRoom,
                         label = {
                             Text(
                                 text = option.label,
@@ -1444,7 +1467,7 @@ fun FeeSpeedControl(
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.sm,
                             lineHeight = VelaTextSize.sm * VelaLeading.normal,
-                            style = TextStyle(fontFeatureSettings = "tnum"),
+                            style = TextStyle(fontFeatureSettings = VelaFontFeaturesTabular),
                             maxLines = 1,
                             softWrap = false,
                             modifier = Modifier

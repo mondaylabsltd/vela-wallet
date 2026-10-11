@@ -185,16 +185,18 @@ struct SigningFixturesTests {
     @Test func theWalletsOwnBackupHasAHeadlineAndNoRequester() {
         let own = model(.cs36)
         #expect(own.dappOwn)
-        #expect(own.headline?.text == "备份公钥")
+        #expect(own.headline?.text == "复制钱包记录")
         #expect(!own.formBlocks.contains { if case .intent = $0 { true } else { false } },
                 "the headline is drawn once, in the header")
         #expect(own.formBlocks.count == own.blocks.count - 1)
         guard case .rows(let rows) = own.formBlocks.first else {
             Issue.record("the backup's rows lead the form"); return
         }
-        #expect(rows.map(\.label) == ["网络", "地址", "公钥数量"])
+        // The wallet's name is a row: it is part of what goes onto a second
+        // public chain. "Keys included" over the count, in every language.
+        #expect(rows.map(\.label) == ["网络", "地址", "钱包名称", "包含的钥匙"])
         #expect(rows.first?.value == "Ethereum")
-        #expect(own.confirm?.action == "备份公钥")
+        #expect(own.confirm?.action == "复制钱包记录")
         #expect(own.tech.summary == nil)
 
         // A site's sheet keeps its header and its intent in the form.

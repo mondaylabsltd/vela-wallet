@@ -516,7 +516,11 @@ enum ExploreLive {
             note = (view.compat?.multiKeyReady == false) ? loc.t("settingsModals.addNetwork.singleKeyOnly") : nil
         case .notCompatible:
             pill = StatusPillModel(tone: .error, label: loc.t("settingsModals.addNetwork.incompatible"))
-            note = loc.t("settingsModals.addNetwork.incompatibleHint")
+            // WHY, in the core's words (PR 3): no P-256 verifier — nothing
+            // anybody can deploy, and money sent there would be stuck — or
+            // contracts that are missing. A core from before the reason keeps
+            // the contracts line.
+            note = loc.t(view.compat?.hintKey ?? "settingsModals.addNetwork.incompatibleHint")
         case .checkFailed:
             pill = StatusPillModel(tone: .warn, label: loc.t("settingsModals.addNetwork.unableToVerify"))
             note = nil
@@ -543,7 +547,10 @@ enum ExploreLive {
             note: note,
             add: view.canAdd ? loc.t("settingsModals.addNetwork.addNetworkBtn") : nil,
             retry: view.phase == .checkFailed ? loc.t("settingsModals.addNetwork.retry") : nil,
-            setupTool: view.phase == .notCompatible ? loc.t("settingsModals.addNetwork.openChainSetupTool") : nil,
+            // Only where the core gives the tool somewhere to go: a gap
+            // somebody can fill, on the page for THIS chain.
+            setupTool: view.compat?.setupUrl != nil ? loc.t("settingsModals.addNetwork.openChainSetupTool") : nil,
+            setupUrl: view.compat?.setupUrl,
             dismiss: decided ? loc.t("common.done") : loc.t("connect.browser.cancel")
         )
     }

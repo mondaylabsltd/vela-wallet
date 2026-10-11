@@ -5,6 +5,7 @@
     "searchPlaceholder": "Cari token...",
     "unreachableOne": "{{name}} tidak bisa dijangkau saat ini",
     "unreachableMany": "{{n}} jaringan tidak bisa dijangkau saat ini",
+    "tokenListUnreachable": "Daftar token {{name}} tidak bisa dimuat saat ini",
     "unreachableBody": "Aset Anda tidak terpengaruh — hanya belum bisa dibaca sekarang.",
     "unreachableNone": "Semua jaringan sudah terjangkau lagi.",
     "lastSeen": "Terakhir terbaca: {{amount}}",

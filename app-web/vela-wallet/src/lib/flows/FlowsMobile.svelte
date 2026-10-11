@@ -93,6 +93,12 @@
 		 */
 		recipientRowChanged?(index: number, patch: { address?: string; amount?: string }): void;
 		pickContactFor?(index: number | null): void;
+		/**
+		 * The scanner, for one split row (issue 471): the code it reads lands
+		 * in THAT row — the core's `open_scanner { target }`, as the book's
+		 * per-row pick is `open_contact_picker { target }`.
+		 */
+		scanFor?(index: number): void;
 		filterClass?(id: string): void;
 		/** The core's gates — `can_continue` / `can_confirm`. */
 		continueDisabled: boolean;
@@ -114,6 +120,9 @@
 		/** The ERC-20 / native toggle, and a chain picked on the native tab (Phase 10). */
 		tab?(id: string): void;
 		pick?(id: string): void;
+		/** The native tab's RPC field, and its "Re-check with this RPC". */
+		customRpc?(value: string): void;
+		recheck?(): void;
 	}
 
 	/**
@@ -168,6 +177,13 @@
 		onchains?: () => void;
 		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
 		onincludenetwork?: (include: boolean) => void;
+		/**
+		 * Draw the state's SHEET alone, over whatever the route already has on
+		 * screen (note 16): a sheet a home row opened stands over the home it
+		 * was opened from, not over the list the drawn state puts under it. The
+		 * host then adds no box of its own — the sheet takes the page's.
+		 */
+		sheetOnly?: boolean;
 	}
 
 	let {
@@ -181,7 +197,8 @@
 		onsheetclose,
 		ondeletetx,
 		onchains,
-		onincludenetwork
+		onincludenetwork,
+		sheetOnly = false
 	}: Props = $props();
 
 	const base = $derived(model.base);
@@ -207,8 +224,14 @@
 	}
 </script>
 
-<div class="host" style:--text-scale={model.textScale === 1 ? undefined : model.textScale}>
-	{#if base.kind === 'scan'}
+<div
+	class="host"
+	class:sheet-only={sheetOnly}
+	style:--text-scale={model.textScale === 1 ? undefined : model.textScale}
+>
+	{#if sheetOnly}
+		<!-- No base: the page this sheet was opened from is already drawn. -->
+	{:else if base.kind === 'scan'}
 		<ScanSurface
 			model={base.model}
 			feed={scan?.feed}
@@ -287,6 +310,7 @@
 					? (i, patch) => send.recipientRowChanged?.(i, patch)
 					: undefined}
 				onpickRecipientRow={send?.pickContactFor ? (i) => send.pickContactFor?.(i) : undefined}
+				onscanRecipientRow={send?.scanFor ? (i) => send.scanFor?.(i) : undefined}
 				onamount={send ? (value) => send.amountChanged(value) : undefined}
 				onrecipient={send ? (value) => send.recipientChanged(value) : undefined}
 				ctaDisabled={send?.continueDisabled ?? false}
@@ -366,6 +390,8 @@
 					onsubmit={addToken ? () => addToken.submit() : undefined}
 					ontab={addToken?.tab ? (id) => addToken.tab?.(id) : undefined}
 					onpick={addToken?.pick ? (id) => addToken.pick?.(id) : undefined}
+					oncustomrpc={addToken?.customRpc ? (value) => addToken.customRpc?.(value) : undefined}
+					onrecheck={addToken?.recheck ? () => addToken.recheck?.() : undefined}
 				/>
 			</BottomSheet>
 		{:else if sheet.kind === 'contact-pick'}
@@ -377,7 +403,6 @@
 			>
 				<ContactPick
 					model={sheet.model}
-					onscan={() => go('scan')}
 					onselect={send?.pickContact ? (address) => send.pickContact?.(address) : undefined}
 					ongroup={send?.pickGroup ? (i) => send.pickGroup?.(i) : undefined}
 				/>
@@ -425,6 +450,12 @@
 		height: 100%;
 		background: var(--color-bg-base);
 		overflow: hidden;
+	}
+
+	/* A sheet over a page that is not this host's: no box, so the sheet and
+	   its scrim take the page's own frame. */
+	.host.sheet-only {
+		display: contents;
 	}
 
 	.card-stage {

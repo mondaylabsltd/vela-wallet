@@ -88,7 +88,6 @@
       "simWillFail": "This transaction is expected to fail — you’d still pay gas.",
       "simWillFailReason": "Expected to fail: {{reason}} — you’d still pay gas.",
       "balanceChangesTitle": "Balance changes",
-      "balanceNoAssetsMove": "No assets leave your wallet",
       "balanceMatchesHero": "Simulated — nothing else leaves your wallet",
       "simResultLabel": "Simulation result",
       "simResultNoChange": "No asset changes",
@@ -191,10 +190,11 @@
       "labelYouPayMax": "You pay (max)",
       "labelYouReceive": "You receive",
       "labelYouReceiveMin": "You receive (min)",
-      "intentBackUpPublicKeys": "Back up public keys",
+      "intentBackUpPublicKeys": "Copy this wallet's record",
       "labelNetwork": "Network",
       "labelAddress": "Address",
-      "labelPublicKeys": "Public keys",
+      "labelPublicKeys": "Keys included",
+      "labelWalletName": "Wallet name",
       "valueUnlimited": "Unlimited",
       "valueAll": "All",
       "warnOrderTerms": "This order's amounts aren't shown — check them on the site.",
@@ -270,8 +270,8 @@
       "signerDown": "Couldn't open the signing page. Check your connection.",
       "integrity": {
         "checking": "Checking the page…",
-        "matches": "Version {{version}} · matches Vela's published build list · checked {{time}}",
-        "trusted": "Version {{version}} · trusted on this device · checked {{time}}",
+        "matches": "Version {{version}} · matches Vela's published build list · checked {{time}}",
+        "trusted": "Version {{version}} · trusted on this device · checked {{time}}",
         "unchecked": "Not checked: checking is off for this page",
         "mismatch": "Version {{version}} isn't on Vela's published build list. Not opened.",
         "blocked": "Version {{version}} is blocked on this device.",
@@ -291,7 +291,8 @@
         "feeFailed": "Couldn't work out the fee. Tap it to retry",
         "feeRetrying": "Couldn't work out the fee yet. Retrying…",
         "feeWouldFail": "This would fail if sent as it is.",
-        "previousPending": "Waiting for your last transaction on this network…"
+        "previousPending": "Waiting for your last transaction on this network…",
+        "simChecking": "Checking what this transaction does…"
       }
     },
     "currency": {

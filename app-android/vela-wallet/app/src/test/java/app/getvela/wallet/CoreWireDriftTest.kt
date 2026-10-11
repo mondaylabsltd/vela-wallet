@@ -163,6 +163,7 @@ import app.getvela.wallet.feature.wallet.core.TrustOperation
 import app.getvela.wallet.feature.wallet.core.TrustRawLog
 import app.getvela.wallet.feature.wallet.core.TrustReceiptLog
 import app.getvela.wallet.feature.wallet.core.TrustShellResult
+import app.getvela.wallet.feature.wallet.core.TrustSimDirection
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.wallet.core.TrustSimView
 import app.getvela.wallet.feature.wallet.core.TrustTokenMeta
@@ -260,6 +261,8 @@ class CoreWireDriftTest {
     @Test
     fun currencyViewMatchesTheGeneratedMirror() {
         assertFieldsExist<CurrencyView>("CurrencyView")
+        // The stored choice on its way, for a label that names its currency while the figure waits.
+        assertTrue("pending" in serializer<CurrencyView>().descriptor.elementNames)
     }
 
     @Test
@@ -364,6 +367,9 @@ class CoreWireDriftTest {
         assertFieldsExist<BalanceCacheEntry>("BalanceCacheEntry")
         // Every field: `hidden` is what masks the switcher's rows and total.
         assertFieldsExhaustive<BalanceSwitcherView>("BalanceSwitcherView")
+        // Every field: `cause` and `rpc_fixable` decide whether a row may
+        // offer its RPC editor (a token list that did not load is no RPC's fault).
+        assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.UnreachableNetwork>("UnreachableNetwork")
     }
 
     @Test
@@ -374,6 +380,11 @@ class CoreWireDriftTest {
         assertVariantFieldsExhaustive(BalanceShellResult.serializer(), "BalanceShellResult")
         assertTrue("internal_chain_ids" in serializer<BalanceView>().descriptor.elementNames)
         assertTrue("internal_key" in serializer<BalanceView>().descriptor.elementNames)
+        // The final core round (F19): "Checking…" and "live" are the core's to say.
+        assertTrue("checking_key" in serializer<BalanceView>().descriptor.elementNames)
+        assertTrue("live_key" in serializer<BalanceView>().descriptor.elementNames)
+        // The device round: the Assets list's empty state is the core's too.
+        assertTrue("empty_key" in serializer<BalanceView>().descriptor.elementNames)
     }
 
     @Test
@@ -417,6 +428,8 @@ class CoreWireDriftTest {
         assertFieldsExist<FeedView>("FeedView")
         // Balance privacy: the feed's own flag, and each row's own word on its figure.
         assertTrue("hidden" in serializer<FeedView>().descriptor.elementNames)
+        // Issue #469: the home's newest three, the core's cut.
+        assertTrue("home_rows" in serializer<FeedView>().descriptor.elementNames)
         assertTrue("figure_maskable" in serializer<FeedItem>().descriptor.elementNames)
         assertFieldsExist<FeedItem>("FeedItem")
         assertFieldsExist<FeedTxRecord>("FeedTxRecord")
@@ -427,12 +440,35 @@ class CoreWireDriftTest {
 
     @Test
     fun feedOperationsAndResultsAreExhaustive() {
-        // Six operations. `read_tx_store` and `scan_incoming_transfers` are
+        // Eight operations. `read_tx_store` and `scan_incoming_transfers` are
         // issued together on a tick, which is why `read_id` exists — an
         // unanswered operation here does not hang one screen, it strands a
         // celebration.
         assertVariantsExhaustive<FeedOperation>("FeedOperation")
         assertVariantsExhaustive<FeedShellResult>("FeedShellResult")
+        // PR 3: a stored receipt's time is checked against its block. The two
+        // operations decode as the core writes them (one this build could not
+        // decode would be answered `haptic_played`, and the core's round
+        // would wait on it for ever), and the answers go out as it reads them.
+        assertEquals(
+            FeedOperation.ReadReceiveTime(id = "100-0xaa-0", chain_id = 100, tx_hash = "0xaa"),
+            roundTrip<FeedOperation>("""{"type":"read_receive_time","id":"100-0xaa-0","chain_id":100,"tx_hash":"0xaa"}"""),
+        )
+        assertEquals(
+            FeedOperation.WriteReceiveTime(id = "100-0xaa-0", timestamp_sec = 1790683200.0),
+            roundTrip<FeedOperation>("""{"type":"write_receive_time","id":"100-0xaa-0","timestamp_sec":1790683200.0}"""),
+        )
+        assertEquals(
+            """{"type":"receive_time_read","id":"100-0xaa-0","timestamp_sec":1.7906832E9}""",
+            Wire.json.encodeToString(FeedShellResult.serializer(), FeedShellResult.ReceiveTimeRead("100-0xaa-0", 1790683200.0)),
+        )
+        assertEquals(
+            """{"type":"receive_time_written","id":"100-0xaa-0","ok":false}""",
+            Wire.json.encodeToString(FeedShellResult.serializer(), FeedShellResult.ReceiveTimeWritten("100-0xaa-0", ok = false)),
+        )
+        // The mark a record carries, or does not: absent stays absent.
+        assertTrue(elementDescriptor<FeedTxRecord>("time_verified").isNullable)
+        assertEquals("boolean | null", tsFieldType("FeedTxRecord", "time_verified"))
     }
 
     @Test
@@ -533,7 +569,9 @@ class CoreWireDriftTest {
     fun trustViewsMatchTheGeneratedMirrors() {
         assertFieldsExist<TrustView>("TrustView")
         assertFieldsExist<TrustIncomingView>("TrustIncomingView")
-        assertFieldsExist<TrustSimView>("TrustSimView")
+        // Every field: `no_change_key` is the line the signing sheet draws
+        // when the judged view says nothing moves (the device round).
+        assertFieldsExhaustive<TrustSimView>("TrustSimView")
         assertFieldsExist<TrustRawLog>("TrustRawLog")
         assertFieldsExist<TrustCustomToken>("TrustCustomToken")
         assertFieldsExist<TrustMetaEntry>("TrustMetaEntry")
@@ -546,6 +584,14 @@ class CoreWireDriftTest {
     fun trustOperationsAndResultsAreExhaustive() {
         assertVariantsExhaustive<TrustOperation>("TrustOperation")
         assertVariantsExhaustive<TrustShellResult>("TrustShellResult")
+        // PR 3: no clock crosses to the trust machine beside a block's time —
+        // it carried `now_ms` "for the fallback", and a receipt of eleven days
+        // before was filed under today with it.
+        assertEquals(
+            listOf("address", "chain_id", "block_number", "timestamp_sec"),
+            serializer<TrustShellResult.BlockTimestamp>().descriptor.elementNames.toList(),
+        )
+        assertTrue(elementDescriptor<TrustShellResult.BlockTimestamp>("timestamp_sec").isNullable)
     }
 
     @Test
@@ -562,6 +608,20 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<TrustLogsOutcome>("TrustLogsOutcome")
         assertVariantsExhaustive<TrustSimJudgment>("TrustSimJudgment")
         assertStringUnion<TrustDeltaKind>("TrustDeltaKind")
+        // PR 3: an unverified token's judgment is a direction and NO figure.
+        // Every direction is named here (one this build could not decode
+        // would lose the whole judged view), and the judgment's fields are
+        // the mirror's exactly — so a `delta` cannot come back unnoticed.
+        assertStringUnion<TrustSimDirection>("TrustSimDirection")
+        assertVariantFieldsExhaustive(TrustSimJudgment.serializer(), "TrustSimJudgment")
+        assertEquals(
+            listOf("token", "direction"),
+            serializer<TrustSimJudgment.Erc20Unverified>().descriptor.elementNames.toList(),
+        )
+        assertEquals(
+            TrustSimJudgment.Erc20Unverified(token = "0xc0", direction = TrustSimDirection.Out),
+            roundTrip<TrustSimJudgment>("""{"type":"erc20_unverified","token":"0xc0","direction":"out"}"""),
+        )
     }
 
     @Test
@@ -691,7 +751,10 @@ class CoreWireDriftTest {
         assertFieldsExist<NetProviderView>("NetProviderView")
         assertFieldsExist<NetProviderTestView>("NetProviderTestView")
         assertFieldsExist<NetProviderNetRow>("NetProviderNetRow")
-        assertFieldsExist<NetWizardView>("NetWizardView")
+        // Every field: `error_key` is the sentence a stop is said in, and
+        // `compat` rides beside an error on the scan path — a field left
+        // unread here is a stop with the wrong words.
+        assertFieldsExhaustive<NetWizardView>("NetWizardView")
         assertFieldsExist<NetChainIndexEntry>("NetChainIndexEntry")
         assertFieldsExist<NetChainInfo>("NetChainInfo")
         assertFieldsExist<NetCompatibility>("NetCompatibility")
@@ -742,6 +805,8 @@ class CoreWireDriftTest {
         assertStringUnion<NetProviderId>("NetProviderId")
         assertStringUnion<NetOverrideField>("NetOverrideField")
         assertStringUnion<NetWizardPhase>("NetWizardPhase")
+        // The core's one rule for the wizard's RPC field (F4 / F14 / F22).
+        assertStringUnion<app.getvela.wallet.feature.settings.core.NetRpcField>("NetRpcField")
         assertStringUnion<NetRpcFailureKind>("NetRpcFailureKind")
     }
 
@@ -1395,6 +1460,13 @@ class CoreWireDriftTest {
             ConfirmState(enabled = false, block = ConfirmBlock.FeeShort, key = "componentsUi.signing.confirmBlock.feeShort"),
             roundTrip<ConfirmState>("""{"enabled":false,"block":"fee_short","key":"componentsUi.signing.confirmBlock.feeShort"}"""),
         )
+        // PR 3: the confirm waits for the simulation's verdict. A gate this
+        // build could not decode is read as "no answer", which keeps the
+        // confirm shut for ever with no line under it.
+        assertEquals(
+            ConfirmState(enabled = false, block = ConfirmBlock.SimChecking, key = "componentsUi.signing.confirmBlock.simChecking"),
+            roundTrip<ConfirmState>("""{"enabled":false,"block":"sim_checking","key":"componentsUi.signing.confirmBlock.simChecking"}"""),
+        )
         val entry = roundTrip<TrackEntryView>(
             """{"user_op_hash":"0xaa","chain_id":42161,"record_ids":[],"status":"pending","tx_hash":null,"polling":true,"submitted_at_ms":1.0,"outcome":"landing","relay_tx_hash":null,"relay_sent_at_ms":4000.0}""",
         )
@@ -1489,6 +1561,29 @@ class CoreWireDriftTest {
         assertVariantsExist<SignEvent>("SignEvent")
         assertVariantFields(SignOperation.serializer(), "SignOperation")
         assertVariantFields(SignEvent.serializer(), "SignEvent")
+        // PR 3, the simulation's wait: the two events this shell says, the one
+        // timer it runs (an operation it could not decode would be answered
+        // `responded`, and the deadline would never pass), its answer, and
+        // the two fields the sheet reads.
+        assertEquals("""{"type":"sim_started","id":"r1"}""", Wire.json.encodeToString(SignEvent.serializer(), SignEvent.SimStarted("r1")))
+        assertEquals("""{"type":"sim_settled","id":"r1"}""", Wire.json.encodeToString(SignEvent.serializer(), SignEvent.SimSettled("r1")))
+        assertEquals(
+            SignOperation.SimVerdictTimer(id = "r1", round = 3, ms = 4000),
+            roundTrip<SignOperation>("""{"type":"sim_verdict_timer","id":"r1","round":3,"ms":4000}"""),
+        )
+        assertEquals(
+            """{"type":"sim_verdict_timer_fired","id":"r1","round":3}""",
+            Wire.json.encodeToString(SignShellResult.serializer(), SignShellResult.SimVerdictTimerFired("r1", 3)),
+        )
+        val waiting = roundTrip<SignView>("""{"surface":"sheet","confirm_gate_open":true,"sim_checking":true,"sim_waited_out_key":null}""")
+        assertTrue(waiting.sim_checking)
+        assertEquals(null, waiting.sim_waited_out_key)
+        assertEquals(
+            "componentsUi.signing.simUnavailableWarning",
+            roundTrip<SignView>("""{"surface":"sheet","sim_checking":false,"sim_waited_out_key":"componentsUi.signing.simUnavailableWarning"}""").sim_waited_out_key,
+        )
+        // A core that predates the wait says neither: nothing is held.
+        assertEquals(false, roundTrip<SignView>("""{"surface":"sheet"}""").sim_checking)
         // The wallet's own request is marked as such where it is raised, and
         // the view says so; a request that does not say is a page's.
         assertTrue("first_party" in serializer<SignRequestView>().descriptor.elementNames)

@@ -19,15 +19,17 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::network_admin::{
-    build_provider_rpc_url, clean_endpoint_value, default_endpoint, explorer_base_url,
-    is_builtin_chain, is_code_deployed, is_localhost_http, p256_call_indicates_support,
-    parse_chain_data, provider_chain_ids, rank_search, Event, NetChainIndexEntry, NetCustomNetwork,
-    NetEndpointField, NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField,
-    NetProbeHealth, NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind,
-    NetServiceEndpoints, NetServiceHealth, NetShellResult as Res, NetStoredEndpoints,
-    NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
-    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE,
-    REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
+    build_provider_rpc_url, chain_setup_url, clean_endpoint_value, default_endpoint,
+    explorer_base_url, is_builtin_chain, is_code_deployed, is_localhost_http, net_blocker,
+    p256_call_indicates_support, parse_chain_data, provider_chain_ids, public_rpc_urls,
+    rank_search, Event, NetBlocker, NetChainIndexEntry, NetCustomNetwork, NetEndpointField,
+    NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth,
+    NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints,
+    NetServiceHealth, NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind,
+    NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
+    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_PASSKEY_INDEX_URL,
+    MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS, REQUIRED_CONTRACTS,
+    SEARCH_DEBOUNCE_MS,
 };
 use vela_core::app::remote_mark::chain_logo_url;
 
@@ -574,6 +576,14 @@ fn a_chain_missing_any_required_contract_never_saves() {
     assert_eq!(compat.contracts[4].name, "Safe L2");
     assert_eq!(compat.p256_available, Some(true));
     assert!(!view.wizard.can_add);
+    // Contracts can be deployed: the line says so, and the button opens
+    // Chain Setup on THIS network.
+    assert_eq!(compat.blocker, Some(NetBlocker::MissingContracts));
+    assert_eq!(compat.hint_key.as_deref(), Some(MISSING_CONTRACTS_HINT));
+    assert_eq!(
+        compat.setup_url.as_deref(),
+        Some("https://getvela.app/chain-setup?chain=7777")
+    );
 
     // The confirm is inert — nothing is written, nothing enters the ledger.
     assert!(sut
@@ -612,11 +622,55 @@ fn a_chain_without_the_p256_precompile_never_saves() {
     let compat = sut.view().wizard.compat.expect("checked");
     assert!(!compat.compatible);
     assert_eq!(compat.p256_available, Some(false));
+    // A precompile is the chain's own: nothing to deploy, so no Chain Setup
+    // button — the line says Vela cannot work here and money would be stuck.
+    assert_eq!(compat.blocker, Some(NetBlocker::NoP256));
+    assert_eq!(compat.hint_key.as_deref(), Some(NO_P256_HINT));
+    assert_eq!(compat.setup_url, None);
     assert!(sut
         .dispatch(Event::AddConfirmed {
             now_iso: NOW_ISO.to_owned()
         })
         .is_empty());
+}
+
+/// No verifier AND missing contracts: the verifier is the answer. Deploying
+/// every contract would still leave a chain no passkey can sign on, so the
+/// tool is not offered (the Chain Setup page's own `blocked` verdict).
+#[test]
+fn no_p256_wins_over_missing_contracts() {
+    assert_eq!(net_blocker(false, false), Some(NetBlocker::NoP256));
+    assert_eq!(net_blocker(false, true), Some(NetBlocker::NoP256));
+    assert_eq!(net_blocker(true, false), Some(NetBlocker::MissingContracts));
+    assert_eq!(net_blocker(true, true), None);
+
+    let mut sut = started();
+    select_and_resolve(&mut sut, raw_chain());
+    resolve_race(&mut sut);
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        sut.resolve(code_result(RPC_FAST, address, Some("0x")));
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some("0x".to_owned()),
+    });
+    sut.resolve(code_result(RPC_FAST, P256_PRECOMPILE, Some("0x")));
+    let compat = sut.view().wizard.compat.expect("checked");
+    assert_eq!(compat.blocker, Some(NetBlocker::NoP256));
+    assert_eq!(compat.setup_url, None);
+}
+
+#[test]
+fn the_setup_link_carries_the_chain_and_the_hints_are_in_the_corpus() {
+    assert_eq!(
+        chain_setup_url(42_220),
+        "https://getvela.app/chain-setup?chain=42220"
+    );
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [NO_P256_HINT, MISSING_CONTRACTS_HINT] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
 }
 
 #[test]
@@ -711,6 +765,8 @@ fn a_chain_without_safes_signer_factory_is_single_key_only() {
         !compat.multi_key_ready,
         "a wallet with two to seven keys does not"
     );
+    assert_eq!(compat.blocker, None, "not refused");
+    assert_eq!(compat.setup_url, None);
     let missing: Vec<_> = compat
         .contracts
         .iter()
@@ -889,6 +945,8 @@ fn all_rpcs_failing_reads_unable_to_verify_not_incompatible() {
     assert_eq!(compat.rpc_failure, Some(NetRpcFailureKind::AllProbesFailed));
     assert!(!compat.compatible);
     assert_eq!(compat.p256_available, None, "never probed — no verdict");
+    assert_eq!(compat.blocker, None, "inconclusive is not a refusal");
+    assert_eq!((compat.hint_key, compat.setup_url), (None, None));
     assert!(compat.contracts.iter().all(|c| !c.deployed));
     assert!(!view.wizard.can_add);
     assert!(sut
@@ -2253,4 +2311,383 @@ fn the_eleven_are_built_in_with_verified_provider_slugs() {
         build_provider_rpc_url(NetProviderId::Drpc, 1_440_000, "k"),
         None
     );
+}
+
+/// The curated public endpoints: built-in networks only, https only, no
+/// endpoint twice — and none of the ones measured dead (2026-10-10: every
+/// `1rpc.io`, the rate-limited `bsc.drpc.org`).
+#[test]
+fn the_public_rpcs_are_built_in_https_and_alive_when_measured() {
+    let mut seen = std::collections::BTreeSet::new();
+    for (chain_id, urls) in PUBLIC_RPCS {
+        assert!(
+            BUILTIN_CHAINS.iter().any(|c| c.chain_id == *chain_id),
+            "{chain_id} is not a built-in network"
+        );
+        assert!(!urls.is_empty());
+        for url in *urls {
+            assert!(url.starts_with("https://"), "{url}");
+            assert!(seen.insert(*url), "{url} twice");
+            assert!(!url.contains("1rpc.io"), "{url}: 1rpc.io is gone");
+            assert_ne!(*url, "https://bsc.drpc.org", "rate-limited");
+        }
+    }
+    assert_eq!(
+        public_rpc_urls(137),
+        [
+            "https://polygon-bor-rpc.publicnode.com",
+            "https://polygon.gateway.tenderly.co"
+        ]
+    );
+    assert!(public_rpc_urls(NEW_CHAIN).is_empty());
+}
+
+// ===========================================================================
+// PR 3 notes 5, 10, 18: every path a network is added by says why it stopped
+// ===========================================================================
+
+/// The path with no confirm step (a scanned request, "Add this network")
+/// used to drop its check and could only say "Incompatible". It keeps it: a
+/// network with no P-256 verifier says so there too, with no Chain Setup
+/// link — and one that only lacks contracts gets the link, on that chain.
+#[test]
+fn the_scan_path_keeps_its_check_so_a_refusal_says_why() {
+    use vela_core::app::network_admin::{WIZARD_CHECK_FAILED, WIZARD_NOT_COMPATIBLE};
+    let scan = || {
+        let mut sut = started();
+        sut.dispatch(Event::AddByChainIdRequested {
+            chain_id: NEW_CHAIN,
+            now_iso: NOW_ISO.to_owned(),
+        });
+        sut.resolve(Res::ChainInfo {
+            chain_id: NEW_CHAIN,
+            data: Some(raw_chain()),
+        });
+        resolve_race(&mut sut);
+        sut
+    };
+
+    // No P-256 verifier: contracts all there, the precompile is not.
+    let mut sut = scan();
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        sut.resolve(code_ok(RPC_FAST, address));
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some("0x".to_owned()),
+    });
+    sut.resolve(code_result(RPC_FAST, P256_PRECOMPILE, Some("0x")));
+    let wizard = sut.view().wizard;
+    assert_eq!(
+        wizard.error,
+        Some(NetWizardErrorKind::NotCompatible {
+            chain_id: NEW_CHAIN
+        })
+    );
+    let compat = wizard.compat.expect("the check is kept beside the error");
+    assert_eq!(compat.blocker, Some(NetBlocker::NoP256));
+    assert_eq!(compat.setup_url, None, "nothing to deploy");
+    assert_eq!(wizard.error_key.as_deref(), Some(NO_P256_HINT));
+    assert!(!wizard.can_add);
+    assert_eq!(sut.view().networks.len(), 24, "nothing saved");
+
+    // Missing contracts: the verifier answers, the contracts are not there.
+    let mut sut = scan();
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        sut.resolve(code_result(RPC_FAST, address, Some("0x")));
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some(p256_one()),
+    });
+    let wizard = sut.view().wizard;
+    let compat = wizard.compat.expect("the check is kept beside the error");
+    assert_eq!(compat.blocker, Some(NetBlocker::MissingContracts));
+    assert_eq!(
+        compat.setup_url.as_deref(),
+        Some(chain_setup_url(NEW_CHAIN).as_str())
+    );
+    assert_eq!(wizard.error_key.as_deref(), Some(MISSING_CONTRACTS_HINT));
+
+    // Inconclusive: the probes failed. Kept too, and never worded as a
+    // refusal — no reason, no link.
+    let mut sut = scan_unreachable();
+    let wizard = sut.view().wizard;
+    assert_eq!(
+        wizard.error,
+        Some(NetWizardErrorKind::CheckFailed {
+            chain_id: NEW_CHAIN
+        })
+    );
+    assert_eq!(wizard.error_key.as_deref(), Some(WIZARD_CHECK_FAILED));
+    let compat = wizard.compat.expect("kept");
+    assert!(compat.rpc_failure.is_some());
+    assert_eq!((compat.blocker, compat.setup_url), (None, None));
+
+    // The next selection starts clean: no stale reason under a new chain.
+    sut.dispatch(Event::ChainSelected {
+        chain_id: 8888,
+        keep_custom_rpc: false,
+    });
+    let wizard = sut.view().wizard;
+    assert_eq!((wizard.compat, wizard.error_key), (None, None));
+
+    // A refusal whose check named no reason still has a sentence.
+    assert_eq!(
+        vela_core::app::network_admin::wizard_error_key(
+            &NetWizardErrorKind::NotCompatible { chain_id: 1 },
+            None
+        ),
+        WIZARD_NOT_COMPATIBLE
+    );
+}
+
+/// The scan path with both probes failing.
+fn scan_unreachable() -> Sut {
+    let mut sut = started();
+    sut.dispatch(Event::AddByChainIdRequested {
+        chain_id: NEW_CHAIN,
+        now_iso: NOW_ISO.to_owned(),
+    });
+    sut.resolve(Res::ChainInfo {
+        chain_id: NEW_CHAIN,
+        data: Some(raw_chain()),
+    });
+    sut.resolve(probe(RPC_SLOW, None, 0.0));
+    sut.resolve(probe(RPC_FAST, None, 0.0));
+    sut
+}
+
+/// Every way the wizard stops has a sentence of its own, in the corpus: on
+/// the web three of them had none and read "Incompatible" — over a network
+/// that was merely already added, or not found.
+#[test]
+fn every_wizard_stop_has_its_own_sentence_in_the_corpus() {
+    use vela_core::app::network_admin::{
+        WIZARD_ALREADY_ADDED, WIZARD_CHECK_FAILED, WIZARD_NOT_COMPATIBLE, WIZARD_NOT_FOUND,
+        WIZARD_NO_RPC_ENDPOINT,
+    };
+    // Already added.
+    let mut sut = started_with(vec![custom_network(999)], vec![]);
+    sut.dispatch(Event::ChainSelected {
+        chain_id: 999,
+        keep_custom_rpc: false,
+    });
+    assert_eq!(
+        sut.view().wizard.error_key.as_deref(),
+        Some(WIZARD_ALREADY_ADDED)
+    );
+
+    // Not found.
+    let mut sut = started();
+    sut.dispatch(Event::ChainSelected {
+        chain_id: NEW_CHAIN,
+        keep_custom_rpc: false,
+    });
+    sut.resolve(Res::ChainInfo {
+        chain_id: NEW_CHAIN,
+        data: None,
+    });
+    assert_eq!(
+        sut.view().wizard.error_key.as_deref(),
+        Some(WIZARD_NOT_FOUND)
+    );
+
+    // No RPC endpoint.
+    let mut sut = started();
+    let mut bare = raw_chain();
+    bare.rpc.clear();
+    select_and_resolve(&mut sut, bare);
+    let wizard = sut.view().wizard;
+    assert_eq!(wizard.error, Some(NetWizardErrorKind::NoRpcEndpoint));
+    assert_eq!(wizard.error_key.as_deref(), Some(WIZARD_NO_RPC_ENDPOINT));
+
+    // No stop, no sentence.
+    assert_eq!(started().view().wizard.error_key, None);
+
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [
+        WIZARD_ALREADY_ADDED,
+        WIZARD_NOT_FOUND,
+        WIZARD_NO_RPC_ENDPOINT,
+        WIZARD_NOT_COMPATIBLE,
+        WIZARD_CHECK_FAILED,
+    ] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
+}
+
+// ===========================================================================
+// PR 3 notes 20, 25: the public tier, its dead hosts, and what the store is told
+// ===========================================================================
+
+/// The host is compared, never a substring: a path that mentions the name is
+/// not that host, and a subdomain of it is.
+#[test]
+fn a_dead_rpc_host_is_matched_by_host_only() {
+    use vela_core::app::network_admin::{is_dead_rpc_host, DEAD_RPC_HOSTS};
+    assert_eq!(DEAD_RPC_HOSTS, ["1rpc.io"]);
+    for dead in [
+        "https://1rpc.io/matic",
+        "https://1RPC.io/eth",
+        "https://1rpc.io",
+        "https://1rpc.io:443/arb",
+        "https://key@1rpc.io/op",
+        "https://eu.1rpc.io/base",
+        "1rpc.io/gnosis",
+    ] {
+        assert!(is_dead_rpc_host(dead), "{dead}");
+    }
+    for alive in [
+        "https://polygon.gateway.tenderly.co",
+        "https://not1rpc.io/matic",
+        "https://1rpc.io.example.com/eth",
+        "https://example.com/1rpc.io/eth",
+        "https://example.com/?via=1rpc.io",
+        "",
+    ] {
+        assert!(!is_dead_rpc_host(alive), "{alive}");
+    }
+    // Nothing Vela ships names one: not the public tier, not a default.
+    for (_, urls) in PUBLIC_RPCS {
+        for url in *urls {
+            assert!(!is_dead_rpc_host(url), "{url}");
+        }
+    }
+    for chain in BUILTIN_CHAINS {
+        assert!(!is_dead_rpc_host(chain.rpc_url), "{}", chain.rpc_url);
+    }
+}
+
+const PRIVACY_EVIDENCE: &str = "../../../docs/store-submission/privacy-evidence.md";
+const DOC_BEGIN: &str = "<!-- public-rpcs:begin -->";
+const DOC_END: &str = "<!-- public-rpcs:end -->";
+
+/// The table the privacy evidence carries between its two markers: every
+/// host of [`PUBLIC_RPCS`], chain by chain, in the order they are asked.
+fn public_rpc_table() -> String {
+    let mut out = String::from("| Network | Hosts asked, in order |\n|---|---|\n");
+    for (chain_id, urls) in PUBLIC_RPCS {
+        let name = BUILTIN_CHAINS
+            .iter()
+            .find(|chain| chain.chain_id == *chain_id)
+            .map_or("", |chain| chain.display_name);
+        let hosts: Vec<String> = urls
+            .iter()
+            .map(|url| {
+                let host = url.trim_start_matches("https://");
+                format!("`{}`", host.split('/').next().unwrap_or(host))
+            })
+            .collect();
+        out.push_str(&format!("| {name} ({chain_id}) | {} |\n", hosts.join(", ")));
+    }
+    out
+}
+
+/// What the store is told about third parties is what the wallet contacts:
+/// the privacy evidence's list of public RPC hosts IS the core's list, host
+/// for host. It was written by hand, and named `1rpc.io` for weeks after
+/// the wallet had stopped asking it. Regenerate after changing the list:
+/// `VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_network_admin`.
+#[test]
+fn the_privacy_evidence_names_exactly_the_public_rpc_hosts() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(PRIVACY_EVIDENCE);
+    let doc = std::fs::read_to_string(&path).expect("docs/store-submission/privacy-evidence.md");
+    let (head, rest) = doc.split_once(DOC_BEGIN).expect("the begin marker");
+    let (have, tail) = rest.split_once(DOC_END).expect("the end marker");
+    let want = format!("\n{}", public_rpc_table());
+    if have != want && std::env::var_os("VELA_WRITE_FIXTURES").is_some() {
+        let rewritten = format!("{head}{DOC_BEGIN}{want}{DOC_END}{tail}");
+        std::fs::write(&path, rewritten).expect("write the privacy evidence");
+        return;
+    }
+    assert!(
+        have == want,
+        "docs/store-submission/privacy-evidence.md lists other public RPC hosts than \
+         PUBLIC_RPCS — regenerate with VELA_WRITE_FIXTURES=1 cargo test -p vela-core \
+         --features crux --test app_network_admin\n--- doc\n{have}\n--- core\n{want}"
+    );
+    // And no host the pool refuses to ask is named anywhere as contacted.
+    for dead in vela_core::app::network_admin::DEAD_RPC_HOSTS {
+        assert!(!have.contains(dead), "{dead} is listed as contacted");
+    }
+}
+
+// ===========================================================================
+// PR 3 final notes F4, F14, F22: one rule for the RPC field and its label
+// ===========================================================================
+
+/// The field where a person names an endpoint of their own — and "Re-check
+/// with this RPC", which is drawn exactly where the field is — follows the
+/// state, not the shell: required (and not called "optional") when the
+/// network lists no endpoint; optional when the check passed or could not
+/// reach a verdict; absent under a refusal another endpoint would not
+/// change, and where there is no chain to check.
+#[test]
+fn the_rpc_field_is_offered_where_another_endpoint_is_a_way_on() {
+    use vela_core::app::network_admin::{NetRpcField, RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED};
+    let field = |sut: &Sut| {
+        let wizard = sut.view().wizard;
+        (wizard.rpc_field, wizard.rpc_field_label_key)
+    };
+
+    // Nothing selected, searching, checking: no field.
+    let mut sut = started();
+    assert_eq!(field(&sut), (NetRpcField::None, None));
+    select_and_resolve(&mut sut, raw_chain());
+    assert_eq!(field(&sut), (NetRpcField::None, None), "still checking");
+
+    // Compatible: an own endpoint may be preferred.
+    let sut = checked_compatible();
+    assert_eq!(
+        field(&sut),
+        (NetRpcField::Optional, Some(RPC_FIELD_OPTIONAL.to_owned()))
+    );
+
+    // No endpoint listed: the field is the one thing asked for.
+    let mut sut = started();
+    let mut bare = raw_chain();
+    bare.rpc.clear();
+    select_and_resolve(&mut sut, bare);
+    assert_eq!(
+        field(&sut),
+        (NetRpcField::Required, Some(RPC_FIELD_REQUIRED.to_owned()))
+    );
+
+    // Could not reach a verdict — in the wizard, and on the scan path.
+    let mut sut = started();
+    select_and_resolve(&mut sut, raw_chain());
+    sut.resolve(probe(RPC_SLOW, None, 0.0));
+    sut.resolve(probe(RPC_FAST, None, 0.0));
+    assert_eq!(field(&sut).0, NetRpcField::Optional, "unable to verify");
+    assert_eq!(field(&scan_unreachable()).0, NetRpcField::Optional);
+
+    // A refusal: no P-256 verifier. Another endpoint would say the same.
+    let mut sut = started();
+    select_and_resolve(&mut sut, raw_chain());
+    resolve_race(&mut sut);
+    for (_, address, _) in REQUIRED_CONTRACTS {
+        sut.resolve(code_ok(RPC_FAST, address));
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some("0x".to_owned()),
+    });
+    sut.resolve(code_result(RPC_FAST, P256_PRECOMPILE, Some("0x")));
+    assert_eq!(field(&sut), (NetRpcField::None, None), "refused");
+
+    // Already added, and not found: no chain to check.
+    let mut sut = started_with(vec![custom_network(999)], vec![]);
+    sut.dispatch(Event::ChainSelected {
+        chain_id: 999,
+        keep_custom_rpc: false,
+    });
+    assert_eq!(field(&sut), (NetRpcField::None, None));
+
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
 }

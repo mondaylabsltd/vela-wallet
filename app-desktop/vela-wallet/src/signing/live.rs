@@ -768,14 +768,17 @@ fn plain_send_blocks(
 ///   token emits its own log, so what leaves cannot be understated;
 /// - an **inflow** renders a number only when the token is trusted. A site can
 ///   emit any `Transfer` it likes from a contract it controls, so an
-///   unverified receipt shows its DIRECTION and its name and no figure at all.
+///   unverified receipt shows its DIRECTION and its name and no figure at all
+///   — and since PR 3 this builder is never handed one: the judgment of an
+///   unverified token is `{ token, direction }`.
 ///
 /// `notice` is the core's reading of the answer (spec 082 RG6,
 /// `sim_outcome::notice`) and a different sentence from an empty list: a
 /// revert is the danger "expected to fail" (with the sanitised reason when
 /// there is one), a node that could not check is the caution "couldn't check
 /// — review it" — never the look of "this will fail" — and "it ran and
-/// nothing moves" says nothing here.
+/// nothing moves" is no block of THIS builder's: the verdict's place says it
+/// ([`verdict_block`]) when the core does (`TrustSimView.no_change_key`).
 #[must_use]
 pub fn sim_blocks(
     judgments: &[vela_core::app::token_trust::TrustSimJudgment],
@@ -783,7 +786,7 @@ pub fn sim_blocks(
     chain_id: u32,
     s: &SigningStrings,
 ) -> Vec<Block> {
-    use vela_core::app::token_trust::TrustSimJudgment as J;
+    use vela_core::app::token_trust::{TrustSimDirection as Direction, TrustSimJudgment as J};
 
     if let Some(notice) = notice {
         return vec![sim_notice_block(notice, s)];
@@ -822,27 +825,189 @@ pub fn sim_blocks(
                 signed_amount(delta, *decimals)?,
                 delta_tone(delta),
             )),
-            // No attacker-controlled amount on screen. The direction is the
-            // core's and it is safe to state; the figure is not.
-            J::Erc20Unverified { delta, .. } => Some((
-                s.balance_unverified_token.clone(),
-                SharedString::from(if delta.starts_with('-') { "−" } else { "+" }),
-                Tone::Caution,
-            )),
+            // No attacker-controlled amount on screen — and none in hand:
+            // the judgment carries a direction and no figure (PR 3), so the
+            // row is its label, the caution's colour and a sign. A move of
+            // nothing is no row, as a zero never is; a figure nobody could
+            // read keeps its row and its caution, with no sign to state.
+            J::Erc20Unverified { direction, .. } => {
+                let sign = match direction {
+                    Direction::In => "+",
+                    Direction::Out => "−",
+                    Direction::Unreadable => "",
+                    Direction::Still => return None,
+                };
+                Some((
+                    s.balance_unverified_token.clone(),
+                    SharedString::from(sign),
+                    Tone::Caution,
+                ))
+            }
         })
         .collect();
 
     // A zero delta changes nothing and is never drawn (RC4/RC6); a block of
-    // nothing would read as "nothing moves", which the simulation did not say.
+    // nothing would read as "nothing moves", and whether nothing moves is the
+    // core's to say ([`verdict_block`]), not this list's being empty.
     if rows.is_empty() {
         return Vec::new();
     }
+    // One warning for the whole card when a token nobody vouches for moves —
+    // the sentence the phones say under the same card (`unverifiedWarning`),
+    // and the reason its row carries a direction and no figure. Once, not per
+    // row: the caution is the same each time, and repeating it is how people
+    // stop reading it. Said for a row that is drawn: a move of nothing has
+    // none, and nothing to warn about.
+    let unverified = judgments.iter().any(|judgment| {
+        matches!(
+            judgment,
+            J::Erc20Unverified { direction, .. } if *direction != Direction::Still
+        )
+    });
     vec![Block::Balances {
         title: s.balances_title.clone(),
         rows,
-        note: None,
-        note_tone: Tone::Neutral,
+        note: unverified.then(|| s.warn_unverified_amount.clone()),
+        note_tone: if unverified {
+            Tone::Caution
+        } else {
+            Tone::Neutral
+        },
     }]
+}
+
+/// Where the simulation of the open request stands — what decides whether
+/// the sheet keeps a place for its verdict, and what stands in that place.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SimStage {
+    /// Nothing was simulated: a message or typed data moves nothing and has
+    /// no verdict to wait for. No place is kept.
+    #[default]
+    NotAsked,
+    /// Asked, and not back yet.
+    Out,
+    /// Back: balances, a notice, or nothing of the wallet's moving.
+    Landed,
+}
+
+/// The simulation verdict's place on the sheet (PR 3 final note F2), or
+/// `None` for a request nothing simulates.
+///
+/// The verdict used to be appended when it landed, a few hundred
+/// milliseconds after the sheet opened: the fee row, the signing account and
+/// the confirm all rode down by its height under a pointer already on its
+/// way to the button (measured on this column: 118 px for a swap's card).
+/// Now the place is there from the request's first frame, at least
+/// [`crate::signing::components::verdict_room_height`] tall:
+///
+/// - **out** — the balance card's own outline and title with "Checking…"
+///   where its rows will be, so a card landing fills in the card;
+/// - **landed, a notice** — the core's sentence in the core's tone: a revert
+///   is the danger, a node that could not check the caution;
+/// - **landed, and nothing of the wallet's moves** — the same card saying
+///   "No asset changes". WHEN is the core's (`no_change_key`:
+///   `TrustSimView.no_change_key`, PR 3 device round) and so is the line —
+///   this builder used to say it whenever it had no row to draw;
+/// - **landed, with rows** — [`sim_blocks`]: the balance card;
+/// - **landed, no row and no key** — a move nobody can write, or a judgment
+///   that never came. That is not "nothing moves": the core's could-not-check
+///   caution, never an empty card;
+/// - **out, and the wait for it has run out** (PR 3 fix C, `waited_out_key`:
+///   `SignView.sim_waited_out_key`) — the confirm waited for this verdict
+///   and the core's deadline passed without one. The core names the sentence
+///   (`sim_outcome::KEY_UNAVAILABLE`) and it stands here in place of
+///   "Checking…", as the caution it is when a node could not check: the same
+///   block, the same tone. A verdict that still lands clears the key and is
+///   drawn as any other — in the same place, so nothing moves either time.
+#[must_use]
+pub fn verdict_block(
+    stage: SimStage,
+    judgments: &[vela_core::app::token_trust::TrustSimJudgment],
+    notice: Option<&vela_core::app::sim_outcome::SimNotice>,
+    no_change_key: Option<&str>,
+    waited_out_key: Option<&str>,
+    chain_id: u32,
+    s: &SigningStrings,
+) -> Option<Block> {
+    let quiet = |line: &SharedString| Block::Balances {
+        title: s.balances_title.clone(),
+        rows: Vec::new(),
+        note: Some(line.clone()),
+        note_tone: Tone::Neutral,
+    };
+    let inner = match stage {
+        SimStage::NotAsked => return None,
+        SimStage::Out if waited_out_key.is_some() => {
+            vec![sim_notice_block(&could_not_check(), s)]
+        }
+        SimStage::Out => vec![quiet(&s.sim_checking)],
+        SimStage::Landed => {
+            if let Some(notice) = notice {
+                vec![sim_notice_block(notice, s)]
+            } else if no_change_key.is_some() {
+                // The core names one key for it
+                // (`sim_outcome::KEY_NO_CHANGE`), and `sim_no_change` is that
+                // key's line in the corpus.
+                vec![quiet(&s.sim_no_change)]
+            } else {
+                let blocks = sim_blocks(judgments, None, chain_id, s);
+                if blocks.is_empty() {
+                    vec![sim_notice_block(&could_not_check(), s)]
+                } else {
+                    blocks
+                }
+            }
+        }
+    };
+    Some(Block::Verdict {
+        inner,
+        // Something to read is in the place: an answer — or the sentence
+        // that says none came in time, which is why the confirm opened.
+        landed: stage == SimStage::Landed || waited_out_key.is_some(),
+    })
+}
+
+/// What a verdict says, as one string: every word of every block in its
+/// place. Two verdicts that read the same are the same verdict to the page
+/// — what tells one that has just landed, or grown, from the one the column
+/// already drew (and already brought into view).
+#[must_use]
+pub fn verdict_said(inner: &[Block]) -> String {
+    let mut said = String::new();
+    for block in inner {
+        match block {
+            Block::Balances {
+                title, rows, note, ..
+            } => {
+                said.push_str(title);
+                for (symbol, delta, _) in rows {
+                    said.push('\n');
+                    said.push_str(symbol);
+                    said.push(' ');
+                    said.push_str(delta);
+                }
+                if let Some(note) = note {
+                    said.push('\n');
+                    said.push_str(note);
+                }
+            }
+            Block::Warning { text, .. } => said.push_str(text),
+            // Nothing else stands in the verdict's place.
+            _ => {}
+        }
+        said.push('\u{1e}');
+    }
+    said
+}
+
+/// The core's notice for a simulation nobody could read
+/// (`sim_outcome::KEY_UNAVAILABLE`, a caution).
+fn could_not_check() -> vela_core::app::sim_outcome::SimNotice {
+    vela_core::app::sim_outcome::SimNotice {
+        key: vela_core::app::sim_outcome::KEY_UNAVAILABLE,
+        risk: vela_core::app::clear_signing::ClearRisk::Caution,
+        reason: None,
+    }
 }
 
 fn delta_tone(delta: &str) -> Tone {
@@ -850,6 +1015,331 @@ fn delta_tone(delta: &str) -> Tone {
         Tone::Neutral
     } else {
         Tone::Success
+    }
+}
+
+#[cfg(test)]
+mod verdict_place_tests {
+    use super::*;
+    use crate::signing::components::{
+        balance_card_height, balance_card_height_at, verdict_room_height,
+    };
+    use crate::signing::fixtures::{SimPin, sim_pin_block};
+
+    fn strings() -> SigningStrings {
+        SigningStrings::resolve(&crate::loc::Loc::for_language("en"))
+    }
+
+    /// PR 3 final note F2. The verdict used to be appended when it landed
+    /// and everything under it rode down (measured on the drawn send: the
+    /// confirm 89 px for a send's card, 118 for a swap's, 147 for three
+    /// coins, 78 and 96 for the two notices). Now every answer — and no
+    /// answer yet — is ONE block, the place, kept from the request's first
+    /// frame.
+    #[test]
+    fn every_verdict_and_none_yet_stand_in_the_one_place() {
+        let s = strings();
+        for (pin, name) in SimPin::ALL {
+            let block = sim_pin_block(pin, &s);
+            let Some(Block::Verdict { inner, landed }) = block else {
+                unreachable!("{name}: a transaction's sheet keeps the place");
+            };
+            assert_eq!(inner.len(), 1, "{name}: one thing is said in it");
+            // Only an answer that is in is a verdict to bring into view.
+            assert_eq!(landed, pin != SimPin::Out, "{name}");
+        }
+        // A request nothing simulates — a message, typed data — keeps none.
+        assert!(verdict_block(SimStage::NotAsked, &[], None, None, None, 1, &s).is_none());
+        assert_eq!(SimStage::default(), SimStage::NotAsked);
+    }
+
+    /// What stands in the place: while the simulation is out, the balance
+    /// card's own outline and title with "Checking…" where its rows will be
+    /// — never a blank room (F2), and no new string; then the card, the
+    /// core's notice, or "No asset changes".
+    #[test]
+    fn the_place_is_never_blank() {
+        let s = strings();
+        let said = |pin| match sim_pin_block(pin, &s) {
+            Some(Block::Verdict { inner, .. }) => match inner.into_iter().next() {
+                Some(Block::Balances {
+                    title, rows, note, ..
+                }) => (
+                    title.to_string(),
+                    rows.len(),
+                    note.map(|note| note.to_string()),
+                ),
+                Some(Block::Warning { text, .. }) => (String::new(), 0, Some(text.to_string())),
+                _ => unreachable!("a card or a notice"),
+            },
+            _ => unreachable!("a place"),
+        };
+        let card = |rows: usize, note: Option<&str>| {
+            ("Balance changes".to_owned(), rows, note.map(str::to_owned))
+        };
+        assert_eq!(said(SimPin::Out), card(0, Some("Checking…")));
+        assert_eq!(said(SimPin::Send), card(1, None));
+        assert_eq!(said(SimPin::Swap), card(2, None));
+        assert_eq!(said(SimPin::Three), card(3, None));
+        // A token nobody vouches for: its row, and the warning under the
+        // card — the sentence the phones say there.
+        let unverified = s.warn_unverified_amount.to_string();
+        assert_eq!(said(SimPin::Unverified), card(2, Some(unverified.as_str())));
+        assert_eq!(said(SimPin::Tall), card(4, Some(unverified.as_str())));
+        assert_eq!(said(SimPin::Nothing), card(0, Some("No asset changes")));
+        let (_, _, caution) = said(SimPin::Caution);
+        assert_eq!(caution, Some(s.warn_sim_unavailable.to_string()));
+        // PR 3 fix C: no answer inside the core's deadline says the same
+        // sentence there.
+        assert_eq!(said(SimPin::Waited), said(SimPin::Caution));
+        let (_, _, danger) = said(SimPin::Danger);
+        assert!(
+            danger.is_some_and(|line| line.starts_with("Expected to fail: ")),
+            "the core's sentence, with its reason"
+        );
+
+        // In the reader's language, from the corpus.
+        let zh = SigningStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        assert_eq!(zh.sim_checking.as_ref(), "正在检查…");
+        assert_eq!(zh.sim_no_change.as_ref(), "无资产变动");
+    }
+
+    /// PR 3 device round, item 3. "No asset changes" is the core's line AND
+    /// the core's case (`TrustSimView.no_change_key`): the place says it
+    /// exactly when the judged view carries the key. This builder used to
+    /// say it whenever it had no row to draw — which is also what a judgment
+    /// that never came, and a move nobody can write, look like.
+    #[test]
+    fn nothing_moves_is_said_when_the_core_says_it_and_never_by_an_empty_list() {
+        use vela_core::app::sim_outcome::{KEY_NO_CHANGE, no_change_key_of};
+        use vela_core::app::token_trust::TrustSimJudgment as J;
+        let s = strings();
+        let native = |delta: &str| J::Native {
+            delta: delta.to_owned(),
+        };
+        // What the core's judged view carries for these judgments.
+        let core_key = |judgments: &[J]| no_change_key_of(judgments);
+        let landed = |judgments: &[J], key: Option<&str>| {
+            let Some(Block::Verdict { inner, .. }) =
+                verdict_block(SimStage::Landed, judgments, None, key, None, 1, &s)
+            else {
+                unreachable!("a place");
+            };
+            assert_eq!(inner.len(), 1);
+            inner.into_iter().next()
+        };
+        let quiet = |block: &Option<Block>| {
+            matches!(
+                block,
+                Some(Block::Balances { rows, note: Some(note), note_tone: Tone::Neutral, .. })
+                    if rows.is_empty() && *note == s.sim_no_change
+            )
+        };
+        let could_not_check = |block: &Option<Block>| {
+            matches!(
+                block,
+                Some(Block::Warning { tone: Tone::Caution, text })
+                    if *text == s.warn_sim_unavailable
+            )
+        };
+
+        // Checked, no judgment at all — and checked, every move a zero: the
+        // core carries the key, and the place says its line.
+        for judgments in [vec![], vec![native("0")], vec![native("0"), native("-0")]] {
+            let key = core_key(&judgments);
+            assert_eq!(key, Some(KEY_NO_CHANGE));
+            assert!(quiet(&landed(&judgments, key)));
+        }
+        assert_eq!(s.sim_no_change.as_ref(), "No asset changes");
+
+        // Something moves: no key, the card with its row.
+        let moves = [native("-10000000000000000")];
+        assert_eq!(core_key(&moves), None);
+        assert!(matches!(
+            landed(&moves, None),
+            Some(Block::Balances { rows, note: None, .. }) if rows.len() == 1
+        ));
+
+        // No row to draw and NO key. A move nobody can write is not "nothing
+        // moves" — the core gives it no key, and the place says the core's
+        // could-not-check caution: never the quiet card, never an empty one.
+        let unreadable = [native("soon")];
+        assert_eq!(core_key(&unreadable), None);
+        assert!(could_not_check(&landed(&unreadable, None)));
+        // The same for a judgment that never came (the worker gone, the view
+        // not ready): no judgments and no key.
+        assert!(could_not_check(&landed(&[], None)));
+
+        // The core's notice outranks everything: a revert moves nothing and
+        // is never "no asset changes".
+        let revert = vela_core::app::sim_outcome::notice(
+            &vela_core::app::sim_outcome::SimOutcome::Reverts { reason: None },
+        );
+        let Some(Block::Verdict { inner, .. }) = verdict_block(
+            SimStage::Landed,
+            &[],
+            revert.as_ref(),
+            Some(KEY_NO_CHANGE),
+            None,
+            1,
+            &s,
+        ) else {
+            unreachable!("a place");
+        };
+        assert!(matches!(
+            inner.first(),
+            Some(Block::Warning {
+                tone: Tone::Danger,
+                ..
+            })
+        ));
+
+        // And the executor's own shortcut for a check with no move in it
+        // asks the core's rule, not its own.
+        let judged = crate::executor::token_trust::judge("0xabc", 1, Vec::new());
+        assert!(judged.judgments.is_empty());
+        assert_eq!(judged.no_change_key.as_deref(), Some(KEY_NO_CHANGE));
+        // Nobody judged: no line.
+        assert_eq!(
+            crate::executor::token_trust::Judged::default().no_change_key,
+            None
+        );
+    }
+
+    /// PR 3 fix C: the place while the confirm's wait has run out. The
+    /// simulation is still out — no answer of its own — and the core names
+    /// the sentence that stands there meanwhile (`sim_waited_out_key`): the
+    /// could-not-check caution, the very block a node that could not check
+    /// draws, in place of "Checking…". One block in the one place, so it is
+    /// no taller than the room the sheet already kept. The key says nothing
+    /// once an answer is in: the answer is drawn.
+    #[test]
+    fn a_waited_out_verdict_says_could_not_check_in_the_same_place() {
+        use vela_core::app::sim_outcome::{KEY_UNAVAILABLE, SimOutcome, notice};
+        let s = strings();
+        let place = |stage, notice: Option<&vela_core::app::sim_outcome::SimNotice>, key| {
+            let Some(Block::Verdict { inner, landed }) =
+                verdict_block(stage, &[], notice, None, key, 1, &s)
+            else {
+                unreachable!("a place");
+            };
+            assert_eq!(inner.len(), 1);
+            (inner.into_iter().next(), landed)
+        };
+
+        // Out, and still waited for: "Checking…", nothing to bring into view.
+        let (checking, landed) = place(SimStage::Out, None, None);
+        assert!(matches!(
+            checking,
+            Some(Block::Balances { rows, note: Some(note), .. })
+                if rows.is_empty() && note == s.sim_checking
+        ));
+        assert!(!landed);
+
+        // Out, and waited out: the caution — the same block and tone as a
+        // node that answered "not offered".
+        let (waited, landed) = place(SimStage::Out, None, Some(KEY_UNAVAILABLE));
+        let not_offered = notice(&SimOutcome::NotOffered);
+        let (offered, _) = place(SimStage::Landed, not_offered.as_ref(), None);
+        let said = |block: &Option<Block>| match block {
+            Some(Block::Warning { tone, text }) => Some((*tone, text.clone())),
+            _ => None,
+        };
+        assert_eq!(
+            said(&waited),
+            Some((Tone::Caution, s.warn_sim_unavailable.clone()))
+        );
+        assert_eq!(said(&waited), said(&offered));
+        assert!(landed, "it is something to read: brought into view");
+        // The sentence is the one the core's key names.
+        assert_eq!(
+            s.warn_sim_unavailable,
+            crate::loc::Loc::for_language("en").t(KEY_UNAVAILABLE)
+        );
+
+        // An answer that is in is drawn, whatever the key says.
+        let revert = notice(&SimOutcome::Reverts { reason: None });
+        let (danger, _) = place(SimStage::Landed, revert.as_ref(), Some(KEY_UNAVAILABLE));
+        assert_eq!(said(&danger).map(|(tone, _)| tone), Some(Tone::Danger));
+        // And a request nothing simulates keeps no place, key or no key.
+        assert!(
+            verdict_block(
+                SimStage::NotAsked,
+                &[],
+                None,
+                None,
+                Some(KEY_UNAVAILABLE),
+                1,
+                &s
+            )
+            .is_none()
+        );
+    }
+
+    /// The place's LEAST height: a send's card (one row) and a swap's (two)
+    /// land in room the sheet already kept, so the usual verdict moves
+    /// nothing. In the text's own sizes, so at every text scale. It is a
+    /// minimum and no limit — what is taller is shown whole (the device
+    /// round's rule; the drawn column is measured for it,
+    /// `VELA_LAYOUT_PROBE`).
+    #[test]
+    fn the_least_room_holds_the_usual_verdict() {
+        // The smallest, the standard and the largest text size (the core's
+        // factors run 0.85 to 1.35), without touching the setting itself.
+        for factor in [0.85_f32, 1., 1.35] {
+            let at = |rows: f32| {
+                balance_card_height_at(rows, gpui::px(13. * factor), gpui::px(15. * factor))
+            };
+            let room = at(2.5);
+            assert!(room > at(1.), "×{factor}: a send's card fits");
+            assert!(room > at(2.), "×{factor}: a swap's card fits");
+            // Three rows do not: that verdict grows the place.
+            assert!(room < at(3.), "×{factor}");
+        }
+        // The room IS that arithmetic, at the size in force — the height
+        // round 3 reserved, not re-tuned.
+        assert_eq!(verdict_room_height(), balance_card_height(2.5));
+        // At the standard size: 116.7 px.
+        let standard: f32 = balance_card_height_at(2.5, gpui::px(13.), gpui::px(15.)).into();
+        assert!((standard - 116.7).abs() < 0.05, "{standard}");
+    }
+
+    /// The warning under an unverified token is the card's own note, once,
+    /// in the caution's colour — and a card with no such token has none.
+    #[test]
+    fn an_unverified_token_puts_one_warning_under_the_card() {
+        use vela_core::app::token_trust::{TrustSimDirection, TrustSimJudgment as J};
+        let s = strings();
+        // As the core judges a simulated figure: its direction, and no more.
+        let unverified = |delta: &str| J::Erc20Unverified {
+            token: Some("0xbad".to_owned()),
+            direction: TrustSimDirection::of_delta(delta),
+        };
+        let native = J::Native {
+            delta: "-10000000000000000".to_owned(),
+        };
+        let note = |judgments: &[J]| match sim_blocks(judgments, None, 1, &s).into_iter().next() {
+            Some(Block::Balances {
+                rows,
+                note,
+                note_tone,
+                ..
+            }) => (rows.len(), note, note_tone),
+            _ => unreachable!("a balances block"),
+        };
+        assert_eq!(
+            note(std::slice::from_ref(&native)),
+            (1, None, Tone::Neutral)
+        );
+        assert_eq!(
+            note(&[native.clone(), unverified("5")]),
+            (2, Some(s.warn_unverified_amount.clone()), Tone::Caution)
+        );
+        // Two of them: still one warning.
+        assert_eq!(
+            note(&[unverified("5"), unverified("-7"), native]),
+            (3, Some(s.warn_unverified_amount.clone()), Tone::Caution)
+        );
     }
 }
 
@@ -898,33 +1388,111 @@ mod sim_block_tests {
         assert_eq!(rows[1].2, Tone::Success);
     }
 
-    /// An unverified inflow shows a DIRECTION and never a figure.
+    /// An unverified token is a DIRECTION and never a figure (PR 3 fix B).
     ///
     /// This is the whole asymmetry: a site can emit any `Transfer` it likes
     /// from a contract it controls, so "+1,000,000 SAFEMOON" on a signing
-    /// sheet would be the attacker writing the wallet's own reassurance.
+    /// sheet would be the attacker writing the wallet's own reassurance —
+    /// Android's sheet printed 「未验证代币 +5,000,000,000,000,000,000,000.00」.
+    ///
+    /// The figure here goes the way a real one does: a simulated delta of
+    /// 5000000000000000000000, judged by the core (`judge_delta`, the token
+    /// trusted by nobody), drawn by this builder. What is drawn is the label
+    /// and "+", and no digit of the figure stands anywhere in the verdict's
+    /// place; an outflow draws "−"; a zero draws no row; a figure nobody
+    /// could read keeps its row and its caution with no sign.
     #[test]
-    fn an_unverified_inflow_carries_no_number() {
-        let s = strings();
-        let blocks = sim_blocks(
-            &[J::Erc20Unverified {
-                token: Some("0xbad".to_owned()),
-                delta: "1000000000000000000000000".to_owned(),
-            }],
-            None,
-            100,
-            &s,
-        );
-        let Some(Block::Balances { rows, .. }) = blocks.first() else {
-            unreachable!("a balances block");
+    fn an_unverified_token_draws_its_direction_and_no_figure() {
+        use vela_core::app::token_trust::{
+            TrustAssetDelta, TrustDeltaKind, TrustSimDirection as Direction, judge_delta,
         };
-        assert_eq!(rows[0].0, s.balance_unverified_token);
-        assert_eq!(rows[0].1, "+", "a direction, not an amount");
-        assert!(
-            !rows[0].1.contains('1'),
-            "no attacker digits: {}",
-            rows[0].1
+        const LURE: &str = "5000000000000000000000";
+        let s = strings();
+        // No metadata, and in nobody's trusted set: a token nobody vouches
+        // for, whichever way it moves.
+        let judged = |delta: &str| {
+            judge_delta(
+                &TrustAssetDelta {
+                    kind: TrustDeltaKind::Erc20,
+                    token: Some("0xbad0000000000000000000000000000000000bad".to_owned()),
+                    delta: delta.to_owned(),
+                },
+                None,
+                false,
+            )
+        };
+        let unverified = |direction| J::Erc20Unverified {
+            token: Some("0xbad0000000000000000000000000000000000bad".to_owned()),
+            direction,
+        };
+        // Everything the verdict's place draws for these judgments, as text.
+        let drawn = |judgments: &[J]| {
+            let Some(Block::Verdict { inner, .. }) =
+                verdict_block(SimStage::Landed, judgments, None, None, None, 100, &s)
+            else {
+                unreachable!("a place");
+            };
+            let rows = match inner.first() {
+                Some(Block::Balances { rows, .. }) => rows.clone(),
+                _ => Vec::new(),
+            };
+            (rows, verdict_said(&inner))
+        };
+
+        // The inflow: the label and "+", in the caution's colour.
+        let inflow = judged(LURE);
+        assert_eq!(inflow, unverified(Direction::In));
+        let (rows, said) = drawn(std::slice::from_ref(&inflow));
+        assert_eq!(
+            rows,
+            vec![(
+                s.balance_unverified_token.clone(),
+                SharedString::from("+"),
+                Tone::Caution
+            )]
         );
+        assert!(
+            !said.chars().any(|c| c.is_ascii_digit()),
+            "no digit of the figure, nor any other: {said}"
+        );
+        assert!(!said.contains(LURE) && !said.contains("5,000"));
+        assert!(said.contains(s.warn_unverified_amount.as_ref()));
+
+        // The outflow: U+2212, the minus every figure on this sheet wears.
+        let outflow = judged(&format!("-{LURE}"));
+        assert_eq!(outflow, unverified(Direction::Out));
+        let (rows, said) = drawn(std::slice::from_ref(&outflow));
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].1, "\u{2212}");
+        assert_eq!(rows[0].2, Tone::Caution);
+        assert!(!said.chars().any(|c| c.is_ascii_digit()), "{said}");
+
+        // A move of nothing is no row — beside a row that is one.
+        let native = J::Native {
+            delta: "-10000000000000000".to_owned(),
+        };
+        assert_eq!(judged("0"), unverified(Direction::Still));
+        let (rows, said) = drawn(&[native, unverified(Direction::Still)]);
+        assert_eq!(rows.len(), 1, "the zero is not drawn");
+        assert_ne!(rows[0].0, s.balance_unverified_token);
+        assert!(
+            !said.contains(s.warn_unverified_amount.as_ref()),
+            "and no warning stands under a card with no such row"
+        );
+
+        // A figure nobody could read: the row with its label and caution,
+        // and no sign — never "+", which would be a direction nobody read.
+        assert_eq!(judged("lots"), unverified(Direction::Unreadable));
+        let (rows, said) = drawn(&[unverified(Direction::Unreadable)]);
+        assert_eq!(
+            rows,
+            vec![(
+                s.balance_unverified_token.clone(),
+                SharedString::default(),
+                Tone::Caution
+            )]
+        );
+        assert!(said.contains(s.warn_unverified_amount.as_ref()));
     }
 
     /// "Could not check" and "checked, nothing moves" are different sentences,
@@ -2423,9 +2991,9 @@ mod tests {
         );
     }
 
-    /// The wallet's own key backup speaks the reader's language through the
-    /// core's terms alone: its intent, then Network / Address / Public keys,
-    /// in that order. Nothing relabels by position — that swap put
+    /// The copy of the wallet's record speaks the reader's language through
+    /// the core's terms alone: its intent, then Network / Address / Wallet
+    /// name / Keys included, in that order. Nothing relabels by position — that swap put
     /// "Registered as" over whichever row came first, which is the Network
     /// row now. The confirm says the intent too, not a generic "Confirm".
     #[test]
@@ -2450,14 +3018,15 @@ mod tests {
             (intent, rows)
         };
         let (intent, rows) = rows_of(1);
-        assert_eq!(intent, "备份公钥");
+        assert_eq!(intent, "复制钱包记录");
         let labels: Vec<&str> = rows.iter().map(|(label, _)| label.as_str()).collect();
-        assert_eq!(labels, ["网络", "地址", "公钥数量"]);
+        assert_eq!(labels, ["网络", "地址", "钱包名称", "包含的钥匙"]);
         assert_eq!(rows[0].1, "Ethereum", "the network the header chip said");
-        assert_eq!(rows[2].1, "3");
+        assert_eq!(rows[2].1, "Interleave", "the name the copy makes public");
+        assert_eq!(rows[3].1, "3");
         assert_eq!(
             confirm_label(&registry_backup_reading(1), &zh).as_ref(),
-            "备份公钥",
+            "复制钱包记录",
             "the confirm says what it does, and nothing else"
         );
         // The rehearsal chain names itself the same way.

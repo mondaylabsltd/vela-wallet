@@ -65,6 +65,13 @@ pub enum SignAnswer {
     Blocking(Box<dyn FnOnce() -> SignShellResult + Send>),
     /// Reports events on the way and settles once — the submit.
     Streaming(Box<dyn FnOnce(&crate::resident::Sink<Event>) -> SignShellResult + Send>),
+    /// Answered once this long has passed, and by nothing else — a timer the
+    /// core asked for (PR 3: the deadline of the wait for the simulation's
+    /// verdict). The same seam as the other machines' timers
+    /// ([`crate::resident::Answer::After`]): the host waits on gpui's timer
+    /// and hands the answer back; a test holds it and gives it when it
+    /// chooses — the clock stopped.
+    After(Duration, SignShellResult),
     /// Not this module's business: the transport belongs to whoever raised the
     /// request (the browser column today), and only the host knows which.
     Screen,
@@ -352,6 +359,20 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
                 SignShellResult::RecordUpdated
             }))
         }
+
+        // PR 3 fix C: the deadline of the wait the confirm keeps for the
+        // simulation's verdict (`SIM_VERDICT_WAIT_MS`). A timer and nothing
+        // else. How long is the core's; so is what its passing means. This
+        // does not look at the simulation, does not shorten the wait, and
+        // answers whatever has become of the request — a stale answer is
+        // dropped by the core, by its `id` and `round`.
+        SignOperation::SimVerdictTimer { id, round, ms } => SignAnswer::After(
+            Duration::from_millis(u64::from(*ms)),
+            SignShellResult::SimVerdictTimerFired {
+                id: id.clone(),
+                round: *round,
+            },
+        ),
 
         SignOperation::SwitchActiveAccount { index } => {
             let index = *index;
@@ -1034,6 +1055,12 @@ fn stored_value(value: Option<&Value>) -> String {
 /// unverified one with neither and `unverified: true`. No `ok`: this
 /// shell's simulation gives no revert verdict, so the row claims none.
 /// `activity_feed::stored_changes` reads it back.
+///
+/// An unverified token's line keeps its `direction` and NO `delta` (PR 3):
+/// the judgment carries no figure — the simulation's number for a token
+/// nobody vouches for is whatever the site being signed for chose to emit —
+/// so there is none to store. A row stored before that still holds a
+/// `delta` there; the reader takes its direction and drops the figure.
 fn stored_changes(
     changes: &[vela_core::app::token_trust::TrustSimJudgment],
     chain_id: u32,
@@ -1070,8 +1097,12 @@ fn stored_changes(
                 }
                 line
             }
-            J::Erc20Unverified { token, delta } => {
-                let mut line = json!({ "kind": "erc20", "delta": delta, "unverified": true });
+            J::Erc20Unverified { token, direction } => {
+                let mut line = json!({
+                    "kind": "erc20",
+                    "direction": direction,
+                    "unverified": true,
+                });
                 if let Some(token) = token {
                     line["token"] = json!(token);
                 }
@@ -2324,6 +2355,59 @@ mod tests {
         });
     }
 
+    /// PR 3 fix C: the simulation verdict's deadline is a timer and nothing
+    /// else. The executor answers `sim_verdict_timer` after exactly the
+    /// `ms` the core named — never its own number — with the same `id` and
+    /// `round`, in the wire's own words; it reads nothing of the request to
+    /// do so, so it answers the same when the page has gone, the pipeline
+    /// was abandoned, or the request is one this column never held.
+    #[test]
+    fn the_sim_verdict_timer_is_a_timer_and_nothing_else() {
+        let timer = |id: &str, round: u32, ms: u32| SignOperation::SimVerdictTimer {
+            id: id.to_owned(),
+            round,
+            ms,
+        };
+        let answered = |operation: &SignOperation, ctx: &SignContext| match perform(operation, ctx)
+        {
+            SignAnswer::After(delay, result) => (delay, result),
+            _ => unreachable!("the deadline is a timer"),
+        };
+
+        let ctx = context(Some("https://app.uniswap.org"));
+        let (delay, fired) = answered(
+            &timer(
+                "rid-1",
+                3,
+                vela_core::app::sign_request::SIM_VERDICT_WAIT_MS,
+            ),
+            &ctx,
+        );
+        assert_eq!(delay, Duration::from_millis(4_000));
+        assert_eq!(
+            serde_json::to_value(&fired).ok(),
+            Some(json!({ "type": "sim_verdict_timer_fired", "id": "rid-1", "round": 3 }))
+        );
+        // The length is the core's, whatever it is.
+        assert_eq!(
+            answered(&timer("rid-1", 4, 250), &ctx).0,
+            Duration::from_millis(250)
+        );
+
+        // Whatever has become of the request: the page gone, the column
+        // closed before the signature, the core's answer already out.
+        let gone = context(Some("https://app.uniswap.org"));
+        gone.asker_left();
+        gone.core_answered();
+        gone.abandoned.store(true, Ordering::SeqCst);
+        let (delay, fired) = answered(&timer("another-request", 9, 4_000), &gone);
+        assert_eq!(delay, Duration::from_millis(4_000));
+        assert!(matches!(
+            fired,
+            SignShellResult::SimVerdictTimerFired { ref id, round: 9 } if id == "another-request"
+        ));
+    }
+
     /// Spec 082 RG3 (T072): every background record write — the pending
     /// record, its close — pokes the feed once, on the tracker's next tick.
     #[test]
@@ -3099,9 +3183,13 @@ mod tests {
                 "0x0",
                 vec![
                     usdc("-100000"),
+                    // As the core judges a simulated +1,000,000 × 10¹⁸ of a
+                    // token nobody vouches for: its direction, and no figure.
                     vela_core::app::token_trust::TrustSimJudgment::Erc20Unverified {
                         token: Some("0x00000000000000000000000000000000000bad01".to_owned()),
-                        delta: "1000000000000000000000000".to_owned(),
+                        direction: vela_core::app::token_trust::TrustSimDirection::of_delta(
+                            "1000000000000000000000000",
+                        ),
                     },
                 ],
                 "",
@@ -3116,6 +3204,22 @@ mod tests {
             assert!(
                 stored[0].get("assetChanges").is_none(),
                 "nothing the page sent"
+            );
+            // PR 3 fix B: the unverified line is stored as a direction — the
+            // record holds no figure for it, because nobody handed it one.
+            assert_eq!(
+                stored[1]["assetChanges"]["changes"][1],
+                json!({
+                    "kind": "erc20",
+                    "direction": "in",
+                    "unverified": true,
+                    "token": "0x00000000000000000000000000000000000bad01",
+                })
+            );
+            assert!(
+                !stored[1]["assetChanges"]
+                    .to_string()
+                    .contains("1000000000000")
             );
 
             let mut host = CoreHost::<ActivityFeed>::new();

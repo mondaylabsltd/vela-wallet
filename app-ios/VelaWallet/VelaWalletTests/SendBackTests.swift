@@ -19,7 +19,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(3)))
+@Suite(.hangLimit)
 struct SendBackTests {
 
     private let me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
@@ -318,5 +318,43 @@ struct SendBackTests {
         #expect(SendLive.back(try view("receipt")) == .leave)
         #expect(SendLive.back(try view("lock_resolving")) == .leave)
         #expect(SendLive.back(try view("lock_error")) == .leave)
+    }
+
+    // MARK: - Send's "add this network" answers at once (final notes F6/F27)
+
+    /// A code for a chain this wallet does not have. Nothing on this shell
+    /// raises `add_network_tapped` (a known gap: the notice draws no "Add
+    /// this network"), but if the core is ever asked, the answer comes AT
+    /// ONCE — never a ten-second wait — and the form says the core's own
+    /// sentence for an add that did not happen, over the lock it could not
+    /// lift.
+    @Test func anAddNetworkAskIsAnsweredAtOnceInTheCoresSentence() async throws {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let send = try store()
+        await open(send)
+        await scan(send, "ethereum:\(payee)@480")
+        let locked = try #require(send.view)
+        #expect(locked.lockError == .network(chainId: 480), "\(String(describing: locked.lockError))")
+        #expect(SendLive.lockNotice(locked, loc: loc)?.text.hasPrefix("Network not supported") == true)
+
+        send.dispatch(["type": "add_network_tapped", "chain_id": 480])
+        await Wait.until({ send.view?.addNetworkMsg != nil }, orIdle: { send.isIdle })
+        let answered = try #require(send.view)
+        #expect(answered.addNetworkMsg == .netAddError)
+        #expect(!answered.addingNetwork, "the form is still \"adding\"")
+        // "At once" is held by the type, not by a clock (a wall-clock bound
+        // took 12.6 s on CI's runner over an answer that was right):
+        // `theAddNetworkAnswerCannotWait` below.
+        #expect(SendLive.lockNotice(answered, loc: loc)?.text == "Couldn't add the network. Please try again.")
+        // The lock stands — the person is not sent on to an empty form.
+        #expect(answered.lockError == .network(chainId: 480))
+    }
+
+    /// The answer is made by a synchronous function, called here with no
+    /// `await`: there is nowhere on that path for a wait to be.
+    @Test func theAddNetworkAnswerCannotWait() throws {
+        let answer = try CoreJSON.object(SendExecutor.addNetworkAnswer())
+        #expect(answer["type"] as? String == "network_added")
+        #expect((answer["outcome"] as? [String: Any])?["type"] as? String == "error")
     }
 }

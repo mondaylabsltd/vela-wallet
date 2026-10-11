@@ -17,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import app.getvela.wallet.core.designsystem.components.VelaAddressStrip
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
 import app.getvela.wallet.core.designsystem.components.VelaTextField
@@ -26,7 +25,6 @@ import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
-import app.getvela.wallet.feature.flows.components.QrCard
 
 /**
  * Spec 048: the sheets the contacts machine had no doors to on the phone —
@@ -116,25 +114,6 @@ fun GroupDeleteConfirmSheet(
         VelaPrimaryButton(confirmLabel, onClick = onConfirm, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         VelaSecondaryButton(cancelLabel, onClick = onDismiss, modifier = Modifier.fillMaxWidth())
-    }
-}
-
-@Composable
-fun ContactQrSheet(
-    name: String,
-    address: String,
-    copyLabel: String,
-    copiedLabel: String,
-    closeLabel: String,
-    onDismiss: () -> Unit,
-) {
-    ContactsSheet(onDismiss) {
-        SheetTitle(name)
-        QrCard(label = name, payload = address)
-        Spacer(modifier = Modifier.height(VelaSpacing.xl))
-        VelaAddressStrip(address = address, copyLabel = copyLabel, copiedLabel = copiedLabel, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(VelaSpacing.xl))
-        VelaSecondaryButton(closeLabel, onClick = onDismiss, modifier = Modifier.fillMaxWidth())
     }
 }
 

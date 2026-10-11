@@ -206,7 +206,7 @@ pub fn text_field(
                 .mt(px(FLOW_GAP_SM))
                 .text_size(theme::text_flow_caption())
                 .text_color(theme.error_base)
-                .child(strings.too_long_hint.clone()),
+                .child(crate::ui::prose(strings.too_long_hint.clone())),
         );
     }
     if strings.helper.is_empty() {
@@ -218,7 +218,7 @@ pub fn text_field(
             .text_size(theme::text_flow_caption())
             .line_height(theme::line_height_body())
             .text_color(theme.fg_muted)
-            .child(strings.helper.clone()),
+            .child(super::prose(strings.helper.clone())),
     )
 }
 

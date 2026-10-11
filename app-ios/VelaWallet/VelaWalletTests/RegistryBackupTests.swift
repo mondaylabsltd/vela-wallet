@@ -8,9 +8,16 @@
 //  `nil` a silence), that a call is only ever offered with "not backed up",
 //  and that the row is a button only while there is something to do.
 //
+//  PR 3: the row is the CORE's (`BackupState::row`) — its words, its tone
+//  and what a tap does ride on the finished step, and the shell hands them
+//  on. "Not copied yet" is neutral and optional; "couldn't check" asks again
+//  (iOS had no retry); a wallet that can never be copied is a calm end, never
+//  a "could not check" that retries for ever.
+//
 
 import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -27,7 +34,27 @@ struct RegistryBackupTests {
 
     private func done(_ state: String, withCall: Bool = false) -> String {
         let call = withCall ? #"{"chain_id":1,"to":"0xreg","value":"0","data":"0xcd438f9b"}"# : "null"
-        return #"{"type":"done","state":"\#(state)","call":\#(call),"unit_id":10}"#
+        // The row the core attaches to each state (`BackupState::row`); none
+        // for the two states that draw nothing.
+        let rows: [String: (String, String, String)] = [
+            "backed_up": ("backedUp", "positive", "none"),
+            "not_backed_up": ("notBackedUp", "neutral", "copy"),
+            "could_not_check": ("couldNotCheck", "neutral", "retry"),
+            "not_copyable": ("cannotCopy", "neutral", "none"),
+        ]
+        // …and its paragraph (`explain_key`, PR 3 note 6): every state but
+        // the one that can never be copied, where the key is left out.
+        let row = rows[state].map { subtitle, tone, action in
+            let explain = state == "not_copyable" ? "" : #","explain_key":"settingsModals.backup.explain""#
+            return #","row":{"title_key":"settingsModals.backup.title","subtitle_key":"settingsModals.backup.\#(subtitle)","tone":"\#(tone)","action":"\#(action)"\#(explain)}"#
+        } ?? ""
+        return #"{"type":"done","state":"\#(state)","call":\#(call),"unit_id":10\#(row)}"#
+    }
+
+    /// A finished check in `state`, as the transport reads the core's step.
+    private func check(_ state: String) async -> RegistryBackup.Check {
+        await backup(Script([done(state, withCall: state == "not_backed_up")]))
+            .check(address: "0xsafe", foundingKeyHex: "04ab")
     }
 
     private func backup(_ script: Script, chain: @escaping (Int) -> String? = { _ in "0x" }) -> RegistryBackup {
@@ -61,6 +88,8 @@ struct RegistryBackupTests {
         let table: [(String, RegistryBackup.State)] = [
             ("unavailable", .unavailable), ("not_registered", .notRegistered),
             ("backed_up", .backedUp), ("could_not_check", .couldNotCheck),
+            // Its own state: read as "could not check" it retried for ever.
+            ("not_copyable", .notCopyable),
             ("something new", .couldNotCheck),
         ]
         for (wire, state) in table {
@@ -74,27 +103,137 @@ struct RegistryBackupTests {
         #expect(bare.state == .couldNotCheck)
     }
 
+    /// The core's row rides on the finished step and is handed on as it
+    /// came: the corpus keys, the tone, and what a tap does.
+    @Test func theCoresRowIsHandedOnAsItCame() async {
+        let title = "settingsModals.backup.title"
+        let explain = "settingsModals.backup.explain"
+        #expect(await check("backed_up").row == RegistryBackup.Row(
+            titleKey: title, subtitleKey: "settingsModals.backup.backedUp", tone: .positive, action: .none,
+            explainKey: explain))
+        #expect(await check("not_backed_up").row == RegistryBackup.Row(
+            titleKey: title, subtitleKey: "settingsModals.backup.notBackedUp", tone: .neutral, action: .copy,
+            explainKey: explain))
+        #expect(await check("could_not_check").row == RegistryBackup.Row(
+            titleKey: title, subtitleKey: "settingsModals.backup.couldNotCheck", tone: .neutral, action: .retry,
+            explainKey: explain))
+        // The one state with no paragraph: nothing can be copied.
+        #expect(await check("not_copyable").row == RegistryBackup.Row(
+            titleKey: title, subtitleKey: "settingsModals.backup.cannotCopy", tone: .neutral, action: .none,
+            explainKey: nil))
+        // Nothing is drawn where there is nothing to copy to, or from.
+        #expect(await check("unavailable").row == nil)
+        #expect(await check("not_registered").row == nil)
+        // A silence this transport caused has no core row to hand on: its
+        // own "could not check", which asks again.
+        let unread = await backup(Script(["not json"])).check(address: "0xsafe", foundingKeyHex: "04ab")
+        #expect(unread.state == .couldNotCheck)
+        #expect(unread.row == .couldNotCheck)
+        #expect(unread.row?.action == .retry)
+        // A tone or an action this build has never heard of is the quiet one.
+        let odd = RegistryBackup.Row(json: [
+            "title_key": title, "subtitle_key": "settingsModals.backup.backedUp", "tone": "sparkly", "action": "explode",
+        ])
+        #expect(odd?.tone == .neutral && odd?.action == RegistryBackup.Row.Action.none)
+        #expect(RegistryBackup.Row(json: ["title_key": title]) == nil)
+    }
+
+    /// The REAL core, with nobody answering: "could not check", and its row
+    /// under the names this transport reads — a rename there would leave the
+    /// row with nothing to tap again.
+    @Test func theRealCoreWordsASilenceAsARetry() async {
+        let silent = await RegistryBackup(ethCall: { _, _, _ in nil })
+            .check(address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                   foundingKeyHex: "04" + String(repeating: "ab", count: 64))
+        #expect(silent.state == .couldNotCheck)
+        #expect(silent.row == .couldNotCheck, "the core's row is not the one this file falls back to")
+        let row = SettingsLive.ethereumBackupRow(silent, loc: loc)
+        #expect(row?.subtitle == "Couldn't check. Tap to try again.")
+        #expect(row?.trailing == .retry)
+    }
+
     private var loc: Loc { Loc(overrideTag: "en", preferredLanguages: []) }
     private var base: SettingsScreenModel { SettingsFixtures.build(.st1, loc: loc) }
 
-    @Test func theBackupRowIsAButtonOnlyWhileThereIsSomethingToDo() {
-        func row(_ state: RegistryBackup.State?) -> SettingsRowModel? {
-            SettingsLive.ethereumBackupRow(state, loc: loc)
+    /// PR 3 note 6 — the paragraph under the row is the core's to give
+    /// (`BackupRow.explain_key`): the explanation while the walk runs and
+    /// for every state a copy can still be made or checked in; NOTHING under
+    /// a wallet that can never be copied — it told somebody how to make a
+    /// copy the row above had just said cannot be made. No row, no paragraph.
+    @Test func theExplanationIsTheCoresAndAWalletThatCannotBeCopiedHasNone() async {
+        let keys = WalletKeys.Result(source: .registry, rows: [key("Mine")])
+        func explain(_ check: RegistryBackup.Check?) -> String? {
+            SettingsLive.withWalletKeys(keys, backup: check, on: base, loc: loc).keys?.backupExplain
+        }
+        let words = loc.t("settingsModals.backup.explain")
+        #expect(words != "settingsModals.backup.explain" && !words.isEmpty)
+
+        // Still asking: the explanation, as before.
+        #expect(explain(nil) == words)
+        for state in ["backed_up", "not_backed_up", "could_not_check"] {
+            #expect(explain(await check(state)) == words, "\(state) lost its explanation")
+        }
+        // The calm end: its row, and no paragraph.
+        let never = await check("not_copyable")
+        #expect(never.row != nil && never.row?.explainKey == nil)
+        #expect(explain(never) == nil, "a wallet that cannot be copied is still told how to copy")
+        #expect(SettingsLive.withWalletKeys(keys, backup: never, on: base, loc: loc).keys?.backup?.subtitle
+                == "This older wallet can't be copied")
+        // A silence this transport caused keeps the paragraph: asking again may answer.
+        #expect(explain(RegistryBackup.Check(state: .couldNotCheck, call: nil, row: .couldNotCheck)) == words)
+        // (That the REAL core writes the key under the name this file reads
+        // is `theRealCoreWordsASilenceAsARetry`: its row equals this file's
+        // own, paragraph and all.)
+        #expect(RegistryBackup.Row.couldNotCheck.explainKey == "settingsModals.backup.explain")
+    }
+
+    /// The row reads the core's words, tone and action. "Not copied yet" is
+    /// neutral — a copy is optional and costs a fee — and the only state
+    /// with a chevron; "couldn't check" asks again; a wallet that can never
+    /// be copied is a calm end with nothing to tap.
+    @Test func theBackupRowIsTheCoresWordsToneAndAction() async {
+        func row(_ state: String?) async -> SettingsRowModel? {
+            guard let state else { return SettingsLive.ethereumBackupRow(nil, loc: loc) }
+            return SettingsLive.ethereumBackupRow(await check(state), loc: loc)
         }
         // Dark where there is nothing to offer.
-        #expect(row(.unavailable) == nil)
-        #expect(row(.notRegistered) == nil)
+        #expect(await row("unavailable") == nil)
+        #expect(await row("not_registered") == nil)
 
-        #expect(row(nil)?.id == SettingsLive.ethereumBackupRow)
-        #expect(row(nil)?.title == "Back up public keys to Ethereum")
-        #expect(row(nil)?.subtitle == "Checking…")
-        #expect(row(.backedUp)?.subtitle == "Backed up on Ethereum")
-        #expect(row(.notBackedUp)?.subtitle == "Not backed up yet")
-        #expect(row(.couldNotCheck)?.subtitle == "Could not check")
-        #expect(row(.notBackedUp)?.trailing == .chevron)
-        for quiet in [nil, RegistryBackup.State.backedUp, .couldNotCheck] {
-            #expect(row(quiet)?.trailing == RowTrailing.none)
-        }
+        let asking = await row(nil)
+        #expect(asking?.id == SettingsLive.ethereumBackupRow)
+        #expect(asking?.title == "Copy this wallet's record to Ethereum")
+        #expect(asking?.subtitle == "Checking…")
+        #expect(asking?.trailing == RowTrailing.none)
+
+        let copied = await row("backed_up")
+        #expect(copied?.subtitle == "Copied to Ethereum")
+        #expect(copied?.subtitleTone == .positive)
+        #expect(copied?.trailing == RowTrailing.none)
+
+        let notYet = await row("not_backed_up")
+        #expect(notYet?.title == "Copy this wallet's record to Ethereum")
+        #expect(notYet?.subtitle == "Not copied yet (optional)")
+        #expect(notYet?.subtitleTone == .standard, "an optional, paid copy is not a warning")
+        #expect(notYet?.trailing == .chevron)
+
+        let silent = await row("could_not_check")
+        #expect(silent?.subtitle == "Couldn't check. Tap to try again.")
+        #expect(silent?.subtitleTone == .standard)
+        #expect(silent?.trailing == .retry, "the row said to tap and had nothing to tap")
+
+        let never = await row("not_copyable")
+        #expect(never?.subtitle == "This older wallet can't be copied")
+        #expect(never?.subtitleTone == .standard)
+        #expect(never?.trailing == RowTrailing.none, "a state that never changes offers nothing to retry")
+
+        // The same row in the reader's language.
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let drawn = SettingsLive.ethereumBackupRow(await check("not_backed_up"), loc: zh)
+        #expect(drawn?.title == "把钱包记录复制到以太坊")
+        #expect(drawn?.subtitle == "尚未复制（可选）")
+        #expect(SettingsLive.ethereumBackupRow(await check("not_copyable"), loc: zh)?.subtitle
+                == "这个较早创建的钱包无法复制")
     }
 
     private func key(
@@ -111,13 +250,13 @@ struct RegistryBackupTests {
         )
     }
 
-    @Test func theKeysBlockNamesEveryKeyAndBadgesOnlyWhatItCanVouchFor() {
+    @Test func theKeysBlockNamesEveryKeyAndBadgesOnlyWhatItCanVouchFor() async {
         let registry = WalletKeys.Result(source: .registry, rows: [
             key("Interleave", provider: "Apple Passwords"),
             key(method: .securityKey, synced: false),
             key(method: .hybrid),
         ])
-        let live = SettingsLive.withWalletKeys(registry, backup: .notBackedUp, on: base, loc: loc)
+        let live = SettingsLive.withWalletKeys(registry, backup: await check("not_backed_up"), on: base, loc: loc)
         let block = live.keys
         #expect(block?.title == "Keys")
         #expect(block?.count == "3")
@@ -127,7 +266,15 @@ struct RegistryBackupTests {
         #expect(block?.rows.map(\.holder) == ["Apple Passwords", "Security key", "Phone or tablet"])
         #expect(block?.rows.map { $0.pills.map(\.text) } == [["Cloud-synced"], ["Device-bound"], ["Cloud-synced"]])
         #expect(block?.rows.first?.details.map(\.label) == ["Public key", "Transport"])
-        #expect(block?.backupExplain.contains("Private keys never leave") == true)
+        // What a copy is, said whole: what is already public (the name and
+        // every key's name among it), that it is a transaction the person
+        // pays for, and that it moves no money and recovers nothing.
+        let explain = block?.backupExplain ?? ""
+        for said in ["its address and name", "credential ID", "pay its network fee",
+                     "can't move money or bring back a lost passkey"] {
+            #expect(explain.contains(said), "the explanation no longer says \"\(said)\"")
+        }
+        #expect(!explain.contains("Only public keys"), "the old under-statement is back")
         #expect(block?.rows.first?.fingerprint == "abab…abab")
         #expect(block?.note == nil)
         #expect(block?.backup?.trailing == .chevron)
@@ -135,7 +282,7 @@ struct RegistryBackupTests {
         #expect(live.sections.count == base.sections.count)
     }
 
-    @Test func stillAskingRegistrySilentAndRegistryEmptyAreThreeDifferentThings() {
+    @Test func stillAskingRegistrySilentAndRegistryEmptyAreThreeDifferentThings() async {
         let asking = SettingsLive.withWalletKeys(nil, backup: nil, on: base, loc: loc).keys
         #expect(asking?.loading == true)
         #expect(asking?.count == "")
@@ -143,7 +290,7 @@ struct RegistryBackupTests {
 
         let silent = SettingsLive.withWalletKeys(
             WalletKeys.Result(source: .device, rows: [key("Mine", synced: nil)]),
-            backup: .couldNotCheck, on: base, loc: loc
+            backup: await check("could_not_check"), on: base, loc: loc
         ).keys
         #expect(silent?.note == "Couldn't reach the registry. Showing what this device remembers.")
         #expect(silent?.rows.first?.pills.isEmpty == true)
@@ -151,7 +298,7 @@ struct RegistryBackupTests {
         // A registry that answered with nothing was not unreachable.
         let empty = SettingsLive.withWalletKeys(
             WalletKeys.Result(source: .notRegistered, rows: [key("Mine", synced: nil)]),
-            backup: .notRegistered, on: base, loc: loc
+            backup: await check("not_registered"), on: base, loc: loc
         ).keys
         #expect(empty?.note == nil)
         #expect(empty?.backup == nil)

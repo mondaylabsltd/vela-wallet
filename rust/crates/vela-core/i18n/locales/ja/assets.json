@@ -5,6 +5,7 @@
     "searchPlaceholder": "トークンを検索...",
     "unreachableOne": "現在 {{name}} に接続できません",
     "unreachableMany": "現在 {{n}} 件のネットワークに接続できません",
+    "tokenListUnreachable": "現在 {{name}} のトークン一覧を取得できません",
     "unreachableBody": "資産に影響はありません。今は読み取れないだけです。",
     "unreachableNone": "すべてのネットワークに接続できました。",
     "lastSeen": "前回の残高 {{amount}}",

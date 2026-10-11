@@ -4268,6 +4268,30 @@ export function markMissTtlMs(kind, status) {
 }
 
 /**
+ * A hidden amount as every shell draws it: the mask, then the unit the
+ * shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
+ * for whether a hidden amount keeps its unit: it does. An empty `unit` (a
+ * figure with no unit of its own) is the mask alone, never a trailing
+ * space. Synchronous, so a view model can call it while it builds a row.
+ * @param {string} unit
+ * @returns {string}
+ */
+export function maskedAmount(unit) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(unit, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.maskedAmount(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * @param {string} sig
  * @param {Uint8Array} calldata
  * @returns {boolean}
@@ -4531,6 +4555,21 @@ export function prefsRead(entries_json) {
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
+}
+
+/**
+ * The curated public RPCs of a built-in network, in order — the RPC pool's
+ * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+ * none. One list for every shell: each used to hold its own copy, and a
+ * dead endpoint had to be found and dropped in each.
+ * @param {number} chain_id
+ * @returns {string[]}
+ */
+export function publicRpcUrls(chain_id) {
+    const ret = wasm.publicRpcUrls(chain_id);
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
 }
 
 /**
@@ -5221,6 +5260,36 @@ export function signingVenueChoices(domain, active_json, saved_json, surface) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v5;
+}
+
+/**
+ * What the pool's `eth_simulateV1` answer means for `user` (the signing
+ * account), and every line the sheet draws for it: a `SimVerdict` JSON —
+ * `{kind, deltas, revert_reason, notice_risk, notice_key, no_change_key}`.
+ * `reply_json` is the JSON-RPC envelope as it came (`{"result": …}` or
+ * `{"error": …}`), or `{"unreachable": true}` when the pool gave up;
+ * anything else is an answer nobody can read ("could not check", never
+ * "nothing moves"). `no_change_key` is "No asset changes" for a check under
+ * which nothing of theirs moves. See `vela_core::app::sim_outcome`.
+ * @param {string} user
+ * @param {string} reply_json
+ * @returns {string}
+ */
+export function simOutcome(user, reply_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(user, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(reply_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.simOutcome(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**

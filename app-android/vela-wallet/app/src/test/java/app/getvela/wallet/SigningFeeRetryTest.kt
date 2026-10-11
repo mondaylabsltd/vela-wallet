@@ -190,13 +190,15 @@ class SigningFeeRetryTest {
         val c = controller()
         c.open(transfer())
         withTimeout(20_000) { c.fee.first { it.failed != null } }
-        val feeJson = withTimeout(5_000) { c.feeJson.first { it != null && it.contains("chain_read") } }
-        val signJson = withTimeout(5_000) { c.signJson.first { it != null } }
-        val clearJson = withTimeout(5_000) { c.clearJson.first { it != null } }
-        val guardJson = withTimeout(5_000) { c.guardJson.first { it != null } }
-        val gate = SigningLive.confirmState(signJson, guardJson, clearJson, feeJson, null)
+        withTimeout(5_000) { c.feeJson.first { it != null && it.contains("chain_read") } }
+        // The gate asks the request, the reading and the guard before the
+        // fee, and those three machines settle on threads of their own: the
+        // gate is read once it has come to the fee, not at whatever each
+        // machine happened to have written first.
+        val gate = c.awaitGate("the footer names the fee's failure") {
+            it.block == app.getvela.wallet.feature.signing.core.ConfirmBlock.FeeFailed
+        }
         assertTrue("the confirm is shut", !gate.enabled)
-        assertEquals(app.getvela.wallet.feature.signing.core.ConfirmBlock.FeeFailed, gate.block)
 
         val reads = port.calls.count { it.endsWith("eth_getCode") }
         c.feeTapped()
@@ -239,7 +241,22 @@ class SigningFeeRetryTest {
         assertEquals(app.getvela.wallet.feature.signing.core.ConfirmBlock.FeeFailed, footer.block)
 
         // The core's own re-ask (3 s): the reason stays, the sign turns, the footer holds its line.
-        val retrying = withTimeout(10_000) { c.fee.first { it.failure?.retrying == true } }
+        //
+        // Its read is HELD in flight here, so "retrying" is a state this test
+        // looks at for as long as it needs. Answered at once, the re-ask was
+        // a moment between two identical failures — `c.fee` is a conflated
+        // flow, and on a loaded machine its collector was never scheduled
+        // inside that moment: the wait sat out its whole 10 s (F7).
+        val asked = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        port.before = { method ->
+            if (method == "eth_getCode") {
+                asked.complete(Unit)
+                release.await()
+            }
+        }
+        withTimeout(20_000) { asked.await() }
+        val retrying = withTimeout(20_000) { c.fee.first { it.failure?.retrying == true } }
         val turning = SigningLive.feeModel(ClearSigningView(), retrying, ctx) as FeeModel.OnChain
         assertEquals("—", turning.value)
         assertEquals(reason, turning.warning)
@@ -247,6 +264,8 @@ class SigningFeeRetryTest {
         // The gate over the decoded views, re-encoded: the failure rides along, so the line holds.
         val during = SigningLive.confirmState(c.sign.value, c.guard.value, c.clear.value, retrying, null)
         assertEquals("through the re-ask, never \"working out the fee\"", I18nKeys.Flows.FEE_RETRYING, during.key)
+        // The read is answered (it fails again) and the schedule goes on.
+        release.complete(Unit)
 
         c.cancel()
         withTimeout(5_000) { c.closed.first { it } }

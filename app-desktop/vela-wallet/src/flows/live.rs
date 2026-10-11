@@ -119,20 +119,20 @@ fn asset_row(
             // about what "no price" is called.
             Fiat::NoPrice(wallet.no_price.clone())
         } else {
-            Fiat::Value(SharedString::from(
-                currency.text(amount * token.price_usd.unwrap_or(0.0), locale),
-            ))
+            currency.fiat(amount * token.price_usd.unwrap_or(0.0), locale)
         },
     }
 }
 
 /// DT1L, or DT4L when there is nothing to list.
 ///
-/// **The empty state is only shown once the core has ruled.** While the count
-/// is in flight (`holdings_loading`, or a balance the core calls unknown) the
-/// panel shows an empty list and no guided-empty body — telling somebody their
-/// wallet is empty while it is still being read is the assets-panel version of
-/// the fake `$0` the hero refuses.
+/// **The empty state is only shown once the core has ruled**
+/// (`BalanceView.empty_key`, read by
+/// [`crate::wallet::live::assets_strip_empty`]). While the first read is
+/// out, the holdings are loading or the balance is unknown, the panel shows
+/// an empty list and no guided-empty body — telling somebody their wallet is
+/// empty while it is still being read is the assets-panel version of the
+/// fake `$0` the hero refuses.
 #[must_use]
 pub fn assets(
     view: &BalanceView,
@@ -172,12 +172,13 @@ pub fn assets(
         })
         .collect();
 
-    let settled = !view.holdings_loading && !view.balance_unknown;
-    // Empty once the core has actually looked — or when the chosen chain
-    // holds nothing while others do. The web's `liveAssets` shows T4 for both:
-    // a narrowed list with nothing in it must still say something, and a
-    // blank column under a pill reads as a panel that failed to load.
-    let filtered_empty = rows.is_empty() && !view.tokens.is_empty();
+    // Empty when the core says the wallet is (`BalanceView.empty_key`: the
+    // first read ended and found nothing) — or when the chosen chain holds
+    // nothing while others do. The web's `liveAssets` shows T4 for both: a
+    // narrowed list with nothing in it must still say something, and a blank
+    // column under a pill reads as a panel that failed to load. One rule
+    // with the home's strip.
+    let empty = rows.is_empty() && crate::wallet::live::assets_strip_empty(view, filter);
     AssetsPanel {
         // No filter row (078 T067): the web's Assets screen has none, and
         // this one's pill and "Add" answered no click. Which chain the list
@@ -187,7 +188,7 @@ pub fn assets(
         no_match: s.no_matching_tokens.clone(),
         rows: rows.clone(),
         add_by_address: s.add_by_address.clone(),
-        empty: (rows.is_empty() && (settled || filtered_empty)).then(|| AssetsEmpty {
+        empty: empty.then(|| AssetsEmpty {
             title: s.assets_empty_title.clone(),
             caption: s.assets_empty_caption.clone(),
             cta: s.add_token_title.clone(),
@@ -401,7 +402,7 @@ pub fn tx_detail(
         facts.push(hash_fact(&s.detail_hash, hash));
     }
 
-    let (breakdown_title, breakdown) = detail_parts(item, s);
+    let (breakdown_title, breakdown) = detail_parts(item, s, hidden);
     Some(crate::flows::fixtures::TxDetail {
         breakdown_title,
         breakdown,
@@ -725,7 +726,9 @@ fn fiat_of(
     if hidden || !item.priced {
         SharedString::from("")
     } else {
-        SharedString::from(currency.text(item.usd_value, locale))
+        // Withheld while the display currency is not committed: the line
+        // under the amount stays, with nothing in it yet.
+        SharedString::from(currency.alone(item.usd_value, locale))
     }
 }
 
@@ -921,6 +924,7 @@ pub fn add_token(view: &MtokView, s: &FlowStrings) -> crate::flows::fixtures::Ad
             None
         },
         result,
+        rpc: None,
         notice: None,
         cta: s.add_to_wallet.clone(),
         cta_disabled: found.is_none_or(|found| found.added) || view.saving,
@@ -977,7 +981,10 @@ pub fn add_network_tab(
         ]
     };
     let info = wizard.chain_info.as_ref();
-    let card = |text: SharedString, tone: StatusTone, link: Option<SharedString>| {
+    let card = |text: SharedString,
+                tone: StatusTone,
+                note: Option<SharedString>,
+                setup: Option<(SharedString, String)>| {
         let (chain_id, name, symbol) = match info {
             Some(info) => (info.chain_id, info.name.clone(), info.native_symbol.clone()),
             None => (0, query.to_owned(), String::new()),
@@ -986,7 +993,8 @@ pub fn add_network_tab(
             mark: mark_of(chain_id, &symbol),
             name: SharedString::from(name),
             chip: StatusChip { text, tone },
-            link,
+            note,
+            setup,
             facts: if info.is_some() {
                 facts(chain_id, &symbol)
             } else {
@@ -999,16 +1007,26 @@ pub fn add_network_tab(
             s.net_picker_empty.replace("{{query}}", query),
         ))
     };
-    let incompatible = || {
-        card(
-            s.not_compatible.clone(),
-            StatusTone::Error,
-            Some(SharedString::from(format!(
-                "{} · {}",
-                s.error_not_compatible, s.deploy_contracts
-            ))),
-        )
+    // A network the check refused: the verdict, and WHY in the core's words —
+    // the check's own reason (`hint_key`), and the Chain Setup button only
+    // where the core names somewhere to go (`setup_url`: contracts that can
+    // be deployed). It said "Not compatible · Deploy missing contracts" for
+    // every refusal — over a network with no P-256 verifier too, where
+    // nothing can be deployed and money sent would be stuck.
+    let refused = || {
+        let compat = wizard.compat.as_ref();
+        let reason = compat
+            .and_then(|compat| compat.hint_key.as_deref())
+            .and_then(|key| s.wizard_stop_of(key))
+            .or_else(|| s.wizard_stop_of(vela_core::app::network_admin::WIZARD_NOT_COMPATIBLE));
+        let setup = compat
+            .and_then(|compat| compat.setup_url.clone())
+            .map(|url| (s.open_chain_setup_tool.clone(), url));
+        card(s.not_compatible.clone(), StatusTone::Error, reason, setup)
     };
+    // Inconclusive is never "not compatible" (the core's invariant ③): no
+    // reason, no link.
+    let unverified = || card(s.unable_to_verify.clone(), StatusTone::Warning, None, None);
 
     let mut can_add = false;
     let result = if let Some(added) = added {
@@ -1019,7 +1037,8 @@ pub fn add_network_tab(
                 text: s.network_added.clone(),
                 tone: StatusTone::Success,
             },
-            link: None,
+            note: None,
+            setup: None,
             facts: facts(added.chain_id, &added.native_symbol),
         }
     } else if query.trim().is_empty() {
@@ -1049,7 +1068,7 @@ pub fn add_network_tab(
                 }
             }
             NetWizardPhase::Resolving | NetWizardPhase::Checking => {
-                card(s.searching_networks.clone(), StatusTone::Info, None)
+                card(s.searching_networks.clone(), StatusTone::Info, None, None)
             }
             NetWizardPhase::Error => match &wizard.error {
                 None | Some(NetWizardErrorKind::NotFound { .. }) => not_found(),
@@ -1067,23 +1086,49 @@ pub fn add_network_tab(
                             text: s.network_added.clone(),
                             tone: StatusTone::Success,
                         },
-                        link: None,
+                        note: None,
+                        setup: None,
                         facts: facts(*chain_id, &symbol),
                     }
                 }
-                Some(_) => incompatible(),
+                Some(NetWizardErrorKind::NotCompatible { .. }) => refused(),
+                Some(NetWizardErrorKind::CheckFailed { .. }) => unverified(),
+                // The chain is known and lists no endpoint to check it
+                // through: not a verdict about it, so no "Not compatible" —
+                // the core's own sentence for the stop.
+                Some(NetWizardErrorKind::NoRpcEndpoint) => wizard
+                    .error_key
+                    .as_deref()
+                    .and_then(|key| s.wizard_stop_of(key))
+                    .map_or_else(unverified, AddTokenResult::Note),
             },
             NetWizardPhase::Checked => match &wizard.compat {
                 Some(compat) if compat.rpc_failure.is_none() && compat.compatible => {
                     can_add = wizard.can_add;
-                    card(s.compatible.clone(), StatusTone::Success, None)
+                    card(s.compatible.clone(), StatusTone::Success, None, None)
                 }
-                Some(compat) if compat.rpc_failure.is_none() => incompatible(),
-                // Inconclusive is never "not compatible" (invariant ③).
-                _ => card(s.unable_to_verify.clone(), StatusTone::Warning, None),
+                Some(compat) if compat.rpc_failure.is_none() => refused(),
+                _ => unverified(),
             },
         }
     };
+
+    // The RPC field and "Re-check with this RPC" — the core's one rule for
+    // every surface that draws this wizard (`rpc_field`; PR 3 final notes
+    // F4, F14, F22). This tab had neither: its no-RPC stop said "Enter one,
+    // then re-check" over a panel with nowhere to enter one. Not after an
+    // add (the panel is saying "added"; the wizard behind it is reset), and
+    // not over an emptied search, which draws no result at all.
+    let rpc = crate::settings::live::wizard_rpc_label_key(wizard)
+        .filter(|_| added.is_none() && !query.trim().is_empty())
+        .and_then(|key| s.rpc_field_label_of(key))
+        .map(|label| crate::flows::fixtures::AddTokenRpc {
+            label,
+            value: SharedString::from(wizard.custom_rpc.clone()),
+            placeholder: s.rpc_field_placeholder.clone(),
+            notice: s.rpc_relay_notice.clone(),
+            recheck: s.recheck_with_rpc.clone(),
+        });
 
     crate::flows::fixtures::AddToken {
         tab_erc20: s.tab_erc20.clone(),
@@ -1095,6 +1140,7 @@ pub fn add_network_tab(
         field_placeholder: s.net_search_placeholder.clone(),
         field_error: None,
         result,
+        rpc,
         notice: None,
         cta: s.add_network_btn.clone(),
         cta_disabled: !can_add,
@@ -1320,12 +1366,11 @@ fn deposits(
                         SharedString::from(match item.usd {
                             // An unpriced arrival still says which chain it came
                             // in on. Printing `$0.00` beside it would be the
-                            // assets panel's mistake on a happier screen.
-                            Some(usd) => format!(
-                                "{}  {}",
-                                chain_name(item.chain_id),
-                                currency.text(usd, locale)
-                            ),
+                            // assets panel's mistake on a happier screen. And
+                            // so does a priced one whose worth is withheld.
+                            Some(usd) => {
+                                currency.after(&chain_name(item.chain_id), "  ", usd, locale)
+                            }
                             None => chain_name(item.chain_id),
                         }),
                     )
@@ -1475,7 +1520,9 @@ fn fiat_line(
     locale: &str,
     currency: &crate::wallet::live::Money,
 ) -> Option<SharedString> {
-    usd.map(|usd| SharedString::from(format!("≈ {}", currency.text(usd, locale))))
+    // `Some("")` while the figure is withheld: the line is this amount's,
+    // and it stays — `None` is a token nobody prices, which has no line.
+    usd.map(|usd| SharedString::from(currency.approx(usd, locale)))
 }
 
 /// A settled estimate as one line: the fee coin's amount. `—` while there is
@@ -1592,7 +1639,9 @@ pub(crate) fn fee_line(
     if !usd.is_finite() || usd < FEE_FIAT_MIN_USD {
         return coin;
     }
-    format!("{coin} · ≈{}", currency.text(usd, locale))
+    // The fee in its coin is not fiat: it stands alone while the display
+    // currency is on its way, and the money beside it lands on the same line.
+    currency.after(&coin, " · ≈", usd, locale)
 }
 
 /// The fee row's mark: the coin the CORE names (`SendView.fee_coin` — the
@@ -1828,7 +1877,7 @@ fn send_token_row(
         balance: SharedString::from(trimmed(amount)),
         fiat: match token.price_usd {
             None => Fiat::NoPrice(wallet.no_price.clone()),
-            Some(price) => Fiat::Value(SharedString::from(currency.text(amount * price, locale))),
+            Some(price) => currency.fiat(amount * price, locale),
         },
     }
 }
@@ -2287,6 +2336,128 @@ mod sweep_tests {
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
             assert!(pick.lock_notice.is_none());
         });
+    }
+
+    /// PR 3 notes 5 and 10: a locked request's "Add this network" saves
+    /// without a confirm step, so its notice is the only place the reason
+    /// can be read. The wizard's stop rides through the send machine and the
+    /// line under the button is the core's own sentence: no P-256 verifier
+    /// (no Chain Setup — nothing can be deployed), missing contracts (Chain
+    /// Setup, on that chain), or a check that could not be made ("unable to
+    /// verify", never a refusal). It said "isn't compatible yet" for all.
+    #[test]
+    fn a_refused_network_says_why_under_the_add_button() {
+        use crate::settings::fixtures::{WizardStopPin, refused_compat, stopped_wizard};
+        use vela_core::app::network_admin::{NetBlocker, chain_setup_url, wizard_error_key};
+        use vela_core::app::send::SendAddNetworkMsg;
+        crate::executor::storage::tests::with_temp_state("send-lock-why", || {
+            let loc = crate::loc::Loc::for_language("en");
+            let s = FlowStrings::resolve(&loc);
+            let wallet = crate::wallet::WalletStrings::resolve(&loc);
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let chain_id = crate::settings::fixtures::REFUSED_CHAIN_ID;
+            let mut view = view_with(vec![token(1, "ETH", None)], Vec::new(), None);
+            view.lock_error = Some(SendLockError::Network { chain_id });
+
+            // The wizard as the path with no confirm step leaves it
+            // (`stopped_wizard`), handed to the send machine as the executor
+            // hands it, and read back by the notice.
+            let mut notice_for = |wizard: &vela_core::app::network_admin::NetWizardView| {
+                let stop = AddNetworkStop::of(wizard).unwrap_or_else(|| unreachable!("stopped"));
+                let detail = stop.to_detail();
+                assert_eq!(
+                    detail.as_deref().and_then(AddNetworkStop::from_detail),
+                    Some(stop),
+                    "what the executor wrote is what the notice reads"
+                );
+                view.add_network_msg = Some(SendAddNetworkMsg::NetNotCompatible { detail });
+                send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All)
+                    .lock_notice
+                    .unwrap_or_else(|| unreachable!("refused"))
+            };
+
+            let no_p256 = notice_for(&stopped_wizard(WizardStopPin::Refused(NetBlocker::NoP256)));
+            let line = no_p256.detail.unwrap_or_else(|| unreachable!("a line"));
+            assert!(line.contains("P-256"), "{line}");
+            assert_eq!(no_p256.link, None, "nothing to deploy, no button");
+
+            let missing = notice_for(&stopped_wizard(WizardStopPin::Refused(
+                NetBlocker::MissingContracts,
+            )));
+            let line = missing.detail.unwrap_or_else(|| unreachable!("a line"));
+            assert!(line.contains("Chain Setup"), "{line}");
+            assert_eq!(
+                missing.link,
+                Some((s.open_chain_setup_tool.clone(), chain_setup_url(chain_id)))
+            );
+
+            // Could not be checked: not a refusal — and no link, even with a
+            // check beside it that names somewhere to go.
+            let mut inconclusive = stopped_wizard(WizardStopPin::CheckFailed);
+            inconclusive.compat = Some(refused_compat(chain_id, NetBlocker::MissingContracts));
+            let unverified = notice_for(&inconclusive);
+            assert_eq!(unverified.detail, Some(s.unable_to_verify.clone()));
+            assert_eq!(unverified.link, None);
+
+            // Refused with no check kept: the general sentence, the core's.
+            let mut bare = stopped_wizard(WizardStopPin::Refused(NetBlocker::NoP256));
+            bare.compat = None;
+            bare.error_key = bare
+                .error
+                .as_ref()
+                .map(|error| wizard_error_key(error, None).to_owned());
+            let bare = notice_for(&bare);
+            assert_eq!(
+                bare.detail.as_deref(),
+                Some("Not compatible with Vela Wallet")
+            );
+            assert_eq!(bare.link, None);
+
+            // Nothing carried (an older outcome): the lock's own general line.
+            view.add_network_msg = Some(SendAddNetworkMsg::NetNotCompatible { detail: None });
+            let plain = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All)
+                .lock_notice
+                .unwrap_or_else(|| unreachable!("refused"));
+            assert_eq!(plain.detail, Some(s.lock_net_not_compatible.clone()));
+            assert_eq!(plain.link, None);
+        });
+    }
+
+    /// Every sentence the core can name for a wizard stop has words here —
+    /// each error kind, with and without a check, for both reasons a check
+    /// refuses.
+    #[test]
+    fn every_wizard_stop_the_core_names_has_words() {
+        use vela_core::app::network_admin::{NetBlocker, NetWizardErrorKind, wizard_error_key};
+        let s = FlowStrings::resolve(&crate::loc::Loc::for_language("en"));
+        let kinds = [
+            NetWizardErrorKind::AlreadyAdded { chain_id: 1 },
+            NetWizardErrorKind::NotFound { chain_id: 7 },
+            NetWizardErrorKind::NoRpcEndpoint,
+            NetWizardErrorKind::NotCompatible { chain_id: 7 },
+            NetWizardErrorKind::CheckFailed { chain_id: 7 },
+        ];
+        let checks = [
+            None,
+            Some(crate::settings::fixtures::refused_compat(
+                7,
+                NetBlocker::NoP256,
+            )),
+            Some(crate::settings::fixtures::refused_compat(
+                7,
+                NetBlocker::MissingContracts,
+            )),
+        ];
+        for kind in &kinds {
+            for check in &checks {
+                let key = wizard_error_key(kind, check.as_ref());
+                let text = s
+                    .wizard_stop_of(key)
+                    .unwrap_or_else(|| unreachable!("no words for `{key}`"));
+                assert_ne!(text.as_ref(), key, "`{key}` echoed");
+            }
+        }
+        assert_eq!(s.wizard_stop_of("some.key.from.a.newer.core"), None);
     }
 
     /// The sweep picker says which rows are ticked, which are on the wrong
@@ -3059,8 +3230,58 @@ pub enum NoticeWayOut {
     EditAmount,
 }
 
+/// Why a locked request's "Add this network" stopped, as it rides through
+/// the send machine: `SendAddNetworkOutcome::NotCompatible.detail` is the
+/// shell's own line, handed back unchanged in `SendView.add_network_msg`.
+/// The executor writes this when the wizard settles (`wallet::money`), and
+/// the notice reads it — the sentence stays the core's (`key` is
+/// `NetWizardView::error_key`), and so does whether Chain Setup is offered.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AddNetworkStop {
+    /// The corpus key of the sentence.
+    pub key: String,
+    /// Where "Open Chain Setup Tool" goes; `None` = no button.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup_url: Option<String>,
+}
+
+impl AddNetworkStop {
+    /// The wizard's stop, when it stopped: the core's sentence key, and the
+    /// Chain Setup link only for a refusal the check explained as contracts
+    /// that can be deployed — an inconclusive check is not a refusal and has
+    /// none.
+    #[must_use]
+    pub fn of(wizard: &vela_core::app::network_admin::NetWizardView) -> Option<Self> {
+        use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
+        if wizard.phase != NetWizardPhase::Error {
+            return None;
+        }
+        let refused = matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }));
+        Some(Self {
+            key: wizard.error_key.clone()?,
+            setup_url: wizard
+                .compat
+                .as_ref()
+                .filter(|_| refused)
+                .and_then(|compat| compat.setup_url.clone()),
+        })
+    }
+
+    /// As the send machine carries it.
+    #[must_use]
+    pub fn to_detail(&self) -> Option<String> {
+        serde_json::to_string(self).ok()
+    }
+
+    /// Read back from the machine's `detail`; `None` for anything else.
+    #[must_use]
+    pub fn from_detail(detail: &str) -> Option<Self> {
+        serde_json::from_str(detail).ok()
+    }
+}
+
 /// The notice a screen shows, if any.
-fn send_notice(i: &SendInputs<'_>, confirming: bool) -> Option<SendNotice> {
+pub(crate) fn send_notice(i: &SendInputs<'_>, confirming: bool) -> Option<SendNotice> {
     build_notice(i, confirming).map(|(notice, _)| notice)
 }
 
@@ -3103,6 +3324,7 @@ fn build_notice(
                 .relay_report
                 .as_ref()
                 .map(|_| s.unreachable_report.clone()),
+            link: None,
             error: true,
             calm: false,
         };
@@ -3170,6 +3392,7 @@ fn build_notice(
             // Issue 466: the lead says telling the operator is the fastest
             // fix; this is how — the core's report, through the reporter.
             report: send.relay_report.as_ref().map(|_| s.funding_report.clone()),
+            link: None,
             error: true,
             calm: false,
         };
@@ -3187,13 +3410,35 @@ fn build_notice(
         };
         // The line under the button is the LAST attempt's outcome; the button
         // itself is only offered for a network the wallet could add.
+        //
+        // A network the wizard stopped on says WHY, in the core's sentence
+        // (PR 3 notes 5 and 10): no P-256 verifier — Vela cannot run there
+        // and nothing can be deployed — or contracts that are missing, with
+        // Chain Setup on that chain; a check that could not be made is
+        // "unable to verify". This path saves without a confirm step, so it
+        // is the only place the reason can be read; it said "isn't
+        // compatible yet" for all of them.
+        let stop = match &send.add_network_msg {
+            Some(SendAddNetworkMsg::NetNotCompatible {
+                detail: Some(detail),
+            }) => AddNetworkStop::from_detail(detail),
+            _ => None,
+        };
         let detail = send.add_network_msg.as_ref().map(|msg| match msg {
             SendAddNetworkMsg::NetNotFound => s.lock_net_not_found.clone(),
-            SendAddNetworkMsg::NetNotCompatible { detail } => detail
-                .clone()
-                .map_or_else(|| s.lock_net_not_compatible.clone(), SharedString::from),
+            SendAddNetworkMsg::NetNotCompatible { detail } => match (&stop, detail) {
+                (Some(stop), _) => s
+                    .wizard_stop_of(&stop.key)
+                    .unwrap_or_else(|| s.lock_net_not_compatible.clone()),
+                // Words from somewhere else: said as they are.
+                (None, Some(detail)) => SharedString::from(detail.clone()),
+                (None, None) => s.lock_net_not_compatible.clone(),
+            },
             SendAddNetworkMsg::NetAddError => s.lock_net_add_error.clone(),
         });
+        let link = stop
+            .and_then(|stop| stop.setup_url)
+            .map(|url| (s.open_chain_setup_tool.clone(), url));
         let way_out = match error {
             // While an add is out the button says so and takes no press.
             SendLockError::Network { chain_id } if !send.adding_network => {
@@ -3218,6 +3463,7 @@ fn build_notice(
             action,
             copy: None,
             report: None,
+            link,
             error: true,
             calm: false,
         };
@@ -3283,6 +3529,7 @@ fn build_notice(
             action: Some(s.same_fee_edit.clone()),
             copy: None,
             report: None,
+            link: None,
             error: true,
             calm: false,
         };
@@ -3299,6 +3546,7 @@ fn build_notice(
             action: None,
             copy: None,
             report: None,
+            link: None,
             error: true,
             calm: false,
         };
@@ -3324,6 +3572,7 @@ fn build_notice(
             action: Some(s.same_fee_edit.clone()),
             copy: None,
             report: None,
+            link: None,
             error: true,
             calm: false,
         };
@@ -3358,6 +3607,7 @@ fn build_notice(
             action: None,
             copy: None,
             report: None,
+            link: None,
             error: false,
             calm: false,
         },
@@ -3897,16 +4147,21 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         amount_unit: (sweep.is_none() && !send.split_mode && !symbol.is_empty())
             .then(|| SharedString::from(symbol.clone())),
         subline: match &sweep {
-            Some((_, total_usd)) => fill(
-                &fill(
-                    &s.confirm_total_line,
+            // "≈ $53.48 on Ethereum" — a sentence about the total: withheld
+            // with it while the currency is on its way, its line kept.
+            Some((_, total_usd)) => i
+                .money
+                .sentence(
+                    &fill(
+                        &s.confirm_total_line,
+                        "network",
+                        &chain_name(send.multi_chain_id.unwrap_or(chain_id)),
+                    ),
                     "fiat",
-                    &money(*total_usd, i.locale, i.money),
-                ),
-                "network",
-                &chain_name(send.multi_chain_id.unwrap_or(chain_id)),
-            )
-            .into(),
+                    *total_usd,
+                    i.locale,
+                )
+                .into(),
             None => fiat_line(usd, i.locale, i.money).unwrap_or_default(),
         },
         facts,
@@ -4005,6 +4260,7 @@ pub(crate) fn tx_error_notice(send: &SendView, s: &FlowStrings) -> Option<SendNo
         action: None,
         copy: None,
         report: None,
+        link: None,
         error: !not_sent,
         calm: not_sent,
     })
@@ -4024,11 +4280,6 @@ pub fn with_handoff(
     }
     confirm.handoff = Some(Box::new(handoff));
     confirm
-}
-
-/// One amount of money, in the hero's own formatting (no `≈`).
-fn money(usd: f64, locale: &str, currency: &crate::wallet::live::Money) -> String {
-    currency.text(usd, locale)
 }
 
 /// SD3c — the sweep's rows and their summed value: every picked coin at the
@@ -4074,7 +4325,7 @@ fn sweep_breakdown(
                 mono: false,
                 detail: None,
                 value: match row_usd {
-                    Some(row_usd) => format!("{value} · ≈{}", money(row_usd, locale, currency)),
+                    Some(row_usd) => currency.after(&value, " · ≈", row_usd, locale),
                     None => value,
                 }
                 .into(),
@@ -4512,9 +4763,16 @@ fn swept_coin_mark(
 /// Spec 038 #D2: a folded batch row opens to what it folded — the split's
 /// recipients by name and avatar, the sweep's assets by their marks — under
 /// the facts, where the single send's "To" would have been.
+///
+/// Each line's amount is a figure too (PR 3 note 15): while balances are
+/// hidden it reads the core's mask with its unit ("•••• USDC",
+/// `privacy::masked_amount`), as the total over it does. It was drawn in
+/// full — a hidden split masked its total and still listed who got how much,
+/// which is exactly what the mask is for.
 fn detail_parts(
     item: &vela_core::app::activity_feed::FeedItem,
     s: &FlowStrings,
+    hidden: bool,
 ) -> (Option<SharedString>, Vec<BreakdownRow>) {
     let Some(batch) = item.batch.as_ref() else {
         return (None, Vec::new());
@@ -4537,10 +4795,16 @@ fn detail_parts(
             },
             mono: false,
             detail: None,
-            value: format!("{} {}", trimmed_str(&transfer.value), transfer.symbol)
-                .trim()
-                .to_owned()
-                .into(),
+            // The core's one rule for the row (`figure_maskable`) covers
+            // what the row folded: its lines are the same money.
+            value: if hidden && item.figure_maskable {
+                vela_core::app::privacy::masked_amount(&transfer.symbol).into()
+            } else {
+                format!("{} {}", trimmed_str(&transfer.value), transfer.symbol)
+                    .trim()
+                    .to_owned()
+                    .into()
+            },
         })
         .collect();
     if rows.is_empty() {
@@ -4627,7 +4891,6 @@ pub fn contact_pick(view: &ContactsView, s: &FlowStrings) -> ContactPick {
     };
     ContactPick {
         search_placeholder: s.pick_contact_search.clone(),
-        scan_row: s.scan_to_fill.clone(),
         groups_title: s.contacts_groups.clone(),
         groups: view
             .groups
@@ -4877,6 +5140,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 action: None,
                 copy: None,
                 report: None,
+                link: None,
                 error: true,
                 calm: false,
             })
@@ -4891,6 +5155,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 action: None,
                 copy: None,
                 report: None,
+                link: None,
                 error: false,
                 calm: false,
             })
@@ -6062,60 +6327,61 @@ mod tests {
         assert_eq!(panel.rows[0].ticker, "xDAI");
     }
 
-    /// An empty wallet and a wallet still being counted are different screens.
+    /// An empty wallet and a wallet still being read are different screens —
+    /// and which one this is is the core's word (`BalanceView.empty_key`),
+    /// never this panel's reading of the flags (PR 3 device round, item 2).
     #[test]
     fn the_guided_empty_waits_until_the_core_has_ruled() {
-        let mut counting = view();
-        counting.tokens = Vec::new();
-        counting.balance_unknown = true;
-        assert!(
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        let empty = |view: &BalanceView| {
             assets(
-                &counting,
+                view,
                 &strings(),
                 &wallet_strings(),
                 "en-US",
                 None,
-                crate::wallet::live::Money::usd()
+                crate::wallet::live::Money::usd(),
             )
             .empty
-            .is_none(),
+        };
+
+        // The first frame of an account: nothing known.
+        let counting = view();
+        assert!(counting.balance_unknown && counting.tokens.is_empty());
+        assert!(
+            empty(&counting).is_none(),
             "still counting: no 'your wallet is empty'"
         );
 
-        let mut loading = view();
-        loading.tokens = Vec::new();
-        loading.balance_unknown = false;
-        loading.holdings_loading = true;
+        // A wallet that held nothing last session: the cached zero is on
+        // screen and the first round is still out ("Checking…"). The flags
+        // this panel used to read all say "settled" — and it invited a first
+        // deposit before anything had been read.
+        let checking = first_read_view(FirstRead::Checking);
+        assert!(checking.checking_key.is_some());
+        assert!(!checking.holdings_loading && !checking.balance_unknown);
         assert!(
-            assets(
-                &loading,
-                &strings(),
-                &wallet_strings(),
-                "en-US",
-                None,
-                crate::wallet::live::Money::usd()
-            )
-            .empty
-            .is_none()
+            empty(&checking).is_none(),
+            "'Deposit your first asset' under 'Checking…'"
         );
 
-        let mut settled = view();
-        settled.tokens = Vec::new();
-        settled.balance_unknown = false;
-        settled.holdings_loading = false;
-        assert!(
-            assets(
-                &settled,
-                &strings(),
-                &wallet_strings(),
-                "en-US",
-                None,
-                crate::wallet::live::Money::usd()
-            )
-            .empty
-            .is_some(),
-            "the core ruled: genuinely empty"
+        // The round ended and found nothing: the core rules it empty.
+        let settled = first_read_view(FirstRead::Live);
+        assert!(settled.empty_key.is_some());
+        assert!(empty(&settled).is_some(), "the core ruled: genuinely empty");
+        // Its title is the key's own line.
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(
+            FlowStrings::resolve(&en).assets_empty_title.as_ref(),
+            en.t(vela_core::app::balance_dashboard::ASSETS_EMPTY)
+                .as_ref()
         );
+
+        // The key and nothing else: the same view read from an older core's
+        // JSON (no key) is a list still loading, whatever its flags say.
+        let mut older = settled.clone();
+        older.empty_key = None;
+        assert!(empty(&older).is_none());
 
         // Narrowed to a chain that holds nothing while others hold something:
         // the web's `filteredEmpty` — the empty body, never a blank column.
@@ -6359,6 +6625,160 @@ mod tests {
         }
     }
 
+    /// PR 3 notes 5, 10 and 18: the network tab says WHY the wizard stopped,
+    /// in the core's words. It said "Not compatible · Deploy missing
+    /// contracts" for every stop: over a network with no P-256 verifier
+    /// (nothing can be deployed), over a check that never reached the
+    /// network, and over a chain that merely lists no endpoint. And the
+    /// "deploy" words were grey text that opened nothing.
+    #[test]
+    fn the_native_tab_says_why_a_network_was_refused() {
+        use crate::flows::fixtures::{AddTokenResult, StatusTone};
+        use crate::settings::fixtures::{WizardStopPin, refused_wizard, stopped_wizard};
+        use vela_core::app::network_admin::{NetBlocker, chain_setup_url};
+        crate::executor::storage::tests::with_temp_state("flows-wizard-why", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::for_language("en"));
+            let chain_id = crate::settings::fixtures::REFUSED_CHAIN_ID;
+            let card =
+                |wizard: &vela_core::app::network_admin::NetWizardView| match add_network_tab(
+                    wizard, "example", None, &s,
+                )
+                .result
+                {
+                    AddTokenResult::Network {
+                        chip, note, setup, ..
+                    } => (chip.text, chip.tone, note, setup),
+                    _ => unreachable!("a card"),
+                };
+
+            for (blocker, word, setup) in [
+                (NetBlocker::NoP256, "P-256", None),
+                (
+                    NetBlocker::MissingContracts,
+                    "Chain Setup",
+                    Some((s.open_chain_setup_tool.clone(), chain_setup_url(chain_id))),
+                ),
+            ] {
+                // Checked and refused — the wizard's confirm step.
+                let wizard = refused_wizard(blocker);
+                let (chip, tone, note, button) = card(&wizard);
+                assert_eq!(chip, s.not_compatible);
+                assert!(tone == StatusTone::Error);
+                let note = note.unwrap_or_else(|| unreachable!("{blocker:?}: a reason"));
+                assert!(note.contains(word), "{blocker:?}: {note}");
+                assert!(!note.contains('↗'), "{note}");
+                assert_eq!(button, setup, "{blocker:?}");
+                assert!(add_network_tab(&wizard, "example", None, &s).cta_disabled);
+
+                // … and stopped with the same check beside the error (the
+                // path with no confirm step): the same reason, same button.
+                let auto = stopped_wizard(WizardStopPin::Refused(blocker));
+                let (_, _, auto_note, auto_button) = card(&auto);
+                assert_eq!(auto_note, Some(note));
+                assert_eq!(auto_button, button);
+            }
+
+            // A check that could not be made is never "Not compatible".
+            let (chip, tone, note, button) = card(&stopped_wizard(WizardStopPin::CheckFailed));
+            assert_eq!(chip, s.unable_to_verify);
+            assert!(tone == StatusTone::Warning);
+            assert_eq!((note, button), (None, None));
+
+            // A chain that lists no endpoint is not a verdict about the
+            // chain: the core's sentence for it, and no card that judges it.
+            let no_rpc = stopped_wizard(WizardStopPin::NoRpc);
+            match add_network_tab(&no_rpc, "example", None, &s).result {
+                AddTokenResult::Note(line) => assert!(line.contains("No RPC endpoint"), "{line}"),
+                _ => unreachable!("said as a line"),
+            }
+        });
+    }
+
+    /// PR 3 final notes F14, F4 and F22 — the add-token flow's network tab
+    /// draws the wizard's RPC field and "Re-check with this RPC" by the
+    /// core's one rule (`NetWizardView::rpc_field`), as Settings' dialog
+    /// does. Its no-RPC stop said "Enter one, then re-check" with nowhere to
+    /// enter one; now the field is there, labelled plain "RPC URL", with the
+    /// re-check. A refusal gets neither; an inconclusive check gets the
+    /// optional field; and the relay notice travels with the field.
+    #[test]
+    fn the_native_tab_draws_the_rpc_field_where_the_core_says() {
+        use crate::settings::fixtures::{WizardStopPin, refused_wizard, stopped_wizard};
+        use vela_core::app::network_admin::NetBlocker;
+        crate::executor::storage::tests::with_temp_state("flows-wizard-rpc", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::for_language("en"));
+            let rpc = |wizard: &vela_core::app::network_admin::NetWizardView| {
+                add_network_tab(wizard, "example", None, &s).rpc
+            };
+
+            // F14 + F4: the stop that asks for an endpoint has the field —
+            // "RPC URL", not "(optional)" — and the re-check with it.
+            let no_rpc = rpc(&stopped_wizard(WizardStopPin::NoRpc))
+                .unwrap_or_else(|| unreachable!("\"Enter one\" needs a field"));
+            assert_eq!(no_rpc.label.as_ref(), "RPC URL");
+            assert_eq!(no_rpc.recheck.as_ref(), "Re-check with this RPC");
+            assert_eq!(no_rpc.value.as_ref(), "", "nothing typed yet");
+            assert_eq!(no_rpc.placeholder, s.rpc_field_placeholder);
+            assert!(
+                no_rpc.notice.contains("relay"),
+                "spec 098: where an RPC is typed, that the relay is sent it"
+            );
+
+            // A check that could not reach a verdict: another endpoint may
+            // answer — the optional field.
+            let failed = rpc(&stopped_wizard(WizardStopPin::CheckFailed))
+                .unwrap_or_else(|| unreachable!("a field"));
+            assert_eq!(failed.label.as_ref(), "Custom RPC (optional)");
+
+            // What was typed stands in the field (the draft is the core's).
+            let mut typed = stopped_wizard(WizardStopPin::NoRpc);
+            typed.custom_rpc = "https://rpc.example".to_owned();
+            assert_eq!(
+                rpc(&typed).map(|rpc| rpc.value),
+                Some(SharedString::from("https://rpc.example"))
+            );
+
+            // F22: a refusal another endpoint would not change — neither
+            // the field nor the re-check, on either path.
+            for blocker in [NetBlocker::NoP256, NetBlocker::MissingContracts] {
+                assert_eq!(rpc(&refused_wizard(blocker)), None, "{blocker:?}");
+                assert_eq!(rpc(&stopped_wizard(WizardStopPin::Refused(blocker))), None);
+            }
+            // Nothing to check: no field.
+            for stop in [WizardStopPin::AlreadyAdded, WizardStopPin::NotFound] {
+                assert_eq!(rpc(&stopped_wizard(stop)), None, "{stop:?}");
+            }
+
+            // The tab draws exactly what Settings' dialog draws: the same
+            // core rule through the same function, for every stop.
+            for (stop, name) in WizardStopPin::ALL {
+                let wizard = stopped_wizard(stop);
+                assert_eq!(
+                    rpc(&wizard).is_some(),
+                    crate::settings::live::wizard_rpc_label_key(&wizard).is_some(),
+                    "{name}"
+                );
+            }
+
+            // Not after an add (the panel says "added"; the wizard is reset),
+            // and not over an emptied search, which draws no result.
+            let no_rpc = stopped_wizard(WizardStopPin::NoRpc);
+            let info = no_rpc.chain_info.clone();
+            assert_eq!(
+                add_network_tab(&no_rpc, "example", info.as_ref(), &s).rpc,
+                None
+            );
+            assert_eq!(add_network_tab(&no_rpc, "  ", None, &s).rpc, None);
+
+            // In the reader's language.
+            let zh = FlowStrings::resolve(&crate::loc::Loc::for_language("zh"));
+            let tab = add_network_tab(&stopped_wizard(WizardStopPin::NoRpc), "example", None, &zh);
+            let rpc = tab.rpc.unwrap_or_else(|| unreachable!("a field"));
+            assert_eq!(rpc.label.as_ref(), "RPC URL");
+            assert_eq!(rpc.recheck.as_ref(), "用此 RPC 重新检查");
+        });
+    }
+
     /// The wizard draws a network being added as itself (the core's kind
     /// rule): Base wears Base's own logo and no badge — the native coin's rule
     /// put Ethereum's logo on every ETH L2 it found — and a card whose chain
@@ -6472,7 +6892,7 @@ mod tests {
                 figure_maskable: true,
             };
             let s = strings();
-            let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s);
+            let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s, false);
             let marks: Vec<&TokenMark> = rows
                 .iter()
                 .map(|row| {
@@ -6501,7 +6921,7 @@ mod tests {
             assert!(marks[2].logos.badge_logo.is_some());
 
             // A split's rows are people, not coins.
-            let (_, rows) = detail_parts(&item(FeedBatchKind::Split), &s);
+            let (_, rows) = detail_parts(&item(FeedBatchKind::Split), &s, false);
             assert!(
                 rows.iter()
                     .all(|row| row.mark.is_none() && row.seed.is_some())
@@ -6546,6 +6966,7 @@ mod tests {
                     call_data: None,
                     summary: None,
                     settlement: None,
+                    time_verified: None,
                 }
             };
             let (s, w) = (strings(), wallet_strings());
@@ -6623,6 +7044,7 @@ mod tests {
             call_data: None,
             summary: None,
             settlement: None,
+            time_verified: None,
         };
         let view = crate::wallet::fixtures::core_feed(vec![record]);
         let (s, w) = (strings(), wallet_strings());
@@ -6888,6 +7310,7 @@ mod tests {
                     call_data: None,
                     summary: None,
                     settlement: None,
+                    time_verified: None,
                 }],
                 ..host.view()
             };
@@ -6953,7 +7376,11 @@ mod tests {
             assert_eq!(chip.text, s.status_pending);
             assert!(matches!(chip.tone, StatusTone::Info));
 
-            // Privacy masks the figure here as everywhere.
+            // Privacy masks the figure here as everywhere — and keeps its
+            // unit (PR 3 item 12, the core's `privacy::masked_amount`): the
+            // detail reads "•••• xDAI", what kind of money without how much,
+            // as the row it was opened from does. Not the digits, not the
+            // sign, not a bare mask.
             let hidden = tx_detail(
                 &view,
                 "a",
@@ -6964,7 +7391,13 @@ mod tests {
                 crate::wallet::live::Money::usd(),
             )
             .unwrap_or_else(|| unreachable!("row a exists"));
-            assert_eq!(hidden.amount, crate::wallet::fixtures::MASK);
+            assert_eq!(hidden.amount, "•••• xDAI");
+            assert_eq!(
+                hidden.amount,
+                vela_core::app::privacy::masked_amount("xDAI"),
+                "the core's rule, not this shell's"
+            );
+            assert!(!hidden.amount.contains("1.5"));
             assert_eq!(hidden.fiat, "");
 
             // A row that no longer exists has no detail — the panel closes
@@ -7155,6 +7588,7 @@ mod tests {
                 ..DappSummary::default()
             }),
             settlement: None,
+            time_verified: None,
         };
         let mut borrow = record("dapp-1-tx", 1_756_000_000.0, FeedTxStatus::Confirmed);
         borrow.tx_hash = format!("0x{}", "cb".repeat(32));
@@ -7531,7 +7965,9 @@ mod tests {
         if let Some(changes) = records[0].balance_changes.as_mut() {
             changes.push(TrustSimJudgment::Erc20Unverified {
                 token: Some("0x00000000000000000000000000000000000bad01".to_owned()),
-                delta: "1000000000000000000000".to_owned(),
+                direction: vela_core::app::token_trust::TrustSimDirection::of_delta(
+                    "1000000000000000000000",
+                ),
             });
         }
         let mut bare = records[0].clone();
@@ -7819,6 +8255,7 @@ mod tests {
                         Fiat::Value(v) => v.to_string(),
                         Fiat::NoPrice(v) => v.to_string(),
                         Fiat::Masked => "•••".to_owned(),
+                        Fiat::Pending => String::new(),
                     }
                 );
             }

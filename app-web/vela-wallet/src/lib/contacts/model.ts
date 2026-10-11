@@ -96,10 +96,13 @@ export interface SearchModel {
 	shortcut?: string;
 }
 
+/**
+ * A contact's page has one action, Send (issue 479). Receive opened the
+ * WALLET's own code from a page about somebody else, and the QR card showed
+ * this person's address as a code; the address stays copyable on the page.
+ */
 export interface ContactActionsModel {
 	send: string;
-	receive: string;
-	qr: string;
 }
 
 export interface AddressBlockModel {

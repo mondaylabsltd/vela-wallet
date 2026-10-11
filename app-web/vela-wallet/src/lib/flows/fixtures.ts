@@ -598,10 +598,18 @@ function addToken(m: WalletFlowMessages, variant: AddTokenVariant): AddTokenMode
 									: variant === 'native-added'
 										? { text: m['addToken.networkAdded'], tone: 'success' }
 										: { text: m['addToken.compatible'], tone: 'success' },
-							link:
-								variant === 'native-incompatible'
-									? `${m['addToken.errorNotCompatible']} · ${m['addToken.deployContracts']}`
-									: undefined,
+							// T5b: refused for contracts that are missing — the one refusal
+							// with something to deploy, so the one with a link (the
+							// core's `setup_url` when live).
+							...(variant === 'native-incompatible'
+								? {
+										note: m['settingsModals.addNetwork.incompatibleHint'],
+										setup: {
+											label: m['settingsModals.addNetwork.openChainSetupTool'],
+											href: `https://getvela.app/chain-setup?chain=${avax.chainId}`
+										}
+									}
+								: {}),
 							facts: [
 								{ label: m['addToken.labelChainId'], value: avax.chainId },
 								{ label: m['addToken.labelNativeToken'], value: avax.code }
@@ -907,7 +915,6 @@ function contactPick(m: WalletFlowMessages, identicon: Identicon): ContactPickMo
 		title: m['send.pickContactTitle'],
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		searchPlaceholder: m['send.pickContactSearch'],
-		scanRow: m['send.scanToFill'],
 		groupsTitle: m['contacts.sectionGroups'],
 		groups: GROUPS.slice(0, 2).map((g, i) => ({
 			name: g.name,

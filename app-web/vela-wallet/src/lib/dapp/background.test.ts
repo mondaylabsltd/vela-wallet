@@ -1716,7 +1716,7 @@ describe('a batch, asked after (EIP-5792, 094)', () => {
 		await settleAll();
 		expect(page.answers).toEqual([{ id: 'b:2', result: { id: ID }, error: undefined }]);
 
-		const id = page.answers[0].result.id;
+		const id = (page.answers[0].result as { id: string }).id;
 		const landed = await rpc(env, page, 'wallet_getCallsStatus', [id]);
 		expect(landed.result).toMatchObject({ id: ID, chainId: '0x64', status: 200 });
 		// What Uniswap asked with: still refused.

@@ -255,6 +255,13 @@ final class BalanceExecutor {
         if !internalChains.isEmpty {
             VelaLog.failure(.balance, kind: "chains_internal", "chains=\(internalChains.map(String.init).joined(separator: ","))")
         }
+        // The failed chains whose RPC was never the problem (PR 3 note 4):
+        // the token list could not be loaded, and there was no native coin to
+        // read without it.
+        let registryChains = results.filter { $0.failed && $0.tokenListFault }.map(\.chainId)
+        if !registryChains.isEmpty {
+            VelaLog.failure(.balance, kind: "chains_token_list", "chains=\(registryChains.map(String.init).joined(separator: ","))")
+        }
 
         return CoreJSON.string([
             "type": "fetch_settled",
@@ -272,6 +279,10 @@ final class BalanceExecutor {
             // fault, which the home says as that — never "Can't reach
             // Ethereum" (issue 483, PR 2 note 11).
             "internal_chain_ids": internalChains,
+            // Also a subset of the failed ones: the chain's token list is
+            // what could not be loaded, never its RPC — so the home says
+            // that, and the list offers no "Fix" for an endpoint that works.
+            "registry_chain_ids": registryChains,
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ])
     }
@@ -279,13 +290,17 @@ final class BalanceExecutor {
     /// One chain's read over its registry document (spec 082 RE9): the
     /// document's stablecoins and wrapped coin join the plan — unless the
     /// chain was not read at all (`notRead`), which fails like a chain that
-    /// did not answer.
+    /// did not answer, and says so (`tokenListFault` → `registry_chain_ids`):
+    /// its RPC was never the problem.
     static func readChain(
         address: String, chainId: Int, tokens: [CustomTokenRef], pool: RpcPool,
         chainlinkPrices: [String: Double], document: ChainTokens.Document
     ) async -> TokenReads.ChainResult {
         if notRead(chainId: chainId, document: document, custom: tokens) {
-            return TokenReads.ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false)
+            // Failed for want of its token list, not its RPC (PR 3 note 4).
+            return TokenReads.ChainResult(
+                chainId: chainId, tokens: [], failed: true, rateLimited: false, tokenListFault: true
+            )
         }
         let facts = document.facts
         return await TokenReads.read(

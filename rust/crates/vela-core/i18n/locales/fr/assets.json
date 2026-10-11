@@ -5,6 +5,7 @@
     "searchPlaceholder": "Rechercher des tokens...",
     "unreachableOne": "{{name}} est injoignable pour le moment",
     "unreachableMany": "{{n}} réseaux sont injoignables pour le moment",
+    "tokenListUnreachable": "La liste des jetons de {{name}} est indisponible pour le moment",
     "unreachableBody": "Vos actifs ne sont pas affectés : nous ne pouvons simplement pas les lire pour l’instant.",
     "unreachableNone": "Tous les réseaux sont de nouveau joignables.",
     "lastSeen": "Dernière lecture : {{amount}}",

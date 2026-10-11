@@ -48,7 +48,7 @@ class SigningFixturesTest {
             model.signerLabel, model.signerName,
             model.panelTitle, model.tech.title,
         )
-        model.blocks.forEach { block ->
+        fun said(block: SigningBlock) {
             when (block) {
                 is SigningBlock.Intent -> out += block.text
                 is SigningBlock.Amount -> out += listOfNotNull(
@@ -81,8 +81,11 @@ class SigningFixturesTest {
                     out += block.title
                     block.note?.let { out += it }
                 }
+                // A held place says only what took it; its room is unsaid.
+                is SigningBlock.Held -> block.shown?.let(::said)
             }
         }
+        model.blocks.forEach(::said)
         when (val fee = model.fee) {
             is FeeModel.OnChain -> {
                 out += listOf(fee.label, fee.value)
@@ -103,9 +106,15 @@ class SigningFixturesTest {
     fun everyScenarioBuilds() {
         // The 33 of the canon, CS36 — the wallet's own backup — CS37–CS42,
         // spec 102's hand-off card (CS40/CS41: the card a send raises on its
-        // own), CS43/CS44, a key ceremony waiting on its page, and CS45–CS56,
-        // the correctness batch's boards (drawn through the live builders).
-        assertEquals(54, SigningScreenState.entries.size)
+        // own), CS43/CS44, a key ceremony waiting on its page, CS45–CS56,
+        // the correctness batch's boards (drawn through the live builders),
+        // CS57/CS58: the simulation's verdict's place, kept and taken,
+        // CS59/CS60: the fee's worth waiting for the display currency, and
+        // landed, CS61–CS64: the place taken by each other verdict,
+        // CS65–CS67: a verdict taller than the place, shown whole,
+        // CS68: two unverified tokens, by their directions alone (PR 3), and
+        // CS69/CS70: the confirm waiting for the verdict, and waited out.
+        assertEquals(68, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
@@ -140,9 +149,16 @@ class SigningFixturesTest {
         // D-17: the founding key carries the wallet's name, so it is named by
         // its place — a label | value row, like "Signing account | name".
         assertEquals(app.getvela.wallet.feature.signing.KeyRowModel("Confirm with", "Phone or tablet"), card.key)
+        // The page by its NAME, as Settings names it — never the host alone;
+        // the address is drawn under it, since the name does not say it.
+        assertEquals("Vela's official signing page", card.pageName)
         assertEquals("sign.getvela.app", card.page)
+        assertEquals("Vela 官方签名页", SigningFixtures.build(SigningScreenState.CS37, zhStrings()).handoff!!.pageName)
+        // A page the person deployed is called what they called it.
+        assertEquals("Home", SigningFixtures.build(SigningScreenState.CS42, en).handoff!!.pageName)
         // D-13: a moment, in the person's format — the boards' check ran at 14:32 today.
-        assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        // Each "·" is bound to the word before it (U+00A0), so no line starts with one.
+        assertTrue(card.integrity.text, card.integrity.text.startsWith("Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked "))
         assertFalse(card.integrity.text, card.integrity.text.endsWith("checked "))
         // The dApp sheet's own fee row sits right above the card: the card does not repeat it.
         assertNull(card.fee)
@@ -216,9 +232,10 @@ class SigningFixturesTest {
         assertEquals(model.headline, model.confirmAction)
         val rows = (model.blocks.single() as SigningBlock.Rows).rows.map { it.label }
         assertEquals(
-            listOf("labelNetwork", "labelAddress", "labelPublicKeys").map { zh.t("componentsUi.signing.$it") },
+            listOf("labelNetwork", "labelAddress", "labelWalletName", "labelPublicKeys").map { zh.t("componentsUi.signing.$it") },
             rows,
         )
+        assertEquals("复制钱包记录", model.headline)
         assertEquals(null, model.tech.summary)
         val speed = (model.fee as FeeModel.OnChain).speed!!
         assertTrue(speed.open && speed.gasPriceLine)
@@ -300,6 +317,68 @@ class SigningFixturesTest {
         val refused = board(SigningScreenState.CS50).receipt!!
         assertTrue(refused.captions.toString(), refused.captions.contains(en.t("componentsUi.signing.wentFirst")))
         assertFalse(refused.captions.contains(en.t("send.txRejectedFees")))
+    }
+
+    /**
+     * PR 3, fix C — the two boards of the confirm's wait for the simulation's
+     * verdict say what the REAL machines say: a sign view the sign machine
+     * wrote after `sim_started` (and, for CS70, after its deadline), read by
+     * the core's own gate. CS69: everything else ready, the confirm shut over
+     * the one line, the verdict's place still its skeleton — and it stays so
+     * (no timer runs on a board). CS70: the confirm open, no line, and the
+     * could-not-check sentence in the verdict's place, as a caution. Same
+     * sheet otherwise: the same blocks, the same place.
+     */
+    @Test
+    fun theBoardsOfTheConfirmsWaitForTheVerdictAreTheCoresOwn() {
+        for (words in listOf(enStrings(), zhStrings())) {
+            fun board(state: SigningScreenState) = SigningFixtures.build(state, words)
+            fun place(model: SigningScreenModel) = model.blocks.filterIsInstance<SigningBlock.Held>().single()
+
+            val held = board(SigningScreenState.CS69)
+            assertFalse(held.confirmEnabled)
+            assertEquals(words.t("componentsUi.signing.confirmBlock.simChecking"), held.confirmBlockLine)
+            assertNull("the simulation is out: the place is its skeleton", place(held).shown)
+            assertEquals(words.t("componentsUi.funding.checking"), place(held).waiting)
+
+            val waitedOut = board(SigningScreenState.CS70)
+            assertTrue(waitedOut.confirmEnabled)
+            assertNull(waitedOut.confirmBlockLine)
+            // The room of the line it said while it waited is kept under the
+            // open confirm, as on the live sheet: the confirm is where CS69's is.
+            assertEquals(held.confirmBlockLine, waitedOut.confirmBlockRoom)
+            assertNull(held.confirmBlockRoom)
+            assertEquals(
+                SigningBlock.Warning(SigningTone.Caution, words.t("componentsUi.signing.simUnavailableWarning")),
+                place(waitedOut).shown,
+            )
+
+            // The same sheet as the verdict boards: CS57's blocks and rooms, so nothing is anywhere else.
+            val waiting = board(SigningScreenState.CS57)
+            for (model in listOf(held, waitedOut)) {
+                assertEquals(place(waiting).rooms, place(model).rooms)
+                assertEquals(waiting.blocks.filterNot { it is SigningBlock.Held }, model.blocks.filterNot { it is SigningBlock.Held })
+                assertEquals(waiting.blocks.indexOfFirst { it is SigningBlock.Held }, model.blocks.indexOfFirst { it is SigningBlock.Held })
+                assertEquals(waiting.confirmAction, model.confirmAction)
+                assertEquals(waiting.fee, model.fee)
+            }
+            // CS58 is the same caution, said by a node that answered: the same block.
+            assertEquals(place(board(SigningScreenState.CS58)).shown, place(waitedOut).shown)
+        }
+        assertEquals("Checking what this transaction does…", SigningFixtures.build(SigningScreenState.CS69, enStrings()).confirmBlockLine)
+        assertEquals("正在检查这笔交易的结果…", SigningFixtures.build(SigningScreenState.CS69, zhStrings()).confirmBlockLine)
+
+        // What the boards stand on: the machines' own views.
+        val views = app.getvela.wallet.feature.signing.core.SimWaitBoards
+        val out = views.views(waitedOut = false, account = app.getvela.wallet.feature.wallet.WalletFixtures.ADDRESS_FULL)
+        assertTrue("the request is on the sheet and its own gate is open", out.sign.confirm_gate_open && out.sign.request?.id == views.REQUEST_ID)
+        assertTrue(out.sign.sim_checking)
+        assertNull(out.sign.sim_waited_out_key)
+        assertTrue("the reading is in", out.clear.resolved && !out.clear.resolving)
+        assertTrue("nothing to choose", out.guard.confirm_allowed)
+        val passed = views.views(waitedOut = true, account = app.getvela.wallet.feature.wallet.WalletFixtures.ADDRESS_FULL)
+        assertFalse(passed.sign.sim_checking)
+        assertEquals("componentsUi.signing.simUnavailableWarning", passed.sign.sim_waited_out_key)
     }
 
     @Test

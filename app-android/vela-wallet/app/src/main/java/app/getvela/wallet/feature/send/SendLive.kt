@@ -56,7 +56,9 @@ import app.getvela.wallet.feature.flows.SendPickModel
 import app.getvela.wallet.feature.flows.SendReceiptModel
 import app.getvela.wallet.feature.flows.SendTokenCardModel
 import app.getvela.wallet.feature.flows.TokenMarkModel
+import app.getvela.wallet.feature.send.core.SendAddNetworkMsg
 import app.getvela.wallet.feature.send.core.SendAlertKind
+import app.getvela.wallet.feature.send.core.SendLockError
 import app.getvela.wallet.feature.send.core.SendAmountWarning
 import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.feature.send.core.FeeAssetView
@@ -209,12 +211,40 @@ object SendLive {
                 text = s.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to (ctx.chainNames[chainId] ?: "chain-$chainId"))),
             )
         }
+        // F6 / F27: a payment request that cannot be fulfilled SAYS so. The
+        // core stops on `lock_error` and this picker stood there with no word
+        // of it — a request for a network the wallet lacks looked like an
+        // ordinary, empty Send. The lock's own sentence, or — once adding the
+        // network has been tried — that attempt's (`add_network_msg`, in the
+        // core's words when it carries them), under the network's mark.
+        val lockNotice = view.lock_error?.let { lock ->
+            val attempt = when (val msg = view.add_network_msg) {
+                null -> null
+                SendAddNetworkMsg.NetNotFound -> s.t(I18nKeys.Flows.LOCK_NET_NOT_FOUND)
+                is SendAddNetworkMsg.NetNotCompatible -> msg.detail?.takeIf { it.isNotBlank() } ?: s.t(I18nKeys.Flows.LOCK_NET_NOT_COMPATIBLE)
+                SendAddNetworkMsg.NetAddError -> s.t(I18nKeys.Flows.LOCK_NET_ADD_ERROR)
+            }
+            when (lock) {
+                is SendLockError.Network -> SendNoticeModel(
+                    // The network's own logo where the registry has one; its
+                    // coin is not known here, so no coin's letters stand in
+                    // for it ("ETH" under "Network not supported" was a guess).
+                    mark = WalletLive.chainMark(lock.chain_id, ctx.chainNames[lock.chain_id]?.let { nativeSymbol(lock.chain_id, ctx) } ?: UNKNOWN_MARK),
+                    text = attempt ?: "${s.t(I18nKeys.Flows.LOCK_NET_TITLE)} — ${s.t(I18nKeys.Flows.LOCK_NET_BODY, mapOf("chainId" to lock.chain_id.toString()))}",
+                )
+                SendLockError.Token -> SendNoticeModel(
+                    mark = (view.request_chain_id ?: chainFilter)?.let { WalletLive.chainMark(it, nativeSymbol(it, ctx)) }
+                        ?: WalletLive.chainMark(0, UNKNOWN_MARK),
+                    text = "${s.t(I18nKeys.Flows.LOCK_TOKEN_TITLE)} — ${s.t(I18nKeys.Flows.LOCK_TOKEN_BODY)}",
+                )
+            }
+        }
         if (!sweepPicking) {
             return fallback.copy(
                 header = fallback.header.copy(pill = pill),
                 recipient = recipient,
                 filters = filters,
-                notice = requestNotice,
+                notice = lockNotice ?: requestNotice,
                 selection = null,
                 rows = rows,
                 cta = SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false),
@@ -231,7 +261,7 @@ object SendLive {
             recipient = recipient,
             filters = filters,
             empty = empty,
-            notice = requestNotice ?: chain?.let {
+            notice = lockNotice ?: requestNotice ?: chain?.let {
                 SendNoticeModel(
                     mark = WalletLive.chainMark(it, nativeSymbol(it, ctx)),
                     text = s.t(I18nKeys.Flows.MULTI_SEND_NOTICE, mapOf("network" to chainName)),
@@ -323,10 +353,48 @@ object SendLive {
 
     // -- SD2c: the batch sheet (spec 045 US3) --------------------------------------
 
-    /** The web's `liveBatchImport`, word for word: the core parsed, priced and gated; this only says so. */
-    internal fun batchImport(fallback: BatchImportModel, batch: BatchView, view: SendView, ctx: Context, replaces: Boolean = false): BatchImportModel {
+    /** The glyph of a mark for something this wallet cannot name — a network it does not have. */
+    private const val UNKNOWN_MARK = "?"
+
+    /** What stands where the importer's currency code will be while the person's currency is not known ([batchImport]). */
+    internal const val BATCH_CURRENCY_PENDING = "…"
+
+    /**
+     * The currency the importer's figures are read as, as it is TOLD the
+     * importer (PR 3 final note F8): the committed code — dollars when the
+     * committed choice has no rate, as every figure then is — else the stored
+     * choice on its way; and `null` while neither is known, when the importer
+     * keeps the placeholder it needs to exist at all and its sheet names no
+     * currency.
+     */
+    fun batchCurrency(currency: app.getvela.wallet.feature.settings.core.CurrencyView): String? = when {
+        currency.committed -> WalletLive.Money.of(currency).code
+        else -> currency.pending?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * The web's `liveBatchImport`, word for word: the core parsed, priced and gated; this only says so.
+     *
+     * [currencyUnknown] is the core's withhold rule on this surface (F8):
+     * nothing has been read of the person's display currency yet, so the code
+     * the importer was opened with is the placeholder's "USD" — nobody's
+     * choice — and it is not SAID anywhere. The unit, the rate, its hint and
+     * the sheet's sum carry [BATCH_CURRENCY_PENDING] where the code will be,
+     * on the same lines, until the importer is told the real one
+     * (`SendController.batchFiatCode`). It read "In USD" over a sheet of yuan.
+     */
+    internal fun batchImport(
+        fallback: BatchImportModel,
+        batch: BatchView,
+        view: SendView,
+        ctx: Context,
+        replaces: Boolean = false,
+        currencyUnknown: Boolean = false,
+    ): BatchImportModel {
         val s = ctx.strings
         val symbol = view.selected_token?.symbol ?: ""
+        // The currency the sheet's figures are in, as it may be said.
+        val code = if (currencyUnknown) BATCH_CURRENCY_PENDING else batch.fiat_code
         val count = batch.recipient_count
         // Lines READ — the ones that became rows and the ones the parser refused
         // (the web's `seen`): the count above a list is the length of that list.
@@ -334,7 +402,7 @@ object SendLive {
         // Someone is already on the form (the core's own count, as `merge` reads it).
         val formHasRows = view.split_import_room < BATCH_MAX_RECIPIENTS
         return fallback.copy(
-            unitFiat = s.t(I18nKeys.Flows.BATCH_UNIT_FIAT, mapOf("code" to batch.fiat_code)),
+            unitFiat = s.t(I18nKeys.Flows.BATCH_UNIT_FIAT, mapOf("code" to code)),
             unitToken = s.t(I18nKeys.Flows.BATCH_UNIT_TOKEN, mapOf("sym" to symbol)),
             unit = if (batch.unit == WireBatchUnit.Fiat) BatchUnit.Fiat else BatchUnit.Token,
             pasteValue = batch.raw_text,
@@ -342,12 +410,12 @@ object SendLive {
             // A token-denominated sheet converts nothing (the web's `unitHint`): it
             // says so instead of explaining a rate the core ignores in that mode.
             rateHint = if (batch.unit == WireBatchUnit.Fiat) {
-                s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to batch.fiat_code, "sym" to symbol))
+                s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to code, "sym" to symbol))
             } else {
                 s.t(I18nKeys.Flows.BATCH_TOKEN_HINT, mapOf("sym" to symbol))
             },
             rateValue = when (batch.rate_status) {
-                BatchRateStatus.Ok -> "${batch.rate_input} ${batch.fiat_code}"
+                BatchRateStatus.Ok -> "${batch.rate_input} $code"
                 BatchRateStatus.Loading -> s.t(I18nKeys.Flows.BATCH_RATE_LOADING)
                 // Unknown, and said so: the core has already refused to apply.
                 BatchRateStatus.Failed -> s.t(I18nKeys.Flows.BATCH_RATE_FAILED)
@@ -399,7 +467,7 @@ object SendLive {
                 SummaryLineModel(
                     label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(if (count == 1) I18nKeys.Flows.RECIPIENT_COUNT_ONE else I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to count.toString()))}",
                     value = "${Formats.current.plain(batch.total_token)} $symbol".trim() +
-                        (batch.total_fiat?.let { " · ${Formats.current.plain(it)} ${batch.fiat_code}" } ?: ""),
+                        (batch.total_fiat?.let { " · ${Formats.current.plain(it)} $code" } ?: ""),
                     over = batch.over_balance,
                     // Adding to people already on the form draws from what the form
                     // has not given out yet (`split_remaining`), not the whole balance.
@@ -523,7 +591,9 @@ object SendLive {
             badgeHidden = mark.badgeHidden,
             balance = "${trim(token.balance)} ${token.symbol}",
             fiat = token.price_usd?.let { price ->
-                AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
+                // As the home's holdings: no worth in a currency that is not
+                // the person's yet — the one helper withholds it.
+                ctx.money.fiat(amount(token.balance) * price)?.let { AssetFiatModel.Value(it) } ?: AssetFiatModel.Loading
             } ?: AssetFiatModel.NoPrice("—"),
             masked = false,
         )
@@ -537,10 +607,14 @@ object SendLive {
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
         val chain = token?.let { ctx.chainNames[it.chain_id] ?: it.network } ?: ""
-        val fiatLine = token?.price_usd?.let { price ->
-            val typed = view.token_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
-            "≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(typed.toDouble() * price))}"
-        } ?: ""
+        // The "≈" line under the amount is a fiat figure: `null` from the one
+        // helper is WITHHELD (the display currency is not the person's yet),
+        // and the line keeps its room. No price at all is no line, as before.
+        val typedWorth = token?.price_usd?.let { price ->
+            (view.token_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO).toDouble() * price
+        }
+        val fiatLine = typedWorth?.let { ctx.money.fiat(it) }?.let { "≈ $it" }.orEmpty()
+        val fiatWithheld = typedWorth != null && !ctx.money.settled
         return fallback.copy(
             header = fallback.header.copy(title = s.t(I18nKeys.Flows.SEND_TITLE, mapOf("symbol" to symbol))),
             token = token?.let {
@@ -563,7 +637,7 @@ object SendLive {
             mode = if (view.split_mode) SendFormMode.Split else SendFormMode.Single,
             addRecipient = if (view.split_mode) null else s.t(I18nKeys.Flows.ADD_RECIPIENT),
             // Only a real address earns an identicon (the founder's anti-poisoning rule).
-            amount = if (view.split_mode) null else amountModel(view, symbol, fiatLine, ctx),
+            amount = if (view.split_mode) null else amountModel(view, symbol, fiatLine, fiatWithheld, ctx),
             recipient = if (view.split_mode) null else recipientModel(view, ctx),
             recipients = if (view.split_mode) view.recipients.mapIndexed { index, draft -> splitRow(draft, index, symbol, ctx, view) } else emptyList(),
             recipientActions = if (view.split_mode) {
@@ -631,13 +705,17 @@ object SendLive {
         return ctx.strings.t(key, mapOf("n" to first.ordinal.toString()))
     }
 
-    private fun amountModel(view: SendView, symbol: String, fiatLine: String, ctx: Context): AmountFieldModel {
+    private fun amountModel(view: SendView, symbol: String, fiatLine: String, fiatWithheld: Boolean, ctx: Context): AmountFieldModel {
         val (prefix, suffix) = unitAdornment(view.amount_fiat_code, symbol)
+        // Typing in fiat, the line under the figure is the TOKEN amount — not
+        // a fiat figure, so never withheld.
+        val typingFiat = view.amount_fiat_code != null
         return AmountFieldModel(
             value = view.amount.ifEmpty { "0" },
             // The token figure under a typed fiat one is a conversion — up to
             // 18 places — so it is written on the one token-amount ladder.
-            fiat = if (view.amount_fiat_code != null) "${tokenAmountText(view.token_amount.ifEmpty { "0" })} $symbol".trim() else fiatLine,
+            fiat = if (typingFiat) "${tokenAmountText(view.token_amount.ifEmpty { "0" })} $symbol".trim() else fiatLine,
+            fiatWithheld = fiatWithheld && !typingFiat,
             // The unit being TYPED: the figure's own currency, or the token.
             denomLabel = view.amount_fiat_code ?: symbol,
             raw = view.amount,
@@ -649,7 +727,10 @@ object SendLive {
             // Issue 197: ⇄ exists only where the core offers it, and is live
             // only where pressing it would change something.
             denomShown = view.denom_toggle_shown,
-            denomEnabled = view.denom_toggle_enabled,
+            // ⇄ swaps to typing a figure IN the display currency: not while
+            // that currency is not the person's yet (it would be the
+            // placeholder's dollars). The control keeps its place, dimmed.
+            denomEnabled = view.denom_toggle_enabled && ctx.money.settled,
         )
     }
 
@@ -721,6 +802,9 @@ object SendLive {
             addressNote = if (issue?.address == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS) else null,
             duplicateNote = repeat?.let { s.t(I18nKeys.Flows.RECIPIENT_DUPLICATE, mapOf("n" to it.first_ordinal.toString())) },
             amountNote = if (issue?.amount == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BAD_AMOUNT) else null,
+            // Issue #471: every row has the single field's two doors.
+            pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+            scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
         )
     }
 
@@ -728,9 +812,9 @@ object SendLive {
     internal fun splitSummary(view: SendView, symbol: String, ctx: Context): SummaryLineModel {
         val s = ctx.strings
         val total = view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
-        val fiat = view.selected_token?.price_usd?.let { price ->
-            " · ≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(total.toDouble() * price))}"
-        } ?: ""
+        // The total's worth rides on the same one line; withheld (`null`),
+        // the line is the token total alone until the currency commits.
+        val fiat = view.selected_token?.price_usd?.let { price -> ctx.money.fiat(total.toDouble() * price) }?.let { " · ≈ $it" }.orEmpty()
         return SummaryLineModel(
             label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString()))}",
             value = "${Formats.current.plain(view.confirm_amount)} $symbol".trim() + fiat,
@@ -870,6 +954,9 @@ object SendLive {
             // and nothing said so. Not while a fresh measurement is out, and
             // not over a row with no figure of its own on it.
             staleNote = if (speed != null && fee?.stale == true && !busy && estimate != null) s.t(I18nKeys.Flows.FEE_STALE) else null,
+            // The fee's worth joins this line when the display currency
+            // commits: the row keeps the longer line's room from now.
+            worthRoom = !ctx.money.settled,
         )
     }
 
@@ -912,7 +999,7 @@ object SendLive {
      * by the core; only the words and the fee line are made here.
      */
     internal fun speedModel(speed: SpeedInputs, view: SendView, ctx: Context): FeeSpeedModel =
-        speedModel(speed, ctx.strings) { quote, fee -> feeText(quote, view, fee, ctx).first }
+        speedModel(speed, ctx.strings, worthRoom = !ctx.money.settled) { quote, fee -> feeText(quote, view, fee, ctx).first }
 
     /**
      * The same control for any fee surface — the dApp signing sheet draws it
@@ -923,11 +1010,14 @@ object SendLive {
     internal fun speedModel(
         speed: SpeedInputs,
         strings: VelaStrings,
+        /** The display currency is on its way: each option's worth will join its line (see [FeeSpeedModel.worthRoom]). */
+        worthRoom: Boolean = false,
         optionFee: (FeeEstimateView, FeeView?) -> String,
     ): FeeSpeedModel {
         val s = strings
         val core = speed.view
         return FeeSpeedModel(
+            worthRoom = worthRoom,
             label = s.t(I18nKeys.Flows.FEE_SPEED_LABEL),
             // THEIR default (or their pick for this send), never a hardcoded one.
             value = tierName(core.tier, s),
@@ -1022,6 +1112,7 @@ object SendLive {
             label = ctx.strings.t("componentsUi.gas.networkFee"),
             value = feeText(row.fee, view, fee, ctx).first,
             tier = row.tier_key?.let(ctx.strings::t),
+            worthRoom = !ctx.money.settled,
         )
     }
 
@@ -1032,7 +1123,11 @@ object SendLive {
      */
     internal fun feeLine(parts: FeeParts, priceUsd: Double?, money: WalletLive.Money): String {
         val usd = if (parts.units == null || priceUsd == null) null else parts.units * priceUsd
-        return if (usd != null && usd >= FEE_FIAT_MIN_USD) "${parts.coin} · ≈${money.fiat(usd)}" else parts.coin
+        // The fee in the coin it is paid in is not a fiat figure: it is drawn
+        // as always. Its worth beside it is — withheld (`null`) until the
+        // display currency is the person's, on the same one line.
+        val worth = usd?.takeIf { it >= FEE_FIAT_MIN_USD }?.let { money.fiat(it) }
+        return if (worth != null) "${parts.coin} · ≈$worth" else parts.coin
     }
 
     /**
@@ -1133,10 +1228,11 @@ object SendLive {
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
         val chain = token?.let { ctx.chainNames[it.chain_id] ?: it.network } ?: ""
-        val fiat = token?.price_usd?.let { price ->
-            val amount = view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
-            "≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(amount.toDouble() * price))}"
-        } ?: ""
+        // The line under the figure is a fiat figure: withheld (`null` from
+        // the one helper) until the display currency is the person's, its
+        // line kept.
+        val worth = token?.price_usd?.let { price -> (view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO).toDouble() * price }
+        val fiat = worth?.let { ctx.money.fiat(it) }?.let { "≈ $it" }.orEmpty()
         val (feeLine, _) = feeText(view.fee, view, fee, ctx)
         // The fee card's failure, only when it is for this send's chain (PR 2
         // polish): another chain's is not drawn — no figure, no reason, no line.
@@ -1157,13 +1253,18 @@ object SendLive {
             },
             amountUnit = if (split || view.multi_select_mode) null else symbol.ifEmpty { null },
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) }
-                ?: sweep?.let {
-                    s.t(
-                        I18nKeys.Flows.CONFIRM_TOTAL_LINE,
-                        mapOf("fiat" to ctx.money.fiat(it.totalUsd), "network" to (view.multi_chain_id?.let { id -> ctx.chainNames[id] } ?: chain)),
-                    )
+                ?: sweep?.let { parts ->
+                    // "Total ≈ $200.90 · Ethereum": the sentence is built
+                    // around the figure, so withheld it is not said at all.
+                    ctx.money.fiat(parts.totalUsd)?.let { total ->
+                        s.t(
+                            I18nKeys.Flows.CONFIRM_TOTAL_LINE,
+                            mapOf("fiat" to total, "network" to (view.multi_chain_id?.let { id -> ctx.chainNames[id] } ?: chain)),
+                        )
+                    }.orEmpty()
                 }
                 ?: fiat,
+            sublineWithheld = view.confirm_amount_issue == null && !ctx.money.settled && (sweep != null || worth != null),
             // The core's own verdicts: a token's own contract (spec 096 F12)
             // first, else the first time, resolved on this page only (single
             // recipient).
@@ -1307,7 +1408,8 @@ object SendLive {
             BreakdownRowModel(
                 lead = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls),
                 label = token.symbol,
-                value = usd?.let { "$value · ≈${ctx.money.fiat(it)}" } ?: value,
+                // The coin's amount always; its worth beside it once the currency is the person's.
+                value = usd?.let { ctx.money.fiat(it) }?.let { "$value · ≈$it" } ?: value,
             )
         }
         return SweepBreakdown(rows, totalUsd)
@@ -1660,8 +1762,6 @@ object SendLive {
         if (view.split_mode) exact(amount) else tokenAmountText(amount)
 
     private fun amount(human: String): Double = human.toDoubleOrNull() ?: 0.0
-
-    private fun fixed2(value: Double): String = Formats.current.fixed2(value)
 
     fun shortAddress(address: String): String =
         if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address

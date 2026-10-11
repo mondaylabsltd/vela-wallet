@@ -21,7 +21,9 @@ use vela_core::app::token_trust::{
     TrustOperation as Op, TrustRawLog, TrustReceiptLog, TrustShellResult as Res, TrustSimJudgment,
     TrustTokenMeta, DEFAULT_MONITOR_CHAINS, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
 };
-use vela_core::app::token_trust::{merge_safe_received, SAFE_RECEIVED_TOPIC};
+use vela_core::app::token_trust::{
+    merge_safe_received, TrustSimDirection, TrustSimView, SAFE_RECEIVED_TOPIC,
+};
 
 type Sut = DomainDriver<TokenTrust>;
 
@@ -181,7 +183,28 @@ fn timestamp(chain_id: u32, block: u64, sec: Option<f64>) -> Res {
         chain_id,
         block_number: block as f64,
         timestamp_sec: sec,
-        now_ms: 1_700_000_123_456.0,
+    }
+}
+
+/// One poll of chain 1 up to the block reads: the customs, the head, the
+/// transfer logs and an empty `SafeReceived`. Returns what the scan asks next.
+fn poll_to_blocks(sut: &mut Sut, latest: u64, logs: Vec<TrustRawLog>) -> Vec<Op> {
+    let ops = sut.dispatch(Event::PollRequested {
+        address: WALLET.to_owned(),
+    });
+    assert_eq!(ops, vec![Op::ReadCustomTokens], "a poll starts: {ops:?}");
+    sut.resolve(Res::CustomTokens {
+        tokens: Some(vec![]),
+    });
+    sut.resolve(block_number(1, latest));
+    logs_round(sut, 1, logs)
+}
+
+fn block_read(block: u64) -> Op {
+    Op::RpcGetBlockByNumber {
+        address: WALLET_LC.to_owned(),
+        chain_id: 1,
+        block: format!("0x{block:x}"),
     }
 }
 
@@ -486,7 +509,7 @@ fn judge_delta_asymmetric_grid_is_exhaustive() {
                         verdict,
                         TrustSimJudgment::Erc20Unverified {
                             token: Some(FRESH.to_owned()),
-                            delta: delta.to_owned(),
+                            direction: TrustSimDirection::of_delta(delta),
                         },
                         "delta={delta} meta={} trusted={trusted}",
                         meta_case.is_some()
@@ -512,7 +535,7 @@ fn judge_delta_edges_fail_toward_unverified() {
         ),
         TrustSimJudgment::Erc20Unverified {
             token: Some(KNOWN_USDC.to_owned()),
-            delta: "50".to_owned(),
+            direction: TrustSimDirection::In,
         }
     );
     // No token address → unverified even with metadata in hand.
@@ -525,7 +548,7 @@ fn judge_delta_edges_fail_toward_unverified() {
         judge_delta(&no_token, Some(&m), true),
         TrustSimJudgment::Erc20Unverified {
             token: None,
-            delta: "50".to_owned()
+            direction: TrustSimDirection::In,
         }
     );
     // A garbled delta (no JS counterpart — bigints can't be malformed) and an
@@ -827,47 +850,231 @@ fn failing_chain_yields_nothing_this_tick() {
     assert!(!sut.view().scanning);
 }
 
+/// Invariant ⑨ (PR 3, fix A) — a receipt's time is its block's time, never
+/// "now". On the owner's phone three receipts of 2026-09-29 stood under
+/// "Today" on 2026-10-10: their block's time had not been read, the transfer
+/// took the clock, and the shell stored it. A transfer whose block time is
+/// unread is withheld, and reaches the feed with the block's own time once a
+/// later poll reads it.
 #[test]
-fn timestamps_come_from_blocks_with_now_fallback() {
+fn an_unread_block_time_withholds_the_transfer_until_it_is_read() {
     let mut sut = booted(vec![1]);
+    let logs = vec![
+        raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xa", 999, 1),
+        raw_log(NATIVE_SENTINEL, PEER, WALLET, 6, "0xb", 998, 0),
+    ];
+    let ops = poll_to_blocks(&mut sut, 1000, logs.clone());
+    assert_eq!(ops, vec![block_read(999), block_read(998)]);
+    sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
+    sut.resolve(timestamp(1, 998, None)); // the header lookup failed
+    let view = sut.view();
+    assert!(!view.scanning, "the poll ended; nothing is held open");
+    assert_eq!(
+        view.incoming
+            .iter()
+            .map(|t| (t.tx_hash.as_str(), t.timestamp_sec))
+            .collect::<Vec<_>>(),
+        vec![("0xa", 1_700_000_000.0)],
+        "the transfer whose block could not be read is not in the feed — it has no time, and it is given none"
+    );
+
+    // The next poll, same window: the time already read is not read again;
+    // the unread block is asked for once more — and only it.
+    let ops = poll_to_blocks(&mut sut, 1001, logs.clone());
+    assert_eq!(
+        ops,
+        vec![block_read(998)],
+        "one retry, of the one unread block"
+    );
+    sut.resolve(timestamp(1, 998, Some(1_699_999_988.0)));
+    let view = sut.view();
+    assert_eq!(
+        view.incoming
+            .iter()
+            .map(|t| (t.tx_hash.as_str(), t.timestamp_sec))
+            .collect::<Vec<_>>(),
+        vec![("0xa", 1_700_000_000.0), ("0xb", 1_699_999_988.0)],
+        "emitted with its block's own time once it is read"
+    );
+
+    // And from then on both times are kept: a third poll reads no block.
+    let ops = poll_to_blocks(&mut sut, 1002, logs);
+    assert!(ops.is_empty(), "a block time once read is cached: {ops:?}");
+    assert!(!sut.view().scanning);
+    assert_eq!(sut.view().incoming.len(), 2);
+}
+
+/// Invariant ⑨ — a time that is no time is an unread block: absent, zero,
+/// negative, or not a number. None of them puts a row in the feed.
+#[test]
+fn a_block_time_that_is_no_time_is_an_unread_block() {
+    for no_time in [
+        None,
+        Some(0.0),
+        Some(-1.0),
+        Some(f64::NAN),
+        Some(f64::INFINITY),
+    ] {
+        let mut sut = booted(vec![1]);
+        let logs = vec![raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xa", 999, 1)];
+        poll_to_blocks(&mut sut, 1000, logs.clone());
+        sut.resolve(timestamp(1, 999, no_time));
+        assert!(sut.view().incoming.is_empty(), "{no_time:?}");
+        // Asked again by the next poll.
+        assert_eq!(poll_to_blocks(&mut sut, 1001, logs), vec![block_read(999)]);
+    }
+}
+
+/// Invariant ⑨ — the withheld transfer is not lost when its window moves on.
+/// A scan window is 100 blocks (25 s of Arbitrum); a block read that fails
+/// for longer than that used to cost nothing, because the clock stood in.
+/// Now the transfer is carried, and a later poll that finds NO log of its own
+/// still asks for the block it owes.
+#[test]
+fn a_withheld_transfer_outlives_its_scan_window() {
+    let mut sut = booted(vec![1]);
+    poll_to_blocks(
+        &mut sut,
+        1000,
+        vec![raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xa", 999, 1)],
+    );
+    sut.resolve(timestamp(1, 999, None));
+    assert!(sut.view().incoming.is_empty());
+
+    // 5,000 blocks later the window holds nothing; the block is still owed.
+    let ops = poll_to_blocks(&mut sut, 6000, vec![]);
+    assert_eq!(ops, vec![block_read(999)]);
+    sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
+    let incoming = sut.view().incoming;
+    assert_eq!(incoming.len(), 1);
+    assert_eq!(
+        (incoming[0].tx_hash.as_str(), incoming[0].timestamp_sec),
+        ("0xa", 1_700_000_000.0)
+    );
+
+    // Settled: the next empty poll asks nothing.
+    assert!(poll_to_blocks(&mut sut, 6001, vec![]).is_empty());
+
+    // Another account's unread transfers are not this one's to ask about.
+    let mut sut = booted(vec![1]);
+    poll_to_blocks(
+        &mut sut,
+        1000,
+        vec![raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xa", 999, 1)],
+    );
+    sut.resolve(timestamp(1, 999, None));
+    sut.dispatch(Event::HeldChainsSnapshot {
+        address: OTHER.to_owned(),
+        chain_ids: vec![1],
+    });
     sut.dispatch(Event::PollRequested {
-        address: WALLET.to_owned(),
+        address: OTHER.to_owned(),
     });
     sut.resolve(Res::CustomTokens {
         tokens: Some(vec![]),
     });
-    sut.resolve(block_number(1, 1000));
-    let ops = logs_round(
-        &mut sut,
-        1,
-        vec![
-            raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xa", 999, 1),
-            raw_log(NATIVE_SENTINEL, PEER, WALLET, 6, "0xb", 998, 0),
-        ],
+    sut.resolve(Res::BlockNumber {
+        address: OTHER.to_owned(),
+        chain_id: 1,
+        block_hex: Some("0x1770".to_owned()),
+    });
+    sut.resolve(Res::Logs {
+        address: OTHER.to_owned(),
+        chain_id: 1,
+        outcome: TrustLogsOutcome::Ok { logs: vec![] },
+    });
+    let ops = sut.resolve(Res::SafeReceivedLogs {
+        address: OTHER.to_owned(),
+        chain_id: 1,
+        outcome: TrustLogsOutcome::Ok { logs: vec![] },
+    });
+    assert!(
+        ops.is_empty(),
+        "the switch dropped what was carried: {ops:?}"
     );
+}
+
+/// Invariant ⑨ — the retries are bounded: at most `TIMESTAMP_BLOCK_CAP`
+/// block reads per chain per poll, whatever is owed. Blocks past the cap are
+/// not stamped with the clock any more — they wait, and the next poll reads
+/// them (and only them).
+#[test]
+fn block_reads_are_capped_per_poll_and_the_rest_wait() {
+    use vela_core::app::token_trust::TIMESTAMP_BLOCK_CAP;
+    let mut sut = booted(vec![1]);
+    let total = TIMESTAMP_BLOCK_CAP as u64 + 5;
+    let logs: Vec<TrustRawLog> = (0..total)
+        .map(|i| {
+            raw_log(
+                NATIVE_SENTINEL,
+                PEER,
+                WALLET,
+                1,
+                &format!("0x{i:x}"),
+                900 + i,
+                0,
+            )
+        })
+        .collect();
+    let ops = poll_to_blocks(&mut sut, 1000, logs.clone());
+    assert_eq!(ops.len(), TIMESTAMP_BLOCK_CAP, "capped: {}", ops.len());
+    for i in 0..TIMESTAMP_BLOCK_CAP as u64 {
+        sut.resolve(timestamp(1, 900 + i, Some(1_700_000_000.0 + i as f64)));
+    }
+    assert_eq!(
+        sut.view().incoming.len(),
+        TIMESTAMP_BLOCK_CAP,
+        "the five past the cap are withheld, not dated now"
+    );
+
+    let ops = poll_to_blocks(&mut sut, 1001, logs.clone());
     assert_eq!(
         ops,
-        vec![
-            Op::RpcGetBlockByNumber {
-                address: WALLET_LC.to_owned(),
-                chain_id: 1,
-                block: "0x3e7".to_owned()
-            },
-            Op::RpcGetBlockByNumber {
-                address: WALLET_LC.to_owned(),
-                chain_id: 1,
-                block: "0x3e6".to_owned()
-            },
-        ]
+        (TIMESTAMP_BLOCK_CAP as u64..total)
+            .map(|i| block_read(900 + i))
+            .collect::<Vec<_>>(),
+        "the next poll reads the rest, and nothing it already holds"
     );
-    sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
-    sut.resolve(timestamp(1, 998, None)); // header lookup failed → now
-    let view = sut.view();
-    assert_eq!(view.incoming[0].timestamp_sec, 1_700_000_000.0);
-    assert_eq!(
-        view.incoming[1].timestamp_sec, 1_700_000_123.0,
-        "floor(now_ms / 1000) fallback, clock from the shell's result"
+    for i in TIMESTAMP_BLOCK_CAP as u64..total {
+        sut.resolve(timestamp(1, 900 + i, Some(1_700_000_000.0 + i as f64)));
+    }
+    let incoming = sut.view().incoming;
+    assert_eq!(incoming.len() as u64, total);
+    assert!(
+        incoming
+            .iter()
+            .all(|t| t.timestamp_sec == 1_700_000_000.0 + (t.block_number - 900.0)),
+        "every row carries its own block's time"
     );
+
+    // A block that never answers costs one read a poll, never a loop.
+    let mut sut = booted(vec![1]);
+    let stuck = vec![raw_log(NATIVE_SENTINEL, PEER, WALLET, 5, "0xa", 999, 1)];
+    for poll in 0..4 {
+        let ops = poll_to_blocks(&mut sut, 1000 + poll, stuck.clone());
+        assert_eq!(ops, vec![block_read(999)], "poll {poll}");
+        let after = sut.resolve(timestamp(1, 999, None));
+        assert!(after.is_empty(), "no retry inside a poll: {after:?}");
+        assert!(!sut.view().scanning);
+    }
+}
+
+/// A shell that still sends the clock beside a block's time is read: the
+/// field is ignored (the wire carried `now_ms` until PR 3).
+#[test]
+fn a_block_timestamp_with_the_old_clock_field_still_reads() {
+    let old = serde_json::json!({
+        "type": "block_timestamp",
+        "address": WALLET_LC,
+        "chain_id": 1,
+        "block_number": 999.0,
+        "timestamp_sec": null,
+        "now_ms": 1_700_000_123_456.0_f64,
+    });
+    let read: Res = serde_json::from_value(old).expect("an older shell's answer reads");
+    assert_eq!(read, timestamp(1, 999, None));
+    let written = serde_json::to_value(timestamp(1, 999, Some(5.0))).expect("serialises");
+    assert_eq!(written.get("now_ms"), None, "no clock crosses to the core");
 }
 
 /// Invariant ③ — an ERC-20 whose metadata can't resolve is withheld from the
@@ -923,13 +1130,11 @@ fn unresolvable_metadata_withholds_the_erc20_but_not_native() {
     });
     sut.resolve(block_number(1, 1000));
     let ops = logs_round(&mut sut, 1, logs);
-    sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
     assert!(
-        !sut.outstanding()
-            .iter()
-            .any(|op| matches!(op, Op::MulticallErc20Meta { .. })),
-        "session negative memo — no re-query (ops after logs: {ops:?})"
+        ops.is_empty() && sut.outstanding().is_empty(),
+        "session negative memo — no re-query; and the block's time is kept, so no read of it either (ops after logs: {ops:?})"
     );
+    assert!(!sut.view().scanning);
     assert_eq!(sut.view().incoming.len(), 1);
 }
 
@@ -1002,8 +1207,12 @@ fn feed_sorts_newest_first_and_dedupes_across_overlapping_polls() {
         tokens: Some(vec![]),
     });
     sut.resolve(block_number(1, 1001));
-    logs_round(&mut sut, 1, vec![newer_high]);
-    sut.resolve(timestamp(1, 999, Some(2.0)));
+    let ops = logs_round(&mut sut, 1, vec![newer_high]);
+    assert!(
+        ops.is_empty(),
+        "block 999's time is already kept (invariant ⑨): {ops:?}"
+    );
+    assert!(!sut.view().scanning);
     assert_eq!(
         sut.view().incoming.len(),
         3,
@@ -1165,7 +1374,7 @@ fn sim_sent_is_trusted_received_needs_the_trusted_set() {
             // STILL renders unverified — trust, not just availability.
             TrustSimJudgment::Erc20Unverified {
                 token: Some(FRESH.to_owned()),
-                delta: "50".to_owned(),
+                direction: TrustSimDirection::In,
             },
             TrustSimJudgment::Erc20Trusted {
                 token: HELD.to_owned(),
@@ -1229,7 +1438,7 @@ fn the_registry_vouches_only_on_its_own_chain() {
         vec![
             TrustSimJudgment::Erc20Unverified {
                 token: Some(KNOWN_USDC.to_owned()),
-                delta: "9".to_owned(),
+                direction: TrustSimDirection::In,
             },
             TrustSimJudgment::Erc20Trusted {
                 token: BSC_USDC.to_owned(),
@@ -1296,7 +1505,7 @@ fn sim_unknown_metadata_is_unverified_and_memoised() {
         sim.judgments,
         vec![TrustSimJudgment::Erc20Unverified {
             token: Some(FRESH.to_owned()),
-            delta: "-5".to_owned(),
+            direction: TrustSimDirection::Out,
         }]
     );
 
@@ -1307,6 +1516,131 @@ fn sim_unknown_metadata_is_unverified_and_memoised() {
     });
     assert!(ops.is_empty(), "negative memo — no re-query");
     assert!(sut.view().sim.expect("re-judged").ready);
+}
+
+/// PR 3: "No asset changes" is the judged view's to say — once it is ready,
+/// with no judgment or every one a zero — so every sheet says the same line
+/// in the same case. Never while resolving, and never over a move.
+#[test]
+fn the_judged_view_says_no_asset_changes() {
+    const NO_CHANGE: &str = "componentsUi.signing.simResultNoChange";
+    let mut sut = booted(vec![1]);
+    // A check that moved nothing: judged at once, and it says so.
+    sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 1,
+        deltas: vec![],
+    });
+    let sim = sut.view().sim.expect("judged");
+    assert!(sim.ready && sim.judgments.is_empty());
+    assert_eq!(sim.no_change_key.as_deref(), Some(NO_CHANGE));
+
+    // A move of nothing is not a move.
+    sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 1,
+        deltas: vec![native_delta("0")],
+    });
+    let sim = sut.view().sim.expect("judged");
+    assert_eq!(sim.judgments.len(), 1);
+    assert_eq!(sim.no_change_key.as_deref(), Some(NO_CHANGE));
+
+    // Something moves: no such line.
+    sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 1,
+        deltas: vec![native_delta("-7")],
+    });
+    assert_eq!(sut.view().sim.expect("judged").no_change_key, None);
+
+    // Still resolving a token's name: nothing is said yet.
+    sut.dispatch(Event::SimDeltasComputed {
+        address: WALLET.to_owned(),
+        chain_id: 1,
+        deltas: vec![erc20_delta(FRESH, "-5")],
+    });
+    let sim = sut.view().sim.expect("resolving");
+    assert!(!sim.ready);
+    assert_eq!(sim.no_change_key, None);
+
+    // A view written before the line reads without it.
+    let mut json = serde_json::to_value(TrustSimView {
+        address: WALLET_LC.to_owned(),
+        chain_id: 1,
+        ready: true,
+        judgments: vec![],
+        no_change_key: Some(NO_CHANGE.to_owned()),
+    })
+    .unwrap_or_default();
+    if let Some(map) = json.as_object_mut() {
+        map.remove("no_change_key");
+    }
+    let old: TrustSimView = serde_json::from_value(json).expect("an older view still reads");
+    assert_eq!(old.no_change_key, None);
+}
+
+/// PR 3, fix B: an unverified token's judgment has no figure to print. The
+/// simulation's number for it is whatever the site being signed for chose to
+/// emit (Android drew 「未验证代币 +5,000,000,000,000,000,000,000.00」 from the
+/// raw delta the judgment used to carry); what a shell is handed now is the
+/// direction, and nothing else of the move.
+#[test]
+fn an_unverified_token_is_a_direction_and_never_a_figure() {
+    const LURE: &str = "5000000000000000000000";
+    let judged = judge_delta(&erc20_delta(FRESH, LURE), Some(&meta("USDC", 18)), false);
+    assert_eq!(
+        judged,
+        TrustSimJudgment::Erc20Unverified {
+            token: Some(FRESH.to_owned()),
+            direction: TrustSimDirection::In,
+        }
+    );
+    // Nothing of the figure crosses to a shell, in any spelling.
+    let wire = serde_json::to_string(&judged).expect("a judgment serialises");
+    assert!(!wire.contains("5000"), "{wire}");
+    assert!(!wire.contains("delta"), "{wire}");
+    assert_eq!(
+        serde_json::to_value(&judged).expect("a judgment serialises"),
+        serde_json::json!({ "type": "erc20_unverified", "token": FRESH, "direction": "in" })
+    );
+
+    // The four things a direction can be.
+    let direction = |delta: &str| judge_delta(&erc20_delta(FRESH, delta), None, true).direction();
+    assert_eq!(direction("-5"), TrustSimDirection::Out);
+    assert_eq!(direction("+5"), TrustSimDirection::In);
+    for zero in ["0", "-0", "+0", "000"] {
+        assert_eq!(direction(zero), TrustSimDirection::Still, "{zero:?}");
+    }
+    for garbage in ["", "abc", "--1", "1.5", "0x10"] {
+        assert_eq!(
+            direction(garbage),
+            TrustSimDirection::Unreadable,
+            "{garbage:?}"
+        );
+    }
+
+    // "No asset changes" reads the direction: a move of nothing is no move,
+    // and a figure nobody could read is never "nothing moves".
+    let mut sut = booted(vec![1]);
+    let judged_view = |sut: &mut Sut, delta: &str| {
+        sut.dispatch(Event::SimDeltasComputed {
+            address: WALLET.to_owned(),
+            chain_id: 1,
+            deltas: vec![TrustAssetDelta {
+                kind: TrustDeltaKind::Erc20,
+                token: None,
+                delta: delta.to_owned(),
+            }],
+        });
+        sut.view().sim.expect("judged at once: no token to name")
+    };
+    let still = judged_view(&mut sut, "0");
+    assert_eq!(
+        still.no_change_key.as_deref(),
+        Some("componentsUi.signing.simResultNoChange")
+    );
+    assert_eq!(judged_view(&mut sut, "abc").no_change_key, None);
+    assert_eq!(judged_view(&mut sut, "7").no_change_key, None);
 }
 
 #[test]

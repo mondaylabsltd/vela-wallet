@@ -13,7 +13,17 @@ import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 
 export type AddNetworkResult =
 	| { ok: true; chainId: number }
-	| { ok: false; reason: 'not-found' | 'not-compatible'; error?: string };
+	| {
+			ok: false;
+			/**
+			 * `unverified` is a check that could not be made (`check_failed`) —
+			 * never folded into `not-compatible`: an inconclusive probe is not a
+			 * refusal (024's invariant ③, and the core keeps the two apart on
+			 * this path since spec 038 #E1).
+			 */
+			reason: 'not-found' | 'not-compatible' | 'unverified';
+			error?: string;
+	  };
 
 /**
  * The core drops every mutation until its stores are read (mutating a ledger
@@ -43,7 +53,8 @@ function savedRow(view: NetView, chainId: number): NetNetworkRow | undefined {
 /**
  * Ask the wizard to add `chainId` from the registry, and answer once it has
  * settled. Never throws: an unknown chain is `not-found`, an incompatible one
- * is `not-compatible`, and the core's own wording is what the send screen shows.
+ * is `not-compatible`, one that could not be checked is `unverified`, and the
+ * core's own wording is what the send screen shows.
  */
 export async function addCustomNetworkByChainId(chainId: number): Promise<AddNetworkResult> {
 	await whenLoaded();
@@ -79,10 +90,16 @@ export async function addCustomNetworkByChainId(chainId: number): Promise<AddNet
 							);
 							return;
 						}
+						case 'check_failed':
+							// The probe did not answer: nothing was learned about the
+							// network, so nothing is said against it.
+							resolve({ ok: false, reason: 'unverified' });
+							return;
 						default:
 							// `not_compatible`, and `no_rpc_endpoint` which the auto path
-							// cannot reach. The core does not project the per-contract
-							// verdict here, so the caller words the failure itself.
+							// cannot reach. WHY it is refused stays on the wizard's view
+							// (`error_key`, and the check beside it): this answer is a
+							// code for the send machine, not words.
 							resolve({ ok: false, reason: 'not-compatible' });
 							return;
 					}

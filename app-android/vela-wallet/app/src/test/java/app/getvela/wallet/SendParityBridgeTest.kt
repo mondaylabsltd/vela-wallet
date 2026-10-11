@@ -72,7 +72,7 @@ class SendParityBridgeTest {
         strings = strings,
         chainNames = mapOf(100 to "Gnosis"),
         explorers = emptyMap(),
-        money = WalletLive.Money.of(CurrencyView(code = "USD")),
+        money = WalletLive.Money.of(CurrencyView(code = "USD", committed = true)),
         fromName = "Me",
         fromAddress = safe,
     )

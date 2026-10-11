@@ -92,8 +92,6 @@ internal fun glyphFor(icon: ContactsIcon): ImageVector = when (icon) {
     ContactsIcon.Edit -> VelaIcons.Pencil
     ContactsIcon.Delete -> VelaIcons.Trash2
     ContactsIcon.Send -> VelaIcons.ArrowUpRight
-    ContactsIcon.Receive -> VelaIcons.ArrowDownLeft
-    ContactsIcon.Qr -> VelaIcons.QrCode
     ContactsIcon.MoveGroup -> VelaIcons.UsersRound
 }
 

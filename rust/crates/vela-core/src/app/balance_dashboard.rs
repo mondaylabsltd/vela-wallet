@@ -129,6 +129,26 @@ pub const UNREACHABLE_RECHECK_MS: u32 = 10_000;
 pub const UNREACHABLE_ONE: &str = "assets.unreachableOne";
 /// The home line when more than one cannot (`{{n}}`, the count).
 pub const UNREACHABLE_MANY: &str = "assets.unreachableMany";
+/// The home line when the one network that could not be read has an RPC that
+/// is fine: its token list could not be loaded ([`UnreachableCause::TokenList`],
+/// `{{name}}`). "Can't reach Tempo" there named the wrong thing, and sent a
+/// person to repair an endpoint that was answering.
+pub const TOKEN_LIST_UNREACHABLE: &str = "assets.tokenListUnreachable";
+/// The hero's line while the first read of an account is still out
+/// ([`BalanceView::checking_key`]): "Checking…".
+pub const CHECKING: &str = "componentsUi.funding.checking";
+/// The hero's line under a zero every network answered for
+/// ([`BalanceView::live_key`]): "Live · listening for payments".
+pub const LIVE_ZERO: &str = "home.liveIndicator";
+/// The Assets list's empty state ([`BalanceView::empty_key`]): "Deposit your
+/// first asset".
+pub const ASSETS_EMPTY: &str = "assets.emptyTitle";
+/// The balance breakdown's short status for a network none of whose
+/// endpoints answered ([`UnreachableNetwork::status_key`]): "RPC unavailable".
+pub const STATUS_RPC_UNAVAILABLE: &str = "home.balanceDetailStatusFailed";
+/// … and for one whose RPC is fine and whose token list could not be loaded:
+/// "RPC unavailable" was false there.
+pub const STATUS_TOKEN_LIST_UNAVAILABLE: &str = "home.balanceDetailStatusTokenList";
 /// A row in the list: it held something worth `{{amount}}` when last read.
 pub const LAST_SEEN: &str = "assets.lastSeen";
 /// A row: it held something when last read, none of it priced.
@@ -724,6 +744,15 @@ pub enum BalanceShellResult {
         /// "can't reach" ([`BalanceView::internal_key`]).
         #[serde(default)]
         internal_chain_ids: Vec<u32>,
+        /// The failed chains whose RPC was never the problem (PR 3 note 4):
+        /// the chain's token list — the registry document that names its
+        /// stablecoins — could not be loaded, and the chain has no native
+        /// coin that could be read without it (Tempo). Nothing was read, so
+        /// it is a subset of `failed_chain_ids` like the two above; but its
+        /// row is never offered an RPC fix, and alone it is said as what it
+        /// is ([`TOKEN_LIST_UNREACHABLE`]), not as "can't reach".
+        #[serde(default)]
+        registry_chain_ids: Vec<u32>,
         now_ms: f64,
     },
     /// The fetch itself threw (`useHomeController.ts:367`) — keep last-known
@@ -867,6 +896,8 @@ pub struct Model {
     rate_limited_chain_ids: Vec<u32>,
     /// [`BalanceShellResult::FetchSettled`]'s `internal_chain_ids`.
     internal_chain_ids: Vec<u32>,
+    /// [`BalanceShellResult::FetchSettled`]'s `registry_chain_ids`.
+    registry_chain_ids: Vec<u32>,
     /// The last round threw inside the app ([`BalanceShellResult::FetchErrored`]).
     errored_internally: bool,
     /// Per chain, what it held the last time it answered for this account
@@ -878,6 +909,11 @@ pub struct Model {
     cached_total: Option<f64>,
     /// First fetch for this account has settled (either way) — skeleton off.
     bootstrapped: bool,
+    /// The last round of this account SETTLED — it was not still out, and it
+    /// did not throw. Only then is what the view holds something the chains
+    /// said: a cached zero before any read, or after a read that threw, is
+    /// nobody's answer ([`BalanceView::live_key`]).
+    last_round_answered: bool,
     /// Survives account switches — ported verbatim.
     last_refreshed_at_ms: Option<f64>,
     partial_retries_left: u32,
@@ -984,6 +1020,43 @@ pub struct UnreachableNetwork {
     /// worth in the display currency), [`LAST_SEEN_UNPRICED`],
     /// [`LAST_SEEN_EMPTY`] or [`NOT_READ_YET`].
     pub line_key: String,
+    /// What kept it from being read.
+    #[serde(default)]
+    pub cause: UnreachableCause,
+    /// May the row offer its RPC editor ("Fix")? Only when the network
+    /// itself did not answer: for any other cause the endpoint is fine, and
+    /// a "Fix RPC" there sends a person to repair what is working.
+    #[serde(default = "rpc_fixable_by_default")]
+    pub rpc_fixable: bool,
+    /// The corpus key of the row's short status in the balance breakdown:
+    /// [`STATUS_RPC_UNAVAILABLE`] or [`STATUS_TOKEN_LIST_UNAVAILABLE`]. Each
+    /// shell wrote "RPC unavailable" for every row, which is false for a
+    /// network whose RPC is answering.
+    #[serde(default = "status_rpc_unavailable")]
+    pub status_key: String,
+}
+
+/// Why a network in the unreachable list could not be read.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum UnreachableCause {
+    /// None of its RPC endpoints answered.
+    #[default]
+    Network,
+    /// Its RPC answers; the token list that names what to read there could
+    /// not be loaded, and it has no native coin to read without one.
+    TokenList,
+}
+
+/// A row from before `rpc_fixable` was said: every row was the network's.
+fn rpc_fixable_by_default() -> bool {
+    true
+}
+
+/// … and its status was the only one there was.
+fn status_rpc_unavailable() -> String {
+    STATUS_RPC_UNAVAILABLE.to_owned()
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1039,8 +1112,10 @@ pub struct BalanceView {
     /// worth, then the rest in the wallet's network order.
     pub unreachable_networks: Vec<UnreachableNetwork>,
     /// The corpus key of the home line over them: [`UNREACHABLE_ONE`]
-    /// (`{{name}}` = the one network) or [`UNREACHABLE_MANY`] (`{{n}}` = how many);
-    /// `None` when every network answered.
+    /// (`{{name}}` = the one network), [`TOKEN_LIST_UNREACHABLE`] (`{{name}}`
+    /// too — the one network's RPC is fine and its token list is what could
+    /// not be loaded) or [`UNREACHABLE_MANY`] (`{{n}}` = how many); `None`
+    /// when every network answered.
     pub unreachable_key: Option<String>,
     /// The failed chains whose read never left the app (PR 2 note 11) — not
     /// in `unreachable_networks`: nothing there is the network's doing.
@@ -1053,6 +1128,41 @@ pub struct BalanceView {
     /// "Can't reach Ethereum" (issue 483). `None` otherwise.
     #[serde(default)]
     pub internal_key: Option<String>,
+    /// The hero's line while the FIRST read of this account is still out:
+    /// [`CHECKING`] ("Checking…"). Until a round has ended nothing here was
+    /// said by a chain — a cached total of 0 is last session's — so the line
+    /// under the total says the wallet is being read, and neither "live" nor
+    /// "can't reach" yet. `None` from the first round's end on (a later
+    /// refresh is not "checking": what the last round found stands).
+    #[serde(default)]
+    pub checking_key: Option<String>,
+    /// The hero's line under a LIVE zero: [`LIVE_ZERO`] ("Live · listening
+    /// for payments"). `Some` only when the last round settled, every chain
+    /// it asked answered, and the wallet holds nothing — a wallet waiting for
+    /// its first deposit. Each shell derived this from the total and the
+    /// partial flag alone, so a cached zero drew "Live · listening" over a
+    /// wallet nothing had read yet, and then swapped it for "Can't reach 24
+    /// networks". A shell draws its "zero, live" state exactly when this is
+    /// `Some`, and derives it from nothing else.
+    #[serde(default)]
+    pub live_key: Option<String>,
+    /// The Assets list's empty state: [`ASSETS_EMPTY`] ("Deposit your first
+    /// asset"), with its caption and its action. `Some` only when a read has
+    /// ended and a chain that ANSWERED found nothing held: never while the
+    /// first read of the account is out ([`Self::checking_key`]), never
+    /// while holdings are loading or unknown, and never while no chain has
+    /// answered for this account — a first round in which every network
+    /// failed, or which threw, has ended and has read nothing. A wallet that
+    /// held nothing last session opens with a cached total of 0, and each
+    /// shell took "no tokens, a known total" for an empty wallet — so it
+    /// invited a first deposit under "Checking…", and again under "Can't
+    /// reach 24 networks", before anything had been read. A round that
+    /// misses SOME networks still says it for the ones that answered: a new
+    /// wallet is not held at a skeleton by one network that is down. A shell
+    /// draws the empty state exactly when this is `Some`, and with no tokens
+    /// and no key it draws what it draws while loading.
+    #[serde(default)]
+    pub empty_key: Option<String>,
     /// `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
     pub holdings_loading: bool,
     /// The last total this account settled on, painted under a skeleton
@@ -1183,9 +1293,12 @@ impl App for BalanceDashboard {
             None
         };
         let unreachable_networks = unreachable_networks(model);
-        let unreachable_key = match unreachable_networks.len() {
-            0 => None,
-            1 => Some(UNREACHABLE_ONE.to_owned()),
+        let unreachable_key = match unreachable_networks.as_slice() {
+            [] => None,
+            [one] if one.cause == UnreachableCause::TokenList => {
+                Some(TOKEN_LIST_UNREACHABLE.to_owned())
+            }
+            [_] => Some(UNREACHABLE_ONE.to_owned()),
             _ => Some(UNREACHABLE_MANY.to_owned()),
         };
         let unpriced_tokens = model
@@ -1197,6 +1310,9 @@ impl App for BalanceDashboard {
         // Nothing could be read and nothing is known (spec 038 finding 15).
         let unreachable =
             model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none();
+        // The first read of this account is still out ("Checking…").
+        let first_read_ended = !(model.address.is_some() && !model.bootstrapped);
+        let holdings_loading = model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0;
         BalanceView {
             address: model.address.clone(),
             // No figure while nothing is known: the skeleton, privacy — and a
@@ -1224,7 +1340,23 @@ impl App for BalanceDashboard {
             internal_chain_ids: model.internal_chain_ids.clone(),
             internal_key: (model.errored_internally || !model.internal_chain_ids.is_empty())
                 .then(|| super::fee_policy::REASON_INTERNAL_KEY.to_owned()),
-            holdings_loading: model.tokens.is_empty() && model.cached_total.unwrap_or(0.0) > 0.0,
+            checking_key: (!first_read_ended).then(|| CHECKING.to_owned()),
+            live_key: (model.last_round_answered
+                && !model.hidden
+                && !unknown
+                && !unreachable
+                && !partial
+                && model.tokens.is_empty()
+                && total == 0.0)
+                .then(|| LIVE_ZERO.to_owned()),
+            empty_key: (first_read_ended
+                && some_chain_answered(model)
+                && model.tokens.is_empty()
+                && !holdings_loading
+                && !unknown
+                && !unreachable)
+                .then(|| ASSETS_EMPTY.to_owned()),
+            holdings_loading,
             cached_total_usd: if model.hidden {
                 None
             } else {
@@ -1263,10 +1395,12 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     model.tokens.clear();
     model.failed_chain_ids.clear();
     model.internal_chain_ids.clear();
+    model.registry_chain_ids.clear();
     model.errored_internally = false;
     model.last_read.clear();
     model.cached_total = None;
     model.bootstrapped = false;
+    model.last_round_answered = false;
     model.partial_retries_left = MAX_PARTIAL_RETRIES;
     model.notice_allowed = false;
     model.live_timer = None; // drop any pending retry from the old account
@@ -1410,6 +1544,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             rate_limited_chain_ids,
             read_chain_ids,
             internal_chain_ids,
+            registry_chain_ids,
             now_ms,
         } => {
             if model.address.as_deref() != Some(address.as_str()) {
@@ -1443,6 +1578,11 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.last_refreshed_at_ms = Some(now_ms);
             model.rate_limited_chain_ids = rate_limited_chain_ids;
             model.internal_chain_ids = internal_chain_ids;
+            // Only a chain that failed can have failed for this reason.
+            model.registry_chain_ids = registry_chain_ids
+                .into_iter()
+                .filter(|id| model.failed_chain_ids.contains(id))
+                .collect();
             model.errored_internally = false;
             model.fetch_in_flight = false;
             model.errored_without_data =
@@ -1508,6 +1648,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 model.notice_allowed = true;
             }
             model.bootstrapped = true;
+            model.last_round_answered = true;
             arm_list_recheck(model, &mut operations);
             requests(model, operations)
         }
@@ -1526,6 +1667,9 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // `catch { /* keep last-known tokens + total */ }` then
             // `setBootstrapped(true)` (`:367-369`).
             model.bootstrapped = true;
+            // It threw: nothing a chain said. What was known stands, but a
+            // zero is no longer one every chain just answered for.
+            model.last_round_answered = false;
             model.fetch_in_flight = false;
             model.errored_internally = internal;
             // Nothing known at all: the home must say so rather than show a
@@ -1675,6 +1819,14 @@ fn arm_list_recheck(model: &mut Model, operations: &mut Vec<BalanceOperation>) {
 /// over for it (the web's and the desktop's `carry_over_unanswered`) stand in
 /// only when this account has no read of it yet — they are that shell's last
 /// read.
+/// Some chain has answered for this account since it opened: one is in
+/// [`Model::last_read`] — or, for a shell that does not say which chains a
+/// round read, the last round settled with none failed. Until then nothing
+/// on screen was said by a chain, whatever the cache holds.
+fn some_chain_answered(model: &Model) -> bool {
+    !model.last_read.is_empty() || (model.last_round_answered && model.failed_chain_ids.is_empty())
+}
+
 fn remember_reads(model: &mut Model, live: &[BalanceToken], failed: &[u32], read: &[u32]) {
     let mut answered: BTreeSet<u32> = read.iter().copied().collect();
     answered.extend(live.iter().map(|t| t.chain_id));
@@ -1726,11 +1878,23 @@ fn unreachable_networks(model: &Model) -> Vec<UnreachableNetwork> {
                 Some(_) if worth > 0.0 => (LastKnown::Held, LAST_SEEN),
                 Some(_) => (LastKnown::Held, LAST_SEEN_UNPRICED),
             };
+            let cause = if model.registry_chain_ids.contains(&chain_id) {
+                UnreachableCause::TokenList
+            } else {
+                UnreachableCause::Network
+            };
             let row = UnreachableNetwork {
                 chain_id,
                 last_known,
                 last_seen_usd: (worth > 0.0 && !model.hidden).then_some(worth),
                 line_key: line_key.to_owned(),
+                cause,
+                rpc_fixable: cause == UnreachableCause::Network,
+                status_key: match cause {
+                    UnreachableCause::Network => STATUS_RPC_UNAVAILABLE,
+                    UnreachableCause::TokenList => STATUS_TOKEN_LIST_UNAVAILABLE,
+                }
+                .to_owned(),
             };
             (worth, row)
         })

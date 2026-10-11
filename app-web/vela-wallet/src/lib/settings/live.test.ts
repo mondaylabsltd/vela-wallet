@@ -3,6 +3,7 @@
  * against hand-written core-view fixtures. Sibling of fixtures.test.ts.
  */
 import { describe, expect, it } from 'vitest';
+import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
 import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
 import type { NetView } from '$lib/core/generated/NetView';
 import type { NetWizardView } from '$lib/core/generated/NetWizardView';
@@ -18,6 +19,9 @@ import {
 	pickRescueMessages,
 	liveUnreachable,
 	withEraseFailure,
+	chosenCurrency,
+	withLiveCurrency,
+	withLiveCurrencyDesktop,
 	withLiveFeeSpeed,
 	withLiveFeeSpeedDesktop,
 	withLiveNetworks,
@@ -25,7 +29,7 @@ import {
 } from './live';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { fill } from '$lib/wallet/messages';
-import { FeeTierPrefCore } from '$lib/core/client';
+import { DisplayCurrencyCore, FeeTierPrefCore } from '$lib/core/client';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
@@ -68,6 +72,9 @@ const WIZARD_IDLE: NetWizardView = {
 	chain_info: null,
 	compat: null,
 	error: null,
+	error_key: null,
+	rpc_field: 'none',
+	rpc_field_label_key: null,
 	can_add: false
 };
 
@@ -162,14 +169,17 @@ describe('liveAddNetwork', () => {
 					p256_available: true,
 					best_rpc_url: 'https://rpc.zora.energy',
 					best_rpc_latency_ms: 182,
-					rpc_failure: null
+					rpc_failure: null,
+					blocker: null,
+					hint_key: null,
+					setup_url: null
 				},
 				can_add: true
 			},
 			m
 		);
 		expect(model.primary).toBe(m.addNetwork.addNetworkBtn);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.compatible);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.compatible);
 		expect(model.checks?.every((c) => c.ok)).toBe(true);
 	});
 
@@ -197,13 +207,16 @@ describe('liveAddNetwork', () => {
 					p256_available: true,
 					best_rpc_url: 'https://rpc.zora.energy',
 					best_rpc_latency_ms: 182,
-					rpc_failure: null
+					rpc_failure: null,
+					blocker: null,
+					hint_key: null,
+					setup_url: null
 				},
 				can_add: true
 			},
 			m
 		);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.compatible);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.compatible);
 		expect(model.callout).toEqual({ tone: 'warning', text: m.addNetwork.singleKeyOnly });
 		expect(model.primary).toBe(m.addNetwork.addNetworkBtn);
 	});
@@ -222,40 +235,222 @@ describe('liveAddNetwork', () => {
 					p256_available: null,
 					best_rpc_url: null,
 					best_rpc_latency_ms: null,
-					rpc_failure: 'all_probes_failed'
+					rpc_failure: 'all_probes_failed',
+					// Inconclusive: the check did not answer, so nothing is refused.
+					blocker: null,
+					hint_key: null,
+					setup_url: null
 				},
 				can_add: false
 			},
 			m
 		);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.unableToVerify);
-		expect(model.candidate?.badge.label).not.toBe(m.addNetwork.incompatible);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.unableToVerify);
+		expect(model.candidate?.badge?.label).not.toBe(m.addNetwork.incompatible);
 		expect(model.primary).toBe(m.addNetwork.retry);
 	});
 
-	it('a true incompatibility keeps the full check list and the setup-tool exit', () => {
-		const model = liveAddNetwork(
+	/**
+	 * The two refusals as the core's check carries them (`net_blocker`,
+	 * `NO_P256_HINT` / `MISSING_CONTRACTS_HINT`, `chain_setup_url`). What can
+	 * be done about them is opposite, so the wizard reads the line and the
+	 * link from the check — never from "incompatible" alone.
+	 */
+	const REFUSED = {
+		chain_id: 7777777,
+		compatible: false,
+		multi_key_ready: false,
+		contracts: [{ name: 'Safe L2', address: '0x2', deployed: false, multi_key_only: false }],
+		best_rpc_url: 'https://rpc.zora.energy',
+		best_rpc_latency_ms: 90,
+		rpc_failure: null
+	} as const;
+	const MISSING_CONTRACTS: NetCompatibility = {
+		...REFUSED,
+		contracts: [...REFUSED.contracts],
+		p256_available: true,
+		blocker: 'missing_contracts',
+		hint_key: 'settingsModals.addNetwork.incompatibleHint',
+		setup_url: 'https://getvela.app/chain-setup?chain=7777777'
+	};
+	const NO_P256: NetCompatibility = {
+		...REFUSED,
+		contracts: [...REFUSED.contracts],
+		p256_available: false,
+		blocker: 'no_p256',
+		hint_key: 'settingsModals.addNetwork.noP256Hint',
+		setup_url: null
+	};
+	const checked = (compat: NetCompatibility) =>
+		liveAddNetwork(
+			{ ...WIZARD_IDLE, phase: 'checked', chain_info: info, compat, can_add: false },
+			m
+		);
+
+	it('missing contracts: the full check list, the reason, and Chain Setup on this chain', () => {
+		const model = checked(MISSING_CONTRACTS);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.incompatible);
+		expect(model.checks?.some((c) => !c.ok)).toBe(true);
+		expect(model.checks?.at(-1)).toEqual({ label: m.addNetwork.checkSigner, ok: true });
+		expect(model.callout).toEqual({
+			tone: 'warning',
+			text: "Some contracts Vela needs aren't on this network yet. Chain Setup shows which ones and who can deploy them."
+		});
+		expect(model.secondary).toEqual({
+			label: m.addNetwork.openChainSetupTool,
+			href: 'https://getvela.app/chain-setup?chain=7777777'
+		});
+		expect(model.primary).toBeUndefined();
+	});
+
+	it('no P-256 verifier: says the network cannot run Vela wallets, and offers no deploy button', () => {
+		const model = checked(NO_P256);
+		expect(model.candidate?.badge?.label).toBe(m.addNetwork.incompatible);
+		expect(model.checks?.at(-1)).toEqual({ label: m.addNetwork.checkSigner, ok: false });
+		expect(model.callout?.tone).toBe('warning');
+		expect(model.callout?.text).toContain("Vela wallets can't work here");
+		expect(model.callout?.text).toContain("Don't send money to your Vela address on this network");
+		expect(model.callout?.text).not.toContain('Chain Setup');
+		// Nothing to deploy: no button, and nothing that adds the network.
+		expect(model.secondary).toBeUndefined();
+		expect(model.primary).toBeUndefined();
+		// No re-check under a refusal (PR 3 final note F22): the core gives it
+		// no RPC field, and a button that reads a field is drawn where the
+		// field is. It stood here with nothing to read.
+		expect(model.customRpc).toBeUndefined();
+		expect(model.recheck).toBeUndefined();
+	});
+
+	it('the RPC field and its re-check are the core’s `rpc_field`: both, or neither', () => {
+		const compat: NetCompatibility = {
+			...NO_P256,
+			compatible: true,
+			blocker: null,
+			hint_key: null
+		};
+		const wizard = { ...WIZARD_IDLE, phase: 'checked' as const, chain_info: info, compat };
+		// The core gives none: neither is drawn, whatever the phase.
+		const none = liveAddNetwork(wizard, m);
+		expect(none.customRpc).toBeUndefined();
+		expect(none.recheck).toBeUndefined();
+		// Optional: the field by the label the core names, and the re-check.
+		const optional = liveAddNetwork(
 			{
-				...WIZARD_IDLE,
-				phase: 'checked',
-				chain_info: info,
-				compat: {
-					chain_id: 7777777,
-					compatible: false,
-					multi_key_ready: false,
-					contracts: [{ name: 'Safe L2', address: '0x2', deployed: false, multi_key_only: false }],
-					p256_available: true,
-					best_rpc_url: 'https://rpc.zora.energy',
-					best_rpc_latency_ms: 90,
-					rpc_failure: null
-				},
-				can_add: false
+				...wizard,
+				custom_rpc: 'https://my.rpc.example',
+				rpc_field: 'optional',
+				rpc_field_label_key: 'settingsModals.addNetwork.customRpcTitle'
 			},
 			m
 		);
-		expect(model.candidate?.badge.label).toBe(m.addNetwork.incompatible);
-		expect(model.checks?.some((c) => !c.ok)).toBe(true);
-		expect(model.secondary).toBe(m.addNetwork.openChainSetupTool);
+		expect(optional.customRpc).toMatchObject({
+			id: 'custom-rpc',
+			label: 'Custom RPC (optional)',
+			value: 'https://my.rpc.example'
+		});
+		expect(optional.recheck).toBe(m.addNetwork.recheckWithRpc);
+		// Required: "RPC URL" — not "(optional)" where it is the one thing asked for.
+		const required = liveAddNetwork(
+			{
+				...wizard,
+				rpc_field: 'required',
+				rpc_field_label_key: 'settingsModals.network.fieldRpcUrl'
+			},
+			m
+		);
+		expect(required.customRpc?.label).toBe('RPC URL');
+		expect(required.recheck).toBe(m.addNetwork.recheckWithRpc);
+		// A label key this build has no words for: the plain one, never a path.
+		const unknown = liveAddNetwork(
+			{ ...wizard, rpc_field: 'optional', rpc_field_label_key: 'settingsModals.addNetwork.new' },
+			m
+		);
+		expect(unknown.customRpc?.label).toBe('RPC URL');
+	});
+
+	/**
+	 * The wizard that STOPPED. The sentence is the core's (`error_key`); the
+	 * builder only resolves it — `net-stops.test.ts` drives the real core
+	 * through every stop. Here: what the builder does with each shape of view.
+	 */
+	it('a stop with no check kept says the core’s sentence, and invents no reason', () => {
+		const stopped = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				error: { type: 'not_compatible', chain_id: 7777777 },
+				error_key: 'addToken.errorNotCompatible',
+				compat: null
+			},
+			m
+		);
+		expect(stopped.callout).toEqual({
+			tone: 'warning',
+			text: 'Not compatible with Vela Wallet'
+		});
+		expect(stopped.secondary).toBeUndefined();
+		// With the check in hand, the same stop says why — and is drawn as the
+		// refused check it is.
+		const known = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				chain_info: info,
+				error: { type: 'not_compatible', chain_id: 7777777 },
+				error_key: 'settingsModals.addNetwork.noP256Hint',
+				compat: NO_P256
+			},
+			m
+		);
+		expect(known.callout?.text).toContain("Vela wallets can't work here");
+		expect(known.candidate?.badge?.label).toBe(m.addNetwork.incompatible);
+		expect(known.secondary).toBeUndefined();
+		const deployable = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				chain_info: info,
+				error: { type: 'not_compatible', chain_id: 7777777 },
+				error_key: 'settingsModals.addNetwork.incompatibleHint',
+				compat: MISSING_CONTRACTS
+			},
+			m
+		);
+		expect(deployable.secondary).toEqual({
+			label: m.addNetwork.openChainSetupTool,
+			href: 'https://getvela.app/chain-setup?chain=7777777'
+		});
+		// Inconclusive is never worded as a refusal (invariant ③), check or no
+		// check — not even with a refusal's check beside it.
+		const failed = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				chain_info: info,
+				error: { type: 'check_failed', chain_id: 7777777 },
+				error_key: 'settingsModals.addNetwork.unableToVerify',
+				compat: MISSING_CONTRACTS
+			},
+			m
+		);
+		expect(failed.callout).toEqual({ tone: 'warning', text: m.addNetwork.unableToVerify });
+		expect(failed.secondary).toBeUndefined();
+		expect(failed.checks).toBeUndefined();
+		expect(failed.candidate?.badge).toBeUndefined();
+	});
+
+	it('a stop words nothing itself: no `error_key`, no sentence', () => {
+		const silent = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'error',
+				error: { type: 'already_added', chain_id: 1 },
+				error_key: null
+			},
+			m
+		);
+		expect(silent.callout).toBeUndefined();
+		expect(JSON.stringify(silent)).not.toContain(m.addNetwork.incompatible);
 	});
 });
 
@@ -377,7 +572,7 @@ describe('liveAccountsSheet', () => {
 			}
 		}
 	];
-	const usd = { code: 'USD', rate: 1, committed: true };
+	const usd = { code: 'USD', rate: 1, committed: true, pending: null };
 
 	it('is the whole sheet from the session and the balance core alone', async () => {
 		const { liveAccountsSheet } = await import('./live');
@@ -438,6 +633,35 @@ describe('liveAccountsSheet', () => {
 		expect(sheet.summary).not.toContain('3262');
 		// The count is not money: it stays.
 		expect(sheet.summary).toContain('2');
+	});
+
+	// "home.switcherAccountCount" is a plural family: a wallet with one account
+	// read "1 accounts · Total". The form is the locale's own for the count,
+	// chosen by the core's rule (`pluralForm`), never by `count === 1` here.
+	it('counts the accounts in the form the count takes', async () => {
+		const { liveAccountsSheet } = await import('./live');
+		const { resolveSettingsMessages } = await import('$lib/i18n/engine.server');
+		const summary = (locale: Parameters<typeof resolveSettingsMessages>[0], n: number) =>
+			liveAccountsSheet(
+				{
+					rows: Array.from({ length: n }, (_, index) => ({ ...rows[index % 2]!, index })),
+					activeIndex: 0,
+					balances: new Map(),
+					hidden: false,
+					currency: usd,
+					identicon: () => ''
+				},
+				resolveSettingsMessages(locale).accounts
+			).summary;
+		expect(summary('en', 1)).toMatch(/^1 account · /);
+		expect(summary('en', 2)).toMatch(/^2 accounts · /);
+		// Russian's corpus sentence is the count-neutral "Accounts: N" in all
+		// four of its forms; every one of them resolves and counts.
+		expect(summary('ru', 1)).toMatch(/^Аккаунтов: 1 · /);
+		expect(summary('ru', 3)).toMatch(/^Аккаунтов: 3 · /);
+		expect(summary('ru', 5)).toMatch(/^Аккаунтов: 5 · /);
+		expect(summary('zh', 1)).toMatch(/^1 个账户 · /);
+		expect(summary('zh', 2)).toMatch(/^2 个账户 · /);
 	});
 });
 
@@ -563,8 +787,8 @@ describe('the relayer bootstrap sheet', () => {
 // ---------------------------------------------------------------------------
 
 describe('the unreachable-networks list (spec 092)', () => {
-	const USD: CurrencyView = { code: 'USD', rate: 1, committed: true };
-	const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true };
+	const USD: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+	const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true, pending: null };
 	const row = (
 		chain_id: number,
 		line_key: string,
@@ -573,7 +797,10 @@ describe('the unreachable-networks list (spec 092)', () => {
 		chain_id,
 		last_known: last_seen_usd === null ? 'not_read' : 'held',
 		last_seen_usd,
-		line_key
+		line_key,
+		cause: 'network',
+		rpc_fixable: true,
+		status_key: 'home.balanceDetailStatusFailed'
 	});
 	const view = (
 		networks: UnreachableNetwork[],
@@ -597,6 +824,9 @@ describe('the unreachable-networks list (spec 092)', () => {
 		unreachable_key: key,
 		internal_chain_ids: [],
 		internal_key: null,
+		checking_key: null,
+		live_key: null,
+		empty_key: null,
 		holdings_loading: false,
 		cached_total_usd: null,
 		switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -666,6 +896,68 @@ describe('the unreachable-networks list (spec 092)', () => {
 // ---------------------------------------------------------------------------
 // Spec 068 — the stored default transaction speed
 // ---------------------------------------------------------------------------
+
+/**
+ * The display currency's row (the core's rule, `CurrencyView.committed`): the
+ * uncommitted view's `code` is the USD/1 placeholder, not the person's
+ * choice. The row read "USD" for a moment and then "CNY"; it now names the
+ * stored choice on its way (`pending`) or nothing, and prices no sample
+ * until the rate is in.
+ */
+describe('the currency row, before and after the core commits', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const CNY_ON_ITS_WAY: CurrencyView = { code: 'USD', rate: 1, committed: false, pending: 'CNY' };
+	const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true, pending: null };
+	const UNPRICED_JPY: CurrencyView = { code: 'JPY', rate: null, committed: true, pending: null };
+	const phoneRow = (view: CurrencyView) =>
+		withLiveCurrency(buildMobileState('st1', m, IDENTICON), view)
+			.sections.flatMap((section) => section.rows)
+			.find((r) => r.id === 'currency');
+	const phoneTicked = (view: CurrencyView) =>
+		withLiveCurrency(buildMobileState('st1', m, IDENTICON), view)
+			.currencySheet.rows.filter((r) => r.selected)
+			.map((r) => r.id);
+	/** What the rate sources can price, as the wide menu lists it. */
+	const CATALOG = { codes: ['USD', 'CNY', 'JPY'], locale: 'en' };
+	const wideRow = (view: CurrencyView) =>
+		withLiveCurrencyDesktop(
+			buildDesktopState('dst3', m, IDENTICON),
+			view,
+			CATALOG
+		).localization.rows.find((r) => r.id === 'currency');
+
+	it('the core’s own first view is the uncommitted placeholder, with nothing pending', () => {
+		const core = new DisplayCurrencyCore();
+		const first = JSON.parse(core.view()) as CurrencyView;
+		core.free();
+		expect(first).toEqual({ code: 'USD', rate: 1, committed: false, pending: null });
+		// Nothing is named, nothing is ticked, nothing is priced.
+		expect(chosenCurrency(first)).toBeNull();
+		expect(phoneRow(first)?.value).toBe('');
+		expect(phoneTicked(first)).toEqual([]);
+		expect(wideRow(first)?.value).toBe('');
+	});
+
+	it('a stored choice on its way is named — and ticked — without a sample in dollars', () => {
+		expect(chosenCurrency(CNY_ON_ITS_WAY)).toBe('CNY');
+		expect(phoneRow(CNY_ON_ITS_WAY)?.value).toBe('CNY');
+		expect(phoneTicked(CNY_ON_ITS_WAY)).toEqual(['CNY']);
+		expect(wideRow(CNY_ON_ITS_WAY)?.value).toBe('CNY');
+		expect(
+			wideRow(CNY_ON_ITS_WAY)
+				?.options?.filter((o) => o.selected)
+				.map((o) => o.id)
+		).toEqual(['CNY']);
+	});
+
+	it('committed: the code, and on the wide row a sample in it', () => {
+		expect(phoneRow(CNY)?.value).toBe('CNY');
+		expect(phoneTicked(CNY)).toEqual(['CNY']);
+		expect(wideRow(CNY)?.value).toBe('CNY · ¥8,641.92');
+		// Unpriceable is committed too: the code alone, never a rate of 1.
+		expect(wideRow(UNPRICED_JPY)?.value).toBe('JPY');
+	});
+});
 
 describe('the default transaction speed, live (spec 068)', () => {
 	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;

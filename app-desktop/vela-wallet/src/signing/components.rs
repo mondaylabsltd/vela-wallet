@@ -199,7 +199,7 @@ pub fn headline(theme: &Theme, text: SharedString, tone: Tone) -> Div {
         } else {
             theme.fg_base
         })
-        .child(text)
+        .child(crate::ui::prose(text))
 }
 
 /// One block, rendered.
@@ -243,7 +243,7 @@ fn block_inner(
             } else {
                 tone_color(theme, *tone)
             })
-            .child(text.clone()),
+            .child(crate::ui::prose(text.clone())),
 
         Block::Amount {
             line,
@@ -262,7 +262,7 @@ fn block_inner(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(caption),
+                        .child(crate::ui::prose(caption)),
                 );
             }
             let mut value_row = div().flex().items_center().gap(px(8.)).child(
@@ -305,7 +305,7 @@ fn block_inner(
                         } else {
                             theme.fg_subtle
                         })
-                        .child(text),
+                        .child(crate::ui::prose(text)),
                 );
             }
             if *card {
@@ -386,7 +386,7 @@ fn block_inner(
         Block::Sentence { text, tone } => div()
             .text_size(theme::text_row_title())
             .text_color(tone_color(theme, *tone))
-            .child(text.clone()),
+            .child(crate::ui::prose(text.clone())),
 
         Block::Allowance {
             label,
@@ -474,7 +474,7 @@ fn block_inner(
                             div()
                                 .text_size(theme::text_row_sub())
                                 .text_color(tone_color(theme, Tone::Danger))
-                                .child(error.clone()),
+                                .child(crate::ui::prose(error.clone())),
                         );
                     }
                     return col;
@@ -515,7 +515,7 @@ fn block_inner(
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(tone_color(theme, Tone::Danger))
-                            .child(error.clone()),
+                            .child(crate::ui::prose(error.clone())),
                     );
                 }
                 col
@@ -561,7 +561,7 @@ fn block_inner(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(note.clone()),
+                        .child(crate::ui::prose(note.clone())),
                 );
             }
             let mut wrap = div().flex().flex_col().gap(px(12.)).child(card);
@@ -703,7 +703,7 @@ fn block_inner(
                         .min_w(px(0.))
                         .text_size(theme::text_row_sub())
                         .text_color(ink)
-                        .child(text.clone()),
+                        .child(crate::ui::prose(text.clone())),
                 )
         }
 
@@ -719,7 +719,7 @@ fn block_inner(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
-                    .child(text.clone()),
+                    .child(crate::ui::prose(text.clone())),
             ),
 
         Block::Code { lines, note } => {
@@ -778,61 +778,187 @@ fn block_inner(
             rows,
             note,
             note_tone,
-        } => {
-            let mut col = div()
-                .px(px(16.))
+        } => balances_card(theme, title, rows, note.as_ref(), *note_tone, None),
+
+        // The page draws the place itself, with what it does when the
+        // verdict is laid out (`verdict_room`); anywhere else it is the same
+        // place, whole.
+        Block::Verdict { inner, .. } => verdict_room(theme, icons, inner, None),
+    }
+}
+
+/// The balance card ([`Block::Balances`]): its title, a row per coin that
+/// moves, and the note under them. Every row and the note at their own
+/// height — the card is as tall as what it holds.
+///
+/// `probe` names the card for a measurement pass (`crate::dev_probe`): the
+/// card, each row and the note report their boxes under it. `None` for a
+/// card nobody measures.
+fn balances_card(
+    theme: &Theme,
+    title: &SharedString,
+    rows: &[(SharedString, SharedString, Tone)],
+    note: Option<&SharedString>,
+    note_tone: Tone,
+    probe: Option<&str>,
+) -> Div {
+    let mark =
+        |part: String| probe.and_then(|probe| crate::dev_probe::mark(format!("{probe}-{part}")));
+    let mut col = div()
+        .relative()
+        .px(px(16.))
+        .py(px(4.))
+        .rounded(px(16.))
+        .border_1()
+        .border_color(theme.border_card)
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .py(px(8.))
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_muted)
+                .child(title.clone()),
+        )
+        .children(mark("card".to_owned()));
+    for (index, (symbol, delta, tone)) in rows.iter().enumerate() {
+        col = col.child(
+            div()
+                .relative()
                 .py(px(4.))
-                .rounded(px(16.))
-                .border_1()
-                .border_color(theme.border_card)
                 .flex()
-                .flex_col()
+                .items_center()
+                .justify_between()
                 .child(
                     div()
-                        .py(px(8.))
-                        .text_size(theme::text_row_sub())
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(symbol.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme.fg_muted)
-                        .child(title.clone()),
-                );
-            for (symbol, delta, tone) in rows {
-                col = col.child(
-                    div()
-                        .py(px(4.))
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .text_size(theme::text_row_title())
-                                .text_color(theme.fg_base)
-                                .child(symbol.clone()),
-                        )
-                        .child(
-                            div()
-                                .text_size(theme::text_row_title())
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(tone_color(theme, *tone))
-                                .child(delta.clone()),
-                        ),
-                );
-            }
-            if let Some(note) = note {
-                col = col.child(
-                    div()
-                        .py(px(8.))
-                        .text_size(theme::text_row_sub())
-                        .text_color(if *note_tone == Tone::Neutral {
-                            theme.fg_subtle
-                        } else {
-                            tone_color(theme, *note_tone)
-                        })
-                        .child(note.clone()),
-                );
-            }
-            col
-        }
+                        .text_color(tone_color(theme, *tone))
+                        .child(delta.clone()),
+                )
+                .children(mark(format!("row-{index}"))),
+        );
     }
+    if let Some(note) = note {
+        col = col.child(
+            div()
+                .relative()
+                .py(px(8.))
+                .text_size(theme::text_row_sub())
+                .text_color(if note_tone == Tone::Neutral {
+                    theme.fg_subtle
+                } else {
+                    tone_color(theme, note_tone)
+                })
+                .child(crate::ui::prose(note.clone()))
+                .children(mark("note".to_owned())),
+        );
+    }
+    col
+}
+
+/// The LEAST height of the simulation verdict's place (PR 3 final note F2):
+/// a balance card of two rows and half of a third.
+///
+/// Two rows is what a send (one) and a swap (two) show, and every notice the
+/// core words is shorter — so the usual verdict lands in room the sheet
+/// already kept from the request's first frame, and nothing under it moves.
+/// It is a minimum and never a limit (PR 3 device round): a taller verdict
+/// is shown whole, and the place is as tall as the verdict
+/// ([`verdict_room`]).
+///
+/// In the text's own sizes, so it holds at every text scale.
+#[must_use]
+pub fn verdict_room_height() -> gpui::Pixels {
+    balance_card_height(2.5)
+}
+
+/// How tall the balance card ([`Block::Balances`]) draws with `rows` rows:
+/// its border, the 4 px above and below, its title and its rows — the
+/// arithmetic the verdict's place is sized by.
+#[must_use]
+pub fn balance_card_height(rows: f32) -> gpui::Pixels {
+    balance_card_height_at(rows, theme::text_row_sub(), theme::text_row_title())
+}
+
+/// [`balance_card_height`] at given text sizes: the title's (`sub`) and a
+/// row's (`row`).
+#[must_use]
+pub fn balance_card_height_at(rows: f32, sub: gpui::Pixels, row: gpui::Pixels) -> gpui::Pixels {
+    let line = crate::wallet::components::LINE_BODY;
+    let chrome = px(2. + 8.);
+    let title = sub * line + px(16.);
+    let row = row * line + px(8.);
+    chrome + title + row * rows
+}
+
+/// What the page does once the verdict's place has been laid out: it is
+/// handed the place's box, in the window, on every frame.
+pub type VerdictLaidOut =
+    Box<dyn FnOnce(gpui::Bounds<gpui::Pixels>, &mut gpui::Window, &mut gpui::App)>;
+
+/// The verdict's place, drawn: at least [`verdict_room_height`] tall, and as
+/// tall as the verdict when the verdict is taller.
+///
+/// **Nothing of the verdict is ever hidden** (PR 3 device round — this
+/// reverses final note F2's fixed room). The verdict is the one part of the
+/// sheet a site cannot write. The room was one height with a scroll of its
+/// own, so a third coin moving, or the warning under an unverified token,
+/// sat cut by a fold inside the sheet — over a confirm that could be live.
+/// There is no inner scroll, no clip and no scrollbar here any more: every
+/// row and every note is laid out at its own height.
+///
+/// A place that grows would push the confirm down, so the confirm is not
+/// under it: the page pins the confirm at the bottom of the column, outside
+/// the scrolling body (`WalletPage::signing_body`), and when the sheet is
+/// taller than the window it is the body that scrolls. `laid_out` is how
+/// the page then brings a verdict that landed below the body's fold into
+/// view.
+pub fn verdict_room(
+    theme: &Theme,
+    icons: &mut IconCache,
+    inner: &[Block],
+    laid_out: Option<VerdictLaidOut>,
+) -> Div {
+    let mut col = div().relative().flex().flex_col().gap(px(16.));
+    for item in inner {
+        col = col.child(match item {
+            Block::Balances {
+                title,
+                rows,
+                note,
+                note_tone,
+            } => balances_card(
+                theme,
+                title,
+                rows,
+                note.as_ref(),
+                *note_tone,
+                Some("verdict"),
+            ),
+            other => block(theme, icons, other),
+        });
+    }
+    div()
+        .relative()
+        .min_h(verdict_room_height())
+        .child(col.children(crate::dev_probe::mark("verdict-content")))
+        .children(laid_out.map(|laid_out| {
+            gpui::canvas(
+                move |bounds, window, cx| laid_out(bounds, window, cx),
+                |_, (), _, _| {},
+            )
+            .absolute()
+            .inset_0()
+        }))
+        .children(crate::dev_probe::mark("verdict-place"))
 }
 
 fn kv_row(
@@ -896,7 +1022,7 @@ pub fn fee(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.success_base)
-                        .child(note.clone()),
+                        .child(crate::ui::prose(note.clone())),
                 ),
         ),
         FeeModel::OnChain {
@@ -922,7 +1048,7 @@ pub fn fee(
                     } else {
                         theme.error_base
                     })
-                    .child(text)
+                    .child(crate::ui::prose(text))
             });
             let Some((title, options)) = selector else {
                 let row = div()
@@ -1013,7 +1139,7 @@ pub fn fee(
                         .px(px(16.))
                         .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
-                        .child(note)
+                        .child(crate::ui::prose(note))
                 });
                 return Some(
                     div()
@@ -1118,7 +1244,7 @@ pub fn fee(
                             .pb(px(4.))
                             .text_size(theme::text_row_sub())
                             .text_color(theme.error_base)
-                            .child(reason),
+                            .child(crate::ui::prose(reason)),
                     );
                 }
             }

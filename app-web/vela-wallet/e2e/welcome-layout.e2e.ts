@@ -104,6 +104,94 @@ for (const width of [1440, 390]) {
 	});
 }
 
+/**
+ * Issue 475: the create flow's screens ran to both edges of a phone. The
+ * page's padding had been commented out so the desktop rail could reach the
+ * window's edges, and it took the phone's gutters with it. Below the desktop
+ * breakpoint the page has the welcome page's gutters; at and above it, none.
+ *
+ * Walked to the keys screen, because that is the screen the issue is about:
+ * with no key yet it shows ONE heading over the three places, and no "+".
+ */
+async function toKeysScreen(page: import('@playwright/test').Page): Promise<void> {
+	await page.goto('/en/create');
+	await page.getByRole('textbox').first().fill('Everyday wallet');
+	for (const box of await page.getByRole('checkbox').all()) await box.check({ force: true });
+	await page.getByRole('button', { name: en('onboarding.create.nextBtn') }).click();
+	await expect(
+		page.getByRole('heading', { name: en('onboarding.create.keysTitle'), level: 1 })
+	).toBeVisible({ timeout: 20_000 });
+}
+
+test('the create flow keeps its gutters on a phone, and the keys screen has one heading', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await toKeysScreen(page);
+
+	// One heading over the three places, open — and nothing else to tap there.
+	// "Choose where it lives" — not the title's own words a second time.
+	await expect(
+		page.getByRole('heading', { name: en('onboarding.create.keyPlaceHeading'), level: 2 })
+	).toBeVisible();
+	// No key yet: no "Added 0 / 7" over an empty list (the core's `key_count_shown`).
+	await expect(page.locator('.listhead')).toHaveCount(0);
+	await expect(page.getByText('0 / 7')).toHaveCount(0);
+	await expect(page.locator('button.method')).toHaveCount(3);
+	await expect(page.locator('button.fold')).toHaveCount(0);
+	await expect(page.locator('.plus')).toHaveCount(0);
+	// Nothing in the add section is a button but the three places themselves.
+	await expect(page.locator('.add button:not(.method)')).toHaveCount(0);
+
+	// The gutters: the welcome page's 24 px, on everything a person reads.
+	const edges = await page.evaluate(() => {
+		const box = (el: Element) => {
+			const r = el.getBoundingClientRect();
+			return { left: r.left, right: r.right };
+		};
+		return {
+			viewport: window.innerWidth,
+			overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+			back: box(document.querySelector('button.back')!),
+			title: box(document.querySelector('h1')!),
+			rows: [...document.querySelectorAll('button.method')].map(box),
+			captions: [...document.querySelectorAll('button.method .caption')].map((el) => ({
+				clipped: el.scrollWidth > el.clientWidth,
+				lines: Math.round(
+					el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).fontSize)
+				)
+			})),
+			cta: box([...document.querySelectorAll('section.screen > *')].at(-1)!)
+		};
+	});
+	expect(edges.overflow).toBe(0);
+	for (const part of [edges.back, edges.title, ...edges.rows, edges.cta]) {
+		expect(part.left).toBeGreaterThanOrEqual(24);
+		expect(part.right).toBeLessThanOrEqual(edges.viewport - 24);
+	}
+	// Each place's caption is one whole line.
+	expect(edges.captions).toEqual([
+		{ clipped: false, lines: 1 },
+		{ clipped: false, lines: 1 },
+		{ clipped: false, lines: 1 }
+	]);
+});
+
+test('at desktop width the create flow gives its gutters up to the rail', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await toKeysScreen(page);
+	// The page itself is unpadded: the rail brings its own and reaches the edge.
+	const padding = await page
+		.locator('main.page')
+		.evaluate((el) => getComputedStyle(el).paddingInlineStart);
+	expect(padding).toBe('0px');
+	expect(
+		await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		)
+	).toBe(0);
+});
+
 test('sign-in stays on Welcome — it has no steps to show', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/en');
@@ -133,8 +221,16 @@ for (const [width, height] of [
 	test(`sign-in offers the three ways in, with icons, at ${width}px`, async ({ page }) => {
 		await page.setViewportSize({ width, height });
 		await page.goto('/en');
-		await page.getByRole('button', { name: 'I already have a wallet' }).click();
-		await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
+		// The button is in the server's HTML before the page hydrates; pressed
+		// then it does nothing (the same race as the intro's keys, below).
+		// Press until the sheet answers.
+		const heading = page.getByRole('heading', { name: 'Sign In' });
+		await expect(async () => {
+			if (!(await heading.isVisible())) {
+				await page.getByRole('button', { name: 'I already have a wallet' }).click();
+			}
+			await expect(heading).toBeVisible({ timeout: 1_000 });
+		}).toPass({ timeout: 20_000 });
 		const rows = page.locator('.methods .method');
 		await expect(rows).toHaveCount(3);
 		await expect(page.getByText(en('onboarding.create.signingPageTitle'))).toHaveCount(0);
@@ -194,12 +290,19 @@ test.describe('the first-run intro', () => {
 	test('the last slide puts the two ways in side by side at 1440px', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await page.goto('/en?intro');
-		await page.keyboard.press('ArrowRight');
-		await page.keyboard.press('ArrowRight');
+		// The keys are the carousel's only once it has hydrated: two presses
+		// sent the moment the document arrived went to nobody, the slide never
+		// changed, and the test waited out its 30 s for a button on a slide it
+		// was not on. The carousel clamps at its last slide, so pressing until
+		// that slide answers is the same two steps — taken when it can hear them.
+		await expect(page.locator('.intro .rail')).toBeVisible();
+		const signInButton = page.getByRole('button', { name: 'I already have a wallet' });
+		await expect(async () => {
+			await page.keyboard.press('ArrowRight');
+			await expect(signInButton).toBeVisible({ timeout: 500 });
+		}).toPass({ timeout: 20_000 });
 		const create = (await page.getByRole('link', { name: 'Create Wallet' }).boundingBox())!;
-		const signIn = (await page
-			.getByRole('button', { name: 'I already have a wallet' })
-			.boundingBox())!;
+		const signIn = (await signInButton.boundingBox())!;
 		expect(signIn.x).toBeGreaterThan(create.x + create.width - 1);
 		expect(Math.abs(signIn.y - create.y)).toBeLessThan(2);
 	});

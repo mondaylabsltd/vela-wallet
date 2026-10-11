@@ -59,6 +59,19 @@ struct AssetRowView: View {
                 .typeRole(Typography.rowSub.scaled(textScale))
                 .foregroundStyle(theme.warningBase)
                 .lineLimit(1)
+        case .pending:
+            // The line's own height (an invisible figure), with the waiting
+            // bar the home's skeletons use: the row does not move when the
+            // figure lands.
+            Text(verbatim: "0")
+                .typeRole(Typography.rowSub.scaled(textScale))
+                .hidden()
+                .overlay(alignment: .trailing) {
+                    Capsule()
+                        .fill(theme.borderBase)
+                        .frame(width: WalletGeometry.rowIcon, height: Tokens.Space.s8)
+                }
+                .accessibilityHidden(true)
         case .masked:
             Text(verbatim: WalletFixtures.mask)
                 .typeRole(Typography.rowSub.scaled(textScale))

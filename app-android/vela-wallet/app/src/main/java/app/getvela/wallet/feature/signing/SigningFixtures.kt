@@ -180,9 +180,11 @@ object SigningFixtures {
     )
 
     /**
-     * CS36: the wallet's own key backup, as the live sheet draws it — no
-     * requester to name, so the header is the intent and the ✕; the core's
-     * rows (network first); "Technical details" with no contract name; the
+     * CS36: "Copy this wallet's record" — the wallet's own copy of its
+     * registry record to Ethereum, as the live sheet draws it. No requester
+     * to name, so the header is the intent and the ✕; the core's rows
+     * (network first, and the wallet's NAME — it becomes public there, so the
+     * sheet says it); "Technical details" with no contract name; the
      * fee's speed control open, the slow tier still measuring, its gas-bid
      * line held so nothing moves when it lands; the confirm says the intent.
      */
@@ -195,6 +197,7 @@ object SigningFixtures {
                     listOf(
                         SigningRow(sg("labelNetwork"), NETWORK),
                         SigningRow(sg("labelAddress"), WalletFixtures.ADDRESS_DISPLAY, mono = true),
+                        SigningRow(sg("labelWalletName"), WalletFixtures.NAME),
                         SigningRow(sg("labelPublicKeys"), "3"),
                     ),
                 ),
@@ -203,7 +206,10 @@ object SigningFixtures {
             tech = tech(
                 functionLabel = sg("techFunction"),
                 signature = intent,
-                simResult = SigningRow(sg("simResultLabel"), sg("simResultNoChange")),
+                // The core's line for a check under which nothing moves —
+                // the row the live builder folds in here (issue #314).
+                simResult = (app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves() as? app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready)
+                    ?.noChangeKey?.let { key -> SigningRow(sg("simResultLabel"), t(key)) },
             ),
             fee = FeeModel.OnChain(
                 t("componentsUi.gas.networkFee"), "~0.00093 ETH ≈ $2.40",
@@ -313,6 +319,192 @@ object SigningFixtures {
         )
     }
 
+    /**
+     * CS57 / CS58: CS1's transfer with the simulation's place as the live
+     * builder keeps it ([SigningLive.model]) — the room of the core's "could
+     * not check" card ([SimDeltas.couldNotCheck], through the live
+     * [SigningLive.simBlocks]), empty while the simulation is out (CS57) and
+     * holding that card once it lands (CS58). And so for each other verdict
+     * ([verdict]): CS61–CS64 the usual ones, CS65–CS67 the tall, and CS68 —
+     * two unverified tokens, by their directions alone.
+     */
+    private fun VelaStrings.heldVerdict(state: SigningScreenState): SigningScreenModel {
+        val ctx = SigningLive.Context(this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1)
+        val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
+        val landed = verdict(state)?.let { outcome -> SigningLive.simBlocks(outcome, ctx).single() }
+        return base.copy(
+            blocks = base.blocks + SigningBlock.Held(
+                rooms = SigningLive.verdictRooms(ctx),
+                shown = landed,
+                waiting = t(I18nKeys.SettingsUi.BACKUP_CHECKING),
+            ),
+        )
+    }
+
+    /**
+     * CS69 / CS70 (PR 3, fix C): the confirm's wait for the simulation's
+     * verdict. CS1's transfer, as the REAL machines hold it once the sheet's
+     * controller has said its simulation is out — the sign view (and, for
+     * CS70, its deadline passed), the reading and the guard are
+     * `SimWaitBoards`'; the fee is one priced and able to pay, as CS47 states
+     * it. Whether the confirm arms and the line under it are the core's gate
+     * over those four ([SigningLive.confirmState]), and the verdict's place is
+     * the live builder's for a simulation still out under that sign view
+     * ([SigningLive.verdictPlace]) — nothing of either is drawn by hand.
+     */
+    private fun VelaStrings.simWait(state: SigningScreenState): SigningScreenModel {
+        val ctx = SigningLive.Context(this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1)
+        val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
+        val views = app.getvela.wallet.feature.signing.core.SimWaitBoards.views(
+            waitedOut = state == SigningScreenState.CS70,
+            account = WalletFixtures.ADDRESS_FULL,
+            chainId = 1,
+        )
+        val fee = FeeView(
+            fee = FeeEstimateView(
+                chain_id = 1, total_wei = "123000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+                relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+                deployed = true, tier = FeeTier.Standard, quoted = true, fee_asset = FeeAssetView.Native, fee_recipient = RELAY,
+            ),
+            confirm_fee_ready = true,
+        )
+        val feeJson = app.getvela.wallet.core.crux.Wire.json.encodeToString(FeeView.serializer(), fee)
+        val gate = SigningLive.confirmState(views.signJson, views.guardJson, views.clearJson, feeJson, null)
+        // The line this request said while it waited — the gate's own, over
+        // the same request before its deadline. Once the confirm is open the
+        // live sheet keeps that line's room under it (unseen), so the confirm
+        // stays where it was; the waited-out board keeps it too.
+        val saidWhileHeld = if (!gate.enabled) {
+            null
+        } else {
+            val before = app.getvela.wallet.feature.signing.core.SimWaitBoards.views(waitedOut = false, account = WalletFixtures.ADDRESS_FULL, chainId = 1)
+            SigningLive.confirmState(before.signJson, before.guardJson, before.clearJson, feeJson, null).key?.let { t(it) }
+        }
+        return base.copy(
+            // The simulation is still out on both: what the place says is the sign view's.
+            blocks = base.blocks + SigningLive.verdictPlace(app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Pending, views.sign, ctx),
+            confirmEnabled = gate.enabled,
+            confirmBlockLine = gate.key?.takeIf { !gate.enabled }?.let { t(it) },
+            confirmBlockRoom = saidWhileHeld,
+        )
+    }
+
+    /**
+     * What the simulation said on each verdict board, as the sheet's
+     * controller would hand it over; `null` while it is still out (CS57).
+     * The notices are the core's own readings (`SimDeltas`); the balance
+     * moves are judgments as the trust machine writes them.
+     */
+    fun verdict(state: SigningScreenState): app.getvela.wallet.feature.signing.core.SigningController.SimOutcome? {
+        val usdcOut = app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Trusted(
+            token = Addr.USDC_FULL.lowercase(), delta = "-1000000000", symbol = "USDC", decimals = 6,
+        )
+        return when (state) {
+            SigningScreenState.CS58 -> app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck()
+            SigningScreenState.CS61 -> app.getvela.wallet.feature.signing.core.SimDeltas.reverted("ERC20: transfer amount exceeds balance")
+            // Checked, and nothing of theirs moves: the core's reading, with its line.
+            SigningScreenState.CS62 -> app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves()
+            SigningScreenState.CS63 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(listOf(usdcOut))
+            SigningScreenState.CS64 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
+                listOf(usdcOut, app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Native(delta = "390000000000000000")),
+            )
+            // Taller than the place: a third balance row…
+            SigningScreenState.CS65 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
+                listOf(
+                    usdcOut,
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Native(delta = "390000000000000000"),
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Trusted(
+                        token = "0x6b175474e89094c44da98b954eedeac495271d0f", delta = "250000000000000000000", symbol = "DAI", decimals = 18,
+                    ),
+                ),
+            )
+            // …and a received token nothing verified, with its warning under
+            // the rows: its direction, and no figure (the judgment has none).
+            SigningScreenState.CS66 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
+                listOf(
+                    usdcOut,
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
+                        token = "0x" + "c0".repeat(20), direction = app.getvela.wallet.feature.wallet.core.TrustSimDirection.In,
+                    ),
+                ),
+            )
+            // …and both: four balance rows, the last a token nothing verified,
+            // and its warning — every line of it one a person reads before
+            // signing (the device round, item 1).
+            SigningScreenState.CS67 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
+                listOf(
+                    usdcOut,
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Native(delta = "390000000000000000"),
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Trusted(
+                        token = "0x6b175474e89094c44da98b954eedeac495271d0f", delta = "250000000000000000000", symbol = "DAI", decimals = 18,
+                    ),
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
+                        token = "0x" + "c0".repeat(20), direction = app.getvela.wallet.feature.wallet.core.TrustSimDirection.In,
+                    ),
+                ),
+            )
+            // PR 3: one token nobody vouches for leaves and another arrives —
+            // each row its direction, neither a figure.
+            SigningScreenState.CS68 -> app.getvela.wallet.feature.signing.core.SigningController.SimOutcome.Ready(
+                listOf(
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
+                        token = "0x" + "d1".repeat(20), direction = app.getvela.wallet.feature.wallet.core.TrustSimDirection.Out,
+                    ),
+                    app.getvela.wallet.feature.wallet.core.TrustSimJudgment.Erc20Unverified(
+                        token = "0x" + "c0".repeat(20), direction = app.getvela.wallet.feature.wallet.core.TrustSimDirection.In,
+                    ),
+                ),
+            )
+            else -> null
+        }
+    }
+
+    /**
+     * CS59 / CS60: CS1's transfer, its fee row built by the live
+     * [SigningLive.feeModel] from a settled fee in the chain's coin and the
+     * price the relay published for it — with the display currency on its
+     * way (a cold start with CNY stored), and committed.
+     */
+    private fun VelaStrings.currencyFee(state: SigningScreenState): SigningScreenModel {
+        val committed = state == SigningScreenState.CS60
+        val currency = if (committed) {
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "CNY", rate = 7.1, committed = true)
+        } else {
+            app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+        }
+        val ctx = SigningLive.Context(
+            this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1,
+            money = app.getvela.wallet.feature.wallet.WalletLive.Money.of(currency),
+        )
+        val fee = app.getvela.wallet.feature.send.core.FeeView(
+            fee = app.getvela.wallet.feature.send.core.FeeEstimateView(
+                chain_id = 1, total_wei = "123000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+                relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+                deployed = true, tier = app.getvela.wallet.feature.send.core.FeeTier.Standard, quoted = true,
+                fee_asset = app.getvela.wallet.feature.send.core.FeeAssetView.Native, fee_recipient = RELAY,
+            ),
+            options = listOf(
+                app.getvela.wallet.feature.send.core.FeeOptionView(
+                    symbol = "ETH", decimals = 18, balance = "1200000000000000000", recipient = RELAY, usd_balance = "3072.00", usd_price = "2560",
+                    amount = "123000000000000", selected = true,
+                ),
+            ),
+            confirm_fee_ready = true,
+        )
+        val base = build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name)
+        // The landed board is the waiting one a moment later: the row took
+        // the room its worth needs and keeps it (`KeptRoom`, remembered by
+        // the row) — a board, a fresh composition, says so itself.
+        val row = SigningLive.feeModel(ClearSigningView(), fee, ctx) as FeeModel.OnChain
+        return base.copy(
+            // The drawn canon puts "≈ $1,000.00" under CS1's amount; the live
+            // sheet draws no worth there (its only fiat figure is the fee's),
+            // so this board — which is about fiat — does not either.
+            blocks = base.blocks.map { block -> if (block is SigningBlock.Amount) block.copy(line = block.line.copy(fiat = null)) else block },
+            fee = row.copy(worthRoom = true),
+        )
+    }
+
     /** A fee view the real fee machine wrote for a board's failure (`FeeBoards`), on the boards' chain and account. */
     private fun feeBoard(case: app.getvela.wallet.feature.send.core.FeeBoards.Case) =
         app.getvela.wallet.feature.send.core.FeeBoards.view(case, chainId = 1, account = WalletFixtures.ADDRESS_FULL)
@@ -365,7 +557,7 @@ object SigningFixtures {
             )
             else -> settings.pageLine(page)
         }
-        val card = SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line), this)
+        val card = SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line, SigningLive.savedPage(settings.SIGNING_PAGES_VIEW.pages, page)), this)
         return model(
             state, Dapp.uniswap, Dapp.uniswapTint,
             blocks = emptyList(),
@@ -409,7 +601,11 @@ object SigningFixtures {
         } else {
             settings.pageLine(page)
         }
-        return SigningLive.handoffModel(SigningLive.Handoff(page, boardKey(), line), strings, fee = boardFee(strings))
+        return SigningLive.handoffModel(
+            SigningLive.Handoff(page, boardKey(), line, SigningLive.savedPage(settings.SIGNING_PAGES_VIEW.pages, page)),
+            strings,
+            fee = boardFee(strings),
+        )
     }
 
     /**
@@ -1231,6 +1427,15 @@ object SigningFixtures {
             SigningScreenState.CS48, SigningScreenState.CS49, SigningScreenState.CS50,
             SigningScreenState.CS51, SigningScreenState.CS52, SigningScreenState.CS53,
             SigningScreenState.CS54, SigningScreenState.CS55, SigningScreenState.CS56 -> correctness(state)
+
+            SigningScreenState.CS57, SigningScreenState.CS58,
+            SigningScreenState.CS61, SigningScreenState.CS62, SigningScreenState.CS63, SigningScreenState.CS64,
+            SigningScreenState.CS65, SigningScreenState.CS66, SigningScreenState.CS67,
+            SigningScreenState.CS68 -> heldVerdict(state)
+
+            SigningScreenState.CS59, SigningScreenState.CS60 -> currencyFee(state)
+
+            SigningScreenState.CS69, SigningScreenState.CS70 -> simWait(state)
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,

@@ -317,21 +317,27 @@ pub fn group_context(s: &ContactsStrings) -> MenuModel {
     }
 }
 
-/// Contact-row context menu (desktop SPEC; component board only in this
-/// feature): 转账 / 收款 / 复制地址 / 编辑 / 移入分组 / divider / 删除.
+/// Contact-row context menu: 转账 / 复制地址 / 编辑 / 移入分组 / divider /
+/// 删除. No 收款 (issue 479): that is the wallet's own code, not something
+/// about this contact. The menu is positional — row N runs action N of the
+/// page's `menu_actions` — so the two lists change together
+/// ([`CONTACT_CONTEXT_ROWS`]).
 pub fn contact_context(s: &ContactsStrings) -> MenuModel {
     MenuModel {
         items: vec![
             item(Icon::ArrowUpRight, s.action_send.clone()),
-            item(Icon::ArrowDownLeft, s.action_receive.clone()),
             item(Icon::Copy, s.copy_address.clone()),
             item(Icon::Pencil, s.edit.clone()),
             item(Icon::UsersRound, s.move_group.clone()),
             destructive(Icon::Trash2, s.delete.clone()),
         ],
-        divider_after: Some(4),
+        divider_after: Some(3),
     }
 }
+
+/// How many rows [`contact_context`] draws — and so how many actions the
+/// page must hand it, in the same order.
+pub const CONTACT_CONTEXT_ROWS: usize = 5;
 
 // -- assembled labels ---------------------------------------------------------
 
@@ -499,6 +505,16 @@ mod tests {
         assert_eq!(labels, ["重命名分组", "导入到本组", "导出本组", "删除分组"]);
         assert_eq!(context.divider_after, Some(2));
         assert!(context.items[3].destructive, "删除分组 is destructive");
+
+        // A contact's own menu (issue 479): no 收款 — that is the wallet's own
+        // code, not something about this person. Five rows, the rule before
+        // the destructive one, and the count the page's actions are typed by.
+        let contact = contact_context(&s);
+        let labels: Vec<&str> = contact.items.iter().map(|i| i.label.as_ref()).collect();
+        assert_eq!(labels, ["转账", "复制地址", "编辑", "移入分组", "删除"]);
+        assert_eq!(contact.items.len(), CONTACT_CONTEXT_ROWS);
+        assert_eq!(contact.divider_after, Some(CONTACT_CONTEXT_ROWS - 2));
+        assert!(contact.items[CONTACT_CONTEXT_ROWS - 1].destructive);
 
         // Alice's 最近往来 (dc2).
         let rows = alice_activity(&s);

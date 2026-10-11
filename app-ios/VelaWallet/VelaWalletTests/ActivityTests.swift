@@ -334,7 +334,7 @@ struct DappActivityRowTests {
             dappRecord("dapp-1-tx", status: "pending"),
             dappRecord("dapp-2-tx", status: "pending", value: "0x0"),
         ])
-        let rows = WalletLive.activityGroups(view, loc: zh, hidden: false).flatMap(\.rows)
+        let rows = WalletLive.activityGroups(view.rows, loc: zh, hidden: false).flatMap(\.rows)
         let ids = Set(items(view).map(\.id))
         #expect(rows.count == 2)
         #expect(Set(rows.compactMap(\.itemId)) == ids, "each row names its own record")

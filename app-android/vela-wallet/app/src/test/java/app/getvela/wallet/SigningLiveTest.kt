@@ -13,8 +13,10 @@ import app.getvela.wallet.feature.send.core.FeeSpeedOptionView
 import app.getvela.wallet.feature.send.core.FeeSpeedView
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.signing.BalanceDeltaRow
 import app.getvela.wallet.feature.signing.FeeModel
 import app.getvela.wallet.feature.signing.SigningBlock
+import app.getvela.wallet.feature.signing.said
 import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningLive
 import app.getvela.wallet.feature.signing.SigningRow
@@ -43,7 +45,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.signing.core.SigningController
 import app.getvela.wallet.feature.signing.core.ClearRisk
+import app.getvela.wallet.feature.wallet.core.TrustSimDirection
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
+import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
+import app.getvela.wallet.feature.wallet.core.TrustDeltaKind
 import app.getvela.wallet.feature.signing.SigningTone
 import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
@@ -630,18 +635,19 @@ class SigningLiveTest {
             listOf(
                 TrustSimJudgment.Native("-1000000000000000"),
                 TrustSimJudgment.Erc20Trusted(token = "0xddaf", delta = "12000000", symbol = "USDC", decimals = 6),
-                TrustSimJudgment.Erc20Unverified(token = "0xbad", delta = "5"),
+                TrustSimJudgment.Erc20Unverified(token = "0xbad", direction = TrustSimDirection.In),
             ),
         )
         val blocks = SigningLive.simBlocks(ready, ctx)
         val balances = blocks.single() as SigningBlock.Balances
         assertEquals(strings.t("componentsUi.signing.balanceChangesTitle"), balances.title)
         assertEquals(listOf("XDAI", "USDC", strings.t("componentsUi.signing.balanceUnverifiedToken")), balances.rows.map { it.symbol })
-        assertEquals(listOf("−0.001", "+12", "+5"), balances.rows.map { it.delta })
+        // The unverified token's row is its direction alone (PR 3).
+        assertEquals(listOf("−0.001", "+12", "+"), balances.rows.map { it.delta })
         assertEquals(listOf(SigningTone.Neutral, SigningTone.Success, SigningTone.Caution), balances.rows.map { it.tone })
         assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), balances.note)
 
-        val none = SigningLive.simBlocks(SigningController.SimOutcome.Ready(emptyList()), ctx).single() as SigningBlock.Balances
+        val none = SigningLive.simBlocks(judged(), ctx).single() as SigningBlock.Balances
         assertEquals(strings.t("componentsUi.signing.simResultNoChange"), none.note)
         assertTrue(none.rows.isEmpty())
         val unavailable = SigningLive.simBlocks(SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning"), ctx).single() as SigningBlock.Warning
@@ -691,7 +697,9 @@ class SigningLiveTest {
             ),
         )
         val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
-        val nothingMoves = SigningController.SimOutcome.Ready(emptyList())
+        // The trust machine's judged view of a check that moves nothing: its line.
+        val nothingMoves = judged()
+        assertEquals("componentsUi.signing.simResultNoChange", nothingMoves.noChangeKey)
         fun sheet(request: IncomingRequest, sim: SigningController.SimOutcome) =
             SigningLive.model(drawn, request, sign(request == own), backup, GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
 
@@ -706,18 +714,467 @@ class SigningLiveTest {
         assertFalse(ownSheet.tech.isEmpty)
 
         val dappSheet = sheet(request(params), nothingMoves)
-        assertTrue("a dApp keeps its balance card", dappSheet.blocks.any { it is SigningBlock.Balances })
+        assertTrue("a dApp keeps its balance card", dappSheet.blocks.said().any { it is SigningBlock.Balances })
+        // … in the place kept for it since the sheet opened (nothing jumps when it lands).
+        assertTrue(dappSheet.blocks.any { it is SigningBlock.Held })
         assertNull(dappSheet.tech.simResult)
         assertNull(dappSheet.headline)
         assertTrue("a site's sheet keeps its intent", dappSheet.blocks.first() is SigningBlock.Intent)
         assertEquals("Vela passkey registry", dappSheet.tech.summary)
 
         val reverts = sheet(own, SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFail"))
-        assertTrue("a revert is never folded away", reverts.blocks.any { it is SigningBlock.Warning && it.tone == SigningTone.Danger })
+        assertTrue("a revert is never folded away", reverts.blocks.said().any { it is SigningBlock.Warning && it.tone == SigningTone.Danger })
         assertNull(reverts.tech.simResult)
         val moves = sheet(own, SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000"))))
-        assertTrue("a balance that would move stays on the sheet", moves.blocks.any { it is SigningBlock.Balances })
+        assertTrue("a balance that would move stays on the sheet", moves.blocks.said().any { it is SigningBlock.Balances })
         assertNull(moves.tech.simResult)
+        // The fold is the core's line, not this sheet's reading of an empty
+        // list: judgments with no line are not "nothing moves", so nothing is
+        // folded away — the sheet says it could not check.
+        val unsaid = sheet(own, SigningController.SimOutcome.Ready(emptyList()))
+        assertNull(unsaid.tech.simResult)
+        assertEquals(
+            listOf<SigningBlock>(SigningBlock.Warning(SigningTone.Caution, strings.t("componentsUi.signing.simUnavailableWarning"))),
+            unsaid.blocks.said().filter { it is SigningBlock.Warning || it is SigningBlock.Balances },
+        )
+        // And the line folded is whichever the core names.
+        val named = sheet(own, SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.balanceChangesTitle"))
+        assertEquals(strings.t("componentsUi.signing.balanceChangesTitle"), named.tech.simResult?.value)
+    }
+
+    /**
+     * The device round, item 3 — "No asset changes" is the core's line, and
+     * the core says when (`TrustSimView.no_change_key`): once its judged view
+     * is ready and nothing moves — no judgment, or every one a zero. This
+     * builder used to decide both the case (`judgments.isEmpty()`, then "every
+     * row came out a zero") and the sentence. The real trust machine judges;
+     * the sheet draws the line exactly when the view carries it.
+     */
+    @Test
+    fun `no asset changes is drawn from the core's key, and from nothing else`() {
+        val line = strings.t("componentsUi.signing.simResultNoChange")
+        assertEquals("No asset changes", line)
+        val title = strings.t("componentsUi.signing.balanceChangesTitle")
+        val quiet = SigningBlock.Balances(title, emptyList(), line)
+        val couldNotCheck = SigningBlock.Warning(SigningTone.Caution, strings.t("componentsUi.signing.simUnavailableWarning"))
+
+        // Nothing moves: no delta at all, and a wash of zeros.
+        val nothing = judged()
+        assertTrue(nothing.judgments.isEmpty())
+        assertEquals("componentsUi.signing.simResultNoChange", nothing.noChangeKey)
+        assertEquals(listOf<SigningBlock>(quiet), SigningLive.simBlocks(nothing, ctx))
+        val wash = judged(TrustAssetDelta(TrustDeltaKind.Native, delta = "0"))
+        assertEquals(listOf<TrustSimJudgment>(TrustSimJudgment.Native("0")), wash.judgments)
+        assertEquals("componentsUi.signing.simResultNoChange", wash.noChangeKey)
+        assertEquals(listOf<SigningBlock>(quiet), SigningLive.simBlocks(wash, ctx))
+
+        // Something moves: no line, the rows.
+        val moves = judged(TrustAssetDelta(TrustDeltaKind.Native, delta = "-1000000000000000"))
+        assertNull(moves.noChangeKey)
+        val card = SigningLive.simBlocks(moves, ctx).single() as SigningBlock.Balances
+        assertEquals(listOf("\u22120.001"), card.rows.map { it.delta })
+        assertNull("rows, and no quiet line under them", card.note)
+
+        // The sentence is the key's, whichever the core names…
+        assertEquals(
+            listOf<SigningBlock>(SigningBlock.Balances(title, emptyList(), strings.t("componentsUi.signing.simWillFail"))),
+            SigningLive.simBlocks(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.simWillFail"), ctx),
+        )
+        // …and the case is the key's too: with it set the line is drawn and
+        // no row, whatever this builder could have made of the judgments.
+        assertEquals(
+            listOf<SigningBlock>(quiet),
+            SigningLive.simBlocks(SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-5")), noChangeKey = "componentsUi.signing.simResultNoChange"), ctx),
+        )
+
+        // No row to draw and NO key is not "nothing moves": the core's
+        // could-not-check notice, a caution — never an empty card, and never
+        // the quiet line. An empty list with no key (a core that predates the
+        // field), a zero the core did not call nothing, a figure nobody can
+        // write out, an unverified token that moves nothing.
+        for (unsaid in listOf(
+            SigningController.SimOutcome.Ready(emptyList()),
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("0"))),
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("not a number"))),
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Erc20Unverified(token = "0xbad", direction = TrustSimDirection.Still))),
+        )) {
+            assertNull(unsaid.noChangeKey)
+            assertEquals(unsaid.toString(), listOf<SigningBlock>(couldNotCheck), SigningLive.simBlocks(unsaid, ctx))
+        }
+        // A figure nobody can read is not "nothing" to the core either.
+        assertNull(judged(TrustAssetDelta(TrustDeltaKind.Native, delta = "not a number")).noChangeKey)
+
+        // The room the sheet keeps for this verdict, and the board, are the
+        // core's reading too (`simOutcome` over a clean run with no logs).
+        val read = app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves()
+        assertEquals(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.simResultNoChange"), read)
+        assertEquals(nothing, read)
+        assertEquals(read, SigningFixtures.verdict(SigningScreenState.CS62))
+        // The key backup's board folds that line into its technical details.
+        assertEquals(SigningRow(strings.t("componentsUi.signing.simResultLabel"), line), SigningFixtures.build(SigningScreenState.CS36, strings).tech.simResult)
+    }
+
+    /**
+     * The trust machine's judged view of a simulation's [deltas] for this
+     * wallet — the real `token_trust`, driven as the app drives it
+     * (`WalletController.judgeSimDeltas`) — as the sheet's controller hands it
+     * over: the judgments, and the core's line when nothing moves.
+     */
+    private fun judged(vararg deltas: TrustAssetDelta): SigningController.SimOutcome.Ready = judgedView(deltas.toList()).first
+
+    /**
+     * [judged], with what the tokens answer for themselves: [named] is the
+     * `symbol()` / `decimals()` each contract returns when the trust machine
+     * asks (`multicall_erc20_meta`) — a contract not in it answers nothing.
+     * Also the judged view's JSON exactly as the core wrote it.
+     */
+    private fun judgedView(
+        deltas: List<TrustAssetDelta>,
+        named: Map<String, app.getvela.wallet.feature.wallet.core.TrustTokenMeta> = emptyMap(),
+    ): Pair<SigningController.SimOutcome.Ready, String> {
+        val wire = app.getvela.wallet.core.crux.Wire.json
+        val script = app.getvela.wallet.core.crux.CoreScript(uniffi.vela_core_uniffi.TokenTrustCore().asBridge()) { operation ->
+            if (operation.optString("type") != "multicall_erc20_meta") return@CoreScript null
+            val asked = operation.optJSONArray("addrs") ?: org.json.JSONArray()
+            val answer: app.getvela.wallet.feature.wallet.core.TrustShellResult = app.getvela.wallet.feature.wallet.core.TrustShellResult.ErcMeta(
+                chain_id = operation.optInt("chain_id"),
+                entries = (0 until asked.length()).map { index ->
+                    val addr = asked.optString(index)
+                    app.getvela.wallet.feature.wallet.core.TrustMetaEntry(addr, named[addr.lowercase()])
+                },
+            )
+            wire.encodeToString(app.getvela.wallet.feature.wallet.core.TrustShellResult.serializer(), answer)
+        }
+        val event: app.getvela.wallet.feature.wallet.core.TrustEvent =
+            app.getvela.wallet.feature.wallet.core.TrustEvent.SimDeltasComputed(address = ctx.walletAddress.lowercase(), chain_id = 100, deltas = deltas)
+        script.dispatch(wire.encodeToString(app.getvela.wallet.feature.wallet.core.TrustEvent.serializer(), event))
+        val json = script.viewJson()
+        val sim = wire.decodeFromString(app.getvela.wallet.feature.wallet.core.TrustView.serializer(), json).sim
+            ?: error("the trust machine judged nothing")
+        assertTrue("every token was asked about and answered: the judged view is ready", sim.ready)
+        return SigningController.SimOutcome.Ready(sim.judgments, noChangeKey = sim.no_change_key) to json
+    }
+
+    /**
+     * PR 3, fix B — **an unverified token is a direction, never a figure.**
+     *
+     * This sheet printed 「未验证代币 +5,000,000,000,000,000,000,000.00」: the
+     * simulation's raw number for a token nobody vouches for, which the site
+     * being signed for chooses (its own contract emits the log). The core no
+     * longer hands the figure over — the judgment is `{token, direction}` —
+     * and the row is drawn from the direction alone.
+     *
+     * The REAL trust machine judges a simulation in which such a token
+     * arrives with that very figure and another leaves; the sheet is drawn by
+     * the live builders. Its contract even answers "USDC" for itself: for
+     * money coming IN that earns it nothing.
+     */
+    @Test
+    fun `an unverified token's row is its direction and never the simulation's figure`() {
+        val lure = "5000000000000000000000"
+        val arriving = "0x" + "c0".repeat(20)
+        val leaving = "0x" + "d1".repeat(20)
+        val (judged, viewJson) = judgedView(
+            listOf(
+                TrustAssetDelta(TrustDeltaKind.Erc20, token = arriving, delta = lure),
+                TrustAssetDelta(TrustDeltaKind.Erc20, token = leaving, delta = "-$lure"),
+            ),
+            named = mapOf(arriving to app.getvela.wallet.feature.wallet.core.TrustTokenMeta("USDC", 18)),
+        )
+        assertEquals(
+            listOf<TrustSimJudgment>(
+                TrustSimJudgment.Erc20Unverified(token = arriving, direction = TrustSimDirection.In),
+                TrustSimJudgment.Erc20Unverified(token = leaving, direction = TrustSimDirection.Out),
+            ),
+            judged.judgments,
+        )
+        assertNull("something moves: no quiet line", judged.noChangeKey)
+        // What this shell is handed holds nothing of the figure, in any field.
+        val sim = org.json.JSONObject(viewJson).getJSONObject("sim").toString()
+        assertFalse(sim, sim.contains("5000"))
+        assertFalse(sim, sim.contains("delta"))
+
+        // The card: the label, the sign, the caution — twice — and the warning.
+        val label = strings.t("componentsUi.signing.balanceUnverifiedToken")
+        val card = SigningLive.simBlocks(judged, ctx).single() as SigningBlock.Balances
+        assertEquals(
+            listOf(
+                BalanceDeltaRow(label, "+", SigningTone.Caution),
+                BalanceDeltaRow(label, "\u2212", SigningTone.Caution),
+            ),
+            card.rows,
+        )
+        assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), card.note)
+        assertEquals(SigningTone.Caution, card.noteTone)
+        val said = listOf(card.title, card.note.orEmpty()) + card.rows.flatMap { listOf(it.symbol, it.delta) }
+        assertTrue("no digit anywhere in the verdict: $said", said.none { text -> text.any(Char::isDigit) })
+
+        // The whole sheet as drawn, the verdict in its place: nothing of the
+        // figure, grouped or not, anywhere on it.
+        val params = org.json.JSONArray().put(org.json.JSONObject().put("to", founder).put("value", "0x0")).toString()
+        val sign = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://app.example", null, 100, null),
+            confirm_gate_open = true,
+        )
+        val sheet = SigningLive.model(drawn, request(params), sign, ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, judged)
+        assertEquals(card, (sheet.blocks.single { it is SigningBlock.Held } as SigningBlock.Held).shown)
+        val drawnText = sheet.toString()
+        assertFalse("the figure is on the sheet: $drawnText", drawnText.filter(Char::isDigit).contains(lure))
+        // …and in no number preset's grouping, in anything the body says.
+        val body = sheet.blocks.toString() + sheet.tech.toString()
+        for (spelling in listOf("5000", "5,000", "5.000", "5 000", "5\u202f000", "5\u00a0000", "5'000")) {
+            assertFalse("\"$spelling\" is on the sheet: $body", body.contains(spelling))
+        }
+
+        // The other two directions. A figure nobody could read: the row
+        // stands, with its caution and its warning, and says no sign — never
+        // "nothing moves", and never the could-not-check notice either (the
+        // check did run). A move of nothing: no row; with something else
+        // moving, only that is drawn.
+        val unreadable = SigningLive.simBlocks(
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Erc20Unverified(token = arriving, direction = TrustSimDirection.Unreadable))),
+            ctx,
+        ).single() as SigningBlock.Balances
+        assertEquals(listOf(BalanceDeltaRow(label, "", SigningTone.Caution)), unreadable.rows)
+        assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), unreadable.note)
+        val still = SigningLive.simBlocks(
+            SigningController.SimOutcome.Ready(
+                listOf(
+                    TrustSimJudgment.Native("-1000000000000000"),
+                    TrustSimJudgment.Erc20Unverified(token = arriving, direction = TrustSimDirection.Still),
+                ),
+            ),
+            ctx,
+        ).single() as SigningBlock.Balances
+        assertEquals(listOf("XDAI"), still.rows.map { it.symbol })
+        assertNull("no unverified row: no warning about one", still.note)
+
+        // The board a person can open (CS68): the same two rows.
+        val board = SigningFixtures.build(SigningScreenState.CS68, strings).blocks.single { it is SigningBlock.Held } as SigningBlock.Held
+        assertEquals(listOf("\u2212", "+"), (board.shown as SigningBlock.Balances).rows.map { it.delta })
+        assertEquals(listOf(label, label), (board.shown as SigningBlock.Balances).rows.map { it.symbol })
+    }
+
+    /**
+     * Item 12 (the 102 device run): the sheet is bottom-anchored, and the
+     * simulation's verdict lands a second after it opens — on a chain whose
+     * nodes cannot simulate (Gnosis), as 「Vela 未能检查这笔交易的结果」 on
+     * every request — pushing the whole form up. Its place is kept from the
+     * first frame, empty while the simulation is out, and the card in it
+     * when it lands. Same block, same size.
+     *
+     * The integration's note 12: the place is as tall as the tallest verdict
+     * a sheet can end on — it was that one card's, and every other verdict
+     * is taller than it (a swap's two balance rows still pushed the sheet
+     * up). Its rooms are those verdicts, each the card the live builder
+     * draws: "could not check", "expected to fail" at the core's longest
+     * reason, "no asset changes", and a balance card of a swap's two rows.
+     */
+    @Test
+    fun `the simulation's verdict has its place from the first frame`() {
+        val registry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
+        val params = org.json.JSONArray().put(org.json.JSONObject().put("to", registry).put("data", "0xcd438f9b").put("value", "0x0")).toString()
+        fun sign(firstParty: Boolean) = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://app.example", null, 100, null, first_party = firstParty),
+            confirm_gate_open = true,
+        )
+        fun sheet(request: IncomingRequest, sim: SigningController.SimOutcome?, firstParty: Boolean = false) =
+            SigningLive.model(drawn, request, sign(firstParty), ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+        val couldNot = app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck()
+        val card = SigningLive.simBlocks(couldNot, ctx).single()
+        assertEquals(
+            SigningBlock.Warning(SigningTone.Caution, strings.t("componentsUi.signing.simUnavailableWarning")),
+            card,
+        )
+
+        // The rooms: every verdict the sheet can end on.
+        val rooms = SigningLive.verdictRooms(ctx)
+        assertEquals("could not check", card, rooms[0])
+        val fails = rooms[1] as SigningBlock.Warning
+        assertEquals("a revert is a danger", SigningTone.Danger, fails.tone)
+        // …at the core's own cap: the reason the core prints is never longer than this one.
+        val longest = app.getvela.wallet.feature.signing.core.SimDeltas.longestRevert()!!
+        assertEquals("componentsUi.signing.simWillFailReason", longest.key)
+        assertEquals("the core cut it at its cap", 64, longest.reason!!.length)
+        assertTrue(longest.reason!!, longest.reason!!.endsWith("…"))
+        assertEquals(strings.t(longest.key, mapOf("reason" to longest.reason!!)), fails.text)
+        // "No asset changes": the card the live builder draws from the core's line.
+        assertEquals(
+            SigningBlock.Balances(strings.t("componentsUi.signing.balanceChangesTitle"), emptyList(), strings.t("componentsUi.signing.simResultNoChange")),
+            rooms[2],
+        )
+        assertEquals(SigningLive.simBlocks(judged(), ctx).single(), rooms[2])
+        assertEquals("a swap's two rows", 2, (rooms[3] as SigningBlock.Balances).rows.size)
+        assertEquals(4, rooms.size)
+
+        // Out: the place, nothing said in it.
+        val waiting = sheet(request(params), SigningController.SimOutcome.Pending)
+        // F2: the place is not blank meanwhile — a skeleton, said as the corpus's "Checking…".
+        val checking = strings.t("componentsUi.funding.checking")
+        assertEquals("Checking…", checking)
+        assertEquals(SigningBlock.Held(rooms = rooms, shown = null, waiting = checking), waiting.blocks.single { it is SigningBlock.Held })
+        assertTrue("nothing is said before a verdict", waiting.blocks.said().none { it is SigningBlock.Warning || it is SigningBlock.Balances })
+
+        // Landed "could not check": the same card in the same place — nothing moves.
+        val landed = sheet(request(params), couldNot)
+        assertEquals(SigningBlock.Held(rooms = rooms, shown = card, waiting = checking), landed.blocks.single { it is SigningBlock.Held })
+        assertEquals(waiting.blocks.indexOfFirst { it is SigningBlock.Held }, landed.blocks.indexOfFirst { it is SigningBlock.Held })
+        assertEquals(waiting.blocks.size, landed.blocks.size)
+
+        // A verdict that says something else takes the same place.
+        val moves = sheet(request(params), SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000"))))
+        assertTrue((moves.blocks.single { it is SigningBlock.Held } as SigningBlock.Held).shown is SigningBlock.Balances)
+
+        // Nothing simulated (no simulator, or a message): no place to keep.
+        assertTrue(sheet(request(params), null).blocks.none { it is SigningBlock.Held })
+        // The wallet's own request expects "nothing moves", which folds into
+        // the technical details and takes no room at all.
+        val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
+        assertTrue(sheet(own, SigningController.SimOutcome.Pending, firstParty = true).blocks.none { it is SigningBlock.Held })
+    }
+
+    /**
+     * PR 3, fix C — the verdict's place follows the core's wait for the
+     * simulation ([SigningLive.verdictShown]); the confirm is the gate's and
+     * is not decided here.
+     *
+     * - While the core waits (`sim_checking`) the place says "checking" — its
+     *   skeleton — even when this shell already holds the answer: the verdict
+     *   and the confirm that waited for it are one commit of the core's, so
+     *   no frame shows a verdict over "Checking what this transaction does…".
+     * - The deadline passed with the simulation still out
+     *   (`sim_waited_out_key`): that sentence in the place, a caution — the
+     *   very block a node that cannot simulate is drawn as.
+     * - A verdict that lands late replaces the caution at once.
+     * - No simulation: no place, whatever the view says.
+     *
+     * Same place, same number of blocks, in every one of them: nothing moves.
+     */
+    @Test
+    fun `the verdict's place follows the core's wait — checking, the waited-out caution, then the verdict`() {
+        val params = org.json.JSONArray().put(org.json.JSONObject().put("to", founder).put("value", "0x38d7ea4c68000")).toString()
+        val settled = SignView(
+            surface = SignSurface.Sheet,
+            request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://app.example", null, 100, null),
+            confirm_gate_open = true,
+        )
+        val checking = settled.copy(sim_checking = true)
+        val key = "componentsUi.signing.simUnavailableWarning"
+        val waitedOut = settled.copy(sim_waited_out_key = key)
+        val pending = SigningController.SimOutcome.Pending
+        val verdict = SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000")))
+        val notice = app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck()
+        val reverts = SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFail")
+
+        // No simulation: nothing to show and no place, whatever the view says.
+        for (sign in listOf(settled, checking, waitedOut)) assertNull(SigningLive.verdictShown(null, sign))
+        // The core still waits: "checking" — also once this shell holds the answer.
+        for (sim in listOf(pending, verdict, notice, reverts)) assertEquals(pending, SigningLive.verdictShown(sim, checking))
+        // The deadline passed, the simulation still out: the core's sentence, a caution.
+        assertEquals(SigningController.SimOutcome.Notice(ClearRisk.Caution, key), SigningLive.verdictShown(pending, waitedOut))
+        // A late answer takes the caution's place at once, before the core takes its line back.
+        for (sim in listOf(verdict, notice, reverts)) assertEquals(sim, SigningLive.verdictShown(sim, waitedOut))
+        // No wait at all (a core that predates it, a board): as it always was.
+        for (sim in listOf(pending, verdict, notice, reverts)) assertEquals(sim, SigningLive.verdictShown(sim, settled))
+
+        // On the sheet.
+        fun sheet(sign: SignView, sim: SigningController.SimOutcome?) =
+            SigningLive.model(drawn, request(params), sign, ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+        fun place(model: app.getvela.wallet.feature.signing.SigningScreenModel) = model.blocks.single { it is SigningBlock.Held } as SigningBlock.Held
+        val couldNotCheck = SigningBlock.Warning(SigningTone.Caution, strings.t(key))
+
+        val held = sheet(checking, pending)
+        assertNull("checking: the skeleton", place(held).shown)
+        assertFalse("the gate is the core's: the confirm is shut", held.confirmEnabled)
+        assertEquals("Checking what this transaction does…", held.confirmBlockLine)
+        // The answer is in this shell's hands and the core has not heard yet:
+        // still "checking", in both places — never the verdict over that line.
+        val between = sheet(checking, verdict)
+        assertNull(place(between).shown)
+        assertFalse(between.confirmEnabled)
+        assertEquals(held.confirmBlockLine, between.confirmBlockLine)
+        // The core heard: the verdict, and the confirm, in one frame.
+        val landed = sheet(settled, verdict)
+        assertTrue(place(landed).shown is SigningBlock.Balances)
+        assertTrue(landed.confirmEnabled)
+        assertNull(landed.confirmBlockLine)
+
+        // Waited out: the caution where "checking" was, the confirm open, no line.
+        val out = sheet(waitedOut, pending)
+        assertEquals(couldNotCheck, place(out).shown)
+        assertEquals("the same block the could-not-check notice draws", SigningLive.simBlocks(notice, ctx).single(), place(out).shown)
+        assertTrue(out.confirmEnabled)
+        assertNull(out.confirmBlockLine)
+        // …and the late verdict in its place.
+        assertTrue(place(sheet(waitedOut, verdict)).shown is SigningBlock.Balances)
+
+        // One place, kept: the same block index and count in every frame.
+        val frames = listOf(held, between, landed, out, sheet(waitedOut, verdict), sheet(settled, pending))
+        for (frame in frames) {
+            assertEquals(held.blocks.indexOfFirst { it is SigningBlock.Held }, frame.blocks.indexOfFirst { it is SigningBlock.Held })
+            assertEquals(held.blocks.size, frame.blocks.size)
+            assertEquals(place(held).rooms, place(frame).rooms)
+        }
+        // A site's sheet with no simulation keeps no place — and is not held by one.
+        assertTrue(sheet(settled, null).blocks.none { it is SigningBlock.Held })
+        // The board helper is the same rule.
+        assertEquals(listOf<SigningBlock>(place(out)), SigningLive.verdictPlace(pending, waitedOut, ctx))
+        assertEquals(listOf<SigningBlock>(place(held)), SigningLive.verdictPlace(pending, checking, ctx))
+        assertTrue(SigningLive.verdictPlace(null, checking, ctx).isEmpty())
+
+        // The wallet's own request (the key backup) keeps no place while it
+        // waits — its expected verdict folds into the technical details — but
+        // a deadline that passed is said on the sheet, never folded away.
+        val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
+        fun ownSheet(sign: SignView, sim: SigningController.SimOutcome?) =
+            SigningLive.model(drawn, own, sign.copy(request = sign.request?.copy(first_party = true)), ClearSigningView(), GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+        assertTrue(ownSheet(checking, pending).blocks.none { it is SigningBlock.Held })
+        assertEquals(listOf<SigningBlock>(couldNotCheck), ownSheet(waitedOut, pending).blocks.said().filterIsInstance<SigningBlock.Warning>())
+    }
+
+    /**
+     * The device round, item 1 (security): a verdict taller than its place is
+     * shown whole, and on a sheet taller than the screen the BODY scrolls to
+     * it — all of it when it fits the body's frame, by the edge that is out;
+     * from its top when it is taller than the frame; and not at all when it
+     * is already in view. (The layout itself is measured on a device:
+     * `SigningVerdictWholeTest`.)
+     */
+    @Test
+    fun `the body moves just far enough to show the verdict, whole when it fits and from its top when it cannot`() {
+        val frame = 600f
+        // In view: nothing moves.
+        assertEquals(0f, app.getvela.wallet.feature.signing.distanceIntoView(top = 0f, height = 600f, frame = frame))
+        assertEquals(0f, app.getvela.wallet.feature.signing.distanceIntoView(top = 120f, height = 330f, frame = frame))
+        // Its end under the fold: up by what is hidden, so all of it shows.
+        assertEquals(180f, app.getvela.wallet.feature.signing.distanceIntoView(top = 450f, height = 330f, frame = frame))
+        // Wholly under the fold.
+        assertEquals(430f, app.getvela.wallet.feature.signing.distanceIntoView(top = 700f, height = 330f, frame = frame))
+        // Its start above the frame (the person had scrolled past it): back down to it.
+        assertEquals(-80f, app.getvela.wallet.feature.signing.distanceIntoView(top = -80f, height = 330f, frame = frame))
+        // Taller than the frame: from its top — never its middle, never its end.
+        assertEquals(450f, app.getvela.wallet.feature.signing.distanceIntoView(top = 450f, height = 700f, frame = frame))
+        assertEquals(-50f, app.getvela.wallet.feature.signing.distanceIntoView(top = -50f, height = 700f, frame = frame))
+        assertEquals(0f, app.getvela.wallet.feature.signing.distanceIntoView(top = 0f, height = 700f, frame = frame))
+        // Brought in, it stands clear of the frame's edge where there is
+        // room for that — and nothing in view is moved for the sake of it.
+        assertEquals(212f, app.getvela.wallet.feature.signing.distanceIntoView(top = 450f, height = 330f, frame = frame, margin = 32f))
+        assertEquals(-112f, app.getvela.wallet.feature.signing.distanceIntoView(top = -80f, height = 330f, frame = frame, margin = 32f))
+        assertEquals("flush with the edge is in view", 0f, app.getvela.wallet.feature.signing.distanceIntoView(top = 270f, height = 330f, frame = frame, margin = 32f))
+        assertEquals("no room for the margin: the whole of it, edge to edge", 10f, app.getvela.wallet.feature.signing.distanceIntoView(top = 40f, height = 570f, frame = frame, margin = 32f))
+        assertEquals("taller than the frame: its top, at the frame's own", 450f, app.getvela.wallet.feature.signing.distanceIntoView(top = 450f, height = 700f, frame = frame, margin = 32f))
+
+        // The board that test photographs: four rows — the last a token
+        // nothing verified — and its warning, through the live builder.
+        val tall = SigningLive.simBlocks(SigningFixtures.verdict(SigningScreenState.CS67), ctx).single() as SigningBlock.Balances
+        assertEquals(listOf("USDC", "XDAI", "DAI", strings.t("componentsUi.signing.balanceUnverifiedToken")), tall.rows.map { it.symbol })
+        assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), tall.note)
+        assertEquals(SigningTone.Caution, tall.noteTone)
+        val held = SigningFixtures.build(SigningScreenState.CS67, strings).blocks.single { it is SigningBlock.Held } as SigningBlock.Held
+        assertEquals(4, (held.shown as SigningBlock.Balances).rows.size)
+        assertEquals("the rooms are the same as every other board's: the place's least height", SigningFixtures.build(SigningScreenState.CS57, strings).blocks.filterIsInstance<SigningBlock.Held>().single().rooms, held.rooms)
     }
 
     /**
@@ -748,13 +1205,20 @@ class SigningLiveTest {
         )
         fun term(leaf: String) = zh.t("componentsUi.signing.$leaf")
         val rows = sheet.blocks.filterIsInstance<SigningBlock.Rows>().single().rows
+        // The wallet's NAME is on the sheet: the copy makes it public on
+        // Ethereum too, so the person sees it before confirming.
         assertEquals(
-            listOf(term("labelNetwork") to "Ethereum", term("labelAddress") to "0x88cCA0…266894", term("labelPublicKeys") to "3"),
+            listOf(
+                term("labelNetwork") to "Ethereum", term("labelAddress") to "0x88cCA0…266894",
+                term("labelWalletName") to "Interleave", term("labelPublicKeys") to "3",
+            ),
             rows.map { it.label to it.value },
         )
+        assertEquals(listOf("网络", "地址", "钱包名称", "包含的钥匙"), rows.map { it.label })
+        assertEquals("复制钱包记录", sheet.confirmAction)
         assertEquals(term("intentBackUpPublicKeys"), sheet.confirmAction)
         assertEquals("the header's title is the intent", term("intentBackUpPublicKeys"), sheet.headline)
-        listOf("labelNetwork", "labelAddress", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
+        listOf("labelNetwork", "labelAddress", "labelWalletName", "labelPublicKeys", "intentBackUpPublicKeys").forEach { leaf ->
             assertFalse("$leaf is said in Chinese", term(leaf).startsWith("componentsUi.") || term(leaf) == strings.t("componentsUi.signing.$leaf"))
         }
     }
@@ -774,7 +1238,8 @@ class SigningLiveTest {
         assertEquals("\u22120.000000000000001", dust.rows.single().delta)
         assertTrue("never −0", dust.rows.none { it.delta == "\u22120" || it.delta == "-0" })
 
-        val zeros = SigningLive.simBlocks(SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("0"))), ctx).single() as SigningBlock.Balances
+        // Every move a zero: the core's judged view says nothing moves.
+        val zeros = SigningLive.simBlocks(judged(TrustAssetDelta(TrustDeltaKind.Native, delta = "0")), ctx).single() as SigningBlock.Balances
         assertTrue(zeros.rows.isEmpty())
         assertEquals("nothing of theirs moves", strings.t("componentsUi.signing.simResultNoChange"), zeros.note)
     }

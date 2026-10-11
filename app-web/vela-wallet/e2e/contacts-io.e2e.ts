@@ -249,9 +249,7 @@ test('a CSV imported into a group seats every valid row in it', async ({ page })
 	await expect(page.getByText('Imported Alice')).toHaveCount(0);
 });
 
-test('the detail actions go somewhere: QR shows the address, 转账 hands the person to the wallet', async ({
-	page
-}) => {
+test('the detail offers Send alone, and 转账 hands the person to the wallet', async ({ page }) => {
 	// Hermetic: with the chain unreachable the send flow stops at its first
 	// screen, the token pick, instead of auto-selecting whatever a live fetch
 	// finds — which is the screen this test can name deterministically.
@@ -260,26 +258,23 @@ test('the detail actions go somewhere: QR shows the address, 转账 hands the pe
 	await addContact(page, 'Alice', ALICE_ADDR);
 	await page.getByText('Alice', { exact: true }).click();
 
-	await page.getByRole('button', { name: en('contacts.actionQr') }).click();
-	// The code itself — an SVG named for the contact — not the identicons.
-	await expect(page.locator('svg[role="img"][aria-label="Alice"]')).toBeVisible();
-	// The address printed in full under the code — inside the sheet, not the
-	// detail's own address block behind it.
+	// Issue 479: a contact's page is about paying this person. Receive went
+	// to the WALLET's own code and the QR card drew this person's address as a
+	// code; both are gone, and no code is drawn anywhere on the page.
+	const send = page.getByRole('button', { name: en('componentsUi.dock.send') });
+	await expect(send).toBeVisible();
+	await expect(page.getByRole('button', { name: en('componentsUi.dock.receive') })).toHaveCount(0);
+	await expect(page.locator('svg[role="img"][aria-label="Alice"]')).toHaveCount(0);
+	// The address is still the page's, in full, with its copy.
 	await expect(
-		page.getByLabel(en('contacts.actionQr')).getByText(ALICE_ADDR, { exact: true })
+		page.getByRole('button', { name: en('componentsUi.identiconViewer.copyAddress') })
 	).toBeVisible();
-	// The sheet's own close — the detail's back button behind the scrim says
-	// the same word.
-	await page
-		.getByLabel(en('contacts.actionQr'))
-		.getByRole('button', { name: en('contacts.cancel') })
-		.click();
 
 	// 转账 hands the person to /wallet, which reads the hand-off once, drops
 	// the query, and opens the send flow with the recipient filled. Which
 	// screen shows first is the core's call: the token pick, or — when the
 	// wallet holds exactly one asset — straight to the form.
-	await page.getByRole('button', { name: en('componentsUi.dock.send') }).click();
+	await send.click();
 	const picker = page.getByRole('heading', { name: en('send.selectTokenTitle') });
 	const recipient = page.getByRole('textbox', { name: en('send.recipientLabel') });
 	await expect(picker.or(recipient)).toBeVisible();

@@ -63,9 +63,11 @@
       "bestRpc": "最佳 RPC：{{latencyMs}}ms",
       "compatibilityCheck": "兼容性檢查",
       "unableToVerify": "無法驗證 — RPC 請求失敗",
+      "noRpcEndpoint": "呢個網絡冇列出 RPC 端點。請填寫一個，再重新檢查。",
       "retry": "重試",
       "addNetworkBtn": "新增網絡",
-      "incompatibleHint": "此區塊鏈上尚未部署部分必需的合約。\n請使用 Vela Wallet 區塊鏈設定工具部署，然後返回重新檢查。",
+      "incompatibleHint": "呢個網絡仲未有 Vela 需要嘅部分合約。區塊鏈設定工具會列出缺邊啲、邊個可以部署。",
+      "noP256Hint": "呢個網絡驗證唔到通行密鑰簽署：佢冇 P-256 驗證器（EIP-7951 / RIP-7212，地址 0x100），只有呢個網絡自己嘅團隊先可以加。Vela 錢包喺度用唔到。唔好轉錢去你喺呢個網絡上嘅 Vela 地址，轉咗入去會卡住。",
       "openChainSetupTool": "開啟區塊鏈設定工具",
       "recheck": "重新檢查",
       "chainIdLabel": "Chain ID：{{chainId}}",
@@ -92,11 +94,12 @@
       "invalid": "無效"
     },
     "backup": {
-      "title": "將公鑰備份去以太坊",
-      "backedUp": "已備份到以太坊",
-      "notBackedUp": "尚未備份",
-      "couldNotCheck": "無法檢查",
-      "explain": "只會發布公鑰，用嚟喺以太坊搵返同重建呢個錢包。私鑰永遠留喺你部機度。"
+      "title": "將錢包紀錄複製去以太坊",
+      "backedUp": "已複製到以太坊",
+      "notBackedUp": "未複製（可選）",
+      "couldNotCheck": "檢查唔到，㩒一下再試",
+      "cannotCopy": "呢個較早開嘅錢包複製唔到",
+      "explain": "錢包喺 Gnosis 上面嘅紀錄係公開嘅：錢包嘅地址同名稱，仲有每條鎖匙嘅名稱、公鑰、憑證 ID 同驗證器型號。有你通行密鑰嘅裝置就係靠佢搵到呢個錢包。呢度會喺以太坊上面再存多一份副本。呢個係一筆以太坊交易：由你用通行密鑰確認，再用你喺以太坊上面持有嘅幣支付網絡費。副本唔可以郁到資金，亦都搵唔返遺失咗嘅通行密鑰。"
     },
     "keys": {
       "title": "鎖匙",

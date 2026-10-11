@@ -69,8 +69,10 @@ unpriced_tokens: Array<BalanceToken>, failed_chain_ids: Array<number>, rate_limi
 unreachable_networks: Array<UnreachableNetwork>, 
 /**
  * The corpus key of the home line over them: [`UNREACHABLE_ONE`]
- * (`{{name}}` = the one network) or [`UNREACHABLE_MANY`] (`{{n}}` = how many);
- * `None` when every network answered.
+ * (`{{name}}` = the one network), [`TOKEN_LIST_UNREACHABLE`] (`{{name}}`
+ * too — the one network's RPC is fine and its token list is what could
+ * not be loaded) or [`UNREACHABLE_MANY`] (`{{n}}` = how many); `None`
+ * when every network answered.
  */
 unreachable_key: string | null, 
 /**
@@ -86,6 +88,44 @@ internal_chain_ids: Array<number>,
  * "Can't reach Ethereum" (issue 483). `None` otherwise.
  */
 internal_key: string | null, 
+/**
+ * The hero's line while the FIRST read of this account is still out:
+ * [`CHECKING`] ("Checking…"). Until a round has ended nothing here was
+ * said by a chain — a cached total of 0 is last session's — so the line
+ * under the total says the wallet is being read, and neither "live" nor
+ * "can't reach" yet. `None` from the first round's end on (a later
+ * refresh is not "checking": what the last round found stands).
+ */
+checking_key: string | null, 
+/**
+ * The hero's line under a LIVE zero: [`LIVE_ZERO`] ("Live · listening
+ * for payments"). `Some` only when the last round settled, every chain
+ * it asked answered, and the wallet holds nothing — a wallet waiting for
+ * its first deposit. Each shell derived this from the total and the
+ * partial flag alone, so a cached zero drew "Live · listening" over a
+ * wallet nothing had read yet, and then swapped it for "Can't reach 24
+ * networks". A shell draws its "zero, live" state exactly when this is
+ * `Some`, and derives it from nothing else.
+ */
+live_key: string | null, 
+/**
+ * The Assets list's empty state: [`ASSETS_EMPTY`] ("Deposit your first
+ * asset"), with its caption and its action. `Some` only when a read has
+ * ended and a chain that ANSWERED found nothing held: never while the
+ * first read of the account is out ([`Self::checking_key`]), never
+ * while holdings are loading or unknown, and never while no chain has
+ * answered for this account — a first round in which every network
+ * failed, or which threw, has ended and has read nothing. A wallet that
+ * held nothing last session opens with a cached total of 0, and each
+ * shell took "no tokens, a known total" for an empty wallet — so it
+ * invited a first deposit under "Checking…", and again under "Can't
+ * reach 24 networks", before anything had been read. A round that
+ * misses SOME networks still says it for the ones that answered: a new
+ * wallet is not held at a skeleton by one network that is down. A shell
+ * draws the empty state exactly when this is `Some`, and with no tokens
+ * and no key it draws what it draws while loading.
+ */
+empty_key: string | null, 
 /**
  * `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
  */

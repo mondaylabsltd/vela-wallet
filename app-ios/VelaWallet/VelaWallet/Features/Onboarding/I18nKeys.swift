@@ -73,7 +73,11 @@ enum I18nKeys {
         static let keyDeviceOnlyBadge = "onboarding.create.keyDeviceOnlyBadge"
         static let keyLimitReached = "onboarding.create.keyLimitReached"
         static let needSecondKeyHint = "onboarding.create.needSecondKeyHint"
-        static let addKeyBtn = "onboarding.create.addKeyBtn"
+        /// The heading over the three places while there is no key yet
+        /// (PR 3 note 17): "Choose where it lives" — it used to repeat the
+        /// screen's own title ("Add a passkey" under "Add passkeys").
+        /// Replaces the retired `onboarding.create.addKeyBtn`.
+        static let keyPlaceHeading = "onboarding.create.keyPlaceHeading"
         static let addSecondKeyBtn = "onboarding.create.addSecondKeyBtn"
         static let confirmKeyBtn = "onboarding.create.confirmKeyBtn"
         static let removeKeyBtn = "onboarding.create.removeKeyBtn"
@@ -180,6 +184,10 @@ enum I18nKeys {
         /// Issue #450: no key plugged in yet — the ceremony waits for one.
         static let insertKeyTitle = "onboarding.common.insertKeyTitle"
         static let insertKeyBody = "onboarding.common.insertKeyBody"
+        /// iOS only: the way out of "insert your key" for a key the app's own
+        /// USB route cannot reach — and what kind of key that is.
+        static let insertKeyAppleSheet = "onboarding.common.insertKeyAppleSheet"
+        static let insertKeyAppleSheetHint = "onboarding.common.insertKeyAppleSheetHint"
         /// Issue #450: a security-key route this device could not use (the
         /// core's `security_key` on a not-supported prompt).
         static let keyUnavailableTitle = "onboarding.common.keyUnavailableTitle"
@@ -270,7 +278,7 @@ enum I18nKeys {
         Create.keysSubtitleBlocked, Create.keysSubtitleFull, Create.keysLabel,
         Create.keysHint, Create.keyCount, Create.keySyncedBadge,
         Create.keyDeviceOnlyBadge, Create.keyLimitReached, Create.needSecondKeyHint,
-        Create.addKeyBtn, Create.addSecondKeyBtn, Create.confirmKeyBtn,
+        Create.keyPlaceHeading, Create.addSecondKeyBtn, Create.confirmKeyBtn,
         Create.removeKeyBtn, Create.addMethodLabel,
         Create.methodPlatformTitle, Create.methodPlatformBody,
         Create.methodHybridTitle, Create.methodHybridBody, Create.methodHybridUnavailable,
@@ -295,7 +303,8 @@ enum I18nKeys {
         Flow.back, Flow.retry, Flow.close, Flow.copyAddress, Flow.copied,
         Flow.confirmInPrompt, Flow.editIndexEndpoint,
         Flow.notDiscoverableTitle, Flow.notDiscoverableBody, Flow.phoneLinkFailed,
-        Flow.insertKeyTitle, Flow.insertKeyBody, Flow.keyUnavailableTitle, Flow.keyUnavailableBody,
+        Flow.insertKeyTitle, Flow.insertKeyBody, Flow.insertKeyAppleSheet, Flow.insertKeyAppleSheetHint,
+        Flow.keyUnavailableTitle, Flow.keyUnavailableBody,
         Settings.sectionPasskeyIndex, Settings.endpointUrlLabel, Settings.passkeyHint,
         Settings.resetToDefault, Settings.warningText,
     ] + CoreRound.all
@@ -449,9 +458,16 @@ enum I18nKeys {
             // added", "Chain info not found", "Not compatible with Vela
             // Wallet". Using the corpus entry whose text says the right thing
             // beats inventing a key, which this feature may not do.
+            //
+            // PR 3 (notes 5/10/18): the CORE names the sentence for every
+            // wizard stop (`NetWizardView.error_key`) and the shell draws
+            // `t(error_key)`; these stay as the names the tests pin the
+            // core's choice against — with the one it added.
         static let addAlreadyAdded = "addToken.errorAlreadyAdded"
         static let addChainNotFound = "addToken.errorChainNotFound"
         static let addNotCompatible = "addToken.errorNotCompatible"
+        static let addNoRpcEndpoint = "settingsModals.addNetwork.noRpcEndpoint"
+        static let addNoP256Hint = "settingsModals.addNetwork.noP256Hint"
 
             // RPC providers.
         static let providersDescription = "settingsModals.rpcProviders.description"
@@ -608,6 +624,9 @@ enum I18nKeys {
             // four row lines the core names in `line_key`.
         static let unreachableOne = "assets.unreachableOne"
         static let unreachableMany = "assets.unreachableMany"
+            // PR 3 note 4: the one network's RPC answers — its token list is
+            // what could not be loaded (`{{name}}`, as `unreachableOne`).
+        static let tokenListUnreachable = "assets.tokenListUnreachable"
         static let unreachableBody = "assets.unreachableBody"
         static let unreachableNone = "assets.unreachableNone"
         static let lastSeen = "assets.lastSeen"

@@ -132,6 +132,8 @@ struct SettingsParityTests {
                 "rpc_failure": "all_probes_failed",
             ],
             "error": NSNull(), "can_add": false,
+            // As the core writes an inconclusive check: another endpoint may answer.
+            "rpc_field": "optional", "rpc_field_label_key": "settingsModals.addNetwork.customRpcTitle",
         ])
         let panel = SettingsLive.wizard(wizard, loc: loc, fallback: SettingsFixtures.build(.st10, loc: loc).addNetwork)
 
@@ -179,7 +181,9 @@ struct SettingsParityTests {
     /// reported as USD, which says the choice did not take.
     @Test func aChosenUnpricedCurrencyIsNamed() {
         #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "CNY", rate: nil, committed: true)) == "CNY")
-        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: false))
+        // Not committed, nothing on its way: no figure yet (PR 3 notes 9/27).
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: false)) == "")
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: true))
                 .hasPrefix("USD · $"))
         #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "EUR", rate: 0.5, committed: true))
                 .hasPrefix("EUR · €"))

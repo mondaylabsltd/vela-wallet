@@ -69,7 +69,7 @@
       "pageAdd": "Add a self-hosted signing page",
       "pageDuplicate": "That page is already saved.",
       "keysOn": "Keys on {{domain}}",
-      "pageSelfHosted": "Self-hosted · {{domain}}",
+      "pageSelfHosted": "Self-hosted · {{domain}}",
       "pageTrust": "Trust this version",
       "pageRename": "Rename",
       "pageRemove": "Remove",

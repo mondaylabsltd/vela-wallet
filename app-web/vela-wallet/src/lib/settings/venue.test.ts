@@ -136,7 +136,7 @@ describe('Where you review and sign', () => {
 		// A page the person named keeps its name; an unnamed one is "Self-hosted · domain".
 		expect(model.rows[2].page).toMatchObject({ name: 'Home server', hostShown: true });
 		expect(model.rows[3].page).toMatchObject({
-			name: 'Self-hosted · sign.example.org',
+			name: 'Self-hosted\u00a0· sign.example.org',
 			hostShown: false
 		});
 		expect(model.value).toBe(en.venue.page);
@@ -253,7 +253,7 @@ describe('the web’s venue', () => {
 		expect(model.rows[1].blocked).toContain('getvela.app');
 		expect(model.rows[2]).toMatchObject({
 			blocked: en.venue.blocked['settings.venue.blockedWeb'],
-			page: { name: 'Self-hosted · sign.example.com', hostShown: false }
+			page: { name: 'Self-hosted\u00a0· sign.example.com', hostShown: false }
 		});
 		expect(model.value).toBe('');
 		expect(model.note).toBe(en.venue.blocked['settings.venue.blockedWeb']);
@@ -290,7 +290,7 @@ describe('Settings → Signing pages', () => {
 		expect(model.rows.map((row) => [row.name, row.host, row.keysOn])).toEqual([
 			["Vela's official signing page", 'sign.getvela.app', 'Keys on getvela.app'],
 			['Home server', 'sign.example.com', undefined],
-			['Self-hosted · sign.example.org', undefined, undefined]
+			['Self-hosted\u00a0· sign.example.org', undefined, undefined]
 		]);
 		// The signing pages' own words (D6): no borrowed "Rename" / "Remove".
 		expect([model.renameLabel, model.removeLabel]).toEqual([
@@ -337,7 +337,7 @@ describe('Settings → Signing pages', () => {
 			en
 		);
 		expect(matches?.text).toBe(
-			"Version 0ba8ee8c · matches Vela's published build list · checked 14:32"
+			"Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked 14:32"
 		);
 		expect(matches?.text).not.toMatch(/certif|untamper/i);
 		expect(integrityLineModel({ key: 'componentsUi.signing.nope', version: '' }, '', en)).toBe(

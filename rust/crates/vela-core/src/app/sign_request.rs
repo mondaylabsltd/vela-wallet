@@ -682,6 +682,13 @@ pub enum SignOperation {
     /// switch landed, which is what sequences "switch first, then the
     /// approval surface may act".
     SwitchActiveAccount { index: u32 },
+    /// Wait `ms`, then answer [`SignShellResult::SimVerdictTimerFired`] with
+    /// the same `id` and `round` (PR 3) — the deadline of the wait the
+    /// confirm keeps for the simulation's verdict ([`SIM_VERDICT_WAIT_MS`]).
+    /// A timer and nothing else: the shell does not look at the simulation
+    /// to answer it, does not shorten it, and answers it even when the
+    /// request has gone (a stale answer is dropped here by `id` and `round`).
+    SimVerdictTimer { id: String, round: u32, ms: u32 },
 }
 
 /// Silent-sponsorship outcomes (`attemptSilentSponsorship`).
@@ -784,6 +791,27 @@ pub enum SignSubmitOutcome {
     },
 }
 
+/// How long the confirm waits for the simulation's verdict
+/// ([`Event::SimStarted`]) before the sheet says "could not check" and the
+/// confirm opens (PR 3).
+///
+/// The verdict is the one part of the sheet the site being signed for cannot
+/// write, so a person should not be able to confirm ahead of it; and a wait
+/// with no end would hand a slow node the confirm. No simulation deadline
+/// existed anywhere: the pool gives one endpoint
+/// [`super::rpc_pool::RPC_READ_TIMEOUT_MS`] (8 s) and then tries the next, so
+/// a chain whose nodes hang could hold the answer for half a minute.
+///
+/// Four seconds: a node that offers `eth_simulateV1` answers in well under
+/// one, and a first endpoint that stalls is hedged after
+/// [`super::rpc_pool::HEDGE_AFTER_MS`] (1.5 s), which leaves the second its
+/// own 2.5 s. It is also about what the fee quote takes, which holds the
+/// same confirm — so in the common case nobody waits a moment longer than
+/// they already did. The shell runs the timer
+/// ([`SignOperation::SimVerdictTimer`]); when, and for how long, is decided
+/// here.
+pub const SIM_VERDICT_WAIT_MS: u32 = 4_000;
+
 /// What the shell observed. Every clock-bearing variant carries `now_ms`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -805,6 +833,11 @@ pub enum SignShellResult {
     RecordPersisted,
     RecordUpdated,
     AccountSwitched,
+    /// The answer to [`SignOperation::SimVerdictTimer`]: its `ms` passed.
+    SimVerdictTimerFired {
+        id: String,
+        round: u32,
+    },
 }
 
 impl Operation for SignOperation {
@@ -968,6 +1001,27 @@ pub enum Event {
     CeremonyStarted { id: String },
     /// That prompt returned a signature (RA9); same guard.
     CeremonyDone { id: String },
+    /// The shell has sent the wallet's own simulation of request `id` to the
+    /// chain (PR 3). From here until [`Event::SimSettled`] — or the deadline,
+    /// [`SIM_VERDICT_WAIT_MS`] — the confirm waits
+    /// ([`SignView::sim_checking`] → [`ConfirmBlock::SimChecking`]) and an
+    /// approve is not taken. Dispatched with the request, before anything is
+    /// drawn, and only when a simulation really is sent: a message has none,
+    /// and a request whose simulation cannot even be asked says so at once
+    /// (`SimSettled`, with the could-not-check notice on the sheet) — neither
+    /// ever holds the confirm. Any other `id` is stale and dropped.
+    SimStarted { id: String },
+    /// The simulation's verdict for request `id` is ON THE SHEET (PR 3): the
+    /// judged balance changes, "No asset changes", "expected to fail", or
+    /// "could not check" — whichever the core's `sim_outcome` and
+    /// `token_trust` made of the answer. Sent once whatever the shell draws
+    /// in the verdict's place is no longer "checking": for a checked answer
+    /// that is when its judgments are ready, not when the node replied. The
+    /// confirm stops waiting; what the verdict SAYS changes nothing here (an
+    /// answer that is expected to fail does not shut the confirm today, and
+    /// does not now). After the deadline it takes the timed-out line back
+    /// off the sheet ([`SignView::sim_waited_out_key`]).
+    SimSettled { id: String },
     /// A durable transport disconnected. Owner-aware clear
     /// (`dapp-connection.tsx:420-431`). Since spec 082 (RB2) it also stops a
     /// pipeline of that transport still before the passkey (pre-check,
@@ -1399,6 +1453,24 @@ struct Pending {
     /// failure took the failure off the screen before anyone read it (the
     /// same reason a refused request waits, spec 081).
     held: Option<SignResponsePayload>,
+    /// Where the wallet's own simulation of this request stands (PR 3).
+    sim: SimWait,
+}
+
+/// The wait the confirm keeps for the simulation's verdict (PR 3).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum SimWait {
+    /// No simulation was announced: nothing to wait for.
+    #[default]
+    None,
+    /// It is out and its deadline has not passed: the confirm waits. `round`
+    /// tells this wait's timer from an earlier one's.
+    Checking { round: u32 },
+    /// The deadline passed with no verdict: the sheet says "could not check"
+    /// and the confirm is open. A verdict that still lands replaces the line.
+    WaitedOut,
+    /// The verdict is on the sheet.
+    Landed,
 }
 
 /// Where the single-flight approve pipeline is.
@@ -1548,6 +1620,8 @@ pub struct Model {
     /// Bumped when a pre-submit pipeline is killed (reject / chain switch).
     attempt: u64,
     abort: Option<AbortHandle>,
+    /// Counts the simulation waits started ([`SimWait::Checking`]'s `round`).
+    sim_round: u32,
 }
 
 impl Model {
@@ -1588,6 +1662,14 @@ impl Model {
             (Some(fl), Some(p)) => fl.id == p.id,
             _ => false,
         }
+    }
+
+    /// The request on the sheet is waiting for its simulation's verdict
+    /// (PR 3): the confirm is held, and an approve is not taken.
+    fn sim_checking(&self) -> bool {
+        self.pending
+            .as_ref()
+            .is_some_and(|p| matches!(p.sim, SimWait::Checking { .. }))
     }
 
     /// Is the matching pipeline past the commitment point (BUG-2 window)?
@@ -1860,6 +1942,26 @@ pub struct SignView {
     /// predates it reads `false`.
     #[serde(default)]
     pub failure_not_sent: bool,
+    /// The wallet's own simulation of this request is out and its verdict is
+    /// not on the sheet yet (PR 3, [`Event::SimStarted`]): the confirm waits —
+    /// [`super::sign_confirm::confirm_state`] holds it with
+    /// [`ConfirmBlock::SimChecking`] once nothing else does, and says the one
+    /// line. Over when the verdict lands ([`Event::SimSettled`]) or at the
+    /// deadline ([`SIM_VERDICT_WAIT_MS`]), whichever is first; a shell runs
+    /// no timer of its own for it. Always `false` for a request with no
+    /// simulation. `#[serde(default)]`.
+    #[serde(default)]
+    pub sim_checking: bool,
+    /// The simulation's deadline passed and no verdict is on the sheet: the
+    /// verdict's place says THIS line, as a caution, in place of "checking"
+    /// — `componentsUi.signing.simUnavailableWarning`, "Vela couldn't check
+    /// what this transaction does" ([`super::sim_outcome::KEY_UNAVAILABLE`],
+    /// the sentence a node that could not simulate already draws) — and the
+    /// confirm is open. `None` again once the simulation's own verdict lands
+    /// ([`Event::SimSettled`]): the shell then draws that verdict.
+    /// `#[serde(default)]`.
+    #[serde(default)]
+    pub sim_waited_out_key: Option<String>,
     pub notice: Option<SignNotice>,
     pub global_chain_id: u32,
     /// Present when the request was refused because it would have changed who
@@ -1975,6 +2077,8 @@ impl App for SignRequest {
             } => on_op_tracked(model, &user_op_hash, status, tx_hash, refusal),
             Event::CeremonyStarted { id } => on_ceremony(model, &id, Ceremony::Up),
             Event::CeremonyDone { id } => on_ceremony(model, &id, Ceremony::Done),
+            Event::SimStarted { id } => on_sim_started(model, &id),
+            Event::SimSettled { id } => on_sim_settled(model, &id),
             Event::TransportDropped { transport_id } => {
                 let mut cleared_inflight_request = false;
                 if let Some(p) = &model.pending {
@@ -2014,7 +2118,15 @@ impl App for SignRequest {
                 // (the attempt moving on) must not strand a newer request's
                 // switch ack, or that request stays `reconcile_pending` and
                 // can never be approved (082 round-2 review).
-                if attempt != model.attempt && !matches!(result, SignShellResult::AccountSwitched) {
+                // Nor does the simulation's deadline belong to a pipeline: it
+                // is the request's, told apart by its own id and round. Were
+                // it dropped with a killed pipeline's attempt, the confirm it
+                // holds would never open.
+                let own_correlation = matches!(
+                    result,
+                    SignShellResult::AccountSwitched | SignShellResult::SimVerdictTimerFired { .. }
+                );
+                if attempt != model.attempt && !own_correlation {
                     // A result from a rejected pipeline (BUG-2): the 4001 is
                     // out, nothing may still submit or answer this id.
                     return Command::done();
@@ -2146,6 +2258,12 @@ impl App for SignRequest {
                 .map(str::to_owned),
             failure_not_sent: model.sign_error.is_some()
                 && model.sign_error_refusal_key == Some(super::sign_confirm::NOT_SENT_BODY_KEY),
+            sim_checking: model.sim_checking(),
+            sim_waited_out_key: model
+                .pending
+                .as_ref()
+                .filter(|p| p.sim == SimWait::WaitedOut)
+                .map(|_| super::sim_outcome::KEY_UNAVAILABLE.to_owned()),
             notice: model.notice,
             global_chain_id: model.global_chain_id(),
             blocked: model.blocked.clone(),
@@ -2500,6 +2618,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             first_party: arrival.first_party,
             responded: false,
             held: None,
+            sim: SimWait::None,
         });
         commands.push(render());
         return Command::all(commands);
@@ -2521,6 +2640,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         first_party: arrival.first_party,
         responded: false,
         held: None,
+        sim: SimWait::None,
     });
     commands.push(render());
     Command::all(commands)
@@ -2688,6 +2808,12 @@ fn approve_with(
     // this one would take its nonce. The confirm is held
     // ([`ConfirmBlock::PreviousPending`]); a tap from a stale frame waits too.
     if model.previous_in_flight().is_some() {
+        return Command::done();
+    }
+    // PR 3: the simulation's verdict is not on the sheet yet. The confirm is
+    // held ([`ConfirmBlock::SimChecking`]); a tap from a stale frame waits
+    // too — nothing is approved ahead of the one line the site cannot write.
+    if model.sim_checking() {
         return Command::done();
     }
     let Some(signer) = model.accounts.get(model.active_index as usize).cloned() else {
@@ -3574,11 +3700,58 @@ fn accept(model: &mut Model, result: SignShellResult) -> Command<SignEffect, Eve
             render()
         }
         SignShellResult::Responded | SignShellResult::RecordUpdated => Command::done(),
+        SignShellResult::SimVerdictTimerFired { id, round } => on_sim_deadline(model, &id, round),
         SignShellResult::RecordPersisted => on_record_persisted(model),
         SignShellResult::PreCheck { funding } => on_precheck(model, funding),
         SignShellResult::Sponsorship { outcome } => on_sponsorship(model, outcome),
         SignShellResult::Submit { outcome, now_ms } => on_submit(model, outcome, now_ms),
     }
+}
+
+// -- the simulation's verdict (PR 3) -----------------------------------------
+
+/// The simulation of the request on the sheet is out: the confirm waits for
+/// its verdict, and the deadline starts. A second start for the same request
+/// (a shell that asks again) waits again, on a deadline of its own.
+fn on_sim_started(model: &mut Model, id: &str) -> Command<SignEffect, Event> {
+    let Some(pending) = model.pending.as_mut().filter(|p| p.id == id) else {
+        return Command::done();
+    };
+    model.sim_round = model.sim_round.wrapping_add(1);
+    let round = model.sim_round;
+    pending.sim = SimWait::Checking { round };
+    let timer = SignOperation::SimVerdictTimer {
+        id: id.to_owned(),
+        round,
+        ms: SIM_VERDICT_WAIT_MS,
+    };
+    Command::all([request_op(model, timer, false), render()])
+}
+
+/// The verdict is on the sheet: nothing waits for it any more.
+fn on_sim_settled(model: &mut Model, id: &str) -> Command<SignEffect, Event> {
+    let Some(pending) = model.pending.as_mut().filter(|p| p.id == id) else {
+        return Command::done();
+    };
+    if pending.sim == SimWait::Landed {
+        return Command::done();
+    }
+    pending.sim = SimWait::Landed;
+    render()
+}
+
+/// The deadline of one wait passed. Only the wait it was started for is
+/// ended by it: a verdict that landed first, a newer wait, or another
+/// request leave it a no-op.
+fn on_sim_deadline(model: &mut Model, id: &str, round: u32) -> Command<SignEffect, Event> {
+    let Some(pending) = model.pending.as_mut().filter(|p| p.id == id) else {
+        return Command::done();
+    };
+    if pending.sim != (SimWait::Checking { round }) {
+        return Command::done();
+    }
+    pending.sim = SimWait::WaitedOut;
+    render()
 }
 
 fn on_precheck(

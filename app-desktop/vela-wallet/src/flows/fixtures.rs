@@ -415,8 +415,11 @@ pub enum AddTokenResult {
         mark: TokenMark,
         name: SharedString,
         chip: StatusChip,
-        /// Under the head: why an incompatible chain is so, and what fixes it.
-        link: Option<SharedString>,
+        /// Under the head: why a refused chain is so, in the core's sentence.
+        note: Option<SharedString>,
+        /// "Open Chain Setup Tool" and where it goes — only where the core
+        /// names somewhere to go (contracts that can be deployed).
+        setup: Option<(SharedString, String)>,
         facts: Vec<FactRow>,
     },
 }
@@ -428,6 +431,24 @@ pub struct NetworkSuggestion {
     pub mark: TokenMark,
     pub name: SharedString,
     pub meta: SharedString,
+}
+
+/// The native tab's RPC field and the re-check that reads it — one thing,
+/// drawn together or not at all (the core's `NetWizardView::rpc_field`, PR 3
+/// final notes F4, F14 and F22).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddTokenRpc {
+    /// `t(rpc_field_label_key)`: "RPC URL" where an endpoint is the one
+    /// thing asked for, "Custom RPC (optional)" where it is one way on.
+    pub label: SharedString,
+    /// What the wizard holds (`custom_rpc`), empty until something is typed.
+    pub value: SharedString,
+    pub placeholder: SharedString,
+    /// Spec 098 §5.1, under the field: the relay is sent this RPC, key and
+    /// all. Said wherever an RPC is typed, not only in Settings.
+    pub notice: SharedString,
+    /// "Re-check with this RPC".
+    pub recheck: SharedString,
 }
 
 #[derive(Clone)]
@@ -443,6 +464,9 @@ pub struct AddToken {
     pub field_placeholder: SharedString,
     pub field_error: Option<SharedString>,
     pub result: AddTokenResult,
+    /// Native tab only: the wizard's RPC field with its re-check, under the
+    /// result. `None` = neither is drawn.
+    pub rpc: Option<AddTokenRpc>,
     /// The CTA cannot act: nothing found, found and already added, or a
     /// network the checks have not passed (the web's `ctaDisabled`).
     pub cta_disabled: bool,
@@ -618,6 +642,10 @@ pub struct SendNotice {
     /// "Report this", on the two relay stops while the core has a report
     /// for them (issue 466): it opens the in-app reporter seeded with it.
     pub report: Option<SharedString>,
+    /// A button that opens a page, and its label — today only a locked
+    /// request's network refused for contracts that can be deployed: "Open
+    /// Chain Setup Tool", on that chain (the core's `setup_url`).
+    pub link: Option<(SharedString, String)>,
     /// Red rather than amber: the person cannot proceed as things stand.
     pub error: bool,
     /// Neither red nor amber — the calm tone: nothing went wrong and
@@ -703,7 +731,6 @@ pub struct ContactEntry {
 #[derive(Clone)]
 pub struct ContactPick {
     pub search_placeholder: SharedString,
-    pub scan_row: SharedString,
     pub groups_title: SharedString,
     pub groups: Vec<(SharedString, SharedString, Hsla, Hsla)>,
     pub contacts_title: SharedString,
@@ -1325,6 +1352,7 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
         },
         field_placeholder: SharedString::default(),
         field_error: None,
+        rpc: None,
         cta_disabled: false,
         result: if native {
             AddTokenResult::Network {
@@ -1334,7 +1362,8 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
                     text: s.compatible.clone(),
                     tone: StatusTone::Success,
                 },
-                link: None,
+                note: None,
+                setup: None,
                 facts: vec![
                     fact(&s.label_chain_id, avax.chain_id),
                     fact(&s.label_native_token, avax.code),
@@ -1530,7 +1559,6 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
 fn contact_pick(s: &FlowStrings) -> ContactPick {
     ContactPick {
         search_placeholder: s.pick_contact_search.clone(),
-        scan_row: s.scan_to_fill.clone(),
         groups_title: s.contacts_groups.clone(),
         groups: vec![
             (

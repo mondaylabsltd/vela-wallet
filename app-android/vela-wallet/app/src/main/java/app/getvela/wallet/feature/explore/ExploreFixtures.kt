@@ -178,11 +178,50 @@ object ExploreFixtures {
     )
 
     /** Every phone state (E1–E7). */
+    /**
+     * E8 / E9 — the add-network sheet over the page, through the LIVE builder
+     * ([app.getvela.wallet.feature.browser.ExploreLive.addNetwork]) from the
+     * view the core sends for a refused chain: the checks, the reason's own
+     * line (`hint_key`), and Chain Setup's link only where contracts are what
+     * is missing (`setup_url`, opened on this chain). `null` on every other board.
+     */
+    fun addNetwork(state: ExploreScreenState, s: VelaStrings): AddNetworkModel? {
+        val noP256 = when (state) {
+            ExploreScreenState.E8 -> false
+            ExploreScreenState.E9 -> true
+            else -> return null
+        }
+        val chain = 48_900L
+        val compat = app.getvela.wallet.feature.settings.core.NetCompatibility(
+            chain_id = chain,
+            compatible = false,
+            contracts = listOf(
+                app.getvela.wallet.feature.settings.core.NetContractStatus("EntryPoint v0.7", "0x0000000071727De22E5E9d8BAf0edAc6f37da032", deployed = true),
+                app.getvela.wallet.feature.settings.core.NetContractStatus("Safe L2", "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762", deployed = false),
+            ),
+            p256_available = !noP256,
+            blocker = if (noP256) "no_p256" else "missing_contracts",
+            hint_key = if (noP256) "settingsModals.addNetwork.noP256Hint" else "settingsModals.addNetwork.incompatibleHint",
+            setup_url = if (noP256) null else "https://getvela.app/chain-setup?chain=$chain",
+        )
+        return app.getvela.wallet.feature.browser.ExploreLive.addNetwork(
+            app.getvela.wallet.feature.settings.core.NetDappAddView(
+                tab = "uniswap", id = "add-1", origin = "https://app.uniswap.org", host = "app.uniswap.org",
+                chain_id = chain, name = "Zircuit", native_symbol = "ETH", rpc_host = "zircuit1-mainnet.p2pify.com",
+                phase = app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible,
+                compat = compat,
+            ),
+            s,
+        )
+    }
+
     fun buildState(state: ExploreScreenState, s: VelaStrings): ExploreScreenModel {
         val populated = state != ExploreScreenState.E1
         val browsing = state == ExploreScreenState.E4 ||
             state == ExploreScreenState.E6 ||
-            state == ExploreScreenState.E7
+            state == ExploreScreenState.E7 ||
+            state == ExploreScreenState.E8 ||
+            state == ExploreScreenState.E9
         val view = when {
             browsing -> ExploreView.Browsing
             state == ExploreScreenState.E5 -> ExploreView.Tabs

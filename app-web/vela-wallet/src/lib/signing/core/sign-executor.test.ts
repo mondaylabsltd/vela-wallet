@@ -816,9 +816,11 @@ describe('the record persisted (spec 093)', () => {
 	it("a transaction's record keeps the core's result and the sheet's balance changes", async () => {
 		store.saveTransaction.mockClear();
 		const executor = createSignExecutor(makePorts());
+		// An unverified token's line is a direction and no figure (PR 3): the
+		// core hands none over, so none is stored.
 		const changes = [
 			{ type: 'native' as const, delta: '30000000000000000' },
-			{ type: 'erc20_unverified' as const, token: null, delta: '-5' }
+			{ type: 'erc20_unverified' as const, token: null, direction: 'out' as const }
 		];
 		await executor.execute({
 			id: 92,
@@ -854,5 +856,71 @@ describe('the record persisted (spec 093)', () => {
 			balanceChanges: changes,
 			requestTruncated: false
 		});
+		// Kept as the core wrote them, line for line — nothing added on the way.
+		expect(saved.balanceChanges).toEqual(changes);
+	});
+});
+
+/**
+ * PR 3 — the confirm waits for the simulation's verdict, for four seconds at
+ * most. The deadline is the core's (`SimVerdictTimer`: which request, which
+ * round, how long); this executor only runs the clock and echoes both back.
+ */
+describe('the simulation verdict’s deadline is a timer and nothing else (PR 3)', () => {
+	const timer = (ms = 4_000): SignEffect => ({
+		id: 7,
+		operation: { type: 'sim_verdict_timer', id: 'req-1', round: 3, ms }
+	});
+	const FIRED = { type: 'sim_verdict_timer_fired', id: 'req-1', round: 3 };
+
+	it('answers after the core’s `ms` and not a moment before, with the same id and round', async () => {
+		vi.useFakeTimers();
+		try {
+			let answer: unknown = null;
+			void createSignExecutor(makePorts())
+				.execute(timer())
+				.then((result) => (answer = result));
+			await vi.advanceTimersByTimeAsync(3_999);
+			expect(answer).toBeNull();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(answer).toEqual(FIRED);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('runs on the session’s clock: a stopped one holds the answer until it is fired', async () => {
+		const waits: { ms: number; fire: () => void }[] = [];
+		const stopped = (ms: number) => new Promise<void>((fire) => waits.push({ ms, fire }));
+		let answer: unknown = null;
+		void createSignExecutor(makePorts(), stopped)
+			.execute(timer(1_234))
+			.then((result) => (answer = result));
+		await Promise.resolve();
+		// Asked for exactly what the core named — never shortened, never a
+		// number of this side's own.
+		expect(waits.map((wait) => wait.ms)).toEqual([1_234]);
+		expect(answer).toBeNull();
+		waits[0].fire();
+		await vi.waitFor(() => expect(answer).toEqual(FIRED));
+	});
+
+	it('answers with nothing to look at: no transport, no request, no simulation', async () => {
+		// The ports of a session whose request has long gone. The timer does
+		// not ask any of them — a stale answer is the core's to drop.
+		const touched: string[] = [];
+		const ports = new Proxy(makePorts(), {
+			get: (target, name) => {
+				touched.push(String(name));
+				return Reflect.get(target, name);
+			}
+		});
+		const answer = await createSignExecutor(ports, async () => {}).execute(timer());
+		expect(answer).toEqual(FIRED);
+		expect(touched).toEqual([]);
+	});
+
+	it('a clock that threw still answers, so a held confirm is never left with no deadline', () => {
+		expect(createSignExecutor(makePorts()).toFailure(timer(), new Error('x'))).toEqual(FIRED);
 	});
 });

@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.signing.components
 
+import androidx.compose.runtime.remember
+import app.getvela.wallet.core.designsystem.components.KeptRoom
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +42,7 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaColors
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
+import app.getvela.wallet.core.designsystem.tokens.VelaMonoFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaOpacity
@@ -608,12 +611,17 @@ fun SigningBalances(
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.lg,
                 )
+                // The amount takes the rest of the row and keeps to its end,
+                // however long it is. (An unverified token's row has no
+                // figure at all since PR 3: its sign alone, or nothing.)
                 Text(
                     text = row.delta,
                     color = row.tone.color(colors),
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = VelaSpacing.lg),
                 )
             }
         }
@@ -735,7 +743,7 @@ fun AllowanceEditor(
                             }
                         },
                         singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg, fontFeatureSettings = app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner ->
@@ -986,20 +994,39 @@ fun HandoffCard(
                 tint = colors.fgMuted,
                 modifier = Modifier.padding(top = VelaSpacing.xs).size(VelaIconSize.base),
             )
-            Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
-                Text(
-                    model.title,
-                    color = colors.fgBase,
-                    fontFamily = VelaFontFamily,
-                    fontWeight = VelaFontWeight.semibold,
-                    fontSize = VelaTextSize.lg,
-                )
-                Text(model.page, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
-            }
+            Text(
+                model.title,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+            )
         }
         model.key?.let { key -> KeyRow(key) }
         model.fee?.let { fee -> HandoffFeeRow(fee) }
-        Column {
+        // The page and what was checked about it, together (as iOS draws
+        // them): its NAME — 「Vela 官方签名页」, the person's label,
+        // "Self-hosted · domain" — its address where the name does not already
+        // say it, and its integrity line. The card used to name the page by
+        // its host alone, under the title.
+        Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+            Text(
+                model.pageName,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.base,
+            )
+            if (!model.pageName.contains(model.page)) {
+                Text(
+                    model.page,
+                    color = colors.fgSubtle,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             app.getvela.wallet.feature.settings.components.IntegrityLine(model.integrity)
             model.trust?.let { label ->
                 app.getvela.wallet.feature.settings.components.TrustAnswer(
@@ -1058,6 +1085,10 @@ fun KeyRow(model: app.getvela.wallet.feature.signing.KeyRowModel, modifier: Modi
 @Composable
 private fun HandoffFeeRow(model: app.getvela.wallet.feature.signing.HandoffFeeModel) {
     val colors = VelaTheme.colors
+    // The fee's worth joins this line when the display currency commits:
+    // two lines' room from the first frame, kept, so the card's Open does
+    // not move when it lands.
+    val worthRoom = remember { KeptRoom() }.keep(model.worthRoom)
     Row(
         modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.Top,
@@ -1075,6 +1106,7 @@ private fun HandoffFeeRow(model: app.getvela.wallet.feature.signing.HandoffFeeMo
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            minLines = if (worthRoom) 2 else 1,
             modifier = Modifier.weight(1f),
         )
     }

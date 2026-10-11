@@ -22,7 +22,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct SigningFeeCoinTests {
 
     private let safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
@@ -102,17 +102,25 @@ struct SigningFeeCoinTests {
         let store = VelaStore(defaults: UserDefaults(suiteName: suite)!)
         let relay = scriptedRelay()
         let accounts = ScriptedAccounts()
+        // Never booted: a read through it fails closed at once.
+        let pool = RpcPool(store: store, accounts: AccountStore(), offline: true)
+        // The judge the app wires (PR 3): a checked answer is the sheet's
+        // verdict once `token_trust` has judged it, and a host with no judge
+        // has none to draw.
+        let trust = TokenTrustStore(store: store, pool: pool, accounts: AccountStore(), held: HeldTokens())
         return SigningController(
             wallet: (address: safe, credentialId: "cred-1"),
             relay: relay,
             accounts: accounts,
             spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
             store: store,
-            // Never booted: a read through it fails closed at once.
-            pool: RpcPool(store: store, accounts: AccountStore(), offline: true),
+            pool: pool,
             ports: SigningController.Ports(
                 nativeSymbol: { _ in "POL" },
                 knownChains: { [137] },
+                simJudged: { address, chainId, deltas in
+                    await trust.simJudged(address: address, chainId: chainId, deltas: deltas)
+                },
                 simulate: { _, _ in simulate() }
             )
         )

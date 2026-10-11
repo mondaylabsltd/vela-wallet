@@ -650,6 +650,27 @@ pub fn wallet_keys_step(
     vela_core::wallet_keys::step_json(address, device_keys_json, answers_json, sign_in_credential)
 }
 
+/// The curated public RPCs of a built-in network, in order — the RPC pool's
+/// `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+/// none. One list for every shell: each used to hold its own copy, and a
+/// dead endpoint had to be found and dropped in each.
+#[wasm_bindgen(js_name = publicRpcUrls)]
+#[must_use]
+pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
+    vela_core::app::network_admin::public_rpc_urls(chain_id)
+}
+
+/// A hidden amount as every shell draws it: the mask, then the unit the
+/// shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
+/// for whether a hidden amount keeps its unit: it does. An empty `unit` (a
+/// figure with no unit of its own) is the mask alone, never a trailing
+/// space. Synchronous, so a view model can call it while it builds a row.
+#[wasm_bindgen(js_name = maskedAmount)]
+#[must_use]
+pub fn masked_amount(unit: &str) -> String {
+    vela_core::app::privacy::masked_amount(unit)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where
@@ -910,6 +931,20 @@ pub fn sign_confirm_state(
         fee_json.as_deref(),
         speed_tier.as_deref(),
     )
+}
+
+/// What the pool's `eth_simulateV1` answer means for `user` (the signing
+/// account), and every line the sheet draws for it: a `SimVerdict` JSON —
+/// `{kind, deltas, revert_reason, notice_risk, notice_key, no_change_key}`.
+/// `reply_json` is the JSON-RPC envelope as it came (`{"result": …}` or
+/// `{"error": …}`), or `{"unreachable": true}` when the pool gave up;
+/// anything else is an answer nobody can read ("could not check", never
+/// "nothing moves"). `no_change_key` is "No asset changes" for a check under
+/// which nothing of theirs moves. See `vela_core::app::sim_outcome`.
+#[wasm_bindgen(js_name = simOutcome)]
+#[must_use]
+pub fn sim_outcome(user: &str, reply_json: &str) -> String {
+    vela_core::app::sim_outcome::verdict_json(user, reply_json)
 }
 
 /// Every operation in flight on this device: the tracker's view (JSON) in, an

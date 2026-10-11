@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.explore.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -279,6 +280,8 @@ fun ExploreSearchField(
                         color = colors.fgBase,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.lg,
+                        // An address or a URL typed here is literal: "0x", never "0×".
+                        fontFeatureSettings = VelaFontFeatures,
                     ),
                     modifier = Modifier
                         .fillMaxWidth()

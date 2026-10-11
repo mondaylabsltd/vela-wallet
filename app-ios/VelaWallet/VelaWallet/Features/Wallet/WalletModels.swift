@@ -74,6 +74,12 @@ struct BalanceModel {
     /// Issue 462: the "↻ Updated 2m" control under the figure; `nil` draws
     /// none (the home before the core has ruled).
     var refresh: BalanceRefreshModel? = nil
+    /// "Checking…" (final note F19) — the core's line while the FIRST read
+    /// of the account is still out (`BalanceView.checkingKey`). It stands
+    /// alone on the status line, quietly, under the skeleton and under a
+    /// cached figure alike: until a round has ended no chain has said the
+    /// wallet is live and none has failed to answer.
+    var checkingText: String? = nil
 }
 
 /// The hero's refresh control (issue 462) — the same control on all four
@@ -161,6 +167,9 @@ enum AssetFiatModel {
     case value(String)
     /// Orange 无价格 marker (H4).
     case noPrice(String)
+    /// The display currency is not known yet (PR 3): the line waits at its
+    /// own height — a figure is coming, in the right money.
+    case pending
     case masked
     /// Spec 021 SD2d: the row has no fiat line at all. Distinct from `masked`,
     /// which HIDES a figure that exists — a sweep row is an editable amount,

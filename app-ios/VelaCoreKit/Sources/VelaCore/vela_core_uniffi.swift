@@ -9989,6 +9989,13 @@ public struct SimOutcomeRecord: Equatable, Hashable {
      * The notice's corpus key; `None` for `deltas`.
      */
     public var noticeKey: String?
+    /**
+     * `componentsUi.signing.simResultNoChange` ("No asset changes") when the
+     * answer was a check and nothing of the user's moves — the quiet line
+     * the verdict's place says then; `None` otherwise. The judged view
+     * (`TrustSimView.no_change_key`) carries the same line.
+     */
+    public var noChangeKey: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -10012,12 +10019,19 @@ public struct SimOutcomeRecord: Equatable, Hashable {
          */noticeRisk: String?, 
         /**
          * The notice's corpus key; `None` for `deltas`.
-         */noticeKey: String?) {
+         */noticeKey: String?, 
+        /**
+         * `componentsUi.signing.simResultNoChange` ("No asset changes") when the
+         * answer was a check and nothing of the user's moves — the quiet line
+         * the verdict's place says then; `None` otherwise. The judged view
+         * (`TrustSimView.no_change_key`) carries the same line.
+         */noChangeKey: String?) {
         self.kind = kind
         self.deltasJson = deltasJson
         self.revertReason = revertReason
         self.noticeRisk = noticeRisk
         self.noticeKey = noticeKey
+        self.noChangeKey = noChangeKey
     }
 
     
@@ -10040,7 +10054,8 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
                 deltasJson: FfiConverterString.read(from: &buf), 
                 revertReason: FfiConverterOptionString.read(from: &buf), 
                 noticeRisk: FfiConverterOptionString.read(from: &buf), 
-                noticeKey: FfiConverterOptionString.read(from: &buf)
+                noticeKey: FfiConverterOptionString.read(from: &buf), 
+                noChangeKey: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -10050,6 +10065,7 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.revertReason, into: &buf)
         FfiConverterOptionString.write(value.noticeRisk, into: &buf)
         FfiConverterOptionString.write(value.noticeKey, into: &buf)
+        FfiConverterOptionString.write(value.noChangeKey, into: &buf)
     }
 }
 
@@ -15474,6 +15490,22 @@ public func markMissTtlMs(kind: String, status: UInt16?) -> UInt32?  {
     )
 })
 }
+/**
+ * A hidden amount as every shell draws it: the mask, then the unit the
+ * shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
+ * for whether a hidden amount keeps its unit: it does. An empty `unit` (a
+ * figure with no unit of its own) is the mask alone, never a trailing
+ * space. Each phone used to spell this itself, and one of them dropped the
+ * unit.
+ */
+public func maskedAmount(unit: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_masked_amount(
+        FfiConverterString.lower(unit),uniffiCallStatus
+    )
+})
+}
 public func matchSelector(sig: String, calldata: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -15659,6 +15691,20 @@ public func peggedNativeUsd(symbol: String) -> Double?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_pegged_native_usd(
         FfiConverterString.lower(symbol),uniffiCallStatus
+    )
+})
+}
+/**
+ * The curated public RPCs of a built-in network, in order — the RPC pool's
+ * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+ * none. One list for every shell: each used to hold its own copy, and a
+ * dead endpoint had to be found and dropped in each.
+ */
+public func publicRpcUrls(chainId: UInt32) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_public_rpc_urls(
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
     )
 })
 }
@@ -17604,6 +17650,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_mark_miss_ttl_ms() != 58714) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_masked_amount() != 17557) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_match_selector() != 41973) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17641,6 +17690,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_pegged_native_usd() != 48722) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_public_rpc_urls() != 50620) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_quoted_fee_usable() != 26912) {

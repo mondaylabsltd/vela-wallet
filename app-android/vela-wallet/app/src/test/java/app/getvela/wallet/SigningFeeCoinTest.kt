@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
@@ -122,7 +123,12 @@ class SigningFeeCoinTest {
         ),
     )
 
-    private fun controller(simulate: () -> RpcResult?, simulated: AtomicInteger = AtomicInteger()): SigningController = SigningController(
+    private fun controller(
+        simulate: () -> RpcResult?,
+        simulated: AtomicInteger = AtomicInteger(),
+        /** The trust machine's judged view of the deltas; none by default (this host has no judge). */
+        judge: ((List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>) -> app.getvela.wallet.feature.wallet.core.TrustSimView?)? = null,
+    ): SigningController = SigningController(
         scope = scope,
         relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0),
         feed = FeedExecutor(store = store, ownAccounts = { emptyList() }),
@@ -147,10 +153,64 @@ class SigningFeeCoinTest {
             override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> = null to false
             override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult? {
                 simulated.incrementAndGet()
-                return simulate()
+                // A node is waited for, never blocked on. These stubs may hold
+                // their thread (a latch) to stand for a slow one, so they
+                // answer off the caller's: the sheet's controller starts its
+                // simulation in the step that opens the request (PR 3), and a
+                // stub that blocked there would hold `open` itself. (IO, not
+                // the scope's own Default: `withContext` onto the dispatcher
+                // a coroutine already has runs in place.)
+                return kotlinx.coroutines.withContext(Dispatchers.IO) { simulate() }
             }
+            override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>) =
+                judge?.invoke(deltas)
         },
     )
+
+    /** The real `token_trust` machine's judged view of [deltas], as the app's port reads it (`WalletController.judgeSimDeltas`). */
+    private fun trustMachine(deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): app.getvela.wallet.feature.wallet.core.TrustSimView? {
+        val script = app.getvela.wallet.core.crux.CoreScript(uniffi.vela_core_uniffi.TokenTrustCore().asBridge()) { null }
+        val event: app.getvela.wallet.feature.wallet.core.TrustEvent =
+            app.getvela.wallet.feature.wallet.core.TrustEvent.SimDeltasComputed(address = SAFE.lowercase(), chain_id = 137, deltas = deltas)
+        script.dispatch(app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.wallet.core.TrustEvent.serializer(), event))
+        return app.getvela.wallet.core.crux.Wire.json.decodeFromString(app.getvela.wallet.feature.wallet.core.TrustView.serializer(), script.viewJson()).sim?.takeIf { it.ready }
+    }
+
+    /** A clean run with no logs: checked, and nothing of the account's moves. */
+    private fun nothingMoves(): RpcResult = RpcResult.Body(
+        JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("returnData", "0x").put("logs", JSONArray()))))),
+    )
+
+    /**
+     * The device round, item 3: the verdict the sheet draws carries the
+     * judged view's own line (`TrustSimView.no_change_key`). The controller
+     * used to hand over the judgments alone, and the sheet read "nothing
+     * moves" off an empty list by itself. Through the real `sim_outcome` and
+     * `token_trust`: a check under which nothing moves lands WITH the core's
+     * line; and with no judge to say it, it is "could not check" — never an
+     * empty verdict the sheet could take for calm.
+     */
+    @Test
+    fun `a check that moves nothing lands with the trust machine's line, and without a judge it is could-not-check`() = runBlocking<Unit> {
+        scriptRelay()
+        suspend fun verdict(c: SigningController): SigningController.SimOutcome? {
+            c.open(swap())
+            return withTimeout(20_000) { c.sim.first { it != null && it != SigningController.SimOutcome.Pending } }
+        }
+        assertEquals(
+            SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "componentsUi.signing.simResultNoChange"),
+            verdict(controller({ nothingMoves() }, judge = ::trustMachine)),
+        )
+        // The line is the view's, whatever it is — and absent, it stays absent.
+        val named = app.getvela.wallet.feature.wallet.core.TrustSimView(address = SAFE, chain_id = 137, ready = true, no_change_key = "a.key.of.the.cores")
+        assertEquals(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = "a.key.of.the.cores"), verdict(controller({ nothingMoves() }, judge = { named })))
+        assertEquals(
+            SigningController.SimOutcome.Ready(emptyList(), noChangeKey = null),
+            verdict(controller({ nothingMoves() }, judge = { named.copy(no_change_key = null) })),
+        )
+        // No judge to say it: could not check.
+        assertEquals(SimDeltas.couldNotCheck(), verdict(controller({ nothingMoves() })))
+    }
 
     private fun swap() = IncomingRequest(
         id = "r411", method = "eth_sendTransaction",

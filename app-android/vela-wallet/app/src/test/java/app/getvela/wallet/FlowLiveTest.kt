@@ -610,7 +610,7 @@ class FlowLiveTest {
             ),
         )
 
-        val live = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"))
+        val live = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true))
 
         assertEquals(listOf("POL", "ETH"), live.rows.map { it.ticker })
         assertEquals(listOf("Polygon", "Arbitrum"), live.rows.map { it.chain })
@@ -624,7 +624,7 @@ class FlowLiveTest {
             assetsFixture(),
             BalanceView(),
             chainNames,
-            CurrencyView(code = "USD"),
+            CurrencyView(code = "USD", committed = true),
         )
 
         assertEquals(emptyList<Any>(), live.rows)
@@ -676,15 +676,15 @@ class FlowLiveTest {
         )
         val copy = FlowFixtures.assetsEmpty(strings)
 
-        val base = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 8453, emptyCopy = copy)
+        val base = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true), chainFilter = 8453, emptyCopy = copy)
         assertEquals(emptyList<Any>(), base.rows)
         assertEquals(copy, base.empty)
 
         // Each pick is its own list: Polygon, then Arbitrum, never the other's rows.
-        val polygon = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 137, emptyCopy = copy)
+        val polygon = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true), chainFilter = 137, emptyCopy = copy)
         assertEquals(listOf("POL"), polygon.rows.map { it.ticker })
         assertNull(polygon.empty)
-        val arbitrum = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 42161, emptyCopy = copy)
+        val arbitrum = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true), chainFilter = 42161, emptyCopy = copy)
         assertEquals(listOf("ETH"), arbitrum.rows.map { it.ticker })
         assertNull(arbitrum.empty)
     }
@@ -696,11 +696,34 @@ class FlowLiveTest {
             assetsFixture(),
             BalanceView(holdings_loading = true),
             chainNames,
-            CurrencyView(code = "USD"),
+            CurrencyView(code = "USD", committed = true),
             emptyCopy = FlowFixtures.assetsEmpty(strings),
         )
 
         assertNull(live.empty)
+    }
+
+    /**
+     * The device round, item 2: the Assets page is empty when the core says
+     * so (`BalanceView.empty_key`). Its own rule — no rows, not loading, not
+     * unknown — was true of a wallet nothing had read yet: last session's
+     * cached zero, its first read still out ("Checking…" on the home).
+     */
+    @Test
+    fun `the assets page invites a first deposit only when the core says the wallet is empty`() {
+        val copy = FlowFixtures.assetsEmpty(strings)
+        fun page(view: BalanceView) =
+            FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD", committed = true), emptyCopy = copy)
+        val address = "0x" + "ab".repeat(20)
+        val out = app.getvela.wallet.feature.wallet.core.BalanceBoards.firstRead(address, 1.7e12, app.getvela.wallet.feature.wallet.core.BalanceBoards.FirstRead.Out)
+        val answered = app.getvela.wallet.feature.wallet.core.BalanceBoards.firstRead(address, 1.7e12, app.getvela.wallet.feature.wallet.core.BalanceBoards.FirstRead.Answered)
+
+        assertFalse("the old rule's inputs all say settled", out.holdings_loading || out.balance_unknown)
+        assertNull("the first read is out: no empty state", page(out).empty)
+        assertEquals(emptyList<Any>(), page(out).rows)
+        assertEquals("a read ended and found nothing", copy, page(answered).empty)
+        assertEquals(strings.t("assets.emptyTitle"), page(answered).empty?.title)
+        assertNull("no key, no empty state", page(BalanceView()).empty)
     }
 
     @Test
@@ -717,7 +740,7 @@ class FlowLiveTest {
         feed = feed,
         id = id,
         chainNames = chainNames,
-        currency = CurrencyView(code = "USD"),
+        currency = CurrencyView(code = "USD", committed = true),
         strings = strings,
     )
 

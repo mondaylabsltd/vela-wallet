@@ -180,6 +180,16 @@ struct NetCompatibilityWire: Decodable, Equatable {
     let bestRpcUrl: String?
     let bestRpcLatencyMs: Double?
     let rpcFailure: NetRpcFailureKindWire?
+    /// WHY the network was refused (PR 3): `no_p256` — the chain has no P-256
+    /// verifier, which nobody can deploy — or `missing_contracts`. Set
+    /// exactly when the check answered and `compatible` is false. A plain
+    /// string on purpose: a reason a later core adds must not fail the decode.
+    var blocker: String? = nil
+    /// The corpus key of the line under the refusal, chosen by the core.
+    var hintKey: String? = nil
+    /// Where "Open Chain Setup Tool" goes, with `?chain=<id>` — only for
+    /// missing contracts. `nil` is "no such button".
+    var setupUrl: String? = nil
 }
 
 /// Why the wizard cannot proceed. Tagged, with a chain id on four of five.
@@ -214,18 +224,81 @@ enum NetWizardErrorWire: Decodable, Equatable {
     }
 }
 
+/// `NetRpcField` — whether the wizard's result draws the field where a
+/// person names an RPC endpoint of their own.
+enum NetRpcFieldWire: String, Decodable {
+    /// No field, no re-check: searching and checking; already added or not
+    /// found; and a REFUSAL another endpoint would not change.
+    case none
+    /// The check passed, or could not reach a verdict.
+    case optional
+    /// The network lists no endpoint: one typed here is the only way on.
+    case required
+}
+
 struct NetWizardViewWire: Decodable, Equatable {
     let phase: NetWizardPhaseWire
     let query: String
     let customRpc: String
     let suggestions: [NetChainIndexEntryWire]
     let chainInfo: NetChainInfoWire?
+    /// The check's result. Present in the `checked` phase — and, since PR 3
+    /// (notes 5, 10), ALSO beside `phase: error` when the check itself raised
+    /// the stop (the scan / auto-add path: `not_compatible`, `check_failed`),
+    /// so a refusal there can say why and offer Chain Setup where it applies.
     let compat: NetCompatibilityWire?
     let error: NetWizardErrorWire?
+    /// The corpus key of the SENTENCE for `error`, chosen by the core (PR 3
+    /// notes 5/10/18): already added, not found, no RPC endpoint listed,
+    /// unable to verify, and for a refusal the check's own reason. The shell
+    /// draws `t(errorKey)` and maps no `error.type` to words — it used to,
+    /// and "no RPC endpoint" borrowed "unable to verify". Absent with no
+    /// error (and from a hand-built view): then there is no sentence.
+    var errorKey: String? = nil
+    /// The RPC field under the result, and "Re-check with this RPC" with it
+    /// (final notes F4, F14, F22) — the core's ONE rule for every surface
+    /// that draws this wizard: the field exactly when this is not `.none`,
+    /// and the re-check exactly where the field is. Absent on the wire (and
+    /// from a hand-built view) reads `.none`, the core's own default.
+    var rpcField: NetRpcFieldWire = .none
+    /// The corpus key of that field's label: "Custom RPC (optional)", or
+    /// plain "RPC URL" where it is the one thing asked for. `nil` with no
+    /// field.
+    var rpcFieldLabelKey: String? = nil
     /// **The add gate.** Never re-derived in Swift: the core owns what makes a
     /// candidate addable, and a second opinion here is how a screen offers to
     /// add a chain the core will refuse.
     let canAdd: Bool
+}
+
+/// Decoded by hand, in an extension so the memberwise initialiser stays: a
+/// view from before `rpc_field` — a stored fixture, an older core — still
+/// decodes, and reads as "no field" rather than stopping the whole settings
+/// screen hearing the core. A value this build has never heard of reads the
+/// same way: no field, no re-check.
+extension NetWizardViewWire {
+    private enum CodingKeys: String, CodingKey {
+        case phase, query, customRpc, suggestions, chainInfo, compat, error, errorKey
+        case rpcField, rpcFieldLabelKey, canAdd
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            phase: try c.decode(NetWizardPhaseWire.self, forKey: .phase),
+            query: try c.decode(String.self, forKey: .query),
+            customRpc: try c.decode(String.self, forKey: .customRpc),
+            suggestions: try c.decode([NetChainIndexEntryWire].self, forKey: .suggestions),
+            chainInfo: try c.decodeIfPresent(NetChainInfoWire.self, forKey: .chainInfo),
+            compat: try c.decodeIfPresent(NetCompatibilityWire.self, forKey: .compat),
+            error: try c.decodeIfPresent(NetWizardErrorWire.self, forKey: .error),
+            errorKey: try c.decodeIfPresent(String.self, forKey: .errorKey),
+            rpcField: try c.decodeIfPresent(String.self, forKey: .rpcField)
+                .flatMap(NetRpcFieldWire.init(rawValue:)) ?? .none,
+            rpcFieldLabelKey: try c.decodeIfPresent(String.self, forKey: .rpcFieldLabelKey),
+            canAdd: try c.decode(Bool.self, forKey: .canAdd)
+        )
+    }
 }
 
 // MARK: - Endpoints and providers
@@ -285,7 +358,21 @@ struct CurrencyViewWire: Decodable, Equatable {
     /// not: a fiat amount multiplied by a defaulted 1 is a real mispayment.
     let rate: Double?
     /// `false` ⇒ the USD placeholder is showing and the person has not chosen.
+    ///
+    /// **While `false`, no money figure is drawn** (the core's rule, PR 3):
+    /// the placeholder is not the person's currency — the home drew "USD
+    /// $1,234" for a few seconds and then jumped to "¥8,876".
     let committed: Bool
+    /// The person's own stored choice on its way: its rate is being fetched
+    /// and nothing is committed yet. A surface that names its currency apart
+    /// from the figure may name this one while the figure waits. `nil` once
+    /// committed, before the preference is read, and on a first launch.
+    var pending: String? = nil
+
+    /// The view before the machine has answered at all: nothing committed,
+    /// nothing known to be on its way. What a live screen reads for the
+    /// frames before the first view — waiting, never the dollar placeholder.
+    static let unread = CurrencyViewWire(code: "USD", rate: nil, committed: false)
 }
 
 // MARK: - The whole view

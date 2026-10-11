@@ -14,5 +14,20 @@ rate: number | null,
 /**
  * `false` ⇒ the USD/1 placeholder is showing. The shell derives the
  * symbol from its catalog and owns all formatting.
+ *
+ * **While `false`, no fiat figure is drawn — on any surface**
+ * ([`FIAT_SURFACES`], the module doc's withhold rule): each holds the
+ * figure's room and shows nothing in it. The placeholder is not the
+ * person's currency; drawing it put "$1,234" on an iPhone home for a
+ * few seconds before it jumped to "¥8,876" (the 102 device run). The
+ * figure appears once, in the right money, where its room was kept.
  */
-committed: boolean, };
+committed: boolean, 
+/**
+ * The person's own currency on its way: a stored choice whose rate is
+ * being fetched while nothing is committed yet. A surface that names
+ * its currency apart from the figure may name this one while the figure
+ * waits. `None` once committed, before the preference is read, and
+ * while the first launch's region guess is priced (not a choice yet).
+ */
+pending: string | null, };

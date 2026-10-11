@@ -14,6 +14,13 @@ export interface WalletMessages {
 	balance: {
 		totalLabel: string;
 		liveIndicator: string;
+		/**
+		 * The hero's quiet line by the key the core names for it
+		 * (`BalanceView.checking_key`, `BalanceView.live_key` —
+		 * {@link BALANCE_SAID_KEYS}): "Checking…" while the first read is out,
+		 * "Live · listening for payments" under a zero every chain answered for.
+		 */
+		said: Readonly<Record<string, string>>;
 		stale: string;
 		unpriced: string;
 		/** Spec 038: nothing could be read and nothing is known. */
@@ -92,6 +99,11 @@ export interface WalletMessages {
 		/** … `{{n}}` for several. */
 		unreachableMany: string;
 		/**
+		 * PR 3 note 4: the one network's RPC is fine — its token list could not
+		 * be loaded (`{{name}}`, as for the one network).
+		 */
+		tokenListUnreachable: string;
+		/**
 		 * PR 2 note 11 (issue 483): the line when the last read failed inside
 		 * Vela itself, by the key the core names (`BalanceView.internal_key`) —
 		 * drawn where the unreachable line goes, never "Can't reach Ethereum".
@@ -168,6 +180,13 @@ export interface WalletMessages {
  */
 export const BALANCE_INTERNAL_KEYS = ['componentsUi.gas.reasonInternal'] as const;
 
+/**
+ * Every quiet line the core can name for the hero's status slot
+ * (`balance_dashboard`: `CHECKING` — `BalanceView.checking_key`, `LIVE_ZERO` —
+ * `BalanceView.live_key`). `live.test.ts` holds the list to the core's source.
+ */
+export const BALANCE_SAID_KEYS = ['componentsUi.funding.checking', 'home.liveIndicator'] as const;
+
 /** Every corpus key the wallet screens consume (tests iterate this). */
 export const WALLET_KEYS = [
 	'componentsUi.mainNav.wallet',
@@ -176,6 +195,7 @@ export const WALLET_KEYS = [
 	'componentsUi.mainNav.settings',
 	'home.totalBalance',
 	'home.liveIndicator',
+	'componentsUi.funding.checking',
 	'home.balanceStale',
 	'home.balanceUnpriced',
 	'home.balanceDetailNoPrice',
@@ -218,6 +238,8 @@ export const WALLET_KEYS = [
 	'assets.emptySubtext',
 	'assets.unreachableOne',
 	'assets.unreachableMany',
+	// PR 3 note 4: a token list that can't be loaded is not a network out of reach.
+	'assets.tokenListUnreachable',
 	// PR 2 note 11: a read that failed inside Vela, said as that.
 	...BALANCE_INTERNAL_KEYS,
 	// Spec 038: the home's sentence for a first launch with no network.

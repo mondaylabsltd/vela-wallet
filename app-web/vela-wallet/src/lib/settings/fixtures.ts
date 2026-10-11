@@ -13,6 +13,7 @@
  */
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
+import { pluralForm } from '$lib/i18n/plural';
 import type { SettingsMessages } from './messages';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
@@ -52,6 +53,7 @@ import type {
 	StorageModel,
 	IntegrityLineModel,
 	SigningPagesModel,
+	UnreachableModel,
 	VenueModel
 } from './model';
 
@@ -103,7 +105,10 @@ export const MARKS: Record<string, ChainMarkModel> = {
 	tempo: { letter: 'T', color: '#8C8C8C' },
 	xlayer: { letter: 'X', color: '#8C8C8C' },
 	zora: { letter: 'Z', color: '#8C8C8C' },
-	zircuit: { letter: 'Z', color: '#2E9E7E' }
+	zircuit: { letter: 'Z', color: '#2E9E7E' },
+	// ST10d's candidate: an invented network. The board says "cannot run Vela
+	// wallets" of it, which is not a thing to draw over a real project's name.
+	sample: { letter: 'S', color: '#8C8C8C' }
 };
 
 /** The twelve networks, in the order ST9 lists them. */
@@ -416,10 +421,21 @@ function networkDetail(m: SettingsMessages, mismatch: boolean): NetworkDetailMod
 	};
 }
 
-/** ST10 search, ST10b compatible, ST10c incompatible — one builder, three modes. */
+/**
+ * ST10 search, ST10b compatible, and the two refusals — one builder, four
+ * modes. The refusals are the core's two blockers (`NetBlocker`), which have
+ * opposite next steps:
+ *
+ * - ST10c `incompatible`: the P-256 verifier is there and contracts are
+ *   missing. Something can be deployed, so Chain Setup is offered, opened on
+ *   the chain that was checked.
+ * - ST10d `no-p256`: the contracts could all be there and the network still
+ *   cannot check a passkey signature. Nothing to deploy — no button, and the
+ *   line says not to send money there.
+ */
 function addNetwork(
 	m: SettingsMessages,
-	mode: 'search' | 'compatible' | 'incompatible'
+	mode: 'search' | 'compatible' | 'incompatible' | 'no-p256'
 ): AddNetworkModel {
 	const base = {
 		title: m.advanced.addNetworkTitle,
@@ -442,14 +458,17 @@ function addNetwork(
 			]
 		};
 	}
-	// Four rows in both modes: "incompatible" is only legible as an answer if
-	// it shows WHICH requirement failed, so the list never shortens.
-	const ok = mode === 'compatible';
+	// Four rows in every mode: a refusal is only legible as an answer if it
+	// shows WHICH requirement failed, so the list never shortens. Missing
+	// contracts cross the contract rows and leave the verifier ticked; no
+	// verifier crosses that one row, whatever else is deployed.
+	const contracts = mode !== 'incompatible';
+	const verifier = mode !== 'no-p256';
 	const checks: CheckItemModel[] = [
 		{ label: m.addNetwork.checkEntryPoint, ok: true },
-		{ label: m.addNetwork.checkSafe, ok },
-		{ label: m.addNetwork.checkSigner, ok },
-		{ label: fill(m.addNetwork.checkRemaining, { count: 8 }), ok }
+		{ label: m.addNetwork.checkSafe, ok: contracts },
+		{ label: m.addNetwork.checkSigner, ok: verifier },
+		{ label: fill(m.addNetwork.checkRemaining, { count: 8 }), ok: contracts }
 	];
 	if (mode === 'compatible') {
 		return {
@@ -464,13 +483,40 @@ function addNetwork(
 			},
 			checksTitle: m.addNetwork.compatibilityCheck,
 			checks,
+			// The core's rule for the field (`NetWizardView.rpc_field`): a check
+			// that passed offers it, "(optional)", and the re-check that reads it
+			// — the two together, or neither.
 			customRpc: {
 				id: 'custom-rpc',
 				label: m.addNetwork.customRpcTitle,
 				value: '',
 				placeholder: m.addNetwork.customRpcPlaceholder
 			},
-			primary: m.addNetwork.addNetworkBtn
+			primary: m.addNetwork.addNetworkBtn,
+			recheck: m.addNetwork.recheckWithRpc
+		};
+	}
+	if (mode === 'no-p256') {
+		return {
+			...base,
+			subtitle: `Sample L2 · ${chainMeta(m, 64800)}`,
+			results: [],
+			candidate: {
+				mark: MARKS.sample,
+				name: 'Sample L2',
+				meta: m.addNetwork.compatibilityCheck,
+				badge: { tone: 'error', label: m.addNetwork.incompatible, dot: true }
+			},
+			checksTitle: m.addNetwork.compatibilityCheck,
+			checks,
+			// The core's `NO_P256_HINT`, and no setup link: `setup_url` is
+			// absent for this blocker.
+			callout: {
+				tone: 'warning',
+				text: m.addNetwork.hints['settingsModals.addNetwork.noP256Hint']
+			}
+			// No field and no re-check under a refusal: another endpoint would
+			// not change it (`rpc_field: none`).
 		};
 	}
 	return {
@@ -485,9 +531,16 @@ function addNetwork(
 		},
 		checksTitle: m.addNetwork.compatibilityCheck,
 		checks,
-		callout: { tone: 'warning', text: m.addNetwork.incompatibleHint },
-		secondary: m.addNetwork.openChainSetupTool,
-		recheck: m.addNetwork.recheckWithRpc
+		// The core's `MISSING_CONTRACTS_HINT`, and its `setup_url`: Chain Setup
+		// opened on the chain that was checked.
+		callout: {
+			tone: 'warning',
+			text: m.addNetwork.hints['settingsModals.addNetwork.incompatibleHint']
+		},
+		secondary: {
+			label: m.addNetwork.openChainSetupTool,
+			href: 'https://getvela.app/chain-setup?chain=48900'
+		}
 	};
 }
 
@@ -778,7 +831,7 @@ function accountsSheet(
 ): AccountsSheetModel {
 	return {
 		title: m.accounts.title,
-		summary: `${fill(m.accounts.countPrefix, { count: ACCOUNTS.length })}${fill(m.accounts.total, { amount: TOTAL_BALANCE })}`,
+		summary: `${fill(pluralForm(m.accounts.countPrefix, ACCOUNTS.length), { count: ACCOUNTS.length })}${fill(m.accounts.total, { amount: TOTAL_BALANCE })}`,
 		rows: ACCOUNTS.map((a, i) => ({
 			name: a.name,
 			addressDisplay: a.display,
@@ -1015,6 +1068,63 @@ function rpcBanner(m: SettingsMessages): RpcBannerModel {
 	};
 }
 
+/**
+ * The list the home's "can't reach" line opens (spec 092), as a board — two
+ * states of one component, because the difference between them is the point
+ * (PR 3 note 4):
+ *
+ * - `networks`: two networks that did not answer. Each row offers "Fix", the
+ *   network's RPC editor.
+ * - `tokenList`: Tempo, whose RPC is fine and whose token list could not be
+ *   loaded. The title says that, and the row offers nothing to press — there
+ *   is no endpoint to repair.
+ *
+ * Amounts are the fixture wallet's; the live list is `liveUnreachable`.
+ */
+export function unreachableBoards(m: SettingsMessages): {
+	networks: UnreachableModel;
+	tokenList: UnreachableModel;
+} {
+	const lastSeen = (amount: string) => fill(m.rescue.lines['assets.lastSeen'] ?? '', { amount });
+	return {
+		networks: {
+			title: fill(m.rescue.unreachableMany, { n: 2 }),
+			summary: m.rescue.unreachableBody,
+			rows: [
+				{
+					id: '137',
+					chainId: 137,
+					mark: MARKS.polygon,
+					name: 'Polygon',
+					line: lastSeen('$412.80'),
+					action: m.rescue.rpcFix
+				},
+				{
+					id: '100',
+					chainId: 100,
+					mark: MARKS.gnosis,
+					name: 'Gnosis',
+					line: m.rescue.lines['assets.notReadYet'] ?? '',
+					action: m.rescue.rpcFix
+				}
+			]
+		},
+		tokenList: {
+			title: fill(m.rescue.tokenListUnreachable, { name: 'Tempo' }),
+			summary: m.rescue.unreachableBody,
+			rows: [
+				{
+					id: '4217',
+					chainId: 4217,
+					mark: MARKS.tempo,
+					name: 'Tempo',
+					line: lastSeen('$120.00')
+				}
+			]
+		}
+	};
+}
+
 /** SR2 (failing) and SR2b (restored) are one model with a flag. */
 function rpcFix(m: SettingsMessages, restored: boolean): RpcFixModel {
 	return {
@@ -1068,6 +1178,17 @@ function balanceDetail(m: SettingsMessages): BalanceDetailModel {
 				mark: MARKS.gnosis,
 				name: 'Gnosis',
 				status: m.balanceDetail.statusFailed,
+				tone: 'error',
+				action: m.balanceDetail.retry
+			},
+			// A network whose RPC answers and whose token list could not be
+			// loaded: the core's other short status (`status_key`, PR 3 final
+			// note F21) — "RPC unavailable" would be false of it.
+			{
+				id: 'tempo',
+				mark: MARKS.tempo,
+				name: 'Tempo',
+				status: m.balanceDetail.statuses['home.balanceDetailStatusTokenList'],
 				tone: 'error',
 				action: m.balanceDetail.retry
 			}
@@ -1411,6 +1532,7 @@ const MOBILE_SHAPE: Record<
 	st10: { page: 'add-network', overlay: 'none' },
 	st10b: { page: 'add-network', overlay: 'none' },
 	st10c: { page: 'add-network', overlay: 'none' },
+	st10d: { page: 'add-network', overlay: 'none' },
 	st11: { page: 'rpc-providers', overlay: 'none' },
 	st12: { page: 'endpoints', overlay: 'none' },
 	st13: { page: 'storage', overlay: 'none' },
@@ -1436,7 +1558,14 @@ export function buildMobileState(
 	identicon: (seed: string) => string
 ): SettingsHomeModel {
 	const shape = MOBILE_SHAPE[state];
-	const addMode = state === 'st10b' ? 'compatible' : state === 'st10c' ? 'incompatible' : 'search';
+	const addMode =
+		state === 'st10b'
+			? 'compatible'
+			: state === 'st10c'
+				? 'incompatible'
+				: state === 'st10d'
+					? 'no-p256'
+					: 'search';
 	const backdropTitle =
 		shape.backdrop === 'wallet'
 			? m.walletTitle

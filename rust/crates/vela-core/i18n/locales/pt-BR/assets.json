@@ -5,6 +5,7 @@
     "searchPlaceholder": "Buscar tokens...",
     "unreachableOne": "Não conseguimos acessar {{name}} agora",
     "unreachableMany": "Não conseguimos acessar {{n}} redes agora",
+    "tokenListUnreachable": "Não conseguimos carregar a lista de tokens de {{name}} agora",
     "unreachableBody": "Seus ativos não são afetados — só não conseguimos lê-los agora.",
     "unreachableNone": "Todas as redes estão acessíveis de novo.",
     "lastSeen": "Última leitura: {{amount}}",

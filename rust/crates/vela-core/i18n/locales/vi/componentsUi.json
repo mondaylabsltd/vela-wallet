@@ -63,7 +63,6 @@
       "simWillFail": "Giao dịch này dự kiến sẽ thất bại — bạn vẫn phải trả phí gas.",
       "simWillFailReason": "Dự kiến thất bại: {{reason}} — bạn vẫn phải trả phí gas.",
       "balanceChangesTitle": "Thay đổi số dư",
-      "balanceNoAssetsMove": "Không có tài sản nào rời khỏi ví của bạn",
       "balanceUnverifiedToken": "Token chưa xác minh",
       "balanceSelfTransfer": "Đến chính địa chỉ của bạn · số dư không đổi",
       "intentContractCall": "Tương tác hợp đồng",
@@ -149,10 +148,11 @@
       "labelYouPayMax": "Bạn trả (tối đa)",
       "labelYouReceive": "Bạn nhận",
       "labelYouReceiveMin": "Bạn nhận (tối thiểu)",
-      "intentBackUpPublicKeys": "Sao lưu khóa công khai",
+      "intentBackUpPublicKeys": "Sao chép bản ghi ví",
       "labelNetwork": "Mạng",
       "labelAddress": "Địa chỉ",
-      "labelPublicKeys": "Số khóa công khai",
+      "labelPublicKeys": "Khóa kèm theo",
+      "labelWalletName": "Tên ví",
       "valueUnlimited": "Không giới hạn",
       "valueAll": "Tất cả",
       "warnOrderTerms": "Số tiền của lệnh này không hiển thị ở đây — hãy kiểm tra trên trang web trước.",
@@ -228,8 +228,8 @@
       "signerDown": "Không mở được trang ký. Hãy kiểm tra kết nối.",
       "integrity": {
         "checking": "Đang kiểm tra trang…",
-        "matches": "Phiên bản {{version}} · khớp danh sách bản dựng Vela đã công bố · kiểm tra {{time}}",
-        "trusted": "Phiên bản {{version}} · đã tin cậy trên thiết bị này · kiểm tra {{time}}",
+        "matches": "Phiên bản {{version}} · khớp danh sách bản dựng Vela đã công bố · kiểm tra {{time}}",
+        "trusted": "Phiên bản {{version}} · đã tin cậy trên thiết bị này · kiểm tra {{time}}",
         "unchecked": "Chưa kiểm tra: trang này đã tắt kiểm tra",
         "mismatch": "Phiên bản {{version}} không có trong danh sách bản dựng Vela đã công bố. Chưa mở.",
         "blocked": "Phiên bản {{version}} bị chặn trên thiết bị này.",
@@ -249,7 +249,8 @@
         "feeFailed": "Không tính được phí — chạm vào phí để thử lại",
         "feeRetrying": "Chưa tính được phí. Đang tự động thử lại…",
         "feeWouldFail": "Nếu gửi như hiện tại, giao dịch sẽ thất bại.",
-        "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…"
+        "previousPending": "Đang chờ giao dịch trước trên mạng này hoàn tất…",
+        "simChecking": "Đang kiểm tra giao dịch này sẽ làm gì…"
       }
     },
     "signingApprove": {

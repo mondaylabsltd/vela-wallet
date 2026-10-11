@@ -33,12 +33,42 @@ function view(over: Partial<NetDappAddView> = {}): NetDappAddView {
 			p256_available: true,
 			best_rpc_url: 'https://rpc.sepolia.example',
 			best_rpc_latency_ms: 20,
-			rpc_failure: null
+			rpc_failure: null,
+			blocker: null,
+			hint_key: null,
+			setup_url: null
 		},
 		can_add: true,
 		...over
 	};
 }
+
+/**
+ * The two refusals as the core's check carries them (`net_blocker`,
+ * `NO_P256_HINT` / `MISSING_CONTRACTS_HINT`, `chain_setup_url`): no P-256
+ * verifier wins over missing contracts, and only a deployable gap has a link.
+ */
+const COMPAT = view().compat!;
+const NO_P256: NetDappAddView['compat'] = {
+	...COMPAT,
+	compatible: false,
+	multi_key_ready: false,
+	contracts: [{ name: 'Safe L2', address: '0x2', deployed: false, multi_key_only: false }],
+	p256_available: false,
+	blocker: 'no_p256',
+	hint_key: 'settingsModals.addNetwork.noP256Hint',
+	setup_url: null
+};
+const MISSING_CONTRACTS: NetDappAddView['compat'] = {
+	...COMPAT,
+	compatible: false,
+	multi_key_ready: false,
+	contracts: [{ name: 'Safe L2', address: '0x2', deployed: false, multi_key_only: false }],
+	p256_available: true,
+	blocker: 'missing_contracts',
+	hint_key: 'settingsModals.addNetwork.incompatibleHint',
+	setup_url: 'https://getvela.app/chain-setup?chain=11155111'
+};
 
 describe('the add-network card', () => {
 	it('offers Add for a compatible chain, naming who asks', () => {
@@ -59,9 +89,11 @@ describe('the add-network card', () => {
 	});
 
 	it('closes a verdict with Done and never offers Add', () => {
-		const incompatible = addNetworkCard(view({ phase: 'not_compatible', can_add: false }), m);
+		const incompatible = addNetworkCard(
+			view({ phase: 'not_compatible', can_add: false, compat: MISSING_CONTRACTS }),
+			m
+		);
 		expect(incompatible.add).toBeNull();
-		expect(incompatible.setupTool).toBe('Open Chain Setup Tool');
 		expect(incompatible.dismiss).toBe('Done');
 		const wrong = addNetworkCard(
 			view({ phase: 'wrong_rpc', can_add: false, reported_chain_id: 100, from_site: true }),
@@ -71,6 +103,56 @@ describe('the add-network card', () => {
 		expect(wrong.fromSite).toBe('Not in Vela’s network list — the name and coin are the site’s.');
 		const none = addNetworkCard(view({ phase: 'no_rpc', can_add: false }), m);
 		expect(none.note).toBe('The site gave no usable RPC for this network');
+	});
+
+	// A refusal says WHY, and only a gap that can be deployed offers Chain
+	// Setup. The card used to say "contracts are missing" and offer the tool
+	// for every refusal — over a network with no P-256 verifier that sends a
+	// person to deploy nothing, and says nothing about money getting stuck.
+	it('missing contracts: says so, and opens Chain Setup on that chain', () => {
+		const card = addNetworkCard(
+			view({ phase: 'not_compatible', can_add: false, compat: MISSING_CONTRACTS }),
+			m
+		);
+		expect(card.pill).toEqual({ tone: 'error', label: 'Incompatible', dot: true });
+		expect(card.note).toBe(
+			"Some contracts Vela needs aren't on this network yet. Chain Setup shows which ones and who can deploy them."
+		);
+		expect(card.setupTool).toEqual({
+			label: 'Open Chain Setup Tool',
+			url: 'https://getvela.app/chain-setup?chain=11155111'
+		});
+		// The check list still shows which rows failed: the verifier is there.
+		expect(card.checks.at(-1)).toEqual({ label: 'P-256 precompile', ok: true });
+	});
+
+	it('no P-256 verifier: says the network cannot run Vela wallets — and offers nothing to deploy', () => {
+		const card = addNetworkCard(
+			view({ phase: 'not_compatible', can_add: false, compat: NO_P256 }),
+			m
+		);
+		expect(card.pill).toEqual({ tone: 'error', label: 'Incompatible', dot: true });
+		expect(card.note).toContain("Vela wallets can't work here");
+		expect(card.note).toContain("Don't send money to your Vela address on this network");
+		expect(card.note).not.toContain('Chain Setup');
+		expect(card.setupTool).toBeNull();
+		expect(card.add).toBeNull();
+		expect(card.dismiss).toBe('Done');
+		expect(card.checks.at(-1)).toEqual({ label: 'P-256 precompile', ok: false });
+		// In the person's language too.
+		const zh = addNetworkCard(
+			view({ phase: 'not_compatible', can_add: false, compat: NO_P256 }),
+			resolveRequestMessages('zh').addNetwork
+		);
+		expect(zh.note).toContain('转进去会被卡住');
+		expect(zh.setupTool).toBeNull();
+	});
+
+	it('a refusal whose check is not in hand says the verdict and invents no reason', () => {
+		const card = addNetworkCard(view({ phase: 'not_compatible', can_add: false, compat: null }), m);
+		expect(card.pill?.label).toBe('Incompatible');
+		expect(card.note).toBeNull();
+		expect(card.setupTool).toBeNull();
 	});
 
 	it('offers Retry when nothing answered, and names the chain before its name is known', () => {

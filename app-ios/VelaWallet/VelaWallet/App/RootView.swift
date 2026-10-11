@@ -193,6 +193,9 @@ struct RootView: View {
     /// the round trip (Android found it on the device).
     @State private var recipientDraft = ""
     @State private var amountDraft = ""
+    /// The split row a scan was opened FROM (issue #471), handed to the core
+    /// with `open_scanner` when the viewfinder comes up, then spent.
+    @State private var scanTarget: String?
     /// The importer's two fields. Local for the same reason every other field
     /// here is: a field bound straight to a machine loses characters on the
     /// round trip.
@@ -432,8 +435,11 @@ struct RootView: View {
         // not the order two statements ran in.
         .environment(\.walletTextScale, preferences.textScale.factor)
         // The Done bar over every amount keypad (087 F28): a decimal pad has
-        // no return key, and on a phone nothing else put it away.
-        .environment(\.keyboardDone, loc.t("explore.done"))
+        // no return key, and on a phone nothing else put it away. And over
+        // "Report a problem" (issue #478), where Return is a newline.
+        // `common.done` — "done with the keyboard" — not Explore's Edit/Done
+        // toggle, which this borrowed.
+        .environment(\.keyboardDone, loc.t("common.done"))
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }
@@ -647,6 +653,24 @@ struct RootView: View {
             #else
             EmptyView()
             #endif
+        case .uiBatch:
+            #if DEBUG
+            UIBatchGalleryScreen(loc: loc, state: PageOverride.state ?? "cable-create")
+            #else
+            EmptyView()
+            #endif
+        case .integration:
+            #if DEBUG
+            IntegrationGalleryScreen(loc: loc, state: PageOverride.state ?? "home-token-list")
+            #else
+            EmptyView()
+            #endif
+        case .finalRound:
+            #if DEBUG
+            FinalRoundGalleryScreen(loc: loc, state: PageOverride.state ?? "hero-checking")
+            #else
+            EmptyView()
+            #endif
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -776,6 +800,9 @@ struct RootView: View {
             // The send machine closed its journey — its back from the picker,
             // or done — and the screens go with it (087 F27).
             .onChange(of: send.closes) { _, _ in sendClosed() }
+            // …and it hears the display currency commit or change while its
+            // journey is open (final note F25).
+            .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
         }
     }
 
@@ -912,10 +939,17 @@ struct RootView: View {
                     // asked for and a battery nobody budgeted.
                     if state == .s1 {
                         camera.onScan = { text in scannedCode(text) }
-                        send.openScanner()
+                        // A split row's own icon names its row (issue #471);
+                        // every other door opens the targetless scan.
+                        send.openScanner(target: scanTarget)
+                        scanTarget = nil
                         await camera.start()
                     } else {
                         camera.stop()
+                        // Left without a code (back, a swipe): the core drops
+                        // the row the scan was aimed at, so it steers nothing
+                        // later. After a code the core has closed it already.
+                        if send.view?.showScanner == true { send.closeScanner() }
                     }
                     if state == .t3 { tokens.open() }
                     // The watcher runs while a code is on screen — five
@@ -1000,6 +1034,12 @@ struct RootView: View {
                             onCommitRpc: { commitRescueRpc() },
                             onRetryChain: { _ in wallet.refresh(pull: true) },
                             onFixChain: { chainId in
+                                // Only a row the core says an RPC fix can
+                                // help (PR 3 note 4): a chain whose token list
+                                // is what failed has no button, and no door.
+                                guard wallet.balance?.unreachableNetworks
+                                    .first(where: { $0.chainId == chainId })?.rpcFixable != false
+                                else { return }
                                 openRpcFix(chainId)
                                 rescueStep = .rpcFix
                             }
@@ -1110,7 +1150,7 @@ struct RootView: View {
                                        address: session.view.address),
                             chainIds: browser.chainIds,
                             holdings: WalletLive.networkHoldings(
-                                wallet.balance, display: WalletLive.Display.from(settings.currency)
+                                wallet.balance, display: WalletLive.Display.live(settings.currency)
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             networks: walletNetworks,
@@ -1581,13 +1621,13 @@ struct RootView: View {
                 // The simulated deltas, to the machine that JUDGES them. The
                 // same machine the confirmed receipts go to, and it keeps the
                 // two apart: a receipt may admit a token, a simulation never
-                // may (spec 017, invariant ⑤).
-                simDeltas: { [trust] address, chainId, deltas in
-                    trust.simDeltasComputed(address: address, chainId: chainId, deltas: deltas)
-                },
-                // The same judged view the sheet draws (`signingContext`),
-                // read at the confirm for the record (spec 093).
-                simView: { [trust] in trust.trust?.sim }
+                // may (spec 017, invariant ⑤). Its judgment of THOSE deltas
+                // comes back to the request that sent them: what its sheet
+                // draws (`signingContext`), what its confirm waits for (PR 3)
+                // and what its record keeps (spec 093).
+                simJudged: { [trust] address, chainId, deltas in
+                    await trust.simJudged(address: address, chainId: chainId, deltas: deltas)
+                }
             )
         )
         signing = controller
@@ -1765,18 +1805,7 @@ struct RootView: View {
                             onCancelGroups: { groupPick = nil },
                             // 转账 to this person, with the recipient already
                             // in — the card said so and did nothing until 057.
-                            onSendTo: { sendToContact(contact.address) },
-                            // 收款 and 二维码 are about the WALLET's own
-                            // address, so they go where that lives rather than
-                            // pretending to be about the contact.
-                            onReceive: {
-                                section = .wallet
-                                enterReceive()
-                            },
-                            onShowQr: {
-                                section = .wallet
-                                enterReceive()
-                            }
+                            onSendTo: { sendToContact(contact.address) }
                         )
                         // Opening somebody's page asks the core about their
                         // address: is it a contract, and has this wallet ever
@@ -2041,7 +2070,7 @@ struct RootView: View {
     private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
-            let display = WalletLive.Display.from(settings.currency)
+            let display = WalletLive.Display.live(settings.currency)
             model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
                                                    networks: walletNetworks)
             model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
@@ -2187,7 +2216,7 @@ struct RootView: View {
             base.balance.refresh = nil
             return base
         }
-        return WalletLive.apply(view, currency: settings.currency, feed: activity.feed,
+        return WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
                                 feedRead: activity.hasRead, on: base, loc: loc,
                                 now: Date(), spinning: wallet.spin.spinning,
                                 networks: walletNetworks)
@@ -2249,7 +2278,7 @@ struct RootView: View {
         }
         if case .assets(let assets) = model.base, let balance = wallet.balance {
             model.base = .assets(FlowsLive.assets(
-                balance, currency: settings.currency, selected: chainFilter,
+                balance, currency: settings.currency ?? .unread, selected: chainFilter,
                 on: assets, loc: loc, networks: walletNetworks
             ))
         }
@@ -2270,6 +2299,8 @@ struct RootView: View {
                 record: feed.transactions.first { $0.id == item.id },
                 on: detail, loc: loc,
                 hidden: feed.hidden,
+                // No fiat before the person's currency is known (PR 3).
+                display: WalletLive.Display.live(settings.currency),
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
@@ -2281,7 +2312,7 @@ struct RootView: View {
             model.sheet = .tokenDetail(FlowsLive.tokenDetail(
                 balance.tokens[assetRow],
                 feed: activity.feed,
-                display: WalletLive.Display.from(settings.currency),
+                display: WalletLive.Display.live(settings.currency),
                 on: detail, loc: loc,
                 hidden: balance.hidden || (activity.feed?.hidden ?? false),
                 networks: walletNetworks
@@ -2291,7 +2322,7 @@ struct RootView: View {
         // already found; SD2 and SD3 are the core's figures, its refusals and
         // its gates.
         if let view = send.view {
-            let display = WalletLive.Display.from(settings.currency)
+            let display = WalletLive.Display.live(settings.currency)
             if case .sendPick(let pick) = model.base {
                 model.base = .sendPick(
                     SendLive.pick(
@@ -2361,7 +2392,9 @@ struct RootView: View {
             if case .batchImport(let sheet)? = model.sheet {
                 model.sheet = .batchImport(
                     SendLive.batchImport(
-                        batch.view, view: view, on: sheet, loc: loc, replaces: importReplaces
+                        batch.view, view: view, on: sheet, loc: loc, replaces: importReplaces,
+                        // No currency is named before the person's is known.
+                        currencyUnknown: SendLive.batchCurrency(settings.currency) == nil
                     )
                 )
             }
@@ -2481,9 +2514,9 @@ struct RootView: View {
     /// form (issue #467). The book is app-resident from the home; opening it
     /// here too costs nothing (`boot` is idempotent) and covers a send that
     /// started somewhere else, a scanned code say.
-    private func openContactPicker() {
+    private func openContactPicker(target: String? = nil) {
         contacts.open(myAddress: session.view.address)
-        send.openContactPicker(target: nil)
+        send.openContactPicker(target: target)
     }
 
     /// Somebody was picked from the address book — by ADDRESS (issue #467).
@@ -2611,7 +2644,9 @@ struct RootView: View {
         let record = await accounts.loadAccounts().first {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }
-        let display = WalletLive.Display.from(settings.currency)
+        // The display currency as the machine is told it — the same rule
+        // again at every change while the journey is open (`sendDisplayStands`).
+        let told = SendStore.displayContext(settings.currency)
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
@@ -2620,10 +2655,20 @@ struct RootView: View {
             accountId: record?["id"] as? String ?? "",
             address: session.view.address,
             name: session.view.activeName.isEmpty ? nil : session.view.activeName,
-            displayCode: display.code,
-            displayRate: display.rate,
-            fiatDecimals: 2
+            displayCode: told.code,
+            displayRate: told.rate,
+            fiatDecimals: Self.sendFiatDecimals
         )
+    }
+
+    /// Every currency the wallet lists is entered to two places.
+    private static let sendFiatDecimals = 2
+
+    /// The display currency committed, or changed (final note F25): an open
+    /// Send journey hears it, and re-denominates by its own rule.
+    private func sendDisplayStands() {
+        let told = SendStore.displayContext(settings.currency)
+        send.displayStands(code: told.code, rate: told.rate, fiatDecimals: Self.sendFiatDecimals)
     }
 
     // MARK: - Into and out of Send (087 F27)
@@ -2779,11 +2824,13 @@ struct RootView: View {
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             chainId: chain,
-            display: WalletLive.Display.from(settings.currency),
+            display: WalletLive.Display.live(settings.currency),
             origin: live?.request?.origin,
-            // What the chain said this transaction would do, and how far the
-            // asking got. The judgment is the CORE's; this only carries it.
-            sim: trust.trust?.sim,
+            // What the chain said THIS request would do, and how far the
+            // asking got. The judgment is the CORE's; this only carries it —
+            // the request's own (`SigningController.simVerdict`), never the
+            // judge's last session, which may be another transaction's.
+            sim: live?.simVerdict,
             simulation: live?.simulation ?? .pending,
             feeOpen: live?.feeOpen ?? false,
             trustedSignerNotice: live?.trustedSignerNotice,
@@ -2924,6 +2971,14 @@ struct RootView: View {
                     },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
+                    // Issue #471: a row's own icons. The picker is the core's
+                    // flag (as the person icon's); the scanner is a pushed
+                    // screen that names its row when it opens.
+                    onPickRecipientRow: { id in openContactPicker(target: id) },
+                    onScanRecipientRow: { id in
+                        scanTarget = id
+                        flows.push(.scan)
+                    },
                     onFillEmpty: { amount in fillEmptyRows(amount) },
                     onConfirm: { send.slideConfirm() },
                     onReceiptDone: {
@@ -3020,6 +3075,9 @@ struct RootView: View {
             torchOn: camera.torchOn,
             onTool: { tool in scanTool(tool) }
         )
+        // A gallery / board / dev session: the drawn viewfinder, never a
+        // camera (PR 3 note 7).
+        inputs.fixture = camera.fixtureOnly
         if camera.refusal == .denied {
             inputs.refusalAction = (
                 label: loc.t("componentsUi.scanner.grantPermission"),
@@ -3339,14 +3397,23 @@ struct RootView: View {
                 onOpenProviders: { settings.openProviders() }
             ),
             onOpenAccounts: { openAccountSwitcher() },
-            // Only "not backed up" carries a call; every other state's row is
-            // not a button, and a tap on it sends nothing.
+            // What a tap on the row does is the core's (`BackupRow.action`):
+            // "not copied yet" opens the sheet with its call, "couldn't
+            // check" asks again — the row reads "Checking…" while it does —
+            // and every other state's row is a statement that sends nothing.
             onEthereumBackup: {
                 guard let asked = backupCheck,
-                      asked.address.caseInsensitiveCompare(session.view.address) == .orderedSame,
-                      let call = asked.check.call
+                      asked.address.caseInsensitiveCompare(session.view.address) == .orderedSame
                 else { return }
-                openEthereumBackup(call)
+                switch asked.check.row?.action {
+                case .copy:
+                    if let call = asked.check.call { openEthereumBackup(call) }
+                case .retry:
+                    backupCheck = nil
+                    Task { await checkEthereumBackup() }
+                case .none?, nil:
+                    break
+                }
             },
             signingActions: SigningSettingsActions(
                 onChooseVenue: { chooseSigningVenue($0) },
@@ -3487,13 +3554,13 @@ struct RootView: View {
             // PR 2: hidden, the core withholds the figures — every row and
             // the total draw the mask instead of summing nothing to $0.00.
             hidden: wallet.balance?.switcher.hidden ?? false,
-            display: WalletLive.Display.from(settings.currency),
+            display: WalletLive.Display.live(settings.currency),
             on: model,
             loc: loc
         )
         // Asked of the chain for THIS wallet, or still being asked (spec 062).
         let backedUp = backupCheck.flatMap {
-            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.check.state : nil
+            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.check : nil
         }
         let keys = walletKeys.flatMap {
             $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.result : nil
@@ -3667,7 +3734,7 @@ struct RootView: View {
         guard !address.isEmpty else { return }
         let key = await RegistryBackup.foundingKeyHex(of: address, in: sendAccountPort)
         guard !key.isEmpty else {
-            backupCheck = (address, RegistryBackup.Check(state: .unavailable, call: nil))
+            backupCheck = (address, RegistryBackup.Check(state: .unavailable, call: nil, row: nil))
             return
         }
         let backup = RegistryBackup(ethCall: { [pool] chainId, to, data in
@@ -3894,7 +3961,11 @@ struct RootView: View {
             UsbTouchSheet(loc: loc, touch: touch, onCancel: onboarding.cancelCable)
                 .themed(scheme)
         } else if onboarding.pendingInsertKey != nil {
-            UsbInsertKeySheet(loc: loc, onCancel: { onboarding.answerInsertKey(false) })
+            UsbInsertKeySheet(
+                loc: loc,
+                onUseSystemSheet: { onboarding.answerInsertKey(.useSystemSheet) },
+                onCancel: { onboarding.answerInsertKey(.cancelled) }
+            )
                 .themed(scheme)
         } else if let payload = onboarding.cableQr {
             // Below touch on purpose: once the phone connects and the ceremony
@@ -3914,6 +3985,12 @@ struct RootView: View {
             .themed(scheme)
         } else if onboarding.signInConnecting {
             UsbConnectingSheet(loc: loc, method: onboarding.signInMethod)
+                .themed(scheme)
+        } else if onboarding.systemSheetHold {
+            // Under Apple's security-key sheet, after "Use Apple's
+            // security-key sheet": this sheet stays, and takes whatever the
+            // ceremony ends in.
+            UsbConnectingSheet(loc: loc, method: .securityKey)
                 .themed(scheme)
         } else if onboarding.showSignInMethods {
             signInMethodSheet
@@ -3998,6 +4075,12 @@ enum PageOverride {
         case handoff
         /// PR 2's boards (`CorrectnessGalleryScreen`).
         case correctness
+        /// PR 3's boards (`UIBatchGalleryScreen`).
+        case uiBatch
+        /// PR 3's integration round (`IntegrationGalleryScreen`).
+        case integration
+        /// PR 3's final round (`FinalRoundGalleryScreen`).
+        case finalRound
     }
 
     static let page: Page? = {
@@ -4022,9 +4105,26 @@ enum PageOverride {
         case "signing": .signing
         case "handoff": .handoff
         case "pr2": .correctness
+        case "pr3": .uiBatch
+        case "pr3b": .integration
+        case "pr3c": .finalRound
         default: nil
         }
     }()
+
+    /// Is this a gallery, fixture, board or dev-flow session? Any
+    /// `VELA_PAGE` override is one — none of them is production navigation —
+    /// and so is the onboarding gallery (`VELA_GALLERY=1`).
+    /// The signal the scanner reads to draw a fixture frame and never open
+    /// the camera (PR 3 note 7, `CameraScanner.fixtureOnly`): a desktop
+    /// gallery sweep photographed the person at the machine. Read from the
+    /// raw variable, so a page name this build has never heard of counts.
+    static func isDevSession(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        // …and the onboarding gallery's own switch (`GalleryMode`).
+        !(environment["VELA_PAGE"] ?? "").isEmpty || environment["VELA_GALLERY"] == "1"
+    }
 
     /// WHICH state the overridden page opens on — `VELA_STATE=e4`,
     /// `VELA_STATE=cs5`, or `VELA_STATE=st9` to put `settings-live` straight

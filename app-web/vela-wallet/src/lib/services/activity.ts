@@ -123,6 +123,10 @@ export function incomingToRecord(
 		...(logoUrls.length ? { logoUrls } : {}),
 		chainId: tx.chainId,
 		timestamp: tx.timestamp,
+		// PR 3: the feed's time IS the block's own (`token_trust` withholds a
+		// transfer whose block it has not read), so the record says so — the
+		// mark that tells it from an older one stamped with the clock.
+		timeVerified: true,
 		status: 'confirmed',
 		type: 'receive',
 		usd

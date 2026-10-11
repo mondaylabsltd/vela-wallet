@@ -10,6 +10,8 @@ export type TrustIncomingView = { id: string, chain_id: number, token: string | 
  */
 value: string, tx_hash: string, block_number: number, log_index: number, 
 /**
- * Unix seconds (block time, falling back to receipt time).
+ * Unix seconds: the time of the transfer's own block, as the chain
+ * gave it — never a clock's (invariant ⑨). A shell that stores this row
+ * stores a time that needs no checking again.
  */
 timestamp_sec: number, symbol: string | null, decimals: number | null, };

@@ -403,8 +403,25 @@ class FeeFailureViewTest {
         assertEquals(FeeFailure.ChainRead(rate_limited = false), quoted.view.failed)
         val first = reads()
         // The re-ask the core asked for (3 s) is a real new read, and it says it is retrying meanwhile.
-        withTimeout(10_000) { speed.fee.first { it.failure?.retrying == true } }
-        withTimeout(10_000) { while (reads() <= first) delay(20) }
+        //
+        // That read is HELD in flight here, as `SigningFeeRetryTest` holds
+        // its own: answered at once, "retrying" is a moment between two
+        // identical failures, `speed.fee` is a conflated flow, and on a
+        // loaded machine its collector was never scheduled inside either of
+        // the two moments the ten seconds held (PR 489's proof runs).
+        val asked = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        port.before = { method ->
+            if (method == "eth_getCode") {
+                asked.complete(Unit)
+                release.await()
+            }
+        }
+        withTimeout(20_000) { asked.await() }
+        assertTrue("the re-ask is a new read of the account", reads() > first)
+        withTimeout(20_000) { speed.fee.first { it.failure?.retrying == true } }
+        // The read is answered (it fails again) and the schedule goes on.
+        release.complete(Unit)
 
         speed.end()
         withTimeout(5_000) { speed.fee.first { it.failure == null && !it.busy } }

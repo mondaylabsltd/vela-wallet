@@ -353,6 +353,12 @@ struct TxDetailModel {
     var received: String? = nil
     /// A dApp record's collapsed "Technical details" (spec 093).
     var technical: TxTechnicalModel? = nil
+    /// What a folded batch row folded (spec 038 #D2, as the web and the
+    /// desktop draw it): a split's people — who got what — or a sweep's
+    /// coins, under the facts where a single send's "To" would have been.
+    /// Each part's figure is money: hidden, it is the core's masked amount.
+    var breakdownTitle: String? = nil
+    var breakdown: [BreakdownRowModel] = []
 }
 
 /// A dApp record's "Technical details" (spec 093), collapsed until tapped.
@@ -534,6 +540,10 @@ struct RecipientCardModel: Identifiable {
     let identiconSeed: String
     let amount: String
     let removeLabel: String
+    /// This row's own address-book icon (`send.recipientPickAria`).
+    let pickLabel: String
+    /// This row's own scan icon (`send.scanAria`, issue #471).
+    let scanLabel: String
     /// The core's row id, so an edit can say which row it edited. Empty in
     /// the fixtures, which have no machine behind them.
     var rowId: String = ""
@@ -643,7 +653,8 @@ struct RecipientFieldModel {
     let lines: [String]
     let identiconSeed: String
     let pickLabel: String
-    /// Sweep shows a scan button beside the picker; single does not.
+    /// The scan button beside the picker — on the single send and the
+    /// sweep alike (`send.scanAria`); `nil` draws the picker alone.
     var scanLabel: String?
     /// Sweep's "every token goes to the same address".
     var note: String?
@@ -738,7 +749,6 @@ struct ContactPickModel {
     let title: String
     let closeLabel: String
     let searchPlaceholder: String
-    let scanRow: String
     let groupsTitle: String
     let groups: [ContactGroupModel]
     let contactsTitle: String

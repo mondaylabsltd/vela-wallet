@@ -10,7 +10,8 @@ use vela_core::app::activity_feed::{
     FeedAllowance, FeedDirection, FeedItem, FeedLine, FeedRow, FeedTxKind, FeedTxStatus, FeedView,
 };
 use vela_core::app::balance_dashboard::{
-    BalanceNotice, BalanceToken, BalanceView, UNREACHABLE_MANY, UNREACHABLE_ONE,
+    BalanceNotice, BalanceToken, BalanceView, TOKEN_LIST_UNREACHABLE, UNREACHABLE_MANY,
+    UNREACHABLE_ONE,
 };
 use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::number::format_token_amount;
@@ -29,10 +30,44 @@ use crate::wallet::fixtures::{
 /// point is the case it refuses: **a code with no rate is drawn as USD, not as
 /// that code at rate 1.** A rate of 1 is a claim — "1 USD = 1 CNY" — and the
 /// core answers `rate: None` rather than 1 for exactly this reason.
+///
+/// And one more refusal, the core's (`CurrencyView.committed`, the withhold
+/// rule of `app::display_currency`): **until the display currency is
+/// committed, no fiat figure is drawn — on any surface.** The machine starts
+/// on a USD/1 placeholder while the person's stored choice is priced;
+/// drawing it put "$1,234" on a home for a moment before it jumped to
+/// "¥8,876". The placeholder is not their currency, so every figure waits
+/// and appears once, in the right money.
+///
+/// **This type is the one place a fiat figure is made**, and so the one
+/// place the rule is kept: every surface in the core's `FIAT_SURFACES` asks
+/// it for its figure, and while the currency is not committed it answers
+/// "withheld" — in the shape that surface draws, so the figure's room is
+/// kept and nothing moves when it lands:
+///
+/// - the hero waits on its skeleton ([`Self::committed`]);
+/// - a holding's worth waits on its bar ([`Self::fiat`]);
+/// - a figure in a place of its own — a row's amount, the "≈" line under an
+///   amount, a sentence about it — is not drawn, and its line or column
+///   stays ([`Self::alone`], [`Self::approx`], [`Self::sentence`]);
+/// - a figure said after something that is not fiat ("0.0021 ETH · ≈$5.40")
+///   leaves that something standing alone ([`Self::after`]): a token amount
+///   is not in the display currency and is drawn as always;
+/// - a figure that LEADS a line something else stands after (the token
+///   page's "worth · network") waits on a bar as wide as its room
+///   ([`Self::room`]), so what follows it is drawn where it will stay.
+///
+/// Never a dash, a zero or the placeholder's dollars on screen: each of
+/// those is a figure, and there is none yet. ([`Self::room`] measures with
+/// the placeholder pair and draws nothing of it.)
 #[derive(Clone, Debug, PartialEq)]
 pub struct Money {
     code: String,
     rate: Option<f64>,
+    /// The core has committed a currency. `false` = the placeholder.
+    committed: bool,
+    /// The person's own currency on its way (`CurrencyView.pending`).
+    pending: Option<String>,
 }
 
 impl Default for Money {
@@ -41,6 +76,8 @@ impl Default for Money {
         Self {
             code: "USD".to_owned(),
             rate: Some(1.0),
+            committed: true,
+            pending: None,
         }
     }
 }
@@ -57,12 +94,48 @@ impl Money {
         USD.get_or_init(Money::default)
     }
 
-    /// The committed pair, straight from `display_currency`.
+    /// A committed pair: `code`, and the rate the core priced it at — what a
+    /// test states its currency as. A live surface reads [`Self::of`].
+    #[cfg(test)]
     #[must_use]
     pub fn new(code: &str, rate: Option<f64>) -> Self {
         Self {
             code: code.to_owned(),
             rate,
+            committed: true,
+            pending: None,
+        }
+    }
+
+    /// The display currency as the core has it right now — committed or not.
+    /// Every live surface builds its `Money` here, so the withhold rule is
+    /// read in one place.
+    #[must_use]
+    pub fn of(view: &vela_core::app::display_currency::CurrencyView) -> Self {
+        Self {
+            code: view.code.clone(),
+            rate: view.rate,
+            committed: view.committed,
+            pending: view.pending.clone(),
+        }
+    }
+
+    /// Whether figures may be drawn: the core has committed a currency.
+    #[must_use]
+    pub fn committed(&self) -> bool {
+        self.committed
+    }
+
+    /// The code a surface that names its currency APART from the figure
+    /// shows (`总余额 · CNY`): the code figures are drawn in once committed;
+    /// before that, the person's own choice on its way, if there is one —
+    /// and nothing rather than the placeholder's "USD".
+    #[must_use]
+    pub fn label_code(&self) -> Option<&str> {
+        if self.committed {
+            Some(self.code())
+        } else {
+            self.pending.as_deref()
         }
     }
 
@@ -79,8 +152,29 @@ impl Money {
     }
 
     /// A USD figure, in this currency — or in USD when it cannot be converted.
+    /// `None` while the currency is not committed: the figure is withheld,
+    /// and the surface draws its loading treatment.
     #[must_use]
-    pub fn text(&self, usd: f64, locale: &str) -> String {
+    pub fn figure(&self, usd: f64, locale: &str) -> Option<String> {
+        if !self.committed {
+            return None;
+        }
+        Some(self.written(usd, locale))
+    }
+
+    /// How wide a figure's place is kept on a line it SHARES with what
+    /// comes after it (the token page's "worth · network"): the figure as
+    /// this pair writes it — which, while nothing is committed, is the
+    /// core's placeholder pair. **For laying out, never for drawing**: what
+    /// takes it draws it invisibly, under the waiting bar. A figure in a
+    /// place of its own ([`Self::alone`], [`Self::fiat`]) needs no room:
+    /// nothing stands after it.
+    #[must_use]
+    pub fn room(&self, usd: f64, locale: &str) -> String {
+        self.written(usd, locale)
+    }
+
+    fn written(&self, usd: f64, locale: &str) -> String {
         let (code, amount) = match self.rate {
             Some(rate) => (self.code.as_str(), usd * rate),
             None => ("USD", usd),
@@ -92,6 +186,60 @@ impl Money {
             locale,
             crate::executor::format_prefs::fiat_options(),
         )
+    }
+
+    /// A figure in a place of its own — a row's amount, a network's total —
+    /// or nothing while it is withheld. What draws it keeps the place: the
+    /// row stays its height and the column its side, and the figure lands
+    /// in it.
+    #[must_use]
+    pub fn alone(&self, usd: f64, locale: &str) -> String {
+        self.figure(usd, locale).unwrap_or_default()
+    }
+
+    /// "≈ $1,234.50" — the other denomination's line under an amount — or
+    /// nothing while it is withheld. The line itself stays (an empty text
+    /// keeps its line), so the amount over it and the rows under it do not
+    /// move when the figure lands.
+    #[must_use]
+    pub fn approx(&self, usd: f64, locale: &str) -> String {
+        self.figure(usd, locale)
+            .map(|figure| format!("≈ {figure}"))
+            .unwrap_or_default()
+    }
+
+    /// A figure said after something that is not fiat, on its line: `lead`,
+    /// `joint`, the figure ("0.0021 ETH" + " · ≈" + "$5.40") — or `lead`
+    /// alone while the figure is withheld. A token amount is not in the
+    /// display currency: it is drawn as always, and the screen it is on
+    /// stays decidable while the currency is on its way.
+    #[must_use]
+    pub fn after(&self, lead: &str, joint: &str, usd: f64, locale: &str) -> String {
+        match self.figure(usd, locale) {
+            Some(figure) => format!("{lead}{joint}{figure}"),
+            None => lead.to_owned(),
+        }
+    }
+
+    /// A sentence about a figure (`template`, its `{{key}}` filled) — or
+    /// nothing while the figure is withheld: without its figure the
+    /// sentence says nothing, and half of it ("Last seen", "Total") would
+    /// read as a fault. Its line stays, as [`Self::approx`]'s does.
+    #[must_use]
+    pub fn sentence(&self, template: &str, key: &str, usd: f64, locale: &str) -> String {
+        self.figure(usd, locale)
+            .map(|figure| crate::wallet::fill(template, key, &figure))
+            .unwrap_or_default()
+    }
+
+    /// A holding's worth as a row draws it: the figure, or the row's waiting
+    /// bar while the currency is not committed.
+    #[must_use]
+    pub fn fiat(&self, usd: f64, locale: &str) -> crate::wallet::fixtures::Fiat {
+        match self.figure(usd, locale) {
+            Some(figure) => crate::wallet::fixtures::Fiat::Value(SharedString::from(figure)),
+            None => crate::wallet::fixtures::Fiat::Pending,
+        }
     }
 }
 
@@ -137,14 +285,30 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
 
     // Hidden says nothing about the figure it is hiding — the web's hidden
     // hero has no status line (078 H-03).
+    // The code beside the label: what figures are drawn in — or, while the
+    // currency is not committed, the person's own choice on its way, and
+    // nothing at all rather than the placeholder's "USD".
+    let currency = SharedString::from(money.label_code().unwrap_or_default().to_owned());
+    // The two lines only the core can say (PR 3 final note F19). "Checking…"
+    // while the first read of the account is out; "Live · listening for
+    // payments" under a zero a settled round found with every chain
+    // answering. This shell used to work the second out for itself — a zero
+    // total, nothing partial, no tokens — which is also true of a CACHED
+    // zero nothing has read: the home said "Live · listening", then swapped
+    // it for "Can't reach 24 networks" when the round came back.
+    let checking = checking_line(view, s);
+    let live = live_line(view, s);
     if view.hidden {
         return BalanceModel {
             label: s.total_balance.clone(),
-            currency: SharedString::from(money.code().to_owned()),
+            currency,
             state: BalanceState::Hidden,
             integer: SharedString::from(BALANCE_MASK),
             decimals: None,
             live: None,
+            // No line under a hidden figure, "Checking…" included — the
+            // web's hidden hero, which says nothing at all (078 H-03).
+            checking: None,
             status: None,
             updated: None,
             // The control under a hidden hero still turns: hiding the
@@ -166,16 +330,17 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     let Some(usd) = known else {
         return BalanceModel {
             label: s.total_balance.clone(),
-            currency: SharedString::from(money.code().to_owned()),
+            currency,
             state: BalanceState::Loading,
             // Not "$0". The core withholds the number until it has one, and the
             // shell must not fill the gap with a figure that reads as an answer.
             integer: SharedString::from(""),
             decimals: None,
             live: None,
+            // The first read, still out: the skeleton's line says so (F19).
+            checking,
             // A first launch with no network says so over the skeleton rather
-            // than show a settled-looking zero (spec 038 finding 15) — and a
-            // skeleton says nothing else: it is already "still counting".
+            // than show a settled-looking zero (spec 038 finding 15).
             status: internal_line(view, s)
                 .or_else(|| view.unreachable.then(|| s.balance_unreachable.clone()))
                 .map(|line| (StatusKind::Warning, line)),
@@ -210,32 +375,53 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         None => None,
     };
 
+    // The total is known, but not yet in the person's money (the core's
+    // withhold rule: the display currency is not committed): the figure
+    // waits on the skeleton — it is drawn once, in the right currency, never
+    // in dollars first — and everything about it that is NOT a fiat figure
+    // is already said: the line under it is what the landed frame will say,
+    // so the figure arriving changes the figure and nothing else. (The line
+    // used to wait with it; when the currency landed over a wallet with a
+    // network out of reach, "Can't reach …" arrived too and pushed the page
+    // down a row.)
+    if !money.committed() {
+        return BalanceModel {
+            label: s.total_balance.clone(),
+            currency,
+            state: BalanceState::Loading,
+            integer: SharedString::from(""),
+            decimals: None,
+            // Neither is a fiat figure: both are said now, as the landed
+            // frame will say them.
+            live,
+            checking,
+            status,
+            updated: None,
+            refreshing: view.refreshing,
+            updating: s.updating.clone(),
+        };
+    }
+
     let (integer, decimals) = split_fiat(usd, locale, money);
     BalanceModel {
         label: s.total_balance.clone(),
-        currency: SharedString::from(money.code().to_owned()),
-        // A zero is "live" only once EVERY chain has answered: a partial zero
-        // (some chain unreachable), or a cached one, is an unknown wallet,
-        // not a listening one.
-        state: if usd == 0.0
-            && !view.balance_unknown
-            && !view.balance_partial
-            && view.tokens.is_empty()
-        {
+        currency,
+        // "Zero, live" is the core's `live_key` and nothing else (F19): a
+        // partial zero (some chain unreachable), a cached one nothing has
+        // read, or one a throwing read left standing is an unknown wallet,
+        // not a listening one — and only the core knows which this is.
+        state: if live.is_some() {
             BalanceState::ZeroLive
         } else {
             BalanceState::Normal
         },
         integer,
         decimals,
-        // The web's "listening" line under a live zero (078 H-05): a wallet
-        // every chain has answered for, holding nothing, is waiting for its
-        // first deposit — and says so rather than looking empty.
-        live: (usd == 0.0
-            && !view.balance_unknown
-            && !view.balance_partial
-            && view.tokens.is_empty())
-        .then(|| s.live_indicator.clone()),
+        // The "listening" line under a live zero (078 H-05): a wallet every
+        // chain has answered for, holding nothing, is waiting for its first
+        // deposit — and says so rather than looking empty.
+        live,
+        checking,
         status,
         // Filled by the page, which holds the clock and the language (#443).
         updated: None,
@@ -243,6 +429,27 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         refreshing: view.refreshing,
         updating: s.updating.clone(),
     }
+}
+
+/// The hero's line while the FIRST read of the account is still out (PR 3
+/// final note F19, `BalanceView.checking_key`): "Checking…". `None` from the
+/// first round's end on — a later refresh is not "checking".
+#[must_use]
+pub fn checking_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
+    // The core names one key for it today; one this build does not know is
+    // still "the wallet is being read", said in the words it has.
+    view.checking_key.as_ref()?;
+    Some(s.balance_checking.clone())
+}
+
+/// The hero's line under a LIVE zero (F19, `BalanceView.live_key`): "Live ·
+/// listening for payments". The core's fact, never this shell's reading of
+/// the total: `None` unless the last round settled, every chain it asked
+/// answered and the wallet holds nothing.
+#[must_use]
+pub fn live_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
+    view.live_key.as_ref()?;
+    Some(s.live_indicator.clone())
 }
 
 /// The hero's line when the last read failed inside Vela (PR 2 note 11,
@@ -257,18 +464,18 @@ pub fn internal_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedStri
 }
 
 /// The line over the networks the wallet cannot reach (spec 092) — the
-/// hero's status line and the title of the list it opens. The core chooses
-/// the sentence (`unreachable_key`: one network named, several counted); this
-/// only fills it. `None` when every network answered.
+/// hero's status line, the title of the list it opens and the Settings
+/// banner's headline. The core chooses the sentence (`unreachable_key`: one
+/// network named, several counted — or, PR 3 note 4, the one network whose
+/// node answers and whose token list is what could not be loaded); this only
+/// fills it. `None` when every network answered.
 #[must_use]
 pub fn unreachable_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
     let first = view.unreachable_networks.first()?;
+    let name = || crate::executor::custom_tokens::network_name(first.chain_id);
     let line = match view.unreachable_key.as_deref()? {
-        UNREACHABLE_ONE => crate::wallet::fill(
-            &s.unreachable_one,
-            "name",
-            &crate::executor::custom_tokens::network_name(first.chain_id),
-        ),
+        UNREACHABLE_ONE => crate::wallet::fill(&s.unreachable_one, "name", &name()),
+        TOKEN_LIST_UNREACHABLE => crate::wallet::fill(&s.token_list_unreachable, "name", &name()),
         UNREACHABLE_MANY => crate::wallet::fill(
             &s.unreachable_many,
             "n",
@@ -277,6 +484,20 @@ pub fn unreachable_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedS
         _ => return None,
     };
     Some(SharedString::from(line))
+}
+
+/// The NAMES of the networks whose RPC is failing — what a problem report's
+/// "RPC failing" line may say. The core's `rpc_fixable` rows only: a network
+/// whose node answers (its token list is what could not be loaded, PR 3
+/// note 4) is not an RPC failure, and a report that said so would send
+/// whoever reads it after an endpoint that is working.
+#[must_use]
+pub fn rpc_failing_names(view: &BalanceView) -> Vec<String> {
+    view.unreachable_networks
+        .iter()
+        .filter(|network| network.rpc_fixable)
+        .map(|network| crate::executor::custom_tokens::network_name(network.chain_id))
+        .collect()
 }
 
 /// The list the hero's "can't reach" line opens (spec 092) — the web's
@@ -295,6 +516,11 @@ pub struct UnreachableRow {
     pub name: SharedString,
     /// "Last seen $1,234.50", "Not read yet", …
     pub line: SharedString,
+    /// May the row offer its network's RPC editor ("Fix")? The core's
+    /// `rpc_fixable`: only when the network itself did not answer. A network
+    /// whose token list is what could not be loaded has an endpoint that
+    /// works, and "Fix" there sends a person to repair it (PR 3 note 4).
+    pub rpc_fixable: bool,
 }
 
 #[must_use]
@@ -313,16 +539,21 @@ pub fn unreachable_list(
                 .iter()
                 .find(|(key, _)| *key == network.line_key)
                 .map_or("", |(_, template)| template.as_str());
-            let amount = match network.last_seen_usd {
-                Some(usd) if !view.hidden => money.text(usd, locale),
-                _ => crate::wallet::fixtures::MASK.to_owned(),
+            // "Last seen $1,234.50" is a sentence about a figure: withheld
+            // with it while the display currency is not committed, its line
+            // kept. The other lines ("Not read yet") carry no figure, and a
+            // hidden one reads the mask.
+            let line = match network.last_seen_usd {
+                Some(usd) if !view.hidden => money.sentence(template, "amount", usd, locale),
+                _ => crate::wallet::fill(template, "amount", crate::wallet::fixtures::MASK),
             };
             UnreachableRow {
                 chain_id: network.chain_id,
                 name: SharedString::from(crate::executor::custom_tokens::network_name(
                     network.chain_id,
                 )),
-                line: SharedString::from(crate::wallet::fill(template, "amount", &amount)),
+                line: SharedString::from(line),
+                rpc_fixable: network.rpc_fixable,
             }
         })
         .collect::<Vec<_>>();
@@ -331,6 +562,31 @@ pub fn unreachable_list(
         summary: (!rows.is_empty()).then(|| s.unreachable_body.clone()),
         rows,
     }
+}
+
+/// The sentence the balance breakdown says at its top: the hero's own
+/// status line, in full (PR 3 final note F16).
+///
+/// The hero's line is ONE line — a sentence longer than the column ends in
+/// an ellipsis rather than growing the reserved slot — so what it opens has
+/// to carry the whole of it. The unreachable list does already (the line is
+/// its title). The breakdown did not: "Something went wrong inside Vela. If
+/// it keeps happening, reopen the app." is 82 characters in Russian, longer
+/// than the home column at the largest text size, and the sheet it opened
+/// never said it.
+///
+/// `None` when the hero has no status line — and for "some tokens couldn't
+/// be priced", which the sheet already says in full as the heading of the
+/// very section it is about: said twice on one sheet it would be noise.
+#[must_use]
+pub fn breakdown_lead(
+    view: &BalanceView,
+    s: &WalletStrings,
+    locale: &str,
+    money: &Money,
+) -> Option<SharedString> {
+    let (_, line) = balance(view, s, locale, money).status?;
+    (line != s.balance_unpriced).then_some(line)
 }
 
 /// SR3, the balance by network (078 H-03) — the web's `liveBalanceDetail`:
@@ -378,14 +634,23 @@ pub fn balance_detail(
             retry: false,
         })
         .collect();
-    for chain_id in view.unreachable_networks.iter().map(|n| n.chain_id) {
+    for network in &view.unreachable_networks {
+        let chain_id = network.chain_id;
         if pending.iter().any(|row| row.chain_id == chain_id) {
             continue;
         }
+        // What the row says is the core's (`status_key`, PR 3 final note
+        // F21): "RPC unavailable", or — under a network whose node answered
+        // and whose token list is what could not be loaded — "Token list
+        // unavailable". The row used to borrow the hero's whole sentence
+        // ("Can't load Tempo's token list right now") for the second: a
+        // sentence naming the network again, under the network's name, in a
+        // column of two-word statuses. Either way it can be read again.
+        let status = s.detail_status(&network.status_key);
         pending.push(DetailChain {
             chain_id,
             name: name(chain_id),
-            status: Some((s.detail_failed.clone(), true)),
+            status: Some((status, true)),
             amount: None,
             retry: true,
         });
@@ -410,29 +675,31 @@ pub fn balance_detail(
             chain_id,
             name: name(chain_id),
             status: None,
+            // Withheld while the display currency is not committed: the row
+            // keeps its place and its side, with no figure in it yet.
             amount: Some(if view.hidden {
                 mask()
             } else {
-                SharedString::from(money.text(usd, locale))
+                SharedString::from(money.alone(usd, locale))
             }),
             retry: false,
         })
         .collect();
 
     let total = view.display_total_usd.or(view.cached_total_usd);
-    let summary = crate::wallet::fill(
-        &s.detail_total,
-        "amount",
-        &match total {
-            _ if view.hidden => crate::wallet::fixtures::MASK.to_owned(),
-            Some(usd) => money.text(usd, locale),
-            // Nothing read and nothing kept — the core hands no figure while
-            // `unreachable` (PR 2 polish), where it used to hand a zero this
-            // line printed as "$0.00": the dash, which is no amount, and not
-            // the privacy mask, which hides one.
-            None => "—".to_owned(),
-        },
-    );
+    let summary = match total {
+        _ if view.hidden => {
+            crate::wallet::fill(&s.detail_total, "amount", crate::wallet::fixtures::MASK)
+        }
+        // The sheet's own line over the networks: withheld with its figure
+        // while the currency is on its way, its line kept.
+        Some(usd) => money.sentence(&s.detail_total, "amount", usd, locale),
+        // Nothing read and nothing kept — the core hands no figure while
+        // `unreachable` (PR 2 polish), where it used to hand a zero this
+        // line printed as "$0.00": the dash, which is no amount, and not
+        // the privacy mask, which hides one.
+        None => crate::wallet::fill(&s.detail_total, "amount", "—"),
+    };
 
     let unpriced = view
         .unpriced_tokens
@@ -495,13 +762,15 @@ pub fn network_balances(
     sums.into_iter()
         // Half a cent is the smallest figure a person reads as money.
         .filter(|(_, usd)| *usd >= 0.005)
-        .map(|(chain_id, usd)| {
+        .filter_map(|(chain_id, usd)| {
             let figure = if view.hidden {
                 crate::wallet::fixtures::MASK.to_owned()
             } else {
-                money.text(usd, locale)
+                // No figure at all while the display currency is not
+                // committed — as for a network whose balance is not known.
+                money.figure(usd, locale)?
             };
-            (chain_id, SharedString::from(figure))
+            Some((chain_id, SharedString::from(figure)))
         })
         .collect()
 }
@@ -514,7 +783,9 @@ pub fn network_balances(
 /// keeps a locale whose group separator is `.` from being cut in half.
 fn split_fiat(usd: f64, locale: &str, money: &Money) -> (SharedString, Option<SharedString>) {
     split_at_mark(
-        &money.text(usd, locale),
+        // The hero asks only once the currency is committed (it waits on its
+        // skeleton before that); a withheld figure splits to nothing.
+        &money.alone(usd, locale),
         crate::executor::format_prefs::current()
             .number
             .separators()
@@ -615,7 +886,7 @@ mod tests {
         let figures = network_balances(&shown, "en", money);
         assert_eq!(
             figures.get(&1),
-            Some(&SharedString::from(money.text(7.5, "en")))
+            Some(&SharedString::from(money.alone(7.5, "en")))
         );
         for chain_id in [100, 8453, 10, 42161, 137] {
             assert!(
@@ -685,6 +956,7 @@ mod tests {
                 rate_limited_chain_ids: Vec::new(),
                 read_chain_ids: vec![1, 56],
                 internal_chain_ids: internal.clone(),
+                registry_chain_ids: Vec::new(),
                 now_ms: 1.0,
             }
         };
@@ -767,7 +1039,9 @@ mod tests {
     }
 
     fn set_unreachable(view: &mut BalanceView, chain_ids: &[u32]) {
-        use vela_core::app::balance_dashboard::{LastKnown, NOT_READ_YET, UnreachableNetwork};
+        use vela_core::app::balance_dashboard::{
+            LastKnown, NOT_READ_YET, STATUS_RPC_UNAVAILABLE, UnreachableCause, UnreachableNetwork,
+        };
         view.unreachable_networks = chain_ids
             .iter()
             .map(|&chain_id| UnreachableNetwork {
@@ -775,6 +1049,9 @@ mod tests {
                 last_known: LastKnown::NotRead,
                 last_seen_usd: None,
                 line_key: NOT_READ_YET.to_owned(),
+                cause: UnreachableCause::Network,
+                status_key: STATUS_RPC_UNAVAILABLE.to_owned(),
+                rpc_fixable: true,
             })
             .collect();
         view.unreachable_key = match chain_ids.len() {
@@ -864,10 +1141,27 @@ mod tests {
             address: "0xme".to_owned(),
         });
         FeedView {
+            home_rows: home_cut(&rows),
             rows,
             transactions,
             ..host.view()
         }
+    }
+
+    /// The core's home cut over hand-built rows: everything up to and
+    /// including the third item, headers included (the core's `view()`).
+    fn home_cut(rows: &[FeedRow]) -> Vec<FeedRow> {
+        let mut items = 0;
+        let mut end = 0;
+        for (i, row) in rows.iter().enumerate() {
+            if matches!(row, FeedRow::Item { .. }) {
+                items += 1;
+                if items <= vela_core::app::activity_feed::HOME_ACTIVITY_ITEMS {
+                    end = i + 1;
+                }
+            }
+        }
+        rows[..end].to_vec()
     }
 
     /// A celebration, produced the way the machine produces one: a first pass
@@ -906,6 +1200,9 @@ mod tests {
             call_data: None,
             summary: None,
             settlement: None,
+            // As the scan stores a receipt it found (PR 3): its time is its
+            // block's, so the core has nothing to repair here.
+            time_verified: Some(true),
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -948,6 +1245,18 @@ mod tests {
                         FeedShellResult::DeleteCommitted { id: id.clone() }
                     }
                     FeedOperation::Haptic => FeedShellResult::HapticPlayed,
+                    // PR 3: the repair of a receipt's time has no chain to
+                    // ask here — "not read", and nothing is rewritten.
+                    FeedOperation::ReadReceiveTime { id, .. } => FeedShellResult::ReceiveTimeRead {
+                        id: id.clone(),
+                        timestamp_sec: None,
+                    },
+                    FeedOperation::WriteReceiveTime { id, .. } => {
+                        FeedShellResult::ReceiveTimeWritten {
+                            id: id.clone(),
+                            ok: false,
+                        }
+                    }
                 };
                 pending.extend(host.resolve(next.id, result));
             }
@@ -1098,7 +1407,56 @@ mod tests {
             call_data: None,
             summary: None,
             settlement: None,
+            time_verified: None,
         }
+    }
+
+    /// Issue 469: the home's Activity is the core's cut — the newest three —
+    /// and History is every row. Through the REAL feed core, five records on
+    /// two days: the home draws three rows, they are History's first three in
+    /// the same order (so drawn row N opens record N on either surface), and
+    /// only the days that head a drawn row are named.
+    #[test]
+    fn the_home_draws_the_newest_three_and_history_every_row() {
+        use vela_core::app::activity_feed::FeedTxStatus;
+        let s = strings();
+        let flow = flow_strings();
+        let records: Vec<_> = (0..5u32)
+            .map(|i| {
+                let mut record = dapp_record(&format!("dapp-{i}-tx"), FeedTxStatus::Confirmed);
+                // Newest first; the last two fall on the day before.
+                record.timestamp = 1_756_000_000.0 - f64::from(i) * 30_000.0;
+                record
+            })
+            .collect();
+        let view = feed_of(records);
+
+        let history: Vec<String> = crate::flows::live::history_ids(&view);
+        assert_eq!(history.len(), 5, "History keeps every row");
+        let all: usize = crate::flows::live::history(&view, &flow, &s, false)
+            .iter()
+            .map(|group| group.rows.len())
+            .sum();
+        assert_eq!(all, 5, "…and draws every one");
+
+        let home = activity_rows(&view, &s, &flow, false);
+        assert_eq!(
+            home.len(),
+            vela_core::app::activity_feed::HOME_ACTIVITY_ITEMS,
+            "the home draws the core's cut"
+        );
+        let home_ids = history_item_ids(&view);
+        assert_eq!(home_ids.len(), home.len(), "an id behind every drawn row");
+        assert_eq!(home_ids[..], history[..3], "the newest three, in order");
+        assert!(home[0].day.is_some(), "the first row carries its day");
+        // No header rides alone: every day named on the home heads a row.
+        let days = home.iter().filter(|row| row.day.is_some()).count();
+        let headers = view
+            .home_rows
+            .iter()
+            .filter(|row| matches!(row, FeedRow::Header { .. }))
+            .count();
+        assert_eq!(days, headers);
     }
 
     /// Spec 082 L-D3 (T072, RG1–RG2), spec 093: a dApp's transaction is in
@@ -1762,12 +2120,235 @@ mod tests {
     }
 
     /// A real zero is a different fact from an unknown one, and gets its own
-    /// state — the mocks draw them differently on purpose.
+    /// state — the mocks draw them differently on purpose. "Real" is the
+    /// core's word (`live_key`): a round settled with every chain answering.
     #[test]
     fn a_real_zero_is_not_the_same_as_unknown() {
-        let model = balance(&view(Some(0.0)), &strings(), "en", &Money::default());
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        let model = balance(
+            &first_read_view(FirstRead::Live),
+            &strings(),
+            "en",
+            &Money::default(),
+        );
         assert_eq!(model.state, BalanceState::ZeroLive);
         assert_eq!(model.integer, SharedString::from("$0"));
+    }
+
+    /// PR 3 final note F19. A wallet that held nothing last session opens on
+    /// a cached zero. The hero drew "Live · listening for payments" over it
+    /// before anything had been read — this shell's own rule (a zero total,
+    /// nothing partial, no tokens) — and swapped it for "Can't reach 24
+    /// networks" when the round came back. Now the three lines are the
+    /// core's: "Checking…" until the first round ends, then "Live" only if
+    /// every chain answered, else "Can't reach".
+    #[test]
+    fn a_cached_zero_says_checking_then_what_the_round_found() {
+        use crate::wallet::components::SlotLine;
+        use crate::wallet::fixtures::{FirstRead, StatusKind, first_read_view};
+        let s = strings();
+        let hero = |stage| balance(&first_read_view(stage), &s, "en", &Money::default());
+
+        // Before the first settle: the cached zero, and "Checking…".
+        let checking = hero(FirstRead::Checking);
+        assert_eq!(checking.state, BalanceState::Normal, "not a live zero");
+        assert_eq!(checking.integer, SharedString::from("$0"));
+        assert_eq!(checking.live, None, "nothing has read this wallet yet");
+        assert_eq!(checking.checking, Some(s.balance_checking.clone()));
+        assert_eq!(
+            SlotLine::of(&checking),
+            SlotLine::Checking(s.balance_checking.clone())
+        );
+
+        // Settled, every chain answering: live.
+        let live = hero(FirstRead::Live);
+        assert_eq!(live.state, BalanceState::ZeroLive);
+        assert_eq!(live.checking, None);
+        assert_eq!(
+            SlotLine::of(&live),
+            SlotLine::Listening(s.live_indicator.clone())
+        );
+
+        // Settled with two chains missing: a zero nobody can vouch for.
+        let cant_reach = hero(FirstRead::CantReach);
+        assert_eq!(cant_reach.state, BalanceState::Normal);
+        assert_eq!(
+            (cant_reach.checking.clone(), cant_reach.live.clone()),
+            (None, None)
+        );
+        let line = crate::wallet::fill(&s.unreachable_many, "n", "2");
+        assert_eq!(
+            SlotLine::of(&cant_reach),
+            SlotLine::Status(StatusKind::Warning, SharedString::from(line))
+        );
+
+        // The same figure in all three: what changes is the one line.
+        for model in [&checking, &live, &cant_reach] {
+            assert_eq!(
+                (model.integer.as_ref(), model.decimals.as_deref()),
+                ("$0", Some("00"))
+            );
+        }
+        // And the words are the corpus's, by the core's keys.
+        let en = WalletStrings::resolve(&crate::loc::Loc::for_tag("en"));
+        assert_eq!(en.balance_checking.as_ref(), "Checking…");
+        assert_eq!(en.live_indicator.as_ref(), "Live · listening for payments");
+        let zh = WalletStrings::resolve(&crate::loc::Loc::for_tag("zh"));
+        assert_eq!(zh.balance_checking.as_ref(), "正在检查…");
+    }
+
+    /// F19, the rule itself: "zero, live" is `live_key` and NOTHING else. A
+    /// view that looks like a live zero by every figure on it — total 0,
+    /// known, nothing partial, no tokens — is not one until the core says
+    /// so; and the core's word is enough.
+    #[test]
+    fn zero_live_is_the_cores_key_and_nothing_else() {
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        let s = strings();
+        let mut looks_live = first_read_view(FirstRead::Checking);
+        looks_live.checking_key = None;
+        assert!(
+            looks_live.display_total_usd == Some(0.0)
+                && !looks_live.balance_unknown
+                && !looks_live.balance_partial
+                && looks_live.tokens.is_empty(),
+            "the old rule would have called this live"
+        );
+        let model = balance(&looks_live, &s, "en", &Money::default());
+        assert_eq!((model.state, model.live), (BalanceState::Normal, None));
+
+        looks_live.live_key = Some(vela_core::app::balance_dashboard::LIVE_ZERO.to_owned());
+        let model = balance(&looks_live, &s, "en", &Money::default());
+        assert_eq!(model.state, BalanceState::ZeroLive);
+        assert_eq!(model.live, Some(s.live_indicator.clone()));
+    }
+
+    /// F19: the first read says "Checking…" whatever figure the hero is
+    /// drawing — the skeleton of a wallet with no cache, a cached figure —
+    /// and stops saying it when the round ends. A later refresh is
+    /// not "checking": the core keeps the key `None`, and so does the hero.
+    #[test]
+    fn checking_is_said_from_the_first_frame_and_only_for_the_first_read() {
+        use crate::wallet::components::SlotLine;
+        let s = strings();
+        let checking = SlotLine::Checking(s.balance_checking.clone());
+
+        // No cache: a skeleton, and the line under it.
+        let fresh = view(None);
+        assert!(fresh.checking_key.is_some(), "the core's first frame");
+        let model = balance(&fresh, &s, "en", &Money::default());
+        assert_eq!(model.state, BalanceState::Loading);
+        assert_eq!(SlotLine::of(&model), checking);
+
+        // A cached figure: the figure, and the same line — not "still
+        // updating", which is a round's finding and no round has ended.
+        let mut cached = view(None);
+        cached.cached_total_usd = Some(42.5);
+        let model = balance(&cached, &s, "en", &Money::default());
+        assert_eq!(model.integer, SharedString::from("$42"));
+        assert_eq!(SlotLine::of(&model), checking);
+
+        // Hidden: the mask and no line at all, as on the web — the slot
+        // stays, empty.
+        let mut hidden = view(None);
+        hidden.hidden = true;
+        let model = balance(&hidden, &s, "en", &Money::default());
+        assert_eq!(model.state, BalanceState::Hidden);
+        assert_eq!(SlotLine::of(&model), SlotLine::Empty);
+
+        // The display currency not committed: the figure waits, the line
+        // does not.
+        let waiting = Money::of(&vela_core::app::display_currency::CurrencyView {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+            committed: false,
+            pending: Some("CNY".to_owned()),
+        });
+        let zero =
+            crate::wallet::fixtures::first_read_view(crate::wallet::fixtures::FirstRead::Checking);
+        let model = balance(&zero, &s, "en", &waiting);
+        assert_eq!(model.state, BalanceState::Loading);
+        assert_eq!(SlotLine::of(&model), checking);
+        // …and the live zero's line is there before its figure too.
+        let live =
+            crate::wallet::fixtures::first_read_view(crate::wallet::fixtures::FirstRead::Live);
+        let model = balance(&live, &s, "en", &waiting);
+        assert_eq!(
+            SlotLine::of(&model),
+            SlotLine::Listening(s.live_indicator.clone())
+        );
+
+        // The round ended: no "checking", whatever it found.
+        let settled = settle("0x0000000000000000000000000000000000000000");
+        assert_eq!(settled.checking_key, None);
+        assert_eq!(
+            balance(&settled, &s, "en", &Money::default()).checking,
+            None
+        );
+    }
+
+    /// PR 3 device round, item 2. A wallet that held nothing last session
+    /// opens with a cached total of 0, and this shell took "no tokens, a
+    /// known total" for an empty wallet: "Deposit your first asset" under
+    /// "Checking…". The empty state is the core's word
+    /// (`BalanceView.empty_key`) and nothing else.
+    #[test]
+    fn a_first_deposit_is_invited_only_after_a_read_found_nothing() {
+        use crate::wallet::components::SlotLine;
+        use crate::wallet::fixtures::{FirstRead, first_read_view};
+        use vela_core::app::balance_dashboard::ASSETS_EMPTY;
+        let s = strings();
+
+        // The cached zero, the first round still out.
+        let checking = first_read_view(FirstRead::Checking);
+        assert!(
+            checking.tokens.is_empty()
+                && checking.display_total_usd == Some(0.0)
+                && !checking.holdings_loading
+                && !checking.balance_unknown
+                && !checking.unreachable,
+            "every flag the old rule read says 'settled, and empty'"
+        );
+        assert_eq!(
+            SlotLine::of(&balance(&checking, &s, "en", &Money::default())),
+            SlotLine::Checking(s.balance_checking.clone())
+        );
+        assert_eq!(checking.empty_key, None);
+        assert!(
+            !assets_strip_empty(&checking, None),
+            "no 'Deposit your first asset' under 'Checking…'"
+        );
+
+        // The round settled and found nothing: now it is an empty wallet.
+        let live = first_read_view(FirstRead::Live);
+        assert_eq!(live.empty_key.as_deref(), Some(ASSETS_EMPTY));
+        // The title the strip draws is that key's line (in English here,
+        // whatever language another test has pinned).
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(
+            WalletStrings::resolve(&en).empty_assets_title.as_ref(),
+            en.t(ASSETS_EMPTY).as_ref()
+        );
+        assert_eq!(en.t(ASSETS_EMPTY).as_ref(), "Deposit your first asset");
+        assert!(assets_strip_empty(&live, None));
+
+        // The key and nothing else: the same settled view without it (what an
+        // older core's JSON reads as) is not an empty wallet…
+        let mut older = live.clone();
+        older.empty_key = None;
+        assert!(!assets_strip_empty(&older, None));
+        // …and the flags cannot make one.
+        let mut flags = checking.clone();
+        flags.checking_key = None;
+        assert!(!assets_strip_empty(&flags, None));
+
+        // The sidebar's own case stands: a chain that holds nothing while
+        // another does is said, not left blank.
+        let held = crate::wallet::fixtures::held_view();
+        assert_eq!(held.empty_key, None);
+        assert!(!assets_strip_empty(&held, None));
+        assert!(!assets_strip_empty(&held, Some(100)));
+        assert!(assets_strip_empty(&held, Some(56)));
     }
 
     /// The last-known total paints first — with the refreshing line, so it
@@ -1971,6 +2552,203 @@ mod tests {
         assert!(none.summary.is_none() && none.rows.is_empty());
     }
 
+    /// PR 3 note 4, on every surface that draws the unreachable networks
+    /// (the gallery's DSR8 is this state): Tempo's node answers and its token
+    /// list could not be loaded. The hero's line, the list's title and the
+    /// Settings banner say the token list — never "Can't reach Tempo"; the
+    /// list's row and the banner's chip offer no "Fix"; the breakdown does
+    /// not say "RPC unavailable"; and a problem report does not name it as
+    /// an RPC that is failing.
+    #[test]
+    fn a_token_list_that_cant_be_loaded_is_never_an_rpc_to_fix() {
+        use vela_core::app::balance_dashboard::STATUS_RPC_UNAVAILABLE;
+        crate::executor::storage::tests::with_temp_state("token-list-unreachable", || {
+            let loc = crate::loc::Loc::for_language("en");
+            let s = WalletStrings::resolve(&loc);
+            let money = Money::usd();
+            let tempo = crate::wallet::fixtures::token_list_view();
+
+            let line = unreachable_line(&tempo, &s).unwrap_or_else(|| unreachable!("a line"));
+            assert_eq!(line.as_ref(), "Can't load Tempo's token list right now");
+            let hero = balance(&tempo, &s, "en", money);
+            assert_eq!(hero.status.map(|(_, line)| line), Some(line.clone()));
+            assert_eq!(hero.integer.as_ref(), "$4,500", "the total stands");
+
+            let list = unreachable_list(&tempo, &s, "en", money);
+            assert_eq!(list.title, line);
+            let rows: Vec<(&str, bool)> = list
+                .rows
+                .iter()
+                .map(|row| (row.name.as_ref(), row.rpc_fixable))
+                .collect();
+            assert_eq!(rows, vec![("Tempo", false)], "one row, no Fix");
+
+            let chips = unreachable_chips(&tempo);
+            assert_eq!(chips.len(), 1);
+            assert_eq!(chips[0].name, "Tempo");
+            assert!(
+                !chips[0].rpc_fixable,
+                "the chip names it and offers nothing"
+            );
+
+            let detail = balance_detail(&tempo, &s, "en", money);
+            let status = detail.pending[0]
+                .status
+                .clone()
+                .unwrap_or_else(|| unreachable!("a status"));
+            // The breakdown's short status is the core's key for the row
+            // (PR 3 final note F21) — not the hero's sentence borrowed, and
+            // not "RPC unavailable", which is false here.
+            assert_eq!(status.0.as_ref(), "Token list unavailable");
+            assert_eq!(status.0, loc.t(&tempo.unreachable_networks[0].status_key));
+            assert_ne!(status.0, line, "the hero's sentence stays the hero's");
+            assert_ne!(
+                status.0,
+                s.detail_status(STATUS_RPC_UNAVAILABLE),
+                "its RPC is not unavailable"
+            );
+            assert!(status.1, "drawn as the failure it is");
+            assert!(detail.pending[0].retry, "it can still be read again");
+
+            assert!(
+                rpc_failing_names(&tempo).is_empty(),
+                "no RPC is failing: a report must not say one is"
+            );
+
+            // A network that is really out of reach keeps all of it.
+            let mut down = view(Some(10.0));
+            set_unreachable(&mut down, &[137]);
+            assert!(unreachable_list(&down, &s, "en", money).rows[0].rpc_fixable);
+            assert!(unreachable_chips(&down)[0].rpc_fixable);
+            assert_eq!(rpc_failing_names(&down), vec!["Polygon".to_owned()]);
+            let detail = balance_detail(&down, &s, "en", money);
+            let status = detail.pending[0].status.as_ref().map(|(text, _)| text);
+            assert_eq!(status, Some(&s.detail_status(STATUS_RPC_UNAVAILABLE)));
+            assert_eq!(status.map(AsRef::as_ref), Some("RPC unavailable"));
+            // A key this build does not know says nothing false.
+            assert_eq!(s.detail_status("home.someLaterStatus").as_ref(), "");
+        });
+    }
+
+    /// PR 3 final note F16: the hero's status line is ONE line and may end
+    /// in an ellipsis, so whatever it opens says the whole sentence at its
+    /// top. The unreachable list does as its title; the breakdown as its
+    /// lead — for every line that opens it, except the one the sheet already
+    /// says in full as a section's heading.
+    #[test]
+    fn what_the_heros_line_opens_says_the_sentence_in_full() {
+        use crate::wallet::fixtures::{
+            FirstRead, breakdown_view, first_read_view, held_view, internal_view, token_list_view,
+            unreachable_view,
+        };
+        let s = WalletStrings::resolve(&crate::loc::Loc::for_language("en"));
+        let money = &Money::default();
+        let hero_line =
+            |view: &BalanceView| balance(view, &s, "en", money).status.map(|(_, line)| line);
+
+        // A read that failed inside Vela: 72 characters in English, 82 in
+        // Russian — the line that is cut first. It opens the breakdown
+        // (no network is unreachable), which now says it.
+        let internal = internal_view();
+        assert!(
+            internal.unreachable_networks.is_empty(),
+            "opens the breakdown"
+        );
+        let line = hero_line(&internal).unwrap_or_else(|| unreachable!("a line"));
+        assert_eq!(line, s.balance_internal);
+        assert_eq!(breakdown_lead(&internal, &s, "en", money), Some(line));
+
+        // A network out of reach opens the LIST, whose title is the line.
+        for view in [unreachable_view(), token_list_view()] {
+            let line = hero_line(&view).unwrap_or_else(|| unreachable!("a line"));
+            assert!(!view.unreachable_networks.is_empty(), "opens the list");
+            assert_eq!(unreachable_list(&view, &s, "en", money).title, line);
+        }
+        // …also where the sentence names a network nobody shortened.
+        let named = crate::wallet::fill(
+            &s.token_list_unreachable,
+            "name",
+            crate::wallet::fixtures::LONG_NETWORK_NAME,
+        );
+        assert!(
+            named.chars().count() > 90,
+            "longer than any column: {named}"
+        );
+
+        // "Some tokens couldn't be priced" opens the breakdown, which heads
+        // its own section with that sentence: not said twice.
+        let mut unpriced = breakdown_view();
+        unpriced.notice = Some(BalanceNotice::Unpriced);
+        assert_eq!(hero_line(&unpriced), Some(s.balance_unpriced.clone()));
+        assert_eq!(breakdown_lead(&unpriced, &s, "en", money), None);
+        assert!(
+            !balance_detail(&unpriced, &s, "en", money)
+                .unpriced
+                .is_empty()
+        );
+
+        // Nothing to say on the hero, nothing to lead with — and "Checking…"
+        // and "Live" are not lines that open anything.
+        assert_eq!(breakdown_lead(&held_view(), &s, "en", money), None);
+        for stage in [FirstRead::Checking, FirstRead::Live] {
+            assert_eq!(
+                breakdown_lead(&first_read_view(stage), &s, "en", money),
+                None
+            );
+        }
+    }
+
+    /// PR 3 final note F21: each unreachable row of the breakdown draws
+    /// `t(row.status_key)` — the core's key for THAT row — and a
+    /// rate-limited one keeps "retrying automatically". The three stand side
+    /// by side on the gallery's `VELA_BREAKDOWN=statuses` board.
+    #[test]
+    fn the_breakdown_draws_each_rows_own_status_key() {
+        let loc = crate::loc::Loc::for_language("en");
+        let s = WalletStrings::resolve(&loc);
+        let view = crate::wallet::fixtures::breakdown_statuses_view();
+        let detail = balance_detail(&view, &s, "en", &Money::default());
+        let rows: Vec<(String, String, bool, bool)> = detail
+            .pending
+            .iter()
+            .map(|row| {
+                let (status, failed) = row.status.clone().unwrap_or_default();
+                (row.name.to_string(), status.to_string(), failed, row.retry)
+            })
+            .collect();
+        let row = |name: &str, status: &str, failed: bool| {
+            (name.to_owned(), status.to_owned(), failed, failed)
+        };
+        assert_eq!(
+            rows,
+            vec![
+                row("Polygon", "Rate-limited · retrying automatically", false),
+                row("BNB Chain", "RPC unavailable", true),
+                row("Tempo", "Token list unavailable", true),
+            ]
+        );
+        // Each is the corpus's sentence for the key on its own row.
+        for network in &view.unreachable_networks {
+            let drawn = detail
+                .pending
+                .iter()
+                .find(|row| row.chain_id == network.chain_id)
+                .and_then(|row| row.status.clone())
+                .map(|(status, _)| status);
+            assert_eq!(drawn, Some(loc.t(&network.status_key)));
+        }
+        // And in the reader's language.
+        let zh = WalletStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        let detail = balance_detail(&view, &zh, "zh", &Money::default());
+        assert_eq!(
+            detail.pending[2]
+                .status
+                .as_ref()
+                .map(|(text, _)| text.as_ref()),
+            Some("代币列表无法读取")
+        );
+    }
+
     /// SR3 splits the chains the way the web's does: rate-limited ones retry
     /// by themselves, unreachable ones offer Retry, and a chain in either
     /// list is not also counted as settled.
@@ -2035,23 +2813,23 @@ mod tests {
     #[test]
     fn an_unpriceable_currency_is_drawn_in_dollars() {
         let priced = Money::new("EUR", Some(0.92));
-        let text = priced.text(1000.0, "en-US");
+        let text = priced.alone(1000.0, "en-US");
         assert!(text.contains("920"), "converted: {text}");
         assert!(!text.contains('$'), "and wearing its own symbol: {text}");
 
         let unpriced = Money::new("EUR", None);
-        let text = unpriced.text(1000.0, "en-US");
+        let text = unpriced.alone(1000.0, "en-US");
         assert!(text.contains('$'), "USD, symbol and all: {text}");
         assert!(text.contains("1,000"), "the figure is untouched: {text}");
 
         // Zero-decimal currencies keep the core's own rule about minor units.
         let yen = Money::new("JPY", Some(157.0));
-        let text = yen.text(10.0, "en-US");
+        let text = yen.alone(10.0, "en-US");
         assert!(!text.contains('.'), "a yen figure has no cents: {text}");
 
         assert_eq!(
-            Money::default().text(1.5, "en-US"),
-            Money::new("USD", Some(1.0)).text(1.5, "en-US"),
+            Money::default().alone(1.5, "en-US"),
+            Money::new("USD", Some(1.0)).alone(1.5, "en-US"),
             "the default IS dollars"
         );
     }
@@ -2214,9 +2992,12 @@ mod tests {
                 .unwrap_or_else(|| unreachable!("row 1 exists"));
             assert_eq!(mon.ticker, "MON");
             assert_eq!(mon.amount, "12 MON");
-            // Unpriced: the chain, never "$0.00 · Monad".
-            assert!(mon.sub.contains("Monad"));
-            assert!(!mon.sub.contains('$'), "an unpriced holding is not $0.00");
+            // Unpriced: said so, never "$0.00 · Monad".
+            assert_eq!(mon.sub.text(), format!("{} · Monad", s.no_price));
+            assert!(
+                !mon.sub.text().contains('$'),
+                "an unpriced holding is not $0.00"
+            );
             // An ERC-20 names its contract, and keeps it whole for the copy;
             // the price row says there is none rather than going missing
             // (the web's `liveAssetDetail`, 078 H-06).
@@ -2237,7 +3018,9 @@ mod tests {
             let xdai = asset_detail(&held, &feed, 0, &s, "en-US", &Money::default())
                 .unwrap_or_else(|| unreachable!("row 0 exists"));
             assert_eq!(xdai.ticker, "xDAI");
-            assert!(xdai.sub.starts_with("$0.76"));
+            // The worth, then the network — the order and the joint the web
+            // writes (`fiatLine`), so the four shells read the same.
+            assert_eq!(xdai.sub.text(), "$0.76 · Gnosis");
             // A native coin has no contract, and says so in words.
             assert!(
                 xdai.facts
@@ -2245,6 +3028,64 @@ mod tests {
                     .any(|(label, value)| *label == s.label_contract && *value == s.native_token)
             );
             assert_eq!(xdai.activity.len(), 1, "its own transaction");
+
+            // PR 3 final note F23, and the device round's item 4 — the worth
+            // is what arrives (it waits on the display currency), and it
+            // leads. Drawn as one text it pushed the network's name 70.5 pt
+            // to the right when it landed; round 3 put the name first, which
+            // no other shell does. Now the worth has its own cell, and while
+            // it is out the cell keeps the figure's room: no figure is
+            // drawn, and the name stands where it will stay.
+            use crate::wallet::fixtures::SubWorth;
+            let waiting = Money::of(&vela_core::app::display_currency::CurrencyView {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                committed: false,
+                pending: None,
+            });
+            let before = asset_detail(&held, &feed, 0, &s, "en-US", &waiting)
+                .unwrap_or_else(|| unreachable!("row 0 exists"));
+            assert_eq!(
+                before.sub.text(),
+                " · Gnosis",
+                "the line is there, the worth is not"
+            );
+            assert_eq!(before.sub.chain, xdai.sub.chain);
+            // The room is the cell's width while the worth is out. When the
+            // currency that commits is the placeholder's own, it is the very
+            // figure that lands: the same glyphs in the same cell, so the
+            // name's x is the same before and after.
+            let SubWorth::Waiting { room } = &before.sub.worth else {
+                unreachable!("withheld: {:?}", before.sub.worth);
+            };
+            assert_eq!(xdai.sub.worth, SubWorth::Said(room.clone()));
+            // Another currency on its way: its rate is not known, so neither
+            // is its figure — the room is still the placeholder pair's, and
+            // nothing of it is drawn.
+            let cny = Money::of(&vela_core::app::display_currency::CurrencyView {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                committed: false,
+                pending: Some("CNY".to_owned()),
+            });
+            let on_its_way = asset_detail(&held, &feed, 0, &s, "en-US", &cny)
+                .unwrap_or_else(|| unreachable!("row 0 exists"));
+            assert_eq!(on_its_way.sub, before.sub);
+            assert!(!on_its_way.sub.text().contains(['$', '¥', '0']));
+            // An unpriced holding has nothing to wait for: it says so at once.
+            let unpriced = asset_detail(&held, &feed, 1, &s, "en-US", &waiting)
+                .unwrap_or_else(|| unreachable!("row 1 exists"));
+            assert_eq!(unpriced.sub, mon.sub);
+            // Hidden says the network and no figure — and keeps no room for
+            // one: nothing of the worth, drawn or not, is on the line.
+            let mut masked = held.clone();
+            masked.hidden = true;
+            for money in [Money::default(), waiting.clone()] {
+                let hidden = asset_detail(&masked, &feed, 0, &s, "en-US", &money)
+                    .unwrap_or_else(|| unreachable!("row 0 exists"));
+                assert_eq!(hidden.sub.worth, SubWorth::Absent);
+                assert_eq!(hidden.sub.text(), "Gnosis");
+            }
             // …and the id that row opens, from the same walk.
             assert_eq!(xdai.activity_ids, vec!["a".to_owned()]);
             assert!(mon.activity_ids.is_empty());
@@ -2280,6 +3121,144 @@ mod tests {
 
             // The list moved underneath: no panel rather than the wrong one.
             assert!(asset_detail(&held, &feed, 9, &s, "en-US", &Money::default()).is_none());
+        });
+    }
+
+    /// PR 3 item 10 — nothing jumps. Before the core commits a display
+    /// currency the machine holds a USD/1 placeholder, and a home that drew
+    /// it said "$1,234" for a moment and then "¥8,876". Until the commit the
+    /// hero is its skeleton with NO figure (the label naming the person's own
+    /// choice on its way, or nothing — never "USD"), a holding's worth is its
+    /// waiting bar, and every other figure is withheld with its place kept
+    /// — never a dash, which reads as a figure that is missing. Once
+    /// committed, each figure appears once, in the right money.
+    #[test]
+    fn no_figure_is_drawn_before_the_display_currency_commits() {
+        crate::executor::storage::tests::with_temp_state("currency-pending", || {
+            use vela_core::app::balance_dashboard::BalanceToken;
+            use vela_core::app::display_currency::CurrencyView;
+            let waiting = |pending: Option<&str>| {
+                Money::of(&CurrencyView {
+                    code: "USD".to_owned(),
+                    rate: Some(1.0),
+                    committed: false,
+                    pending: pending.map(str::to_owned),
+                })
+            };
+            let s = strings();
+            let mut held = view(Some(1234.5));
+            held.tokens = vec![BalanceToken {
+                chain_id: 1,
+                symbol: "ETH".to_owned(),
+                name: "ETH".to_owned(),
+                balance: "0.5".to_owned(),
+                decimals: 18,
+                token_address: None,
+                price_usd: Some(2_469.0),
+                spam: false,
+            }];
+
+            // The stored choice is on its way: the hero waits, and names it.
+            let money = waiting(Some("CNY"));
+            assert!(!money.committed());
+            let hero = balance(&held, &s, "en-US", &money);
+            assert_eq!(
+                hero.state,
+                BalanceState::Loading,
+                "a skeleton, not a figure"
+            );
+            assert_eq!(hero.integer.as_ref(), "");
+            assert_eq!(hero.decimals, None);
+            assert_eq!(hero.currency.as_ref(), "CNY", "the person's own choice");
+            assert_eq!(hero.status, None, "a currency on its way is not a fault");
+            // First launch, nothing chosen yet: no code at all — not "USD".
+            assert_eq!(
+                balance(&held, &s, "en-US", &waiting(None))
+                    .currency
+                    .as_ref(),
+                ""
+            );
+
+            let rows = asset_rows(&held, &s, "en-US", None, &money);
+            assert!(
+                matches!(rows[0].fiat, Fiat::Pending),
+                "the row's waiting bar"
+            );
+            assert_eq!(rows[0].balance.as_ref(), "0.5", "the amount is not money");
+            assert_eq!(money.figure(1.0, "en-US"), None);
+            // Withheld, in each shape a surface asks for: never a dash, a
+            // zero or a dollar — nothing, with its place kept by what draws it.
+            assert_eq!(money.alone(1.0, "en-US"), "");
+            assert_eq!(money.approx(1.0, "en-US"), "");
+            assert_eq!(money.after("0.5 ETH", " · ≈", 1.0, "en-US"), "0.5 ETH");
+            assert_eq!(
+                money.sentence("Total {{amount}}", "amount", 1.0, "en-US"),
+                ""
+            );
+            let detail = balance_detail(&held, &s, "en-US", &money);
+            assert_eq!(detail.summary.as_ref(), "", "the total's line, kept empty");
+
+            // A hidden hero is still hidden — and still names no placeholder.
+            let mut hidden = held.clone();
+            hidden.hidden = true;
+            hidden.display_total_usd = None;
+            let masked = balance(&hidden, &s, "en-US", &waiting(None));
+            assert_eq!(masked.state, BalanceState::Hidden);
+            assert_eq!(masked.currency.as_ref(), "");
+
+            // Committed: the figure, once, in the person's money.
+            let cny = Money::of(&CurrencyView {
+                code: "CNY".to_owned(),
+                rate: Some(7.2),
+                committed: true,
+                pending: None,
+            });
+            let hero = balance(&held, &s, "en-US", &cny);
+            assert_eq!(hero.state, BalanceState::Normal);
+            assert_eq!(hero.currency.as_ref(), "CNY");
+            assert!(hero.integer.contains("8,888"), "{}", hero.integer);
+            let rows = asset_rows(&held, &s, "en-US", None, &cny);
+            assert!(
+                matches!(&rows[0].fiat, Fiat::Value(v) if v.contains("8,888.40")),
+                "the worth, in CNY"
+            );
+        });
+    }
+
+    /// PR 3 item 12: a hidden amount keeps its unit — the core's
+    /// `privacy::masked_amount`. A token's detail reads "•••• ETH" where it
+    /// read a bare "••••": what is held, never how much.
+    #[test]
+    fn a_hidden_token_detail_keeps_its_unit() {
+        crate::executor::storage::tests::with_temp_state("hidden-unit", || {
+            use vela_core::app::balance_dashboard::BalanceToken;
+            let mut held = view(Some(1234.5));
+            held.tokens = vec![BalanceToken {
+                chain_id: 1,
+                symbol: "ETH".to_owned(),
+                name: "Ether".to_owned(),
+                balance: "0.5".to_owned(),
+                decimals: 18,
+                token_address: None,
+                price_usd: Some(2_469.0),
+                spam: false,
+            }];
+            let feed = feed_with(Vec::new(), Vec::new());
+            let s = strings();
+            let shown = asset_detail(&held, &feed, 0, &s, "en-US", &Money::default())
+                .unwrap_or_else(|| unreachable!("the token is there"));
+            assert_eq!(shown.amount.as_ref(), "0.5 ETH");
+
+            held.hidden = true;
+            let hidden = asset_detail(&held, &feed, 0, &s, "en-US", &Money::default())
+                .unwrap_or_else(|| unreachable!("the token is there"));
+            assert_eq!(hidden.amount.as_ref(), "•••• ETH");
+            assert!(!hidden.amount.contains("0.5"));
+            assert!(
+                !hidden.sub.text().contains("1,234"),
+                "{}",
+                hidden.sub.text()
+            );
         });
     }
 
@@ -2414,13 +3393,15 @@ mod tests {
             set_unreachable(&mut down, &[100, 137]);
             let chips = unreachable_chips(&down);
             assert_eq!(chips.len(), 2);
-            assert_eq!(chips[0].2, "Gnosis");
-            assert_eq!(chips[1].2, "Polygon");
-            assert_eq!(chips[0].0, "G");
+            assert_eq!(chips[0].name, "Gnosis");
+            assert_eq!(chips[1].name, "Polygon");
+            assert_eq!(chips[0].letter, "G");
+            assert_eq!((chips[0].chain_id, chips[1].chain_id), (100, 137));
+            assert!(chips.iter().all(|chip| chip.rpc_fixable));
             // The tint is the settings table's, so the chip matches the network
             // row for the same chain.
             assert_eq!(
-                chips[0].1,
+                chips[0].tint,
                 crate::settings::model::chain_tint(100)
                     .unwrap_or_else(|| unreachable!("Gnosis has a tint"))
             );
@@ -2440,7 +3421,7 @@ mod tests {
             }
             let mut custom = view(Some(10.0));
             set_unreachable(&mut custom, &[7_777_777]);
-            assert_eq!(unreachable_chips(&custom)[0].2, "My testnet");
+            assert_eq!(unreachable_chips(&custom)[0].name, "My testnet");
         });
     }
 
@@ -2553,23 +3534,41 @@ mod tests {
 /// MINUS rate-limited (invariant ⑦), because a rate limit lifts on its own and
 /// a "fix your RPC" banner that nags about one is telling somebody to repair
 /// something that is not broken — and it is in the core's order (spec 092).
+///
+/// Every network the core lists is named; only one whose RPC is the problem
+/// (`rpc_fixable`) offers its editor. A network whose token list could not
+/// be loaded (PR 3 note 4) is a chip that names it and offers nothing: its
+/// endpoint is working.
 #[must_use]
-pub fn unreachable_chips(view: &BalanceView) -> Vec<(SharedString, u32, SharedString)> {
+pub fn unreachable_chips(view: &BalanceView) -> Vec<UnreachableChip> {
     view.unreachable_networks
         .iter()
-        .map(|network| &network.chain_id)
-        .map(|chain_id| {
-            let name = crate::executor::custom_tokens::network_name(*chain_id);
-            (
-                crate::settings::model::lettermark(&name),
+        .map(|network| {
+            let name = crate::executor::custom_tokens::network_name(network.chain_id);
+            UnreachableChip {
+                chain_id: network.chain_id,
+                letter: crate::settings::model::lettermark(&name),
                 // The same table the network rows and the activity badges read.
                 // A second colour map for the same chains is how one screen's
                 // Polygon stops matching another's.
-                crate::settings::model::chain_tint(u64::from(*chain_id)).unwrap_or(0x8A_8F_98),
-                SharedString::from(name),
-            )
+                tint: crate::settings::model::chain_tint(u64::from(network.chain_id))
+                    .unwrap_or(0x8A_8F_98),
+                name: SharedString::from(name),
+                rpc_fixable: network.rpc_fixable,
+            }
         })
         .collect()
+}
+
+/// One network in the Settings banner ([`unreachable_chips`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnreachableChip {
+    pub chain_id: u32,
+    pub letter: SharedString,
+    pub tint: u32,
+    pub name: SharedString,
+    /// Does the chip open its network's RPC editor? The core's word.
+    pub rpc_fixable: bool,
 }
 
 /// The home's asset strip — the person's holdings, most valuable first.
@@ -2630,9 +3629,9 @@ pub fn asset_rows(
                 } else if unpriced.contains(&key) {
                     Fiat::NoPrice(s.no_price.clone())
                 } else {
-                    Fiat::Value(SharedString::from(
-                        money.text(amount * token.price_usd.unwrap_or(0.0), locale),
-                    ))
+                    // The worth — or the row's waiting bar while the display
+                    // currency is not committed.
+                    money.fiat(amount * token.price_usd.unwrap_or(0.0), locale)
                 },
             }
         })
@@ -2687,18 +3686,26 @@ pub fn chain_rows(
     rows
 }
 
-/// Whether the home's asset strip says "nothing here" — the web's
-/// `assetsMode(..) === 'empty'`: once the core has actually looked and there
-/// is nothing held, or when the sidebar's chain holds nothing while others do
-/// — never when nothing could be read (`unreachable`).
-/// A blank strip under a pill reads as a list that failed to load; while the
-/// core is still counting it stays blank, because the hero says "counting".
+/// Whether the Assets list says "nothing here" ("Deposit your first asset",
+/// its caption and its action) — the home's strip and the Assets panel both.
+///
+/// An empty WALLET is the core's word and nothing else
+/// (`BalanceView.empty_key`): set only once the first read of the account
+/// has ended and found nothing held, with the holdings neither loading,
+/// unknown nor out of reach. This shell read "no tokens, a known total" as
+/// empty — and a wallet that held nothing last session opens with a cached
+/// total of 0, so it invited a first deposit under "Checking…", before
+/// anything had been read. With no tokens and no key the list draws what it
+/// draws while loading.
+///
+/// The one case that is this shell's own: the sidebar's chain holds nothing
+/// while others do. The core's list is not narrowed (the filter is the
+/// sidebar's), and a blank strip under a pill reads as a list that failed to
+/// load.
 #[must_use]
 pub fn assets_strip_empty(view: &BalanceView, filter: Option<u32>) -> bool {
     if view.tokens.is_empty() {
-        // Nothing read at all is not "nothing held": no "Deposit your first
-        // asset" under a hero that says the read failed.
-        return !view.holdings_loading && !view.balance_unknown && !view.unreachable;
+        return view.empty_key.is_some();
     }
     filter.is_some() && visible_token_indices(view, filter).is_empty()
 }
@@ -2754,13 +3761,15 @@ pub fn receipt_toast(view: &FeedView, s: &WalletStrings) -> Option<SharedString>
 
 /// The ids of the feed ITEMS, in the order the home preview draws them.
 ///
-/// The preview drops the core's day headers, so this is the header-free walk;
-/// `flows::live::history_ids` is the same list for the full panel, which keeps
-/// them. Both exist because the two surfaces draw different shapes of the same
-/// feed, and a row must open its own transaction on either.
+/// The home draws the core's cut (`FeedView.home_rows`, issue 469: the newest
+/// three and their day headers), and this walks the SAME rows as
+/// [`activity_rows`], so drawn row N opens record N and the glow lands on the
+/// row it names. `flows::live::history_ids` is the full list for History,
+/// which keeps every row. Both exist because the two surfaces draw different
+/// shapes of the same feed, and a row must open its own transaction on either.
 #[must_use]
 pub fn history_item_ids(view: &FeedView) -> Vec<String> {
-    view.rows
+    view.home_rows
         .iter()
         .filter_map(|row| match row {
             FeedRow::Item { item } => Some(item.id.clone()),
@@ -2799,19 +3808,21 @@ pub fn asset_detail(
         .collect();
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     let chain = crate::executor::custom_tokens::network_name(token.chain_id);
-    let figure = |value: f64| money.text(value, locale);
 
     let mut facts = vec![(s.label_name.clone(), SharedString::from(token.name.clone()))];
     // Price is always a row — "No price" when there is none (the web's
     // `liveAssetDetail`, 078 H-06): a fact that disappears reads as a panel
-    // that forgot it rather than a token nobody quotes.
+    // that forgot it rather than a token nobody quotes. While the display
+    // currency is not committed the row is there with no value in it yet:
+    // "1 ETH = $2,469" is a figure in that currency like any other.
     facts.push((
         s.label_price.clone(),
         match token.price_usd {
-            Some(price) => SharedString::from(crate::wallet::fill(
+            Some(price) => SharedString::from(money.sentence(
                 &crate::wallet::fill(&s.price_value, "symbol", &token.symbol),
                 "value",
-                &figure(price),
+                price,
+                locale,
             )),
             None => s.no_price.clone(),
         },
@@ -2839,8 +3850,10 @@ pub fn asset_detail(
         ),
         ticker: SharedString::from(token.symbol.clone()),
         badge: badge(token.chain_id),
+        // Hidden, the figure keeps its unit as the shown one does (the
+        // core's `privacy::masked_amount`): "•••• BNB".
         amount: if view.hidden {
-            SharedString::from(crate::wallet::fixtures::MASK)
+            SharedString::from(vela_core::app::privacy::masked_amount(&token.symbol))
         } else {
             SharedString::from(format!(
                 "{} {}",
@@ -2848,14 +3861,30 @@ pub fn asset_detail(
                 token.symbol
             ))
         },
-        sub: if view.hidden {
-            SharedString::from(chain.clone())
-        } else {
-            match token.price_usd {
-                Some(price) => SharedString::from(format!("{} · {chain}", figure(amount * price))),
-                // Unpriced: the chain alone, never "$0.00 · Gnosis".
-                None => SharedString::from(format!("{} · {chain}", s.no_price)),
-            }
+        // What the holding is worth, then its network — "$1,234.50 · Gnosis",
+        // as the web writes it (PR 3 device round, item 4). The worth is the
+        // part that arrives (it waits on the display currency) and it leads,
+        // so it has a cell of its own whose room is kept while it is out:
+        // the name after it is drawn where it will stay.
+        sub: crate::wallet::fixtures::AssetSub {
+            worth: if view.hidden {
+                // Hidden says the network and no figure.
+                crate::wallet::fixtures::SubWorth::Absent
+            } else {
+                match token.price_usd {
+                    Some(price) => match money.figure(amount * price, locale) {
+                        Some(worth) => {
+                            crate::wallet::fixtures::SubWorth::Said(SharedString::from(worth))
+                        }
+                        None => crate::wallet::fixtures::SubWorth::Waiting {
+                            room: SharedString::from(money.room(amount * price, locale)),
+                        },
+                    },
+                    // Unpriced: said so, never "$0.00 · Gnosis".
+                    None => crate::wallet::fixtures::SubWorth::Said(s.no_price.clone()),
+                }
+            },
+            chain: SharedString::from(chain.clone()),
         },
         facts,
         // This asset's own transactions, from the same feed the home draws.
@@ -2912,10 +3941,14 @@ pub(crate) fn badge(chain_id: u32) -> gpui::Hsla {
 
 /// The activity rows the home preview shows.
 ///
-/// `FeedView::rows` interleaves the core's day headers with the items. The
-/// home used to drop them ("the mocks draw no headings") — the web files its
-/// preview under its days (spec 038 #E3, 078 H-04), so a header now rides on
-/// the first item of its day as `day`, and row N is still feed item N.
+/// The home draws `FeedView::home_rows` — the core's cut of the feed (issue
+/// 469): the newest three items and the day headers over them, so Assets is
+/// never pushed off the page; "All" opens History, which draws every row.
+/// The cut is the core's, never taken here. The rows interleave the day
+/// headers with the items. The home used to drop them ("the mocks draw no
+/// headings") — the web files its preview under its days (spec 038 #E3, 078
+/// H-04), so a header now rides on the first item of its day as `day`, and
+/// row N is still the cut's item N ([`history_item_ids`]).
 #[must_use]
 pub fn activity_rows(
     view: &FeedView,
@@ -2925,7 +3958,7 @@ pub fn activity_rows(
 ) -> Vec<ActivityRowModel> {
     let mut rows = Vec::new();
     let mut day = None;
-    for row in &view.rows {
+    for row in &view.home_rows {
         match row {
             FeedRow::Header { day_start_ms, .. } => {
                 day = Some(crate::flows::live::day_label(*day_start_ms, flow));
@@ -3285,7 +4318,16 @@ pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> S
     // no coin has no figure (083 H2) — and nothing to mask either: "••••"
     // would say there is one (083 H2 review).
     if hidden && item.figure_maskable {
-        return SharedString::from(crate::wallet::fixtures::MASK);
+        // …and the core's other rule (`privacy::masked_amount`): the mask
+        // hides the number and KEEPS the unit — "•••• xDAI", as the row
+        // beside it reads, and as every shell draws a hidden transfer's
+        // detail. A bare "••••" here said less than its own row did. A
+        // mixed-token batch has no figure and so no unit: the mask alone.
+        return SharedString::from(if item.value.is_some() {
+            vela_core::app::privacy::masked_amount(&item.symbol)
+        } else {
+            crate::wallet::fixtures::MASK.to_owned()
+        });
     }
     let amount = amount_text(item, incoming);
     // Nothing, not a stray space where a figure would be.

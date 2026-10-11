@@ -179,6 +179,8 @@ describe('fee shapes', () => {
 		expect(blocks(model, 'rows')[0].rows.map((r) => r.label)).toEqual([
 			messages.terms.labelNetwork,
 			messages.terms.labelAddress,
+			// The record's name becomes public on Ethereum too: the sheet says it.
+			messages.terms.labelWalletName,
 			messages.terms.labelPublicKeys
 		]);
 		expect(model.tech.summary).toBeUndefined();

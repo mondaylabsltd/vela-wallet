@@ -188,8 +188,8 @@ pub const TOTAL_BALANCE: &str = "$3,262.40";
 
 /// "3 个账户 · 总计 $3,262.40" — composed here, because the order of the two
 /// clauses is a translation concern and a component must never learn one.
-pub fn accounts_summary(s: &SettingsStrings) -> SharedString {
-    let count = fill(&s.accounts_count, "count", &ACCOUNTS.len().to_string());
+pub fn accounts_summary(s: &SettingsStrings, loc: &crate::loc::Loc) -> SharedString {
+    let count = crate::settings::switcher_account_count(loc, ACCOUNTS.len());
     let total = fill(&s.accounts_total, "amount", TOTAL_BALANCE);
     SharedString::from(format!("{count}{total}"))
 }
@@ -330,6 +330,230 @@ pub fn compatibility_checks(s: &SettingsStrings, ok: bool) -> [(SharedString, bo
             ok,
         ),
     ]
+}
+
+// -- a refused network (PR 3 item 9) -----------------------------------------
+
+/// The made-up chain the refusal fixtures are about: not in any catalog, so
+/// nothing real is ever said to be unusable.
+pub const REFUSED_CHAIN_ID: u32 = 424_242;
+
+/// A checked network refused for `blocker`, shaped as the core's check ends:
+/// no P-256 verifier with every contract in place, or the verifier present
+/// and the Safe contracts not deployed yet. The reason, its line and — only
+/// for missing contracts — the Chain Setup link are the core's own constants
+/// and `chain_setup_url`, so a fixture cannot drift from what a real check
+/// says.
+#[must_use]
+pub fn refused_compat(
+    chain_id: u32,
+    blocker: vela_core::app::network_admin::NetBlocker,
+) -> vela_core::app::network_admin::NetCompatibility {
+    use vela_core::app::network_admin::{
+        MISSING_CONTRACTS_HINT, NO_P256_HINT, NetBlocker, NetCompatibility, NetContractStatus,
+        REQUIRED_CONTRACTS, chain_setup_url,
+    };
+    let missing = blocker == NetBlocker::MissingContracts;
+    NetCompatibility {
+        chain_id,
+        compatible: false,
+        multi_key_ready: false,
+        contracts: REQUIRED_CONTRACTS
+            .iter()
+            .map(|(name, address, multi_key_only)| NetContractStatus {
+                name: (*name).to_owned(),
+                address: (*address).to_owned(),
+                deployed: !(missing && name.contains("Safe")),
+                multi_key_only: *multi_key_only,
+            })
+            .collect(),
+        p256_available: Some(blocker != NetBlocker::NoP256),
+        best_rpc_url: Some("https://rpc.example-l2.org".to_owned()),
+        best_rpc_latency_ms: Some(212.0),
+        rpc_failure: None,
+        blocker: Some(blocker),
+        hint_key: Some(
+            match blocker {
+                NetBlocker::NoP256 => NO_P256_HINT,
+                NetBlocker::MissingContracts => MISSING_CONTRACTS_HINT,
+            }
+            .to_owned(),
+        ),
+        setup_url: missing.then(|| chain_setup_url(chain_id)),
+    }
+}
+
+/// Settings' add-network wizard on [`refused_compat`]: a chain chosen,
+/// checked and refused.
+#[must_use]
+pub fn refused_wizard(
+    blocker: vela_core::app::network_admin::NetBlocker,
+) -> vela_core::app::network_admin::NetWizardView {
+    use vela_core::app::network_admin::{NetChainInfo, NetRpcField, NetWizardPhase, NetWizardView};
+    NetWizardView {
+        phase: NetWizardPhase::Checked,
+        query: REFUSED_CHAIN_ID.to_string(),
+        custom_rpc: String::new(),
+        suggestions: Vec::new(),
+        chain_info: Some(NetChainInfo {
+            chain_id: REFUSED_CHAIN_ID,
+            name: "Example L2".to_owned(),
+            short_name: "exl2".to_owned(),
+            native_name: "Ether".to_owned(),
+            native_symbol: "ETH".to_owned(),
+            native_decimals: 18,
+            rpc_url: "https://rpc.example-l2.org".to_owned(),
+            rpc_urls: vec!["https://rpc.example-l2.org".to_owned()],
+            explorer_url: "https://explorer.example-l2.org".to_owned(),
+            logo_url: String::new(),
+            is_testnet: false,
+        }),
+        compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
+        error: None,
+        error_key: None,
+        // A refusal: another endpoint would not change it, so no field and
+        // no re-check (the core's `wizard_rpc_field`).
+        rpc_field: NetRpcField::None,
+        rpc_field_label_key: None,
+        can_add: false,
+    }
+}
+
+/// One way the add-network wizard stops, as `VELA_NET_STOP` and
+/// `VELA_SEND_STATE=lock-*` name it ([`stopped_wizard`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WizardStopPin {
+    /// The network is already in the list.
+    AlreadyAdded,
+    /// The chain index has no such chain.
+    NotFound,
+    /// The chain is known and lists no RPC endpoint.
+    NoRpc,
+    /// The check could not reach a verdict.
+    CheckFailed,
+    /// Checked and refused, on the path with no confirm step.
+    Refused(vela_core::app::network_admin::NetBlocker),
+}
+
+impl WizardStopPin {
+    pub const ALL: [(Self, &'static str); 6] = [
+        (Self::AlreadyAdded, "already_added"),
+        (Self::NotFound, "not_found"),
+        (Self::NoRpc, "no_rpc"),
+        (Self::CheckFailed, "check_failed"),
+        (
+            Self::Refused(vela_core::app::network_admin::NetBlocker::NoP256),
+            "no_p256",
+        ),
+        (
+            Self::Refused(vela_core::app::network_admin::NetBlocker::MissingContracts),
+            "missing_contracts",
+        ),
+    ];
+
+    /// The stop a pin's value names.
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(stop, name)| (name == want.trim()).then_some(stop))
+    }
+}
+
+/// The add-network wizard stopped for `stop`, shaped as the core leaves it:
+/// the error, the corpus key of its sentence (the core's own
+/// `wizard_error_key`) and — on the path that saves without a confirm step —
+/// the check kept beside the error (PR 3 notes 5 and 10). A real wizard
+/// cannot be made to stop each way on demand, and every stop has to be
+/// looked at and tested in its own words.
+#[must_use]
+pub fn stopped_wizard(stop: WizardStopPin) -> vela_core::app::network_admin::NetWizardView {
+    use vela_core::app::network_admin::{
+        NetBlocker, NetRpcFailureKind, NetRpcField, NetWizardErrorKind, NetWizardPhase,
+        RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED, wizard_error_key, wizard_rpc_field,
+    };
+    // The chosen chain, as a check on it would have left the wizard.
+    let mut view = refused_wizard(NetBlocker::MissingContracts);
+    let chain_id = REFUSED_CHAIN_ID;
+    let error = match stop {
+        WizardStopPin::AlreadyAdded => {
+            // Stopped before anything was resolved: Ethereum is built in.
+            view.chain_info = None;
+            view.compat = None;
+            view.query = "1".to_owned();
+            NetWizardErrorKind::AlreadyAdded { chain_id: 1 }
+        }
+        WizardStopPin::NotFound => {
+            view.chain_info = None;
+            view.compat = None;
+            NetWizardErrorKind::NotFound { chain_id }
+        }
+        WizardStopPin::NoRpc => {
+            // Resolved, and nothing to check it through.
+            if let Some(info) = view.chain_info.as_mut() {
+                info.rpc_url.clear();
+                info.rpc_urls.clear();
+            }
+            view.compat = None;
+            NetWizardErrorKind::NoRpcEndpoint
+        }
+        WizardStopPin::CheckFailed => {
+            // No endpoint answered: nothing was probed, nothing is refused.
+            view.compat = view.compat.take().map(|mut compat| {
+                compat.rpc_failure = Some(NetRpcFailureKind::AllProbesFailed);
+                compat.p256_available = None;
+                compat.contracts.clear();
+                compat.best_rpc_url = None;
+                compat.best_rpc_latency_ms = None;
+                compat.blocker = None;
+                compat.hint_key = None;
+                compat.setup_url = None;
+                compat
+            });
+            NetWizardErrorKind::CheckFailed { chain_id }
+        }
+        WizardStopPin::Refused(blocker) => {
+            view.compat = Some(refused_compat(chain_id, blocker));
+            NetWizardErrorKind::NotCompatible { chain_id }
+        }
+    };
+    view.phase = NetWizardPhase::Error;
+    view.error_key = Some(wizard_error_key(&error, view.compat.as_ref()).to_owned());
+    // The field and its label by the core's own rule, as its view has them.
+    view.rpc_field = wizard_rpc_field(view.phase, Some(&error), view.compat.as_ref());
+    view.rpc_field_label_key = match view.rpc_field {
+        NetRpcField::None => None,
+        NetRpcField::Optional => Some(RPC_FIELD_OPTIONAL.to_owned()),
+        NetRpcField::Required => Some(RPC_FIELD_REQUIRED.to_owned()),
+    };
+    view.error = Some(error);
+    view.can_add = false;
+    view
+}
+
+/// The sheet a page opens with `wallet_addEthereumChain`, on the same
+/// refused chain.
+#[must_use]
+pub fn refused_dapp_add(
+    blocker: vela_core::app::network_admin::NetBlocker,
+) -> vela_core::app::network_admin::NetDappAddView {
+    use vela_core::app::network_admin::{NetDappAddPhase, NetDappAddView};
+    NetDappAddView {
+        tab: "fixture".to_owned(),
+        id: "fixture".to_owned(),
+        origin: "https://app.example".to_owned(),
+        host: "app.example".to_owned(),
+        chain_id: REFUSED_CHAIN_ID,
+        name: "Example L2".to_owned(),
+        native_symbol: "ETH".to_owned(),
+        rpc_host: Some("rpc.example-l2.org".to_owned()),
+        explorer_host: Some("explorer.example-l2.org".to_owned()),
+        from_site: true,
+        phase: NetDappAddPhase::NotCompatible,
+        reported_chain_id: None,
+        compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
+        can_add: false,
+    }
 }
 
 // -- rpc providers ------------------------------------------------------------
@@ -762,7 +986,7 @@ pub fn banner_text(s: &SettingsStrings) -> SharedString {
 #[must_use]
 pub fn unavailable_text(s: &SettingsStrings, names: &[SharedString]) -> SharedString {
     SharedString::from(match names {
-        [one] => fill(&s.wizard_no_rpc, "name", one),
+        [one] => fill(&s.unreachable_one, "name", one),
         many => fill(&s.unreachable_many, "n", &many.len().to_string()),
     })
 }

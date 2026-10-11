@@ -46,7 +46,6 @@
       "simWillFail": "这笔交易预计会失败 — 但仍会扣除 gas。",
       "simWillFailReason": "预计会失败：{{reason}} — 但仍会扣除 gas。",
       "balanceChangesTitle": "余额变化",
-      "balanceNoAssetsMove": "没有资产离开你的钱包",
       "balanceMatchesHero": "已模拟 — 没有其他资产变动",
       "simResultLabel": "模拟结果",
       "simResultNoChange": "无资产变动",
@@ -149,10 +148,11 @@
       "labelYouPayMax": "你最多支付",
       "labelYouReceive": "你收到",
       "labelYouReceiveMin": "你最少收到",
-      "intentBackUpPublicKeys": "备份公钥",
+      "intentBackUpPublicKeys": "复制钱包记录",
       "labelNetwork": "网络",
       "labelAddress": "地址",
-      "labelPublicKeys": "公钥数量",
+      "labelPublicKeys": "包含的钥匙",
+      "labelWalletName": "钱包名称",
       "valueUnlimited": "无限额",
       "valueAll": "全部",
       "warnOrderTerms": "此订单的金额不在这里显示 — 请先在网站上核对。",
@@ -228,8 +228,8 @@
       "signerDown": "签名页没能打开，请检查网络。",
       "integrity": {
         "checking": "正在检查页面…",
-        "matches": "版本 {{version}} · 与 Vela 公布的构建清单一致 · 检查于 {{time}}",
-        "trusted": "版本 {{version}} · 已在本设备上信任 · 检查于 {{time}}",
+        "matches": "版本 {{version}} · 与 Vela 公布的构建清单一致 · 检查于 {{time}}",
+        "trusted": "版本 {{version}} · 已在本设备上信任 · 检查于 {{time}}",
         "unchecked": "未检查：这个页面已关闭检查",
         "mismatch": "版本 {{version}} 不在 Vela 公布的构建清单中，未打开。",
         "blocked": "版本 {{version}} 已在本设备上屏蔽。",
@@ -249,7 +249,8 @@
         "feeFailed": "没能算出费用——点费用重试",
         "feeRetrying": "暂时没能算出费用，正在自动重试…",
         "feeWouldFail": "按现在的方式发送会失败。",
-        "previousPending": "正在等待这个网络上的上一笔交易完成…"
+        "previousPending": "正在等待这个网络上的上一笔交易完成…",
+        "simChecking": "正在检查这笔交易的结果…"
       }
     },
     "currency": {

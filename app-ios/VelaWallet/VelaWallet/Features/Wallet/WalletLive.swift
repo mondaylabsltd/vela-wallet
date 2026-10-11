@@ -34,6 +34,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum WalletLive {
 
@@ -45,22 +46,122 @@ enum WalletLive {
     struct Display {
         let code: String
         let rate: Double
+        /// `false` while the person's currency is not known yet — the
+        /// machine has not committed one. **No money figure is drawn then**
+        /// (the core's rule on `CurrencyView.committed`): the hero, the
+        /// holdings and the switcher show their waiting treatment, and the
+        /// figure appears once, in the right money. `code` and `rate` stay
+        /// dollars while it waits, so a surface that has not learnt the rule
+        /// prints what it always did and never the stored code over
+        /// unconverted digits (¥ on a dollar figure is a wrong magnitude).
+        var settled = true
+        /// The stored choice on its way (`CurrencyView.pending`): what the
+        /// hero's label names while its figure waits.
+        var pendingCode: String? = nil
 
         static let usd = Display(code: "USD", rate: 1)
+
+        /// The person's currency is on its way; `pending` names it when it is
+        /// a stored choice.
+        static func waiting(for pending: String?) -> Display {
+            Display(code: "USD", rate: 1, settled: false, pendingCode: pending)
+        }
 
         /// The badge the hero's figure wears. Decoration, not identity — the
         /// code itself is already stated in the line above the figure, so a
         /// currency the catalog has never heard of shows the number bare rather
         /// than borrowing somebody else's `$`.
-        var glyph: String { CurrencyCatalog.entry(code)?.glyph ?? "" }
+        ///
+        /// Private to this file ON PURPOSE: nothing else may glue it to a
+        /// number — every fiat figure is written by `fiat(_:)` below.
+        fileprivate var glyph: String { CurrencyCatalog.entry(code)?.glyph ?? "" }
 
-        /// A currency without a rate, or one the person has not committed to,
-        /// degrades to USD. `rate: nil` is **not** 1: the difference is
-        /// whether the digits get relabelled.
+        // MARK: THE fiat formatter (PR 3 notes 9, 27)
+
+        /// A USD figure in the person's currency — "¥8,876.00" — or `nil`
+        /// while that currency is not known: **withheld**.
+        ///
+        /// The core's rule (`display_currency.rs`, "no fiat figure before the
+        /// currency commits"): until `CurrencyView.committed` the view is the
+        /// USD/1 placeholder, which is not the person's currency, and NO fiat
+        /// figure is drawn on any surface — `FIAT_SURFACES`: the home total,
+        /// the holdings, the account switcher, the token page (worth and
+        /// price), Assets, the balance detail sheet (and the unreachable
+        /// list's "last seen"), an activity row and its detail, Send's coin
+        /// list, the send form ("≈" under the amount, the confirm's fiat),
+        /// the signing sheet (the fee's fiat), Settings' total. The rule was
+        /// once applied to five of those and missed the rest, because each
+        /// surface multiplied by the rate itself. So this is the ONE place a
+        /// rate meets a glyph: every surface asks here and gets a figure or
+        /// `nil`, and a surface that is handed `nil` keeps the figure's room
+        /// (`withheldLine`, or the line without its fiat half) so nothing
+        /// moves when the figure lands.
+        ///
+        /// A token amount ("0.5 ETH") is not fiat and never comes through here.
+        func fiat(_ usd: Double) -> String? {
+            guard settled else { return nil }
+            return glyph + Formats.number(usd * rate, minimumFractionDigits: 2, maximumFractionDigits: 2)
+        }
+
+        /// The hero's figure in its two parts — `("¥8,876", "00")`, the
+        /// decimals subordinated — or `nil` while withheld, as `fiat(_:)`.
+        func fiatParts(_ usd: Double) -> (integer: String, decimals: String)? {
+            guard settled else { return nil }
+            let (integer, decimals) = WalletLive.split(usd * rate)
+            return (glyph + integer, decimals)
+        }
+
+        /// What a WITHHELD figure's own line draws: nothing, at the line's
+        /// height (a no-break space — an empty `Text` has no height at all,
+        /// and the rows under it would move up, then down when the figure
+        /// lands). For a figure that is a line of its own; a figure inside a
+        /// longer line is simply left off it.
+        static let withheldLine = "\u{00A0}"
+
+        /// `fiat(_:)` as a line of its own: the figure, or its empty line.
+        func fiatLine(_ usd: Double, prefix: String = "") -> String {
+            fiat(usd).map { prefix + $0 } ?? Self.withheldLine
+        }
+
+        /// A committed currency without a rate degrades to USD. `rate: nil`
+        /// is **not** 1: the difference is whether the digits get relabelled.
+        /// One not committed yet is WAITING (see `settled`), never dollars
+        /// shown as if they were the answer. No view at all is a surface with
+        /// no currency machine behind it — a drawing, a test: dollars.
         static func from(_ view: CurrencyViewWire?) -> Display {
-            guard let view, view.committed, let rate = view.rate, rate > 0, rate.isFinite
-            else { return .usd }
+            guard let view else { return .usd }
+            guard view.committed else { return .waiting(for: view.pending) }
+            guard let rate = view.rate, rate > 0, rate.isFinite else { return .usd }
             return Display(code: view.code, rate: rate)
+        }
+
+        /// The LIVE app's display. Its machine is booted with the first
+        /// screen, so a view not there yet is one on its way: waiting, never
+        /// the dollar placeholder for the frames before it answers.
+        static func live(_ view: CurrencyViewWire?) -> Display {
+            view.map(from) ?? .waiting(for: nil)
+        }
+
+        /// The display currency as the SEND MACHINE is told it — ONE rule,
+        /// for its `open` and for every change after it (PR 3 final note
+        /// F25), and the one place outside the formatter where the rate is
+        /// read: handed over as the machine's own input, never multiplied
+        /// here.
+        ///
+        /// - **committed**: the pair the hero prints in (a committed
+        ///   currency nobody could price is dollars there, and here);
+        /// - **not yet**: the code on its way when there is one, with NO
+        ///   rate. Before there is a committed pair the currency view is the
+        ///   USD/1 placeholder, which is not the person's currency; handed
+        ///   over as it was, a Send opened in a wallet's first seconds could
+        ///   be flipped to typing dollars at rate 1. `rate: nil` is the state
+        ///   the machine keeps for exactly this: the ⇄ toggle will not enter
+        ///   fiat, and sending in the token's own units is untouched.
+        static func sendContext(_ view: CurrencyViewWire?) -> (code: String, rate: Double?) {
+            guard let view else { return ("USD", nil) }
+            guard view.committed else { return (view.pending ?? view.code, nil) }
+            let display = from(view)
+            return (display.code, display.rate)
         }
     }
 
@@ -86,11 +187,14 @@ enum WalletLive {
                                networks: networks)
         copy.balance.refresh = refresh(view, loc: loc, now: now, spinning: spinning)
         copy.assetRows = assetRows(view, display: display, networks: networks)
-        copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection)
+        copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection, loc: loc)
         if let feed {
             // The feed's own flag, and the balance's while the two machines
             // catch up with one tap: a figure is never shown for a frame.
-            copy.activityGroups = activityGroups(feed, loc: loc, hidden: feed.hidden || view.hidden,
+            // The home draws the core's cut (issue #469: the newest three);
+            // "All" opens History, which draws every row.
+            copy.activityGroups = activityGroups(feed.homeRows, loc: loc,
+                                                 hidden: feed.hidden || view.hidden,
                                                  networks: networks)
             copy.activitySection = section(copy.activityGroups, read: feedRead,
                                            fallback: model.activitySection,
@@ -131,22 +235,32 @@ enum WalletLive {
     /// The assets section, kept as drawn except for its mode (087 F03).
     ///
     /// The drawn home's mode stayed `.rows` whatever the core said, so an
-    /// account holding nothing showed 资产 over a blank area. The same three
-    /// states as the web's `assetsMode` and the desktop's `assets_strip_empty`:
-    /// rows when there are rows, the skeleton while the first read is out or
-    /// the balance is unknown — "nothing here" is a claim, never made before
-    /// anybody looked — and the drawn empty state (存入您的第一笔资产) once the
-    /// core has looked and found nothing. Nothing could be read at all
-    /// (`unreachable`) is no "nothing here" either: the skeleton stays, under
-    /// the hero's reason (PR 2 integration — "Deposit your first asset" under
-    /// Vela's own error line).
-    static func assetsSection(_ view: BalanceViewWire, rows: [AssetRowModel], fallback: SectionModel) -> SectionModel {
-        SectionModel(
+    /// account holding nothing showed 资产 over a blank area. Three states:
+    /// rows when there are rows; the drawn empty state (存入您的第一笔资产)
+    /// **exactly when the core says the list is empty** (`emptyKey`: a read
+    /// of this account ended and found nothing held); the skeleton otherwise.
+    ///
+    /// "Nothing here" is a claim, and it is the core's to make. This shell
+    /// made it itself — no rows, and holdings neither loading, unknown nor
+    /// unreachable — which a wallet that held nothing last session satisfies
+    /// from its cached total of 0 before anything has been read: "Deposit
+    /// your first asset" under "Checking…", an answer the first round could
+    /// take back.
+    static func assetsSection(
+        _ view: BalanceViewWire, rows: [AssetRowModel], fallback: SectionModel, loc: Loc? = nil
+    ) -> SectionModel {
+        // The title is the core's key through the corpus; the caption is the
+        // drawn one that goes with it.
+        let empty = view.emptyKey.flatMap { key in
+            loc.map {
+                SectionEmptyModel(title: $0.t(key), caption: fallback.empty?.caption ?? $0.t("assets.emptySubtext"))
+            }
+        }
+        return SectionModel(
             title: fallback.title,
             action: fallback.action,
-            mode: !rows.isEmpty ? .rows
-                : (view.holdingsLoading || view.balanceUnknown || view.unreachable == true ? .loading : .empty),
-            empty: fallback.empty
+            mode: !rows.isEmpty ? .rows : (view.emptyKey != nil ? .empty : .loading),
+            empty: empty ?? fallback.empty
         )
     }
 
@@ -159,16 +273,29 @@ enum WalletLive {
         loc: Loc? = nil,
         networks: WalletNetworks = .builtin
     ) -> BalanceModel {
+        // Final note F19: while the first read of this account is out the
+        // line under the total says "Checking…" (the core's `checkingKey`),
+        // and nothing else — a cached figure under a first read is not
+        // "still updating" yet, and no chain has failed to answer.
+        let checking = loc.flatMap { loc in view.checkingKey.map { loc.t($0) } }
+        let kind = state(view, display: display)
         var model = BalanceModel(
             label: fallback.label,
-            currency: display.code,
-            state: state(view),
+            // Named apart from the figure: the stored choice while it is on
+            // its way ("CNY" over the waiting figure, never "USD" first), and
+            // nothing while no choice is known.
+            currency: display.settled ? display.code : (display.pendingCode ?? ""),
+            state: kind,
             integer: nil,
             decimals: nil,
-            liveText: nil,
-            status: status(view, fallback: fallback, loc: loc, networks: networks),
+            // "Live · listening for payments" is the core's to say
+            // (`liveKey`), under the zero it is about.
+            liveText: kind == .zeroLive ? loc.flatMap { loc in view.liveKey.map { loc.t($0) } } : nil,
+            status: checking == nil
+                ? status(view, fallback: fallback, loc: loc, networks: networks) : nil,
             a11yHide: fallback.a11yHide,
-            a11yShow: fallback.a11yShow
+            a11yShow: fallback.a11yShow,
+            checkingText: checking
         )
 
         // Hidden and loading both draw without a figure, so there is nothing to
@@ -178,17 +305,28 @@ enum WalletLive {
               let total = view.displayTotalUsd ?? view.cachedTotalUsd
         else { return model }
 
-        let (integer, decimals) = split(total * display.rate)
-        model.integer = display.glyph + integer
-        model.decimals = decimals
+        // `state` is `.loading` while the currency is withheld, so there is
+        // always a figure here; were there not, the hero draws none.
+        guard let parts = display.fiatParts(total) else { return model }
+        model.integer = parts.integer
+        model.decimals = parts.decimals
         return model
     }
 
     /// `nil` total is **not** zero — it is "no total can be stated", and the
-    /// drawn loading treatment is what says that. `zeroLive` is for a wallet
-    /// that genuinely holds nothing, which the core distinguishes.
-    private static func state(_ view: BalanceViewWire) -> BalanceStateKind {
+    /// drawn loading treatment is what says that.
+    ///
+    /// **"Zero, live" is `view.liveKey != nil` and nothing else** (final note
+    /// F19). The core says it only when the last round settled, every chain
+    /// it asked answered and the wallet holds nothing. This shell used to
+    /// call any total of 0 live, which a wallet that held nothing last
+    /// session satisfies from its cache before anything has been read — and
+    /// keeps satisfying after a read that threw.
+    private static func state(_ view: BalanceViewWire, display: Display = .usd) -> BalanceStateKind {
         if view.hidden { return .hidden }
+        // The currency is not known yet: no figure — not the total, and not
+        // "$0" for a wallet that holds nothing (PR 3, `CurrencyView.committed`).
+        if !display.settled { return .loading }
         if view.balanceUnknown { return .loading }
         // **Unreachable is not zero** (spec 038 finding 15): nothing could be
         // read and nothing is known — a fetch that threw, or (PR 2) a round
@@ -196,8 +334,8 @@ enum WalletLive {
         // total is 0 then; a settled-looking "$0.00" (and "Deposit your first
         // asset") under the reason was the bug. A skeleton and the reason.
         if view.unreachable == true { return .loading }
-        guard let total = view.displayTotalUsd ?? view.cachedTotalUsd else { return .loading }
-        return total == 0 ? .zeroLive : .normal
+        guard view.displayTotalUsd ?? view.cachedTotalUsd != nil else { return .loading }
+        return view.liveKey != nil ? .zeroLive : .normal
     }
 
     /// The line under the figure. A partial total says so; a figure the core
@@ -206,7 +344,7 @@ enum WalletLive {
     /// live home, which left a ⚠ › line with no words (082 X-DEADPROXY).
     private static func status(
         _ view: BalanceViewWire,
-        fallback: BalanceModel,
+        fallback: BalanceModel?,
         loc: Loc?,
         networks: WalletNetworks
     ) -> BalanceStatusModel? {
@@ -226,7 +364,7 @@ enum WalletLive {
         if let loc, let line = unreachableLine(view, loc: loc, networks: networks) {
             return BalanceStatusModel(kind: .warning, text: line)
         }
-        let text = loc?.t("home.balanceStale") ?? fallback.status?.text ?? ""
+        let text = loc?.t("home.balanceStale") ?? fallback?.status?.text ?? ""
         if view.balancePartial || !view.failedChainIds.isEmpty {
             return BalanceStatusModel(kind: .warning, text: text)
         }
@@ -239,6 +377,19 @@ enum WalletLive {
             return BalanceStatusModel(kind: .refreshing, text: text)
         }
         return nil
+    }
+
+    /// The sentence on the hero's status line, whole (final note F16): the
+    /// line itself is ONE line and may cut it, so the sheet the line opens
+    /// says it in full at its top. `nil` when the line says nothing a sheet
+    /// answers — no status, or "Checking…", which is no door.
+    static func statusSentence(
+        _ view: BalanceViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> (kind: BalanceStatusModel.Kind, text: String)? {
+        guard view.checkingKey == nil,
+              let status = status(view, fallback: nil, loc: loc, networks: networks)
+        else { return nil }
+        return (status.kind, status.text)
     }
 
     /// The hero's refresh control (issue 462): when the figure was last read —
@@ -261,23 +412,18 @@ enum WalletLive {
     /// The line over the networks the wallet cannot reach (spec 092) — the
     /// hero's status line and the title of the list it opens. The core
     /// chooses the sentence (`unreachableKey`: one network named, several
-    /// counted); this only fills it. `nil` when every network answered. A
-    /// network is named from the wallet's list, the person's own included.
+    /// counted, or — PR 3 note 4 — the one network whose TOKEN LIST could not
+    /// be loaded, which is not a network out of reach); this only fills it,
+    /// whichever key it is: `{{name}}` is the first network, `{{n}}` how many
+    /// there are. `nil` when every network answered. A network is named from
+    /// the wallet's list, the person's own included.
     static func unreachableLine(
         _ view: BalanceViewWire, loc: Loc, networks: WalletNetworks = .builtin
     ) -> String? {
-        let k = I18nKeys.SettingsUi.self
-        guard let first = view.unreachableNetworks.first else { return nil }
-        switch view.unreachableKey {
-        case k.unreachableOne?:
-            let name = networks.meta(first.chainId)?.displayName
-                ?? loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(first.chainId)])
-            return loc.t(k.unreachableOne, vars: ["name": name])
-        case k.unreachableMany?:
-            return loc.t(k.unreachableMany, vars: ["n": String(view.unreachableNetworks.count)])
-        default:
-            return nil
-        }
+        guard let first = view.unreachableNetworks.first, let key = view.unreachableKey else { return nil }
+        let name = networks.meta(first.chainId)?.displayName
+            ?? loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(first.chainId)])
+        return loc.t(key, vars: ["name": name, "n": String(view.unreachableNetworks.count)])
     }
 
     /// `1234.56` → `("1,234", "56")`. The drawing splits the figure so the
@@ -442,13 +588,13 @@ enum WalletLive {
             // that rather than showing a `$0.00` nobody should read as a value.
             return .noPrice("")
         }
-        // The person's own preset, with the currency's glyph in front of it —
-        // a system currency formatter would put both the marks and the symbol
+        // The currency is not known yet: the line waits, at its own height,
+        // rather than print dollars and then change (PR 3). Otherwise the
+        // person's own preset, with the currency's glyph in front of it — a
+        // system currency formatter would put both the marks and the symbol
         // wherever the DEVICE's locale says, which is not what they chose.
-        let value = amount * price * display.rate
-        return .value(display.glyph + Formats.number(
-            value, minimumFractionDigits: 2, maximumFractionDigits: 2
-        ))
+        guard let figure = display.fiat(amount * price) else { return .pending }
+        return .value(figure)
     }
 
     /// What the account holds on each network, in the display currency, from
@@ -457,17 +603,15 @@ enum WalletLive {
     /// failed, an unpriced or spam token, a total under half a cent, or a
     /// hidden balance shows NOTHING rather than a made-up zero.
     static func networkHoldings(_ balance: BalanceViewWire?, display: Display) -> [Int: String] {
+        // Nothing while the currency is not known yet (`fiat` withholds), as
+        // for a hidden balance.
         guard let balance, !balance.hidden else { return [:] }
         var usd: [Int: Double] = [:]
         for token in balance.tokens where !token.spam && !balance.failedChainIds.contains(token.chainId) {
             guard let price = token.priceUsd, let amount = Double(token.balance) else { continue }
             usd[token.chainId, default: 0] += amount * price
         }
-        return usd.filter { $0.value >= 0.005 }.mapValues { value in
-            display.glyph + Formats.number(
-                value * display.rate, minimumFractionDigits: 2, maximumFractionDigits: 2
-            )
-        }
+        return usd.filter { $0.value >= 0.005 }.compactMapValues { display.fiat($0) }
     }
 
     /// The same brand colours the settings list uses, and the same neutral for a
@@ -490,11 +634,15 @@ extension WalletLive {
     ///
     /// What is the shell's: the day's WORDING (今天 / 昨天 / a date), the
     /// counterparty's label, and how an amount reads.
+    ///
+    /// **Which rows is the caller's, never this helper's** (issue #469): the
+    /// home passes `feed.homeRows` (the core's newest three), History passes
+    /// `feed.rows`. A cap here would silently cut History too.
     static func activityGroups(
-        _ feed: FeedViewWire, loc: Loc, hidden: Bool, networks: WalletNetworks = .builtin
+        _ rows: [FeedRowWire], loc: Loc, hidden: Bool, networks: WalletNetworks = .builtin
     ) -> [ActivityGroupModel] {
         var groups: [(label: String, rows: [ActivityRowModel])] = []
-        for row in feed.rows {
+        for row in rows {
             switch row {
             case .header(_, let dayStartMs, let timestamp):
                 groups.append((dayLabel(dayStartMs: dayStartMs, timestamp: timestamp, loc: loc), []))
@@ -587,10 +735,7 @@ extension WalletLive {
             badgeLogoURL: Marks.chainLogoURL(item.chainId),
             itemId: item.id,
             danger: money == nil && allowance?.unlimited == true,
-            received: dapp.received.map { change in
-                [changeFigure(change, hidden: hidden), change.symbol]
-                    .filter { !$0.isEmpty }.joined(separator: " ")
-            },
+            received: dapp.received.map { changeText($0, hidden: hidden) },
             titlePlace: dappTitleParts(dapp, loc: loc)
         )
     }
@@ -652,6 +797,22 @@ extension WalletLive {
         guard change.verified, let value = change.value else { return sign }
         let digits = hidden ? WalletFixtures.mask : compactAmount(value)
         return (change.exact ? "" : "≈ ") + sign + digits
+    }
+
+    /// One of a dApp's balance changes as a line WITH its coin — "≈ +0.03
+    /// ETH", "−100 USDC" — for where the two are one text (a swap's coin
+    /// back). Hidden, the amount and its unit are the core's one spelling
+    /// (`maskedAmount(unit:)`, PR 3 notes 3/11): "≈ +•••• ETH" keeps the
+    /// direction and the coin, never the number. An unverified token keeps
+    /// its direction and never a number, as `changeFigure` says.
+    static func changeText(_ change: FeedDappChangeWire, hidden: Bool) -> String {
+        let sign = change.direction == .in ? "+" : "\u{2212}"
+        guard change.verified, let value = change.value else {
+            return [sign, change.symbol].filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        let lead = (change.exact ? "" : "≈ ") + sign
+        if hidden { return lead + maskedAmount(unit: change.symbol) }
+        return [lead + compactAmount(value), change.symbol].filter { !$0.isEmpty }.joined(separator: " ")
     }
 
     /// An allowance, split into the figure and its unit: 「无限额」 + "USDC"

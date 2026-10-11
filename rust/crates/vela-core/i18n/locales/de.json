@@ -69,7 +69,7 @@
       "pageAdd": "Selbst gehostete Signaturseite hinzufügen",
       "pageDuplicate": "Diese Seite ist bereits gespeichert.",
       "keysOn": "Schlüssel auf {{domain}}",
-      "pageSelfHosted": "Selbst gehostet · {{domain}}",
+      "pageSelfHosted": "Selbst gehostet · {{domain}}",
       "pageTrust": "Dieser Version vertrauen",
       "pageRename": "Umbenennen",
       "pageRemove": "Entfernen",

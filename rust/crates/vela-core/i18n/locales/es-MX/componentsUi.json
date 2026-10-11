@@ -63,7 +63,6 @@
       "simWillFail": "Se espera que esta transacción falle — aun así pagarías gas.",
       "simWillFailReason": "Se espera que falle: {{reason}} — aun así pagarías gas.",
       "balanceChangesTitle": "Cambios de saldo",
-      "balanceNoAssetsMove": "Ningún activo sale de tu billetera",
       "balanceUnverifiedToken": "Token no verificado",
       "balanceSelfTransfer": "A tu propia dirección · el saldo no cambia",
       "intentContractCall": "Interacción con contrato",
@@ -149,10 +148,11 @@
       "labelYouPayMax": "Pagas (máx.)",
       "labelYouReceive": "Recibes",
       "labelYouReceiveMin": "Recibes (mín.)",
-      "intentBackUpPublicKeys": "Respaldar llaves públicas",
+      "intentBackUpPublicKeys": "Copiar el registro de la billetera",
       "labelNetwork": "Red",
       "labelAddress": "Dirección",
-      "labelPublicKeys": "Llaves públicas",
+      "labelPublicKeys": "Llaves incluidas",
+      "labelWalletName": "Nombre de la billetera",
       "valueUnlimited": "Ilimitado",
       "valueAll": "Todo",
       "warnOrderTerms": "Los montos de esta orden no se muestran aquí — revísalos primero en el sitio.",
@@ -228,8 +228,8 @@
       "signerDown": "No se abrió la página de firma. Revisa tu conexión.",
       "integrity": {
         "checking": "Revisando la página…",
-        "matches": "Versión {{version}} · coincide con la lista de compilaciones publicada por Vela · revisada {{time}}",
-        "trusted": "Versión {{version}} · de confianza en este dispositivo · revisada {{time}}",
+        "matches": "Versión {{version}} · coincide con la lista de compilaciones publicada por Vela · revisada {{time}}",
+        "trusted": "Versión {{version}} · de confianza en este dispositivo · revisada {{time}}",
         "unchecked": "Sin revisar: la revisión está desactivada para esta página",
         "mismatch": "La versión {{version}} no está en la lista de compilaciones publicada por Vela. No se abrió.",
         "blocked": "La versión {{version}} está bloqueada en este dispositivo.",
@@ -249,7 +249,8 @@
         "feeFailed": "No se pudo calcular la comisión: tócala para reintentar",
         "feeRetrying": "Aún no se pudo calcular la comisión. Reintentando automáticamente…",
         "feeWouldFail": "Fallaría si se envía así.",
-        "previousPending": "Esperando a que termine tu transacción anterior en esta red…"
+        "previousPending": "Esperando a que termine tu transacción anterior en esta red…",
+        "simChecking": "Comprobando qué hace esta transacción…"
       }
     },
     "signingApprove": {

@@ -58,7 +58,7 @@
 	{:else if block.kind === 'rows'}
 		<KeyValueRows rows={block.rows} />
 	{:else if block.kind === 'warning'}
-		<WarningBanner tone={block.tone} text={block.text} />
+		<WarningBanner tone={block.tone} text={block.text} verdict={block.verdict} />
 	{:else if block.kind === 'positive'}
 		<PositiveNote text={block.text} />
 	{:else if block.kind === 'code'}
@@ -71,6 +71,7 @@
 			rows={block.rows}
 			note={block.note}
 			noteTone={block.noteTone}
+			verdict={block.verdict}
 		/>
 	{/if}
 {/each}

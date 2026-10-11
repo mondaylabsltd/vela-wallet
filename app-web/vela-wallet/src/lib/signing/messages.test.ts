@@ -4,8 +4,10 @@
  * reason key the core's `feeFailureReasonKey` can name (RJ13).
  */
 import '$lib/i18n/wasm-init.server';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+	CONFIRM_BLOCK_KEYS,
 	FEE_REASON_KEYS,
 	REFUSAL_KEYS,
 	rawResolve,
@@ -136,5 +138,47 @@ describe('the not-sent and would-fail words resolve', () => {
 		said(m.feePayWithAnotherCoin, 'componentsUi.gas.payWithAnotherCoin');
 		const wouldFail = 'componentsUi.signing.confirmBlock.feeWouldFail';
 		said(m.confirmBlock[wouldFail], wouldFail);
+	});
+});
+
+/**
+ * PR 3 — the confirm waits for the simulation's verdict. The core names one
+ * new line under the held confirm (`ConfirmBlock::SimChecking`); the sheet
+ * looks a block's key up in `confirmBlock`, and a key missing from that map
+ * is a held confirm that does not say why.
+ */
+describe('the line under a confirm that waits for the simulation (PR 3)', () => {
+	const KEY = 'componentsUi.signing.confirmBlock.simChecking';
+
+	it.each(SUPPORTED_LOCALES)('%s: it is a sentence, not its key', (locale) => {
+		const m = resolveSigningMessages(locale);
+		expect(m.confirmBlock[KEY], locale).toBe(rawResolve(locale, KEY));
+		expect(m.confirmBlock[KEY], locale).not.toBe(KEY);
+		expect(m.confirmBlock[KEY].trim(), locale).not.toBe('');
+	});
+
+	it('says what is happening, in the present tense of the could-not-check sentence', () => {
+		expect(resolveSigningMessages('en').confirmBlock[KEY]).toBe(
+			'Checking what this transaction does…'
+		);
+		expect(resolveSigningMessages('zh').confirmBlock[KEY]).toBe('正在检查这笔交易的结果…');
+		expect(resolveSigningMessages('en').warnSimUnavailable).toBe(
+			'Vela couldn’t check what this transaction does. Review it before you sign.'
+		);
+	});
+
+	it('every line the core can put under a held confirm has its words here, and no other', () => {
+		const dir = '../../rust/crates/vela-core/src/app';
+		const named = new Set<string>();
+		for (const file of readdirSync(dir).filter((name) => name.endsWith('.rs'))) {
+			const source = readFileSync(`${dir}/${file}`, 'utf8');
+			for (const [, key] of source.matchAll(
+				/"(componentsUi\.signing\.confirmBlock\.[A-Za-z]+)"/g
+			)) {
+				named.add(key);
+			}
+		}
+		expect(named.has(KEY)).toBe(true);
+		expect([...named].sort()).toEqual([...CONFIRM_BLOCK_KEYS].sort());
 	});
 });

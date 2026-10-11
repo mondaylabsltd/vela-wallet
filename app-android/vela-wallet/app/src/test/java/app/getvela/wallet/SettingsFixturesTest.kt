@@ -43,10 +43,42 @@ class SettingsFixturesTest {
         for (locale in SHIPPED_LOCALES) {
             val s = strings(locale)
             for (key in keys) {
-                val value = s.t(key)
-                assertTrue("$key did not resolve in $locale", value != key && value.isNotBlank())
+                // A plural family has no bare key: every count a language
+                // tells apart resolves, through the count.
+                val values = if (key in PLURAL_KEYS) listOf(1, 2, 5, 21).map { s.t(key, it) } else listOf(s.t(key))
+                for (value in values) {
+                    assertTrue("$key did not resolve in $locale", value != key && value.isNotBlank() && !value.startsWith(key))
+                }
             }
         }
+    }
+
+    /** PR 3 final note F15: "1 accounts · Total" — the count picks the form, in the core. */
+    @Test
+    fun `the switcher counts its accounts in the plural form the count takes`() {
+        val en = strings("en")
+        assertEquals("1 account · ", en.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1))
+        assertEquals("2 accounts · ", en.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 2))
+        val money = app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", committed = true)
+        val totals = app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(
+            balances = listOf(app.getvela.wallet.feature.wallet.core.BalanceCacheEntry("0xa1", 5.65)),
+        )
+        fun summary(accounts: Int, strings: I18nRuntime) = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(
+            List(accounts) { "Account ${it + 1}" to "0xa${it + 1}" }, 0, totals, money, strings,
+        ).summary
+        assertEquals("1 account · Total \$5.65", summary(1, en))
+        assertEquals("2 accounts · Total \$5.65", summary(2, en))
+        // Never this shell's `count == 1`: the core picks the form by the
+        // language's own rule, and a language with one form has one.
+        val es = strings("es-MX")
+        assertEquals("1 cuenta · ", es.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1))
+        assertEquals("2 cuentas · ", es.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 2))
+        assertEquals("1 个账户 · ", strings("zh").t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, 1))
+        // The gallery's sheets count the same way: three accounts, and one (ST2B).
+        val sheet = SettingsFixtures.buildState(SettingsScreenState.ST1, en).accountsSheet
+        assertTrue(sheet.summary, sheet.summary.startsWith("${sheet.rows.size} accounts · "))
+        assertEquals("1 account · Total \$1,383.28", SettingsFixtures.buildState(SettingsScreenState.ST2B, en).accountsSheet.summary)
+        assertEquals("1 个账户 · 总计 \$1,383.28", SettingsFixtures.buildState(SettingsScreenState.ST2B, strings("zh")).accountsSheet.summary)
     }
 
     /** Spec 095 (App Review 5.1.1(i)): About links the policy, the terms and support. */
@@ -70,9 +102,79 @@ class SettingsFixturesTest {
         val states = SettingsScreenState.entries
         // ST14B (spec 091) has no mock: About with the debug-mode switch revealed.
         // ST17–ST18B are spec 102's: where you review and sign, and the signing pages.
-        assertEquals(35, states.size)
-        assertEquals(28, states.count { it.name.startsWith("ST") })
-        assertEquals(7, states.count { it.name.startsWith("SR") })
+        // SK1–SK4: the Keys block with its copy-to-Ethereum row in each state.
+        // ST10D: Add network refused for no P-256 verifier (ST10C is missing contracts).
+        // ST10E–ST10J: the wizard's stops, each from the real machine's view.
+        // SR7: the unreachable list when the one network is there for its token list.
+        // SR3B / SR3C: the balance sheet with the currency on its way, and landed.
+        // ST2B: the switcher with one account. SR3D–SR3F: the balance sheet in
+        // three rounds the real machine wrote (the final round's F21, F20, F16).
+        assertEquals(53, states.size)
+        assertEquals(36, states.count { it.name.startsWith("ST") })
+        assertEquals(13, states.count { it.name.startsWith("SR") })
+        assertEquals(4, states.count { it.name.startsWith("SK") })
+    }
+
+    /**
+     * PR 3 final notes F21, F20 and F16, on the balance-by-network sheet, in
+     * three rounds the real balance machine wrote.
+     */
+    @Test
+    fun `the balance sheet says the core's short status, heads only the rows it has, and leads with the home's line`() {
+        val en = strings("en")
+        // F21 — a network down for its token list: the core's short status.
+        val tempo = SettingsFixtures.buildState(SettingsScreenState.SR3D, en).balanceDetail
+        assertEquals("Token list unavailable", tempo.pending.single().status)
+        assertEquals("Tempo", tempo.pending.single().name)
+        assertEquals("代币列表无法读取", SettingsFixtures.buildState(SettingsScreenState.SR3D, strings("zh")).balanceDetail.pending.single().status)
+
+        // F20 — nothing out of reach, one token unpriced: the "still updating"
+        // list is EMPTY (its heading and note are drawn with rows only —
+        // `WalletRescueSheetTest` holds the sheet to that), and the sheet's
+        // lead is the heading of the rows it is about, said once.
+        val unpriced = SettingsFixtures.buildState(SettingsScreenState.SR3E, en).balanceDetail
+        assertTrue(unpriced.pending.isEmpty())
+        assertEquals(listOf("Gnosis", "Ethereum"), unpriced.done.map { it.name })
+        assertEquals(listOf("ODD"), unpriced.unpriced.map { it.name })
+        assertEquals("Some tokens couldn't be priced.", unpriced.lead)
+        assertEquals(unpriced.sectionUnpriced, unpriced.lead)
+
+        // F16 — the home's line cut this sentence to one line: the sheet says all of it.
+        val fault = SettingsFixtures.buildState(SettingsScreenState.SR3F, en).balanceDetail
+        assertEquals("Something went wrong inside Vela. If it keeps happening, reopen the app.", fault.lead)
+        assertTrue("an internal fault is never listed as a network out of reach", fault.pending.isEmpty())
+        assertEquals(listOf("Gnosis"), fault.done.map { it.name })
+    }
+
+    /**
+     * SR7 (the integration's note 4): Tempo's token list did not load. One
+     * row, what was last read there, and NO "Fix" — its RPC is fine.
+     */
+    @Test
+    fun `SR7 lists the network whose token list did not load, with no Fix`() {
+        val model = SettingsFixtures.buildState(SettingsScreenState.SR7, strings("en"))
+        assertEquals(SettingsOverlay.Unreachable, model.overlay)
+        assertEquals("Can't load Tempo's token list right now", model.unreachable.title)
+        val row = model.unreachable.rows.single()
+        assertEquals("Tempo", row.name)
+        assertEquals("Last seen \$120.50", row.line)
+        assertNull(row.action)
+        assertEquals("暂时读不到 Tempo 的代币列表", SettingsFixtures.buildState(SettingsScreenState.SR7, strings("zh")).unreachable.title)
+    }
+
+    /** ST10E–ST10J: every stop is on the Add network page, saying something. */
+    @Test
+    fun `each wizard stop board says its sentence in every shipped locale`() {
+        for (locale in SHIPPED_LOCALES) {
+            val s = strings(locale)
+            for (state in SettingsScreenState.entries.filter { SettingsFixtures.wizardStop(it) != null }) {
+                val add = SettingsFixtures.buildState(state, s).addNetwork
+                val text = add.callout?.text.orEmpty()
+                assertTrue("$locale $state: a stop always says why", text.isNotBlank())
+                assertTrue("$locale $state: a sentence, not a key ($text)", !text.contains("settingsModals.") && !text.contains("addToken."))
+            }
+        }
+        assertEquals(6, SettingsScreenState.entries.count { SettingsFixtures.wizardStop(it) != null })
     }
 
     /** Spec 092: SR6 is the unreachable list, drawn through the live builder. */
@@ -150,6 +252,17 @@ class SettingsFixturesTest {
         assertEquals("调试模式", shown.title)
     }
 
+    /** F5: the gallery's Time format sheet draws the core's clock in the board's language. */
+    @Test
+    fun `ST8's twelve-hour example is the core's clock in the board's language`() {
+        fun twelve(locale: String) = SettingsFixtures.buildState(SettingsScreenState.ST8, strings(locale)).timeSheet.rows.last().label
+            .replace('\u00A0', ' ').replace("\u2060", "")
+        assertEquals("1:45 PM", twelve("en"))
+        assertEquals("下午 1:45", twelve("zh"))
+        assertEquals("午後 1:45", twelve("ja"))
+        assertEquals("13:45", SettingsFixtures.buildState(SettingsScreenState.ST8, strings("zh")).timeSheet.rows[1].label)
+    }
+
     @Test
     fun `the rescue states sit on the wallet tab, not on settings`() {
         val s = strings("zh")
@@ -168,18 +281,40 @@ class SettingsFixturesTest {
         assertNull("a custom network has no latency to show", last.badge)
     }
 
+    /**
+     * Two refusals, told apart by the signer row: ST10C has the P-256
+     * verifier and lacks contracts — Chain Setup, opened on that chain;
+     * ST10D has no verifier — nothing can be deployed, so no button, and the
+     * line says Vela wallets cannot work there.
+     */
     @Test
-    fun `ST10b passes every check and ST10c fails all but EntryPoint`() {
-        val s = strings("zh")
+    fun `ST10b passes every check, ST10c lacks contracts and ST10d has no P-256 verifier`() {
+        val s = strings("en")
         val ok = SettingsFixtures.buildState(SettingsScreenState.ST10B, s).addNetwork
         val bad = SettingsFixtures.buildState(SettingsScreenState.ST10C, s).addNetwork
+        val never = SettingsFixtures.buildState(SettingsScreenState.ST10D, s).addNetwork
         assertEquals(listOf(true, true, true, true), ok.checks.map { it.ok })
-        assertEquals(listOf(true, false, false, false), bad.checks.map { it.ok })
+        assertEquals(listOf(true, false, true, false), bad.checks.map { it.ok })
+        assertEquals(listOf(true, false, false, false), never.checks.map { it.ok })
         // The failing state offers a way forward, not a greyed-out CTA.
         assertNotNull(ok.primary)
         assertNull(bad.primary)
-        assertNotNull(bad.secondary)
-        assertNotNull(bad.recheck)
+        assertEquals("Open Chain Setup Tool", bad.secondary)
+        assertEquals("https://getvela.app/chain-setup?chain=48900", bad.secondaryUrl)
+        assertTrue(bad.callout!!.text, bad.callout!!.text.startsWith("Some contracts Vela needs aren't on this network yet."))
+        // The core's one rule for the wizard (F4 / F14 / F22), on the drawn
+        // boards too: the re-check exactly where the RPC field is — with the
+        // check that passed, and under neither refusal.
+        for (board in listOf(ok, bad, never)) assertEquals(board.customRpc != null, board.recheck != null)
+        assertNotNull(ok.recheck)
+        assertNull(bad.recheck)
+        assertNull(never.recheck)
+        // No verifier: said plainly, and nothing to open.
+        assertNull(never.primary)
+        assertNull(never.secondary)
+        assertNull(never.secondaryUrl)
+        assertTrue(never.callout!!.text, never.callout!!.text.contains("Vela wallets can't work here"))
+        assertTrue(never.callout!!.text, never.callout!!.text.contains("It would be stuck."))
     }
 
     @Test
@@ -265,6 +400,9 @@ class SettingsFixturesTest {
     }
 
     private companion object {
+        /** The settings keys that are plural families: resolved with a count, never bare. */
+        val PLURAL_KEYS = setOf(I18nKeys.SettingsUi.ACCOUNTS_COUNT)
+
         val SHIPPED_LOCALES = listOf(
             "en", "zh", "zh-TW", "zh-HK", "ja", "ko", "vi", "id",
             "tr", "es-MX", "pt-BR", "fr", "de", "ru", "it",

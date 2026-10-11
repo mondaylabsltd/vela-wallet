@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
@@ -143,11 +145,15 @@ fun OwnPageEntry(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(role = Role.Button, onClick = onOpen)
+            // The three places' row metrics (issue #475): a full control's
+            // height, and ONE line under the title.
+            .heightIn(min = VelaSizing.controlLg)
             .padding(vertical = VelaSpacing.lg)
             .semantics { contentDescription = title },
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
             Text(
                 text = title,
                 color = colors.fgBase,
@@ -160,14 +166,15 @@ fun OwnPageEntry(
                 color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.sm,
-                lineHeight = VelaLeading.normal * VelaTextSize.sm,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Icon(
             imageVector = VelaIcons.ChevronRight,
             contentDescription = null,
             tint = colors.fgSubtle,
-            modifier = Modifier.size(VelaIconSize.lg),
+            modifier = Modifier.size(VelaIconSize.sm),
         )
     }
 }

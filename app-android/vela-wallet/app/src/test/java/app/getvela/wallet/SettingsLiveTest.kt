@@ -11,6 +11,8 @@ import app.getvela.wallet.feature.settings.core.NetChainIndexEntry
 import app.getvela.wallet.feature.settings.core.NetChainInfo
 import app.getvela.wallet.feature.settings.core.NetCompatibility
 import app.getvela.wallet.feature.settings.core.NetContractStatus
+import app.getvela.wallet.feature.settings.core.NetBoards
+import app.getvela.wallet.feature.settings.core.NetRpcField
 import app.getvela.wallet.feature.settings.core.NetWizardPhase
 import app.getvela.wallet.feature.settings.core.NetWizardView
 import app.getvela.wallet.feature.settings.core.NetEndpointField
@@ -31,6 +33,7 @@ import app.getvela.wallet.feature.wallet.core.BalanceView
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -360,6 +363,9 @@ class SettingsLiveTest {
         assertEquals("Not read yet", list.rows[2].line)
         assertTrue(list.rows.all { it.action == strings.t(I18nKeys.SettingsUi.RPC_FIX) })
 
+        // A row from a core that predates `rpc_fixable` is the network's: it keeps its Fix.
+        assertTrue(app.getvela.wallet.feature.wallet.core.UnreachableNetwork(1).rpc_fixable)
+
         // Hidden: the worth is masked, the network stays.
         val hidden = SettingsLive.unreachable(
             view.copy(hidden = true, unreachable_networks = listOf(net(1, I18nKeys.SettingsUi.LAST_SEEN))),
@@ -373,6 +379,60 @@ class SettingsLiveTest {
         assertEquals(strings.t(I18nKeys.SettingsUi.UNREACHABLE_NONE), none.title)
         assertNull(none.summary)
         assertTrue(none.rows.isEmpty())
+    }
+
+    /**
+     * The integration's note 4: a network whose RPC is fine and whose TOKEN
+     * LIST could not be loaded (the core's `cause: token_list`,
+     * `rpc_fixable: false`) is on the list for what it is — the title is the
+     * core's "Can't load Tempo's token list", and its row draws NO "Fix":
+     * the RPC editor there would send a person to repair what is working.
+     * Driven by the real balance machine.
+     */
+    @Test
+    fun `a network down for its token list is said as that and offers no rpc fix`() {
+        val view = app.getvela.wallet.feature.wallet.core.BalanceBoards.tokenListUnreachable("0x" + "ab".repeat(20), 1.7e12)
+        val names = mapOf(100 to "Gnosis", 4217 to "Tempo")
+        val usd = CurrencyView("USD", 1.0, true)
+
+        val tempo = view.unreachable_networks.single()
+        assertEquals(4217, tempo.chain_id)
+        assertEquals("token_list", tempo.cause)
+        assertFalse(tempo.rpc_fixable)
+        assertEquals("assets.tokenListUnreachable", view.unreachable_key)
+
+        val list = SettingsLive.unreachable(view, usd, names, strings)
+        assertEquals("Can't load Tempo's token list right now", list.title)
+        assertEquals("Tempo", list.rows.single().name)
+        assertEquals("what was last read there stays", "Last seen ${WalletLive.Money.of(usd).fiat(120.5)}", list.rows.single().line)
+        assertNull("no RPC to fix: no Fix action", list.rows.single().action)
+
+        // The breakdown never says "RPC unavailable" over it either: its
+        // short status is the core's (`status_key`, F21) — "Token list
+        // unavailable", as short as its neighbours', where this shell had
+        // borrowed the home line's whole sentence. Reading again is still offered.
+        assertEquals("home.balanceDetailStatusTokenList", tempo.status_key)
+        val detail = SettingsLive.balanceDetail(base().balanceDetail, view, usd, names, strings)
+        val row = detail.pending.single { it.id == "4217" }
+        assertEquals("Token list unavailable", row.status)
+        assertEquals(strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY), row.action)
+        // A status this build has no words for reads as the one there was — never a dotted path.
+        val unknown = view.copy(unreachable_networks = listOf(tempo.copy(status_key = "home.balanceDetailStatusFromTheFuture")))
+        assertEquals(
+            strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
+            SettingsLive.balanceDetail(base().balanceDetail, unknown, usd, names, strings).pending.single { it.id == "4217" }.status,
+        )
+
+        // A network whose RPC did not answer keeps both.
+        val down = BalanceView(
+            unreachable_networks = listOf(app.getvela.wallet.feature.wallet.core.UnreachableNetwork(100, "not_read", null, I18nKeys.SettingsUi.NOT_READ_YET)),
+            unreachable_key = I18nKeys.Wallet.UNREACHABLE_ONE,
+        )
+        assertEquals(strings.t(I18nKeys.SettingsUi.RPC_FIX), SettingsLive.unreachable(down, usd, names, strings).rows.single().action)
+        assertEquals(
+            strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
+            SettingsLive.balanceDetail(base().balanceDetail, down, usd, names, strings).pending.single().status,
+        )
     }
 
     @Test
@@ -405,7 +465,7 @@ class SettingsLiveTest {
         assertEquals(WalletLive.Money.of(usd).fiat(2000.0), detail.done[0].amount)
         assertEquals(WalletLive.Money.of(usd).fiat(1015.0), detail.done[1].amount)
         assertEquals(
-            strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL, mapOf("amount" to WalletLive.Money.of(usd).fiat(3017.5))),
+            strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL, mapOf("amount" to WalletLive.Money.of(usd).fiat(3017.5)!!)),
             detail.summary,
         )
         assertEquals(listOf("ODD"), detail.unpriced.map { it.name })
@@ -438,6 +498,20 @@ class SettingsLiveTest {
         val model = SettingsLive.withCurrency(base(), CurrencyView("JPY", null, true))
         val row = model.sections.flatMap { it.rows }.single { it.id == "currency" }
         assertEquals("JPY · ¥", row.value)
+    }
+
+    /**
+     * While the stored choice is still being priced the core is on its USD
+     * placeholder (`committed == false`) and names the choice as `pending`:
+     * the row and the sheet say the person's own currency, never "USD" for
+     * someone who chose yen.
+     */
+    @Test
+    fun theCurrencyRowNamesTheChoiceOnItsWayNotThePlaceholder() {
+        val model = SettingsLive.withCurrency(base(), CurrencyView("USD", null, false, pending = "JPY"))
+        val row = model.sections.flatMap { it.rows }.single { it.id == "currency" }
+        assertEquals("JPY · ¥", row.value)
+        assertEquals("JPY", model.currencySheet.rows.single { it.selected }.id)
     }
 
     // -- the add-network wizard (spec 041 phase 8) ---------------------------
@@ -546,15 +620,97 @@ class SettingsLiveTest {
             chain_info = chainInfo(42220, "Celo Mainnet"),
             custom_rpc = "https://my.rpc",
             compat = compat(true),
+            // As the core sends a check that passed.
+            rpc_field = NetRpcField.Optional,
+            rpc_field_label_key = "settingsModals.addNetwork.customRpcTitle",
             can_add = true,
         )
         val field = SettingsLive.withWizard(base(), wizardView(checked), strings).addNetwork.customRpc
         assertEquals("https://my.rpc", field!!.value)
         assertEquals("custom-rpc", field.id)
 
-        // An incompatible chain is not rescued by a better RPC: no field (the web's rule).
-        val incompatible = checked.copy(compat = compat(false), can_add = false)
+        // An incompatible chain is not rescued by a better RPC: no field (the core's rule).
+        val incompatible = checked.copy(compat = compat(false), can_add = false, rpc_field = NetRpcField.None, rpc_field_label_key = null)
         assertNull(SettingsLive.withWizard(base(), wizardView(incompatible), strings).addNetwork.customRpc)
+    }
+
+    // -- the RPC field and "Re-check with this RPC": ONE rule, the core's -------
+    //
+    // PR 3 final notes F4 / F14 / F22. This shell decided both, each by its
+    // own condition: a re-check under a refusal with no RPC box for "this" to
+    // mean, and "Custom RPC (optional)" over the one thing a stop asks for.
+
+    /**
+     * Every state the wizard can rest in, as the REAL `network_admin` machine
+     * says it (`NetBoards`): the field is drawn exactly when the core's
+     * `rpc_field` is not `none`, under the core's label, and the re-check
+     * exactly when the field is — never one without the other.
+     */
+    @Test
+    fun `the rpc field and the re-check follow the core's rule in every wizard state`() {
+        val optional = "Custom RPC (optional)"
+        val required = "RPC URL"
+        val table = listOf(
+            // checked, compatible: an own endpoint may be preferred
+            NetBoards.Stop.WizardCompatible to optional,
+            // checked, unable to verify: another endpoint may answer
+            NetBoards.Stop.WizardUnverified to optional,
+            // checked, refused: another endpoint would not change it (F22)
+            NetBoards.Stop.WizardNoP256 to null,
+            NetBoards.Stop.WizardMissingContracts to null,
+            // the scan path's stops
+            NetBoards.Stop.ScanNoP256 to null,
+            NetBoards.Stop.ScanMissingContracts to null,
+            NetBoards.Stop.ScanCheckFailed to optional,
+            NetBoards.Stop.AlreadyAdded to null,
+            NetBoards.Stop.NotFound to null,
+            // the one thing asked for is not "(optional)" (F4)
+            NetBoards.Stop.NoRpcEndpoint to required,
+        )
+        assertEquals("every board is in the table", NetBoards.Stop.entries.toSet(), table.map { it.first }.toSet())
+        for ((which, label) in table) {
+            val view = stop(which)
+            val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+            assertEquals("$which: the field", label, add.customRpc?.label)
+            assertEquals("$which: the core's word", label != null, view.wizard.rpc_field != NetRpcField.None)
+            assertEquals("$which: the re-check is drawn exactly where the field is", add.customRpc != null, add.recheck != null)
+            add.recheck?.let { assertEquals("Re-check with this RPC", it) }
+        }
+        // The verdicts the wizard rests on are what they say they are.
+        assertTrue(stop(NetBoards.Stop.WizardCompatible).wizard.can_add)
+        assertEquals("no_p256", stop(NetBoards.Stop.WizardNoP256).wizard.compat?.blocker)
+        assertEquals("missing_contracts", stop(NetBoards.Stop.WizardMissingContracts).wizard.compat?.blocker)
+        assertNotNull(stop(NetBoards.Stop.WizardUnverified).wizard.compat?.rpc_failure)
+    }
+
+    /**
+     * And nothing here decides either: whatever the phase, the error and the
+     * check say, the core's `rpc_field` alone draws the field and the link.
+     */
+    @Test
+    fun `this shell decides neither the rpc field nor the re-check`() {
+        val info = chainInfo(1234, "Somewhere")
+        val compatible = NetCompatibility(chain_id = 1234, compatible = true, multi_key_ready = true)
+        // A check that passed, from a core that says "no field": none, and no re-check.
+        val none = SettingsLive.withWizard(base(), wizardView(NetWizardView(phase = NetWizardPhase.Checked, chain_info = info, compat = compatible, can_add = true)), strings).addNetwork
+        assertNull(none.customRpc)
+        assertNull(none.recheck)
+        // A refusal, from a core that says "required": the field under ITS label, and the re-check.
+        val refused = NetCompatibility(chain_id = 1234, compatible = false, blocker = "no_p256", hint_key = "settingsModals.addNetwork.noP256Hint")
+        val asked = SettingsLive.withWizard(
+            base(),
+            wizardView(NetWizardView(phase = NetWizardPhase.Checked, chain_info = info, compat = refused, rpc_field = NetRpcField.Required, rpc_field_label_key = "settingsModals.network.fieldRpcUrl")),
+            strings,
+        ).addNetwork
+        assertEquals("RPC URL", asked.customRpc?.label)
+        assertNotNull(asked.recheck)
+        // The label is the core's key, whichever it is.
+        val other = SettingsLive.withWizard(
+            base(),
+            wizardView(NetWizardView(phase = NetWizardPhase.Checked, chain_info = info, compat = compatible, rpc_field = NetRpcField.Optional, rpc_field_label_key = "settingsModals.network.fieldExplorer")),
+            strings,
+        ).addNetwork
+        assertEquals(strings.t("settingsModals.network.fieldExplorer"), other.customRpc?.label)
     }
 
     @Test
@@ -645,10 +801,16 @@ class SettingsLiveTest {
             NetWizardView(
                 phase = NetWizardPhase.Checked,
                 chain_info = chainInfo(1234, "Nowhere"),
+                // As the core sends a chain that has the verifier and lacks
+                // contracts: the reason, its line and Chain Setup on this chain.
                 compat = NetCompatibility(
                     chain_id = 1234,
                     compatible = false,
                     contracts = listOf(NetContractStatus("EntryPoint", "0xaa", deployed = false)),
+                    p256_available = true,
+                    blocker = "missing_contracts",
+                    hint_key = "settingsModals.addNetwork.incompatibleHint",
+                    setup_url = "https://getvela.app/chain-setup?chain=1234",
                 ),
                 can_add = false,
             ),
@@ -660,9 +822,166 @@ class SettingsLiveTest {
         assertEquals(false, add.checks.first { it.label == "EntryPoint" }.ok)
         assertNull("a chain whose contracts are missing cannot be added", add.primary)
         // Spec 072: it says why, offers the setup tool and a re-check.
-        assertTrue(add.callout!!.text.isNotBlank())
+        assertEquals(strings.t("settingsModals.addNetwork.incompatibleHint"), add.callout!!.text)
         assertTrue(add.secondary!!.isNotBlank())
+        assertEquals("the link is the core's, opened on this chain", "https://getvela.app/chain-setup?chain=1234", add.secondaryUrl)
+        // F22: another RPC does not deploy the contracts — no re-check, and no box.
+        assertNull(add.recheck)
+        assertNull(add.customRpc)
+    }
+
+    /**
+     * The other refusal: no P-256 verifier at 0x100. Nothing can be deployed
+     * to add one, so the line says Vela wallets cannot work on this network
+     * and that money sent there would be stuck — and there is NO Chain Setup
+     * button. It used to share the missing-contracts sentence and its button.
+     */
+    @Test
+    fun aChainWithNoP256VerifierSaysSoAndOffersNothingToDeploy() {
+        val view = wizardView(
+            NetWizardView(
+                phase = NetWizardPhase.Checked,
+                chain_info = chainInfo(1234, "Nowhere"),
+                compat = NetCompatibility(
+                    chain_id = 1234,
+                    compatible = false,
+                    contracts = listOf(NetContractStatus("EntryPoint", "0xaa", deployed = true)),
+                    p256_available = false,
+                    blocker = "no_p256",
+                    hint_key = "settingsModals.addNetwork.noP256Hint",
+                ),
+                can_add = false,
+            ),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals(SettingsTone.Error, add.candidate!!.badge!!.tone)
+        assertEquals(false, add.checks.last().ok)
+        assertNull(add.primary)
+        assertEquals(strings.t("settingsModals.addNetwork.noP256Hint"), add.callout!!.text)
+        assertTrue(add.callout!!.text, add.callout!!.text.contains("P-256"))
+        assertNull("nothing to deploy: no Chain Setup button", add.secondary)
+        assertNull(add.secondaryUrl)
+        // F22: another RPC does not give a network the verifier — no re-check, and no box.
+        assertNull(add.recheck)
+        assertNull(add.customRpc)
+    }
+
+    // -- every way the wizard stops, in the core's own sentence -----------------
+    //
+    // Each view below is the REAL `network_admin` machine's (`NetBoards`): the
+    // stop, the sentence it names (`error_key`) and the check it kept.
+
+    private fun stop(which: app.getvela.wallet.feature.settings.core.NetBoards.Stop) =
+        app.getvela.wallet.feature.settings.core.NetBoards.view(which)
+
+    /**
+     * The scan path (a chain added by id, no confirm step) on a chain that
+     * lacks Vela's contracts. The core now keeps the check beside the stop,
+     * so the reason and Chain Setup show here exactly as in the wizard — it
+     * used to say only the general line, with no button.
+     */
+    @Test
+    fun `the scan path refused for missing contracts says why and offers Chain Setup`() {
+        val view = stop(app.getvela.wallet.feature.settings.core.NetBoards.Stop.ScanMissingContracts)
+        assertEquals(NetWizardPhase.Error, view.wizard.phase)
+        assertTrue(view.wizard.error is app.getvela.wallet.feature.settings.core.NetWizardErrorKind.NotCompatible)
+        assertEquals("missing_contracts", view.wizard.compat?.blocker)
+        assertEquals("settingsModals.addNetwork.incompatibleHint", view.wizard.error_key)
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+        assertEquals("Zircuit", add.candidate!!.name)
+        assertEquals(strings.t("settingsModals.addNetwork.incompatibleHint"), add.callout!!.text)
+        assertEquals(strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL), add.secondary)
+        assertEquals("https://getvela.app/chain-setup?chain=48900", add.secondaryUrl)
+        assertNull("a stop is never a verdict's checklist", add.checksTitle)
+        assertTrue(add.checks.isEmpty())
+        assertNull(add.primary)
+        assertNull("a refusal: no re-check (F22)", add.recheck)
+        assertNull(add.customRpc)
+    }
+
+    /** The same path on a chain with no P-256 verifier: its own words, and nothing to deploy. */
+    @Test
+    fun `the scan path refused for no P-256 verifier says so and offers nothing to deploy`() {
+        val view = stop(app.getvela.wallet.feature.settings.core.NetBoards.Stop.ScanNoP256)
+        assertEquals("no_p256", view.wizard.compat?.blocker)
+        assertEquals("settingsModals.addNetwork.noP256Hint", view.wizard.error_key)
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+        assertEquals(strings.t("settingsModals.addNetwork.noP256Hint"), add.callout!!.text)
+        assertTrue(add.callout!!.text, add.callout!!.text.contains("Vela wallets can't work here"))
+        assertNull("nothing to deploy: no Chain Setup button", add.secondary)
+        assertNull(add.secondaryUrl)
+        assertNull(add.primary)
+        assertNull("a refusal: no re-check (F22)", add.recheck)
+        assertNull(add.customRpc)
+    }
+
+    /** A check that could not be completed there is "unable to verify" — no reason, no link, never a refusal. */
+    @Test
+    fun `the scan path that could not check says unable to verify, with no reason and no link`() {
+        val view = stop(app.getvela.wallet.feature.settings.core.NetBoards.Stop.ScanCheckFailed)
+        assertTrue(view.wizard.error is app.getvela.wallet.feature.settings.core.NetWizardErrorKind.CheckFailed)
+        assertEquals("settingsModals.addNetwork.unableToVerify", view.wizard.error_key)
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+        assertEquals(strings.t("settingsModals.addNetwork.unableToVerify"), add.callout!!.text)
+        assertNull(add.secondary)
+        assertNull(add.secondaryUrl)
+        assertNull(add.candidate!!.badge)
+        // A failed RPC request is what another RPC fixes: "Re-check with this
+        // RPC" has a box for "this" to mean, under the sentence that says why.
+        assertNotNull("an RPC to re-check with can be typed", add.customRpc)
+        assertEquals("another endpoint MAY answer: optional", "Custom RPC (optional)", add.customRpc!!.label)
+        assertTrue(add.calloutAsksForRpc)
         assertTrue(add.recheck!!.isNotBlank())
+        assertNull("nothing can be added from a stop", add.primary)
+    }
+
+    /**
+     * The integration's note 18: three stops had no words of their own and
+     * all read "Some contracts Vela needs aren't on this network yet" — or,
+     * with no network to show, nothing at all. Each says the core's sentence.
+     */
+    @Test
+    fun `already added, not found and no rpc endpoint each say their own sentence`() {
+        val added = SettingsLive.withWizard(base(), stop(app.getvela.wallet.feature.settings.core.NetBoards.Stop.AlreadyAdded), strings).addNetwork
+        assertEquals("This network is already added", added.callout!!.text)
+        assertNull("no network is named, so the sentence sits under the search box", added.candidate)
+        assertEquals("what was typed stays", "Ethereum", added.query)
+        assertNull("nothing to re-check", added.recheck)
+        assertNull(added.secondary)
+
+        val missing = SettingsLive.withWizard(base(), stop(app.getvela.wallet.feature.settings.core.NetBoards.Stop.NotFound), strings).addNetwork
+        assertEquals("Chain info not found", missing.callout!!.text)
+        assertNull(missing.candidate)
+        assertNull(missing.recheck)
+
+        val noRpc = SettingsLive.withWizard(base(), stop(app.getvela.wallet.feature.settings.core.NetBoards.Stop.NoRpcEndpoint), strings).addNetwork
+        assertEquals("No RPC endpoint is listed for this network. Enter one, then re-check.", noRpc.callout!!.text)
+        assertEquals("Zircuit", noRpc.candidate!!.name)
+        assertNotNull("\"Enter one\" needs the box to enter it in", noRpc.customRpc)
+        assertEquals("…and it is the one thing asked for, not \"(optional)\" (F4)", "RPC URL", noRpc.customRpc!!.label)
+        assertTrue("…and the sentence sits over that box: why, then where", noRpc.calloutAsksForRpc)
+        assertFalse(added.calloutAsksForRpc || missing.calloutAsksForRpc)
+        assertTrue("…and the re-check it promises", noRpc.recheck!!.isNotBlank())
+        assertNull(noRpc.secondary)
+        assertNull(noRpc.primary)
+    }
+
+    /** This file words no stop: whatever key the core names is the sentence drawn. */
+    @Test
+    fun `a stop draws the core's key, whichever it is`() {
+        val view = wizardView(
+            NetWizardView(
+                phase = NetWizardPhase.Error,
+                error = app.getvela.wallet.feature.settings.core.NetWizardErrorKind.AlreadyAdded(1),
+                error_key = "addToken.errorChainNotFound",
+            ),
+        )
+        assertEquals(strings.t("addToken.errorChainNotFound"), SettingsLive.withWizard(base(), view, strings).addNetwork.callout!!.text)
     }
 
     /**
@@ -677,6 +996,9 @@ class SettingsLiveTest {
                 phase = NetWizardPhase.Checked,
                 chain_info = chainInfo(1234, "Somewhere"),
                 compat = null,
+                // As the core sends a check that reached no verdict.
+                rpc_field = NetRpcField.Optional,
+                rpc_field_label_key = "settingsModals.addNetwork.customRpcTitle",
                 can_add = false,
             ),
         )
@@ -720,12 +1042,41 @@ class SettingsLiveTest {
             assertEquals(base().numberSheet.rows[0].note, live.numberSheet.rows[0].note)
             assertEquals("12,34,567.89", live.numberSheet.rows[4].label)
             assertEquals(listOf("auto", "h24", "h12"), live.timeSheet.rows.map { it.id })
-            assertEquals("1:45 PM", live.timeSheet.rows.single { it.selected }.label)
+            assertEquals("1:45 PM", shown(live.timeSheet.rows.single { it.selected }.label))
 
             val rows = live.sections.flatMap { it.rows }
             assertEquals("1.234.567,89", rows.single { it.id == "number-format" }.value)
-            assertEquals("1:45 PM", rows.single { it.id == "time-format" }.value)
+            assertEquals("1:45 PM", shown(rows.single { it.id == "time-format" }.value!!))
             assertEquals("06/13/2026", rows.single { it.id == "date-format" }.value)
+        } finally {
+            Formats.current = saved
+        }
+    }
+
+    /** A time as read: the core's no-break space as a space, its zero-width joiners gone. */
+    private fun shown(time: String) = time.replace('\u00A0', ' ').replace("\u2060", "")
+
+    /**
+     * PR 3 final note F5: under Chinese, Settings → Time format showed
+     * "1:45 PM" as its 12-hour example — this shell's own clock — while the
+     * core's lines on the same phone said 「下午」. The examples are the
+     * core's clock in the APP's language now, whatever the format's locale.
+     */
+    @Test
+    fun `the time format examples are the core's clock in the app's language`() {
+        val zh = I18nRuntime { tag -> File(System.getProperty("vela.repo.root")!!, "assets/i18n/$tag.json").readBytes() }.apply { initialize("zh") }
+        val saved = Formats.current
+        // The format's own locale is English here: the language named is the app's.
+        Formats.current = Formats(time = TimeFormatKey.H12, locale = Locale.US)
+        try {
+            val prefs = PrefsView(timeFormat = TimeFormatKey.H12, loaded = true)
+            val live = SettingsLive.withPreferences(SettingsFixtures.buildState(SettingsScreenState.ST1, zh), prefs, "zh", zh, theme = "auto")
+            assertEquals("下午 1:45", shown(live.timeSheet.rows.single { it.id == "h12" }.label))
+            assertEquals("13:45", live.timeSheet.rows.single { it.id == "h24" }.label)
+            assertEquals("下午 1:45", shown(live.sections.flatMap { it.rows }.single { it.id == "time-format" }.value!!))
+            // In English it is the English it always was.
+            val en = SettingsLive.withPreferences(base(), prefs, "en", strings, theme = "auto")
+            assertEquals("1:45 PM", shown(en.timeSheet.rows.single { it.id == "h12" }.label))
         } finally {
             Formats.current = saved
         }
@@ -812,7 +1163,8 @@ class SettingsLiveTest {
         val rows = model.signingPages.rows
         // D6: the official page is a trusted page by its own name; only a page
         // the person deployed is "self-hosted", and a label they gave wins.
-        assertEquals(listOf("Vela's official signing page", "My page", "Self-hosted · signer.example.org"), rows.map { it.title })
+        // The "·" is bound to the word before it (U+00A0): no line starts with it.
+        assertEquals(listOf("Vela's official signing page", "My page", "Self-hosted\u00a0· signer.example.org"), rows.map { it.title })
         assertEquals(listOf("", "My page", ""), rows.map { it.label })
         // A row named by its domain does not say its address a second time.
         assertEquals(listOf(true, true, false), rows.map { it.showAddress })
@@ -823,8 +1175,10 @@ class SettingsLiveTest {
         // official page keeps its keys on getvela.app, "My page" on
         // example.com; a page whose keys are its own host's says nothing more.
         assertEquals(listOf("Keys on getvela.app", "Keys on example.com", ""), rows.map { it.domain })
-        assertTrue(rows[0].integrity.text, rows[0].integrity.text.startsWith("Version 0ba8ee8c · matches Vela's published build list · checked "))
+        assertTrue(rows[0].integrity.text, rows[0].integrity.text.startsWith("Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked "))
         assertTrue(rows[0].integrity.opens)
+        // The remove question's two answers (Android asks first, as iOS does).
+        assertEquals("Cancel", model.signingPages.cancel)
         assertTrue(rows[1].integrity.asksToTrust)
         assertEquals("Checking the page…", rows[2].integrity.text)
         // The page's own words, not other screens' borrowed ones (core round 10).

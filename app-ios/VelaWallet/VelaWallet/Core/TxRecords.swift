@@ -110,6 +110,33 @@ enum TxRecords {
         store.writeList(VelaStore.Key.transactionHistory, records)
     }
 
+    /// Rewrite ONE record's time with its block's (the feed core's
+    /// `write_receive_time`, PR 3): `timestamp` becomes `timestampSec` and
+    /// the record is marked `timeVerified`. Nothing else of it changes, no
+    /// other record is touched, and the list keeps its order — the next
+    /// merge sorts it, and the feed sorts what it draws itself.
+    ///
+    /// Answers whether the store now holds it: `false` when no record has
+    /// that id (nothing is written), or when the write did not land — read
+    /// back, because a store that could not take a value keeps yesterday's
+    /// bytes without a word (`VelaStore.write`).
+    ///
+    /// The mark is what `merge` never has to protect: a scan's record whose
+    /// id is already stored is skipped whole, so a time repaired here is
+    /// never written over by a later poll.
+    @MainActor
+    static func writeReceiveTime(id: String, timestampSec: Double, store: VelaStore) -> Bool {
+        var records = load(store: store)
+        guard !id.isEmpty,
+              let index = records.firstIndex(where: { ($0["id"] as? String) == id })
+        else { return false }
+        records[index]["timestamp"] = timestampSec
+        records[index]["timeVerified"] = true
+        store.writeList(VelaStore.Key.transactionHistory, records)
+        let stored = load(store: store).first { ($0["id"] as? String) == id }
+        return stored.map { timestamp($0) == timestampSec && $0["timeVerified"] as? Bool == true } ?? false
+    }
+
     /// The still-pending submissions, as `load_pending_txs` defines them:
     /// `status == "pending"`, a `userOpHash`, and **no** `txHash` yet.
     ///
@@ -203,6 +230,10 @@ enum TxRecords {
             // recipient, or the contract a call went to.
             "call_data": (rawKind == "dapp_tx" ? callData(record) : nil).map { $0 as Any } ?? NSNull(),
         ]
+        // PR 3: the record's time is its block's own (`timeVerified`, set
+        // where a receipt is stored and where the core repairs one). Absent
+        // stays absent — that is what marks an older record for the repair.
+        if let verified = record["timeVerified"] as? Bool { wire["time_verified"] = verified }
         guard dapp else { return wire }
         // Spec 093: what the record was, as the core wrote it at approve time
         // — handed back untouched, for the feed to word. Only a value of the

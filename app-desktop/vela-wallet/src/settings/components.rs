@@ -128,7 +128,9 @@ pub fn callout(
                 .min_w(px(0.))
                 .text_size(theme::text_row_sub())
                 .text_color(fg)
-                .child(text.into()),
+                // A sentence, and it wraps: by the CJK line rule, so its
+                // full stop is never alone on the last line (`ui::prose`).
+                .child(crate::ui::prose(text)),
         )
 }
 
@@ -472,7 +474,7 @@ fn menu_of(
                 div()
                     .text_size(theme::text_label())
                     .text_color(theme.fg_subtle)
-                    .child(note.clone()),
+                    .child(crate::ui::prose(note.clone())),
             );
         }
         if *selected {
@@ -556,7 +558,7 @@ pub fn dropdown_menu_details(
                     .text_size(theme::text_label())
                     .line_height(theme::line_height_body())
                     .text_color(theme.fg_subtle)
-                    .child(detail.clone()),
+                    .child(crate::ui::prose(detail.clone())),
             );
         }
         let mut row = div()
@@ -975,7 +977,7 @@ pub fn editable_url_field(
                 .text_size(theme::text_label())
                 .line_height(px(16.))
                 .text_color(theme.fg_subtle)
-                .child(hint),
+                .child(crate::ui::prose(hint)),
         );
     }
     col
@@ -1083,7 +1085,7 @@ pub fn url_field_with(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(hint),
+                .child(crate::ui::prose(hint)),
         );
     }
     col
@@ -1211,7 +1213,7 @@ pub fn storage_group_with(
                             div()
                                 .text_size(theme::text_label())
                                 .text_color(theme.fg_subtle)
-                                .child(item.meta.clone()),
+                                .child(crate::ui::prose(item.meta.clone())),
                         )
                         .child(crate::flows::panels::clickable(
                             ElementId::from((key, index)),
@@ -1444,7 +1446,7 @@ pub fn danger_card(
                     div()
                         .text_size(theme::text_label())
                         .text_color(theme.fg_muted)
-                        .child(subtitle),
+                        .child(crate::ui::prose(subtitle)),
                 ),
         )
         .child(
@@ -1527,7 +1529,7 @@ pub fn confirm_sheet(
                 .text_size(theme::text_row_title())
                 .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_base)
-                .child(copy.body),
+                .child(crate::ui::prose(copy.body)),
         );
     if let Some(note) = copy.note {
         sheet = sheet.child(
@@ -1535,7 +1537,7 @@ pub fn confirm_sheet(
                 .text_size(theme::text_row_sub())
                 .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_subtle)
-                .child(note),
+                .child(crate::ui::prose(note)),
         );
     }
     if let Some(callout) = copy.callout {
@@ -1547,7 +1549,7 @@ pub fn confirm_sheet(
                 .text_size(theme::text_row_sub())
                 .line_height(theme::line_height_body())
                 .text_color(theme.error_base)
-                .child(callout),
+                .child(crate::ui::prose(callout)),
         );
     }
     sheet.child(
@@ -1562,30 +1564,42 @@ pub fn confirm_sheet(
 
 // -- RpcBanner ----------------------------------------------------------------
 
-/// DSR1's amber banner: the count of unreachable networks, then one chip per
+/// One network in [`rpc_banner`].
+pub struct BannerChip {
+    pub letter: gpui::SharedString,
+    pub color: u32,
+    // Owned strings, not `&'static str`: the chips are a chain list, and since
+    // 031 that list can come from a live `BalanceView` — a network the person
+    // added has a name nobody could have written into this binary.
+    pub name: gpui::SharedString,
+    /// The chip's "Fix" and what it opens — `None` for a network whose RPC
+    /// is not what failed (the core's `rpc_fixable`, PR 3 note 4): the chip
+    /// names it and offers nothing, because there is no endpoint to repair.
+    /// A label with no click is the mock's.
+    pub fix: Option<(gpui::SharedString, Option<crate::flows::panels::Click>)>,
+}
+
+/// DSR1's amber banner: the home's "can't reach" line, then one chip per
 /// network with its own 修复. Per-chain rather than one global button, because
 /// the fix IS per chain — a shared button would have to ask which one first.
 pub fn rpc_banner(
     theme: &Theme,
     icons: &mut IconCache,
     text: gpui::SharedString,
-    // Owned strings, not `&'static str`: the chips are a chain list, and since
-    // 031 that list can come from a live `BalanceView` — a network the person
-    // added has a name nobody could have written into this binary.
-    chips: Vec<(
-        gpui::SharedString,
-        u32,
-        gpui::SharedString,
-        gpui::SharedString,
-        Option<crate::flows::panels::Click>,
-    )>,
+    chips: Vec<BannerChip>,
 ) -> Div {
     let mut row = div().flex().flex_wrap().gap(px(8.));
-    for (index, (letter, color, name, action, on_click)) in chips.into_iter().enumerate() {
+    for (index, chip) in chips.into_iter().enumerate() {
+        let BannerChip {
+            letter,
+            color,
+            name,
+            fix,
+        } = chip;
         // The chip IS the fix affordance — it names a chain and the thing to do
         // about it, so clicking it must open that chain's editor rather than
         // some other one's.
-        let chip = div()
+        let mut chip = div()
             .id(gpui::ElementId::from(("rpc-banner-chip", index)))
             .flex()
             .items_center()
@@ -1600,15 +1614,21 @@ pub fn rpc_banner(
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
                     .child(name),
-            )
-            // The only accent on this banner: the thing that fixes it.
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.accent)
-                    .child(action),
             );
+        let Some((action, on_click)) = fix else {
+            // Nothing to fix here: the same chip, the name alone — its end
+            // padded as its start is, so the pill stays even.
+            row = row.child(chip.pr(px(12.)));
+            continue;
+        };
+        // The only accent on this banner: the thing that fixes it.
+        chip = chip.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.accent)
+                .child(action),
+        );
         row = row.child(match on_click {
             Some(on_click) => chip.cursor_pointer().on_click(on_click).into_any_element(),
             None => chip.into_any_element(),
@@ -1640,7 +1660,7 @@ pub fn rpc_banner(
                         .text_size(theme::text_row_sub())
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.warning_base)
-                        .child(text),
+                        .child(crate::ui::prose(text)),
                 ),
         )
         .child(row)

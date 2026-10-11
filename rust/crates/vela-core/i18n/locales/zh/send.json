@@ -157,7 +157,6 @@
     "multiSendSameRecipient": "多币发送时收款人为同一地址",
     "pickContactTitle": "选择联系人",
     "pickContactSearch": "搜索联系人或粘贴地址",
-    "scanToFill": "扫码填写地址",
     "feeTokenHint": "用于支付这笔转账的网络费，费用按当前网络实时估算",
     "feeTokenEstimate": "预估费用",
     "batchRateHint": "表格金额按 {{code}} 读取，导入时按此汇率换算为 {{sym}}",

@@ -400,11 +400,37 @@ export type AddTokenResult =
 			kind: 'network';
 			mark: TokenMarkModel;
 			name: string;
-			chip: StatusChipModel;
+			/**
+			 * The verdict, where there is one (compatible, not compatible, could
+			 * not verify, added). Absent on a stop that is not a verdict — the
+			 * note under the head says it, in the core's sentence.
+			 */
+			chip?: StatusChipModel;
 			/** Chain ID / native coin, as label-value rows. */
 			facts: FactRowModel[];
-			/** T5b's "deploy the missing contracts" link, on the incompatible chip. */
-			link?: string;
+			/**
+			 * The sentence under the head: why the network is refused (the
+			 * check's own reason — no P-256 verifier, or missing contracts), or
+			 * why the wizard stopped (`NetWizardView.error_key`).
+			 */
+			note?: string;
+			/**
+			 * "Open Chain Setup Tool", and where it goes (the core's
+			 * `NetCompatibility.setup_url`). Only a refusal with something to
+			 * deploy has one. T5b drew "deploy the missing contracts ↗" as text
+			 * that went nowhere, and under every refusal alike.
+			 */
+			setup?: { label: string; href: string };
+			/**
+			 * The RPC field under the card and "Re-check with this RPC" — one
+			 * thing, so neither is ever drawn without the other. Present exactly
+			 * when the core gives the wizard a field
+			 * (`NetWizardView.rpc_field`), labelled by the key it names
+			 * ("Custom RPC (optional)", or "RPC URL" where an endpoint is the
+			 * one thing asked for). This tab's no-RPC stop said "Enter one, then
+			 * re-check" and had neither (PR 3 final note F14).
+			 */
+			rpc?: { label: string; value: string; placeholder: string; recheck: string };
 	  }
 	| { kind: 'not-found'; text: string }
 	/**
@@ -507,6 +533,13 @@ export interface RecipientCardModel {
 	/** Live rows only: what an empty address field asks for. */
 	addressPlaceholder?: string;
 	pickLabel?: string;
+	/**
+	 * Live rows only: the row's OWN scan door, beside the book's (issue 471).
+	 * A code scanned from it lands in this row — the core's
+	 * `open_scanner { target }` — where the picker's "Scan to fill" used to
+	 * be the only way to scan into a split.
+	 */
+	scanLabel?: string;
 	removeLabel: string;
 	/**
 	 * Live rows only: what the core says is wrong with a field that has
@@ -555,6 +588,15 @@ export interface FeeRowModel {
 	 * the row broke wherever the text ran out, which was inside "Network fee".
 	 */
 	valueFiat?: string;
+	/**
+	 * `valueFiat` is not a figure yet: the display currency has not committed
+	 * (the core's withhold rule), and "≈ …" stands where the money will be.
+	 * The row then holds the layout its figure may need — the fee on the line
+	 * under the label — and keeps it once the figure lands, so the money
+	 * arriving moves nothing: side by side, a figure as long as "≈ ₫112,500.00"
+	 * dropped the fee to a second line and pushed the form 18 px down.
+	 */
+	valueFiatWithheld?: boolean;
 	openLabel: string;
 	/**
 	 * The refresh affordance's accessible name (spec 068). The fee is the one
@@ -724,7 +766,10 @@ export interface SendFormModel {
 		address?: string;
 		identiconSvg: string;
 		pickLabel: string;
-		/** sweep shows a scan button beside the picker; single does not. */
+		/**
+		 * The scan door beside the book's: single and sweep both draw it
+		 * (issue 468). Absent, no scan button is drawn.
+		 */
 		scanLabel?: string;
 		/** sweep's "every token goes to the same address". */
 		note?: string;
@@ -781,12 +826,14 @@ export interface SendFormModel {
 	cta: string;
 }
 
-/** SD2e — the contact picker sheet. */
+/**
+ * SD2e — the contact picker sheet: the book alone. Scanning is each
+ * recipient row's own icon (issue 471), never a row in here.
+ */
 export interface ContactPickModel {
 	title: string;
 	closeLabel: string;
 	searchPlaceholder: string;
-	scanRow: string;
 	groupsTitle: string;
 	groups: { name: string; count: string; colors: [string, string] }[];
 	contactsTitle: string;

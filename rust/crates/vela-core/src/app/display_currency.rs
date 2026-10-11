@@ -19,6 +19,38 @@
 //! The shell owns the rate *sources* (Chainlink → FX endpoint), the currency
 //! catalog (names/symbols), formatting, and the storage key — the core only
 //! decides what may be paired, persisted and shown.
+//!
+//! # The withhold rule: no fiat figure before the currency commits
+//!
+//! Until [`CurrencyView::committed`] is true the view is the USD/1
+//! placeholder, which is not the person's currency. **While it is false no
+//! fiat figure is drawn — anywhere.** Not "$1,234" that becomes "¥8,876" a
+//! few seconds later (the iPhone home, the 102 device run), and not a "$"
+//! on one screen while another waits: the rule has no surface it skips.
+//!
+//! Every surface that draws money in the display currency
+//! ([`FIAT_SURFACES`]):
+//!
+//! - the home total, the holdings' worth, the account switcher;
+//! - the token page (its worth, its price), the Assets page;
+//! - the balance detail sheet, its unpriced and unreachable lists;
+//! - an activity row's fiat, a transfer's and a dApp row's detail;
+//! - Send: the coin list, the form's "≈" line under the amount, the review;
+//! - the signing sheet: the fee's fiat and every balance change's worth;
+//! - Settings: the account's total.
+//!
+//! What is withheld is the FIAT figure only. A token amount ("0.5 ETH") is
+//! not in the display currency and is drawn as always — so Send and the
+//! signing sheet stay decidable while the currency is on its way.
+//!
+//! **Withholding never moves the layout.** A withheld figure keeps the room
+//! the figure will take (a skeleton of its line, or an empty line of its
+//! height); the figure then lands in place. A row that grows when its "≈"
+//! line arrives is the same jump the rule exists to remove.
+//!
+//! The wait is bounded: every path through the machine ends in a commit —
+//! the stored code with its rate (or with none, which formats as USD), or
+//! USD itself.
 
 use crux_core::capability::Operation;
 use crux_core::macros::effect;
@@ -141,6 +173,26 @@ enum Phase {
     },
 }
 
+/// Every surface the withhold rule covers (the module doc): where a figure
+/// in the display currency is drawn. A shell's own list of the places it
+/// formats fiat is held to this one by its tests, so a new surface is added
+/// here first — the rule was once applied to five of these and missed the
+/// send form, the signing fee and the balance detail sheet.
+pub const FIAT_SURFACES: [&str; 12] = [
+    "home_total",
+    "holdings",
+    "account_switcher",
+    "token_detail",
+    "assets",
+    "balance_detail",
+    "activity_row",
+    "activity_detail",
+    "send_coin_list",
+    "send_form",
+    "signing_sheet",
+    "settings_total",
+];
+
 #[derive(Default)]
 pub struct Model {
     /// The ONLY pair any surface may render. `None` ⇒ USD/1 placeholder —
@@ -171,7 +223,21 @@ pub struct CurrencyView {
     pub rate: Option<f64>,
     /// `false` ⇒ the USD/1 placeholder is showing. The shell derives the
     /// symbol from its catalog and owns all formatting.
+    ///
+    /// **While `false`, no fiat figure is drawn — on any surface**
+    /// ([`FIAT_SURFACES`], the module doc's withhold rule): each holds the
+    /// figure's room and shows nothing in it. The placeholder is not the
+    /// person's currency; drawing it put "$1,234" on an iPhone home for a
+    /// few seconds before it jumped to "¥8,876" (the 102 device run). The
+    /// figure appears once, in the right money, where its room was kept.
     pub committed: bool,
+    /// The person's own currency on its way: a stored choice whose rate is
+    /// being fetched while nothing is committed yet. A surface that names
+    /// its currency apart from the figure may name this one while the figure
+    /// waits. `None` once committed, before the preference is read, and
+    /// while the first launch's region guess is priced (not a choice yet).
+    #[serde(default)]
+    pub pending: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +304,7 @@ impl App for DisplayCurrency {
                 code: pair.code.clone(),
                 rate: pair.rate,
                 committed: true,
+                pending: None,
             },
             None => CurrencyView {
                 code: "USD".to_owned(),
@@ -245,6 +312,10 @@ impl App for DisplayCurrency {
                 // this `Some` is a priced pair, not a default.
                 rate: Some(1.0),
                 committed: false,
+                pending: match &model.phase {
+                    Phase::ResolvingDisplay { code } => Some(code.clone()),
+                    _ => None,
+                },
             },
         }
     }

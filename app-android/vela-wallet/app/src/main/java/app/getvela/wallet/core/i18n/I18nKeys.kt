@@ -119,7 +119,12 @@ object I18nKeys {
         const val KEY_DEVICE_ONLY_BADGE = "onboarding.create.keyDeviceOnlyBadge"
         const val KEY_LIMIT_REACHED = "onboarding.create.keyLimitReached"
         const val NEED_SECOND_KEY_HINT = "onboarding.create.needSecondKeyHint"
-        const val ADD_KEY_BTN = "onboarding.create.addKeyBtn"
+        /**
+         * The heading over the three places with no key yet: "Choose where it
+         * lives". It was "Add a passkey" (`addKeyBtn`, retired) — the screen's
+         * own title said over again.
+         */
+        const val KEY_PLACE_HEADING = "onboarding.create.keyPlaceHeading"
         const val ADD_SECOND_KEY_BTN = "onboarding.create.addSecondKeyBtn"
         const val CONFIRM_KEY_BTN = "onboarding.create.confirmKeyBtn"
         const val REMOVE_KEY_BTN = "onboarding.create.removeKeyBtn"
@@ -305,6 +310,12 @@ object I18nKeys {
         const val UNREACHABLE_ONE = "assets.unreachableOne"
         const val UNREACHABLE_MANY = "assets.unreachableMany"
         /**
+         * The same line when the one network's RPC is fine and its token list
+         * (the document that names what to read there) could not be loaded —
+         * `{{name}}`. The core picks it (`BalanceView.unreachable_key`).
+         */
+        const val TOKEN_LIST_UNREACHABLE = "assets.tokenListUnreachable"
+        /**
          * The hero's reason when a first load could read nothing and nothing is
          * cached (#188, spec 038 finding 15). Borrowed from the onboarding
          * flow's network line — the same key the web and desktop shells bind
@@ -409,7 +420,6 @@ object I18nKeys {
         const val RECENT_ACTIVITY = "contacts.recentActivity"
         const val VIEW_ALL_ACTIVITY = "contacts.viewAllActivity"
         const val DELETE_CONTACT = "contacts.deleteContact"
-        const val ACTION_QR = "contacts.actionQr"
         const val EDIT = "contacts.edit"
         const val MOVE_GROUP = "contacts.moveGroup"
 
@@ -460,7 +470,6 @@ object I18nKeys {
 
         // Reused from the spec-015 map (same keys, no corpus change).
         const val ACTION_SEND = "componentsUi.dock.send"
-        const val ACTION_RECEIVE = "componentsUi.dock.receive"
         const val COPY_ADDRESS = "componentsUi.identiconViewer.copyAddress"
         const val LABEL_SENT = "history.labelSent"
         const val LABEL_RECEIVED = "history.labelReceived"
@@ -688,13 +697,20 @@ object I18nKeys {
         // Send · contact picker.
         const val PICK_CONTACT_TITLE = "send.pickContactTitle"
         const val PICK_CONTACT_SEARCH = "send.pickContactSearch"
-        const val SCAN_TO_FILL = "send.scanToFill"
         const val CONTACTS_GROUPS = "contacts.sectionGroups"
         const val CONTACTS_TITLE = "contacts.title"
         const val GROUP_MEMBERS = "contacts.groupMembers"
 
         // Send · batch import.
         const val BATCH_TITLE = "send.batchTitle"
+        // A locked payment request the wallet cannot fulfil (`SendView.lock_error`).
+        const val LOCK_NET_TITLE = "send.lock.netTitle"
+        const val LOCK_NET_BODY = "send.lock.netBody"
+        const val LOCK_TOKEN_TITLE = "send.lock.tokenTitle"
+        const val LOCK_TOKEN_BODY = "send.lock.tokenBody"
+        const val LOCK_NET_NOT_FOUND = "send.lock.netNotFound"
+        const val LOCK_NET_NOT_COMPATIBLE = "send.lock.netNotCompatible"
+        const val LOCK_NET_ADD_ERROR = "send.lock.netAddError"
         const val BATCH_UNIT_FIAT = "send.batchUnitFiat"
         const val BATCH_UNIT_TOKEN = "send.batchUnitToken"
         const val BATCH_PASTE_PLACEHOLDER = "send.batchPastePlaceholder"
@@ -809,6 +825,13 @@ object I18nKeys {
          * "previous transaction pending" refusal, with Try again.
          */
         const val PREVIOUS_PENDING = "componentsUi.signing.confirmBlock.previousPending"
+        /**
+         * PR 3: "Checking what this transaction does…" — the one line under a
+         * confirm that waits for the simulation's verdict
+         * (`ConfirmBlock.SimChecking`; the core's `ConfirmState.key`). Listed
+         * so the smoke test holds it in the corpus.
+         */
+        const val SIM_CHECKING = "componentsUi.signing.confirmBlock.simChecking"
         /** The fee's own reasons (issue #483): the chain's nodes out of reach (`{{chain}}`), or a fault inside the app. */
         const val FEE_REASON_CHAIN_DOWN = "componentsUi.gas.reasonChainDown"
         const val FEE_REASON_INTERNAL = "componentsUi.gas.reasonInternal"
@@ -994,10 +1017,13 @@ object I18nKeys {
         const val HEALTH_HTTPS_REQUIRED = "settingsModals.health.httpsRequired"
         const val HEALTH_INVALID = "settingsModals.health.invalid"
 
-        /** The Ethereum backup row (spec 062). */
+        /**
+         * The Ethereum copy's row (spec 062). Its states' words are the
+         * core's — the row arrives with its keys (`BackupState::row`) — so
+         * only what is said BEFORE the core answers is named here: the title
+         * and "Checking…", and the transport's own "couldn't check".
+         */
         const val BACKUP_TITLE = "settingsModals.backup.title"
-        const val BACKUP_BACKED_UP = "settingsModals.backup.backedUp"
-        const val BACKUP_NOT_BACKED_UP = "settingsModals.backup.notBackedUp"
         const val BACKUP_COULD_NOT_CHECK = "settingsModals.backup.couldNotCheck"
         const val BACKUP_CHECKING = "componentsUi.funding.checking"
         const val KEYS_TITLE = "settingsModals.keys.title"
@@ -1131,6 +1157,11 @@ object I18nKeys {
         // Account switcher + sign out + erase.
         const val ACCOUNTS_TITLE = "settingsModals.account.modalTitle"
         const val ACCOUNTS_TOTAL = "settingsModals.account.total"
+        /**
+         * Plural (`_one`/`_few`/`_many`/`_other`): resolve with
+         * [VelaStrings.t] and a COUNT — "1 account · ", "2 accounts · " (PR 3
+         * final note F15). Filled as a text variable it read "1 accounts ·".
+         */
         const val ACCOUNTS_COUNT = "home.switcherAccountCount"
         const val ACCOUNT_CREATE = "settingsModals.account.createNew"
         const val ACCOUNT_SIGN_IN = "settingsModals.account.signInExisting"

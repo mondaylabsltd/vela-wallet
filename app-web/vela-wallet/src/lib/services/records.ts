@@ -194,6 +194,25 @@ export async function updateTransactions(
 	});
 }
 
+/**
+ * Rewrite ONE record's time with its block's own (PR 3, the feed's
+ * `write_receive_time`): `timestamp` becomes `timestampSec` and the record is
+ * marked `timeVerified`. Nothing else of it changes, no other record is
+ * touched, and it keeps its place in the list — the feed sorts what it reads.
+ * Behind the same lock as every other writer. `false`, and nothing written,
+ * when no record has that id; a store that refuses the write rejects.
+ */
+export async function rewriteReceiveTime(id: string, timestampSec: number): Promise<boolean> {
+	return withTxLock(async () => {
+		const txs = await loadTransactions();
+		const idx = txs.findIndex((t) => t.id === id);
+		if (idx === -1) return false;
+		txs[idx] = { ...txs[idx], timestamp: timestampSec, timeVerified: true };
+		await setItem(TX_KEY, JSON.stringify(txs));
+		return true;
+	});
+}
+
 export async function loadCustomTokens(): Promise<CustomToken[]> {
 	return loadArray<CustomToken>('vela.customTokens');
 }

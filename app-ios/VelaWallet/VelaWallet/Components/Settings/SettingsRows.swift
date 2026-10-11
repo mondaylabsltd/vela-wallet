@@ -54,7 +54,7 @@ struct SettingsRow: View {
                         if let subtitle = row.subtitle {
                             Text(subtitle)
                                 .typeRole(Typography.flowCaption)
-                                .foregroundStyle(theme.fgSubtle)
+                                .foregroundStyle(row.subtitleTone == .positive ? theme.successBase : theme.fgSubtle)
                                 .lineLimit(2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -72,6 +72,9 @@ struct SettingsRow: View {
                         .foregroundStyle(theme.fgSubtle)
                 case .external:
                     LucideIcon(.externalLink, size: LucideIconSize.rowGlyph)
+                        .foregroundStyle(theme.fgSubtle)
+                case .retry:
+                    LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
                         .foregroundStyle(theme.fgSubtle)
                 case .none:
                     EmptyView()
@@ -94,6 +97,13 @@ struct SettingsRow: View {
 struct TitleAndValue: Layout {
     var gap: CGFloat = Tokens.Space.s8
     var rowGap: CGFloat = Tokens.Space.s2
+    /// The value's width as far as the ARRANGEMENT is concerned: at least
+    /// this. A row whose value arrives late or grows — a fee's figure after
+    /// "Estimating…", its fiat half once the currency is known, a re-quote
+    /// with more digits — passes the widest value it expects to show, so the
+    /// row is arranged for that from the first frame and never re-arranges
+    /// under the person's finger. 0 arranges for whatever the value is now.
+    var valueReserve: CGFloat = 0
 
     private func frames(width: CGFloat?, subviews: Subviews) -> (size: CGSize, title: CGRect, value: CGRect?) {
         guard let title = subviews.first else { return (.zero, .zero, nil) }
@@ -104,7 +114,7 @@ struct TitleAndValue: Layout {
         }
         let valueIdeal = subviews[1].sizeThatFits(.unspecified)
         let available = width ?? (titleIdeal.width + gap + valueIdeal.width)
-        if titleIdeal.width + gap + valueIdeal.width <= available {
+        if titleIdeal.width + gap + max(valueIdeal.width, valueReserve) <= available {
             let height = max(titleIdeal.height, valueIdeal.height)
             return (
                 CGSize(width: available, height: height),

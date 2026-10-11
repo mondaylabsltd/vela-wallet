@@ -271,7 +271,9 @@ final class SigningVenueScreenshotTests: XCTestCase {
             attach("2c-create-chooser-\(look.lang)-\(look.theme)")
             entry.tap()
             XCTAssertTrue(app.descendants(matching: .any)["signingPagePicker"].firstMatch.waitForExistence(timeout: 10))
-            let selfHosted = look.lang == "zh" ? "自己部署的签名页 · sign.example.com" : "Self-hosted · sign.example.com"
+            // The "·" is bound to the word before it (U+00A0, PR 3).
+            let selfHosted = look.lang == "zh"
+                ? "自己部署的签名页\u{00A0}· sign.example.com" : "Self-hosted\u{00A0}· sign.example.com"
             XCTAssertTrue(app.staticTexts[selfHosted].waitForExistence(timeout: 5), "no \(selfHosted)")
             // "Keys on …" only where it is news: the official page's, not the
             // self-hosted page's own host (polish 3).

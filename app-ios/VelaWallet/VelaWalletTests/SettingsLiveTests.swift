@@ -46,17 +46,25 @@ struct SettingsLiveTests {
         return core + multiKey
     }
 
+    /// A finished check, with the core's own ruling on a refusal
+    /// (`net_blocker`): no P-256 wins over missing contracts, and only
+    /// missing contracts carries Chain Setup's address.
     private func compat(
         compatible: Bool,
         missing: Set<String> = [],
-        latency: Double? = 182
+        latency: Double? = 182,
+        p256: Bool? = true
     ) -> NetCompatibilityWire {
-        NetCompatibilityWire(
+        let noP256 = !compatible && p256 == false
+        return NetCompatibilityWire(
             chainId: 7_777_777, compatible: compatible,
             multiKeyReady: compatible && missing.isEmpty,
             contracts: contracts(missing: missing),
-            p256Available: compatible, bestRpcUrl: "https://rpc.test",
-            bestRpcLatencyMs: latency, rpcFailure: nil
+            p256Available: p256, bestRpcUrl: "https://rpc.test",
+            bestRpcLatencyMs: latency, rpcFailure: nil,
+            blocker: compatible ? nil : (noP256 ? "no_p256" : "missing_contracts"),
+            hintKey: compatible ? nil : "settingsModals.addNetwork." + (noP256 ? "noP256Hint" : "incompatibleHint"),
+            setupUrl: compatible || noP256 ? nil : "https://getvela.app/chain-setup?chain=7777777"
         )
     }
 
@@ -65,12 +73,23 @@ struct SettingsLiveTests {
         chainInfo: NetChainInfoWire? = nil,
         compat: NetCompatibilityWire? = nil,
         error: NetWizardErrorWire? = nil,
+        errorKey: String? = nil,
+        rpcField: NetRpcFieldWire = .none,
         canAdd: Bool = false,
         suggestions: [NetChainIndexEntryWire] = []
     ) -> NetWizardViewWire {
-        NetWizardViewWire(
+        // `rpcField` is what the CORE says for the state under test (its
+        // table, `wizard_rpc_field`); the label key follows it as it does
+        // on the wire.
+        let label: String? = switch rpcField {
+        case .none: nil
+        case .optional: "settingsModals.addNetwork.customRpcTitle"
+        case .required: "settingsModals.network.fieldRpcUrl"
+        }
+        return NetWizardViewWire(
             phase: phase, query: "", customRpc: "", suggestions: suggestions,
-            chainInfo: chainInfo, compat: compat, error: error, canAdd: canAdd
+            chainInfo: chainInfo, compat: compat, error: error, errorKey: errorKey,
+            rpcField: rpcField, rpcFieldLabelKey: label, canAdd: canAdd
         )
     }
 
@@ -109,33 +128,99 @@ struct SettingsLiveTests {
         #expect(open.primary != nil)
     }
 
-    /// An incompatible chain gets the re-check, never a greyed accent CTA: an
-    /// action you cannot take should not be dressed as the action you came
-    /// for. And no "Open Chain Setup Tool" — no client has a page for it to
-    /// open, and a button that goes nowhere is an inert control (072 SC-001).
-    @Test func anIncompatibleChainOffersTheOutlinePairInstead() {
+    /// A chain missing contracts never gets a greyed accent CTA: an action
+    /// you cannot take should not be dressed as the action you came for.
+    /// It gets "Open Chain Setup Tool" — on the page for THIS chain, the
+    /// core's `setup_url` (PR 3; live Settings never offered it, and the
+    /// drawing's button went to the tool's front page) — and, a refusal
+    /// being `rpc_field: none`, no RPC field and no re-check (F22).
+    @Test func aChainMissingContractsOffersChainSetupForThatChain() {
         let model = SettingsLive.wizard(
-            wizardView(chainInfo: zora, compat: compat(compatible: false), canAdd: false),
+            wizardView(chainInfo: zora, compat: compat(compatible: false, missing: ["Multicall3"]), canAdd: false),
             loc: loc, fallback: fallback()
         )
         #expect(model.primary == nil)
-        #expect(model.secondary == nil)
-        #expect(model.recheck != nil)
-        #expect(model.callout != nil)
+        #expect(model.secondary == loc.t("settingsModals.addNetwork.openChainSetupTool"))
+        #expect(model.secondaryUrl == "https://getvela.app/chain-setup?chain=7777777")
+        #expect(model.recheck == nil && model.customRpc == nil, "a re-check, or its field, under a refusal")
+        #expect(model.callout?.text == loc.t("settingsModals.addNetwork.incompatibleHint"))
+    }
+
+    /// A chain with no P-256 verifier is told so plainly — Vela wallets
+    /// cannot work there, and money sent would be stuck — with NO Chain
+    /// Setup button: a precompile is the chain's own to add, and the old
+    /// line sent people to a tool that could not help. Its row says ✗ while
+    /// every contract ticks.
+    @Test func aChainWithNoP256VerifierSaysSoAndOffersNoSetupTool() {
+        let refused = compat(compatible: false, p256: false)
+        let model = SettingsLive.wizard(
+            wizardView(chainInfo: zora, compat: refused, canAdd: false),
+            loc: loc, fallback: fallback()
+        )
+        #expect(model.primary == nil)
+        #expect(model.secondary == nil, "a button to a tool that cannot help")
+        #expect(model.secondaryUrl == nil)
+        #expect(model.recheck == nil && model.customRpc == nil, "another endpoint would not change a refusal")
+        #expect(model.callout?.text == loc.t("settingsModals.addNetwork.noP256Hint"))
+        #expect(model.callout?.text != loc.t("settingsModals.addNetwork.incompatibleHint"))
+        #expect(model.candidate?.badge?.tone == .error)
+
+        let rows = SettingsLive.checks(refused, loc: loc)
+        #expect(rows.map(\.ok) == [true, true, false, true], "only the precompile's row fails: \(rows)")
+        #expect(rows[2].label == loc.t("settingsModals.addNetwork.checkSigner"))
+    }
+
+    /// The reason rides on the wire under these names; an absent one (a core
+    /// from before PR 3) still decodes, and keeps the contracts line.
+    @Test func theRefusalsReasonDecodesAndAnAbsentOneIsTolerated() throws {
+        func decode(_ extra: [String: Any]) throws -> NetCompatibilityWire {
+            var json: [String: Any] = [
+                "chain_id": 5, "compatible": false, "multi_key_ready": false, "contracts": [],
+                "p256_available": false, "best_rpc_url": NSNull(), "best_rpc_latency_ms": NSNull(),
+                "rpc_failure": NSNull(),
+            ]
+            json.merge(extra) { _, new in new }
+            return try CoreJSON.decode(NetCompatibilityWire.self, from: json)
+        }
+        let noP256 = try decode([
+            "blocker": "no_p256", "hint_key": "settingsModals.addNetwork.noP256Hint", "setup_url": NSNull(),
+        ])
+        #expect(noP256.blocker == "no_p256")
+        #expect(noP256.hintKey == "settingsModals.addNetwork.noP256Hint")
+        #expect(noP256.setupUrl == nil)
+        let missing = try decode([
+            "blocker": "missing_contracts", "hint_key": "settingsModals.addNetwork.incompatibleHint",
+            "setup_url": "https://getvela.app/chain-setup?chain=5",
+        ])
+        #expect(SettingsLive.refusal(missing, loc: loc)?.setup?.url == "https://getvela.app/chain-setup?chain=5")
+        // A reason this build has never heard of is still a refusal with a line.
+        #expect(try decode(["blocker": "something_new"]).blocker == "something_new")
+        let old = try decode([:])
+        #expect(old.blocker == nil && old.hintKey == nil && old.setupUrl == nil)
+        #expect(SettingsLive.refusal(old, loc: loc)?.callout.text == loc.t("settingsModals.addNetwork.incompatibleHint"))
+        #expect(SettingsLive.refusal(old, loc: loc)?.setup == nil)
     }
 
     // MARK: - The four drawn rows over the core's contracts
 
-    /// Everything deployed → four ticks, and the fourth counts the other
-    /// seven. Seven, not eight: spec 081 dropped the fallback handler the
-    /// wallet never uses, and moved the two passkey-signer contracts out of
-    /// this count into their own sentence.
+    /// Everything deployed → four ticks: EntryPoint, Safe L2, the P-256
+    /// precompile, and the count of the other eight. Eight: the ten a
+    /// one-key wallet needs less the two named (the WebAuthn Signer contract
+    /// is counted here now — the third row is the precompile, as its words
+    /// say); spec 081 moved the two passkey-signer contracts out of this
+    /// count into their own sentence.
     @Test func theChecksSummariseTheContractsIntoTheDrawnFour() {
         let rows = SettingsLive.checks(compat(compatible: true), loc: loc)
         #expect(rows.count == 4)
         #expect(rows.allSatisfy { $0.ok })
         #expect(rows[0].label == "EntryPoint v0.7")
-        #expect(rows[3].label.contains("7"), "the remaining row must count 7, got \(rows[3].label)")
+        #expect(rows[2].label == loc.t("settingsModals.addNetwork.checkSigner"))
+        #expect(rows[3].label.contains("8"), "the remaining row must count 8, got \(rows[3].label)")
+
+        // Never probed is not "absent": the row is left out, not failed.
+        let unprobed = SettingsLive.checks(compat(compatible: true, p256: nil), loc: loc)
+        #expect(unprobed.count == 3)
+        #expect(!unprobed.contains { $0.label == loc.t("settingsModals.addNetwork.checkSigner") })
     }
 
     /// Spec 081 FR-009. A chain with everything but Safe's passkey signer
@@ -166,17 +251,19 @@ struct SettingsLiveTests {
     /// "Incompatible" is only legible as an answer if it shows WHICH
     /// requirement failed.
     @Test func aMissingContractFailsExactlyTheRowThatNamesIt() {
+        let safe = SettingsLive.checks(compat(compatible: false, missing: ["Safe L2"]), loc: loc)
+        #expect(safe.map(\.ok) == [true, false, true, true], "the Safe row must fail, alone")
+
+        // The signer CONTRACT is one of the counted; the precompile's row is
+        // not its row, and stays ticked while the precompile answers.
         let signer = SettingsLive.checks(compat(compatible: false, missing: ["WebAuthn Signer"]),
                                          loc: loc)
-        #expect(signer[0].ok)
-        #expect(signer[1].ok)
-        #expect(!signer[2].ok, "the signer row must fail")
-        #expect(signer[3].ok)
+        #expect(signer.map(\.ok) == [true, true, true, false])
 
         let counted = SettingsLive.checks(compat(compatible: false, missing: ["Multicall3"]),
                                           loc: loc)
         #expect(counted[0].ok && counted[1].ok && counted[2].ok)
-        #expect(!counted[3].ok, "a missing contract inside the counted seven must fail that row")
+        #expect(!counted[3].ok, "a missing contract inside the counted eight must fail that row")
     }
 
     // MARK: - Rows and badges
@@ -212,21 +299,198 @@ struct SettingsLiveTests {
         #expect(model.candidate == nil)
     }
 
-    /// The core's refusals get the corpus sentences that say the right thing —
-    /// including the three whose keys live under `addToken.*` for historical
-    /// reasons.
-    @Test func everyRefusalKindRendersARealSentence() {
-        let kinds: [NetWizardErrorWire] = [
-            .alreadyAdded(chainId: 1), .notFound(chainId: 1),
-            .noRpcEndpoint, .notCompatible(chainId: 1),
+    /// Every wizard stop is said in the sentence the CORE names
+    /// (`error_key`, PR 3 notes 5/10/18) — the five keys it can name are
+    /// real sentences in the corpus, each different from the others.
+    @Test func everyWizardStopRendersTheCoresSentence() {
+        let k = I18nKeys.SettingsUi.self
+        let stops: [(NetWizardErrorWire, String)] = [
+            (.alreadyAdded(chainId: 1), k.addAlreadyAdded),
+            (.notFound(chainId: 1), k.addChainNotFound),
+            (.noRpcEndpoint, k.addNoRpcEndpoint),
+            (.checkFailed(chainId: 1), k.addUnableToVerify),
+            (.notCompatible(chainId: 1), k.addNotCompatible),
+            (.notCompatible(chainId: 1), k.addNoP256Hint),
+            (.notCompatible(chainId: 1), k.addIncompatibleHint),
         ]
-        for kind in kinds {
-            let model = SettingsLive.wizard(
-                wizardView(phase: .error, error: kind), loc: loc, fallback: fallback()
-            )
-            let text = model.callout?.text ?? ""
-            #expect(!text.isEmpty, "no wording for \(kind)")
-            #expect(!text.contains("."), "an unresolved corpus key echoed: \(text)")
+        var said: Set<String> = []
+        for (kind, key) in stops {
+            for info in [nil, zora] as [NetChainInfoWire?] {
+                let model = SettingsLive.wizard(
+                    wizardView(phase: .error, chainInfo: info, error: kind, errorKey: key),
+                    loc: loc, fallback: fallback()
+                )
+                let text = model.callout?.text ?? ""
+                #expect(text == loc.t(key), "\(kind) is not said in the core's sentence: \(text)")
+                #expect(!text.isEmpty && text != key, "an unresolved corpus key echoed: \(text)")
+                said.insert(text)
+            }
         }
+        #expect(said.count == stops.count, "two stops read the same: \(said)")
+    }
+
+    /// The shell maps NO `error.type` to words any more: the sentence is the
+    /// key's, whatever the type. (Its own table said "unable to verify" for a
+    /// network that lists no RPC endpoint.) An error with no key — a view no
+    /// core wrote — says nothing rather than a sentence made up here; no
+    /// error, no line.
+    @Test func theShellMapsNoErrorTypeToWords() {
+        let k = I18nKeys.SettingsUi.self
+        // The same type under two keys draws two sentences…
+        let first = SettingsLive.wizard(
+            wizardView(phase: .error, error: .noRpcEndpoint, errorKey: k.addNoRpcEndpoint),
+            loc: loc, fallback: fallback()
+        )
+        let second = SettingsLive.wizard(
+            wizardView(phase: .error, error: .noRpcEndpoint, errorKey: k.addChainNotFound),
+            loc: loc, fallback: fallback()
+        )
+        #expect(first.callout?.text == loc.t(k.addNoRpcEndpoint))
+        #expect(second.callout?.text == loc.t(k.addChainNotFound))
+        // …and with none, nothing is said.
+        let keyless = SettingsLive.wizard(
+            wizardView(phase: .error, chainInfo: zora, error: .notCompatible(chainId: 7_777_777)),
+            loc: loc, fallback: fallback()
+        )
+        #expect(keyless.callout == nil)
+        let calm = SettingsLive.wizard(
+            wizardView(phase: .suggested, errorKey: k.addChainNotFound), loc: loc, fallback: fallback()
+        )
+        #expect(calm.callout == nil, "a sentence with no error behind it")
+    }
+
+    /// A refusal that keeps its check (the scan / auto-add path, `phase:
+    /// error` beside `compat`) draws the reason and — for missing contracts
+    /// only — Chain Setup for THIS chain; "unable to verify" beside a check
+    /// draws neither reason nor link.
+    @Test func aRefusalBesideItsCheckDrawsTheReasonAndTheButton() {
+        let k = I18nKeys.SettingsUi.self
+        func page(
+            _ error: NetWizardErrorWire, _ key: String, _ compat: NetCompatibilityWire?,
+            rpcField: NetRpcFieldWire = .none
+        ) -> AddNetworkModel {
+            SettingsLive.wizard(
+                wizardView(phase: .error, chainInfo: zora, compat: compat, error: error, errorKey: key,
+                           rpcField: rpcField),
+                loc: loc, fallback: fallback()
+            )
+        }
+        let missing = page(.notCompatible(chainId: 7_777_777), k.addIncompatibleHint,
+                           compat(compatible: false, missing: ["Multicall3"]))
+        #expect(missing.callout?.text == loc.t(k.addIncompatibleHint))
+        #expect(missing.secondary == loc.t(k.addChainTool))
+        #expect(missing.secondaryUrl == "https://getvela.app/chain-setup?chain=7777777")
+        #expect(missing.checks.isEmpty && missing.candidate?.badge == nil && missing.primary == nil)
+        // A refusal: no field, and no re-check with nothing to read (F22).
+        #expect(missing.customRpc == nil && missing.recheck == nil)
+
+        let noP256 = page(.notCompatible(chainId: 7_777_777), k.addNoP256Hint, compat(compatible: false, p256: false))
+        #expect(noP256.callout?.text == loc.t(k.addNoP256Hint))
+        #expect(noP256.secondary == nil && noP256.secondaryUrl == nil)
+        #expect(noP256.customRpc == nil && noP256.recheck == nil)
+
+        // The check could not run: whatever it kept, no reason and no link.
+        var unverified = compat(compatible: false, missing: ["Multicall3"])
+        unverified = NetCompatibilityWire(
+            chainId: unverified.chainId, compatible: false, multiKeyReady: false, contracts: [],
+            p256Available: nil, bestRpcUrl: nil, bestRpcLatencyMs: nil, rpcFailure: .allProbesFailed,
+            blocker: nil, hintKey: nil, setupUrl: "https://getvela.app/chain-setup?chain=7777777"
+        )
+        let failed = page(.checkFailed(chainId: 7_777_777), k.addUnableToVerify, unverified,
+                          rpcField: .optional)
+        #expect(failed.callout?.text == loc.t(k.addUnableToVerify))
+        #expect(failed.secondary == nil && failed.secondaryUrl == nil)
+        #expect(failed.recheck == loc.t(k.addRecheckWithRpc))
+        #expect(failed.customRpc?.label == loc.t(k.addCustomRpcTitle))
+    }
+
+    // MARK: - One rule for the RPC field and its re-check (final notes F4, F14, F22)
+
+    /// The field and "Re-check with this RPC" follow the core's `rpcField`
+    /// and NOTHING else here: every wizard state this builder can be handed,
+    /// under each of the core's three answers — the field exactly when the
+    /// answer is not `none`, under the core's label, and the re-check exactly
+    /// where the field is. A condition of this shell's own would show as a
+    /// state that disagrees with the answer it was given.
+    @Test func theRpcFieldAndItsReCheckFollowTheCoresRuleAlone() {
+        let k = I18nKeys.SettingsUi.self
+        let unverified = NetCompatibilityWire(
+            chainId: 7_777_777, compatible: false, multiKeyReady: false, contracts: [],
+            p256Available: nil, bestRpcUrl: nil, bestRpcLatencyMs: nil, rpcFailure: .allProbesFailed
+        )
+        typealias State = (
+            name: String, phase: NetWizardPhaseWire, compat: NetCompatibilityWire?,
+            error: NetWizardErrorWire?, key: String?, canAdd: Bool
+        )
+        let states: [State] = [
+            ("resolving", .resolving, nil, nil, nil, false),
+            ("checking", .checking, nil, nil, nil, false),
+            ("compatible", .checked, compat(compatible: true), nil, nil, true),
+            ("unable to verify", .checked, unverified, nil, nil, false),
+            ("refused: no P-256", .checked, compat(compatible: false, p256: false), nil, nil, false),
+            ("refused: contracts", .checked, compat(compatible: false, missing: ["Multicall3"]), nil, nil, false),
+            ("stop: no RPC", .error, nil, .noRpcEndpoint, k.addNoRpcEndpoint, false),
+            ("stop: check failed", .error, unverified, .checkFailed(chainId: 7_777_777), k.addUnableToVerify, false),
+            ("stop: refused", .error, compat(compatible: false, p256: false),
+             .notCompatible(chainId: 7_777_777), k.addNoP256Hint, false),
+        ]
+        for state in states {
+            for answer in [NetRpcFieldWire.none, .optional, .required] {
+                let model = SettingsLive.wizard(
+                    wizardView(phase: state.phase, chainInfo: zora, compat: state.compat, error: state.error,
+                               errorKey: state.key, rpcField: answer, canAdd: state.canAdd),
+                    loc: loc, fallback: fallback()
+                )
+                let said = "\(state.name), rpc_field \(answer)"
+                #expect((model.customRpc != nil) == (answer != .none), "the field: \(said)")
+                #expect((model.recheck != nil) == (model.customRpc != nil), "a re-check without its field, or a field without it: \(said)")
+                switch answer {
+                case .none: break
+                case .optional: #expect(model.customRpc?.label == loc.t(k.addCustomRpcTitle), "\(said)")
+                case .required: #expect(model.customRpc?.label == loc.t(k.fieldRpcUrl), "\(said)")
+                }
+            }
+        }
+        // The two labels are different words: "(optional)" is not said over
+        // the one thing asked for (F4).
+        let en = Loc(overrideTag: "en", preferredLanguages: [])
+        #expect(en.t(k.addCustomRpcTitle) == "Custom RPC (optional)")
+        #expect(en.t(k.fieldRpcUrl) == "RPC URL")
+    }
+
+    /// The no-RPC stop says why FIRST, then gives the box: its sentence ends
+    /// "Enter one, then re-check." A result that was checked keeps the field
+    /// above its note, as drawn.
+    @Test func aStopSaysWhyAboveItsField() {
+        let k = I18nKeys.SettingsUi.self
+        let stop = SettingsLive.wizard(
+            wizardView(phase: .error, chainInfo: zora, error: .noRpcEndpoint, errorKey: k.addNoRpcEndpoint,
+                       rpcField: .required),
+            loc: loc, fallback: fallback()
+        )
+        #expect(stop.calloutLeads && stop.callout != nil && stop.customRpc != nil)
+        let checked = SettingsLive.wizard(
+            wizardView(chainInfo: zora, compat: compat(compatible: true), rpcField: .optional, canAdd: true),
+            loc: loc, fallback: fallback()
+        )
+        #expect(!checked.calloutLeads)
+    }
+
+    /// A view from before `rpc_field` decodes, and reads as "no field"; a
+    /// value this build has never heard of reads the same way.
+    @Test func aWizardFromBeforeTheRpcFieldStillDecodes() throws {
+        let base: [String: Any] = [
+            "phase": "checked", "query": "", "custom_rpc": "", "suggestions": [[String: Any]](),
+            "chain_info": NSNull(), "compat": NSNull(), "error": NSNull(), "can_add": false,
+        ]
+        let old = try CoreJSON.decode(NetWizardViewWire.self, from: base)
+        #expect(old.rpcField == .none && old.rpcFieldLabelKey == nil && old.errorKey == nil)
+        var keyed = base
+        keyed["rpc_field"] = "required"
+        keyed["rpc_field_label_key"] = "settingsModals.network.fieldRpcUrl"
+        let new = try CoreJSON.decode(NetWizardViewWire.self, from: keyed)
+        #expect(new.rpcField == .required && new.rpcFieldLabelKey == "settingsModals.network.fieldRpcUrl")
+        keyed["rpc_field"] = "something_new"
+        #expect(try CoreJSON.decode(NetWizardViewWire.self, from: keyed).rpcField == .none)
     }
 }

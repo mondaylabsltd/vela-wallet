@@ -99,7 +99,8 @@ object ExploreLive {
         names: Map<Int, String>,
         siteChain: Int,
         balances: app.getvela.wallet.feature.wallet.core.BalanceView,
-        fiat: (Double) -> String,
+        /** The one fiat helper (`WalletLive.Money.fiat`): `null` is a figure WITHHELD until the display currency is the person's — the row says nothing. */
+        fiat: (Double) -> String?,
     ): List<app.getvela.wallet.feature.explore.components.PickerOption> {
         val held = heldUsdByChain(balances)
         return networks.map { n ->
@@ -454,7 +455,10 @@ object ExploreLive {
         val note = when (phase) {
             app.getvela.wallet.feature.settings.core.NetDappAddPhase.Ready ->
                 view.compat?.takeIf { !it.multi_key_ready }?.let { strings.t("settingsModals.addNetwork.singleKeyOnly") }
-            app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible -> strings.t("settingsModals.addNetwork.incompatibleHint")
+            // Why it is refused, in the core's words: no P-256 verifier
+            // (nothing to deploy; money sent there would be stuck) or
+            // contracts that are missing.
+            app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible -> view.compat?.hint_key?.let(strings::t)
             app.getvela.wallet.feature.settings.core.NetDappAddPhase.WrongRpc -> strings.t(
                 "assets.rpcFixWrongChain",
                 mapOf("actual" to (view.reported_chain_id?.toString() ?: ""), "expected" to chain),
@@ -477,7 +481,9 @@ object ExploreLive {
             note = note,
             add = if (view.can_add) strings.t("settingsModals.addNetwork.addNetworkBtn") else null,
             retry = if (phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.CheckFailed) strings.t("settingsModals.addNetwork.retry") else null,
-            setupTool = if (phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible) strings.t("settingsModals.addNetwork.openChainSetupTool") else null,
+            setupTool = view.compat?.setup_url
+                ?.takeIf { phase == app.getvela.wallet.feature.settings.core.NetDappAddPhase.NotCompatible }
+                ?.let { url -> app.getvela.wallet.feature.explore.SetupToolModel(strings.t("settingsModals.addNetwork.openChainSetupTool"), url) },
             dismiss = if (decided) strings.t("common.done") else strings.t("connect.browser.cancel"),
         )
     }

@@ -65,6 +65,26 @@ const DESKTOP_ENTRIES: Record<FlowEntry, DesktopFlowStateId[]> = {
 	'tx-detail': ['da1', 'da2']
 };
 
+/**
+ * The entries a HOME ROW opens straight onto a sheet (note 16).
+ *
+ * A transaction tapped in the home's Activity and a holding tapped in its
+ * Assets open their detail — a sheet. The stacks above put that sheet over the
+ * list it also lives on (`a1`, `t1`), because that is where the drawn states
+ * put it; but the person never opened that list. Closing the sheet used to
+ * land them on it: a row tapped on the home, closed, and they were in History.
+ *
+ * So these sheets are drawn over the page they were opened from — the home,
+ * which stays mounted under them — and closing one (✕, a drag, the scrim,
+ * Escape, ‹, the browser's Back) leaves the flow: back to where it was opened.
+ * The list's own rows still open the same sheet over the list, and close onto
+ * it.
+ */
+const HOME_SHEETS: Partial<Record<FlowEntry, FlowStateId>> = {
+	'tx-detail': 'a2',
+	'token-detail': 't2'
+};
+
 /** Pushes a step deeper within a flow that is already open. */
 const MOBILE_STEPS: Record<string, FlowStateId> = {
 	'receive-qr': 'r2',
@@ -99,6 +119,21 @@ export class FlowNav {
 	/** Deepest state last. Empty means the wallet home is showing. */
 	mobile = $state<FlowStateId[]>([]);
 	desktop = $state<DesktopFlowStateId[]>([]);
+	/**
+	 * The sheet a home row opened ({@link HOME_SHEETS}), for as long as that
+	 * entry stands; `null` for every other way into a flow.
+	 */
+	homeSheet = $state<FlowStateId | null>(null);
+
+	/**
+	 * The phone is showing a sheet over the HOME it was opened from: the top
+	 * of the stack is the sheet a home row opened. The route draws the home
+	 * under it rather than the list the stack has beneath it, and closing it
+	 * leaves the flow.
+	 */
+	get overHome(): boolean {
+		return this.homeSheet !== null && this.mobileTop === this.homeSheet;
+	}
 
 	/** The state on top, or `undefined` when the home is showing. */
 	get mobileTop(): FlowStateId | undefined {
@@ -117,6 +152,7 @@ export class FlowNav {
 	enter(entry: FlowEntry): void {
 		this.mobile = [...MOBILE_ENTRIES[entry]];
 		this.desktop = [...DESKTOP_ENTRIES[entry]];
+		this.homeSheet = HOME_SHEETS[entry] ?? null;
 		this.#mark();
 	}
 
@@ -139,8 +175,16 @@ export class FlowNav {
 		this.#mark();
 	}
 
-	/** One level up. At the root this leaves the flow and shows the wallet. */
+	/**
+	 * One level up. At the root this leaves the flow and shows the wallet —
+	 * and so does a sheet a home row opened: the level under it is a list the
+	 * person never opened (note 16).
+	 */
 	back(): void {
+		if (this.overHome) {
+			this.close();
+			return;
+		}
 		this.mobile = this.mobile.slice(0, -1);
 		this.desktop = this.desktop.slice(0, -1);
 	}
@@ -157,6 +201,12 @@ export class FlowNav {
 	 */
 	sheetClosed(state: FlowStateId): void {
 		if (this.mobileTop !== state) return;
+		// A sheet a home row opened closes back onto the home (note 16), not
+		// onto the list the stack has under it.
+		if (this.overHome) {
+			this.close();
+			return;
+		}
 		this.mobile = this.mobile.slice(0, -1);
 		const step = Object.keys(MOBILE_STEPS).find((key) => MOBILE_STEPS[key] === state);
 		const desktop = step === undefined ? undefined : DESKTOP_STEPS[step];
@@ -168,6 +218,7 @@ export class FlowNav {
 	close(): void {
 		this.mobile = [];
 		this.desktop = [];
+		this.homeSheet = null;
 	}
 
 	/**

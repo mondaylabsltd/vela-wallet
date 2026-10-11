@@ -104,6 +104,31 @@ test("tap-to-hide masks every figure and survives a reload (privacy is the core'
 	await expect(page.getByText('••••••').first()).toBeVisible();
 	await expect(page.getByText('$4,500')).toHaveCount(0);
 
+	// The mask is drawn from the core's view at once; the flag reaches the
+	// store a transaction later. Reloading in between tests the race, not the
+	// rule: with the machine loaded the write had not landed, the page came
+	// back shown, and this failed about one full run in three. So the reload
+	// waits for what "survives a reload" means — the flag being stored.
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					new Promise<unknown>((resolve) => {
+						const open = indexedDB.open('vela', 1);
+						open.onerror = () => resolve(null);
+						open.onsuccess = () => {
+							const read = open.result
+								.transaction('kv', 'readonly')
+								.objectStore('kv')
+								.get('vela.balanceHidden');
+							read.onsuccess = () => resolve(read.result ?? null);
+							read.onerror = () => resolve(null);
+						};
+					})
+			)
+		)
+		.toBe('1');
+
 	await page.reload();
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await expect(page.getByText('••••••').first()).toBeVisible({ timeout: 20_000 });
@@ -170,6 +195,43 @@ test('an unreachable chain’s status line opens the list, its row the RPC fix, 
 		timeout: 20_000
 	});
 	await expect(page.getByText('$4,500', { exact: true })).toBeVisible({ timeout: 20_000 });
+});
+
+/**
+ * PR 3 note 4. Tempo has no coin of its own: what it holds is the stablecoins
+ * its registry document lists, so with that document away nothing can be read
+ * there. Home said "Can't reach Tempo" and the list offered "Fix" — the RPC
+ * editor — for a network whose RPC nobody had asked. The round now says why,
+ * and the core's words and its `rpc_fixable` are what is drawn.
+ */
+test('a token list that cannot be loaded is said as that, and its row offers no RPC fix (PR 3 note 4)', async ({
+	page
+}, testInfo) => {
+	// Tempo's document: the registry answers 503 (not a 404, which is the
+	// server saying there is none). Registered last, so it wins for this id.
+	await page.route(/\/chains\/eip155-4217\.json$/, (route) =>
+		route.fulfill({ status: 503, body: 'registry down' })
+	);
+	await openHome(page);
+	await expect(page.getByText('$4,500', { exact: true })).toBeVisible({ timeout: 20_000 });
+
+	// The line names the token list — never the network as out of reach.
+	const words = en('assets.tokenListUnreachable').replace('{{name}}', 'Tempo');
+	const line = page.getByRole('button', { name: words });
+	await expect(line).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByText("Can't reach Tempo right now")).toHaveCount(0);
+	await page.screenshot({ path: testInfo.outputPath('note4-home-line.png') });
+
+	// The list it opens: Tempo's row, and nothing to press on it.
+	await line.click();
+	const sheet = page.getByRole('dialog');
+	const list = sheet.getByTestId('unreachable-list');
+	await expect(sheet.getByText(words).first()).toBeVisible();
+	await expect(list.getByRole('listitem')).toHaveCount(1);
+	await expect(list.getByText('Tempo', { exact: true })).toBeVisible();
+	await expect(list.getByRole('button')).toHaveCount(0);
+	await expect(sheet.getByRole('button', { name: en('assets.rpcFix') })).toHaveCount(0);
+	await page.screenshot({ path: testInfo.outputPath('note4-list-no-fix.png') });
 });
 
 test('every unreachable network is listed with what was last read there, and one that comes back leaves (spec 092)', async ({

@@ -42,7 +42,11 @@
 	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
-	import { checkEthereumBackup, type EthereumBackupState } from '$lib/services/registry-backup';
+	import {
+		CHECKING_ROW,
+		checkEthereumBackup,
+		type EthereumBackupRow
+	} from '$lib/services/registry-backup';
 	import { readWalletKeys, type WalletKeys } from '$lib/services/wallet-keys';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
@@ -257,22 +261,24 @@
 		await reportSend.send(() => fileReport(payload), copy);
 	}
 
-	// --- The Ethereum backup row (spec 062) ---------------------------------
+	// --- The Ethereum copy's row (spec 062) ---------------------------------
 	//
-	// Where the active wallet's founding record stands on Ethereum, asked of the
-	// chain (never of our server) each time this page meets an account — and
-	// again whenever a backup request settles, because the chain is what knows
-	// whether it landed.
-	let backupState = $state<EthereumBackupState | 'checking'>('checking');
+	// Where the active wallet's record stands on Ethereum, asked of the chain
+	// (never of our server) each time this page meets an account — and again
+	// whenever a copy request settles, because the chain is what knows whether
+	// it landed. What is kept is the ROW the core says to draw for where it
+	// stands (`registry_backup::BackupRow`): its words, its tone and what a tap
+	// does. `null` is "draw nothing" (no registry on Ethereum, no record).
+	let backupRow = $state<EthereumBackupRow | null>(CHECKING_ROW);
 	let backupAsked = $state(0);
 	$effect(() => {
 		const account = session.view.accounts[session.view.active_index]?.account;
 		void backupAsked;
 		if (!account) return;
-		backupState = 'checking';
+		backupRow = CHECKING_ROW;
 		let cancelled = false;
 		void checkEthereumBackup(account.address, foundingKeyOf(account)).then((check) => {
-			if (!cancelled) backupState = check.state;
+			if (!cancelled) backupRow = check.row;
 		});
 		return () => {
 			cancelled = true;
@@ -306,10 +312,14 @@
 	onMount(() => () => feeQuote.dispose());
 	let backupOpening = false;
 	function startBackup(): void {
-		// "Could not check" asks again rather than starting a backup: there is
-		// nothing to sign until we know whether it is already backed up, and
-		// the same effect below does the asking.
-		if (backupState === 'could_not_check') {
+		// What a tap does is the core's (`BackupRow.action`). `retry` — only
+		// "couldn't check" — asks again rather than starting a copy: there is
+		// nothing to sign until we know whether it is already there, and the
+		// effect above does the asking. `none` is a statement: copied, still
+		// checking, or an older wallet that can never be copied — which used
+		// to read "could not check" and be asked again for ever.
+		if (backupRow === null || backupRow.action === 'none') return;
+		if (backupRow.action === 'retry') {
 			backupAsked += 1;
 			return;
 		}
@@ -575,7 +585,7 @@
 		model = withFeedback(model, m, deviceFacts);
 		model = {
 			...model,
-			keys: walletKeysModel(walletKeys, backupState, m, customDomain),
+			keys: walletKeysModel(walletKeys, backupRow, m, customDomain),
 			venue: liveVenue,
 			// Spec 102: no Signing pages on the web — it opens none, so a list of
 			// pages it trusts would be a list of nothing it does.
@@ -617,7 +627,7 @@
 			...model,
 			account: {
 				...model.account,
-				keys: walletKeysModel(walletKeys, backupState, m, customDomain),
+				keys: walletKeysModel(walletKeys, backupRow, m, customDomain),
 				venue: liveVenue
 			},
 			// Spec 102: the web opens no signing page — see the phone model above.
@@ -654,6 +664,17 @@
 		rpcSaving = null;
 		if (row !== undefined && row.rpc_chain_mismatch === null) track('network_rpc_set', { chain });
 	});
+
+	/**
+	 * Check the wizard's candidate again, with whatever RPC is typed — the
+	 * panel's "Re-check with this RPC", and its "Retry" over a check that
+	 * could not be made.
+	 */
+	function recheckCandidate(): void {
+		const chainId = net.wizard.chain_info?.chain_id;
+		if (chainId === undefined) return;
+		networkAdmin.dispatch({ type: 'chain_selected', chain_id: chainId, keep_custom_rpc: true });
+	}
 
 	/**
 	 * The one translation table: what the person did → what the core is told.
@@ -714,19 +735,20 @@
 				networkAdmin.dispatch({ type: 'custom_rpc_edited', value: event.value });
 				return;
 			case 'confirm-add':
+				// The panel's primary is "Add network" only when the core says the
+				// candidate may be added (`can_add`). Over an inconclusive check it
+				// reads "Retry" — and it did nothing: `add_confirmed` is dropped
+				// unless the check passed. Retry is the check, made again.
+				if (!net.wizard.can_add) {
+					recheckCandidate();
+					return;
+				}
 				addingChain = net.wizard.chain_info?.chain_id ?? null;
 				networkAdmin.dispatch({ type: 'add_confirmed', now_iso: new Date().toISOString() });
 				return;
-			case 'recheck': {
-				const chainId = net.wizard.chain_info?.chain_id;
-				if (chainId !== undefined)
-					networkAdmin.dispatch({
-						type: 'chain_selected',
-						chain_id: chainId,
-						keep_custom_rpc: true
-					});
+			case 'recheck':
+				recheckCandidate();
 				return;
-			}
 			case 'endpoints-open':
 				networkAdmin.dispatch({ type: 'endpoints_opened' });
 				return;

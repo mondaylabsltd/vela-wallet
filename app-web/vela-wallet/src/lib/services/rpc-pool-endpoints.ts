@@ -9,6 +9,7 @@
  * state and the core filters bans at SELECTION, not collection (invariant ⑧).
  */
 
+import { loadCore, publicRpcUrls } from '$lib/core/client';
 import { fetchChainInfo } from './chain-registry';
 import { getBundlerServiceURL } from './endpoints';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from './networks';
@@ -46,21 +47,23 @@ export function getBuiltinBundlerUrl(): string {
 	return getBundlerServiceURL();
 }
 
-/** Reliable public RPCs per chain (curated, CORS-friendly; the Expo table, minus
- *  endpoints dropped for measured cause — see the inline notes). */
-export const PUBLIC_RPCS: Record<number, string[]> = {
-	1: ['https://ethereum-rpc.publicnode.com', 'https://1rpc.io/eth'],
-	// bsc.meowrpc.com was dropped (issue 212; measured 2026-09-20): its
-	// eth_gasPrice flips between 0.05, 0.1 and 1.0 gwei and ~33% of calls error.
-	56: ['https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org'],
-	137: ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'],
-	42161: ['https://arbitrum-one-rpc.publicnode.com', 'https://1rpc.io/arb'],
-	10: ['https://optimism-rpc.publicnode.com', 'https://1rpc.io/op'],
-	8453: ['https://base-rpc.publicnode.com', 'https://1rpc.io/base'],
-	43114: ['https://avalanche-c-chain-rpc.publicnode.com', 'https://1rpc.io/avax/c'],
-	100: ['https://gnosis-rpc.publicnode.com', 'https://1rpc.io/gnosis'],
-	196: ['https://rpc.xlayer.tech', 'https://xlayer.drpc.org']
-};
+/**
+ * The curated public RPCs behind a chain's default, first choice first — the
+ * core's ONE list (`network_admin::PUBLIC_RPCS`, `public_rpc_urls`), the same
+ * on all four apps. Empty for a chain it has none for.
+ *
+ * This shell kept its own copy, and it had gone stale: every `1rpc.io`
+ * endpoint answered HTTP 502 for every call and `bsc.drpc.org` rate-limited
+ * most of them (measured 2026-10-10), so the "public" tier was one endpoint
+ * deep on eight chains. Which endpoints are curated, and why one was dropped,
+ * is the core's to say.
+ *
+ * The wasm must be loaded. `collectRpcUrls` awaits it; a caller that is not
+ * async loads the core before it asks (`ext-chains.ts`).
+ */
+export function publicRpcs(chainId: number): string[] {
+	return publicRpcUrls(chainId);
+}
 
 /** Never-banned predicate — on web bans are core state. */
 export const NEVER_BANNED = (url: string): boolean => {
@@ -80,6 +83,10 @@ export async function collectRpcUrls(
 		seen.add(url);
 		entries.push({ url, source });
 	};
+
+	// The public tier is the core's list: the wasm has to be up before it is
+	// asked. It already is wherever the pool runs; idempotent.
+	await loadCore();
 
 	// Chain index — fetched once, reused for primary and deep-fallback tiers.
 	let indexRpcs: string[] = [];
@@ -121,8 +128,8 @@ export async function collectRpcUrls(
 	const customNet = getAllNetworksSync().find((n) => n.chainId === chainId);
 	if (customNet?.rpcURL) add(customNet.rpcURL, 'default');
 
-	// 4. Public fallback (curated)
-	for (const url of PUBLIC_RPCS[chainId] ?? []) add(url, 'public');
+	// 4. Public fallback — the core's curated list, in its order.
+	for (const url of publicRpcs(chainId)) add(url, 'public');
 
 	// 5./6. Chain index: first few primary, the rest as deep fallback.
 	indexRpcs.slice(0, 5).forEach((url) => add(url, 'builtin'));

@@ -31,13 +31,8 @@ import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
 import type { SignView } from '$lib/core/generated/SignView';
-import {
-	feeAmountText,
-	feeLine,
-	feeLineParts,
-	feeOptionPriceUsd,
-	feeParts
-} from '$lib/flows/fee-line';
+import type { SimVerdict } from '$lib/core/generated/SimVerdict';
+import { feeAmountText, feeLineParts, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
 import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
@@ -53,7 +48,7 @@ import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
 import { failedFeeTappable } from '$lib/flows/fee-failure';
-import type { SigningMessages } from './messages';
+import { SIM_COULD_NOT_CHECK_KEY, type SigningMessages } from './messages';
 import type {
 	AllowanceChip,
 	AmountLine,
@@ -89,6 +84,14 @@ export interface SigningLiveInputs {
 	 * so the ✕ stays shut while anything is in flight.
 	 */
 	progress?: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'>;
+	/**
+	 * The sheet's own simulation of THIS request, as the core read it
+	 * (`simOutcome`, PR 3 device round) — the host's one `eth_simulateV1`
+	 * read, which also tells the fee machine what the calls move. Absent
+	 * until the node answers, for a request nobody simulated (a message), and
+	 * for any other request than the one it was measured for.
+	 */
+	sim?: SimVerdict | null;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -723,6 +726,10 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// the new figure lands; the core's gate holds the confirm meanwhile.
 	const measuring = fee.busy || fee.provisional;
 	const refresh = { refreshLabel: m.feeRefresh, refreshing: measuring, chevron: choosable };
+	// The display currency is not the person's yet: the fee's money is
+	// withheld, and the row keeps the line it will land on from now — under
+	// "Estimating…" too, so the fee landing moves nothing either (F12).
+	const withheld = inputs.currency.committed ? {} : { valueFiatWithheld: true };
 	// PR 2 note 1: the fee's failure, said ONCE by the core for this row and
 	// the line under the confirm (`FeeView.failure`) — present while the run
 	// failed AND through the re-ask that follows it, so nothing here holds a
@@ -769,6 +776,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 				kind: 'onchain',
 				label: m.feeLabel,
 				value: m.feeEstimating,
+				...withheld,
 				speed,
 				tappable,
 				// A first figure the core already knows no coin can pay
@@ -787,7 +795,11 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// eighteen-decimal number under a coin nobody was spending. The design
 	// sheet is explicit that these two surfaces must not drift.
 	const parts = feeParts(fee.fee, fee.options);
-	const value = feeLine(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
+	// In the send form's two pieces — the coin, and what it costs — so the row
+	// can stand the money under the coin WHOLE (F12). As one string, "0.0015
+	// ETH · ≈…" became "0.0015 ETH · ≈₫112,500.00" at 320 px, "Network fee"
+	// wrapped to make room, and the bottom-anchored sheet moved 18 px.
+	const line = feeLineParts(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
 	const selector = feeSelector(inputs);
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
@@ -810,7 +822,9 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	return {
 		kind: 'onchain',
 		label: m.feeLabel,
-		value,
+		value: line.coin,
+		...(line.fiat === null ? {} : { valueFiat: line.fiat }),
+		...withheld,
 		selector,
 		speed,
 		warning,
@@ -884,6 +898,100 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 	});
 }
 
+/**
+ * PR 3 device round, item 3 — "No asset changes" is the core's line, and the
+ * web says it too.
+ *
+ * The sheet's own simulation was a check, and nothing of the person's moves:
+ * the core names the line (`SimVerdict.no_change_key`) and this looks its
+ * words up. Which case this is, and the sentence, are never decided here —
+ * no key, no line. Only for a transaction that may still be signed: a
+ * message moves nothing by nature (and nobody simulates one), and a refused
+ * request says only its refusal.
+ *
+ * Two things of the simulation's answer are still NOT drawn here (spec 082
+ * RG6 stands): the balance rows of a check that moves something, and a
+ * revert's line — the relay's own estimate stays the one voice that says
+ * "will fail" (`withEstimateVerdict`).
+ *
+ * Nothing while the core says nothing could be checked (`couldNotCheckLine`):
+ * that sentence has the verdict's place then, and never both at once.
+ */
+function noChangeLine(inputs: SigningLiveInputs): string | undefined {
+	const { sign, sim, m } = inputs;
+	const request = sign.request;
+	if (!request || sign.blocked) return undefined;
+	if (request.kind !== 'transaction' && request.kind !== 'batch') return undefined;
+	if (couldNotCheckLine(inputs) !== undefined) return undefined;
+	const key = sim?.no_change_key ?? null;
+	return key === null ? undefined : m.simSaid[key] || undefined;
+}
+
+/**
+ * PR 3 — nothing could be checked, and the verdict's place says so, as a
+ * caution: "Vela couldn't check what this transaction does…". A person who
+ * confirms then does it knowing — never under an empty place that reads as
+ * "nothing to report".
+ *
+ * The core says it two ways, and names the sentence both times:
+ *
+ * - the simulation's deadline passed with no verdict at all
+ *   (`SignView.sim_waited_out_key` — the confirm waits four seconds at most,
+ *   then opens beside this line);
+ * - this request's own verdict is a not-checked answer
+ *   (`SimVerdict.notice_risk === 'caution'`, its `notice_key`): the node does
+ *   not offer the simulation, answered what nobody can read, or no node
+ *   answered.
+ *
+ * The first was once the only one drawn, and the line then left the sheet the
+ * moment the pool gave up: "could not check" taken back, over an open
+ * confirm, when "could not check" was the final verdict. Both are the same
+ * card, so the one becoming the other moves nothing and lands nothing anew.
+ *
+ * No key, no line; a key this build has no words for is never drawn as a
+ * dotted path; a revert's notice (`danger`) is not this one. A refused
+ * request says only its refusal.
+ */
+function couldNotCheckLine({ sign, sim, m }: SigningLiveInputs): string | undefined {
+	const request = sign.request;
+	if (!request || sign.blocked) return undefined;
+	const waitedOut = cautionWords(sign.sim_waited_out_key, m);
+	if (waitedOut !== undefined) return waitedOut;
+	if (request.kind !== 'transaction' && request.kind !== 'batch') return undefined;
+	return sim?.notice_risk === 'caution' ? cautionWords(sim.notice_key, m) : undefined;
+}
+
+/** The words of the caution the core named for the verdict's place, by its key — or none. */
+function cautionWords(key: string | null | undefined, m: SigningMessages): string | undefined {
+	return key === SIM_COULD_NOT_CHECK_KEY ? m.warnSimUnavailable || undefined : undefined;
+}
+
+/**
+ * The verdict's place: the balance-changes card with no rows, where the apps
+ * put the verdict — after the request's own blocks, before the footer. What
+ * it says lands after the sheet has opened (`verdict`), so the sheet keeps
+ * its confirm where it was and brings the card into sight.
+ *
+ * "No asset changes" is a site's request's alone here — the wallet's own
+ * folds it into Technical details (`techModel`, issue 314). The caution that
+ * nothing could be checked is drawn for both alike: it is the one thing the
+ * person must see before a confirm that just opened, so it is never folded
+ * away.
+ */
+function withSimVerdict(blocks: Block[], inputs: SigningLiveInputs, own: boolean): Block[] {
+	const title = inputs.m.balancesTitle;
+	const caution = couldNotCheckLine(inputs);
+	if (caution !== undefined) {
+		return [
+			...blocks,
+			{ kind: 'balances', title, rows: [], note: caution, noteTone: 'caution', verdict: true }
+		];
+	}
+	const note = own ? undefined : noChangeLine(inputs);
+	if (note === undefined) return blocks;
+	return [...blocks, { kind: 'balances', title, rows: [], note, verdict: true }];
+}
+
 function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 	const { sign, clear, m } = inputs;
 	// A refused request discloses nothing (spec 081). Android and iOS hide this
@@ -892,6 +1000,7 @@ function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 	// disclosure — the one shell that stayed lax about it.
 	const request = sign.blocked ? null : sign.request;
 	const result = sign.blocked ? null : clear.result;
+	const simResult = noChangeLine(inputs);
 	return {
 		title: m.advancedToggle,
 		// The contract's name beside the toggle tells a site's request apart;
@@ -909,6 +1018,12 @@ function techModel(inputs: SigningLiveInputs, own: boolean): TechModel {
 					}
 				]
 			: [],
+		// Issue 314: the wallet's own request is plain rows, and a card saying
+		// nothing moves would be the only "simulation" on it — so the line
+		// folds in here, as it does on the phones.
+		...(own && simResult !== undefined
+			? { simResult: { label: m.techSimResult, value: simResult } }
+			: {}),
 		raw: request ? { label: m.techRawData, hex: request.params_json } : undefined,
 		copyLabel: m.copyValue,
 		explorerLabel: m.viewOnExplorer
@@ -1216,7 +1331,7 @@ function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[
 		: m.warnWillFail;
 	const at = blocks.findIndex((block) => block.kind === 'intent');
 	const next = [...blocks];
-	next.splice(at + 1, 0, { kind: 'warning', tone: 'danger', text });
+	next.splice(at + 1, 0, { kind: 'warning', tone: 'danger', text, verdict: true });
 	return next;
 }
 
@@ -1249,11 +1364,14 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// fee at the speed in force. Spec 099 R7: the AND is the core's
 	// (`sign_confirm::confirm_state`), the same on every client, and it says
 	// which part is shut; the line under a shut confirm is its corpus key.
+	// PR 3: and, last, the sheet's own simulation — while its verdict is out
+	// (`sign.sim_checking`) the core holds the confirm and names the line
+	// ("Checking what this transaction does…"). Nothing is ANDed on here.
 	const confirmState = signConfirmState(sign, guard, clear, fee, inputs.speed?.view.tier ?? null);
 	const enabled = confirmState?.enabled === true;
 	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
 
-	const drawn = withEstimateVerdict(blocksFor(inputs), inputs);
+	const drawn = withSimVerdict(withEstimateVerdict(blocksFor(inputs), inputs), inputs, own);
 	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(drawn), m);
 	// The wallet's own request names no requester: its intent is the header's
 	// headline, beside the ✕, and is not said a second time below it. While
@@ -1303,7 +1421,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		confirm: {
 			/*
 			 * The control's whole label is the action, a PHRASE ("Confirm
-			 * send", "Back up public keys"), never a sentence or a template: a
+			 * send", "Copy this wallet's record"), never a sentence or a template: a
 			 * template fallback once put "{{action}}" on screen (spec 027 T340).
 			 * With no intent from the core, the generic word is the honest one.
 			 */

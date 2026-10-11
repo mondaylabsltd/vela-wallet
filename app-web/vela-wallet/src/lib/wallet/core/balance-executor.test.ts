@@ -33,12 +33,13 @@ vi.mock('$lib/services/wallet-api', () => ({
 			_address: string,
 			options: {
 				onProgress?: (t: APIToken[]) => void;
-				onFailedChains?: (ids: number[], internal: number[]) => void;
+				onFailedChains?: (ids: number[], internal: number[], registry: number[]) => void;
 			} = {}
 		) => {
 			options.onProgress?.([ETH]);
-			// Polygon did not answer; Optimism's read never left the app.
-			options.onFailedChains?.([137, 10], [10]);
+			// Polygon did not answer; Optimism's read never left the app; Tempo's
+			// token list could not be loaded.
+			options.onFailedChains?.([137, 10, 4217], [10], [4217]);
 			return [ETH];
 		}
 	),
@@ -82,10 +83,12 @@ describe('fetch_tokens', () => {
 			type: 'fetch_settled',
 			address: ADDR,
 			pull: false,
-			failed_chain_ids: [137, 10],
+			failed_chain_ids: [137, 10, 4217],
 			rate_limited_chain_ids: [56],
 			// PR 2 note 11: the subset that failed inside the app.
-			internal_chain_ids: [10]
+			internal_chain_ids: [10],
+			// PR 3 note 4: the subset not read for want of its token list.
+			registry_chain_ids: [4217]
 		});
 		// Spec 092: the chains the round asked, so the core can tell a network
 		// that answered holding nothing from one never read.

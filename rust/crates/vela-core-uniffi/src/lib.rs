@@ -891,6 +891,26 @@ pub fn registry_chain_unit(unit_id: u32, unit_hex: String, members_hex: String) 
     vela_core::registry_chain::unit_json(u64::from(unit_id), &unit_hex, &members_hex)
 }
 
+/// The curated public RPCs of a built-in network, in order — the RPC pool's
+/// `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+/// none. One list for every shell: each used to hold its own copy, and a
+/// dead endpoint had to be found and dropped in each.
+#[uniffi::export]
+pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
+    vela_core::app::network_admin::public_rpc_urls(chain_id)
+}
+
+/// A hidden amount as every shell draws it: the mask, then the unit the
+/// shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
+/// for whether a hidden amount keeps its unit: it does. An empty `unit` (a
+/// figure with no unit of its own) is the mask alone, never a trailing
+/// space. Each phone used to spell this itself, and one of them dropped the
+/// unit.
+#[uniffi::export]
+pub fn masked_amount(unit: String) -> String {
+    vela_core::app::privacy::masked_amount(&unit)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where
@@ -2306,6 +2326,11 @@ pub struct SimOutcomeRecord {
     pub notice_risk: Option<String>,
     /// The notice's corpus key; `None` for `deltas`.
     pub notice_key: Option<String>,
+    /// `componentsUi.signing.simResultNoChange` ("No asset changes") when the
+    /// answer was a check and nothing of the user's moves — the quiet line
+    /// the verdict's place says then; `None` otherwise. The judged view
+    /// (`TrustSimView.no_change_key`) carries the same line.
+    pub no_change_key: Option<String>,
 }
 
 /// What the pool's `eth_simulateV1` answer means for `user` (the signing
@@ -2317,31 +2342,30 @@ pub struct SimOutcomeRecord {
 /// client.
 #[uniffi::export]
 pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
-    use vela_core::app::sim_outcome::{classify, notice, SimOutcome, SimReply};
-    let outcome = classify(SimReply::from_json(&reply_json), &user);
-    let deltas: &[vela_core::app::token_trust::TrustAssetDelta] = match &outcome {
-        SimOutcome::Deltas { deltas } => deltas,
-        _ => &[],
+    use vela_core::app::sim_outcome::{verdict, SimReply};
+    let unreadable = || {
+        verdict(
+            SimReply::Error {
+                code: None,
+                message: None,
+            },
+            &user,
+        )
     };
+    let read = verdict(SimReply::from_json(&reply_json), &user);
     // A list that cannot be written out is an answer nobody can read: the
     // could-not-check line, never an empty list that reads "nothing moves".
-    let (outcome, deltas_json) = match serde_json::to_string(deltas) {
-        Ok(json) => (outcome, json),
-        Err(_) => (SimOutcome::NotOffered, "[]".to_owned()),
+    let (read, deltas_json) = match serde_json::to_string(&read.deltas) {
+        Ok(json) => (read, json),
+        Err(_) => (unreadable(), "[]".to_owned()),
     };
-    let notice = notice(&outcome);
     SimOutcomeRecord {
-        kind: serde_json::to_value(&outcome)
-            .ok()
-            .and_then(|value| value.get("kind")?.as_str().map(str::to_owned))
-            .unwrap_or_default(),
+        kind: read.kind,
         deltas_json,
-        revert_reason: match &outcome {
-            SimOutcome::Reverts { reason } => reason.clone(),
-            _ => None,
-        },
-        notice_risk: notice.as_ref().map(|n| snake_name(&n.risk)),
-        notice_key: notice.map(|n| n.key.to_owned()),
+        revert_reason: read.revert_reason,
+        notice_risk: read.notice_risk.as_ref().map(snake_name),
+        notice_key: read.notice_key,
+        no_change_key: read.no_change_key,
     }
 }
 
@@ -3360,6 +3384,21 @@ mod tests_082 {
             Some("componentsUi.signing.simWillFailReason")
         );
         assert_eq!(reverts.deltas_json, "[]");
+        // A revert moves nothing and is not "no asset changes": only a
+        // check that found nothing is.
+        assert_eq!(reverts.no_change_key, None);
+        assert_eq!(crashed.no_change_key, None);
+        assert_eq!(unreachable.no_change_key, None);
+        let nothing = sim_outcome(
+            user.into(),
+            json!({"result": [{"calls": [{"status": "0x1", "logs": []}]}]}).to_string(),
+        );
+        assert_eq!(nothing.kind, "deltas");
+        assert_eq!(nothing.deltas_json, "[]");
+        assert_eq!(
+            nothing.no_change_key.as_deref(),
+            Some("componentsUi.signing.simResultNoChange")
+        );
 
         let token = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
         let transfer = json!({
@@ -3378,6 +3417,7 @@ mod tests_082 {
         assert_eq!(checked.kind, "deltas");
         assert_eq!(checked.notice_risk, None);
         assert_eq!(checked.notice_key, None);
+        assert_eq!(checked.no_change_key, None, "something moves");
         let deltas: Value = serde_json::from_str(&checked.deltas_json).unwrap();
         assert_eq!(
             deltas,

@@ -53,6 +53,7 @@ import init, {
 	LoginCore,
 	minGasPriceWei,
 	ManageTokensCore,
+	maskedAmount,
 	NetworkAdminCore,
 	passkeyDirectoryEntry,
 	passkeyDirectoryUrl,
@@ -62,6 +63,7 @@ import init, {
 	peggedNativeUsd,
 	prefsMigrations,
 	prefsRead,
+	publicRpcUrls,
 	ReceiveWatchCore,
 	registryBackupStep,
 	registryChainKeyPlan,
@@ -126,6 +128,12 @@ export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
 // the $1 peg for a coin that IS a dollar, and the chain gas floor below which
 // Arc discards a transaction without saying so.
 export { minGasPriceWei, peggedNativeUsd };
+// A hidden amount as balance privacy draws it — the mask, and the unit kept:
+// "•••• xDAI" (`privacy::masked_amount`). One rule for all four apps; the web
+// kept a mirror of it (`maskedFigure`) until the core exported its own.
+// Synchronous, and callable once `loadCore()` has resolved — every caller is
+// a view-model builder over a core view, which cannot exist before that.
+export { maskedAmount };
 export { identiconNormalizeSeed, identiconSvgCircular };
 // Which plural form a count takes in a language (CLDR, issue 409): flow copy
 // ships every form, and the screen asks this rather than `count === 1`.
@@ -133,6 +141,11 @@ export { i18nPluralSuffix };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
 export { registryBackupStep, registryNameStep, walletKeysStep };
+// The curated public RPCs behind each built-in network's default — ONE list
+// for all four apps (`network_admin::PUBLIC_RPCS`), where each shell used to
+// keep its own copy and they drifted (the web's still named endpoints that
+// had been answering HTTP 502 for every call).
+export { publicRpcUrls };
 // How a pending request is settled when the request window goes away: 4900,
 // never 4001 (spec 070 T063). The window asks rather than restating it.
 export { dpermSettleOnClose };

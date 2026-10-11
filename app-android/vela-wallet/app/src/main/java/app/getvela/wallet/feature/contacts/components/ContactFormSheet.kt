@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.contacts.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -150,7 +151,9 @@ private fun FormField(
 ) {
     val colors = VelaTheme.colors
     val family: FontFamily = if (mono) VelaMonoFontFamily else VelaFontFamily
-    val style = TextStyle(color = colors.fgBase, fontFamily = family, fontSize = VelaTextSize.base)
+    // A style built here does not come from the theme: it says "0x stays 0x"
+    // itself (a contact named "0xAlice" was typed "0×Alice").
+    val style = TextStyle(color = colors.fgBase, fontFamily = family, fontSize = VelaTextSize.base, fontFeatureSettings = VelaFontFeatures)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,

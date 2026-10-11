@@ -73,6 +73,29 @@
 //! swap's "Received" row folds into its dApp row (one operation, one row).
 //! Shells word and format; they decide nothing.
 //!
+//! # A receipt's time is its block's time (PR 3)
+//!
+//! `token_trust` used to stamp a transfer whose block time it could not read
+//! with the clock, and every shell stored that for good: three receipts of
+//! 2026-09-29 stood under "Today" eleven days later. The scan no longer does
+//! it (`token_trust` invariant ⑨), and a `receive` record written from its
+//! feed is marked [`FeedTxRecord::time_verified`]. The records stored before
+//! that carry no mark, and this machine repairs them:
+//!
+//! ```text
+//! StoreLoaded ─► up to TIME_REPAIR_PER_ROUND unmarked receives, newest first
+//!        ReadReceiveTime{id, chain, tx} ─► ReceiveTimeRead{Some(t)} ─► WriteReceiveTime{id, t}
+//!                                                    └ None ─► kept as it is; asked again later
+//!        ReceiveTimeWritten{ok} ─► (a time moved) one re-read: the row moves to its day
+//! ```
+//!
+//! In the background, a few a round, never in the feed's way: the first read
+//! paints at once and the repair's answers arrive after it. A record that
+//! cannot be checked yet keeps the time it has and sits out a growing number
+//! of rounds ([`TIME_REPAIR_MAX_WAIT_ROUNDS`] at most), so an unreachable
+//! chain costs a read now and then, never a loop. The repair's own re-read
+//! starts no round and celebrates nothing.
+//!
 //! # Fidelity notes
 //!
 //! - The TS pipeline is one sequential async function (read → reconcile →
@@ -103,7 +126,7 @@ use ts_rs::TS;
 
 use super::clear_signing::ClearTerm;
 use super::dapp_activity::{contract_name_of, permit2_owner, protocol_of, DappAction, DappSummary};
-use super::token_trust::TrustSimJudgment;
+use super::token_trust::{TrustSimDirection, TrustSimJudgment};
 use super::tx_tracker::{TrackFailure, TrackMove, TrackSettlement};
 
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
@@ -117,6 +140,26 @@ pub const HISTORY_EMPTY_FILTERED: &str = "history.emptyFilter";
 pub const HOME_EMPTY_ALL: &str = "home.emptyNoActivity";
 /// The home Activity with nothing to show on the chosen network.
 pub const HOME_EMPTY_FILTERED: &str = "home.emptyNoActivityNetwork";
+
+/// How many items the wallet home's Activity draws (issue 469): the newest
+/// three, so Assets stays in reach under them. "All" opens History, which
+/// draws every row. One number for every shell — it was meant since spec 015
+/// ("the home stops at three") and never coded, so each home listed the
+/// whole feed.
+pub const HOME_ACTIVITY_ITEMS: usize = 3;
+
+/// How many `receive` records' times one round of the repair checks (module
+/// doc, "A receipt's time is its block's time"). A round follows a store
+/// read — a tick every ten to thirty seconds — and each record costs two RPC
+/// reads, so this is six reads a tick at most, beside the scan's own.
+pub const TIME_REPAIR_PER_ROUND: usize = 3;
+
+/// The most rounds a record whose time could not be checked waits before it
+/// is asked about again: the second round after its first miss, then the
+/// fourth, the eighth… to this. A transaction no endpoint will ever return
+/// costs one check in about ten to thirty minutes, for as long as the record
+/// is kept.
+pub const TIME_REPAIR_MAX_WAIT_ROUNDS: u32 = 64;
 
 /// How old a pending record with no operation hash may be and still be drawn
 /// pending (087 F04): three times the longest any client keeps a submit open
@@ -233,12 +276,14 @@ pub struct FeedTxRecord {
     /// (`SignRecord::balance_changes`, stored by the shell). The one account
     /// of a dApp call's money that its page did not write. Absent on every
     /// other kind, on older rows and from a shell that does not map it.
-    /// Read leniently ([`stored_or_none`]): lines this build cannot read are
-    /// no lines, never a feed that fails to load.
+    /// Read leniently ([`stored_judgments`]): lines this build cannot read
+    /// are no lines, never a feed that fails to load — and a row stored
+    /// before an unverified token's judgment lost its figure (PR 3) reads as
+    /// the direction that figure had.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "stored_or_none"
+        deserialize_with = "stored_judgments"
     )]
     pub balance_changes: Option<Vec<TrustSimJudgment>>,
     /// `dapp_tx` only (083 F3): whether the transaction carried calldata, as
@@ -276,6 +321,16 @@ pub struct FeedTxRecord {
         deserialize_with = "stored_or_none"
     )]
     pub settlement: Option<TrackSettlement>,
+    /// `receive` only (PR 3): `timestamp` is the time of the transaction's
+    /// own block, as a chain gave it — the stored `timeVerified` mark. A
+    /// shell sets it on every `receive` it writes from `token_trust`'s feed
+    /// (whose times are block times, invariant ⑨) and when it answers
+    /// [`FeedOperation::WriteReceiveTime`]. `None` or `false` is a record
+    /// written before the mark existed, when a transfer whose block could not
+    /// be read was stamped with the clock: this machine re-reads its block's
+    /// time in the background and rewrites it (module doc).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_verified: Option<bool>,
 }
 
 /// A value the shell stored and hands back verbatim, read leniently: what
@@ -289,6 +344,41 @@ where
 {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
     Ok(value.and_then(|value| serde_json::from_value(value).ok()))
+}
+
+/// A record's stored judgments ([`FeedTxRecord::balance_changes`]), read as
+/// leniently as [`stored_or_none`] reads — and across the one change their
+/// shape has had: until PR 3 an unverified token's judgment kept the
+/// simulation's raw `delta`; it keeps only a `direction` now
+/// ([`TrustSimJudgment::Erc20Unverified`]). A stored `delta` is read for its
+/// sign and dropped, so an older row keeps its line and its figure is gone
+/// from this build's memory too.
+fn stored_judgments<'de, D>(deserializer: D) -> Result<Option<Vec<TrustSimJudgment>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let Some(mut value) = Option::<serde_json::Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    for judgment in value.as_array_mut().into_iter().flatten() {
+        let Some(fields) = judgment.as_object_mut() else {
+            continue;
+        };
+        let unverified =
+            fields.get("type").and_then(serde_json::Value::as_str) == Some("erc20_unverified");
+        if !unverified || fields.contains_key("direction") {
+            continue;
+        }
+        let direction = fields
+            .remove("delta")
+            .as_ref()
+            .and_then(serde_json::Value::as_str)
+            .map_or(TrustSimDirection::Unreadable, TrustSimDirection::of_delta);
+        if let Ok(direction) = serde_json::to_value(direction) {
+            fields.insert("direction".to_owned(), direction);
+        }
+    }
+    Ok(serde_json::from_value(value).ok())
 }
 
 impl FeedTxRecord {
@@ -752,7 +842,7 @@ pub struct FeedToast {
 // Protocol
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "FeedOperation"))]
 pub enum FeedOperation {
@@ -781,6 +871,24 @@ pub enum FeedOperation {
     Timer { ms: u32, generation: u32 },
     /// `hapticSuccess()` — money-in buzz.
     Haptic,
+    /// The time of the block that holds transaction `tx_hash` on `chain_id`,
+    /// through the shell's RPC pool: `eth_getTransactionReceipt` for its
+    /// `blockNumber`, then `eth_getBlockByNumber(that, false)` for its
+    /// `timestamp`. Answered with [`FeedShellResult::ReceiveTimeRead`] —
+    /// `None` whenever either read gave no answer; never a clock's time.
+    /// Transport only: which records are asked about, and what is done with
+    /// the answer, is decided here.
+    ReadReceiveTime {
+        id: String,
+        chain_id: u32,
+        tx_hash: String,
+    },
+    /// Rewrite ONE stored record: its `timestamp` becomes `timestamp_sec`
+    /// (whole Unix seconds, a block's time) and it is marked time-verified
+    /// (`timeVerified: true`). Nothing else of it changes. Answered with
+    /// [`FeedShellResult::ReceiveTimeWritten`] — `ok: false` when no record
+    /// has that id or the store could not be written.
+    WriteReceiveTime { id: String, timestamp_sec: f64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -814,6 +922,18 @@ pub enum FeedShellResult {
         generation: u32,
     },
     HapticPlayed,
+    /// The answer to [`FeedOperation::ReadReceiveTime`]: the block's time in
+    /// Unix seconds, or `None` — not read (the record keeps its time and is
+    /// asked about again later).
+    ReceiveTimeRead {
+        id: String,
+        timestamp_sec: Option<f64>,
+    },
+    /// The answer to [`FeedOperation::WriteReceiveTime`].
+    ReceiveTimeWritten {
+        id: String,
+        ok: bool,
+    },
 }
 
 impl Operation for FeedOperation {
@@ -890,6 +1010,36 @@ struct Celebration {
     toast: Option<ToastState>,
 }
 
+/// The background repair of `receive` records' times (module doc).
+#[derive(Default)]
+struct TimeRepair {
+    /// Records whose block time is being read, or whose rewrite is being
+    /// written — and whether that rewrite MOVES the record's time (a rewrite
+    /// that only adds the mark changes nothing a person sees). A round
+    /// starts only when this is empty.
+    in_flight: BTreeMap<String, bool>,
+    /// A record's time moved in this round: once the round is in, the store
+    /// is read again so the row stands under its own day.
+    moved: bool,
+    /// The re-read the repair itself issued. It re-sorts the feed and starts
+    /// no round — a round follows a tick's read, never the repair's own.
+    own_read: Option<u32>,
+    /// Records that could not be checked yet.
+    waiting: BTreeMap<String, RepairWait>,
+    /// Records rewritten this session: never asked about again, whatever a
+    /// store hands back (a shell that dropped the mark must not be asked to
+    /// write it for ever).
+    done: BTreeSet<String>,
+}
+
+/// One record the repair could not check: how often, and how many rounds it
+/// still sits out.
+#[derive(Clone, Copy, Debug, Default)]
+struct RepairWait {
+    misses: u32,
+    rounds_left: u32,
+}
+
 /// Mint the next read id and the operation carrying it.
 fn read_store(model: &mut Model) -> (u32, FeedOperation) {
     model.next_read_id = model.next_read_id.wrapping_add(1);
@@ -942,6 +1092,8 @@ pub struct Model {
     /// Bumped ONLY on account switch — any in-flight answer for a previous
     /// account is stale and dropped.
     attempt: u64,
+    /// The background repair of `receive` records' times.
+    time_repair: TimeRepair,
 }
 
 // ---------------------------------------------------------------------------
@@ -951,8 +1103,17 @@ pub struct Model {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct FeedView {
-    /// Date headers + items, chain-filtered, in render order.
+    /// Date headers + items, chain-filtered, in render order. History draws
+    /// these, every one.
     pub rows: Vec<FeedRow>,
+    /// The wallet home's Activity (issue 469): the first
+    /// [`HOME_ACTIVITY_ITEMS`] items of `rows` and the day headers over them
+    /// — nothing else. The same rows, worded and filtered the same, so a row
+    /// on the home is the row History opens with; never a header with no row
+    /// under it. A fresh send or receipt is the newest item, so it is always
+    /// here (and `new_item_id` names one of these).
+    #[serde(default)]
+    pub home_rows: Vec<FeedRow>,
     /// Raw account-scoped records for the detail sheet
     /// (`loadActivityTransactions`).
     pub transactions: Vec<FeedTxRecord>,
@@ -1011,6 +1172,12 @@ impl App for ActivityFeed {
                 // setNewItemId(null); setReceipt(null) — the account-change
                 // reset (`useHomeController.ts:399-402`).
                 model.celebration = None;
+                // The previous account's repair answers are dropped with its
+                // attempt; what was learnt about records (`waiting`, `done`)
+                // is about records, and stays.
+                model.time_repair.in_flight.clear();
+                model.time_repair.moved = false;
+                model.time_repair.own_read = None;
                 load_pipeline(model)
             }
             Event::FocusTick | Event::LiveTick => {
@@ -1070,6 +1237,11 @@ impl App for ActivityFeed {
         // (`useHomeController.ts:543-563`).
         let mut rows = Vec::new();
         let mut last_day: Option<f64> = None;
+        // The home's cut, taken in the same pass: everything up to (and
+        // including) the HOME_ACTIVITY_ITEMS-th item — headers included,
+        // because each one precedes an item it heads.
+        let mut home_len = 0;
+        let mut items_seen = 0;
         for item in &model.items {
             if let Some(chain) = model.chain_filter {
                 if item.chain_id != chain {
@@ -1087,7 +1259,12 @@ impl App for ActivityFeed {
             let mut out = presented(model, item);
             out.subtitle = subtitle_of(&out);
             rows.push(FeedRow::Item { item: out });
+            items_seen += 1;
+            if items_seen <= HOME_ACTIVITY_ITEMS {
+                home_len = rows.len();
+            }
         }
+        let home_rows = rows[..home_len].to_vec();
 
         let contact_rows = model
             .contact_filter
@@ -1127,6 +1304,7 @@ impl App for ActivityFeed {
 
         FeedView {
             rows,
+            home_rows,
             transactions: model.records.clone(),
             new_item_id: model.celebration.as_ref().map(|c| c.item_id.clone()),
             toast,
@@ -1314,8 +1492,60 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 ));
             }
 
+            // The repair of receive times: a round after a tick's read,
+            // never after the repair's own re-read (module doc).
+            if model.time_repair.own_read == Some(read_id) {
+                model.time_repair.own_read = None;
+            } else {
+                commands.extend(start_time_repair_round(model));
+            }
+
             commands.push(render());
             Command::all(commands)
+        }
+
+        FeedShellResult::ReceiveTimeRead { id, timestamp_sec } => {
+            if !model.time_repair.in_flight.contains_key(&id) {
+                return Command::done();
+            }
+            // A time that is no time is a block nobody read.
+            match timestamp_sec.filter(|sec| sec.is_finite() && *sec > 0.0) {
+                Some(sec) => {
+                    let sec = sec.floor();
+                    let moves = model
+                        .records
+                        .iter()
+                        .find(|t| t.id == id)
+                        .is_none_or(|t| t.timestamp != sec);
+                    model.time_repair.in_flight.insert(id.clone(), moves);
+                    shell_request(
+                        model.attempt,
+                        FeedOperation::WriteReceiveTime {
+                            id,
+                            timestamp_sec: sec,
+                        },
+                    )
+                }
+                None => {
+                    model.time_repair.in_flight.remove(&id);
+                    time_repair_missed(model, id);
+                    finish_time_repair_round(model)
+                }
+            }
+        }
+
+        FeedShellResult::ReceiveTimeWritten { id, ok } => {
+            let Some(moves) = model.time_repair.in_flight.remove(&id) else {
+                return Command::done();
+            };
+            if ok {
+                model.time_repair.moved |= moves;
+                model.time_repair.waiting.remove(&id);
+                model.time_repair.done.insert(id);
+            } else {
+                time_repair_missed(model, id);
+            }
+            finish_time_repair_round(model)
         }
 
         FeedShellResult::SyncCompleted { new_count } => {
@@ -2274,8 +2504,10 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
     judgments
         .iter()
         .filter_map(|judgment| {
-            let (delta, verified, known, symbol, decimals) = match judgment {
-                TrustSimJudgment::Native { delta } => (delta, true, true, native.clone(), Some(18)),
+            let ((out, magnitude), verified, known, symbol, decimals) = match judgment {
+                TrustSimJudgment::Native { delta } => {
+                    (signed_delta(delta)?, true, true, native.clone(), Some(18))
+                }
                 TrustSimJudgment::Erc20Trusted {
                     delta,
                     symbol,
@@ -2283,17 +2515,22 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
                     in_trusted_set,
                     ..
                 } => (
-                    delta,
+                    signed_delta(delta)?,
                     true,
                     *in_trusted_set,
                     symbol.trim().to_owned(),
                     Some(*decimals),
                 ),
-                TrustSimJudgment::Erc20Unverified { delta, .. } => {
-                    (delta, false, false, String::new(), None)
+                // No figure was ever kept for it: a direction, or no line.
+                TrustSimJudgment::Erc20Unverified { direction, .. } => {
+                    let out = match direction {
+                        TrustSimDirection::In => false,
+                        TrustSimDirection::Out => true,
+                        TrustSimDirection::Still | TrustSimDirection::Unreadable => return None,
+                    };
+                    ((out, None), false, false, String::new(), None)
                 }
             };
-            let (out, magnitude) = signed_delta(delta)?;
             // A coin arriving that the wallet does not already trust is the
             // one line a site fully controls (its own token, any symbol, any
             // figure): the record draws it as an unverified token whatever
@@ -2869,6 +3106,93 @@ fn load_pipeline(model: &mut Model) -> Command<FeedEffect, Event> {
         ),
         render(),
     ])
+}
+
+// ---------------------------------------------------------------------------
+// The repair of receive times (module doc)
+// ---------------------------------------------------------------------------
+
+/// One round: the block-time reads for up to [`TIME_REPAIR_PER_ROUND`] of the
+/// account's `receive` records that carry no time-verified mark, newest
+/// first — the rows a person sees first are put right first. Nothing while a
+/// round is still out, and nothing for a record that is sitting out a miss.
+fn start_time_repair_round(model: &mut Model) -> Vec<Command<FeedEffect, Event>> {
+    if !model.time_repair.in_flight.is_empty() {
+        return Vec::new();
+    }
+    // A round has come: every record sitting one out sits one less.
+    for wait in model.time_repair.waiting.values_mut() {
+        wait.rounds_left = wait.rounds_left.saturating_sub(1);
+    }
+    let repair = &model.time_repair;
+    let mut due: Vec<&FeedTxRecord> = model
+        .records
+        .iter()
+        .filter(|t| {
+            t.kind() == FeedTxKind::Receive
+                && t.time_verified != Some(true)
+                && t.chain_id != 0
+                && !t.tx_hash.trim().is_empty()
+                && !repair.done.contains(&t.id)
+                && !model.tombstones.contains(&t.id)
+                && repair
+                    .waiting
+                    .get(&t.id)
+                    .is_none_or(|wait| wait.rounds_left == 0)
+        })
+        .collect();
+    due.sort_by(|a, b| {
+        b.timestamp
+            .total_cmp(&a.timestamp)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    due.dedup_by(|a, b| a.id == b.id);
+    let asked: Vec<FeedOperation> = due
+        .into_iter()
+        .take(TIME_REPAIR_PER_ROUND)
+        .map(|t| FeedOperation::ReadReceiveTime {
+            id: t.id.clone(),
+            chain_id: t.chain_id,
+            tx_hash: t.tx_hash.trim().to_owned(),
+        })
+        .collect();
+    let attempt = model.attempt;
+    asked
+        .into_iter()
+        .map(|op| {
+            if let FeedOperation::ReadReceiveTime { id, .. } = &op {
+                model.time_repair.in_flight.insert(id.clone(), false);
+            }
+            shell_request(attempt, op)
+        })
+        .collect()
+}
+
+/// A record whose time could not be checked, or whose rewrite did not land:
+/// it keeps the time it has and waits twice as many rounds as last time,
+/// [`TIME_REPAIR_MAX_WAIT_ROUNDS`] at most.
+fn time_repair_missed(model: &mut Model, id: String) {
+    let wait = model.time_repair.waiting.entry(id).or_default();
+    wait.misses = wait.misses.saturating_add(1);
+    wait.rounds_left = 1u32
+        .checked_shl(wait.misses)
+        .unwrap_or(TIME_REPAIR_MAX_WAIT_ROUNDS)
+        .min(TIME_REPAIR_MAX_WAIT_ROUNDS);
+}
+
+/// An answer of the round is in. When it was the last and a record was
+/// rewritten, the store is read once more — the record moves to its own day,
+/// on the home and in History — and that read starts no round.
+fn finish_time_repair_round(model: &mut Model) -> Command<FeedEffect, Event> {
+    if !model.time_repair.in_flight.is_empty() {
+        return Command::done();
+    }
+    if !std::mem::take(&mut model.time_repair.moved) {
+        return Command::done();
+    }
+    let (read_id, op) = read_store(model);
+    model.time_repair.own_read = Some(read_id);
+    shell_request(model.attempt, op)
 }
 
 /// Issue one operation whose answer must match the current attempt.

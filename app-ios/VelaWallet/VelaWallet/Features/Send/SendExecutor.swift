@@ -28,6 +28,18 @@ import VelaCore
 @MainActor
 final class SendExecutor {
 
+    /// This shell's answer to the core's `add_network`: the add did not
+    /// happen (nothing here can add a network from Send yet — final notes
+    /// F6/F27), said at once so the form shows the core's own sentence.
+    ///
+    /// Synchronous on purpose. "At once" is not a time to be measured — a
+    /// wall-clock bound fails on a loaded runner over behaviour that is right
+    /// — it is that nothing on this path CAN wait, and a function that cannot
+    /// suspend cannot wait.
+    static func addNetworkAnswer() -> String {
+        CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
+    }
+
     /// Every operation this executor is required to handle.
     static let operations = [
         "fetch_tokens", "clear_token_cache", "resolve_token_metadata", "add_network",
@@ -106,6 +118,19 @@ final class SendExecutor {
     /// `userOpWriteAheadWaitMs`. A test seam.
     private let clearanceWaitMs: Double
 
+    /// The pre-check's bound under a test's stopped clock (`start_timer`,
+    /// `estimate_timeout`): held until the machine abandons it or the test
+    /// runs it out, and counted so `SendStore.isIdle` tells it from a read.
+    private let heldTimers = FeeStore.HeldTimers()
+    private static let estimateTimeout = "estimate_timeout"
+
+    /// How many pre-check bounds a stopped clock holds.
+    var heldTimerCount: Int { heldTimers.count }
+
+    /// A test's clock moving, under a stopped clock (`FeeStore.Timers`):
+    /// every pre-check bound it holds runs out now.
+    func elapseEstimateTimeout() { heldTimers.elapse(Self.estimateTimeout) }
+
     init(
         store: VelaStore,
         relay: RelayClient,
@@ -172,9 +197,13 @@ final class SendExecutor {
                     .map { $0 as Any } ?? NSNull(),
             ])
 
-        // The scanner is this operation's ONLY entry, and the scanner is 055.
+        // Send's "Add this network" has no entry on this shell (a known gap,
+        // final notes F6/F27: nothing here raises `add_network_tapped`). If
+        // the core ever asks, it is answered AT ONCE — never a wait — and
+        // the form says the core's own sentence for an add that did not
+        // happen (`send.lock.netAddError`, `SendLive.lockNotice`).
         case "add_network":
-            return CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
+            return Self.addNetworkAnswer()
 
         case "estimate_fee":
             return await estimateFee(operation)
@@ -269,9 +298,21 @@ final class SendExecutor {
         case "simulate_calls":
             return CoreJSON.string(["type": "sim_resolved", "sim_json": NSNull()])
 
+        // Three timers, and one of them is a verdict: `estimate_timeout`
+        // bounds the pre-check (the core's 15 s), and running out fails
+        // Continue with "couldn't estimate". The other two only say when to
+        // ask (`form_estimate`, `treasury_watch`). Under a test's stopped
+        // clock — the fee store's, one clock for the journey — the bound
+        // does not run out: a scripted relay answers every call, and on a
+        // main actor the run had filled the answers took longer than 15 s,
+        // so the form reported a failure the code never had (`Waits.swift`).
         case "start_timer":
-            let ms = (operation["ms"] as? NSNumber)?.doubleValue ?? 0
-            try? await Task.sleep(nanoseconds: UInt64(max(0, ms) * 1_000_000))
+            if fees.timers == .stopped, operation["tag"] as? String == Self.estimateTimeout {
+                await heldTimers.hold(Self.estimateTimeout)
+            } else {
+                let ms = (operation["ms"] as? NSNumber)?.doubleValue ?? 0
+                try? await Task.sleep(nanoseconds: UInt64(max(0, ms) * 1_000_000))
+            }
             return CoreJSON.string([
                 "type": "timer_elapsed",
                 "tag": operation["tag"] ?? NSNull(),
@@ -325,7 +366,15 @@ final class SendExecutor {
         /// `.some(round met)` once the one re-read is out (`nil` inside: it
         /// met no settled round, only an unreachable dashboard).
         var retriedFrom: Int?? = nil
-        while Date().timeIntervalSince(started) * 1000 < Self.firstRoundWaitMs, !Task.isCancelled {
+        // The wait's budget is on the wall clock, counted between this
+        // loop's own turns. Under a test's stopped clock (the fee store's —
+        // one clock for the journey) none of it passes: the asset list is
+        // the test's, it answers in two or three looks, and on a main actor
+        // the run had filled the second look came more than thirty seconds
+        // after the first — "could not load" for a load that was coming
+        // (`Waits.swift`). The wait then ends by its answer or its cancel.
+        let budgeted = fees.timers != .stopped
+        while !budgeted || Date().timeIntervalSince(started) * 1000 < Self.firstRoundWaitMs, !Task.isCancelled {
             let view = balances().flatMap { Self.sameAccount($0, address) ? $0 : nil }
             let round = holdingsRound(address)
             let unreachable = view?.unreachable == true
@@ -749,7 +798,7 @@ final class SendExecutor {
         case "resolve_token_metadata":
             return CoreJSON.string(["type": "token_metadata", "meta": NSNull()])
         case "add_network":
-            return CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
+            return Self.addNetworkAnswer()
         case "estimate_fee":
             return CoreJSON.string([
                 "type": "fee_estimated", "outcome": ["type": "failed", "kind": "other"],

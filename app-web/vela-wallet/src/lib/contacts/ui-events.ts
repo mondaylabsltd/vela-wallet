@@ -5,10 +5,10 @@
  * translates each variant into core events. No variant decides anything.
  *
  * The 028 additions are the screens' remaining affordances, every one of
- * which was drawn in 018 and did nothing: the detail's three actions, the
- * address copy, the group chips' `+`, "全部 ›", the group screen's CTA and
- * its ⋯, the desktop's right-click menus, and the mobile "+" that opens the
- * drawn C5 sheet rather than the form.
+ * which was drawn in 018 and did nothing: the detail's Send (its one action
+ * since issue 479), the address copy, the group chips' `+`, "全部 ›", the
+ * group screen's CTA and its ⋯, the desktop's right-click menus, and the
+ * mobile "+" that opens the drawn C5 sheet rather than the form.
  */
 
 export type ContactsUiEvent =
@@ -33,7 +33,7 @@ export type ContactsUiEvent =
 	 * right-clicked row's — so the route never has to guess from its own
 	 * selection state.
 	 */
-	| { kind: 'action'; id: 'send' | 'receive' | 'qr' | 'copy' | 'move-group'; address: string }
+	| { kind: 'action'; id: 'send' | 'copy' | 'move-group'; address: string }
 	/** 最近往来's "全部 ›" / 查看全部往来. */
 	| { kind: 'activity-all' }
 	/** 群发转账 for the open group. */

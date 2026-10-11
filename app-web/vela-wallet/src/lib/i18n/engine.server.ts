@@ -16,18 +16,38 @@ import { I18n as WasmI18n, i18nPluralSuffixes } from '../../../../../rust/pkg-we
 import './wasm-init.server';
 import { FALLBACK_LOCALE, type Locale } from './locales';
 import { FLOW_KEYS, FLOW_PLURAL_KEYS, type FlowMessages, type WelcomeMessages } from './messages';
-import { BALANCE_INTERNAL_KEYS, type WalletMessages } from '$lib/wallet/messages';
+import {
+	BALANCE_INTERNAL_KEYS,
+	BALANCE_SAID_KEYS,
+	type WalletMessages
+} from '$lib/wallet/messages';
 import type { ContactsMessages } from '$lib/contacts/messages';
 import { INTRO_KEYS } from '$lib/intro/slides';
 import { FEE_REASON_KEYS, WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
-import type { HandoffMessages, SigningMessages } from '$lib/signing/messages';
+import {
+	SIM_SAID_KEYS,
+	SIM_COULD_NOT_CHECK_KEY,
+	type HandoffMessages,
+	type SigningMessages
+} from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import {
+	BACKUP_EXPLAIN_KEYS,
+	BACKUP_ROW_KEYS,
+	BALANCE_STATUS_KEYS,
+	NET_HINT_KEYS,
+	NET_RPC_FIELD_KEYS,
+	NET_STOP_KEYS,
 	UNREACHABLE_LINE_KEYS,
 	VENUE_BLOCK_KEYS,
+	type BackupExplainKey,
+	type BackupRowKey,
+	type NetHintKey,
+	type NetRpcFieldKey,
+	type NetStopKey,
 	type SettingsMessages,
 	type VenueBlockKey
 } from '$lib/settings/messages';
@@ -147,6 +167,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 		balance: {
 			totalLabel: k('home.totalBalance'),
 			liveIndicator: k('home.liveIndicator'),
+			said: Object.fromEntries(BALANCE_SAID_KEYS.map((key) => [key, k(key)])),
 			stale: k('home.balanceStale'),
 			unpriced: k('home.balanceUnpriced'),
 			unreachable: k('onboarding.common.networkBody'),
@@ -200,6 +221,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyCaption: k('assets.emptySubtext'),
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
+			tokenListUnreachable: k('assets.tokenListUnreachable'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)]))
 		},
 		networkFilter: {
@@ -303,8 +325,6 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		addressLabel: k('contacts.addressLabel'),
 		copyAddress: k('componentsUi.identiconViewer.copyAddress'),
 		send: k('componentsUi.dock.send'),
-		receive: k('componentsUi.dock.receive'),
-		actionQr: k('contacts.actionQr'),
 		deleteContact: k('contacts.deleteContact'),
 		delete: k('contacts.delete'),
 		deleteTitle: k('contacts.deleteTitle'),
@@ -537,7 +557,20 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			checkingCompatibility: k('settingsModals.addNetwork.checkingCompatibility'),
 			unableToVerify: k('settingsModals.addNetwork.unableToVerify'),
 			retry: k('settingsModals.addNetwork.retry'),
-			incompatibleHint: k('settingsModals.addNetwork.incompatibleHint'),
+			// By corpus key: the core names which line a refusal says.
+			hints: Object.fromEntries(NET_HINT_KEYS.map((key) => [key, k(key)])) as Record<
+				NetHintKey,
+				string
+			>,
+			// …and which sentence a stopped wizard says (`error_key`).
+			stops: Object.fromEntries(NET_STOP_KEYS.map((key) => [key, k(key)])) as Record<
+				NetStopKey,
+				string
+			>,
+			rpcFieldLabels: Object.fromEntries(NET_RPC_FIELD_KEYS.map((key) => [key, k(key)])) as Record<
+				NetRpcFieldKey,
+				string
+			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
 			openChainSetupTool: k('settingsModals.addNetwork.openChainSetupTool'),
 			recheckWithRpc: k('settingsModals.addNetwork.recheckWithRpc'),
@@ -635,7 +668,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		accounts: {
 			title: k('settingsModals.account.modalTitle'),
 			total: k('settingsModals.account.total'),
-			countPrefix: k('home.switcherAccountCount'),
+			countPrefix: pluralCopy(locale, 'home.switcherAccountCount'),
 			createNew: k('settingsModals.account.createNew'),
 			signInExisting: k('settingsModals.account.signInExisting'),
 			remove: k('settings.account.remove'),
@@ -703,6 +736,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		rescue: {
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
+			tokenListUnreachable: k('assets.tokenListUnreachable'),
 			unreachableBody: k('assets.unreachableBody'),
 			unreachableNone: k('assets.unreachableNone'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)])),
@@ -723,16 +757,20 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			networksNote: k('home.balanceDetailNetworksNote'),
 			statusRetrying: k('home.balanceDetailStatusRetrying'),
 			statusFailed: k('home.balanceDetailStatusFailed'),
+			statuses: Object.fromEntries(BALANCE_STATUS_KEYS.map((key) => [key, k(key)])),
 			updatedLabel: k('home.balanceDetailUpdatedLabel'),
 			retry: k('home.balanceDetailRetry')
 		},
 		backup: {
-			title: k('settingsModals.backup.title'),
-			backedUp: k('settingsModals.backup.backedUp'),
-			notBackedUp: k('settingsModals.backup.notBackedUp'),
-			couldNotCheck: k('settingsModals.backup.couldNotCheck'),
-			checking: k('componentsUi.funding.checking'),
-			explain: k('settingsModals.backup.explain')
+			// By corpus key: the core names which one each state says.
+			words: Object.fromEntries(BACKUP_ROW_KEYS.map((key) => [key, k(key)])) as Record<
+				BackupRowKey,
+				string
+			>,
+			explains: Object.fromEntries(BACKUP_EXPLAIN_KEYS.map((key) => [key, k(key)])) as Record<
+				BackupExplainKey,
+				string
+			>
 		},
 		keys: {
 			title: k('settingsModals.keys.title'),
@@ -871,7 +909,10 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 			checking: k('settingsModals.addNetwork.checkingCompatibility'),
 			compatible: k('settingsModals.addNetwork.compatible'),
 			incompatible: k('settingsModals.addNetwork.incompatible'),
-			incompatibleHint: k('settingsModals.addNetwork.incompatibleHint'),
+			hints: Object.fromEntries(NET_HINT_KEYS.map((key) => [key, k(key)])) as Record<
+				NetHintKey,
+				string
+			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
 			unableToVerify: k('settingsModals.addNetwork.unableToVerify'),
 			wrongRpc: k('assets.rpcFixWrongChain'),
@@ -1004,7 +1045,11 @@ export const CONFIRM_BLOCK_KEYS = [
 	'componentsUi.signing.confirmBlock.feeRetrying',
 	// PR 2 polish: the relay answered that the operation would fail — a fact,
 	// asking for no tap; the row says what a tap does.
-	'componentsUi.signing.confirmBlock.feeWouldFail'
+	'componentsUi.signing.confirmBlock.feeWouldFail',
+	// PR 3: everything else is ready and the sheet's own simulation has not
+	// given its verdict yet (`ConfirmBlock::SimChecking`) — "Checking what
+	// this transaction does…", for four seconds at most.
+	'componentsUi.signing.confirmBlock.simChecking'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
 	// coin, and the confirm's note said it again.
 ] as const;
@@ -1132,11 +1177,13 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnVerifiedAbi: k('componentsUi.signing.verifiedAbiWarning'),
 		warnDescriptorFetched: k('componentsUi.signing.descriptorFetchedWarning'),
 		warnOrderTerms: k('componentsUi.signing.warnOrderTerms'),
-		warnSimUnavailable: k('componentsUi.signing.simUnavailableWarning'),
+		warnSimUnavailable: k(SIM_COULD_NOT_CHECK_KEY),
 		warnDrain: k('componentsUi.signing.drainWarning'),
 		okSelfTransfer: k('componentsUi.signing.balanceSelfTransfer'),
 		okNoNetworkFee: k('componentsUi.signing.noNetworkFee'),
 		balancesTitle: k('componentsUi.signing.balanceChangesTitle'),
+		// PR 3 device round: the verdict's quiet line, by the key the core names.
+		simSaid: Object.fromEntries(SIM_SAID_KEYS.map((key) => [key, k(key)])),
 		balancesMatchHero: k('componentsUi.signing.balanceMatchesHero'),
 		balancesBlindSimulated: k('componentsUi.signing.blindButSimulated'),
 		balancesBestEffort: k('componentsUi.signing.bestEffortSimulated'),

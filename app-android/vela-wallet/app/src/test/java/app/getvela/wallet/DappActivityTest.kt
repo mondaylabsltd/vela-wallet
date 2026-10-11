@@ -55,6 +55,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.builtins.ListSerializer
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -230,7 +231,9 @@ class DappActivityTest {
         val records = (feed.perform(FeedOperation.ReadTxStore(ME, 1)) as FeedShellResult.StoreLoaded).records.associateBy { it.id }
         val read = records.getValue(swap.getString("id"))
         assertEquals(summary, read.summary)
-        assertEquals(judgments, read.balance_changes)
+        // The judgments are handed back as they were stored — not read here
+        // (PR 3): the core's own reader takes every shape they were stored in.
+        assertEquals(Wire.json.encodeToJsonElement(ListSerializer(TrustSimJudgment.serializer()), judgments), read.balance_changes)
         assertEquals("Swap", read.intent)
         assertEquals(SITE, read.dapp_url)
 
@@ -238,7 +241,12 @@ class DappActivityTest {
         assertEquals("an old record's origin", SITE, records.getValue("legacy-sig").dapp_url)
 
         assertNull("a summary this build cannot read is absent", records.getValue("odd").summary)
-        assertNull("judgments are all kept or none", records.getValue("odd").balance_changes)
+        // Lines no build can read cross untouched too, and it is the CORE
+        // that reads them as no lines — all kept or none — never this shell.
+        assertEquals(
+            Wire.json.parseToJsonElement("""[{"type":"quantum","delta":"1"}]"""),
+            records.getValue("odd").balance_changes,
+        )
         assertEquals("the record itself stays", "Swap", records.getValue("odd").intent)
 
         assertNull("only a dApp record carries them", records.getValue("send").intent)
@@ -486,6 +494,53 @@ class DappActivityTest {
         val swapTechnical = swap.technical!!.lines.filterIsInstance<TxTechnicalLine.Fact>().map { it.fact }
         assertEquals(SWAP_TX, swapTechnical.single { it.label == en.t(I18nKeys.Flows.DETAIL_HASH) }.copyValue)
         assertEquals(SWAP_OP, swapTechnical.single { it.label == en.t(I18nKeys.Flows.USER_OP_HASH) }.copyValue)
+    }
+
+    /**
+     * PR 3, fix B: a dApp record stored before an unverified token's judgment
+     * lost its figure still holds `{"type":"erc20_unverified","delta":"…"}`.
+     * This shell's mirror of a judgment has no `delta` any more, so it does
+     * not read the stored lines at all: they cross to the core as they are,
+     * and the REAL feed reads the old shape as the direction that figure had.
+     * The record loads, its lines are all there, and the figure — a number the
+     * site chose — is on no row, in no detail, and not in the view at all.
+     */
+    @Test
+    fun `a record stored with an unverified token's figure still loads, by its direction alone`() = runBlocking {
+        val lure = "5000000000000000000000"
+        val fresh = "0x" + "c0".repeat(20)
+        val stored = JSONArray()
+            .put(JSONObject().put("type", "erc20_trusted").put("token", USDC).put("delta", "-100000000").put("symbol", "USDC").put("decimals", 6).put("in_trusted_set", true))
+            .put(JSONObject().put("type", "erc20_unverified").put("token", fresh).put("delta", lure))
+        val old = SignExecutor.recordRow(swapRecord().copy(record_id = "dapp-old"), "ETH").put("balanceChanges", stored)
+        val (view, feed) = realFeed(emptyList(), extra = listOf(old)) { view -> view.rows.any { it is FeedRow.Item } }
+
+        // The store: the record is read, and its lines are handed over untouched.
+        val read = (feed.perform(FeedOperation.ReadTxStore(ME, 1)) as FeedShellResult.StoreLoaded).records.single()
+        assertEquals("dapp-old", read.id)
+        assertEquals(Wire.json.parseToJsonElement(stored.toString()), read.balance_changes)
+
+        // The core: both lines, the unverified one by its direction and with no figure.
+        val item = view.rows.filterIsInstance<FeedRow.Item>().single().item
+        val changes = item.dapp!!.changes
+        assertEquals(2, changes.size)
+        val unverified = changes.single { !it.verified }
+        assertEquals(app.getvela.wallet.feature.wallet.core.FeedDirection.In, unverified.direction)
+        assertNull("no figure was kept for it", unverified.value)
+        // The record as the core holds it now: the direction, and no `delta`.
+        val kept = view.transactions.single { it.id == "dapp-old" }.balance_changes.toString()
+        assertTrue(kept, kept.contains("\"direction\":\"in\""))
+        assertFalse("the figure is still in the view: $kept", kept.contains("5000"))
+        assertFalse("nothing of it anywhere in what the core says", Wire.json.encodeToString(FeedView.serializer(), view).contains("5000"))
+
+        // Drawn: the row, and the detail's balance changes — "+ Unverified token".
+        val row = rowsById(view, en).getValue("dapp-old")
+        assertEquals("≈ −100", row.amount)
+        val fallback = (FlowFixtures.build(FlowState.A2, en).sheet as FlowSheet.TxDetail).model
+        val detail = FlowLive.txDetail(fallback, view, "dapp-old", en, chains, mapOf(1 to "https://etherscan.io"))!!
+        val lines = detail.facts.single { it.label == en.t(I18nKeys.Flows.BALANCE_CHANGES) }.let { listOf(it.value) + it.lines }
+        assertEquals(listOf("≈ −100 USDC", "+ ${en.t(I18nKeys.Flows.UNVERIFIED_TOKEN)}"), lines)
+        assertFalse(detail.toString().filter(Char::isDigit).contains(lure))
     }
 
     // -- fail-soft decoding, and the words --------------------------------------------
@@ -756,6 +811,7 @@ class DappActivityTest {
         is SignOperation.ClearToPost -> SignShellResult.Responded
         is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
         is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
+        is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(op.id, op.round)
     }
 
     private companion object {

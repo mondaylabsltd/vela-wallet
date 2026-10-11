@@ -467,6 +467,8 @@ class SendController(
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         speedControl.reset()
+        // The money this journey was told it shows ([displayChanged]).
+        toldDisplay = display
         // The core's Open starts a journey that has been told nothing; the
         // fee bridge's next word about the card's coin goes, whatever it is,
         // once the form is on the chain the fee session prices.
@@ -494,7 +496,12 @@ class SendController(
      * note 1) belong to a form or a confirm on screen, never to one that is
      * gone. The next [open] asks afresh.
      */
-    fun left() = speedControl.end()
+    fun left() {
+        // No journey: a display change has nobody to tell, and the next
+        // [open] carries the money of its own moment.
+        toldDisplay = null
+        speedControl.end()
+    }
 
     /**
      * Every operation in flight on this device (`inFlightOps` of the
@@ -539,7 +546,30 @@ class SendController(
         return tap
     }
 
-    fun displayChanged(display: SendDisplayContext) = dispatch(SendEvent.DisplayChanged(display))
+    /** The display the open journey was last told — at [open], or since; `null` while no Send is open. */
+    @Volatile
+    private var toldDisplay: SendDisplayContext? = null
+
+    /**
+     * The display currency as it is NOW — committed since the Send opened,
+     * or changed while it is open (PR 3 final note F25). The machine is told
+     * the money it shows once, at [open], and this had no caller: a Send
+     * opened before the currency committed kept the placeholder's dollars —
+     * no rate, so nothing to type a fiat amount against — for as long as it
+     * stayed open. The machine re-denominates by its own rule
+     * (`DisplayChanged`).
+     *
+     * Said only while a Send is open, and only when it differs from what the
+     * journey was last told: the caller hands over the display on every
+     * change and this decides whether it is news. Returns whether it was.
+     */
+    fun displayChanged(display: SendDisplayContext): Boolean {
+        val told = toldDisplay ?: return false
+        if (told == display) return false
+        toldDisplay = display
+        dispatch(SendEvent.DisplayChanged(display))
+        return true
+    }
 
     fun refreshTokens() = dispatch(SendEvent.RefreshTokens)
 
@@ -589,7 +619,10 @@ class SendController(
     /** 导入表格: the sheet opens on the send's flag and the batch machine opens on the token. */
     // -- Scanner (spec 046 US3): the core's flag opens the surface; a decode
     // becomes ScanResolved and the core decides what it means.
-    fun openScanner() = dispatch(SendEvent.OpenScanner)
+    fun openScanner() = dispatch(SendEvent.OpenScanner())
+
+    /** Issue #471: the scanner for ONE split row: the scanned address lands in that row. */
+    fun openRowScanner(id: String) = dispatch(SendEvent.OpenScanner(id))
 
     fun closeScanner() = dispatch(SendEvent.CloseScanner)
 

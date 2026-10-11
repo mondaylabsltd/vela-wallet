@@ -221,6 +221,31 @@ class BalanceMachineTest {
         assertTrue("not read: it fails like a chain that did not answer", view.unreachable_networks.any { it.chain_id == 4217 })
         assertTrue("not the app's fault", view.internal_chain_ids.isEmpty())
         assertTrue("nothing was asked of it: $asked", asked.isEmpty())
+        // The integration's note 4: the executor says WHICH failure this is
+        // (`registry_chain_ids`), so the core words it as the token list —
+        // the chain's RPC was never the problem, and was never asked — and
+        // offers no RPC fix for it.
+        val tempo = view.unreachable_networks.single { it.chain_id == 4217 }
+        assertEquals("token_list", tempo.cause)
+        assertFalse("no RPC to fix", tempo.rpc_fixable)
+        assertEquals("the one unreachable network is there for its list", "assets.tokenListUnreachable", view.unreachable_key)
+    }
+
+    /**
+     * The other half: a chain whose RPC did not answer is NOT reported as a
+     * token-list failure — its row keeps the network's cause and its fix.
+     */
+    @Test
+    fun aChainWhoseRpcDidNotAnswerIsNotATokenListFailure() {
+        val h = harness(listOf(row(1, "ETH", "Ethereum"), row(100, "xDAI", "Gnosis"))) { url, _ ->
+            if (url.contains("chain-100")) FakeRpcTransport.network() else FakeRpcTransport.body("0x14d1120d7b160000")
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        val view = h.host.settle { it.unreachable_networks.any { network -> network.chain_id == 100 } }
+        val gnosis = view.unreachable_networks.single { it.chain_id == 100 }
+        assertEquals("network", gnosis.cause)
+        assertTrue(gnosis.rpc_fixable)
+        assertEquals("assets.unreachableOne", view.unreachable_key)
     }
 
     /** "No such document" (a 404) is an answer: nothing listed, so the chain answered holding nothing — as before. */

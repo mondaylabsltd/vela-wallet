@@ -28,7 +28,8 @@
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import { feeCallsOf } from '$lib/signing/fee-calls';
-	import { tellBalanceChanges } from '$lib/signing/fee-balance-changes';
+	import { checkRequest } from '$lib/signing/fee-balance-changes';
+	import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
 	import {
 		dappReceiptModel,
@@ -390,6 +391,12 @@
 	);
 	onMount(() => {
 		void speedControl.boot();
+		// The sheet prices what it shows in the display currency, and no money
+		// figure is drawn until that currency is the person's
+		// (`CurrencyView.committed`). The wallet and Settings routes boot the
+		// store themselves; the extension's request window has only this host,
+		// and without this its figures would wait for ever. Idempotent.
+		void currency.boot();
 		return () => speedControl.dispose();
 	});
 
@@ -398,6 +405,15 @@
 	// request arrived, so the web sheet drew no fee for anything — and the
 	// backup to Ethereum, which costs real dollars, said nothing about it.
 	let quotedFor = '';
+	/**
+	 * What the sheet's own simulation said of a request, as the core read it
+	 * (PR 3 device round, item 3): the one `eth_simulateV1` read that tells
+	 * the fee machine what the calls move also tells the sheet when nothing
+	 * of the person's does ("No asset changes"). It belongs to the request it
+	 * was measured for — the sheet is handed it for that request only, and a
+	 * new request starts with none.
+	 */
+	let checked = $state<{ requestId: string; verdict: SimVerdict } | null>(null);
 	$effect(() => {
 		const request = signView.request;
 		if (!request || signView.surface === 'hidden' || !identity) {
@@ -411,6 +427,7 @@
 				untrack(() => fee.dispose());
 			}
 			quotedFor = '';
+			checked = null;
 			return;
 		}
 		if (quotedFor === request.id) return;
@@ -446,12 +463,30 @@
 		// Told to the fee in force and every speed pricing these calls, for as
 		// long as this request is the one on the sheet; a revert or a node that
 		// could not check tells it nothing.
+		// The same read is the sheet's (item 3): what it means is the core's
+		// (`simOutcome`), kept for this request alone.
 		const requestId = request.id;
-		void tellBalanceChanges(
+		// PR 3: the confirm waits for this read's verdict — the one part of
+		// the sheet the site being signed for cannot write. The core is told
+		// the simulation is out in the step that sends it, and that its
+		// verdict is on the sheet in the step that puts it there; between the
+		// two it holds the confirm (`sim_checking`), for four seconds at most
+		// on a timer of its own. Nothing here holds the confirm or keeps a
+		// clock. A message never reaches this line: it has no calls.
+		signRequest.dispatch({ type: 'sim_started', id: requestId });
+		// However the read ends — a verdict, nothing to say, or a throw — the
+		// verdict's place is no longer "checking". For a request that has gone
+		// nothing is said: its wait went with it.
+		const settled = (verdict: SimVerdict | null) => {
+			if (quotedFor !== requestId) return;
+			if (verdict !== null) checked = { requestId, verdict };
+			signRequest.dispatch({ type: 'sim_settled', id: requestId });
+		};
+		void checkRequest(
 			speedControl,
 			{ from: identity.address, calls, chainId: request.chain_id },
 			() => quotedFor === requestId
-		);
+		).then(settled, () => settled(null));
 	});
 
 	/**
@@ -494,6 +529,8 @@
 			guard: signingSheet.guard,
 			fee: feeShown,
 			progress: signRequest.progress,
+			// This request's own simulation, and no other's.
+			sim: checked !== null && checked.requestId === signView.request?.id ? checked.verdict : null,
 			feeOpen,
 			speed: {
 				view: speedControl.view,

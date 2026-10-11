@@ -146,18 +146,21 @@ test.describe('on the wide layout', () => {
 });
 
 /**
- * Two records, one address — the switcher must survive it.
+ * One wallet, one row (the session core's rule ⑨).
  *
- * Signing in with a passkey this device is ALREADY signed in with appends a
- * second account (the core's `AddAccount` appends without deduping), and both
- * records derive the same address. The switcher used to key its rows by the
- * truncated display address, so Svelte threw `each_key_duplicate` and the
- * settings screen died where a person had done nothing stranger than sign in
- * twice (founder-reported, 2026-09-16).
+ * A wallet is its ADDRESS. Signing in with a passkey this device is already
+ * signed in with used to append a second record deriving the same address,
+ * and the switcher — keyed by the truncated display address — threw
+ * `each_key_duplicate` and took the settings screen down (founder-reported,
+ * 2026-09-16). This test then held that the PAIR rendered and each of the two
+ * was selectable by position.
  *
- * Position is the row's identity here — it is what `onselect` already sends —
- * so the pair renders AND the second one is still selectable as its own row,
- * which an address key could not have managed even without throwing.
+ * The core no longer keeps the pair: an establishment whose address the list
+ * already holds activates that row instead of appending one, and a restore
+ * collapses a pair already on disk — with the saved index following its
+ * wallet, not its old slot. So this holds the core's rule: a profile that
+ * still has the pair on disk shows the wallet ONCE, nothing throws, and the
+ * wallet that was active is still the active one.
  */
 test.describe('two records deriving one address', () => {
 	test.use({ viewport: { width: 1280, height: 900 } });
@@ -170,8 +173,16 @@ test.describe('two records deriving one address', () => {
 		created_at_iso: '2026-01-03T00:00:00.000Z',
 		keys: []
 	};
+	const OTHER = {
+		id: 'e2e-other-credential',
+		name: 'Another Wallet',
+		address: '0x54fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d5e',
+		public_key_hex: '04' + 'cd'.repeat(64),
+		created_at_iso: '2026-01-02T00:00:00.000Z',
+		keys: []
+	};
 
-	test('renders both rows, throws nothing, and switches by position', async ({ page }) => {
+	test('a pair on disk is one row, and nothing throws', async ({ page }) => {
 		const pageErrors: string[] = [];
 		page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -185,14 +196,40 @@ test.describe('two records deriving one address', () => {
 
 		// Scoped to the panel: the sidebar header names the active account too.
 		const rows = page.getByRole('main').getByRole('button', { name: /Twice Signed In/ });
-		await expect(rows).toHaveCount(2);
-		expect(pageErrors.filter((message) => /each_key_duplicate/.test(message))).toEqual([]);
+		await expect(rows).toHaveCount(1);
+		// One wallet is counted as one: "1 account · ", in the singular.
+		await expect(page.getByRole('main').getByText(/^1 account · /)).toBeVisible();
+		expect(pageErrors).toEqual([]);
+	});
 
-		// The second of the pair is its own row, and the core persists ITS index.
-		await rows.nth(1).click();
+	test('the saved index follows its wallet when the pair collapses', async ({ page }) => {
+		const pageErrors: string[] = [];
+		page.on('pageerror', (error) => pageErrors.push(error.message));
+
+		// The second of the pair was the active one: slot 2 of three.
+		await page.addInitScript(
+			([other, twin]) => {
+				window.localStorage.setItem('vela.accounts', JSON.stringify([other, twin, twin]));
+				window.localStorage.setItem('vela.activeAccountIndex', '2');
+			},
+			[OTHER, TWIN] as const
+		);
+
+		await page.goto('/en/settings');
+		// Still that wallet — not whatever now sits in its old slot, and not
+		// the first of the list.
+		await expect(page.getByText('Twice Signed In').first()).toBeVisible();
+		await page.getByRole('button', { name: 'Account', exact: true }).click();
+		const main = page.getByRole('main');
+		await expect(main.getByRole('button', { name: /Twice Signed In/ })).toHaveCount(1);
+		await expect(main.getByRole('button', { name: /Another Wallet/ })).toHaveCount(1);
+		await expect(main.getByText(/^2 accounts · /)).toBeVisible();
+
+		// The other wallet is its own row, and choosing it is persisted.
+		await main.getByRole('button', { name: /Another Wallet/ }).click();
 		await expect
 			.poll(() => page.evaluate(() => window.localStorage.getItem('vela.activeAccountIndex')))
-			.toBe('1');
+			.toBe('0');
 		expect(pageErrors).toEqual([]);
 	});
 });

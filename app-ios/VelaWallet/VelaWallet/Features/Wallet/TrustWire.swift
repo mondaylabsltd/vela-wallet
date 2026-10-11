@@ -32,10 +32,33 @@ struct TrustIncomingWire: Decodable, Equatable {
     let txHash: String
     let blockNumber: Double
     let logIndex: Int
-    /// Unix seconds: the block's time, falling back to when it was seen.
+    /// Unix seconds: the time of the transfer's own block, as the chain gave
+    /// it — never a clock's (invariant ⑨). A transfer whose block could not
+    /// be read is not here yet.
     let timestampSec: Double
     let symbol: String?
     let decimals: Int?
+}
+
+/// Which way an unverified token moves (`TrustSimDirection`) — all the core
+/// tells a sheet about it.
+enum TrustSimDirectionWire: String, Decodable, Equatable {
+    /// The account receives it: "+".
+    case `in`
+    /// It leaves the account: "−".
+    case out
+    /// A move of nothing (the simulation's figure was a zero): never a row.
+    case still
+    /// The figure was no signed number, so there is no direction to state:
+    /// the row, its caution, and no sign.
+    case unreadable
+
+    /// A direction this build has never heard of is one it cannot state:
+    /// the row with its caution and no sign, never a view that fails.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = TrustSimDirectionWire(rawValue: raw) ?? .unreadable
+    }
 }
 
 /// The core's verdict on ONE simulated balance change.
@@ -54,45 +77,44 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
     /// one whose `symbol()` answered — carried so the judgment can be handed
     /// back to the core verbatim (`wire`), never read here.
     case erc20Trusted(token: String, delta: String, symbol: String, decimals: Int, inTrustedSet: Bool = false)
-    /// Direction and caution, and **no attacker-controlled amount**.
-    case erc20Unverified(token: String?, delta: String)
+    /// A direction and a caution, and **no figure** (PR 3, fix B). The
+    /// simulation's number for a token nobody vouches for is whatever the
+    /// site being signed for chose to emit, so the core hands over only which
+    /// way it moves: this case cannot hold the amount, and a sheet cannot
+    /// print what it was never given. (It held the raw `delta` until then,
+    /// "to read the sign from", and one client printed it: 「未验证代币
+    /// +5,000,000,000,000,000,000,000.00」.)
+    case erc20Unverified(token: String?, direction: TrustSimDirectionWire)
 
     private enum CodingKeys: String, CodingKey {
-        case type, token, delta, symbol, decimals, inTrustedSet
+        case type, token, delta, symbol, decimals, inTrustedSet, direction
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let type = try container.decode(String.self, forKey: .type)
-        let delta = try container.decode(String.self, forKey: .delta)
-        switch type {
+        switch try container.decode(String.self, forKey: .type) {
         case "native":
-            self = .native(delta: delta)
+            self = .native(delta: try container.decode(String.self, forKey: .delta))
         case "erc20_trusted":
             self = .erc20Trusted(
                 token: try container.decode(String.self, forKey: .token),
-                delta: delta,
+                delta: try container.decode(String.self, forKey: .delta),
                 symbol: try container.decode(String.self, forKey: .symbol),
                 decimals: try container.decode(Int.self, forKey: .decimals),
                 inTrustedSet: try container.decodeIfPresent(Bool.self, forKey: .inTrustedSet) ?? false
             )
         default:
+            // The direction is the core's word. A judgment written before
+            // it had one (`{"type":"erc20_unverified","delta":"…"}`) still
+            // reads — its figure is not read at all, here or anywhere — and
+            // has no direction this file may state for it. (A stored record's
+            // lines never come through here: `TxRecords.toWire` hands them to
+            // the core as stored, and the core reads both shapes.)
             self = .erc20Unverified(
-                token: try container.decodeIfPresent(String.self, forKey: .token),
-                delta: delta
+                token: try? container.decodeIfPresent(String.self, forKey: .token),
+                direction: (try? container.decodeIfPresent(TrustSimDirectionWire.self, forKey: .direction))
+                    ?? .unreadable
             )
-        }
-    }
-
-    /// Positive means the wallet RECEIVES. The sign lives in the core's
-    /// string, and reading it here is the shell's one arithmetic fact.
-    var incoming: Bool { !(delta.hasPrefix("-")) }
-
-    var delta: String {
-        switch self {
-        case .native(let delta): delta
-        case .erc20Trusted(_, let delta, _, _, _): delta
-        case .erc20Unverified(_, let delta): delta
         }
     }
 
@@ -112,8 +134,11 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
             // Absent when false, as the core writes it.
             if inTrustedSet { wire["in_trusted_set"] = true }
             return wire
-        case .erc20Unverified(let token, let delta):
-            return ["type": "erc20_unverified", "token": token.map { $0 as Any } ?? NSNull(), "delta": delta]
+        case .erc20Unverified(let token, let direction):
+            return [
+                "type": "erc20_unverified", "token": token.map { $0 as Any } ?? NSNull(),
+                "direction": direction.rawValue,
+            ]
         }
     }
 }
@@ -126,6 +151,14 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
 struct TrustSimViewWire: Decodable, Equatable {
     let ready: Bool
     let judgments: [TrustSimJudgmentWire]
+    /// The verdict's quiet line when the checked answer moves nothing of the
+    /// person's: `componentsUi.signing.simResultNoChange`, "No asset
+    /// changes" — set by the core once `ready`, with no judgment or every
+    /// one a zero. **The sheet says the line exactly when this key is there**
+    /// and never picks the case, or the sentence, itself. `nil` while
+    /// resolving, whenever something moves, and on a view from before the
+    /// key.
+    var noChangeKey: String? = nil
 }
 
 /// The scan half of the view.

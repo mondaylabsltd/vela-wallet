@@ -711,11 +711,21 @@ final class WriteAheadGate {
 
     /// `true` once `hash` is cleared; `false` at `ms`, or when the waiting
     /// task is cancelled (a cancel before the POST sends nothing).
-    func wait(_ hash: String, ms: Double) async -> Bool {
+    ///
+    /// `ms` is `nil` under a test's stopped clock (`FeeStore.Timers`): no
+    /// time passes, and the wait ends by the clearance or the cancel alone.
+    /// The deadline is on the wall clock and the clearance is a few turns of
+    /// the main actor away — the record's write, then `clear_to_post`, each
+    /// an effect of its own. On a main actor a test run had filled, those
+    /// turns took longer than the core's five seconds, and a scripted relay
+    /// that answers every call was reported unreachable: a failure the code
+    /// never had, measured on a clock (`Waits.swift`).
+    func wait(_ hash: String, ms: Double?) async -> Bool {
         let key = hash.lowercased()
-        let deadline = Date().addingTimeInterval(ms / 1000)
+        let deadline = ms.map { Date().addingTimeInterval($0 / 1000) }
         while !cleared.contains(key) {
-            if Task.isCancelled || Date() >= deadline { return false }
+            if Task.isCancelled { return false }
+            if let deadline, Date() >= deadline { return false }
             try? await Task.sleep(nanoseconds: 5_000_000)
         }
         cleared.remove(key)

@@ -63,9 +63,11 @@
       "bestRpc": "Melhor RPC: {{latencyMs}}ms",
       "compatibilityCheck": "Verificação de compatibilidade",
       "unableToVerify": "Não foi possível verificar — a solicitação ao RPC falhou",
+      "noRpcEndpoint": "Esta rede não tem nenhum endpoint de RPC listado. Informe um e verifique de novo.",
       "retry": "Tentar de novo",
       "addNetworkBtn": "Adicionar rede",
-      "incompatibleHint": "Alguns contratos necessários ainda não foram implantados nesta chain.\nUse a ferramenta Vela Wallet Chain Setup para implantá-los e depois volte para verificar de novo.",
+      "incompatibleHint": "Alguns contratos de que a Vela precisa ainda não estão nesta rede. A ferramenta Chain Setup mostra quais faltam e quem pode implantá-los.",
+      "noP256Hint": "Esta rede não consegue verificar assinaturas de chaves de acesso: não tem verificador P-256 (EIP-7951 / RIP-7212 em 0x100), e só a equipe da própria rede pode adicioná-lo. Carteiras Vela não funcionam aqui. Não envie dinheiro para o seu endereço Vela nesta rede: ele ficaria preso.",
       "openChainSetupTool": "Abrir ferramenta de Chain Setup",
       "recheck": "Verificar de novo",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -92,11 +94,12 @@
       "invalid": "Inválido"
     },
     "backup": {
-      "title": "Fazer backup das chaves públicas na Ethereum",
-      "backedUp": "Backup feito na Ethereum",
-      "notBackedUp": "Ainda sem backup",
-      "couldNotCheck": "Não foi possível verificar",
-      "explain": "Apenas as chaves públicas são publicadas, para que esta carteira possa ser encontrada e reconstruída a partir da Ethereum. As chaves privadas nunca saem dos seus dispositivos."
+      "title": "Copiar o registro desta carteira para a Ethereum",
+      "backedUp": "Copiado para a Ethereum",
+      "notBackedUp": "Ainda não copiado (opcional)",
+      "couldNotCheck": "Não foi possível verificar. Toque para tentar de novo.",
+      "cannotCopy": "Esta carteira é anterior e não pode ser copiada",
+      "explain": "O registro da sua carteira na Gnosis é público: o endereço e o nome e, de cada chave, o nome, a chave pública, o ID da credencial e o modelo do autenticador. Um aparelho com uma das suas chaves de acesso encontra esta carteira por meio dele. Aqui uma cópia é salva também na Ethereum. É uma transação na Ethereum: você a confirma com uma chave de acesso e paga a taxa de rede com uma moeda que tem na Ethereum. A cópia não movimenta dinheiro nem recupera uma chave de acesso perdida."
     },
     "keys": {
       "title": "Chaves",

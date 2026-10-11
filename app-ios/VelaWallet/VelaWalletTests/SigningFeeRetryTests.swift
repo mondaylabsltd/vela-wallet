@@ -40,7 +40,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct SigningFeeRetryTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])
@@ -292,6 +292,28 @@ struct SigningFeeRetryTests {
         #expect(reads() == settled, "a sheet that is over kept asking the chain")
     }
 
+    /// How a test approves (`approveWhenOpen`, `Waits.swift`): through the
+    /// gate a person waits for. Here the gate cannot open — the fee failed,
+    /// and its re-ask is a timer the stopped clock holds — so nothing is in
+    /// flight behind the sheet, and the helper says so at once, naming the
+    /// part of the gate that is shut; no approve is sent, nothing is signed.
+    /// A test that approved by itself would have waited out its time limit
+    /// for a signature the core was never going to start.
+    @Test func aConfirmThatCannotOpenIsSaidAtOnceAndNothingIsApproved() async {
+        let port = ScriptedRelayPort()   // eth_getCode unscripted: the chain is silent
+        let controller = controller(port, timers: .stopped)
+        var approved = true
+        await withKnownIssue {
+            approved = await controller.approveWhenOpen()
+        } matching: { issue in
+            issue.comments.contains { $0.rawValue.contains("the confirm never opened (fee_failed)") }
+        }
+        #expect(!approved)
+        #expect(controller.isIdle, "nothing was left that could open it")
+        #expect(controller.confirmState.block == "fee_failed")
+        #expect(controller.sign.phase == .idle && !controller.sign.isSigning, "nothing was approved")
+    }
+
     /// The re-ask out is no new state on screen (PR 2 note 1): the row keeps
     /// the failure's reason beside the measuring sign, its figure the dash —
     /// never "Estimating…" — and the footer still says it is retrying.
@@ -354,7 +376,7 @@ struct SigningFeeRetryTests {
             spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
             store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults), offline: true),
             ports: SigningController.Ports(knownChains: { [chainId] }),
-            feeTimers: timers
+            timers: timers
         )
         controller.open(SigningController.Incoming(
             id: "r1", method: "eth_sendTransaction",

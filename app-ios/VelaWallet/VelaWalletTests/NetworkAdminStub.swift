@@ -21,10 +21,15 @@ enum NetworkAdminStub {
     /// `reported` is what an RPC answers to `eth_chainId`, per URL; `chains`
     /// what the chain-data endpoint knows (raw, as the executor sends it);
     /// `asked` hears each operation's type and URL as it is performed.
+    /// `code` is what `eth_getCode` answers for a contract's address and
+    /// `p256` what the P-256 precompile's test call returns — both `nil`
+    /// (nothing deployed, no verifier) unless a test says otherwise.
     static func perform(
         executor: NetworkAdminExecutor,
         reported: @escaping (String) -> Int? = { _ in nil },
         chains: [Int: [String: Any]] = [:],
+        code: @escaping (_ address: String) -> String? = { _ in nil },
+        p256: String? = nil,
         asked: @escaping (_ type: String, _ url: String) -> Void = { _, _ in }
     ) -> @MainActor ([String: Any]) async -> String {
         { operation in
@@ -55,11 +60,15 @@ enum NetworkAdminStub {
             case "fetch_search_index":
                 return CoreJSON.string(["type": "search_index", "chains": []])
             case "rpc_get_code":
+                let address = operation["address"] as? String ?? ""
                 return CoreJSON.string([
-                    "type": "code", "url": url, "address": operation["address"] ?? "", "code": NSNull(),
+                    "type": "code", "url": url, "address": address,
+                    "code": code(address).map { $0 as Any } ?? NSNull(),
                 ])
             case "rpc_call_p256":
-                return CoreJSON.string(["type": "p256_call", "url": url, "result": NSNull()])
+                return CoreJSON.string([
+                    "type": "p256_call", "url": url, "result": p256.map { $0 as Any } ?? NSNull(),
+                ])
             default:
                 return await executor.perform(operation)
             }

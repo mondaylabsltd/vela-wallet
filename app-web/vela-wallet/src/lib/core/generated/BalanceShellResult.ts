@@ -25,7 +25,17 @@ read_chain_ids: Array<number>,
  * honest about what did not answer, and none of them is ever said as
  * "can't reach" ([`BalanceView::internal_key`]).
  */
-internal_chain_ids: Array<number>, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
+internal_chain_ids: Array<number>, 
+/**
+ * The failed chains whose RPC was never the problem (PR 3 note 4):
+ * the chain's token list — the registry document that names its
+ * stablecoins — could not be loaded, and the chain has no native
+ * coin that could be read without it (Tempo). Nothing was read, so
+ * it is a subset of `failed_chain_ids` like the two above; but its
+ * row is never offered an RPC fix, and alone it is said as what it
+ * is ([`TOKEN_LIST_UNREACHABLE`]), not as "can't reach".
+ */
+registry_chain_ids: Array<number>, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
 /**
  * It threw inside the app before anything left it (PR 2 note 11):
  * said as Vela's own fault, never "can't reach".

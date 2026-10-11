@@ -144,14 +144,18 @@ describe('fixture canon (zh mock verbatim)', () => {
 		expect(m.list?.contactsCount).toBe('1 位');
 	});
 
-	it('c2 carries the C2 detail: chips, actions, two-line address, 最近往来', () => {
+	it('c2 carries the C2 detail: chips, Send alone, two-line address, 最近往来', () => {
 		const m = buildMobileState('c2', zh, IDENTICON_STUB);
 		const d = m.detail;
 		expect(d?.contact.name).toBe('Alice');
 		expect(d?.contact.addressDisplay).toBe('0x9F3c…21aE');
 		expect(d?.chips).toEqual(['家人']);
 		expect(d?.addChipLabel).toBe('分组');
-		expect(d?.actions).toEqual({ send: '转账', receive: '收款', qr: '二维码' });
+		// Issue 479: a contact's page offers Send and nothing else. Receive
+		// was the wallet's own code and the QR card this person's address;
+		// the address block below stays, with its copy.
+		expect(d?.actions).toEqual({ send: '转账' });
+		expect(d?.address.copyLabel).toBe('复制地址');
 		expect(d?.address.label).toBe('地址');
 		expect(d?.address.lines).toEqual(['0x9F3cA71b04E82f5C55d9', 'B21aE00734F8Dd8021aE']);
 		expect(d?.address.lines.join('')).toBe(CONTACTS[0].addressFull);
@@ -316,7 +320,6 @@ describe('menu fixtures (data-model.md §Menus)', () => {
 	it('the contact context menu renders the desktop SPEC items', () => {
 		expect(contactContextMenu(zh).items.map((i) => i.label)).toEqual([
 			'转账',
-			'收款',
 			'复制地址',
 			'编辑',
 			'移入分组',

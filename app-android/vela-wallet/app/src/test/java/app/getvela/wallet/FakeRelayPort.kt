@@ -4,6 +4,10 @@ import app.getvela.wallet.feature.send.core.RelayPort
 import app.getvela.wallet.feature.send.core.RestAnswer
 import app.getvela.wallet.feature.wallet.core.RpcKind
 import app.getvela.wallet.feature.wallet.core.RpcResult
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /**
@@ -17,6 +21,28 @@ class FakeRelayPort : RelayPort {
     val rest = HashMap<String, RestAnswer>()
     /** Written by the machines' threads, counted by the test's: never a plain list. */
     val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+    /** How many calls have been logged: what [awaitCalls] wakes on. */
+    private val logged = MutableStateFlow(0)
+
+    private fun log(call: String) {
+        calls += call
+        logged.update { it + 1 }
+    }
+
+    /**
+     * The log, once [test] holds of it — woken by each call, never by a
+     * clock. Calls made by coroutines that run side by side arrive in no
+     * order a test may count on: a test that waits for one of them and then
+     * asserts another has already been made is asserting how the scheduler
+     * ran. It waits here for everything it is about to assert, and a log
+     * that never gets there fails with what was called.
+     */
+    suspend fun awaitCalls(what: String, timeoutMs: Long = 10_000, test: (List<String>) -> Boolean): List<String> =
+        withTimeoutOrNull(timeoutMs) {
+            logged.first { test(calls) }
+            calls.toList()
+        } ?: throw AssertionError("$what — called so far: $calls")
     var base: String? = "https://relay.test"
 
     /** A default per method, served when the queue for it is empty. */
@@ -38,7 +64,7 @@ class FakeRelayPort : RelayPort {
     var before: (suspend (method: String) -> Unit)? = null
 
     override suspend fun call(chainId: Int, method: String, params: List<Any?>, kind: RpcKind): RpcResult {
-        calls += "$kind:$method"
+        log("$kind:$method")
         before?.invoke(method)
         return rpc[method]?.removeFirstOrNull()
             ?: defaults[method]?.invoke(params)
@@ -50,7 +76,7 @@ class FakeRelayPort : RelayPort {
     override suspend fun bestRpcUrl(chainId: Int): String? = "https://rpc.test"
 
     override suspend fun restGet(url: String, xRpcUrl: String?): RestAnswer {
-        calls += "GET:$url"
+        log("GET:$url")
         return rest[url] ?: RestAnswer.Failed
     }
 

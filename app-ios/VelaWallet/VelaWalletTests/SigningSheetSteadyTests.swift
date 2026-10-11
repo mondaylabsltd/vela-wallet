@@ -76,6 +76,13 @@ struct SigningSheetSteadyTests {
         /// The first figure measured, and the core already knows no coin has
         /// anything to pay from (`FeeView.nothing_to_pay_from`).
         case firstNothingToPay
+        /// A sheet's first second on a phone: the fee still measured, the
+        /// speed row folded with nothing under it.
+        case lateBare
+        /// Then the fee lands and its card grows by three lines at once: the
+        /// speed row's two-line "this network charges nothing extra for
+        /// Instant" and the red "no coin can pay".
+        case lateLanded
     }
 
     private var measuringNote: String { loc.t("componentsUi.signing.confirmBlock.feeMeasuring") }
@@ -103,10 +110,13 @@ struct SigningSheetSteadyTests {
         case .short:
             fee = .onchain(label: label, value: figure, selector: nil, warning: noCoin, tappable: false)
             (enabled, note, measuring) = (false, nil, false)
-        case .firstNothingToPay:
+        case .firstNothingToPay, .lateBare:
             fee = .onchain(label: label, value: loc.t("componentsUi.gas.estimating"), selector: nil,
                            tappable: false)
             (enabled, note, measuring) = (false, measuringNote, true)
+        case .lateLanded:
+            fee = .onchain(label: label, value: figure, selector: nil, warning: noCoin, tappable: false)
+            (enabled, note, measuring) = (false, nil, false)
         }
         var model = SigningModel(
             id: base.id, dapp: base.dapp, network: base.network, blocks: base.blocks,
@@ -118,6 +128,13 @@ struct SigningSheetSteadyTests {
         model.closeLabel = loc.t("common.close")
         model.feeRefresh = FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: measuring)
         if step == .firstNothingToPay { model.feeReserve = noCoin }
+        if step == .lateBare || step == .lateLanded {
+            model.feeSpeed = FeeSpeedModel(
+                label: loc.t("send.feeSpeedLabel"), value: step == .lateLanded ? "超快" : "标准", open: false,
+                onceNote: "", freeNote: step == .lateLanded ? loc.t("send.feeSpeedFree") : nil,
+                singleNote: nil, gasPriceLabel: "", gasPriceLine: false, options: []
+            )
+        }
         return model
     }
 
@@ -204,18 +221,18 @@ struct SigningSheetSteadyTests {
 
     /// Walks `steps` on one live sheet `height` points tall — scrolled to its
     /// end after the first step when `atEnd` — and reads where the fee row and
-    /// the confirm sit after each, with every element said aloud.
-    private func walk(_ steps: [Step], height: CGFloat = 844, atEnd: Bool = false)
-        async throws -> (frames: [Frame], trees: [[Element]]) {
+    /// the confirm sit after each, with every element said aloud, and how
+    /// tall the sheet's body has become.
+    private func walk(_ steps: [Step], width: CGFloat = 390, height: CGFloat = 844, atEnd: Bool = false)
+        async throws -> (frames: [Frame], trees: [[Element]], bodies: [CGFloat]) {
         _ = Self.automation
         let box = Box(model(steps[0]))
         let host = UIHostingController(rootView: Host(box: box))
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: height))
-        window.rootViewController = host
-        window.makeKeyAndVisible()
+        let window = HostedWindow.show(host, size: CGSize(width: width, height: height))
         defer { window.isHidden = true }
         var frames: [Frame] = []
         var trees: [[Element]] = []
+        var bodies: [CGFloat] = []
         for (index, step) in steps.enumerated() {
             box.model = model(step)
             try await shown(host.view)
@@ -227,8 +244,9 @@ struct SigningSheetSteadyTests {
             let (frame, tree) = try await settled(host.view)
             frames.append(frame)
             trees.append(tree)
+            bodies.append(scrollView(in: host.view)?.contentSize.height ?? 0)
         }
-        return (frames, trees)
+        return (frames, trees, bodies)
     }
 
     // MARK: - The sequences
@@ -268,10 +286,44 @@ struct SigningSheetSteadyTests {
         // Held, not said: nothing is claimed before the figure.
         #expect(!walked.trees[0].contains { $0.label == noCoin })
         #expect(!walked.trees[0].contains { $0.id == "signing.fee.reason" })
-        // Without the core's word the first landing still moves it — the
-        // held line covers only what was said.
+        // Without the core's word the held line covers only what was said:
+        // the shortfall's first landing still takes a line of the BODY. The
+        // confirm is pinned under the body now, so even that cannot move it.
         let unknown = try await walk([.newSpeed, .short])
-        #expect(unknown.frames[1].confirm > unknown.frames[0].confirm)
+        #expect(unknown.frames[1].confirm == unknown.frames[0].confirm)
+    }
+
+    /// The device round's finding (iPhone 11, 375 × 812, 2026-10-10): a live
+    /// "Send dust" sheet moved its confirm 70.5 pt in its first four seconds
+    /// — and not for the verdict. A line's room appeared under the fee card
+    /// (632 → 658), then the fee landed with the speed row's two-line note
+    /// and the red "no coin can pay" under it (→ 702.5): the confirm was the
+    /// last thing in the scroll, so everything the fee card gained pushed it
+    /// down under the thumb.
+    ///
+    /// The confirm stands on the sheet's bottom edge now, outside the
+    /// scroll: the same three lines arriving late grow the BODY, and the
+    /// confirm is where it was — on that phone's width, on a taller one, and
+    /// on a screen the sheet no longer fits.
+    @Test func aFeeCardThatGrowsLateLeavesTheConfirmWhereItWas() async throws {
+        for (width, height) in [(375.0, 812.0), (390.0, 844.0), (375.0, 480.0)] as [(CGFloat, CGFloat)] {
+            let walked = try await walk([.lateBare, .lateLanded, .lateBare, .lateLanded],
+                                        width: width, height: height)
+            let grew = walked.bodies[1] - walked.bodies[0]
+            print("MEASURE signing-late-fee \(Int(width))x\(Int(height)): confirm.y "
+                + walked.frames.map { "\($0.confirm)" }.joined(separator: " → ")
+                + " | body " + walked.bodies.map { "\($0)" }.joined(separator: " → ") + " (+\(grew))")
+            // The lines are there, and they are what the phone saw arrive.
+            #expect(walked.trees[1].contains { $0.label == loc.t("send.feeSpeedFree") })
+            #expect(walked.trees[1].contains { $0.label == noCoin })
+            #expect(!walked.trees[0].contains { $0.label == loc.t("send.feeSpeedFree") })
+            #expect(grew >= 60, "\(Int(width))x\(Int(height)): the fee card grew only \(grew) pt")
+            // …and the confirm did not move for them.
+            for (index, frame) in walked.frames.enumerated() {
+                #expect(frame.confirm == walked.frames[0].confirm,
+                        "\(Int(width))x\(Int(height)) step \(index): confirm at \(frame.confirm), was \(walked.frames[0].confirm)")
+            }
+        }
     }
 
     /// A held line is space and nothing else: not read aloud, not a hook a
@@ -287,9 +339,11 @@ struct SigningSheetSteadyTests {
         #expect(!landed.contains { $0.label == measuringNote }, "a held note is silent")
         #expect(!landed.contains { $0.id == "signing.confirmBlock" })
         #expect(!landed.contains { $0.label == noCoin })
-        // The shortfall's line went with a clean landing: the confirm sits a
-        // line higher than it did under the shortfall, and only then.
-        #expect(walked.frames[2].confirm < walked.frames[0].confirm)
+        // The shortfall's line went with a clean landing, and only then:
+        // it is said while the fee is short, and not after. The confirm is
+        // pinned under the body, so it stands where it stood throughout.
+        #expect(walked.trees[0].contains { $0.label == noCoin })
+        #expect(walked.frames[2].confirm == walked.frames[0].confirm)
         #expect(walked.frames[1].confirm == walked.frames[0].confirm)
     }
 }

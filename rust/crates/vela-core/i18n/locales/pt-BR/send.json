@@ -153,7 +153,6 @@
     "multiSendSameRecipient": "Todos os tokens vão para o mesmo endereço",
     "pickContactTitle": "Escolha um contato",
     "pickContactSearch": "Busque contatos ou cole um endereço",
-    "scanToFill": "Escaneie para preencher o endereço",
     "feeTokenHint": "Paga a taxa de rede desta transferência. A estimativa acompanha a rede em tempo real.",
     "feeTokenEstimate": "Taxa estimada",
     "batchRateHint": "Os valores da planilha são lidos como {{code}} e convertidos para {{sym}} por esta taxa.",

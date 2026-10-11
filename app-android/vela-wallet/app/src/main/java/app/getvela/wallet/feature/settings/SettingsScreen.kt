@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -126,6 +127,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.getvela.wallet.core.designsystem.components.VelaDangerButton
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -459,7 +461,14 @@ fun SettingsRoute(
         onSigningPageAdd = { url -> actions.onSigningPageAdd(url, "") },
         onSigningPageRenameOpen = { url -> editingPage = url; overlay = SettingsOverlay.RenameSigningPage },
         onSigningPageRename = { name -> editingPage?.let { actions.onSigningPageRename(it, name) } },
-        onSigningPageRemove = actions.onSigningPageRemove,
+        // The row's "Remove" asks first (as iOS does); only the sheet's own
+        // Remove takes the page.
+        onSigningPageRemove = { url -> editingPage = url; overlay = SettingsOverlay.RemoveSigningPage },
+        onConfirmRemoveSigningPage = {
+            editingPage?.let(actions.onSigningPageRemove)
+            editingPage = null
+            overlay = SettingsOverlay.None
+        },
         onSigningPageTrust = actions.onSigningPageTrust,
         onFeedbackOpened = actions.onFeedbackOpened,
         onVersionTap = {
@@ -597,6 +606,7 @@ fun SettingsScreen(
     onSigningPageRenameOpen: (String) -> Unit = {},
     onSigningPageRename: (String) -> Unit = {},
     onSigningPageRemove: (String) -> Unit = {},
+    onConfirmRemoveSigningPage: () -> Unit = {},
     onSigningPageTrust: (String, String) -> Unit = { _, _ -> },
     /** Spec 091: a tap on About's version — the hidden entry. */
     onVersionTap: () -> Unit = {},
@@ -748,6 +758,7 @@ fun SettingsScreen(
                 onRpcFixPrimary = onRpcFixPrimary,
                 editingPage = editingPage,
                 onSigningPageRename = onSigningPageRename,
+                onConfirmRemoveSigningPage = onConfirmRemoveSigningPage,
             )
         }
     }
@@ -1062,6 +1073,14 @@ private fun SettingsPageBody(
                     keyboard = KeyboardType.Text,
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                // A stop that named no network to show — it is already in the
+                // list, or nobody could find it — is said here, under what
+                // was typed. It used to be said nowhere: the tap emptied the
+                // list and the screen gave no reason.
+                if (add.callout != null) {
+                    VelaCallout(add.callout)
+                    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                }
                 add.results.forEach { row ->
                     VelaNetworkRow(row = row, onClick = onPickNetwork)
                 }
@@ -1093,6 +1112,12 @@ private fun SettingsPageBody(
                     VelaCheckList(add.checksTitle, add.checks)
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
+                // Why, then where: a stop that asks for an RPC says so over
+                // the box it is typed in.
+                if (add.callout != null && add.calloutAsksForRpc) {
+                    VelaCallout(add.callout)
+                    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                }
                 if (add.customRpc != null) {
                     VelaUrlField(
                         label = add.customRpc.label,
@@ -1102,7 +1127,7 @@ private fun SettingsPageBody(
                     )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
-                if (add.callout != null) {
+                if (add.callout != null && !add.calloutAsksForRpc) {
                     VelaCallout(add.callout)
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
@@ -1119,8 +1144,11 @@ private fun SettingsPageBody(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (add.secondary != null) {
-                    VelaSecondaryButton(add.secondary, onClick = {}, modifier = Modifier.fillMaxWidth())
+                // The button was drawn with an empty handler. It opens the
+                // core's link — Chain Setup on this very chain — and is not
+                // drawn where there is none (a network with no P-256 verifier).
+                if (add.secondary != null && add.secondaryUrl != null) {
+                    VelaSecondaryButton(add.secondary, onClick = { onOpenLink(add.secondaryUrl) }, modifier = Modifier.fillMaxWidth())
                 }
                 if (add.recheck != null) {
                     Text(
@@ -1487,6 +1515,7 @@ internal fun SettingsSheet(
     onRpcFixPrimary: () -> Unit = {},
     editingPage: String? = null,
     onSigningPageRename: (String) -> Unit = {},
+    onConfirmRemoveSigningPage: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1512,12 +1541,24 @@ internal fun SettingsSheet(
       // did nothing and the sheet still ended at Português.
       val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
       val sheetScroll = rememberScrollState()
+      // Issue #478: a tap anywhere in the sheet that is not a control leaves
+      // the field — the keyboard goes down and what it covered (the
+      // screenshots, the consent line, Send) is there again. The page has the
+      // same handler, but a sheet is its own window with its own focus: the
+      // page's never saw a tap in here, so in "Report a problem" the only way
+      // out of the box was the keyboard's own hide key.
+      val sheetFocus = LocalFocusManager.current
       CompositionLocalProvider(
           LocalSheetScroll provides sheetScroll,
           LocalSheetClose provides SheetClose(model.closeLabel, onClose),
           LocalSheetBodyMax provides maxSheetHeight - VelaSpacing.xl3,
       ) {
-        Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxSheetHeight)
+                .pointerInput(Unit) { detectTapGestures(onTap = { sheetFocus.clearFocus() }) },
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1548,6 +1589,9 @@ internal fun SettingsSheet(
                 }
                 SettingsOverlay.RenameSigningPage -> editingPage?.let { url ->
                     RenameSigningPageSheetBody(model.signingPages, url = url, onRename = onSigningPageRename, onDone = onDismiss)
+                }
+                SettingsOverlay.RemoveSigningPage -> editingPage?.let { url ->
+                    RemoveSigningPageSheetBody(model.signingPages, url = url, onConfirm = onConfirmRemoveSigningPage, onCancel = onDismiss)
                 }
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
                     onSheetSelect(SettingsOverlay.NumberFormat, it)
@@ -2494,31 +2538,67 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: 
 private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(model.title)
+    // The sentence the home's line said, in full (F16) — unless the sheet
+    // says it itself, as the heading of the rows it is about.
+    model.lead
+        ?.takeIf { it != model.title && !(it == model.sectionUnpriced && model.unpriced.isNotEmpty()) }
+        ?.let { lead -> SheetLead(lead) }
+    // "Total …": withheld until the display currency is the person's — the
+    // line keeps its room, so the sections under it do not move.
     Text(
         text = model.summary,
         color = colors.fgSubtle,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
-        modifier = Modifier.padding(bottom = VelaSpacing.xl),
+        modifier = Modifier.padding(bottom = VelaSpacing.xl).withheldFigure(model.summaryWithheld, colors.borderBase),
     )
-    BalanceDetailSection(model.sectionPending)
-    Text(
-        text = model.pendingNote,
-        color = colors.fgSubtle,
-        fontFamily = VelaFontFamily,
-        fontSize = VelaTextSize.sm,
-        modifier = Modifier.padding(vertical = VelaSpacing.md),
-    )
-    model.pending.forEach { row -> BalanceDetailRow(row, onRetry) }
-    // Three sections, as the web draws them (BalanceDetailBody): the settled
-    // chains under their own label, and the unpriced holdings only when any.
-    BalanceDetailSection(model.sectionDone, top = VelaSpacing.xl)
-    model.done.forEach { row -> BalanceDetailRow(row, onRetry) }
+    // Three sections, as the web draws them (BalanceDetailBody) — and a
+    // heading is drawn WITH the rows it is about, never without them (PR 3
+    // final note F20). "Networks still updating — These networks couldn't be
+    // reached, so your cached balance is shown until they recover." headed an
+    // EMPTY list: the sheet a person opens from "Some tokens couldn't be
+    // priced." told a healthy wallet that networks could not be reached and
+    // its balance was cached. "Updated" over nothing said as little.
+    var first = true
+    fun top() = (if (first) 0.dp else VelaSpacing.xl).also { first = false }
+    if (model.pending.isNotEmpty()) {
+        BalanceDetailSection(model.sectionPending, top = top())
+        Text(
+            text = model.pendingNote,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+            modifier = Modifier.padding(vertical = VelaSpacing.md),
+        )
+        model.pending.forEach { row -> BalanceDetailRow(row, onRetry) }
+    }
+    if (model.done.isNotEmpty()) {
+        BalanceDetailSection(model.sectionDone, top = top())
+        model.done.forEach { row -> BalanceDetailRow(row, onRetry) }
+    }
     if (model.unpriced.isNotEmpty()) {
-        BalanceDetailSection(model.sectionUnpriced, top = VelaSpacing.xl)
+        BalanceDetailSection(model.sectionUnpriced, top = top())
         model.unpriced.forEach { row -> BalanceDetailRow(row, onRetry) }
     }
 }
+
+/**
+ * The home line's sentence at the top of the sheet it opened (F16): whole,
+ * on as many lines as it takes — the one place it is never cut.
+ */
+@Composable
+private fun SheetLead(text: String) {
+    Text(
+        text = text,
+        color = VelaTheme.colors.fgMuted,
+        fontFamily = VelaFontFamily,
+        fontSize = VelaTextSize.base,
+        modifier = Modifier.padding(bottom = VelaSpacing.md).testTag(SHEET_LEAD_TAG),
+    )
+}
+
+/** The home line's full sentence at the top of the sheet it opened ([SheetLead]). */
+const val SHEET_LEAD_TAG = "sheet-lead"
 
 /**
  * SR6 (spec 092): every network the wallet cannot reach, one row each — what
@@ -2529,6 +2609,7 @@ private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) 
 private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) {
     val colors = VelaTheme.colors
     SheetTitle(model.title)
+    model.lead?.takeIf { it != model.title }?.let { lead -> SheetLead(lead) }
     model.summary?.let { summary ->
         Text(
             text = summary,
@@ -2553,9 +2634,18 @@ private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) 
             VelaChainMark(row.mark)
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = row.name, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
-                Text(text = row.line, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+                // "Last seen …" waits for the display currency like any fiat figure: its line kept.
+                Text(
+                    text = row.line,
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier.withheldFigure(row.lineWithheld, colors.borderBase),
+                )
             }
-            UnreachableFixAction(row.action) { onFix(row.chainId) }
+            // No "Fix" where there is no RPC to fix (the core's `rpc_fixable`):
+            // the row is its name and what was last read there.
+            row.action?.let { action -> UnreachableFixAction(action) { onFix(row.chainId) } }
         }
     }
 }
@@ -2635,12 +2725,13 @@ private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Un
                 modifier = Modifier.clickable { onRetry(row.id) }.padding(VelaSpacing.sm),
             )
         }
-        if (row.amount != null) {
+        if (row.amount != null || row.amountWithheld) {
             Text(
-                text = row.amount,
+                text = row.amount.orEmpty(),
                 color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.lg,
+                modifier = Modifier.withheldFigure(row.amountWithheld, colors.borderBase),
             )
         }
     }

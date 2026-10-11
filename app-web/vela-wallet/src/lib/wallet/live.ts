@@ -24,7 +24,9 @@ import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedLine } from '$lib/core/generated/FeedLine';
+import type { FeedRow } from '$lib/core/generated/FeedRow';
 import type { FeedView } from '$lib/core/generated/FeedView';
+import { maskedAmount } from '$lib/core/client';
 import { formatRelativeTime } from '$lib/core/kernels';
 import {
 	formatDate,
@@ -131,18 +133,23 @@ export function liveChainRows(
  * The feed narrowed to one chain — the phone app's `filterFeedRowsByChain`.
  * A day header whose items all fell away goes with them, or the list would
  * show dates with nothing under them.
+ *
+ * Both lists are narrowed the same way: `rows` (History, every one) and
+ * `home_rows` (the home's newest three, issue 469). Which rows are the
+ * home's is the core's cut — this only drops what is not on the chain, it
+ * never counts.
  */
 export function narrowedFeed(feed: FeedView, filter: number | null): FeedView {
 	if (filter === null) return feed;
-	const kept = feed.rows.filter((row) => row.type === 'header' || row.item.chain_id === filter);
-	return {
-		...feed,
-		rows: kept.filter((row, i) => {
+	const narrowed = (rows: FeedRow[]): FeedRow[] => {
+		const kept = rows.filter((row) => row.type === 'header' || row.item.chain_id === filter);
+		return kept.filter((row, i) => {
 			if (row.type !== 'header') return true;
 			const next = kept[i + 1];
 			return next !== undefined && next.type !== 'header';
-		})
+		});
 	};
+	return { ...feed, rows: narrowed(feed.rows), home_rows: narrowed(feed.home_rows) };
 }
 
 // ---------------------------------------------------------------------------
@@ -170,14 +177,60 @@ export function fixedTwo(value: number): [string, string] {
 }
 
 /**
- * A USD amount in the display currency: converted at the committed rate, or
- * the USD figure itself when the shell could not price the currency —
- * `rate: null` is NOT 1 (024's rule; a defaulted 1 under a ¥ is a lie).
+ * What stands where a money figure WILL be, while the display currency is not
+ * the person's yet.
+ *
+ * The core's rule (`CurrencyView.committed`, and the module doc of
+ * `display_currency.rs`): while it is false the pair on the wire is the USD/1
+ * placeholder, and no fiat figure is drawn in it — on ANY surface. A home that
+ * showed "$1,234" for a few seconds and then jumped to "¥8,876" is what the
+ * rule ends (the 102 device run). The hero keeps its skeleton (`liveBalance`);
+ * every other figure is this mark, so the line it stands on is already there
+ * and already the height the figure will be. The figure appears once, in the
+ * right money, where its room was kept.
  */
-export function moneyParts(
-	usd: number,
-	currency: CurrencyView
-): { code: string; glyph: string; integer: string; decimals: string } {
+export const MONEY_PENDING = '…';
+
+/**
+ * The currency a figure is — or will be — counted in, for a surface that
+ * names it apart from the figure (the hero's "Total · CNY").
+ *
+ * Committed: the code the figure is really in — the display currency, or USD
+ * when it could not be priced (`moneyParts` degrades the same way). Not yet:
+ * the person's stored choice on its way (`CurrencyView.pending`), and nothing
+ * at all while even that is unknown — never the placeholder's "USD".
+ */
+export function figureCurrency(currency: CurrencyView): string | undefined {
+	if (!currency.committed) return currency.pending ?? undefined;
+	return currency.rate !== null ? currency.code : 'USD';
+}
+
+/** A fiat figure, in the pieces a surface draws it from. */
+export interface MoneyParts {
+	code: string;
+	glyph: string;
+	integer: string;
+	decimals: string;
+}
+
+/**
+ * THE ONE PLACE A FIAT FIGURE IS MADE — a USD amount in the display currency,
+ * or `null`: WITHHELD, because the display currency has not committed.
+ *
+ * Every figure the web draws in the display currency comes through here (by
+ * way of `moneyText`, or directly for the hero's two-size figure), so no
+ * surface has to remember the withhold rule and none can forget it: there is
+ * no other formatter to reach for, and this one answers "withheld" before it
+ * answers anything else. `fiat-withheld.test.ts` holds every surface the core
+ * names (`FIAT_SURFACES`) to it.
+ *
+ * Committed: converted at the committed rate, or the USD figure itself when
+ * the shell could not price the currency — `rate: null` is NOT 1 (024's rule;
+ * a defaulted 1 under a ¥ is a lie).
+ */
+export function moneyParts(usd: number, currency: CurrencyView): MoneyParts | null {
+	// Not the person's currency yet: no figure, in any money.
+	if (!currency.committed) return null;
 	const convertible = currency.rate !== null;
 	const code = convertible ? currency.code : 'USD';
 	const amount = convertible ? usd * (currency.rate as number) : usd;
@@ -191,8 +244,10 @@ export function moneyParts(
 	return { code, glyph, integer: `${glyph}${grouped}`, decimals: frac };
 }
 
+/** A fiat figure as one string — or the pending mark while it is withheld. */
 export function moneyText(usd: number, currency: CurrencyView): string {
 	const parts = moneyParts(usd, currency);
+	if (parts === null) return MONEY_PENDING;
 	return `${parts.integer}${numberSeparators().decimal}${parts.decimals}`;
 }
 
@@ -332,6 +387,11 @@ export function exactAmount(amount: string): string {
  * never reads "Can't reach Ethereum", and the core already leaves such chains
  * out of `unreachable_networks`. A key this build has no words for falls
  * through to the network line (or none), never a dotted path.
+ *
+ * PR 3 note 4: the one network may be one whose RPC is fine and whose token
+ * list could not be loaded (Tempo, its registry document away). The core names
+ * that sentence too (`assets.tokenListUnreachable`, `{{name}}` as for the one
+ * network) — "Can't reach Tempo" there named the wrong thing.
  */
 export function unreachableLine(
 	view: Pick<BalanceView, 'unreachable_networks' | 'unreachable_key'> &
@@ -339,6 +399,7 @@ export function unreachableLine(
 	words: {
 		unreachableOne: string;
 		unreachableMany: string;
+		tokenListUnreachable: string;
 		internal?: Readonly<Record<string, string>>;
 	}
 ): string | undefined {
@@ -347,6 +408,9 @@ export function unreachableLine(
 	const first = view.unreachable_networks[0];
 	if (view.unreachable_key === 'assets.unreachableOne' && first !== undefined) {
 		return fill(words.unreachableOne, { name: chainName(first.chain_id) });
+	}
+	if (view.unreachable_key === 'assets.tokenListUnreachable' && first !== undefined) {
+		return fill(words.tokenListUnreachable, { name: chainName(first.chain_id) });
 	}
 	if (view.unreachable_key === 'assets.unreachableMany') {
 		return fill(words.unreachableMany, { n: view.unreachable_networks.length });
@@ -432,10 +496,29 @@ export function liveBalance(
 	if (view.hidden) {
 		return {
 			...base,
-			currency: currency.rate !== null ? currency.code : 'USD',
+			currency: figureCurrency(currency),
 			state: 'hidden',
 			integer: BALANCE_MASK
 		};
+	}
+
+	// PR 3 final note F19: the first read of this account is still out
+	// (`checking_key`, the core's): the status line says "Checking…" from the
+	// first frame — under the skeleton and under a cached figure alike — and
+	// in place of anything else that line could say. Until a round has ended
+	// no chain has said the wallet is live and none has failed to answer; a
+	// cached zero drew "Live · listening for payments" over a wallet nothing
+	// had read, and then swapped it for "Can't reach 24 networks".
+	const checkingText = view.checking_key ? m.balance.said[view.checking_key] : undefined;
+	const checking = checkingText === undefined ? {} : { checkingText };
+
+	// The display currency is not the person's yet (`CurrencyView.committed`):
+	// the skeleton, whatever the balance already knows. The cached total is
+	// ready in milliseconds and the rate takes a round trip, so this is the
+	// frame that drew "$1,234" and then jumped to "¥8,876". The label names
+	// the stored choice on its way (`pending`) or no currency at all.
+	if (!currency.committed) {
+		return { ...base, ...checking, currency: figureCurrency(currency), state: 'loading' };
 	}
 
 	// The core withholds the display total while the skeleton shows; the
@@ -449,7 +532,8 @@ export function liveBalance(
 	if (total === null || view.unreachable) {
 		return {
 			...base,
-			currency: currency.rate !== null ? currency.code : 'USD',
+			...checking,
+			currency: figureCurrency(currency),
 			state: 'loading',
 			// Spec 038 finding 15: a first launch with no network is
 			// "unreachable" over the skeleton, never a settled-looking $0 —
@@ -469,10 +553,17 @@ export function liveBalance(
 	}
 
 	const parts = moneyParts(total, currency);
-	// A zero is "live" only once EVERY chain has answered: a partial zero (some
-	// chain unreachable) is not a listening wallet, it is an unknown one.
-	const zeroLive =
-		total === 0 && !view.balance_unknown && !view.balance_partial && view.tokens.length === 0;
+	// Withheld: the skeleton (the early return above is this same answer,
+	// said first so the label can name the currency on its way).
+	if (parts === null) {
+		return { ...base, ...checking, currency: figureCurrency(currency), state: 'loading' };
+	}
+	// "Zero, live" is the core's to say (`live_key`, F19) and nothing else
+	// here decides it: the last round settled, every chain it asked answered,
+	// and the wallet holds nothing. This shell used to derive it from the
+	// total and the partial flag, which a cached zero satisfies before
+	// anything has been read.
+	const zeroLive = (view.live_key ?? null) !== null;
 	const onCache = view.display_total_usd === null && view.cached_total_usd !== null;
 
 	// One status line, most actionable first: the networks the wallet cannot
@@ -486,16 +577,21 @@ export function liveBalance(
 	// and a figure re-read on request is current, not "still updating".
 	const unreachable = unreachableLine(view, m.assets);
 	const status: BalanceModel['status'] =
-		unreachable !== undefined
-			? { kind: 'warning', text: unreachable }
-			: onCache || view.notice === 'still_updating'
-				? { kind: 'refreshing', text: m.balance.stale }
-				: view.notice === 'unpriced'
-					? { kind: 'warning', text: m.balance.unpriced }
-					: undefined;
+		// "Checking…" stands alone on the line (F19): a cached figure under a
+		// first read is not "still updating" yet — nothing has been read at all.
+		checkingText !== undefined
+			? undefined
+			: unreachable !== undefined
+				? { kind: 'warning', text: unreachable }
+				: onCache || view.notice === 'still_updating'
+					? { kind: 'refreshing', text: m.balance.stale }
+					: view.notice === 'unpriced'
+						? { kind: 'warning', text: m.balance.unpriced }
+						: undefined;
 
 	return {
 		...base,
+		...checking,
 		currency: parts.code,
 		state: zeroLive ? 'zero-live' : 'normal',
 		integer: parts.integer,
@@ -504,7 +600,7 @@ export function liveBalance(
 		// grouped the integer by it, and a `.` drawn after `1.575` read as a
 		// second thousands separator.
 		decimalMark: numberSeparators().decimal,
-		liveText: zeroLive ? m.balance.liveIndicator : undefined,
+		liveText: view.live_key ? m.balance.said[view.live_key] : undefined,
 		status
 	};
 }
@@ -540,11 +636,13 @@ export function liveAssetRow(
 
 function assetsMode(view: BalanceView): SectionModel['mode'] {
 	if (view.tokens.length > 0) return 'rows';
-	// Nothing held yet — a skeleton while the first fetch is out, an empty
-	// state once the core has actually looked. A look that reached nothing
-	// (`unreachable`) is no look: never "Deposit your first asset" under a
-	// line saying nothing could be read.
-	return view.holdings_loading || view.balance_unknown || view.unreachable ? 'loading' : 'empty';
+	// "Deposit your first asset" is the core's to say (`empty_key`, PR 3
+	// device round) and nothing here decides it: a read has ended and found
+	// nothing held. This shell used to take "no tokens, a known total" for an
+	// empty wallet — which a cached total of 0 satisfies before anything has
+	// been read, so it invited a first deposit under "Checking…". With no
+	// tokens and no key the list is still being read: the skeleton.
+	return (view.empty_key ?? null) !== null ? 'empty' : 'loading';
 }
 
 // ---------------------------------------------------------------------------
@@ -733,14 +831,21 @@ export function dappTitle(dapp: FeedDapp, m: RowMessages): string {
 	return dapp.place != null ? fill(m.activity.dappRowTitle, { intent, place: dapp.place }) : intent;
 }
 
-/** The core emits headers and items already interleaved (invariant ⑥). */
+/**
+ * The core emits headers and items already interleaved (invariant ⑥).
+ *
+ * `rows` is the list to draw, and WHICH list is the caller's to say: History
+ * hands `FeedView.rows` (every one), the home hands `FeedView.home_rows` (the
+ * core's newest three, issue 469). Nothing here caps — a cap in this helper
+ * would silently cut History short too.
+ */
 export function liveActivityGroups(
-	view: FeedView,
+	rows: FeedRow[],
 	m: WalletMessages,
 	hidden: boolean
 ): ActivityGroupModel[] {
 	const groups: ActivityGroupModel[] = [];
-	for (const row of view.rows) {
+	for (const row of rows) {
 		if (row.type === 'header') {
 			groups.push({ label: dayLabel(row.day_start_ms, m), rows: [] });
 			continue;
@@ -797,7 +902,9 @@ export function liveAssetDetail(
 		token: {
 			ticker: token.symbol,
 			badgeColor: art.badgeColor,
-			balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
+			balance: hidden
+				? maskedAmount(token.symbol)
+				: `${tokenAmountText(token.balance)} ${token.symbol}`,
 			fiatLine: [fiat, chainName(token.chain_id)].filter((part) => part !== undefined).join(' · '),
 			logoUrls: art.logoUrls,
 			badgeLogoUrl: art.badgeLogoUrl,
@@ -866,15 +973,21 @@ function liveSections(inputs: WalletLiveInputs) {
 	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
 	return {
 		balance: liveBalance(view, currency, m, inputs.refresh),
+		// The filter's own case, not the core's empty wallet (`empty_key` is
+		// about the whole account, and this one HOLDS tokens): none of them is
+		// on the network picked.
 		assetsMode:
 			filter !== null && tokens.length === 0 && view.tokens.length > 0
 				? ('empty' as const)
 				: assetsMode(view),
 		assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
 		activityMode: activityMode(view, feed),
+		// The home's Activity is the newest three (issue 469): the core's
+		// `home_rows`, never `rows` — a long history pushed Assets off the
+		// screen. "All" opens History, which draws every row.
 		// The feed masks on its own flag (`FeedView.hidden`), never the
 		// balance machine's threaded through (`app::privacy`).
-		activityGroups: feed ? liveActivityGroups(feed, m, feed.hidden) : [],
+		activityGroups: feed ? liveActivityGroups(feed.home_rows, m, feed.hidden) : [],
 		// Spec 082 RG5: which empty line the home says is the core's
 		// (`FeedView.home_empty_key`) — "no activity" or "none on this network".
 		activityEmpty: {

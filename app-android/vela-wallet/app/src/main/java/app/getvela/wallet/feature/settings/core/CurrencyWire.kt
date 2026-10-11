@@ -31,8 +31,21 @@ import kotlinx.serialization.Serializable
 data class CurrencyView(
     val code: String,
     val rate: Double? = null,
-    /** `false` ⇒ the USD placeholder is showing, not a settled choice. */
+    /**
+     * `false` ⇒ the USD placeholder is showing, not a settled choice — and
+     * while it is, NO money figure is drawn (the core's rule): the home
+     * total, a holding's worth, each shows its loading state. The placeholder
+     * is not the person's currency; drawing it put "$1,234" on a home for a
+     * few seconds before it jumped to "¥8,876".
+     */
     val committed: Boolean = false,
+    /**
+     * The person's own currency on its way: the stored choice, while its rate
+     * is fetched and nothing is committed. A label that names its currency
+     * apart from the figure may name this one while the figure waits. `null`
+     * once committed, and before the preference is read.
+     */
+    val pending: String? = null,
 )
 
 // -- what the screen sends ---------------------------------------------------

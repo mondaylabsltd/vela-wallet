@@ -323,6 +323,7 @@ mod tests {
             call_data: None,
             summary: None,
             settlement: None,
+            time_verified: None,
         }
     }
 

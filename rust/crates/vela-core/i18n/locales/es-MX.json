@@ -69,7 +69,7 @@
       "pageAdd": "Agregar una página de firma alojada por ti",
       "pageDuplicate": "Esa página ya está guardada.",
       "keysOn": "Llaves en {{domain}}",
-      "pageSelfHosted": "Alojada por ti · {{domain}}",
+      "pageSelfHosted": "Alojada por ti · {{domain}}",
       "pageTrust": "Confiar en esta versión",
       "pageRename": "Cambiar nombre",
       "pageRemove": "Quitar",

@@ -70,7 +70,7 @@ final class EventChainPort: RelayPort {
 }
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct TrackerFindOpEventTests {
 
     private let op = "0x" + String(repeating: "c3", count: 32)
@@ -340,7 +340,7 @@ final class IncludedChainPort: RelayPort {
 }
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct TrackerRoundTwoTests {
 
     private let op = "0x" + String(repeating: "d4", count: 32)

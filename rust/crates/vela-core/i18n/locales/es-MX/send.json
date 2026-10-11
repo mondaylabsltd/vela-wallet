@@ -153,7 +153,6 @@
     "multiSendSameRecipient": "Todos los tokens van a la misma dirección",
     "pickContactTitle": "Elige un contacto",
     "pickContactSearch": "Busca contactos o pega una dirección",
-    "scanToFill": "Escanea para llenar la dirección",
     "feeTokenHint": "Paga la comisión de red de esta transferencia. La estimación sigue a la red en tiempo real.",
     "feeTokenEstimate": "Comisión estimada",
     "batchRateHint": "Los montos de la hoja se leen como {{code}} y se convierten a {{sym}} con este tipo de cambio.",

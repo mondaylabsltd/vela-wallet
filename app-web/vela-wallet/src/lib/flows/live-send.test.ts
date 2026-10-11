@@ -3,6 +3,7 @@
  * and `FeeView`, and nothing else. Every assertion here is "the core said so".
  */
 import { describe, expect, it } from 'vitest';
+import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -14,7 +15,8 @@ import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
-import { liveAssetRow } from '$lib/wallet/live';
+import { liveAssetRow, MONEY_PENDING } from '$lib/wallet/live';
+import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
 import { buildFlowState } from './fixtures';
 import { tokenMarkFor } from './marks';
 import { wouldFailView } from './testing/fee-core';
@@ -38,7 +40,7 @@ const identity: WalletIdentity = {
 	address: '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c',
 	identiconSvg: '<svg/>'
 };
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 
 const USDT: SendToken = {
 	network: 'eth-mainnet',
@@ -518,7 +520,7 @@ describe('the form', () => {
 		it("is the FIGURE's currency, not the display currency that moved under it", () => {
 			// Typed in yuan; the display currency has since become euros. "€"
 			// over these digits would be a relabel — the same number, a new unit.
-			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true });
+			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true, pending: null });
 			expect(figure?.adornment).toEqual({ prefix: '¥' });
 			expect(figure?.denomLabel).toBe('CNY');
 		});
@@ -1009,6 +1011,19 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 					...over
 				})
 			);
+
+		// Issue 471: every split row has the same two doors the single field
+		// has — the book and the scanner — each for THAT row. Scanning into a
+		// split used to be a row inside the contact picker and nowhere else.
+		it('gives every row the book and the scanner, named as the single field names them', () => {
+			const rows = split({}).recipients ?? [];
+			expect(rows.map((row) => row.id)).toEqual(['a', 'b']);
+			for (const row of rows) {
+				expect(row.pickLabel).toBe(m['send.recipientPickAria']);
+				expect(row.scanLabel).toBe(m['send.scanAria']);
+			}
+			expect(liveSendForm(formModel(), inputs({})).recipient?.scanLabel).toBe(m['send.scanAria']);
+		});
 
 		it('counts the people in the total and prices the sum', () => {
 			const form = split({});
@@ -1635,13 +1650,14 @@ describe('the fee row says what the fee costs', () => {
 	it('converts into the display currency, at the committed rate only', () => {
 		const model = liveSendForm(formModel(), {
 			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
-			currency: { code: 'EUR', rate: 2, committed: true }
+			currency: { code: 'EUR', rate: 2, committed: true, pending: null }
 		});
 		expect(model.fee.value).toBe('0.000091 BNB');
 		expect(model.fee.valueFiat).toBe('≈ €0.11');
 		const unpriced = liveSendForm(formModel(), {
 			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
-			currency: { code: 'EUR', rate: null, committed: false }
+			// The core's unpriceable pair: committed, with no rate.
+			currency: { code: 'EUR', rate: null, committed: true, pending: null }
 		});
 		expect(unpriced.fee.value).toBe('0.000091 BNB');
 		expect(unpriced.fee.valueFiat).toBe('≈ $0.05');
@@ -2942,5 +2958,115 @@ describe('another chain’s fee failure is not drawn on this form (PR 2 polish)'
 			)
 		).fee;
 		expect(own.tap).toBe('retry');
+	});
+});
+
+/**
+ * 0.8 — no fiat figure before the display currency commits, on Send: the
+ * coin list, the form ("≈" under the amount, the fee's money) and the review.
+ * The one assertion every surface makes (`expectWithheld`): nothing in any
+ * money while it is withheld, the pending mark where the figure will be, and
+ * the same lines as once it lands — a line that arrived with the figure would
+ * be a row that grows.
+ */
+describe('no fiat figure before the display currency commits — Send', () => {
+	const alice = '0x' + 'ab'.repeat(20);
+	const withCurrency = (
+		currency: CurrencyView,
+		send: Partial<SendView>,
+		fee: Partial<FeeView> = {}
+	): SendLiveInputs => ({ ...inputs(send, fee), currency });
+
+	it('send_coin_list: each coin’s worth waits; its balance does not', () => {
+		expectWithheld('send_coin_list', (currency) =>
+			liveSendPick(pickModel(), withCurrency(currency, { tokens: [USDT, ETH] }))
+		);
+		const rows = liveSendPick(pickModel(), withCurrency(ON_ITS_WAY, { tokens: [USDT, ETH] })).rows;
+		expect(rows.map((row) => [row.ticker, row.balance, row.fiat])).toEqual([
+			['USDT', '53.4836', { kind: 'value', text: MONEY_PENDING }],
+			['ETH', '1.5', { kind: 'value', text: MONEY_PENDING }]
+		]);
+	});
+
+	it('send_form: the "≈" line under the amount and the fee’s money — and the fee row holds the figure’s room', () => {
+		const typed = { selected_token: ETH, recipient: alice, amount: '0.5', token_amount: '0.5' };
+		expectWithheld('send_form', (currency) => {
+			const form = liveSendForm(formModel(), withCurrency(currency, { ...typed, fee: QUOTE }));
+			// `valueFiatWithheld` is the row's own note that its money is
+			// withheld — the one field that differs by design.
+			return [form.amount, { ...form.fee, valueFiatWithheld: undefined }];
+		});
+		const form = liveSendForm(formModel(), withCurrency(ON_ITS_WAY, { ...typed, fee: QUOTE }));
+		expect(form.amount?.fiat).toBe(`≈ ${MONEY_PENDING}`);
+		// The fee in the coin is not fiat: drawn as always.
+		expect(form.fee.value).toBe('0.0021 ETH');
+		expect(form.fee.valueFiat).toBe(`≈ ${MONEY_PENDING}`);
+		// The row is told, so it can keep the layout a long figure will need.
+		expect(form.fee.valueFiatWithheld).toBe(true);
+		const landed = liveSendForm(formModel(), withCurrency(COMMITTED, { ...typed, fee: QUOTE }));
+		expect(landed.amount?.fiat).toBe('≈ ¥10,800.00');
+		expect(landed.fee.valueFiat).toBe('≈ ¥45.36');
+		expect(landed.fee.valueFiatWithheld).toBeUndefined();
+		// No money half at all (an unpriced coin): nothing is withheld either.
+		const unpriced = liveSendForm(
+			formModel(),
+			withCurrency(ON_ITS_WAY, {
+				...typed,
+				selected_token: { ...ETH, price_usd: null },
+				fee: QUOTE
+			})
+		);
+		expect(unpriced.fee.valueFiat).toBeUndefined();
+		expect(unpriced.fee.valueFiatWithheld).toBeUndefined();
+	});
+
+	it('send_form: the review states the amount’s worth and the fee’s, withheld alike', () => {
+		const settled = { selected_token: ETH, confirm_amount: '0.5', recipient: alice, fee: QUOTE };
+		expectWithheld('send_form', (currency) =>
+			liveSendConfirm(confirmModel(), withCurrency(currency, settled))
+		);
+		const review = liveSendConfirm(confirmModel(), withCurrency(ON_ITS_WAY, settled));
+		expect(review.amount).toBe('0.5');
+		expect(review.subline).toBe(`≈ ${MONEY_PENDING}`);
+		expect(review.facts.find((fact) => fact.label === m['send.estFeeLabel'])?.value).toBe(
+			`0.0021 ETH · ≈${MONEY_PENDING}`
+		);
+		// A split's rows and its total.
+		const split = {
+			selected_token: ETH,
+			split_mode: true,
+			confirm_amount: '0.3',
+			recipients: [
+				{ id: 'a', address: alice, amount: '0.1', name: null },
+				{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.2', name: null }
+			],
+			fee: QUOTE
+		};
+		expectWithheld('send_form', (currency) => [
+			liveSendConfirm(confirmModel(), withCurrency(currency, split)),
+			liveSendForm(formModel(), withCurrency(currency, split)).summary
+		]);
+	});
+
+	it('the ⇄ row’s refusal is not said while the currency is only on its way', () => {
+		// The machine is told "no rate" until the pair commits
+		// (`sendDisplayContext`), so the row is shown and inert, with its reason.
+		const waiting = {
+			selected_token: ETH,
+			amount: '0.5',
+			token_amount: '0.5',
+			denom_toggle_shown: true,
+			denom_toggle_enabled: false,
+			denom_toggle_reason: { code: 'CNY', symbol: 'ETH' }
+		};
+		const words = fill(m['send.denomToggleNoRate'], { code: 'CNY', symbol: 'ETH' });
+		// On its way: the toggle is there (inert) so the hero does not change
+		// shape — and no red line that would come, then go a second later.
+		const pending = liveSendForm(formModel(), withCurrency(ON_ITS_WAY, waiting));
+		expect(pending.amount?.denomToggle).toEqual({ enabled: false });
+		expect(pending.alert).toBeUndefined();
+		// Committed with no rate — the person's choice cannot be priced: said.
+		const unpriceable: CurrencyView = { code: 'CNY', rate: null, committed: true, pending: null };
+		expect(liveSendForm(formModel(), withCurrency(unpriceable, waiting)).alert).toBe(words);
 	});
 });

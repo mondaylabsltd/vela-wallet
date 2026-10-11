@@ -436,10 +436,7 @@ pub fn ethereum_backup_check(
     address: &str,
     founding_public_key_hex: &str,
     target_chain: u32,
-) -> (
-    vela_core::registry_backup::BackupState,
-    Option<vela_core::registry_backup::BackupCall>,
-) {
+) -> BackupAnswer {
     use vela_core::registry_backup::{self as backup, BackupState, BackupStep};
     let mut answers: Vec<LookupAnswer> = Vec::new();
     for _ in 0..MAX_LOOKUP_ROUNDS {
@@ -447,10 +444,94 @@ pub fn ethereum_backup_check(
             BackupStep::Ask { requests } => {
                 answers.extend(requests.iter().map(perform));
             }
-            BackupStep::Done { state, call, .. } => return (state, call),
+            BackupStep::Done {
+                state, call, row, ..
+            } => return BackupAnswer { state, call, row },
         }
     }
-    (BackupState::CouldNotCheck, None)
+    // The walk ran out of rounds: nobody settled it, so it is the state that
+    // asks again — with the core's row for that state, as every other end.
+    BackupAnswer {
+        state: BackupState::CouldNotCheck,
+        call: None,
+        row: BackupState::CouldNotCheck.row(),
+    }
+}
+
+/// What the backup walk ended on: the state, the one call that would make
+/// the copy (only when it has not been made), and the row the core says the
+/// Keys block draws for it — its words, its tone and what a tap does
+/// (`BackupState::row`). `row` is `None` when nothing is drawn.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackupAnswer {
+    pub state: vela_core::registry_backup::BackupState,
+    pub call: Option<vela_core::registry_backup::BackupCall>,
+    pub row: Option<vela_core::registry_backup::BackupRow>,
+}
+
+/// What a press on the backup row does.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BackupPress {
+    /// Nothing — the row is a statement.
+    Nothing,
+    /// Open the signing column on this call: the one transaction that copies
+    /// the record.
+    Copy(vela_core::registry_backup::BackupCall),
+    /// Ask the chain again.
+    Retry,
+}
+
+/// The Keys block's backup row as it is drawn: two corpus keys, whether the
+/// second line is the positive tone, and the press. Every field is the
+/// core's (`BackupState::row`); this only pairs the row with the call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackupLine {
+    pub title_key: String,
+    pub subtitle_key: String,
+    /// The second line is good news ("Copied to Ethereum"). Everything else
+    /// is neutral — "not copied yet" is a state, never a warning.
+    pub positive: bool,
+    pub press: BackupPress,
+    /// The corpus key of the paragraph under the row — what a copy makes
+    /// public, what it costs and how it is made — or `None` for no paragraph:
+    /// the core's `BackupRow::explain_key` once the walk has answered (absent
+    /// for a wallet that can never be copied: the paragraph described what
+    /// the row had just said cannot be done), and the core's own
+    /// `EXPLAIN_KEY` while it is still running.
+    pub explain_key: Option<String>,
+}
+
+/// The row for a check: `None` while nothing is to be drawn (no registry on
+/// the target chain, no record to copy). `check` is `None` while the walk
+/// is still running — the core's "checking" line, with nothing to press.
+#[must_use]
+pub fn backup_line(check: Option<&BackupAnswer>) -> Option<BackupLine> {
+    use vela_core::registry_backup::{
+        BackupAction, BackupTone, CHECKING_KEY, EXPLAIN_KEY, TITLE_KEY,
+    };
+    let Some(answer) = check else {
+        return Some(BackupLine {
+            title_key: TITLE_KEY.to_owned(),
+            subtitle_key: CHECKING_KEY.to_owned(),
+            positive: false,
+            press: BackupPress::Nothing,
+            explain_key: Some(EXPLAIN_KEY.to_owned()),
+        });
+    };
+    let row = answer.row.as_ref()?;
+    Some(BackupLine {
+        title_key: row.title_key.clone(),
+        subtitle_key: row.subtitle_key.clone(),
+        positive: row.tone == BackupTone::Positive,
+        explain_key: row.explain_key.clone(),
+        press: match (row.action, answer.call.as_ref()) {
+            (BackupAction::Copy, Some(call)) => BackupPress::Copy(call.clone()),
+            // "Copy" with no call to make would be a button that does
+            // nothing: the row stays a statement.
+            (BackupAction::Copy | BackupAction::None, _) => BackupPress::Nothing,
+            (BackupAction::Retry, _) => BackupPress::Retry,
+        },
+    })
 }
 
 /// Which passkeys control `address` (spec 062) — the settings keys block.
@@ -806,22 +887,32 @@ pub fn probe_health() -> Probe {
 /// the returned struct's fifth slot.
 const LEGACY_INDEX_CONTRACT: &str = "0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3";
 
-/// Gnosis RPC endpoints, tried in order. Same set the wallet's rpc pool pins
-/// for chain 100; this module keeps its own copy because the onboarding
-/// executor has no pool.
-const GNOSIS_RPC_URLS: &[&str] = &[
-    "https://rpc.gnosischain.com",
-    "https://gnosis-rpc.publicnode.com",
-    "https://1rpc.io/gnosis",
-];
+/// Gnosis's built-in default RPC, asked first — then the core's curated
+/// public fallbacks for chain 100 ([`gnosis_rpc_urls`]). The onboarding
+/// executor has no pool, so it walks the same endpoints by hand.
+const GNOSIS_DEFAULT_RPC: &str = "https://rpc.gnosischain.com";
+
+/// Gnosis RPC endpoints, tried in order: the default, then the core's public
+/// tier (`network_admin::public_rpc_urls(100)`) — the list the wallet's rpc
+/// pool uses, not a copy that can go stale (this one still named a
+/// `1rpc.io` endpoint that had stopped answering).
+fn gnosis_rpc_urls() -> Vec<String> {
+    let mut urls = vec![GNOSIS_DEFAULT_RPC.to_owned()];
+    for url in vela_core::app::network_admin::public_rpc_urls(100) {
+        if !urls.contains(&url) {
+            urls.push(url);
+        }
+    }
+    urls
+}
 
 /// The v1 index's display name for a credential. Best effort and read-only; a
 /// lost name degrades the label ("Wallet"), never the flow.
 pub fn legacy_name(credential_id: &str) -> Option<String> {
     let data = encode_get_record(RELYING_PARTY, credential_id);
     let data_hex = format!("0x{}", vela_core::primitives::to_hex(&data, false));
-    for url in GNOSIS_RPC_URLS {
-        match eth_call(url, LEGACY_INDEX_CONTRACT, &data_hex) {
+    for url in gnosis_rpc_urls() {
+        match eth_call(&url, LEGACY_INDEX_CONTRACT, &data_hex) {
             // An empty (reverted) result is a definite "no record" — a v2-era
             // wallet. Do not burn two more RPCs re-asking the same question.
             Ok(result) if result.is_empty() => return None,
@@ -1495,6 +1586,100 @@ mod tests {
         assert_eq!(urlencode("a b"), "a%20b");
     }
 
+    /// The backup row, state by state, is the core's table: "not copied yet"
+    /// is neutral and opens the copy; "could not check" asks again; a wallet
+    /// from before registry V13 ends calmly with nothing to press (it used
+    /// to read "could not check" and retry forever); a wallet with no record
+    /// draws no row at all. Every key resolves in English and Chinese.
+    #[test]
+    fn the_backup_row_is_the_cores_row_for_each_state() {
+        use vela_core::registry_backup::{BackupCall, BackupState};
+        let call = BackupCall {
+            chain_id: 1,
+            to: "0xregistry".to_owned(),
+            value: "0".to_owned(),
+            data: "0x".to_owned(),
+        };
+        let answer = |state: BackupState, call: Option<BackupCall>| BackupAnswer {
+            state,
+            call,
+            row: state.row(),
+        };
+        let line =
+            |state: BackupState, call: Option<BackupCall>| backup_line(Some(&answer(state, call)));
+
+        let checking = backup_line(None).unwrap_or_else(|| unreachable!("a row while asking"));
+        assert_eq!(checking.subtitle_key, "componentsUi.funding.checking");
+        assert_eq!(checking.press, BackupPress::Nothing);
+        assert!(!checking.positive);
+
+        let copied = line(BackupState::BackedUp, None)
+            .unwrap_or_else(|| unreachable!("backed up has a row"));
+        assert_eq!(copied.subtitle_key, "settingsModals.backup.backedUp");
+        assert!(copied.positive);
+        assert_eq!(copied.press, BackupPress::Nothing);
+
+        let not_yet = line(BackupState::NotBackedUp, Some(call.clone()))
+            .unwrap_or_else(|| unreachable!("not backed up has a row"));
+        assert_eq!(not_yet.subtitle_key, "settingsModals.backup.notBackedUp");
+        assert!(
+            !not_yet.positive,
+            "a state, not a warning and not good news"
+        );
+        assert_eq!(not_yet.press, BackupPress::Copy(call));
+        // …and with no call to make, it is not a button.
+        assert_eq!(
+            line(BackupState::NotBackedUp, None).map(|line| line.press),
+            Some(BackupPress::Nothing)
+        );
+
+        let unknown = line(BackupState::CouldNotCheck, None)
+            .unwrap_or_else(|| unreachable!("could not check has a row"));
+        assert_eq!(unknown.subtitle_key, "settingsModals.backup.couldNotCheck");
+        assert_eq!(unknown.press, BackupPress::Retry);
+
+        let never = line(BackupState::NotCopyable, None)
+            .unwrap_or_else(|| unreachable!("not copyable has a row"));
+        assert_eq!(never.subtitle_key, "settingsModals.backup.cannotCopy");
+        assert_eq!(never.press, BackupPress::Nothing, "a calm end: no retry");
+        assert!(!never.positive);
+
+        assert_eq!(line(BackupState::Unavailable, None), None);
+        assert_eq!(line(BackupState::NotRegistered, None), None);
+
+        // The paragraph under the row (PR 3 note 6) is the core's too: what a
+        // copy publishes, costs and takes — while the walk runs and for
+        // every state a copy can still be made or checked in, and NOT under
+        // a wallet that can never be copied, where it described what the row
+        // had just said cannot be done.
+        const EXPLAIN: &str = "settingsModals.backup.explain";
+        for row in [&checking, &copied, &not_yet, &unknown] {
+            assert_eq!(row.explain_key.as_deref(), Some(EXPLAIN));
+        }
+        assert_eq!(never.explain_key, None, "no paragraph, and no slot for one");
+
+        for lang in ["en", "zh"] {
+            let loc = crate::loc::Loc::for_language(lang);
+            for row in [&checking, &copied, &not_yet, &unknown, &never] {
+                for key in [&row.title_key, &row.subtitle_key]
+                    .into_iter()
+                    .chain(row.explain_key.as_ref())
+                {
+                    assert_ne!(loc.t(key).as_ref(), key.as_str(), "{lang}: {key} echoed");
+                }
+            }
+        }
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(
+            en.t(&never.title_key).as_ref(),
+            "Copy this wallet's record to Ethereum"
+        );
+        assert_eq!(
+            en.t(&never.subtitle_key).as_ref(),
+            "This older wallet can't be copied"
+        );
+    }
+
     /// The golden multi-key Safe was backed up from the web wallet on
     /// 2026-09-18 (Ethereum tx 0x86795d08…dc5c, Base tx 0x69c54f91…fc73d), so
     /// both registries hold its group; a key that founded nothing is simply
@@ -1507,13 +1692,13 @@ mod tests {
             let safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
             let key = "04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b";
             for chain in [1, 8453] {
-                let (state, call) = ethereum_backup_check(safe, key, chain);
-                assert_eq!(state, BackupState::BackedUp, "chain {chain}");
-                assert!(call.is_none());
+                let answer = ethereum_backup_check(safe, key, chain);
+                assert_eq!(answer.state, BackupState::BackedUp, "chain {chain}");
+                assert!(answer.call.is_none());
             }
             let stranger = format!("04{}{}", "11".repeat(32), "22".repeat(32));
             assert_eq!(
-                ethereum_backup_check(safe, &stranger, 1).0,
+                ethereum_backup_check(safe, &stranger, 1).state,
                 BackupState::NotRegistered
             );
         });

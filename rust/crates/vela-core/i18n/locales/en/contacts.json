@@ -2,7 +2,6 @@
   "contacts": {
     "title": "Contacts",
     "manageSubtitle": "Saved addresses & recent recipients",
-    "pickerTitle": "Choose recipient",
     "searchPlaceholder": "Search name, ENS, or address",
     "filterAll": "All",
     "sectionFavorites": "Favorites",
@@ -11,7 +10,6 @@
     "empty": "No contacts yet",
     "emptyHint": "Save the addresses you use often — no more re-pasting when you send. You can also import an existing address book from a file.",
     "emptyPicker": "No recipients yet",
-    "pickerEmptyHint": "Paste an address or scan a QR to send right away.",
     "noResults": "No matches for “{{query}}”",
     "useTyped": "Use this address",
     "addTitle": "New contact",
@@ -34,7 +32,6 @@
     "sends_other": "{{count}} sends",
     "savedTag": "Saved",
     "savedContact": "Saved contact",
-    "scanToAdd": "Scan address",
     "sectionGroups": "Groups",
     "groupMembers": "{{count}} members",
     "groupNew": "New group",
@@ -77,7 +74,6 @@
     "recentActivity": "Recent activity",
     "viewAllActivity": "View all activity",
     "deleteContact": "Delete contact",
-    "actionQr": "QR code",
     "edit": "Edit"
   }
 }

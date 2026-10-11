@@ -2,7 +2,6 @@
   "contacts": {
     "title": "Kontakte",
     "manageSubtitle": "Gespeicherte Adressen & kürzliche Empfänger",
-    "pickerTitle": "Empfänger auswählen",
     "searchPlaceholder": "Name, ENS oder Adresse suchen",
     "filterAll": "Alle",
     "sectionFavorites": "Favoriten",
@@ -11,7 +10,6 @@
     "empty": "Noch keine Kontakte",
     "emptyHint": "Häufige Adressen speichern statt bei jedem Senden neu einzufügen. Bestehende Kontakte lassen sich auch aus einer Datei importieren.",
     "emptyPicker": "Noch keine Empfänger",
-    "pickerEmptyHint": "Fügen Sie eine Adresse ein oder scannen Sie einen QR-Code, um sofort zu senden.",
     "noResults": "Keine Treffer für „{{query}}“",
     "useTyped": "Diese Adresse verwenden",
     "addTitle": "Neuer Kontakt",
@@ -34,7 +32,6 @@
     "sends_other": "{{count}} Überweisungen",
     "savedTag": "Gespeichert",
     "savedContact": "Gespeicherter Kontakt",
-    "scanToAdd": "Adresse scannen",
     "sectionGroups": "Gruppen",
     "groupMembers": "{{count}} Mitglieder",
     "groupNew": "Neue Gruppe",
@@ -77,7 +74,6 @@
     "recentActivity": "Letzte Aktivität",
     "viewAllActivity": "Gesamte Aktivität ansehen",
     "deleteContact": "Kontakt löschen",
-    "actionQr": "QR-Code",
     "edit": "Bearbeiten"
   }
 }

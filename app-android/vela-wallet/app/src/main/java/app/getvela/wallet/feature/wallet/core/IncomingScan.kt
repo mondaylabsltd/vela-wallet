@@ -194,6 +194,12 @@ class IncomingScan(
             .put("decimals", decimals)
             .put("chainId", transfer.chain_id)
             .put("timestamp", transfer.timestamp_sec)
+            // Its time is its block's own, by construction: the trust feed
+            // holds no transfer whose block it has not read (PR 3). The mark
+            // is what tells this record from one stored before that, when a
+            // block that could not be read was stamped with the clock — those
+            // the feed's core re-reads and rewrites (`FeedExecutor`).
+            .put("timeVerified", true)
             .put("status", "confirmed")
             .put("type", "receive")
             .apply {

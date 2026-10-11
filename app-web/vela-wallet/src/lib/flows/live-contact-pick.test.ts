@@ -87,6 +87,9 @@ describe('the live picker before the book is read', () => {
 		unreachable_key: null,
 		internal_chain_ids: [],
 		internal_key: null,
+		checking_key: null,
+		live_key: null,
+		empty_key: null,
 		holdings_loading: false,
 		cached_total_usd: null,
 		switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -94,7 +97,7 @@ describe('the live picker before the book is read', () => {
 	/** A live page with a send open and no book: `contactPick` absent. */
 	const unread: FlowsLiveInputs = {
 		balance: BALANCE,
-		currency: { code: 'USD', rate: 1, committed: true },
+		currency: { code: 'USD', rate: 1, committed: true, pending: null },
 		m: resolveWalletMessages('en'),
 		emptyCopy: undefined,
 		feed: null,
@@ -114,9 +117,10 @@ describe('the live picker before the book is read', () => {
 		for (const address of fixtures) {
 			expect(JSON.stringify(live.sheet)).not.toContain(address);
 		}
-		// Scan and search stay: the escape hatch does not wait for the book.
-		expect(live.sheet.model.scanRow).toBe(drawn.sheet.model.scanRow);
+		// Search stays: it does not wait for the book. Scanning is not in this
+		// sheet at all (issue 471) — each recipient row has its own scan icon.
 		expect(live.sheet.model.searchPlaceholder).toBe(drawn.sheet.model.searchPlaceholder);
+		expect(live.sheet.model).not.toHaveProperty('scanRow');
 	});
 
 	it('the wide column draws none of them either', () => {

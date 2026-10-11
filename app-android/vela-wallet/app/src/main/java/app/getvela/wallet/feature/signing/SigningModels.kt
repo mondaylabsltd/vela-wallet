@@ -84,6 +84,83 @@ enum class SigningScreenState {
      * (CS56), and the dash, no control, when no other coin is left (CS55).
      */
     CS45, CS46, CS47, CS48, CS49, CS50, CS51, CS52, CS53, CS54, CS55, CS56,
+
+    /**
+     * Nothing jumps when the simulation's verdict lands (the 102 device run):
+     * CS1's transfer while its simulation is out — the verdict's place kept,
+     * nothing in it (CS57) — and the same sheet once a node that cannot
+     * simulate has answered: 「Vela 未能检查这笔交易的结果」 in that place
+     * (CS58). The two are the same height, and the confirm is where it was.
+     */
+    CS57, CS58,
+
+    /**
+     * The verdict's place holds EVERY verdict a sheet can end on (the
+     * integration's note 12 — it held "could not check" alone, and a taller
+     * one still pushed the sheet up): CS57's waiting sheet once the node
+     * says the call is expected to fail, with its reason (CS61); once it
+     * says nothing of theirs moves (CS62); once it shows the one balance a
+     * send moves (CS63), and the two a swap does (CS64). Each is the same
+     * height as CS57, and the confirm is where it was. Through the live
+     * builders.
+     */
+    CS61, CS62, CS63, CS64,
+
+    /**
+     * A verdict TALLER than the place: three balance rows (CS65), a received
+     * token nothing could verify, with its warning under the rows (CS66),
+     * and both at once — four rows and the warning (CS67). The device round,
+     * item 1: the verdict is shown WHOLE — the place grows to it, with no
+     * scroll of its own, and the body brings it into view — and the confirm,
+     * in the sheet's footer, is where it was. (They scrolled inside the
+     * place: a row or the warning under a fold, over a live confirm.)
+     */
+    CS65, CS66, CS67,
+
+    /**
+     * The fee's worth waits for the display currency like every fiat figure
+     * (the core's withhold rule): CS1's transfer with a settled fee while the
+     * currency is on its way — the fee in its coin, no "≈ $" beside it (CS59)
+     * — and the SAME sheet once it commits, the worth in the person's money
+     * on the same one line (CS60). Through the live [SigningLive.feeModel].
+     */
+    CS59, CS60,
+
+    /**
+     * PR 3 — an unverified token is a direction, never a figure: CS57's sheet
+     * once its simulation says one token nobody vouches for leaves and
+     * another arrives — "−" and "+" beside the label, the warning under the
+     * rows, and no number on either (CS68). The judgment carries none: this
+     * sheet printed 「未验证代币 +5,000,000,000,000,000,000,000.00」, a figure
+     * the site being signed for chose. Through the live builders.
+     */
+    CS68,
+
+    /**
+     * PR 3 — the confirm waits for the simulation's verdict. CS1's transfer
+     * with everything else ready (the reading in, nothing to choose, the fee
+     * priced) and its simulation still out: the confirm shut over the one
+     * line "Checking what this transaction does…", the verdict's place its
+     * skeleton (CS69) — and the same request once the core's deadline has
+     * passed with no verdict: the confirm open, no line under it, and the
+     * verdict's place saying "Vela couldn't check what this transaction
+     * does…" as a caution (CS70). On a real phone a chain's node answers
+     * before either can be looked at.
+     *
+     * Each is a sign view the REAL machine wrote — the request, `sim_started`,
+     * and for CS70 its deadline answered (`SimWaitBoards`) — read by the
+     * core's own gate and drawn by the live builders. CS69 stays held: no
+     * timer runs on a board. The confirm is where it is on CS57.
+     */
+    CS69, CS70,
+}
+
+/**
+ * What a list of blocks SAYS: a held place counts as the block that took it,
+ * and as nothing while it is still only room.
+ */
+fun List<SigningBlock>.said(): List<SigningBlock> = flatMap { block ->
+    if (block is SigningBlock.Held) listOfNotNull(block.shown) else listOf(block)
 }
 
 /** Semantic weight. `Accent` is the intent sentence; the rest colour warnings. */
@@ -192,6 +269,41 @@ sealed interface SigningBlock {
         val rows: List<BalanceDeltaRow>,
         val note: String? = null,
         val noteTone: SigningTone = SigningTone.Neutral,
+    ) : SigningBlock
+
+    /**
+     * A place kept for a block that arrives late — the simulation's verdict.
+     *
+     * The sheet is bottom-anchored and as tall as its content, so a card
+     * that appears a second after the sheet opened pushed everything above
+     * it up (the 102 device run: 「Vela 未能检查这笔交易的结果」 on every
+     * Gnosis request). The place is there from the first frame — at least as
+     * tall as the TALLEST of [rooms], each drawn unseen and unsaid — and
+     * [shown] takes it when it lands, centred in it.
+     *
+     * [rooms] are the verdicts a sheet usually ends on (`SigningLive.
+     * verdictRooms`): "could not check", "expected to fail" at the longest
+     * reason the core prints, "no asset changes", and a balance card of the
+     * usual number of moves. It was the "could not check" card alone, which
+     * every other verdict is taller than: a swap's two balance rows still
+     * pushed the sheet up when they landed.
+     *
+     * PR 3 final note F2. The place is never BLANK: while the verdict is out
+     * a quiet skeleton stands in it, the size of the place, said to a screen
+     * reader as [waiting] ("Checking…").
+     *
+     * The device round, item 1 (security). The rooms are the place's MINIMUM
+     * height: a [shown] taller than them (a third balance row, an unverified
+     * token's warning) is drawn whole and the place is as tall as it is —
+     * it used to scroll INSIDE the place, part of the one block a site
+     * cannot write under a fold. The sheet's body scrolls instead, and the
+     * confirm is pinned under it.
+     */
+    data class Held(
+        val rooms: List<SigningBlock>,
+        val shown: SigningBlock?,
+        /** What the skeleton says to a screen reader while [shown] is still out. */
+        val waiting: String = "",
     ) : SigningBlock
 }
 
@@ -307,6 +419,13 @@ sealed interface FeeModel {
          * is kept, unmarked, so the figure does not move when it comes back.
          */
         val chevronRoom: Boolean = false,
+        /**
+         * The display currency is on its way: the fee is its coin amount
+         * alone, and its worth will join the line when the currency commits.
+         * The row keeps the room that longer line needs from now, so the
+         * confirm under it does not move when it lands.
+         */
+        val worthRoom: Boolean = false,
     ) : FeeModel
 
     /** Off-chain signature: the ✓ line, in place of a fee row. */
@@ -332,7 +451,12 @@ data class HandoffModel(
      * `KeyLabel`); `null` when nothing names the key.
      */
     val key: KeyRowModel?,
-    /** The page's address, without its scheme. */
+    /**
+     * The page's NAME, as Settings names it (D6): 「Vela 官方签名页」, the
+     * person's label, or "Self-hosted · domain".
+     */
+    val pageName: String,
+    /** The page's address, without its scheme — drawn under [pageName] unless the name already says it. */
     val page: String,
     val integrity: app.getvela.wallet.feature.settings.components.IntegrityLineModel,
     val open: String,
@@ -356,7 +480,13 @@ data class HandoffModel(
 
 /** The hand-off card's fee row: "Network fee  ~0.00012 ETH · ≈$0.31", and the speed's name. */
 @Immutable
-data class HandoffFeeModel(val label: String, val value: String, val tier: String?)
+data class HandoffFeeModel(
+    val label: String,
+    val value: String,
+    val tier: String?,
+    /** The fee's worth is withheld until the display currency commits: the row keeps the room the longer line needs. */
+    val worthRoom: Boolean = false,
+)
 
 /**
  * Spec 102: a key row — "Confirm with | Phone or tablet", "New key on | This
@@ -399,7 +529,7 @@ data class SigningScreenModel(
      */
     val dappOwn: Boolean = false,
     /**
-     * The wallet's own request: what it does ("备份公钥"), drawn as the
+     * The wallet's own request: what it does ("复制钱包记录"), drawn as the
      * header's title beside the ✕. The intent block it comes from is not
      * repeated below. `null` for a site's request, whose header names the site.
      */
@@ -424,7 +554,7 @@ data class SigningScreenModel(
     val signerName: String,
     val signerSeed: String,
     /**
-     * The confirm's words — the action alone ("确认兑换", "签名", "备份公钥"),
+     * The confirm's words — the action alone ("确认兑换", "签名", "复制钱包记录"),
      * on a tap button (issue #461: the Send screen's Confirm, not a slide).
      * There is no reject BUTTON anywhere in this vocabulary; the header's ✕ is
      * the explicit refusal, and since spec 079 nothing else closes the sheet
@@ -442,6 +572,15 @@ data class SigningScreenModel(
      * sheet already says it its own way.
      */
     val confirmBlockLine: String? = null,
+    /**
+     * A line whose room the footer keeps under an OPEN confirm from the first
+     * frame, unseen and unsaid. A live sheet needs none: it keeps the room of
+     * the last line it said by itself ([HeldLine]). A board that stands for a
+     * moment AFTER a line was said — the confirm that waited for the
+     * simulation's verdict, open again (CS70) — names that line here, so its
+     * confirm is where the live sheet's is at that moment.
+     */
+    val confirmBlockRoom: String? = null,
     /** Spec 079: the ✕'s label — the sheet's one explicit close. */
     val closeLabel: String = "",
     /**

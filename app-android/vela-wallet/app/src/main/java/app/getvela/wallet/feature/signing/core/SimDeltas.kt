@@ -104,6 +104,51 @@ object SimDeltas {
         notice(simOutcome("", UNREACHABLE))
             ?: SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
 
+    /**
+     * A check under which nothing of the person's moves, as the core reads
+     * one (`simOutcome` over a clean run with no logs): no judgment, and the
+     * core's own line for it (`no_change_key`, "No asset changes"). For the
+     * room the sheet keeps and for a board; a session's comes from the trust
+     * machine's judged view, which carries the same key.
+     */
+    fun nothingMoves(): SigningController.SimOutcome = NOTHING_MOVES
+
+    private val NOTHING_MOVES: SigningController.SimOutcome by lazy {
+        val record = simOutcome("", JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray()))))).toString())
+        notice(record) ?: SigningController.SimOutcome.Ready(emptyList(), noChangeKey = record.noChangeKey)
+    }
+
+    /**
+     * The core's "expected to fail" line at the LONGEST reason it prints — a
+     * revert whose `Error(string)` runs past the core's cap, read by the core
+     * like any other (`simOutcome`), so the reason comes back cut where the
+     * core cuts it. Never shown: the signing sheet measures it to know how
+     * tall that verdict can be, and keeps that room.
+     */
+    fun longestRevert(): SigningController.SimOutcome.Notice? = LONGEST_REVERT
+
+    private val LONGEST_REVERT: SigningController.SimOutcome.Notice? by lazy {
+        reverted("ERC20: transfer amount exceeds the balance of the sending account, and more of it")
+    }
+
+    /**
+     * The core's notice for a call that fails with [reason] — its own reading
+     * (`simOutcome`) of a node's answer carrying that `Error(string)`:
+     * `{"result":[{"calls":[{"status":"0x0","returnData":…}]}]}`. For the
+     * room above and for a board; a session's comes from its node.
+     */
+    fun reverted(reason: String): SigningController.SimOutcome.Notice? {
+        val bytes = reason.toByteArray(Charsets.UTF_8)
+        fun word(value: Int) = value.toString(16).padStart(64, '0')
+        val text = bytes.joinToString("") { "%02x".format(it) }.let { hex -> hex.padEnd((hex.length + 63) / 64 * 64, '0') }
+        val data = "0x08c379a0" + word(32) + word(bytes.size) + text
+        val reply = JSONObject().put(
+            "result",
+            JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x0").put("returnData", data)))),
+        ).toString()
+        return notice(simOutcome("", reply))
+    }
+
     /** A value as the node wants it: `0x`-hex; decimal input converted; empty → `0x0`. */
     internal fun hexValue(value: String?): String {
         val raw = value.orEmpty().trim()

@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet.components
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +19,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -32,9 +35,18 @@ import app.getvela.wallet.feature.wallet.BalanceStateKind
 /**
  * Hero balance (spec vocabulary #4): label line (总余额 · USD), amount with
  * de-emphasised decimals, and exactly one of normal / zero-live / loading /
- * hidden, plus the optional BalanceStatusLine slot, then the refresh control
- * (issue 462) under it. The refresh the control starts adds no status line
+ * hidden, then the status line's place, then the refresh control (issue 462)
+ * under it. The refresh the control starts adds no status line
  * (WalletLive.balanceStatus), so nothing above it moves when it is tapped.
+ *
+ * **The line under the figure keeps its place from the first frame** (the
+ * integration's note 26b). It comes and goes with the wallet's state — "Some
+ * balances are still updating." on every cold start with a cached total,
+ * "Can't reach Polygon right now" when a network drops, the empty wallet's
+ * "live" line — and each arrival used to push the refresh control, Receive,
+ * Send and the whole page down by its height (32 dp), and each departure
+ * pulled them back up. One line of room is always there now; a status (or
+ * the live line) is drawn in it, and nothing under the hero moves.
  */
 @Composable
 fun BalanceDisplay(
@@ -50,7 +62,11 @@ fun BalanceDisplay(
     val colors = VelaTheme.colors
     Column(modifier = modifier) {
         Text(
-            text = "${model.label} · ${model.currency}",
+            // The currency is named once it is known — the stored choice
+            // while its rate is on the way, the committed one after; before
+            // either, the label stands alone rather than say "USD" for a
+            // person who never chose it.
+            text = if (model.currency.isBlank()) model.label else "${model.label} · ${model.currency}",
             color = colors.fgSubtle,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.medium,
@@ -58,18 +74,28 @@ fun BalanceDisplay(
         )
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         when (model.state) {
-            BalanceStateKind.Normal -> HeroLine { AmountRow(model, onToggleVisibility) }
-            BalanceStateKind.ZeroLive -> {
-                HeroLine { AmountRow(model, onToggleVisibility) }
-                Spacer(modifier = Modifier.height(VelaSpacing.md))
-                LiveIndicatorRow(model.liveText.orEmpty())
-            }
+            BalanceStateKind.Normal, BalanceStateKind.ZeroLive -> HeroLine { AmountRow(model, onToggleVisibility) }
             BalanceStateKind.Loading -> HeroLine { SkeletonBalanceBlock() }
             BalanceStateKind.Hidden -> HeroLine { HiddenRow(model, onToggleVisibility) }
         }
-        model.status?.let { status ->
-            Spacer(modifier = Modifier.height(VelaSpacing.md))
-            BalanceStatusLine(model = status, onClick = onStatusClick)
+        // The status line's place: one line of the row a status draws, kept
+        // whether or not there is one. What is said in it is the status —
+        // the most actionable thing — else "Checking…" while the first read
+        // of the account is out, else the empty wallet's live line. The last
+        // two are the core's words (PR 3 final note F19): each is drawn when
+        // the core says it, and by nothing this screen works out.
+        Spacer(modifier = Modifier.height(VelaSpacing.md))
+        Box(modifier = Modifier.testTag(BALANCE_STATUS_PLACE_TAG), contentAlignment = Alignment.CenterStart) {
+            BalanceStatusRoom()
+            val status = model.status
+            val checking = model.checkingText
+            val live = model.liveText
+            when {
+                status != null -> BalanceStatusLine(model = status, onClick = onStatusClick)
+                // Quiet: the live line's own row, its dot not yet green.
+                checking != null -> QuietIndicatorRow(checking, colors.fgSubtle)
+                live != null -> QuietIndicatorRow(live, colors.successBase)
+            }
         }
         model.refresh?.let { refresh ->
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
@@ -77,6 +103,9 @@ fun BalanceDisplay(
         }
     }
 }
+
+/** The status line's place under the figure — there in every state. */
+const val BALANCE_STATUS_PLACE_TAG = "balance-status-place"
 
 /**
  * The figure's own line, held in every state (PR 2 polish): the mask and the
@@ -125,8 +154,14 @@ private fun AmountRow(model: BalanceModel, onToggle: () -> Unit = {}) {
     }
 }
 
+/**
+ * The status place's two quiet lines — "Live · listening for payments" (a
+ * green dot) and "Checking…" (the same dot, not yet green): a pulsing dot and
+ * the core's words. One line, like the status line whose place it stands in
+ * (F16): a sentence longer than the line ends in an ellipsis.
+ */
 @Composable
-private fun LiveIndicatorRow(text: String) {
+private fun QuietIndicatorRow(text: String, dot: Color) {
     val colors = VelaTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -136,7 +171,7 @@ private fun LiveIndicatorRow(text: String) {
             modifier = Modifier
                 .size(WalletMetrics.liveDotSize)
                 .alpha(rememberPulseAlpha())
-                .background(colors.successBase, CircleShape),
+                .background(dot, CircleShape),
         )
         Text(
             text = text,
@@ -144,6 +179,9 @@ private fun LiveIndicatorRow(text: String) {
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.medium,
             fontSize = VelaTextSize.sm,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
         )
     }
 }

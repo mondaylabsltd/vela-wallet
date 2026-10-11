@@ -26,6 +26,7 @@ import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.FeedTxKind
 import app.getvela.wallet.feature.wallet.core.FeedTxStatus
+import uniffi.vela_core_uniffi.maskedAmount
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DateFormat
@@ -67,6 +68,14 @@ object WalletLive {
     /** The hero's mask, one glyph wider (`privacy::BALANCE_MASK`). */
     const val BALANCE_MASK = "••••••"
 
+    // A masked amount written WITH its unit ("•••• xDAI") is the core's own
+    // function now — `maskedAmount(unit)`, the export of `privacy::masked_amount`
+    // — called wherever one is drawn (a dApp row's "received" here, a
+    // detail's figures in `FlowLive`). This file used to spell the rule
+    // itself, and before that a transfer's detail dropped the unit while iOS
+    // kept it. A figure with no unit of its own — a holding under its ticker,
+    // a worth in the display currency — is [MASK] alone.
+
     /**
      * The home screen, from the person's own holdings.
      *
@@ -100,7 +109,10 @@ object WalletLive {
         val money = Money.of(currency)
         val rows = assetRows(view, chainNames, currency)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
-        val groups = activity(feed, strings, now, chainNames)
+        // Issue #469: the home draws the core's short list (`home_rows`, the
+        // newest three); History keeps every row. The cut is the core's — the
+        // shared helper below also builds History, so it never caps.
+        val groups = activity(feed.copy(rows = feed.home_rows), strings, now, chainNames)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(
@@ -116,17 +128,19 @@ object WalletLive {
                     // A network filtered down to nothing reads as the empty
                     // state, not as a list still loading or a blank one.
                     chainFilter != null && view.tokens.isNotEmpty() -> SectionMode.Empty
-                    // "Nothing here" is a claim: not while the first read is
-                    // out, and not while the balance cannot be read at all —
-                    // the web's `assetsMode`, the desktop's and the iPhone's
-                    // (087 F03).
-                    // Nor while nothing could be read at all — every chain
-                    // failed, or the fetch threw, with nothing cached
-                    // (`unreachable`): "Deposit your first asset" under the
-                    // reason would be a claim nobody made (PR 2 integration).
-                    view.holdings_loading || view.balance_unknown || view.unreachable -> SectionMode.Loading
-                    else -> SectionMode.Empty
+                    // "Nothing here" is a claim, and the core's to make
+                    // (`empty_key`): only once the first read of the account
+                    // has ended and found nothing held — never while it is
+                    // out, loading, unknown or out of reach. This used to be
+                    // worked out here from those flags, and a wallet that
+                    // held nothing last session (a cached total of 0, no
+                    // tokens) read "Deposit your first asset" under
+                    // "Checking…", before anything had been read.
+                    view.empty_key != null -> SectionMode.Empty
+                    else -> SectionMode.Loading
                 },
+                // The empty state's title is the core's line.
+                empty = fallback.assetsSection.empty?.let { drawn -> view.empty_key?.let { drawn.copy(title = strings.t(it)) } ?: drawn },
             ),
             assetRows = rows,
         )
@@ -254,7 +268,7 @@ object WalletLive {
             // What came back masks whenever the balance is hidden, whatever
             // the row's own figure is (`privacy`).
             received = dapp?.received?.let { change ->
-                listOf(if (hidden) MASK else changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
+                if (hidden) maskedAmount(change.symbol) else listOf(changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
             },
         )
     }
@@ -393,24 +407,34 @@ object WalletLive {
         money: Money,
         chainNames: Map<Int, String>,
     ): BalanceModel {
-        val live = balanceVisible(fallback, view, strings, money, chainNames)
+        val drawn = balanceVisible(fallback, view, money)
+            // The label names the currency in EVERY state — it used to keep
+            // the drawn board's "USD" while the figure loaded, then change.
+            .copy(currency = money.label)
+        // PR 3 final note F19: the two lines only the core can say. While the
+        // FIRST read of the account is out (`checking_key`) the status line's
+        // place says "Checking…" — under the skeleton and under a cached
+        // figure alike, from the first frame, and in place of anything else
+        // that line could say: until a round has ended no chain has said the
+        // wallet is live, none has failed to answer, and a cached figure is
+        // not "still updating" yet. And "Live · listening for payments" is
+        // said exactly when the core says it (`live_key`), in every state.
+        val live = drawn.copy(
+            checkingText = view.checking_key?.let { strings.t(it) },
+            liveText = view.live_key?.let { strings.t(it) },
+            status = heroStatus(view, strings, chainNames),
+        )
         // Spec 048 (device-found): hidden used to return the FIXTURE with a hidden
         // state — "$1,383 · USD" under the eye. Hidden is the live label with
         // the figures masked.
-        // The currency is the person's own even while hidden: with the total withheld the
-        // visible builder falls back to the drawn "USD".
         // The hero's mask is the wider one (`privacy::BALANCE_MASK`), as the
         // gallery's hidden state always drew it.
-        return if (view.hidden) live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null, currency = money.code) else live
+        if (view.hidden) return live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null)
+        return live
     }
 
-    private fun balanceVisible(
-        fallback: BalanceModel,
-        view: BalanceView,
-        strings: VelaStrings,
-        money: Money,
-        chainNames: Map<Int, String>,
-    ): BalanceModel {
+    /** The figure and its state; what the line under it says is [heroStatus]'s. */
+    private fun balanceVisible(fallback: BalanceModel, view: BalanceView, money: Money): BalanceModel {
 
         // The core withholds the display total while a fetch is out; the
         // last-known cached total paints first and live replaces it
@@ -426,17 +450,7 @@ object WalletLive {
         // still decides first: a skeleton and a reason, the same reason the
         // web and desktop heroes give.
         if (view.unreachable) {
-            return fallback.copy(
-                state = BalanceStateKind.Loading,
-                integer = null,
-                decimals = null,
-                status = BalanceStatusModel(
-                    kind = BalanceStatusKind.Warning,
-                    // A read that failed inside Vela (PR 2 note 11) is said as
-                    // that — never "the request never arrived".
-                    text = strings.t(view.internal_key ?: I18nKeys.Wallet.BALANCE_UNREACHABLE),
-                ),
-            )
+            return fallback.copy(state = BalanceStateKind.Loading, integer = null, decimals = null)
         }
 
         // **A total of zero is only honest when it is one.**
@@ -448,60 +462,72 @@ object WalletLive {
         // could not be priced" warning, which assumes SOME of them were; when
         // none were, there is no total to show and the skeleton is the truthful
         // shape. Phase 4c removes this state by giving prices a source.
-        val nothingPriceable = view.tokens.isNotEmpty() && view.tokens.all { it.price_usd == null }
-        if (nothingPriceable) {
-            return fallback.copy(
-                state = BalanceStateKind.Loading,
-                integer = null,
-                decimals = null,
-                // Built here rather than borrowed from the fixture: the H1
-                // state carries no status at all, so a `?.copy` produced a
-                // bare skeleton with no explanation — a person staring at an
-                // empty hero with two holdings underneath and no reason given.
-                // Seen on the device before it was fixed.
-                status = BalanceStatusModel(
-                    kind = BalanceStatusKind.Warning,
-                    text = strings.t(I18nKeys.Wallet.BALANCE_UNPRICED),
-                ),
-            )
+        if (nothingPriceable(view)) {
+            return fallback.copy(state = BalanceStateKind.Loading, integer = null, decimals = null)
         }
 
         if (total == null) {
             // Unknown. Either still counting, or nothing could be priced —
             // both render as "not a number yet" rather than as zero, and the
             // core's own notice says which.
-            return fallback.copy(
-                state = BalanceStateKind.Loading,
-                integer = null,
-                decimals = null,
-                // A refresh the person asked for is the control's to show
-                // (issue 462), never a line pushed in above it.
-                status = null,
-            )
+            return fallback.copy(state = BalanceStateKind.Loading, integer = null, decimals = null)
         }
 
-        // The exact binary value rounded HALF UP — `Formats.fixed2`'s rule and
-        // the web's `toFixed(2)`, so the hero and its rows agree with each
-        // other and with the web. It used to CUT: `BigDecimal(12.34)` is
-        // 12.3399…, and cutting that printed $12.33.
-        val rounded = BigDecimal(money.convert(total)).setScale(2, RoundingMode.HALF_UP)
-        val whole = rounded.toBigInteger()
-        val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
-        // A zero is "live" only once EVERY chain has answered: a zero with a
-        // chain unread (partial) or unknown is not a listening wallet, it is an
-        // unknown one — and a cached zero is not live at all.
-        val zeroLive = rounded.signum() == 0 && view.display_total_usd != null &&
-            !view.balance_unknown && !view.balance_partial && view.tokens.isEmpty()
+        // The display currency is not the person's yet (the core's rule on
+        // `CurrencyView.committed`): the one helper withholds the figure. The
+        // total waits as a total still being read waits — its status line
+        // kept — and appears once, in the right money: it read "$1,234" for
+        // a few seconds and then jumped to "¥8,876".
+        val figure = money.parts(total)
+            ?: return fallback.copy(state = BalanceStateKind.Loading, integer = null, decimals = null)
+        // "Zero, live" is the core's to say (`live_key`, PR 3 final note F19)
+        // and nothing here decides it: the last round settled, every chain it
+        // asked answered, and the wallet holds nothing. It was derived here
+        // from the total and the partial flag, which a cached zero satisfies
+        // before anything has been read — "Live · listening for payments"
+        // over a wallet nothing had read, then "Can't reach 24 networks".
+        val zeroLive = view.live_key != null
         return fallback.copy(
             state = if (zeroLive) BalanceStateKind.ZeroLive else BalanceStateKind.Normal,
-            integer = money.symbol + Formats.current.groupDigits(whole.toString()),
-            decimals = cents.toString().padStart(2, '0'),
+            integer = figure.integer,
+            decimals = figure.decimals,
             decimalMark = Formats.current.decimalMark(),
             // The label beside the figure names the currency it is in.
             currency = money.code,
-            liveText = if (zeroLive) strings.t(I18nKeys.Wallet.LIVE_INDICATOR) else null,
-            status = balanceStatus(view, strings, chainNames),
         )
+    }
+
+    /** Every holding is unpriced: there is no total to show, and the line says why. */
+    private fun nothingPriceable(view: BalanceView): Boolean =
+        view.tokens.isNotEmpty() && view.tokens.all { it.price_usd == null }
+
+    /**
+     * What the hero's status line says — the ONE definition, for the hero
+     * and for the sheet the line opens, which repeats the sentence in full
+     * at its top (PR 3 final note F16: the line itself is one line, cut with
+     * an ellipsis when the sentence is longer).
+     *
+     * - While the first read is out the core's "Checking…" stands alone in
+     *   the line's place ([BalanceModel.checkingText]): no status.
+     * - Nothing could be read and nothing is known: the reason — the fault's
+     *   own sentence when the read failed inside Vela (PR 2 note 11), never
+     *   "the request never arrived" for that.
+     * - Every holding unpriced: a skeleton needs its explanation. (Built
+     *   here rather than borrowed from the fixture: H1 carries no status, so
+     *   a `?.copy` drew an empty hero over two holdings with no reason.)
+     * - No figure at all yet: nothing — a refresh the person asked for is
+     *   the control's to show (issue 462), never a line pushed in above it.
+     * - Otherwise [balanceStatus].
+     */
+    fun heroStatus(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): BalanceStatusModel? = when {
+        view.checking_key != null -> null
+        view.unreachable -> BalanceStatusModel(
+            BalanceStatusKind.Warning,
+            strings.t(view.internal_key ?: I18nKeys.Wallet.BALANCE_UNREACHABLE),
+        )
+        nothingPriceable(view) -> BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNPRICED))
+        view.display_total_usd == null && view.cached_total_usd == null -> null
+        else -> balanceStatus(view, strings, chainNames)
     }
 
     /**
@@ -558,17 +584,19 @@ object WalletLive {
      */
     fun unreachableLine(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): String? {
         val first = view.unreachable_networks.firstOrNull() ?: return null
-        return when (view.unreachable_key) {
-            I18nKeys.Wallet.UNREACHABLE_ONE -> strings.t(
-                I18nKeys.Wallet.UNREACHABLE_ONE,
-                mapOf("name" to (chainNames[first.chain_id] ?: first.chain_id.toString())),
-            )
-            I18nKeys.Wallet.UNREACHABLE_MANY -> strings.t(
-                I18nKeys.Wallet.UNREACHABLE_MANY,
-                mapOf("n" to view.unreachable_networks.size.toString()),
-            )
-            else -> null
-        }
+        // Whichever sentence the core chose, filled the one way: `{{name}}` is
+        // the first network's name ("Can't reach Polygon", "Can't load
+        // Tempo's token list" — its RPC is fine, the list that names what to
+        // read there is what could not be loaded), `{{n}}` how many there
+        // are. It switched on the two keys it knew, so a third said nothing.
+        val key = view.unreachable_key ?: return null
+        return strings.t(
+            key,
+            mapOf(
+                "name" to (chainNames[first.chain_id] ?: first.chain_id.toString()),
+                "n" to view.unreachable_networks.size.toString(),
+            ),
+        )
     }
 
     /**
@@ -603,9 +631,11 @@ object WalletLive {
             balance = if (hidden) MASK else "${tokenAmountText(token.balance)} ${token.symbol}",
             fiat = when {
                 hidden -> AssetFiatModel.Masked
+                // A holding's worth is a figure in the display currency: it
+                // waits with the total while that is not the person's yet
+                // (the helper answers `null`), its line's room kept.
                 else -> token.price_usd?.let { price ->
-                    val value = money.convert(amountAsDouble(token.balance) * price)
-                    AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
+                    money.fiat(amountAsDouble(token.balance) * price)?.let { AssetFiatModel.Value(it) } ?: AssetFiatModel.Loading
                 } ?: AssetFiatModel.NoPrice("—")
             },
             masked = hidden,
@@ -647,13 +677,19 @@ object WalletLive {
         val total = switcher.balances.sumOf { it.usd }
         val known = switcher.balances.isNotEmpty()
         val hidden = switcher.hidden
-        val count = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString()))
+        // A PLURAL family (F15): the number goes to the core as the count, so
+        // the core picks the form by the language's rule — "1 account · ",
+        // "2 accounts · ". As a text variable it read "1 accounts · Total".
+        val count = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, accounts.size)
         return AccountsSheetModel(
             title = strings.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
             summary = when {
                 hidden -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to MASK))
-                known -> count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to money.fiat(total)))
-                else -> count.trimEnd(' ', '·')
+                // No total in a currency that is not the person's yet (the
+                // helper withholds it): the count alone, on the same one line.
+                else -> money.fiat(total)?.takeIf { known }
+                    ?.let { count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to it)) }
+                    ?: count.trimEnd(' ', '·')
             },
             rows = accounts.mapIndexed { i, (name, address) ->
                 val short = ExploreLive.shortAddress(address)
@@ -720,24 +756,84 @@ object WalletLive {
      * hero showed for the whole of phases 4 and 5, correctly, before there was
      * a rate to use.
      */
+    /**
+     * **The one place a fiat figure is formatted — and the one place it is
+     * withheld.** The core's rule (`app::display_currency`, its
+     * `FIAT_SURFACES`): until the display currency is the person's
+     * (`CurrencyView.committed`) NO fiat figure is drawn on ANY surface —
+     * not "$1,234" that becomes "¥8,876" a few seconds later, and not a "$"
+     * on one screen while another waits. So [fiat] and [parts] answer `null`
+     * while it is not, and the sign and the rate are private: no caller can
+     * format around them. Each surface decides only what its WITHHELD figure
+     * draws — the figure's room, kept, so nothing moves when it lands. A
+     * token amount ("0.5 ETH") is not in the display currency and never
+     * comes through here.
+     */
     class Money private constructor(
         val code: String,
-        val symbol: String,
+        private val symbol: String,
         private val rate: Double?,
+        /**
+         * The display currency is the person's (`CurrencyView.committed`).
+         * `false`: the core is still on its USD placeholder — and a surface
+         * that draws a figure in it draws the WRONG currency for a few
+         * seconds, then jumps. Every figure waits instead, and appears once,
+         * in the right money.
+         */
+        val settled: Boolean = true,
+        /**
+         * What a label that names its currency apart from the figure says:
+         * the committed code; while waiting, the stored choice on its way
+         * (`CurrencyView.pending`); nothing at all before either is known.
+         */
+        val label: String = code,
     ) {
-        fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
+        private fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
 
-        /** A fiat figure in this money, drawn with the person's number format (spec 047 D2). */
-        fun fiat(usd: Double): String = symbol + Formats.current.fixed2(convert(usd))
+        /**
+         * A fiat figure in this money, drawn with the person's number format
+         * (spec 047 D2) — or `null`: WITHHELD, the currency is not the
+         * person's yet. A caller draws the figure's room and nothing in it.
+         */
+        fun fiat(usd: Double): String? = if (settled) symbol + Formats.current.fixed2(convert(usd)) else null
+
+        /** The hero's figure in its parts; see [parts]. */
+        class Parts(
+            /** "$1,383" — the sign and the grouped whole part. */
+            val integer: String,
+            /** "28" — the cents, two digits. */
+            val decimals: String,
+        )
+
+        /**
+         * The hero's figure, in the two parts it is drawn in — or `null`:
+         * WITHHELD, as [fiat]. The exact binary value rounded HALF UP —
+         * `Formats.fixed2`'s rule and the web's `toFixed(2)`, so the hero and
+         * its rows agree with each other and with the web. It used to CUT:
+         * `BigDecimal(12.34)` is 12.3399…, and cutting that printed $12.33.
+         */
+        fun parts(usd: Double): Parts? {
+            if (!settled) return null
+            val rounded = BigDecimal(convert(usd)).setScale(2, RoundingMode.HALF_UP)
+            val whole = rounded.toBigInteger()
+            val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
+            return Parts(
+                integer = symbol + Formats.current.groupDigits(whole.toString()),
+                decimals = cents.toString().padStart(2, '0'),
+            )
+        }
 
         companion object {
             /** Dollars, unconverted — the default before a currency is known. */
             fun dollars(): Money = Money("USD", "$", null)
 
             fun of(view: CurrencyView): Money {
+                // No settled choice yet: the placeholder's dollars, marked as
+                // not the person's — figures drawn in the display currency wait.
+                if (!view.committed) return Money("USD", "$", null, settled = false, label = view.pending.orEmpty())
                 val rate = view.rate?.takeIf { it.isFinite() && it > 0.0 }
-                // No rate, or no settled choice, means dollars — and saying so.
-                if (rate == null || !view.committed) return Money("USD", "$", null)
+                // A settled choice nothing could price means dollars — and saying so.
+                if (rate == null) return Money("USD", "$", null)
                 return Money(view.code, symbolFor(view.code), rate)
             }
 

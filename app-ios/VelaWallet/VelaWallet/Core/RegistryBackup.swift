@@ -2,8 +2,8 @@
 //  RegistryBackup.swift
 //  VelaWallet
 //
-//  "Is this wallet's founding key set on Ethereum too?" — the iOS transport
-//  for `vela_core::registry_backup` (spec 062).
+//  "Is this wallet's record on Ethereum too?" — the iOS transport for
+//  `vela_core::registry_backup` (spec 062).
 //
 //  A wallet is registered on Gnosis when it is created. The registry stores
 //  the registration's calldata verbatim and signs over a frozen domain, so the
@@ -12,6 +12,11 @@
 //  estimate, never funds. WHICH reads prove that, in what order, and what a
 //  silent chain means are the core's, shared with the other three shells. What
 //  is left here is what only a shell can do: perform the `eth_call`s.
+//
+//  What the Keys block DRAWS for the answer is the core's too (PR 3): the
+//  finished step carries a `row` — its words, its tone and what a tap does —
+//  and this file hands it on unread. Each shell used to map the state itself,
+//  and iOS drew "could not check" with nothing to tap.
 //
 
 import Foundation
@@ -26,8 +31,75 @@ final class RegistryBackup {
         case notRegistered
         case backedUp
         case notBackedUp
-        /// Somebody did not answer. Never drawn as "not backed up".
+        /// Somebody did not answer. Never drawn as "not backed up"; asking
+        /// again may answer it.
         case couldNotCheck
+        /// Gnosis answered, and what it holds can never be copied (a wallet
+        /// from before registry V13 stored no payload). Asking again gets the
+        /// same answer: a calm end, nothing to tap.
+        case notCopyable
+    }
+
+    /// The Keys block's row for a finished check, as the core words it
+    /// (`BackupState::row`): corpus keys, a tone, and what a tap does.
+    struct Row: Equatable {
+        enum Tone: String { case neutral, positive }
+        enum Action: String {
+            /// A statement: nothing to tap.
+            case none
+            /// Open the signing sheet with the check's `call`.
+            case copy
+            /// Run the walk again.
+            case retry
+        }
+
+        let titleKey: String
+        let subtitleKey: String
+        let tone: Tone
+        let action: Action
+        /// The corpus key of the paragraph under the Keys block for THIS
+        /// state (`BackupRow.explain_key`, PR 3 note 6): what a copy
+        /// publishes, what it costs and how it is made — for every state a
+        /// copy can still be made or checked in. Absent for a wallet that can
+        /// never be copied: the paragraph described what the row above had
+        /// just said cannot be done, so there is none, and no slot kept.
+        var explainKey: String? = nil
+
+        /// The paragraph while the walk is still running, and for a silence
+        /// this file caused — the core's `EXPLAIN_KEY`.
+        static let explainKey = "settingsModals.backup.explain"
+
+        /// The row for a silence THIS file caused — a step that could not be
+        /// read, a walk that ran out of rounds — which the core never saw to
+        /// word. Its own "could not check" row, in its own keys.
+        static let couldNotCheck = Row(
+            titleKey: "settingsModals.backup.title",
+            subtitleKey: "settingsModals.backup.couldNotCheck",
+            tone: .neutral, action: .retry, explainKey: Row.explainKey
+        )
+
+        /// A tone or an action this build does not know reads as the quiet
+        /// one: a neutral line, nothing to tap.
+        init?(json: [String: Any]?) {
+            guard let json, let title = json["title_key"] as? String, !title.isEmpty,
+                  let subtitle = json["subtitle_key"] as? String, !subtitle.isEmpty
+            else { return nil }
+            self.init(
+                titleKey: title, subtitleKey: subtitle,
+                tone: (json["tone"] as? String).flatMap(Tone.init) ?? .neutral,
+                action: (json["action"] as? String).flatMap(Action.init) ?? Action.none,
+                // Absent is "no paragraph" — the core leaves the key out.
+                explainKey: (json["explain_key"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            )
+        }
+
+        init(titleKey: String, subtitleKey: String, tone: Tone, action: Action, explainKey: String? = nil) {
+            self.titleKey = titleKey
+            self.subtitleKey = subtitleKey
+            self.tone = tone
+            self.action = action
+            self.explainKey = explainKey
+        }
     }
 
     /// The one transaction that makes the backup — the registry's `register`,
@@ -42,6 +114,9 @@ final class RegistryBackup {
         let state: State
         /// Present only with `.notBackedUp`.
         let call: Call?
+        /// What the Keys block draws; `nil` where no row is drawn (no
+        /// registry on Ethereum, or no record to copy).
+        var row: Row?
     }
 
     /// A check is a handful of rounds; this only stops a contract bug from spinning.
@@ -71,7 +146,7 @@ final class RegistryBackup {
     }
 
     func check(address: String, foundingKeyHex: String, targetChain: Int? = nil) async -> Check {
-        let silent = Check(state: .couldNotCheck, call: nil)
+        let silent = Check(state: .couldNotCheck, call: nil, row: .couldNotCheck)
         var answers: [[String: Any]] = []
         for _ in 0..<Self.maxRounds {
             guard let transcript = try? JSONSerialization.data(withJSONObject: answers),
@@ -101,12 +176,18 @@ final class RegistryBackup {
                 else { return nil }
                 return Call(chainId: chainId, to: to, data: data)
             }
+            // The core's row for its own verdict, handed on as it came.
+            let row = Row(json: next["row"] as? [String: Any])
             switch next["state"] as? String {
             case "unavailable": return Check(state: .unavailable, call: nil)
             case "not_registered": return Check(state: .notRegistered, call: nil)
-            case "backed_up": return Check(state: .backedUp, call: nil)
+            case "backed_up": return Check(state: .backedUp, call: nil, row: row)
             // "Not backed up" with nothing to send is not something to show a fee for.
-            case "not_backed_up": return call.map { Check(state: .notBackedUp, call: $0) } ?? silent
+            case "not_backed_up": return call.map { Check(state: .notBackedUp, call: $0, row: row) } ?? silent
+            case "could_not_check": return Check(state: .couldNotCheck, call: nil, row: row ?? .couldNotCheck)
+            // Its own state, never "could not check": it would retry for ever.
+            case "not_copyable": return Check(state: .notCopyable, call: nil, row: row)
+            // A state this build has never heard of: not a verdict.
             default: return silent
             }
         }

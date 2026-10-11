@@ -11,8 +11,26 @@
 //! JSON-RPC error, or no call results     ─► NotOffered  ─► Caution  simUnavailableWarning
 //! any call with status 0x0 or an error   ─► Reverts     ─► Danger   simWillFailReason | simWillFail
 //! a status neither 0 nor 1 (no error)    ─► NotOffered  ─► Caution  simUnavailableWarning
-//! otherwise                              ─► Deltas      ─► none (token_trust draws the balances)
+//! otherwise, something of theirs moves   ─► Deltas      ─► none (token_trust draws the balances)
+//! otherwise, nothing of theirs moves     ─► Deltas []   ─► quiet    simResultNoChange
+//! no reply inside SIM_VERDICT_WAIT_MS    ─► (none yet)  ─► Caution  simUnavailableWarning, until one lands
 //! ```
+//!
+//! The last row is `sign_request`'s (PR 3): the confirm waits for the verdict
+//! and the wait has an end. When it passes, the request's view names the same
+//! could-not-check line (`SignView::sim_waited_out_key`) and the sheet draws
+//! it in the verdict's place; a reply that still arrives is read by the rows
+//! above and replaces it.
+//!
+//! ## "No asset changes" is said, and it is one line (PR 3)
+//!
+//! A checked answer under which nothing of the person's moves is a verdict
+//! too, and the place the sheet keeps for the verdict says it:
+//! [`KEY_NO_CHANGE`]. The desktop and Android said it, iOS said another
+//! sentence ("No assets leave your wallet") and the web said nothing. Which
+//! line, and when, is [`no_change_key`] — carried by the outcome
+//! ([`SimOutcome::no_change_key`], the UniFFI and wasm records) and by the
+//! judged view the sheets draw from (`token_trust::TrustSimView`).
 //!
 //! ## Why the severity is one rule (research RG6)
 //!
@@ -55,7 +73,9 @@ use ts_rs::TS;
 
 use super::clear_signing::ClearRisk;
 use super::name_verify::is_never_in_a_name;
-use super::token_trust::{TrustAssetDelta, TrustDeltaKind, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC};
+use super::token_trust::{
+    TrustAssetDelta, TrustDeltaKind, TrustSimJudgment, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC,
+};
 
 /// The selector of Solidity's `Error(string)` revert payload.
 pub const ERROR_STRING_SELECTOR: [u8; 4] = [0x08, 0xc3, 0x79, 0xa0];
@@ -74,6 +94,9 @@ pub const KEY_WILL_FAIL_REASON: &str = "componentsUi.signing.simWillFailReason";
 pub const KEY_WILL_FAIL: &str = "componentsUi.signing.simWillFail";
 /// The corpus key for "Vela couldn't check what this transaction does".
 pub const KEY_UNAVAILABLE: &str = "componentsUi.signing.simUnavailableWarning";
+/// The corpus key for "No asset changes": checked, and nothing of the
+/// person's moves ([`no_change_key`]).
+pub const KEY_NO_CHANGE: &str = "componentsUi.signing.simResultNoChange";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -246,6 +269,131 @@ pub fn notice(outcome: &SimOutcome) -> Option<SimNotice> {
             reason: None,
         }),
     }
+}
+
+impl SimOutcome {
+    /// [`KEY_NO_CHANGE`] when this answer was checked and moves nothing of
+    /// the person's; `None` for moves, and for every answer that is not a
+    /// check (a revert, a node that could not or did not simulate).
+    #[must_use]
+    pub fn no_change_key(&self) -> Option<&'static str> {
+        match self {
+            SimOutcome::Deltas { deltas } => {
+                no_change_key(deltas.iter().map(|delta| delta.delta.as_str()))
+            }
+            SimOutcome::Reverts { .. } | SimOutcome::NotOffered | SimOutcome::Unreachable => None,
+        }
+    }
+}
+
+/// The verdict's quiet line over a CHECKED answer's signed moves (each a
+/// decimal string, as [`TrustAssetDelta::delta`] and the judgments carry
+/// them): [`KEY_NO_CHANGE`] when there are none, or every one of them is a
+/// zero — a move of nothing is not a move, and a card with a title and
+/// nothing under it would read as a verdict that never came. `None` as soon
+/// as one of them is anything else, a figure nobody can read included: what
+/// cannot be read is never "nothing moves".
+///
+/// Only for an answer that was a check. The callers are
+/// [`SimOutcome::no_change_key`] and [`no_change_key_of`].
+#[must_use]
+pub fn no_change_key<'a>(deltas: impl IntoIterator<Item = &'a str>) -> Option<&'static str> {
+    deltas.into_iter().all(is_zero).then_some(KEY_NO_CHANGE)
+}
+
+/// [`no_change_key`] over a checked answer's JUDGMENTS — what `token_trust`'s
+/// view and a sheet hold. The same rule, asked of each judgment
+/// ([`TrustSimJudgment::moves_nothing`]): an unverified token carries no
+/// figure to read a zero from, only its direction.
+#[must_use]
+pub fn no_change_key_of(judgments: &[TrustSimJudgment]) -> Option<&'static str> {
+    judgments
+        .iter()
+        .all(TrustSimJudgment::moves_nothing)
+        .then_some(KEY_NO_CHANGE)
+}
+
+/// A signed decimal that is zero: an optional sign, then one or more `0`s.
+fn is_zero(delta: &str) -> bool {
+    let digits = delta.trim();
+    let digits = digits
+        .strip_prefix('-')
+        .or_else(|| digits.strip_prefix('+'))
+        .unwrap_or(digits);
+    !digits.is_empty() && digits.bytes().all(|b| b == b'0')
+}
+
+/// An outcome and every line a sheet draws for it, as one record: what the
+/// UniFFI and wasm exports hand a client ([`verdict`]). A client reads the
+/// tone and the sentences from here and decides none of them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SimVerdict {
+    /// `deltas | reverts | not_offered | unreachable`. Only `deltas` means
+    /// the node checked the transaction.
+    pub kind: String,
+    /// The person's signed per-asset moves (the input `token_trust` takes).
+    /// Empty for every kind but `deltas` — and empty WITH `deltas` is
+    /// "checked, nothing of theirs moves" ([`Self::no_change_key`]).
+    pub deltas: Vec<TrustAssetDelta>,
+    /// The sanitised `Error(string)` of a revert, at most
+    /// [`REVERT_REASON_MAX_CHARS`] characters — the `{{reason}}` of
+    /// [`Self::notice_key`]. Untrusted text made safe to print.
+    pub revert_reason: Option<String>,
+    /// The notice's tone (`danger` for a revert, `caution` for
+    /// could-not-check); `None` for `deltas`.
+    pub notice_risk: Option<ClearRisk>,
+    /// The notice's corpus key; `None` for `deltas`.
+    pub notice_key: Option<String>,
+    /// [`KEY_NO_CHANGE`] when the answer was a check and nothing of the
+    /// person's moves: the quiet line the verdict's place says then.
+    pub no_change_key: Option<String>,
+}
+
+/// [`classify`] and what the sheet says for it, in one record.
+#[must_use]
+pub fn verdict(reply: SimReply, user: &str) -> SimVerdict {
+    let outcome = classify(reply, user);
+    let notice = notice(&outcome);
+    let no_change_key = outcome.no_change_key().map(str::to_owned);
+    let kind = match &outcome {
+        SimOutcome::Deltas { .. } => "deltas",
+        SimOutcome::Reverts { .. } => "reverts",
+        SimOutcome::NotOffered => "not_offered",
+        SimOutcome::Unreachable => "unreachable",
+    };
+    let (deltas, revert_reason) = match outcome {
+        SimOutcome::Deltas { deltas } => (deltas, None),
+        SimOutcome::Reverts { reason } => (Vec::new(), reason),
+        SimOutcome::NotOffered | SimOutcome::Unreachable => (Vec::new(), None),
+    };
+    SimVerdict {
+        kind: kind.to_owned(),
+        deltas,
+        revert_reason,
+        notice_risk: notice.as_ref().map(|notice| notice.risk),
+        notice_key: notice.map(|notice| notice.key.to_owned()),
+        no_change_key,
+    }
+}
+
+/// [`verdict`] over the reply's wire form ([`SimReply::from_json`]), as JSON
+/// — the wasm client's export. A record that cannot be written out is an
+/// answer nobody can read: the could-not-check line, never an empty list
+/// that reads "nothing moves".
+#[must_use]
+pub fn verdict_json(user: &str, reply_json: &str) -> String {
+    serde_json::to_string(&verdict(SimReply::from_json(reply_json), user))
+        .or_else(|_| {
+            serde_json::to_string(&verdict(
+                SimReply::Error {
+                    code: None,
+                    message: None,
+                },
+                user,
+            ))
+        })
+        .unwrap_or_default()
 }
 
 /// What one call result says about itself.

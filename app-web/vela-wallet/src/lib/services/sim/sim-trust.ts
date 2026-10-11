@@ -42,11 +42,19 @@ function toWireDelta(delta: AssetDelta): TrustAssetDelta {
 }
 
 /**
- * One judgment back into the shape `BalanceChangePreview` renders. The symbol
- * and decimals of the NATIVE row are the shell's vocabulary, exactly as
- * `enrichDeltas` composed them; everything trust-related came from the core.
+ * One judgment back into the shape `BalanceChangePreview` renders — or `null`
+ * for the one judgment that is no row. The symbol and decimals of the NATIVE
+ * row are the shell's vocabulary, exactly as `enrichDeltas` composed them;
+ * everything trust-related came from the core.
+ *
+ * PR 3: an unverified token is a DIRECTION, never a figure. Its number is
+ * whatever the site being signed for chose to emit from a contract it
+ * controls (Android printed "+5,000,000,000,000,000,000,000.00" of one), so
+ * the core no longer hands it over and this change carries none: `in` and
+ * `out` are a row with a sign, `unreadable` a row with neither sign nor
+ * figure, and `still` — a zero — is not a row at all.
  */
-function toAssetChange(judgment: TrustSimJudgment, chainId: number): AssetChange {
+function toAssetChange(judgment: TrustSimJudgment, chainId: number): AssetChange | null {
 	switch (judgment.type) {
 		case 'native':
 			return {
@@ -64,10 +72,11 @@ function toAssetChange(judgment: TrustSimJudgment, chainId: number): AssetChange
 				decimals: judgment.decimals
 			};
 		case 'erc20_unverified':
+			if (judgment.direction === 'still') return null;
 			return {
 				kind: 'erc20',
 				token: judgment.token ?? undefined,
-				delta: BigInt(judgment.delta),
+				direction: judgment.direction,
 				unverified: true
 			};
 	}
@@ -75,7 +84,8 @@ function toAssetChange(judgment: TrustSimJudgment, chainId: number): AssetChange
 
 /**
  * Judge and enrich one simulation's deltas. Order-preserving: the core answers
- * one judgment per delta, in the order they were given.
+ * one judgment per delta, in the order they were given — less an unverified
+ * token that did not move, which is no row.
  */
 export async function enrichDeltas(
 	deltas: AssetDelta[],
@@ -92,5 +102,8 @@ export async function enrichDeltas(
 		notifyHeldTokens(from, chainId, getCachedHeldTokens(from, chainId));
 	}
 	const judgments = await judgeSimDeltas(from, chainId, deltas.map(toWireDelta));
-	return judgments.map((judgment) => toAssetChange(judgment, chainId));
+	return judgments.flatMap((judgment) => {
+		const change = toAssetChange(judgment, chainId);
+		return change === null ? [] : [change];
+	});
 }

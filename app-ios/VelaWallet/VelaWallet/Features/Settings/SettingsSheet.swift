@@ -71,6 +71,24 @@ struct SettingsSheet: View {
     static let contributeUrl = "https://github.com/mondaylabsltd/vela-wallet/issues"
 
     var body: some View {
+        Group {
+            if overlay == .feedback {
+                // "Report a problem" carries a Done over its keyboard (issue
+                // #478), and before iOS 26 SwiftUI draws a `.keyboard`
+                // toolbar only under a navigation container: in a bare sheet
+                // on iOS 17.5 the bar never appeared (measured, simulator).
+                // The stack shows no bar of its own.
+                NavigationStack {
+                    host.toolbar(.hidden, for: .navigationBar)
+                }
+            } else {
+                host
+            }
+        }
+        .presentationDragIndicator(.visible)
+    }
+
+    private var host: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
         // SheetTitle, so one overlay pinned top-trailing lands on the title
         // line for all of them — and none of them can forget it. The drag
@@ -185,7 +203,16 @@ struct SettingsSheet: View {
             }
             .padding(.horizontal, Tokens.Space.s24)
             .padding(.vertical, Tokens.Space.s24)
+            // A tap outside a field puts the keyboard away (issue #478). The
+            // recogniser rides on this sheet's own scroll view and lets a
+            // touch inside a text input through, so moving the caret works.
+            .background(KeyboardDismissOnTap())
         }
+        // …and so does a drag of the sheet's page (issue #478). The page's
+        // own `.scrollDismissesKeyboard` sits above the `.sheet` and never
+        // reached in here: the keyboard, once up, covered the lower half of
+        // "Report a problem" with no way down.
+        .scrollDismissesKeyboard(.interactively)
         .background(theme.bgBase)
 
             Button(action: onDismiss) {
@@ -201,7 +228,6 @@ struct SettingsSheet: View {
             .padding(.top, Tokens.Space.s24)
         }
         .background(theme.bgBase)
-        .presentationDragIndicator(.visible)
     }
 }
 
@@ -434,6 +460,11 @@ struct FeedbackSheetBody: View {
     /// took the keyboard BACK when it re-enabled — straight over the fallback
     /// block and its "Open GitHub form" button (device run, 2026-09-27).
     @FocusState private var typing: String?
+    /// The keyboard's Done, in the app's words (`common.done`, set once at
+    /// the root). Issue #478: Return is a newline in a report — a bug is
+    /// described in several lines — so the keys need their own way down.
+    /// `nil` (a preview, a test) draws no bar.
+    @Environment(\.keyboardDone) private var keyboardDone
     /// The screenshot viewer while it is up (spec C), and the picture on
     /// screen — whose tile hides under it, as in Photos, so the picture flies
     /// out of an empty slot and back into it.
@@ -508,6 +539,18 @@ struct FeedbackSheetBody: View {
                     focusSoon(.fallback)
                 default:
                     break
+                }
+            }
+        }
+        .toolbar {
+            // Over the keys, trailing — where iOS puts its own. One tap and
+            // the whole form, Send included, is on screen again.
+            if let keyboardDone {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button(keyboardDone) { typing = nil }
+                        .fontWeight(.semibold)
+                        .accessibilityIdentifier("keyboard.done")
                 }
             }
         }
@@ -1272,7 +1315,7 @@ private struct RpcFixSheetBody: View {
     }
 }
 
-private struct BalanceDetailSheetBody: View {
+struct BalanceDetailSheetBody: View {
     @Environment(\.theme) private var theme
     let model: BalanceDetailModel
     /// 立即重试 on an unreachable chain. Absent in the gallery.
@@ -1280,26 +1323,51 @@ private struct BalanceDetailSheetBody: View {
 
     var body: some View {
         SheetTitle(title: model.title)
+        // What the hero's line said, whole — the line is one line and may
+        // have cut it (final note F16).
+        if let reason = model.reason {
+            SettingsCallout(callout: reason)
+                .padding(.bottom, Tokens.Space.s12)
+                .accessibilityIdentifier("balanceDetail.reason")
+        }
         Text(model.summary)
             .typeRole(Typography.flowCaption)
             .foregroundStyle(theme.fgSubtle)
             .padding(.bottom, Tokens.Space.s16)
-        Text(model.sectionPending)
-            .typeRole(Typography.flowCaption)
-            .fontWeight(.semibold)
-            .foregroundStyle(theme.fgBase)
-        Text(model.pendingNote)
-            .typeRole(Typography.label)
-            .foregroundStyle(theme.fgSubtle)
-            .padding(.vertical, Tokens.Space.s8)
-        ForEach(model.pending) { row(model: $0) }
-        Text(model.sectionDone)
-            .typeRole(Typography.flowCaption)
-            .fontWeight(.semibold)
-            .foregroundStyle(theme.fgBase)
-            .padding(.top, Tokens.Space.s16)
-        ForEach(model.done) { row(model: $0) }
+        // A heading is drawn with its rows, and not without them (final
+        // note F20). "Networks still updating — These networks couldn't be
+        // reached, so your cached balance is shown until they recover."
+        // headed an EMPTY list: the sheet opened from "Some tokens couldn't
+        // be priced." told a healthy wallet its balance was cached.
+        if Self.headsPending(model) {
+            Text(model.sectionPending)
+                .typeRole(Typography.flowCaption)
+                .fontWeight(.semibold)
+                .foregroundStyle(theme.fgBase)
+                .accessibilityIdentifier("balanceDetail.pending")
+            Text(model.pendingNote)
+                .typeRole(Typography.label)
+                .foregroundStyle(theme.fgSubtle)
+                .padding(.vertical, Tokens.Space.s8)
+            ForEach(model.pending) { row(model: $0) }
+        }
+        if Self.headsDone(model) {
+            Text(model.sectionDone)
+                .typeRole(Typography.flowCaption)
+                .fontWeight(.semibold)
+                .foregroundStyle(theme.fgBase)
+                // The gap is between two sections; a lone one sits under
+                // the summary's own.
+                .padding(.top, Self.headsPending(model) ? Tokens.Space.s16 : Tokens.Space.s0)
+                .accessibilityIdentifier("balanceDetail.done")
+            ForEach(model.done) { row(model: $0) }
+        }
     }
+
+    /// "Networks still updating" and its note: only over networks still out.
+    static func headsPending(_ model: BalanceDetailModel) -> Bool { !model.pending.isEmpty }
+    /// "Updated": only over networks that answered.
+    static func headsDone(_ model: BalanceDetailModel) -> Bool { !model.done.isEmpty }
 
     @ViewBuilder private func row(model row: BalanceDetailRowModel) -> some View {
         HStack(spacing: Tokens.Space.s12) {
@@ -1370,19 +1438,24 @@ private struct UnreachableSheetBody: View {
                         .monospacedDigit()
                 }
                 Spacer(minLength: Tokens.Space.s8)
-                if let onFix {
-                    Button { onFix(row.chainId) } label: {
-                        Text(row.action)
+                // No action, no control (PR 3 note 4): a network whose RPC
+                // is fine offers no "Fix" — the row is its name and its line.
+                if let action = row.action {
+                    if let onFix {
+                        Button { onFix(row.chainId) } label: {
+                            Text(action)
+                                .typeRole(Typography.flowCaption)
+                                .foregroundStyle(theme.infoBase)
+                                .padding(.vertical, Tokens.Space.s8)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainTextButtonStyle())
+                        .accessibilityIdentifier("unreachable.fix.\(row.chainId)")
+                    } else {
+                        Text(action)
                             .typeRole(Typography.flowCaption)
                             .foregroundStyle(theme.infoBase)
-                            .padding(.vertical, Tokens.Space.s8)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(PlainTextButtonStyle())
-                } else {
-                    Text(row.action)
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(theme.infoBase)
                 }
             }
             .padding(.vertical, Tokens.Space.s12)

@@ -74,7 +74,40 @@ data class UnreachableNetwork(
     val last_seen_usd: Double? = null,
     /** The corpus key of the row's line; `assets.lastSeen` fills `{{amount}}`. */
     val line_key: String = "",
-)
+    /**
+     * What kept it from being read: `network` (none of its RPC endpoints
+     * answered) or `token_list` (its RPC answers; the list that names what to
+     * read there could not be loaded, and it has no coin of its own to read
+     * without one — Tempo). A string on purpose: a cause this build does not
+     * know still has [rpc_fixable] to say whether a "Fix" belongs on the row.
+     */
+    val cause: String = CAUSE_NETWORK,
+    /**
+     * May the row offer its RPC editor ("Fix")? The core's word — true only
+     * when the network itself did not answer. For any other cause the
+     * endpoint is fine, and a "Fix RPC" there sends a person to repair what
+     * is working. `true` from a core that predates the field: every row was
+     * the network's then.
+     */
+    val rpc_fixable: Boolean = true,
+    /**
+     * The corpus key of the row's SHORT status in the balance breakdown — the
+     * core's word (PR 3 final note F21): `home.balanceDetailStatusFailed`
+     * ("RPC unavailable") when none of its endpoints answered,
+     * `home.balanceDetailStatusTokenList` ("Token list unavailable") when its
+     * RPC answers and its token list could not be loaded. The default is the
+     * one status there was, for a core that predates the field.
+     */
+    val status_key: String = STATUS_RPC_UNAVAILABLE,
+) {
+    companion object {
+        const val CAUSE_NETWORK = "network"
+        const val CAUSE_TOKEN_LIST = "token_list"
+
+        /** `balance_dashboard::STATUS_RPC_UNAVAILABLE`. */
+        const val STATUS_RPC_UNAVAILABLE = "home.balanceDetailStatusFailed"
+    }
+}
 
 /**
  * `BalanceView`.
@@ -127,6 +160,36 @@ data class BalanceView(
      * goes, in place of any "Can't reach …". `null` otherwise.
      */
     val internal_key: String? = null,
+    /**
+     * The hero's line while the FIRST read of this account is still out (PR 3
+     * final note F19): `componentsUi.funding.checking` ("Checking…"). Until a
+     * round has ended nothing here was said by a chain — a cached total of 0
+     * is last session's — so the line under the total says the wallet is
+     * being read, and neither "live" nor "can't reach" yet. `null` from the
+     * first round's end on: a later refresh is not "checking".
+     */
+    val checking_key: String? = null,
+    /**
+     * The hero's line under a LIVE zero: `home.liveIndicator` ("Live ·
+     * listening for payments"). Set only when the last round settled, every
+     * chain it asked answered and the wallet holds nothing. **The "zero,
+     * live" state is this key being set, and nothing else**: derived here
+     * from the total and the partial flag, a cached zero drew "Live ·
+     * listening" over a wallet nothing had read, then swapped it for "Can't
+     * reach 24 networks".
+     */
+    val live_key: String? = null,
+    /**
+     * The Assets list's empty state: `assets.emptyTitle` ("Deposit your first
+     * asset"), with its caption and its action. Set only when the first read
+     * of the account has ended, nothing is held, and holdings are neither
+     * loading, unknown nor unreachable. **The list is empty exactly when this
+     * is set, and for no other reason**: a wallet that held nothing last
+     * session opens with a cached total of 0, and "no tokens, a known total"
+     * drew "Deposit your first asset" under "Checking…", before anything had
+     * been read. `null` from a core that predates the field: not empty.
+     */
+    val empty_key: String? = null,
     val holdings_loading: Boolean = false,
     val cached_total_usd: Double? = null,
     val switcher: BalanceSwitcherView = BalanceSwitcherView(),
@@ -255,6 +318,14 @@ sealed class BalanceShellResult {
          * [failed_chain_ids], never said as "can't reach".
          */
         val internal_chain_ids: List<Int> = emptyList(),
+        /**
+         * The failed chains whose RPC was never the problem: the chain's
+         * token list (the registry document that names its stablecoins) could
+         * not be loaded, and the chain has no native coin to read without it
+         * (Tempo). A subset of [failed_chain_ids]; the core says "can't load
+         * its token list" for them and offers no RPC fix.
+         */
+        val registry_chain_ids: List<Int> = emptyList(),
         val now_ms: Double,
     ) : BalanceShellResult()
 

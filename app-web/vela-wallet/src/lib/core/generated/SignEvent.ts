@@ -52,4 +52,4 @@ submit_block: number | null, now_ms: number, } | { "type": "op_tracked", user_op
  * (`TrackEntryView::refusal`), for [`SignView::failure_refusal_key`].
  * Absent: the plain refusal sentence.
  */
-refusal?: RefusalReason, } | { "type": "ceremony_started", id: string, } | { "type": "ceremony_done", id: string, } | { "type": "transport_dropped", transport_id: string, };
+refusal?: RefusalReason, } | { "type": "ceremony_started", id: string, } | { "type": "ceremony_done", id: string, } | { "type": "sim_started", id: string, } | { "type": "sim_settled", id: string, } | { "type": "transport_dropped", transport_id: string, };

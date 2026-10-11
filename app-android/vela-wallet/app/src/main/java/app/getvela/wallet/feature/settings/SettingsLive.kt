@@ -35,6 +35,7 @@ import app.getvela.wallet.feature.settings.core.NetProbeHealth
 import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetProviderId
+import app.getvela.wallet.feature.settings.core.NetRpcField
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.settings.core.NetWizardErrorKind
 import app.getvela.wallet.feature.settings.core.NetWizardPhase
@@ -94,6 +95,21 @@ object SettingsLive {
     }
 
     /**
+     * How a signing page is NAMED, everywhere it is named (D6) — the lists,
+     * and the hand-off card: Vela's official signing page; the person's own
+     * label; else "Self-hosted · <domain>". Never by its host alone: a host
+     * says where a page is, not whose it is.
+     */
+    fun pageName(name: String, official: Boolean, domain: String, address: String, s: VelaStrings): String {
+        val label = if (official) "" else name.trim()
+        return when {
+            official -> s.t("settings.signing.pageOfficial")
+            label.isNotEmpty() -> label
+            else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { address.substringBefore('/') }))
+        }
+    }
+
+    /**
      * One signing page as every list draws it (spec 102): its name — Vela's
      * official signing page, the person's label, or "Self-hosted · <domain>"
      * (D6: only a page the person deployed is "their own"); the address;
@@ -114,11 +130,7 @@ object SettingsLive {
         val integrity = integrityModel(line, s)
         val label = if (official) "" else name.trim()
         val host = address.substringBefore('/')
-        val title = when {
-            official -> s.t("settings.signing.pageOfficial")
-            label.isNotEmpty() -> label
-            else -> s.t("settings.signing.pageSelfHosted", mapOf("domain" to domain.ifBlank { host }))
-        }
+        val title = pageName(name = name, official = official, domain = domain, address = address, s = s)
         return SigningPageItemModel(
             url = url,
             title = title,
@@ -177,6 +189,7 @@ object SettingsLive {
             },
             save = s.t("settings.signing.pageSave"),
             remove = s.t("settings.signing.pageRemove"),
+            cancel = s.t("common.cancel"),
             trust = s.t("settings.signing.pageTrust"),
             loaded = view.loaded,
         )
@@ -288,12 +301,14 @@ object SettingsLive {
     const val VENUE_ROW = "signing-venue"
 
     fun withCurrency(model: SettingsScreenModel, view: CurrencyView): SettingsScreenModel {
-        val code = view.code
+        // The person's own choice — on its way (`pending`) or settled — never
+        // the USD placeholder standing in for it.
+        val code = view.pending?.takeIf { !view.committed } ?: view.code
         return model.copy(
             sections = model.sections.map { section ->
                 section.copy(
                     rows = section.rows.map { row ->
-                        if (row.id == "currency") row.copy(value = currencyRowValue(view)) else row
+                        if (row.id == "currency") row.copy(value = currencyRowValue(code)) else row
                     },
                 )
             },
@@ -393,9 +408,33 @@ object SettingsLive {
         val compat = wizard.compat
         val checked = wizard.phase == NetWizardPhase.Checked
         val stopped = wizard.phase == NetWizardPhase.Error
-        val inconclusive = wizard.error is NetWizardErrorKind.CheckFailed
         val unverified = checked && (compat == null || compat.rpc_failure != null)
         val compatible = checked && compat != null && compat.compatible && compat.rpc_failure == null
+        // Why the wizard stopped, in the core's sentence (`error_key`): the
+        // network is already added, was not found, lists no RPC endpoint,
+        // could not be verified — or was refused by its check, in the check's
+        // own words. This file words no stop itself.
+        val stop = wizard.error_key?.takeIf { stopped }
+        // The check answered and the chain is refused — in the wizard
+        // (`checked`), or on the scan path, which has no confirm step and so
+        // stops with the check kept beside it. The core's reason and — for
+        // missing contracts only — its link, the same on both.
+        val refusedStop = stopped && wizard.error is NetWizardErrorKind.NotCompatible
+        val refusedCheck = checked && !compatible && !unverified
+        val refusal = compat?.hint_key?.takeIf { refusedCheck }
+        val setupUrl = compat?.setup_url?.takeIf { refusedStop || refusedCheck }
+        // The RPC field and "Re-check with this RPC" are ONE rule, and it is
+        // the core's (`rpc_field`, PR 3 final notes F4 / F14 / F22): the field
+        // exactly when naming another endpoint is a way on — the check passed
+        // or could not reach a verdict (optional), or the network lists no
+        // endpoint (required: "Enter one, then re-check", so the box to enter
+        // one in is there and is not called "(optional)") — and the re-check
+        // exactly when the field is drawn, never one without the other. Not
+        // under a refusal: another endpoint does not give a network the
+        // P-256 verifier or the contracts it lacks, and a "Re-check with this
+        // RPC" there had no RPC box for "this" to mean. This file used to
+        // decide both, each by its own condition.
+        val rpcField = wizard.rpc_field != NetRpcField.None
         return model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
@@ -465,12 +504,13 @@ object SettingsLive {
                     null
                 },
                 // The person's own RPC for this chain, as the core holds it —
-                // so a keystroke round-trips. Offered where the web offers it:
-                // once checked, unless the chain was ruled incompatible.
-                customRpc = if (compatible || unverified) {
+                // so a keystroke round-trips. Drawn where the core says
+                // (`rpc_field`), under the core's label: "Custom RPC
+                // (optional)", or "RPC URL" where it is the one thing asked for.
+                customRpc = if (rpcField) {
                     UrlFieldModel(
                         id = "custom-rpc",
-                        label = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
+                        label = strings.t(wizard.rpc_field_label_key ?: I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
                         value = wizard.custom_rpc,
                         placeholder = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_PLACEHOLDER),
                         // Spec 098 §5.1: the relay is sent this RPC, key and all.
@@ -492,12 +532,24 @@ object SettingsLive {
                 // sentence. Without it the pill says Compatible while two rows
                 // carry a red cross. It cannot collide with the arm above it:
                 // that one needs `!compatible`, this one needs `compatible`.
+                //
+                // A refusal says WHY, in the core's words (`compat.hint_key`):
+                // no P-256 verifier — Vela wallets cannot work here and money
+                // sent here would be stuck — or contracts that are missing and
+                // can be deployed. The two used to share one sentence about
+                // contracts, which is false of the first.
+                //
+                // A stop is said in the core's sentence, whichever stop it is.
+                // It used to be one line for all of them ("Some contracts Vela
+                // needs aren't on this network yet") — over a network that was
+                // already added, one nobody could find and one with no RPC
+                // listed, none of which is about contracts.
+                // Why, then where: a stop the field is the way on from says
+                // so OVER the box.
+                calloutAsksForRpc = stop != null && rpcField,
                 callout = when {
-                    stopped -> CalloutModel(
-                        CalloutTone.Warning,
-                        strings.t(if (inconclusive) "settingsModals.addNetwork.unableToVerify" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
-                    )
-                    checked && !compatible && !unverified -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
+                    stop != null -> CalloutModel(CalloutTone.Warning, strings.t(stop))
+                    refusal != null -> CalloutModel(CalloutTone.Warning, strings.t(refusal))
                     compat?.let { it.compatible && !it.multi_key_ready } == true -> CalloutModel(
                         tone = CalloutTone.Warning,
                         text = strings.t(I18nKeys.SettingsUi.ADD_SINGLE_KEY_ONLY),
@@ -514,17 +566,15 @@ object SettingsLive {
                     else -> null
                 },
                 // The chain setup tool is for a chain that is really missing
-                // Vela's contracts — never for one that could not be reached.
-                secondary = if ((stopped && !inconclusive) || (checked && !compatible && !unverified)) {
-                    strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL)
-                } else {
-                    null
-                },
-                recheck = if (stopped || unverified || (checked && !compatible)) {
-                    strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC)
-                } else {
-                    null
-                },
+                // Vela's contracts — never for one that could not be reached,
+                // and never for one with no P-256 verifier (nothing can be
+                // deployed to add it). The core says which by sending the
+                // link, opened on this chain (`setup_url`), or not.
+                secondary = setupUrl?.let { strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL) },
+                secondaryUrl = setupUrl,
+                // "Re-check with this RPC" reads the field, so it is drawn
+                // exactly where the field is (the core's one rule, above).
+                recheck = strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC).takeIf { rpcField },
             ),
         )
     }
@@ -667,15 +717,12 @@ object SettingsLive {
     }
 
     /**
-     * The row's right-hand value.
-     *
-     * `committed == false` means the core is still showing its USD placeholder
-     * rather than a settled choice — the row says the code it would use and
-     * nothing more, because a sample amount implies a rate and there is not one
-     * yet.
+     * The row's right-hand value: the code and its sign, and nothing more —
+     * a sample amount implies a rate, and while the choice is still on its
+     * way (`pending`) there is not one yet.
      */
-    private fun currencyRowValue(view: CurrencyView): String =
-        "${view.code} · ${CurrencyCatalog.glyph(view.code)}"
+    private fun currencyRowValue(code: String): String =
+        "$code · ${CurrencyCatalog.glyph(code)}"
 
     // -- Spec 047 US1: the rows that read the device, not a fixture -----------------
 
@@ -728,7 +775,9 @@ object SettingsLive {
             Formats(date = it, locale = formats.locale).dateExample()
         }
         val timeSheet = formatSheet(model.timeSheet, TimeFormatKey.entries, { it.wire }, prefs.timeFormat.wire) {
-            Formats(time = it, locale = formats.locale).timeExample()
+            // The example is the CORE's clock in the app's language (F5):
+            // 「下午 1:45」, never this shell's own "1:45 PM" under Chinese.
+            Formats(time = it, locale = formats.locale).timeExample(strings.language)
         }
         return model.copy(
             sections = model.sections.map { section ->
@@ -739,7 +788,7 @@ object SettingsLive {
                             // The row shows the CURRENT rendering (the web's `currentExamples`).
                             "number-format" -> row.copy(value = formats.example())
                             "date-format" -> row.copy(value = formats.dateExample())
-                            "time-format" -> row.copy(value = formats.timeExample())
+                            "time-format" -> row.copy(value = formats.timeExample(strings.language))
                             else -> row
                         }
                     },
@@ -1013,7 +1062,10 @@ object SettingsLive {
     /**
      * SR6 (spec 092): the list the home's "can't reach" line opens — every
      * network the core lists, in its order, each with what was last read there
-     * (its worth in the display currency, masked while hidden) and its RPC fix.
+     * (its worth in the display currency, masked while hidden) and its RPC fix
+     * — where the core says an RPC fix belongs (`rpc_fixable`): a network
+     * whose RPC answers and whose token list could not be loaded gets none,
+     * since "Fix RPC" there sends a person to repair what is working.
      * Built from the live view on every composition, so a network that comes
      * back leaves the open sheet; the title is the home's own line.
      */
@@ -1027,13 +1079,22 @@ object SettingsLive {
         val rows = view.unreachable_networks.map { network ->
             val id = network.chain_id
             val name = chainNames[id] ?: id.toString()
-            val amount = network.last_seen_usd?.takeIf { !view.hidden }?.let(money::fiat) ?: MASK
+            // "Last seen {{amount}}" carries a worth in the display currency:
+            // masked while hidden (the core withholds the figure and this
+            // writes the mask), and WITHHELD while that currency is not the
+            // person's yet — the line is not said then, its room kept, since
+            // the sentence is built around the figure. Every other line
+            // ("Not read yet", "Held nothing when last read") has no figure.
+            val worth = network.last_seen_usd?.takeIf { !view.hidden }
+            val withheld = worth != null && !money.settled
+            val amount = worth?.let { money.fiat(it) } ?: MASK
             UnreachableRowModel(
                 chainId = id,
                 mark = ChainMarkModel(name.take(1).uppercase(), markColour(id.toLong()), Marks.chainLogoUrl(id)),
                 name = name,
-                line = strings.t(network.line_key, mapOf("amount" to amount)),
-                action = strings.t(I18nKeys.SettingsUi.RPC_FIX),
+                line = if (withheld) "" else strings.t(network.line_key, mapOf("amount" to amount)),
+                lineWithheld = withheld,
+                action = if (network.rpc_fixable) strings.t(I18nKeys.SettingsUi.RPC_FIX) else null,
             )
         }
         return UnreachableModel(
@@ -1071,13 +1132,23 @@ object SettingsLive {
                 tone = SettingsTone.Neutral,
             )
         }.toMutableList()
-        view.unreachable_networks.map { it.chain_id }.filter { id -> pending.none { it.id == id.toString() } }.distinct().forEach { id ->
+        view.unreachable_networks.distinctBy { it.chain_id }.filter { network -> pending.none { it.id == network.chain_id.toString() } }.forEach { network ->
+            val id = network.chain_id
             pending += BalanceDetailRowModel(
                 id = id.toString(),
                 mark = mark(id),
                 name = name(id),
-                status = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
+                // The row's short status is the core's to name (`status_key`,
+                // PR 3 final note F21): "RPC unavailable" only where the RPC
+                // is what failed, "Token list unavailable" where the RPC
+                // answers and the list could not be loaded — a status as
+                // short as its neighbours', where this shell had borrowed the
+                // home line's whole sentence. A key this build has no words
+                // for reads as the one status there was, never a dotted path.
+                status = strings.t(network.status_key).takeIf { it.isNotBlank() && it != network.status_key }
+                    ?: strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
                 tone = SettingsTone.Error,
+                // Reading again is right for both: it asks for the list again too.
                 action = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY),
             )
         }
@@ -1096,16 +1167,28 @@ object SettingsLive {
                     id = id.toString(),
                     mark = mark(id),
                     name = name(id),
+                    // A network's worth is a fiat figure: the mask while
+                    // hidden, and withheld (`null` from the one helper) while
+                    // the display currency is not the person's yet.
                     amount = if (view.hidden) MASK else money.fiat(usd),
+                    amountWithheld = !view.hidden && !money.settled,
                 )
             }
         val total = view.display_total_usd ?: view.cached_total_usd
+        // "Total {{amount}}": the mask while hidden or unknown; while the
+        // currency is on its way the line is not said, its room kept.
+        val totalWithheld = !view.hidden && total != null && !money.settled
         return fallback.copy(
             title = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TITLE),
-            summary = strings.t(
-                I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL,
-                mapOf("amount" to if (view.hidden || total == null) MASK else money.fiat(total)),
-            ),
+            summary = if (totalWithheld) {
+                ""
+            } else {
+                strings.t(
+                    I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL,
+                    mapOf("amount" to (total?.takeIf { !view.hidden }?.let { money.fiat(it) } ?: MASK)),
+                )
+            },
+            summaryWithheld = totalWithheld,
             pending = pending,
             done = done,
             // The hero's "some tokens couldn't be priced" is answered here by name.
@@ -1154,7 +1237,7 @@ object SettingsLive {
     fun withWalletKeys(
         model: SettingsScreenModel,
         keys: app.getvela.wallet.feature.settings.core.WalletKeys.Result?,
-        backup: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        backup: app.getvela.wallet.feature.settings.core.RegistryBackup.Check?,
         strings: VelaStrings,
         /** Spec 102: the account's signing domain — said only when it is not `getvela.app`. */
         signingDomain: String = "getvela.app",
@@ -1206,7 +1289,11 @@ object SettingsLive {
                 domain = signingDomain.takeIf { !it.equals("getvela.app", ignoreCase = true) && it.isNotBlank() }
                     ?.let { strings.t("settings.signing.keysOn", mapOf("domain" to it)) },
                 backup = ethereumBackupRow(backup, strings),
-                backupExplain = strings.t(k.BACKUP_EXPLAIN),
+                // While the walk is still running the paragraph is the
+                // explanation itself; once it has answered, the core says
+                // whether this state has one (`explain_key`) — a wallet that
+                // can never be copied is not told how a copy is made.
+                backupExplain = if (backup == null) strings.t(k.BACKUP_EXPLAIN) else backup.row?.explainKey?.let { strings.t(it) },
                 copyLabel = strings.t(k.KEYS_COPY),
                 copiedLabel = strings.t(k.KEYS_COPIED),
             ),
@@ -1214,38 +1301,40 @@ object SettingsLive {
     }
 
     /**
-     * The backup as a row: one line, four states, and an affordance only where
-     * a tap does something.
+     * The backup as a row — the core's words, tone and tap (`BackupState::row`),
+     * drawn and not re-mapped: every shell used to map the state itself, and
+     * they disagreed.
      *
-     * Two of those states have nothing to offer — the check is still running,
-     * or it came back "backed up" — so the row is inert there: no chevron, and
-     * (dead-controls #8) no ripple either, because it took taps in every state
-     * while only `NotBackedUp` carried an action.
+     * - still asking ([check] `null`): the title and "Checking…", inert;
+     * - "Copied to Ethereum": said in the positive tone, inert;
+     * - "Not copied yet (optional)": a plain state, never a caution — a copy
+     *   is optional and costs a fee — and a tap opens the sheet (the chevron);
+     * - "Couldn't check. Tap to try again.": a tap asks again, with the glyph
+     *   that says so rather than a chevron that would promise a page (the
+     *   founder's ruling, 2026-09-23);
+     * - "This older wallet can't be copied": a calm end, nothing to tap;
+     * - no row from the core (no registry on Ethereum, no record): not drawn.
      *
-     * "Could not check" is the state a person actually taps, and what they
-     * want is another attempt (founder's ruling, 2026-09-23). So it is
-     * actionable, with the glyph that says "ask again" rather than the chevron
-     * that promises a page: the tap re-runs the very check this screen runs
-     * when it opens.
+     * A row with nothing to do takes no taps at all (dead-controls #8): no
+     * chevron and no ripple.
      */
     fun ethereumBackupRow(
-        state: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        check: app.getvela.wallet.feature.settings.core.RegistryBackup.Check?,
         strings: VelaStrings,
     ): SettingsRowModel? {
         val k = I18nKeys.SettingsUi
-        val (subtitle, trailing) = when (state) {
-            null -> strings.t(k.BACKUP_CHECKING) to RowTrailing.None
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.BackedUp -> strings.t(k.BACKUP_BACKED_UP) to RowTrailing.None
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotBackedUp -> strings.t(k.BACKUP_NOT_BACKED_UP) to RowTrailing.Chevron
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.CouldNotCheck -> strings.t(k.BACKUP_COULD_NOT_CHECK) to RowTrailing.Retry
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.Unavailable,
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotRegistered -> return null
+        val row = if (check == null) null else check.row ?: return null
+        val trailing = when (row?.action) {
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.Copy -> RowTrailing.Chevron
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.Retry -> RowTrailing.Retry
+            app.getvela.wallet.feature.settings.core.RegistryBackup.Action.None, null -> RowTrailing.None
         }
         return SettingsRowModel(
             id = ETHEREUM_BACKUP_ROW,
-            title = strings.t(k.BACKUP_TITLE),
+            title = strings.t(row?.titleKey ?: k.BACKUP_TITLE),
             icon = SettingsIcon.Upload,
-            subtitle = subtitle,
+            subtitle = strings.t(row?.subtitleKey ?: k.BACKUP_CHECKING),
+            subtitlePositive = row?.tone == app.getvela.wallet.feature.settings.core.RegistryBackup.Tone.Positive,
             trailing = trailing,
             actionable = trailing != RowTrailing.None,
         )

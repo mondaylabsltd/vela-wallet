@@ -25,7 +25,7 @@ import {
 const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const identity = {
 	name: 'My Wallet',
 	address: '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c',
@@ -59,6 +59,9 @@ const BALANCE: BalanceView = {
 	unreachable_key: null,
 	internal_chain_ids: [],
 	internal_key: null,
+	checking_key: null,
+	live_key: null,
+	empty_key: null,
 	holdings_loading: false,
 	cached_total_usd: null,
 	switcher: { open: false, loading: false, balances: [], hidden: false }

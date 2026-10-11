@@ -24,7 +24,9 @@ private final class SilentPrompts: SmartCardCtapCeremony.Prompts, @unchecked Sen
     func askPin(product: String, retries: Int, isRetry: Bool) -> String? { nil }
     func askWhichWallet(_ choices: [CtapCredentialChoice]) -> Int? { nil }
     func touchWaiting(kind: String?, product: String) {}
-    func awaitKeyInsertion(probe: @escaping () async -> Bool) async -> Bool { false }
+    func awaitKeyInsertion(
+        probe: @escaping @MainActor () async -> Bool
+    ) async -> SmartCardCtapCeremony.KeyInsertion { .cancelled }
 }
 
 /// What the QR sheet was told, in order, and — when set — a dismissal the
@@ -66,7 +68,7 @@ struct CableDismissTests {
 
     /// The code is dismissed as it appears: the ceremony ends as a cancel —
     /// never "no phone answered" — and the code comes down.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aDismissedCodeEndsItsCeremonyAsACancel() async {
         let screen = CodeScreen()
         screen.dismissOnShow = true
@@ -79,7 +81,7 @@ struct CableDismissTests {
 
     /// The same for a registration: the create flow's "add a key on your
     /// phone" is the same sheet.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aDismissedCodeEndsARegistrationAsACancel() async {
         let screen = CodeScreen()
         screen.dismissOnShow = true
@@ -96,7 +98,7 @@ struct CableDismissTests {
     /// A cancel reaches only the ceremony in flight: after a dismissed one,
     /// and after a cancel with nothing in flight, the next ceremony puts up a
     /// fresh code and is NOT born cancelled.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aCancelNeverReachesTheNextCeremony() async throws {
         let screen = CodeScreen()
         let ceremony = ceremony(screen)

@@ -23,7 +23,7 @@ import type { BatchPreviewRow } from '$lib/core/generated/BatchPreviewRow';
 import type { BatchView } from '$lib/core/generated/BatchView';
 import { amountToInput, groupDigits, numberSeparators } from '$lib/services/locale-format';
 import { shortenAddress } from '$lib/wallet/identity';
-import { exactAmount as exact, tokenAmountText } from '$lib/wallet/live';
+import { exactAmount as exact, MONEY_PENDING, tokenAmountText } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
 import type { BatchImportModel, BatchRefusedModel, BatchRowModel } from './model';
@@ -46,6 +46,21 @@ export interface BatchLiveInputs {
 	 * balance — is what it draws from, so that is the figure beside the total.
 	 */
 	remaining?: string | null;
+	/**
+	 * The person's currency is not known yet: the display-currency machine has
+	 * read nothing (`committed` false, no `pending`), so the code this importer
+	 * was opened with is the USD placeholder's — nobody's choice. The core's
+	 * withhold rule (no fiat in a currency the person did not choose, on any
+	 * surface): the unit, the rate and the sheet's sum then name no currency —
+	 * the pending mark stands where the code will be — until the page tells
+	 * the importer the real one (`set_fiat_code`). PR 3 final note F8.
+	 */
+	currencyUnknown?: boolean;
+}
+
+/** The currency the sheet's figures are in, as it may be SAID: the pending mark while it is nobody's. */
+function saidCode(inputs: BatchLiveInputs): string {
+	return inputs.currencyUnknown === true ? MONEY_PENDING : inputs.batch.fiat_code;
 }
 
 /**
@@ -102,7 +117,7 @@ function previewRow(row: BatchPreviewRow, inputs: BatchLiveInputs): BatchRowMode
 		amount: sendable ? `${exact(row.token_amount)} ${symbol}` : '—',
 		// The figure exactly as the sheet wrote it, so it can be read back
 		// against the sheet — beside the unit the importer took it to be in.
-		source: fiat ? `${sheetFigure(row.raw_amount)} ${batch.fiat_code}` : undefined,
+		source: fiat ? `${sheetFigure(row.raw_amount)} ${saidCode(inputs)}` : undefined,
 		note: row.dup ? m['send.batchDup'] : !row.valid ? m['send.batchBadAddress'] : undefined
 	};
 }
@@ -136,7 +151,7 @@ function rateHint(inputs: BatchLiveInputs): { hint: string; hintTone: 'plain' | 
 	const { batch, m, symbol } = inputs;
 	if (batch.rate_input !== '')
 		return {
-			hint: fill(m['send.batchRateHint'], { code: batch.fiat_code, sym: symbol }),
+			hint: fill(m['send.batchRateHint'], { code: saidCode(inputs), sym: symbol }),
 			hintTone: 'plain'
 		};
 	if (batch.rate_status === 'loading')
@@ -175,7 +190,7 @@ export function liveBatchImport(
 		// token being split — the fixture's CNY/USDT were a picture.
 		unitCaption: m['send.batchUnitCaption'],
 		units: {
-			fiat: fill(m['send.batchUnitFiat'], { code: batch.fiat_code }),
+			fiat: fill(m['send.batchUnitFiat'], { code: saidCode(inputs) }),
 			token: fill(m['send.batchUnitToken'], { sym: symbol })
 		},
 		unit: batch.unit,
@@ -217,7 +232,7 @@ export function liveBatchImport(
 					// its decimal mark is the person's, because "7.558" is seven
 					// thousand to anyone who groups with a dot.
 					value: amountToInput(batch.rate_input),
-					code: batch.fiat_code,
+					code: saidCode(inputs),
 					editable: true,
 					edited: batch.rate_edited,
 					reset: m['send.batchRateReset'],
@@ -246,7 +261,7 @@ export function liveBatchImport(
 						detail:
 							batch.total_fiat === null
 								? undefined
-								: `${groupedFigure(batch.total_fiat)} ${batch.fiat_code}`,
+								: `${groupedFigure(batch.total_fiat)} ${saidCode(inputs)}`,
 						balance:
 							inputs.formHasRows && !inputs.replaces && inputs.remaining != null
 								? fill(m['send.splitRemaining'], {

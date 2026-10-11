@@ -33,7 +33,12 @@ fun WalletRescueSheet(
         onDismiss = { onMove(rescue.swiped()) },
         onClose = { onMove(rescue.closed()) },
         onSignOut = {},
-        onUnreachableFix = { chainId -> onMove(rescue.fix(chainId)) },
+        // Only a row that draws "Fix" can be tapped for it; the check here is
+        // the same word of the core's, so no other door opens an RPC editor
+        // over a network whose RPC is fine.
+        onUnreachableFix = { chainId ->
+            if (model.unreachable.rows.any { it.chainId == chainId && it.action != null }) onMove(rescue.fix(chainId))
+        },
         onBalanceRetry = onBalanceRetry,
         onRpcFixField = onRpcFixField,
         onRpcFixPrimary = onRpcFixPrimary,

@@ -24,7 +24,10 @@ import { ClearSigningCore, FeeSpeedCore } from '$lib/core/client';
 import { toClearLocale } from './core/clear-types';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
+import { rawResolve, resolveSigningMessages } from '$lib/i18n/engine.server';
+import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { simOutcome } from '$lib/core/kernels';
+import { SIM_SAID_KEYS, SIM_COULD_NOT_CHECK_KEY } from './messages';
 import { CLEAR_TERMS } from './terms';
 import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
@@ -32,6 +35,8 @@ import { txKickoff } from './core/tx-params';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
 import { fill } from '$lib/wallet/messages';
+import { MONEY_PENDING } from '$lib/wallet/live';
+import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
 import { tokenMarkFor } from '$lib/flows/marks';
 import { feeRowTap } from '$lib/flows/fee-failure';
 import { wouldFailView } from '$lib/flows/testing/fee-core';
@@ -181,7 +186,7 @@ function inputs(over: Partial<SigningLiveInputs> = {}): SigningLiveInputs {
 		clear: DECODED,
 		guard: INITIAL_GUARD_VIEW,
 		fee: QUOTED_FEE,
-		currency: { code: 'USD', rate: 1, committed: true },
+		currency: { code: 'USD', rate: 1, committed: true, pending: null },
 		m,
 		identity,
 		identicon,
@@ -219,7 +224,10 @@ describe('the fee the sheet shows', () => {
 		expect(model?.fee).toEqual({
 			kind: 'onchain',
 			label: m.feeLabel,
-			value: '0.0021 ETH · ≈$6.30',
+			// The send form's two pieces (PR 3 final note F12): the coin, and
+			// what it costs — the row stands the money under the coin whole.
+			value: '0.0021 ETH',
+			valueFiat: '≈ $6.30',
 			selector: undefined,
 			speed: undefined,
 			warning: undefined,
@@ -1783,10 +1791,21 @@ describe("the wallet's own backup, as the core reads it", () => {
 		expect(rows && 'rows' in rows ? rows.rows.map((r) => [r.label, r.value]) : null).toEqual([
 			[zh.terms.labelNetwork, 'Ethereum'],
 			[zh.terms.labelAddress, '0x88cCA0…266894'],
+			// What the copy makes public beyond the keys: the wallet's own name,
+			// read by the core from the record's bytes.
+			[zh.terms.labelWalletName, 'Interleave'],
 			[zh.terms.labelPublicKeys, '3']
 		]);
 		expect(model.confirm.action).toBe(zh.terms.intentBackUpPublicKeys);
-		expect(zh.terms.intentBackUpPublicKeys).not.toBe('Back up public keys');
+		// The reader's words, and honest ones: it is a copy of the wallet's
+		// record, not "a backup of public keys".
+		expect(zh.terms.intentBackUpPublicKeys).toBe('复制钱包记录');
+		expect(zh.terms.labelWalletName).toBe('钱包名称');
+		expect(zh.terms.labelPublicKeys).toBe('包含的钥匙');
+		const en = resolveSigningMessages('en');
+		expect(en.terms.intentBackUpPublicKeys).toBe("Copy this wallet's record");
+		expect(en.terms.labelWalletName).toBe('Wallet name');
+		expect(en.terms.labelPublicKeys).toBe('Keys included');
 	});
 
 	it('is the wallet’s own only when the request says so — a site sending the same bytes stays a site', () => {
@@ -1999,7 +2018,7 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 		expect(fiat).toContain('1,000,000,000,000,000,000,000,000');
 		// The display currency, converted — not "$" over a euro figure.
 		const eur = buildSigningModel(
-			inputs({ currency: { code: 'EUR', rate: 0.5, committed: true } })
+			inputs({ currency: { code: 'EUR', rate: 0.5, committed: true, pending: null } })
 		)!.blocks.find((b) => b.kind === 'amount');
 		const euros = eur?.kind === 'amount' ? (eur.line.fiat ?? '') : '';
 		expect(euros).not.toContain('$');
@@ -2023,7 +2042,10 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 			expect(model.blocks[1]).toEqual({
 				kind: 'warning',
 				tone: 'danger',
-				text: fill(m.warnWillFailReason, { reason: 'ERC20: transfer amount exceeds balance' })
+				text: fill(m.warnWillFailReason, { reason: 'ERC20: transfer amount exceeds balance' }),
+				// Marked as the line that lands after the sheet has opened (F2):
+				// the sheet keeps its confirm where it was across it.
+				verdict: true
 			});
 			// A warning informs, never blocks (L-D5).
 			expect(model.confirm.enabled).toBe(true);
@@ -2815,5 +2837,580 @@ describe('a fee that would fail, on the sheet (PR 2 polish)', () => {
 		// No failure: two coins open their list; one is the host's.
 		expect(feeRowTap(QUOTED_FEE, 2)).toBe('toggle_coins');
 		expect(feeRowTap(QUOTED_FEE, 1)).toBe('host');
+	});
+});
+
+/**
+ * 0.8 — no fiat figure before the display currency commits, on the signing
+ * sheet: the fee's money, each coin's fee in the selector, and the worth
+ * under the amount (a balance change's). The extension's request window
+ * mounts only this sheet and starts cold on every request, so this is the
+ * surface where "$" before "¥" would be seen most.
+ */
+describe('no fiat figure before the display currency commits — the signing sheet', () => {
+	const PRICED_FEE = {
+		...QUOTED_FEE,
+		options: [
+			{
+				symbol: 'ETH',
+				contract: null,
+				decimals: 18,
+				balance: '1500000000000000000',
+				recipient: '0x1',
+				usd_balance: '4500',
+				usd_price: '3000',
+				amount: '2100000000000000',
+				insufficient: false,
+				selected: true,
+				spent_by_operation: false,
+				short: null
+			}
+		]
+	};
+
+	it('signing_sheet: the fee’s money and the amount’s worth wait; the coin figures do not', () => {
+		expectWithheld('signing_sheet', (currency) => {
+			const model = buildSigningModel(inputs({ fee: PRICED_FEE, currency }))!;
+			// `valueFiatWithheld` is the row's own note that its money is
+			// withheld — the one field that differs by design (as the send
+			// form's fee row).
+			return [{ ...model.fee, valueFiatWithheld: undefined }, model.blocks];
+		});
+		const model = buildSigningModel(inputs({ fee: PRICED_FEE, currency: ON_ITS_WAY }))!;
+		// The fee in its coin is a token amount: drawn. Its money: withheld.
+		// The row is told so (`valueFiatWithheld`): it keeps the money's line
+		// from now, and the figure landing in it moves nothing (F12).
+		expect(model.fee).toMatchObject({
+			kind: 'onchain',
+			value: '0.0021 ETH',
+			valueFiat: `≈ ${MONEY_PENDING}`,
+			valueFiatWithheld: true
+		});
+		// The amount is what is being signed: drawn. Its worth: withheld, on
+		// the line it will stand on.
+		const amount = model.blocks.find((block) => block.kind === 'amount');
+		expect(JSON.stringify(amount)).toContain('100 USDC');
+		expect(JSON.stringify(amount)).toContain(`≈ ${MONEY_PENDING}`);
+		const landed = buildSigningModel(inputs({ fee: PRICED_FEE, currency: COMMITTED }))!;
+		expect(landed.fee).toMatchObject({ value: '0.0021 ETH', valueFiat: '≈ ¥45.36' });
+		expect(landed.fee).not.toHaveProperty('valueFiatWithheld');
+		expect(JSON.stringify(landed.blocks)).toContain('≈ ¥720.00');
+	});
+
+	it('signing_sheet: with the fee coins open, no coin’s fee is priced in a placeholder', () => {
+		// Two coins can pay, so the row opens onto the list.
+		const twoCoins = {
+			...PRICED_FEE,
+			options: [
+				PRICED_FEE.options[0],
+				{
+					...PRICED_FEE.options[0],
+					symbol: 'USDC',
+					contract: '0x' + 'a0'.repeat(20),
+					decimals: 6,
+					balance: '500000000',
+					usd_balance: '500',
+					usd_price: '1',
+					amount: '6300000',
+					selected: false
+				}
+			]
+		};
+		const open = (currency: SigningLiveInputs['currency']) => ({
+			...buildSigningModel(inputs({ fee: twoCoins, currency, feeOpen: true }))!.fee,
+			// The row's own note, as above.
+			valueFiatWithheld: undefined
+		});
+		const selector = open(COMMITTED);
+		expect(selector).toMatchObject({ kind: 'onchain' });
+		expect(selector.kind === 'onchain' && selector.selector?.options).toHaveLength(2);
+		expectWithheld('signing_sheet', open);
+	});
+});
+
+/**
+ * PR 3 device round, item 3 — "No asset changes" is the core's line, and the
+ * web says it. The desktop and Android said it, iOS said another sentence and
+ * this sheet said nothing. The sheet's own simulation (the read the host
+ * already runs for the fee) is read by the core (`simOutcome`); when it was a
+ * check and nothing of the person's moves, the core names the line and the
+ * sheet draws it — a balance-changes card with no rows, after the request's
+ * own blocks. Nothing else is drawn from that simulation (spec 082 RG6).
+ *
+ * The verdicts are the REAL core's, over `eth_simulateV1` envelopes.
+ */
+describe('the sheet says the core’s "No asset changes" (device round, item 3)', () => {
+	const USER = identity.address;
+	const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+	const topic = (address: string) => '0x' + address.slice(2).toLowerCase().padStart(64, '0');
+	const answered = (...calls: object[]) => JSON.stringify({ result: [{ calls }] });
+	const verdictOf = (reply: string) => simOutcome(USER, reply)!;
+	const NOTHING_MOVES = verdictOf(answered({ status: '0x1', logs: [] }));
+	const SOMETHING_MOVES = verdictOf(
+		answered({
+			status: '0x1',
+			logs: [
+				{
+					address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+					topics: [TRANSFER, topic(USER), topic('0x' + '11'.repeat(20))],
+					data: '0x' + 1_000_000n.toString(16).padStart(64, '0')
+				}
+			]
+		})
+	);
+	const REVERTS = verdictOf(answered({ status: '0x0', error: { code: 3, message: 'reverted' } }));
+	const UNREADABLE = verdictOf(answered({ status: '0x2', logs: [] }));
+	const NOT_OFFERED = verdictOf(JSON.stringify({ error: { code: -32603, message: 'crashed' } }));
+	const UNREACHABLE = verdictOf(JSON.stringify({ unreachable: true }));
+	const LINE = 'No asset changes';
+	const cards = (model: { blocks: { kind: string }[] }) =>
+		model.blocks.filter((block) => block.kind === 'balances');
+
+	it('the real core calls it: a check that moves nothing carries the key, and nothing else does', () => {
+		expect(NOTHING_MOVES).toMatchObject({
+			kind: 'deltas',
+			deltas: [],
+			no_change_key: SIM_SAID_KEYS[0]
+		});
+		expect(SOMETHING_MOVES).toMatchObject({ kind: 'deltas', no_change_key: null });
+		expect(SOMETHING_MOVES.deltas).toEqual([
+			{ kind: 'erc20', token: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', delta: '-1000000' }
+		]);
+		expect(REVERTS).toMatchObject({ kind: 'reverts', no_change_key: null });
+		expect(UNREADABLE).toMatchObject({ kind: 'not_offered', no_change_key: null });
+		expect(NOT_OFFERED).toMatchObject({ kind: 'not_offered', no_change_key: null });
+		expect(UNREACHABLE).toMatchObject({ kind: 'unreachable', no_change_key: null });
+	});
+
+	it('a site’s transaction: the card with no rows and the core’s line, after the request’s own blocks', () => {
+		const before = buildSigningModel(inputs())!;
+		expect(cards(before)).toEqual([]);
+		const model = buildSigningModel(inputs({ sim: NOTHING_MOVES }))!;
+		// The request's own blocks, untouched, then the card.
+		expect(model.blocks.slice(0, -1)).toEqual(before.blocks);
+		expect(model.blocks.at(-1)).toEqual({
+			kind: 'balances',
+			title: m.balancesTitle,
+			rows: [],
+			note: LINE,
+			// It lands after the sheet has opened: the confirm is kept where it
+			// was and the card brought into sight (item 1).
+			verdict: true
+		});
+		expect(m.balancesTitle).toBe('Balance changes');
+		// Said once: not in Technical details too.
+		expect(model.tech.simResult).toBeUndefined();
+		// A line informs; the gate is the core's and is not touched by it.
+		expect(model.confirm).toEqual(before.confirm);
+		expect(model.fee).toEqual(before.fee);
+	});
+
+	it('is said in the reader’s language, by the core’s key', () => {
+		const zh = resolveSigningMessages('zh');
+		const model = buildSigningModel(inputs({ m: zh, sim: NOTHING_MOVES }))!;
+		expect(model.blocks.at(-1)).toMatchObject({
+			kind: 'balances',
+			title: '余额变化',
+			rows: [],
+			note: '无资产变动'
+		});
+	});
+
+	it('no balance rows and no revert line are drawn from the simulation (RG6)', () => {
+		const before = buildSigningModel(inputs())!;
+		for (const sim of [SOMETHING_MOVES, REVERTS, null]) {
+			const model = buildSigningModel(inputs({ sim }))!;
+			expect(model.blocks, JSON.stringify(sim)).toEqual(before.blocks);
+			expect(model.tech).toEqual(before.tech);
+		}
+	});
+
+	it('a node that could not check is neither "No asset changes" nor nothing: it is the caution (PR 3)', () => {
+		for (const sim of [UNREADABLE, NOT_OFFERED, UNREACHABLE]) {
+			const model = buildSigningModel(inputs({ sim }))!;
+			expect(cards(model), sim.kind).toHaveLength(1);
+			expect(cards(model)[0], sim.kind).toMatchObject({
+				note: m.warnSimUnavailable,
+				noteTone: 'caution'
+			});
+			expect(JSON.stringify(model.blocks)).not.toContain(LINE);
+			expect(model.tech.simResult).toBeUndefined();
+		}
+	});
+
+	it('the line and the sentence are the core’s: a view without the key says nothing, whatever else it holds', () => {
+		const before = buildSigningModel(inputs())!;
+		// Everything a shell's own rule would read — a check, no moves — with
+		// the core's word taken away.
+		const withoutTheKey = { ...NOTHING_MOVES, no_change_key: null };
+		expect(buildSigningModel(inputs({ sim: withoutTheKey }))!.blocks).toEqual(before.blocks);
+		// A key this build has no words for is never drawn as a dotted path.
+		const unknown = { ...NOTHING_MOVES, no_change_key: 'componentsUi.signing.somethingNew' };
+		expect(buildSigningModel(inputs({ sim: unknown }))!.blocks).toEqual(before.blocks);
+	});
+
+	it('beside the relay’s "will fail": the danger line under the intent, the card after the blocks', () => {
+		recordEstimateReverts(REQUEST.chain_id, identity.address, null);
+		try {
+			const model = buildSigningModel(inputs({ sim: NOTHING_MOVES }))!;
+			expect(model.blocks[1]).toMatchObject({
+				kind: 'warning',
+				text: m.warnWillFail,
+				verdict: true
+			});
+			expect(model.blocks.at(-1)).toMatchObject({ kind: 'balances', note: LINE, verdict: true });
+		} finally {
+			clearEstimateReverts(REQUEST.chain_id, identity.address);
+		}
+	});
+
+	it('the wallet’s own request folds it into Technical details instead (issue 314)', () => {
+		const own: SignView = { ...OPEN_SIGN, request: { ...REQUEST, first_party: true } };
+		const model = buildSigningModel(inputs({ sign: own, sim: NOTHING_MOVES }))!;
+		expect(cards(model)).toEqual([]);
+		expect(model.tech.simResult).toEqual({ label: m.techSimResult, value: LINE });
+		expect(m.techSimResult).toBe('Simulation result');
+		// Nothing to fold while there is no line.
+		expect(buildSigningModel(inputs({ sign: own }))!.tech.simResult).toBeUndefined();
+		expect(buildSigningModel(inputs({ sign: own, sim: REVERTS }))!.tech.simResult).toBeUndefined();
+	});
+
+	it('a batch says it too; a message and a refused request never do', () => {
+		const batch: SignView = {
+			...OPEN_SIGN,
+			request: {
+				...REQUEST,
+				method: 'wallet_sendCalls',
+				kind: 'batch',
+				params_json: JSON.stringify([
+					{ calls: [{ to: '0x' + 'de'.repeat(20), data: '0x', value: '0x0' }] }
+				])
+			}
+		};
+		expect(
+			buildSigningModel(inputs({ sign: batch, sim: NOTHING_MOVES }))!.blocks.at(-1)
+		).toMatchObject({ kind: 'balances', rows: [], note: LINE });
+
+		const message: SignView = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' }
+		};
+		const signed = buildSigningModel(inputs({ sign: message, sim: NOTHING_MOVES }))!;
+		expect(cards(signed)).toEqual([]);
+		expect(signed.tech.simResult).toBeUndefined();
+
+		const refused: SignView = {
+			...OPEN_SIGN,
+			blocked: { function: 'enableModule', selector: '0x610b5925', leg_index: null, nested: false }
+		};
+		for (const first_party of [false, true]) {
+			const model = buildSigningModel(
+				inputs({
+					sign: { ...refused, request: { ...REQUEST, first_party } },
+					sim: NOTHING_MOVES
+				})
+			)!;
+			expect(model.dismissOnly).toBe(m.close);
+			expect(cards(model)).toEqual([]);
+			expect(model.tech.simResult).toBeUndefined();
+		}
+	});
+
+	it('the keys this sheet has words for are the ones the core’s source names', () => {
+		const source = readFileSync('../../rust/crates/vela-core/src/app/sim_outcome.rs', 'utf8');
+		const named = /pub const KEY_NO_CHANGE: &str = "([^"]+)";/.exec(source)?.[1];
+		expect([named]).toEqual([...SIM_SAID_KEYS]);
+	});
+
+	it.each(SUPPORTED_LOCALES)('has words in %s', (locale) => {
+		const said = resolveSigningMessages(locale).simSaid;
+		for (const key of SIM_SAID_KEYS) {
+			expect(said[key], `${key} in ${locale}`).toBe(rawResolve(locale, key));
+			expect(said[key].trim()).not.toBe('');
+			expect(said[key]).not.toBe(key);
+		}
+	});
+});
+
+/**
+ * PR 3 — the confirm waits for the simulation's verdict, four seconds at
+ * most. The gate is the core's (`signConfirmState`, real here) and so is the
+ * wait (`SignView.sim_checking`, `sim_waited_out_key`); what this builder
+ * does is look keys up: the line under the held confirm, and the caution in
+ * the verdict's place when nothing could be checked — because the deadline
+ * passed with no verdict, or because the verdict itself is a not-checked
+ * answer. The second was not drawn at first, and the caution then left the
+ * sheet the moment the pool gave up: said, and taken back.
+ *
+ * The verdicts are the REAL core's, over `eth_simulateV1` envelopes.
+ */
+describe('the simulation’s verdict: waited for, and said when it could not be had (PR 3)', () => {
+	const CHECKING = 'componentsUi.signing.confirmBlock.simChecking';
+	const NOTHING_MOVES = simOutcome(
+		identity.address,
+		JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] })
+	)!;
+	const REVERTS = simOutcome(
+		identity.address,
+		JSON.stringify({ result: [{ calls: [{ status: '0x0', error: { code: 3, message: 'no' } }] }] })
+	)!;
+	const SOMETHING_MOVES = simOutcome(
+		identity.address,
+		JSON.stringify({
+			result: [
+				{
+					calls: [
+						{
+							status: '0x1',
+							logs: [
+								{
+									address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+									topics: [
+										'0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+										'0x' + identity.address.slice(2).toLowerCase().padStart(64, '0'),
+										'0x' + '11'.repeat(20).padStart(64, '0')
+									],
+									data: '0x' + 1_000_000n.toString(16).padStart(64, '0')
+								}
+							]
+						}
+					]
+				}
+			]
+		})
+	)!;
+	/** The three answers that are no check: the node does not offer it, says what nobody can read, or nobody answered. */
+	const NOT_OFFERED = simOutcome(
+		identity.address,
+		JSON.stringify({ error: { code: -32601, message: 'the method eth_simulateV1 does not exist' } })
+	)!;
+	const UNREADABLE = simOutcome(
+		identity.address,
+		JSON.stringify({ result: [{ calls: [{ status: '0x2', logs: [] }] }] })
+	)!;
+	const UNREACHABLE = simOutcome(identity.address, JSON.stringify({ unreachable: true }))!;
+	const NOT_CHECKED = [NOT_OFFERED, UNREADABLE, UNREACHABLE];
+	const checking: SignView = { ...OPEN_SIGN, sim_checking: true };
+	const waitedOut: SignView = { ...OPEN_SIGN, sim_waited_out_key: SIM_COULD_NOT_CHECK_KEY };
+	const own = (sign: SignView): SignView => ({
+		...sign,
+		request: { ...REQUEST, first_party: true }
+	});
+	const cards = (model: { blocks: { kind: string }[] }) =>
+		model.blocks.filter((block) => block.kind === 'balances');
+	const CAUTION = {
+		kind: 'balances',
+		title: m.balancesTitle,
+		rows: [],
+		note: m.warnSimUnavailable,
+		noteTone: 'caution',
+		// It lands after the sheet has opened: the confirm is kept where it
+		// was and the card brought into sight.
+		verdict: true
+	};
+
+	it('while it is out, the confirm is shut and says the core’s one line', () => {
+		const ready = buildSigningModel(inputs())!;
+		expect(ready.confirm.enabled).toBe(true);
+		expect(ready.confirm.note).toBeUndefined();
+
+		const held = buildSigningModel(inputs({ sign: checking }))!;
+		expect(held.confirm).toEqual({
+			action: ready.confirm.action,
+			enabled: false,
+			note: m.confirmBlock[CHECKING]
+		});
+		expect(m.confirmBlock[CHECKING]).toBe('Checking what this transaction does…');
+		// Nothing is drawn in the verdict's place meanwhile, and nothing else moves.
+		expect(held.blocks).toEqual(ready.blocks);
+		expect(held.fee).toEqual(ready.fee);
+	});
+
+	it('the line is the gate’s LAST word: a fee still being worked out says its own', () => {
+		const measuring = buildSigningModel(
+			inputs({ sign: checking, fee: { ...QUOTED_FEE, busy: true, confirm_fee_ready: false } })
+		)!;
+		expect(measuring.confirm.enabled).toBe(false);
+		expect(measuring.confirm.note).toBe(
+			m.confirmBlock['componentsUi.signing.confirmBlock.feeMeasuring']
+		);
+	});
+
+	it('past the deadline: the confirm is open and the verdict’s place says, as a caution, that nothing was checked', () => {
+		const ready = buildSigningModel(inputs())!;
+		const model = buildSigningModel(inputs({ sign: waitedOut }))!;
+		expect(model.confirm).toEqual(ready.confirm);
+		// The request's own blocks, untouched, then the card.
+		expect(model.blocks.slice(0, -1)).toEqual(ready.blocks);
+		expect(model.blocks.at(-1)).toEqual(CAUTION);
+		expect(m.warnSimUnavailable).toBe(
+			'Vela couldn’t check what this transaction does. Review it before you sign.'
+		);
+		expect(model.tech.simResult).toBeUndefined();
+	});
+
+	it('the wallet’s own request shows it too — on the sheet, never folded into Technical details', () => {
+		const model = buildSigningModel(inputs({ sign: own(waitedOut) }))!;
+		expect(cards(model)).toEqual([CAUTION]);
+		expect(model.tech.simResult).toBeUndefined();
+		// Its "No asset changes" still folds away, as before (issue 314).
+		const quiet = buildSigningModel(inputs({ sign: own(OPEN_SIGN), sim: NOTHING_MOVES }))!;
+		expect(cards(quiet)).toEqual([]);
+		expect(quiet.tech.simResult).toEqual({ label: m.techSimResult, value: 'No asset changes' });
+	});
+
+	it('a verdict that lands after all takes the caution’s place — the same card, the same slot', () => {
+		// The core has heard `sim_settled`: the key is gone, the verdict is in hand.
+		const landed = buildSigningModel(inputs({ sim: NOTHING_MOVES }))!;
+		const waiting = buildSigningModel(inputs({ sign: waitedOut }))!;
+		expect(landed.blocks.length).toBe(waiting.blocks.length);
+		expect(landed.blocks.at(-1)).toEqual({
+			kind: 'balances',
+			title: m.balancesTitle,
+			rows: [],
+			note: 'No asset changes',
+			verdict: true
+		});
+		// While the core still says "no verdict on the sheet", that is what is
+		// drawn — one card, and never both sentences at once.
+		for (const sign of [waitedOut, own(waitedOut)]) {
+			const both = buildSigningModel(inputs({ sign, sim: NOTHING_MOVES }))!;
+			expect(cards(both)).toEqual([CAUTION]);
+			expect(both.tech.simResult).toBeUndefined();
+		}
+	});
+
+	it('the real core calls a not-checked answer a caution, and names the sentence', () => {
+		for (const sim of NOT_CHECKED) {
+			expect(sim, sim.kind).toMatchObject({
+				deltas: [],
+				notice_risk: 'caution',
+				notice_key: SIM_COULD_NOT_CHECK_KEY,
+				no_change_key: null
+			});
+		}
+		expect(NOT_CHECKED.map((sim) => sim.kind)).toEqual([
+			'not_offered',
+			'not_offered',
+			'unreachable'
+		]);
+		// A revert's notice is another one, in another tone.
+		expect(REVERTS).toMatchObject({ kind: 'reverts', notice_risk: 'danger' });
+		expect(REVERTS.notice_key).not.toBe(SIM_COULD_NOT_CHECK_KEY);
+	});
+
+	it('a not-checked answer draws the caution — and it stays: nothing about the wait puts it there or takes it away', () => {
+		const ready = buildSigningModel(inputs())!;
+		for (const sim of NOT_CHECKED) {
+			// Settled at once (the node said "not offered"): no wait was ever over.
+			const model = buildSigningModel(inputs({ sim }))!;
+			expect(model.blocks.slice(0, -1), sim.kind).toEqual(ready.blocks);
+			expect(model.blocks.at(-1), sim.kind).toEqual(CAUTION);
+			// The confirm is the core's and is open: a caution informs.
+			expect(model.confirm).toEqual(ready.confirm);
+			expect(model.tech.simResult).toBeUndefined();
+			// The wallet's own request the same — on the sheet.
+			const mine = buildSigningModel(inputs({ sign: own(OPEN_SIGN), sim }))!;
+			expect(cards(mine), sim.kind).toEqual([CAUTION]);
+			expect(mine.tech.simResult).toBeUndefined();
+		}
+	});
+
+	it('the deadline, and then the pool gives up: the card that was there is the card that is there', () => {
+		// At the deadline: no verdict, the core's waited-out key.
+		const atDeadline = buildSigningModel(inputs({ sign: waitedOut }))!;
+		// The answer arrives as "nobody reachable", in the step before the
+		// core hears it has settled: both say the same thing.
+		const between = buildSigningModel(inputs({ sign: waitedOut, sim: UNREACHABLE }))!;
+		// Settled: the key is gone, the verdict is what is left.
+		const after = buildSigningModel(inputs({ sim: UNREACHABLE }))!;
+		expect(cards(atDeadline)).toEqual([CAUTION]);
+		// Block for block the same sheet — so nothing lands anew, and nothing moves.
+		expect(JSON.stringify(between.blocks)).toBe(JSON.stringify(atDeadline.blocks));
+		expect(JSON.stringify(after.blocks)).toBe(JSON.stringify(atDeadline.blocks));
+		expect(after.confirm).toEqual(atDeadline.confirm);
+	});
+
+	it('a revert, or a check that moves something, still draws no line of its own (RG6)', () => {
+		const ready = buildSigningModel(inputs())!;
+		for (const sim of [REVERTS, SOMETHING_MOVES]) {
+			// Landing first…
+			expect(buildSigningModel(inputs({ sim }))!.blocks, sim.kind).toEqual(ready.blocks);
+			// …or after the deadline's caution, which it then takes away: a
+			// check did happen. (While the core still says none has, it stands.)
+			expect(cards(buildSigningModel(inputs({ sign: waitedOut, sim }))!)).toEqual([CAUTION]);
+			for (const first_party of [false, true]) {
+				const sign = first_party ? own(OPEN_SIGN) : OPEN_SIGN;
+				const model = buildSigningModel(inputs({ sign, sim }))!;
+				expect(cards(model), sim.kind).toEqual([]);
+				expect(model.tech.simResult).toBeUndefined();
+			}
+		}
+	});
+
+	it('the sentence is the core’s: no key, or a key this build has no words for, draws nothing', () => {
+		const ready = buildSigningModel(inputs())!;
+		for (const key of [null, 'componentsUi.signing.somethingNew', '']) {
+			const model = buildSigningModel(inputs({ sign: { ...OPEN_SIGN, sim_waited_out_key: key } }))!;
+			expect(model.blocks, String(key)).toEqual(ready.blocks);
+			// The same for a verdict's own key.
+			const named = buildSigningModel(inputs({ sim: { ...NOT_OFFERED, notice_key: key } }))!;
+			expect(named.blocks, String(key)).toEqual(ready.blocks);
+		}
+		// The tone is the core's too: the sentence under a tone that is not a
+		// caution's is not this line, and a caution with no key says nothing.
+		for (const notice_risk of ['danger', 'normal', 'safe', null] as const) {
+			const model = buildSigningModel(inputs({ sim: { ...NOT_OFFERED, notice_risk } }))!;
+			expect(model.blocks, String(notice_risk)).toEqual(ready.blocks);
+		}
+	});
+
+	it('a batch says it too; a message never does', () => {
+		const batch: SignView = {
+			...OPEN_SIGN,
+			request: {
+				...REQUEST,
+				method: 'wallet_sendCalls',
+				kind: 'batch',
+				params_json: JSON.stringify([
+					{ calls: [{ to: '0x' + 'de'.repeat(20), data: '0x', value: '0x0' }] }
+				])
+			}
+		};
+		expect(cards(buildSigningModel(inputs({ sign: batch, sim: UNREACHABLE }))!)).toEqual([CAUTION]);
+		// Nobody simulates a message; a verdict handed beside one is not its.
+		const message: SignView = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' }
+		};
+		expect(cards(buildSigningModel(inputs({ sign: message, sim: UNREACHABLE }))!)).toEqual([]);
+	});
+
+	it('a refused request says only its refusal', () => {
+		const refused: SignView = {
+			...waitedOut,
+			sim_checking: false,
+			blocked: { function: 'enableModule', selector: '0x610b5925', leg_index: null, nested: false }
+		};
+		for (const sign of [refused, own(refused)]) {
+			const model = buildSigningModel(inputs({ sign }))!;
+			expect(model.dismissOnly).toBe(m.close);
+			expect(cards(model)).toEqual([]);
+			const answered = { ...sign, sim_waited_out_key: null };
+			expect(cards(buildSigningModel(inputs({ sign: answered, sim: UNREACHABLE }))!)).toEqual([]);
+		}
+	});
+
+	it('the key this sheet has words for is the one the core’s source names, in every language', () => {
+		const source = readFileSync('../../rust/crates/vela-core/src/app/sim_outcome.rs', 'utf8');
+		expect(/pub const KEY_UNAVAILABLE: &str = "([^"]+)";/.exec(source)?.[1]).toBe(
+			SIM_COULD_NOT_CHECK_KEY
+		);
+		for (const locale of SUPPORTED_LOCALES) {
+			const words = resolveSigningMessages(locale).warnSimUnavailable;
+			expect(words, locale).toBe(rawResolve(locale, SIM_COULD_NOT_CHECK_KEY));
+			expect(words.trim(), locale).not.toBe('');
+			expect(words, locale).not.toBe(SIM_COULD_NOT_CHECK_KEY);
+		}
 	});
 });

@@ -125,6 +125,18 @@ enum class ConfirmBlock {
     @SerialName("fee_failed") FeeFailed,
 
     @SerialName("fee_short") FeeShort,
+
+    /**
+     * PR 3: everything else is ready and the wallet's own simulation has not
+     * given its verdict yet ([SignView.sim_checking]). The balance changes
+     * are the one part of the sheet the site being signed for cannot write,
+     * so the confirm waits for them — four seconds at most, the core's own
+     * deadline. The gate's last block: a request still being read, an
+     * amount to choose or a fee being worked out says its own line first.
+     * (A build that could not decode this value would read the whole gate as
+     * unreadable and keep the confirm shut for ever, with no line.)
+     */
+    @SerialName("sim_checking") SimChecking,
 }
 
 /**
@@ -572,6 +584,23 @@ data class SignView(
      * Try again ([failure_retryable]). A core that predates it sends none: `false`.
      */
     val failure_not_sent: Boolean = false,
+    /**
+     * PR 3: the wallet's own simulation of this request is out and its
+     * verdict is not on the sheet yet ([SignEvent.SimStarted]) — the confirm
+     * waits ([ConfirmBlock.SimChecking], once nothing else holds it). Over
+     * when the verdict lands ([SignEvent.SimSettled]) or at the core's
+     * deadline, whichever is first. Never set for a request with no
+     * simulation. This shell shuts nothing on it and runs no clock for it.
+     */
+    val sim_checking: Boolean = false,
+    /**
+     * PR 3: the deadline passed and no verdict is on the sheet — the
+     * verdict's place says THIS line, as a caution, in place of "checking"
+     * (`componentsUi.signing.simUnavailableWarning`, the sentence a node that
+     * could not simulate already draws), and the confirm is open. `null`
+     * again once the simulation's own verdict lands.
+     */
+    val sim_waited_out_key: String? = null,
     val notice: SignNotice? = null,
     val global_chain_id: Int = 0,
     val blocked: SignBlockedView? = null,
@@ -635,6 +664,18 @@ sealed class SignOperation {
     @Serializable
     @SerialName("switch_active_account")
     data class SwitchActiveAccount(val index: Int) : SignOperation()
+
+    /**
+     * PR 3: wait [ms], then answer [SignShellResult.SimVerdictTimerFired]
+     * with the same [id] and [round] — the deadline of the wait the confirm
+     * keeps for the simulation's verdict. A timer and nothing else: it does
+     * not look at the simulation, is not shortened, and is answered even when
+     * the request has gone (the core drops a stale answer by [id] and
+     * [round]). `round` and `ms` are `u32`.
+     */
+    @Serializable
+    @SerialName("sim_verdict_timer")
+    data class SimVerdictTimer(val id: String, val round: Int, val ms: Int) : SignOperation()
 }
 
 @Serializable
@@ -666,6 +707,11 @@ sealed class SignShellResult {
     @Serializable
     @SerialName("account_switched")
     data object AccountSwitched : SignShellResult()
+
+    /** PR 3: the answer to [SignOperation.SimVerdictTimer] — its `ms` passed. */
+    @Serializable
+    @SerialName("sim_verdict_timer_fired")
+    data class SimVerdictTimerFired(val id: String, val round: Int) : SignShellResult()
 }
 
 @Serializable
@@ -809,6 +855,27 @@ sealed class SignEvent {
     @Serializable
     @SerialName("transport_dropped")
     data class TransportDropped(val transport_id: String) : SignEvent()
+
+    /**
+     * PR 3: this shell has sent the wallet's own simulation of request [id]
+     * to the chain. From here until [SimSettled] — or the core's deadline —
+     * the confirm waits. Dispatched in the step that opens the request, and
+     * only when a simulation really is sent: a message has none.
+     */
+    @Serializable
+    @SerialName("sim_started")
+    data class SimStarted(val id: String) : SignEvent()
+
+    /**
+     * PR 3: the simulation's verdict for request [id] is on the sheet — the
+     * judged balance changes, "No asset changes", "expected to fail" or
+     * "could not check". For a checked answer that is once its tokens are
+     * judged, not when the node replied. Every way a simulation ends reaches
+     * it.
+     */
+    @Serializable
+    @SerialName("sim_settled")
+    data class SimSettled(val id: String) : SignEvent()
 }
 
 /**

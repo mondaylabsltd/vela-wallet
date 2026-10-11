@@ -126,6 +126,20 @@ fn back_on_form_of(view: &SignView, responded: bool) -> bool {
         && !responded
 }
 
+/// Whether the core took the approve it was just sent: a pipeline runs, or
+/// has already ended somewhere other than the form (an error on the sheet,
+/// an answer).
+///
+/// The core takes none while its gate is shut — the fee not priced, the
+/// simulation's verdict not on the sheet, the account's previous transaction
+/// still going through — and says nothing: the confirm it was drawn from is
+/// shut, with the line that says why. A click can still land on a frame
+/// drawn before the gate shut. The form it leaves is the form as it was, so
+/// "still on the form" is "nothing was approved", whatever the reason.
+fn approve_taken(view: &SignView, responded: bool) -> bool {
+    !back_on_form_of(view, responded)
+}
+
 /// How often the column looks at its ceremony while a pipeline runs — the
 /// cadence the send and onboarding already poll theirs at (083).
 const CEREMONY_TICK_MS: u64 = 120;
@@ -250,16 +264,9 @@ pub struct SigningHost {
     page_asked: bool,
     /// The core asked to close the column.
     pub closed: bool,
-    /// What the CHAIN says this request would move, judged by `token_trust`.
-    ///
-    /// Empty until the simulation answers, and empty forever when it cannot —
-    /// the sheet says so rather than showing an empty list as "nothing moves".
-    pub sim: Vec<vela_core::app::token_trust::TrustSimJudgment>,
-    /// What the simulation's answer says beside its balances (spec 082 RG6,
-    /// the core's `sim_outcome::notice`): a revert is a danger, a node that
-    /// could not check is a caution — a different sentence from "it ran and
-    /// found nothing", which says nothing here.
-    pub sim_notice: Option<vela_core::app::sim_outcome::SimNotice>,
+    /// The wallet's own simulation of this request: where it stands and what
+    /// it found — what the sheet's verdict place is drawn from.
+    pub sim: Simulation,
     /// The submission already handed to the tracker: the records it closes
     /// (the key it is deduped by — spec 082: a may-have-been-sent op is
     /// handed over under its local hash, and the dedupe must not hang on a
@@ -374,8 +381,7 @@ impl SigningHost {
         // have: the shell must never invent a starting shape for a machine.
         let (view, clear_view, guard_view) = (sign.view(), clear.view(), guard.view());
         let mut host = Self {
-            sim: Vec::new(),
-            sim_notice: None,
+            sim: Simulation::default(),
             transport_id: request.transport_id.clone(),
             request_id: request.id.clone(),
             tab: None,
@@ -458,34 +464,30 @@ impl SigningHost {
     fn begin(&mut self, request: &IncomingRequest, wallet: &str, cx: &mut Context<Self>) {
         let now = now_ms();
 
-        // The machine has to know the world before it can judge a request
-        // against it. Without these two it refuses every transaction with
-        // 4902 — "that chain is not added" — because as far as it knows, none
-        // are. Found by running it: no test could, since the whole point is
-        // what the machine is NOT told.
-        self.dispatch_sign(
-            SignEvent::NetworksChanged {
-                chain_ids: known_chain_ids(),
-            },
-            cx,
+        // What it costs and what it would do are asked of a transaction
+        // only; what is done about its simulation is settled first
+        // ([`sim_plan`]), because the signing machine hears of it in the
+        // same step as the request itself.
+        let calls = crate::executor::sign_request::calls_of(&request.method, &request.params_json);
+        let plan = sim_plan(calls.as_deref(), self.handoff().is_some());
+        let credential_id = self
+            .ctx
+            .keys
+            .first()
+            .map(|key| key.credential_id.clone())
+            .unwrap_or_default();
+        let opening = opening_events(
+            request,
+            wallet,
+            credential_id,
+            known_chain_ids(),
+            now,
+            plan,
+            &mut self.sim,
         );
-        self.dispatch_sign(
-            SignEvent::AccountsChanged {
-                accounts: vec![SignAccountRef {
-                    address: wallet.to_owned(),
-                    credential_id: self
-                        .ctx
-                        .keys
-                        .first()
-                        .map(|key| key.credential_id.clone())
-                        .unwrap_or_default(),
-                }],
-                active_index: 0,
-            },
-            cx,
-        );
-
-        self.dispatch_sign(arrival_of(request, now), cx);
+        for event in opening {
+            self.dispatch_sign(event, cx);
+        }
 
         // What it does. A transaction decodes from its call; typed data and a
         // plain message are their own rungs of the same ladder.
@@ -503,14 +505,14 @@ impl SigningHost {
         }
 
         // What it costs. Only a transaction has a fee.
-        if let Some(calls) =
-            crate::executor::sign_request::calls_of(&request.method, &request.params_json)
-        {
+        if let Some(calls) = calls {
             // And what it would DO. Asked of the chain, off the main thread,
             // and judged by `token_trust` before anything reaches the screen —
             // a simulation is untrusted input, so which deltas may carry a
             // confident number is never this file's call.
-            self.simulate(request.chain_id, wallet.to_owned(), calls.clone(), cx);
+            if plan.sent() {
+                self.simulate(request.chain_id, wallet.to_owned(), calls.clone(), cx);
+            }
             self.request_quote(request.chain_id, wallet.to_owned(), calls, cx);
         }
 
@@ -587,6 +589,14 @@ impl SigningHost {
     /// answers (spec 083 fee review): which coin can pay does not wait on the
     /// token names, and a quote priced before it arrives costs the relay one
     /// more simulation (USDC refused, then ETH).
+    ///
+    /// The sheet has kept the verdict's place since the request opened
+    /// ([`Simulation::begin`]). EVERY way this can end puts a verdict there
+    /// and tells the signing machine so in the same step
+    /// ([`Self::verdict_landed`], PR 3 fix C): the judged balances, the
+    /// core's notice for a revert or a node that could not check — and a
+    /// simulation or a judgment that fell over, which is one nobody could
+    /// read. If the column has gone meanwhile there is nobody to tell.
     fn simulate(
         &mut self,
         chain_id: u32,
@@ -594,22 +604,28 @@ impl SigningHost {
         calls: Vec<FeeCall>,
         cx: &mut Context<Self>,
     ) {
+        use vela_core::app::sim_outcome::SimOutcome;
         cx.spawn(async move |host, cx| {
             let fee_calls = calls.clone();
             let sim_wallet = wallet.clone();
             let outcome = cx
                 .background_executor()
-                .spawn(async move { crate::executor::sim::simulate(&sim_wallet, &calls, chain_id) })
-                .await;
+                .spawn(async move {
+                    crate::panic_report::guarded(|| {
+                        crate::executor::sim::simulate(&sim_wallet, &calls, chain_id)
+                    })
+                })
+                .await
+                // No answer anybody could read: the core's "no node
+                // answered", which draws "couldn't check".
+                .unwrap_or(SimOutcome::Unreachable);
             let notice = vela_core::app::sim_outcome::notice(&outcome);
-            let vela_core::app::sim_outcome::SimOutcome::Deltas { deltas } = outcome else {
+            let SimOutcome::Deltas { deltas } = outcome else {
                 // A revert moves nothing, and a node that could not check says
                 // nothing about what moves. NOT "nothing moves" — the notice is
                 // the sentence for each.
                 host.update(cx, |host, cx| {
-                    host.sim = Vec::new();
-                    host.sim_notice = notice;
-                    cx.notify();
+                    host.verdict_landed(SimVerdict::noticed(notice), cx);
                 })
                 .ok();
                 return;
@@ -625,20 +641,44 @@ impl SigningHost {
             if told.is_err() {
                 return;
             }
-            let judgments = cx
+            let judged = cx
                 .background_executor()
-                .spawn(
-                    async move { crate::executor::token_trust::judge(&wallet, chain_id, deltas) },
-                )
+                .spawn(async move {
+                    // Nobody judged is no judgment and no line — the sheet's
+                    // could-not-check, never "nothing moves".
+                    crate::panic_report::guarded(|| {
+                        crate::executor::token_trust::judge(&wallet, chain_id, deltas)
+                    })
+                    .unwrap_or_default()
+                })
                 .await;
+            // Told only now: a checked answer's verdict is its JUDGMENTS,
+            // ready, not the node's reply.
             host.update(cx, |host, cx| {
-                host.sim = judgments;
-                host.sim_notice = notice;
-                cx.notify();
+                host.verdict_landed(
+                    SimVerdict {
+                        judgments: judged.judgments,
+                        notice,
+                        no_change: judged.no_change_key,
+                    },
+                    cx,
+                );
             })
             .ok();
         })
         .detach();
+    }
+
+    /// The simulation's verdict is in: on the sheet from this frame, and —
+    /// in the same step — the signing machine is told it is there, when it
+    /// was told the simulation was out ([`Simulation::land`]). The confirm
+    /// stops waiting on the core's word, never on this column's.
+    fn verdict_landed(&mut self, verdict: SimVerdict, cx: &mut Context<Self>) {
+        let request_id = self.request_id.clone();
+        if let Some(event) = self.sim.land(verdict, &request_id) {
+            self.dispatch_sign(event, cx);
+        }
+        cx.notify();
     }
 
     /// The fee row, tapped: a failed quote does what its failure says a tap
@@ -678,8 +718,16 @@ impl SigningHost {
         let mut opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
         // 083 F1: the lines the sheet drew under "Balance changes" — none when
         // the simulation reverted or could not run (its notice stood there).
-        opts.balance_changes = approved_changes(&self.sim, self.sim_notice.is_some());
+        opts.balance_changes = approved_changes(&self.sim.judgments, self.sim.notice.is_some());
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
+        // An approve the core did not take approved nothing (`approve_taken`),
+        // and this host must not go on saying it did: `approved` turns the
+        // fee's refresh off (`on_form`) and keeps the request running unseen
+        // after its column closes (`owed_unseen`), and only a pipeline coming
+        // back clears it — none ran. The confirm is still there to press.
+        if !self.closed && !approve_taken(&self.view, self.responded) {
+            self.approved = false;
+        }
     }
 
     // -- the ceremony, in the column (083) -----------------------------------
@@ -1088,6 +1136,18 @@ impl SigningHost {
                     })
                     .detach();
                 }
+                // A timer the core asked for (PR 3: the simulation verdict's
+                // deadline), waited out on gpui's timer like the reading's
+                // and the guard's — and answered whatever has become of the
+                // request, for the core to keep or drop.
+                SignAnswer::After(delay, result) => {
+                    cx.spawn(async move |host, cx| {
+                        cx.background_executor().timer(delay).await;
+                        host.update(cx, |host, cx| host.resolve_sign(id, result, cx))
+                            .ok();
+                    })
+                    .detach();
+                }
                 SignAnswer::Screen => self.answer_transport(id, &effect.operation, cx),
             }
         }
@@ -1345,6 +1405,197 @@ impl Drop for SigningHost {
     fn drop(&mut self) {
         release(&self.ctx.trusted_signer, &self.channel);
     }
+}
+
+/// What a request's arrival does about the wallet's own simulation of it
+/// (PR 3 fix C) — decided once, as the request opens ([`sim_plan`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SimPlan {
+    /// A signature: nothing moves, nothing is simulated, and the sheet keeps
+    /// no place for a verdict.
+    None,
+    /// A transaction with nothing to ask the chain about (no call, or a
+    /// deployment — [`crate::executor::sim::askable`]). Nothing is sent, so
+    /// nothing is waited for: the verdict's place says the core's
+    /// could-not-check from the first frame.
+    Unaskable,
+    /// Sent, and its verdict will stand on this column's sheet. The signing
+    /// machine is told it is out (`SimStarted`), and the confirm waits for
+    /// the verdict — as long as the core says.
+    Awaited,
+    /// Sent — for the fee machine, which reads what the calls move, and for
+    /// the record — on a column that draws no verdict: the hand-off (spec
+    /// 102 D4), where the request is reviewed and consented to on the
+    /// trusted page and this column's one action only opens it. There is no
+    /// verdict here to confirm ahead of, so nothing is announced and
+    /// nothing is held; "Checking what this transaction does…" under a card
+    /// that will never say what it found would be a wait for nothing.
+    Unseen,
+}
+
+impl SimPlan {
+    /// A simulation goes out to the chain.
+    pub(crate) fn sent(self) -> bool {
+        matches!(self, Self::Awaited | Self::Unseen)
+    }
+}
+
+/// [`SimPlan`] for a request: `calls` is what it would submit (`None` for a
+/// signature), `handed_off` whether this column hands the request to a
+/// trusted page instead of drawing it ([`SigningHost::handoff`]).
+pub(crate) fn sim_plan(calls: Option<&[FeeCall]>, handed_off: bool) -> SimPlan {
+    match calls {
+        None => SimPlan::None,
+        Some(calls) if !crate::executor::sim::askable(calls) => SimPlan::Unaskable,
+        Some(_) if handed_off => SimPlan::Unseen,
+        Some(_) => SimPlan::Awaited,
+    }
+}
+
+/// A simulation's verdict, as it lands on the sheet.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct SimVerdict {
+    /// What the chain says the request would move, judged by `token_trust`.
+    pub judgments: Vec<vela_core::app::token_trust::TrustSimJudgment>,
+    /// The core's notice for an answer that is not a check that ran: a
+    /// revert, or a node that could not check (`sim_outcome::notice`).
+    pub notice: Option<vela_core::app::sim_outcome::SimNotice>,
+    /// The core's line for a check under which nothing of the person's
+    /// moves (`TrustSimView.no_change_key`).
+    pub no_change: Option<String>,
+}
+
+impl SimVerdict {
+    /// An answer with no balances to judge: its notice is the verdict.
+    pub(crate) fn noticed(notice: Option<vela_core::app::sim_outcome::SimNotice>) -> Self {
+        Self {
+            notice,
+            ..Self::default()
+        }
+    }
+}
+
+/// The wallet's own simulation of the request on the sheet, as its column
+/// holds it: where it stands, what it found — and whether the signing
+/// machine was told it is out, which is what makes the confirm wait for its
+/// verdict (PR 3 fix C).
+///
+/// The column decides nothing about the confirm. It says two things to the
+/// signing machine, each once and each in the same step as the thing it
+/// describes: "the simulation is out" ([`Self::begin`] — with the request,
+/// before anything is drawn) and "its verdict is on the sheet"
+/// ([`Self::land`] — in the step that puts it there). Whether the confirm
+/// waits between the two, for how long, and what the sheet says when the
+/// wait runs out are the core's (`sign_request`'s wait, `sign_confirm`'s
+/// gate); this column starts no timer of its own and shuts no button.
+#[derive(Debug, Default)]
+pub struct Simulation {
+    /// Asked or not, and back or not (PR 3 final note F2) — what the sheet
+    /// keeps the verdict's place by, from the request's first frame, so the
+    /// answer landing moves nothing.
+    pub stage: crate::signing::live::SimStage,
+    /// What the CHAIN says this request would move, judged by `token_trust`.
+    ///
+    /// Empty until the simulation answers, and empty forever when it cannot —
+    /// the sheet says so rather than showing an empty list as "nothing moves".
+    pub judgments: Vec<vela_core::app::token_trust::TrustSimJudgment>,
+    /// What the simulation's answer says beside its balances (spec 082 RG6,
+    /// the core's `sim_outcome::notice`): a revert is a danger, a node that
+    /// could not check is a caution — a different sentence from "it ran and
+    /// found nothing", which says nothing here.
+    pub notice: Option<vela_core::app::sim_outcome::SimNotice>,
+    /// The core's quiet line for a checked answer that moves nothing of the
+    /// person's (`TrustSimView.no_change_key`): the sheet says "No asset
+    /// changes" exactly when this is `Some`, and never because
+    /// [`Self::judgments`] happens to be empty — empty is also what a
+    /// judgment that never came looks like.
+    pub no_change: Option<String>,
+    /// The signing machine was told this simulation is out (`SimStarted`),
+    /// so it is told when its verdict is on the sheet (`SimSettled`).
+    announced: bool,
+}
+
+impl Simulation {
+    /// The request opens. What the sheet keeps for its simulation from the
+    /// first frame — and what the signing machine is told in this same
+    /// step: `SimStarted`, only when a simulation really goes out AND its
+    /// verdict will stand on this sheet.
+    pub(crate) fn begin(&mut self, plan: SimPlan, request_id: &str) -> Option<SignEvent> {
+        use crate::signing::live::SimStage;
+        match plan {
+            SimPlan::None => None,
+            // A question that could not be asked is the core's "this node
+            // does not simulate": its notice, on the sheet at once.
+            SimPlan::Unaskable => {
+                self.stage = SimStage::Landed;
+                self.notice = vela_core::app::sim_outcome::notice(
+                    &vela_core::app::sim_outcome::SimOutcome::NotOffered,
+                );
+                None
+            }
+            SimPlan::Unseen => {
+                self.stage = SimStage::Out;
+                None
+            }
+            SimPlan::Awaited => {
+                self.stage = SimStage::Out;
+                self.announced = true;
+                Some(SignEvent::SimStarted {
+                    id: request_id.to_owned(),
+                })
+            }
+        }
+    }
+
+    /// The verdict is in: what the sheet draws from this frame — and what
+    /// the signing machine is told in this same step: `SimSettled`, when it
+    /// was told the simulation was out.
+    pub(crate) fn land(&mut self, verdict: SimVerdict, request_id: &str) -> Option<SignEvent> {
+        self.judgments = verdict.judgments;
+        self.notice = verdict.notice;
+        self.no_change = verdict.no_change;
+        self.stage = crate::signing::live::SimStage::Landed;
+        self.announced.then(|| SignEvent::SimSettled {
+            id: request_id.to_owned(),
+        })
+    }
+}
+
+/// Everything the signing machine is told in the step that opens a request,
+/// in order.
+///
+/// **The world first.** The machine has to know it before it can judge a
+/// request against it. Without the networks and the account it refuses every
+/// transaction with 4902 — "that chain is not added" — because as far as it
+/// knows, none are. Found by running it: no test could, since the whole
+/// point is what the machine is NOT told.
+///
+/// **Then the request — and, with it, its simulation** (PR 3 fix C): when
+/// one goes out and its verdict will stand on this sheet ([`SimPlan`]), the
+/// machine hears `SimStarted` here, after the request and before anything is
+/// drawn, so no frame ever shows a confirm that is not waiting for it.
+pub(crate) fn opening_events(
+    request: &IncomingRequest,
+    wallet: &str,
+    credential_id: String,
+    chain_ids: Vec<u32>,
+    now_ms: f64,
+    plan: SimPlan,
+    sim: &mut Simulation,
+) -> Vec<SignEvent> {
+    let mut events = vec![
+        SignEvent::NetworksChanged { chain_ids },
+        SignEvent::AccountsChanged {
+            accounts: vec![SignAccountRef {
+                address: wallet.to_owned(),
+                credential_id,
+            }],
+            active_index: 0,
+        },
+        arrival_of(request, now_ms),
+    ];
+    events.extend(sim.begin(plan, &request.id));
+    events
 }
 
 /// One hand-off as the tracker must hear it — every field that can change
@@ -1863,7 +2114,7 @@ mod tests {
             },
             J::Erc20Unverified {
                 token: Some("0xbad".to_owned()),
-                delta: "1000000000000000000000".to_owned(),
+                direction: vela_core::app::token_trust::TrustSimDirection::In,
             },
         ];
         assert_eq!(approved_changes(&drawn, false), Some(drawn.clone()));
@@ -2803,6 +3054,8 @@ mod approve_tests {
         let signing = sign.dispatch(SignEvent::ApproveTapped {
             opts: SignApproveOpts::default(),
         });
+        // The core took it: the host's `approved` stands (`approve_taken`).
+        assert!(approve_taken(&sign.view(), false));
         match signing.as_slice() {
             [
                 Pending {
@@ -3184,5 +3437,642 @@ mod approve_tests {
             tier: Some(estimate.tier),
         });
         assert!(quoted.is_none());
+    }
+}
+
+/// PR 3 fix C on this column's wiring: the confirm waits for the
+/// simulation's verdict, and for nothing else of the column's.
+///
+/// Driven the way the tests above drive the column — a `SigningHost` is a
+/// gpui entity, and this crate builds gpui without its test support — but
+/// with every part that carries the fix the column's own:
+///
+/// - what `begin` tells the signing machine, and in what order
+///   ([`opening_events`], [`sim_plan`]);
+/// - the column's hold on its simulation ([`Simulation`]), answered when a
+///   test says: the chain is the one thing stubbed;
+/// - this shell's sign executor performing every operation the machine
+///   asks for — its timer among them, HELD rather than waited out: the
+///   clock is stopped, and a test lets it pass when it chooses;
+/// - the sheet read as the page reads it: the core's one gate for the
+///   confirm and its line (`signing::live::confirm_state`, the line through
+///   the corpus), the live builder for the verdict's place
+///   (`signing::live::verdict_block`).
+#[cfg(test)]
+mod sim_wait_tests {
+    use super::*;
+    use crate::signing::SigningStrings;
+    use crate::signing::fixtures::Block;
+    use crate::signing::live::SimStage;
+    use vela_core::app::sign_confirm::{ConfirmBlock, SIM_CHECKING_KEY};
+    use vela_core::app::sign_request::SIM_VERDICT_WAIT_MS;
+    use vela_core::app::sim_outcome::{KEY_UNAVAILABLE, SimOutcome};
+
+    const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    const PEER: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+
+    fn send_of(to: &str) -> String {
+        format!(r#"[{{"from":"{ME}","to":"{to}","value":"0x38d7ea4c68000"}}]"#)
+    }
+
+    fn context() -> SignContext {
+        let account = Account {
+            id: "cred0".to_owned(),
+            name: "savings".to_owned(),
+            address: ME.to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: String::new(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: String::new(),
+                transports: "internal".to_owned(),
+                signer_origin: None,
+            }],
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        };
+        SignContext::new(&account, CeremonyChannel::new().ceremony(0))
+    }
+
+    /// One timer the machine asked for and the test has not let pass.
+    struct Held {
+        effect: u64,
+        delay: std::time::Duration,
+        answer: SignShellResult,
+    }
+
+    struct Sheet {
+        request: IncomingRequest,
+        sign: CoreHost<SignRequest>,
+        sim: Simulation,
+        plan: SimPlan,
+        ctx: SignContext,
+        clear: ClearSigningView,
+        guard: GuardView,
+        fee: FeeView,
+        /// The clock, stopped.
+        timers: Vec<Held>,
+        /// Every operation the machine asked this shell for, in order.
+        asked: Vec<SignOperation>,
+    }
+
+    impl Sheet {
+        /// A request opens: what `SigningHost::begin` does, in its order.
+        fn open(method: &str, params_json: &str, handed_off: bool) -> Self {
+            let request = IncomingRequest {
+                id: "rid-1".to_owned(),
+                method: method.to_owned(),
+                params_json: params_json.to_owned(),
+                origin: "https://app.uniswap.org".to_owned(),
+                transport_id: BROWSER_TRANSPORT.to_owned(),
+                chain_id: 1,
+                granted_address: Some(ME.to_owned()),
+            };
+            let ctx = context();
+            let calls = sign_executor::calls_of(&request.method, &request.params_json);
+            let plan = sim_plan(calls.as_deref(), handed_off);
+            let mut sim = Simulation::default();
+            let opening = opening_events(
+                &request,
+                ME,
+                "cred0".to_owned(),
+                vec![1],
+                1_000.0,
+                plan,
+                &mut sim,
+            );
+
+            // The reading and the approval guard, by their real machines —
+            // told what `begin` tells them. A plain send and a message need
+            // nothing fetched, so both are ready at once.
+            let mut clear = CoreHost::<ClearSigning>::new();
+            let kickoff = clear_kickoff(
+                &request.method,
+                &request.params_json,
+                request.chain_id,
+                Some(request.origin.clone()),
+            )
+            .unwrap_or_else(|| unreachable!("{method} has a rung"));
+            let fetches = clear.dispatch(kickoff);
+            assert!(fetches.is_empty(), "this reading needs nothing fetched");
+            let mut guard = CoreHost::<ApprovalGuard>::new();
+            let lookups = guard.dispatch(GuardEvent::ApprovalDetected {
+                method: request.method.clone(),
+                params_json: request.params_json.clone(),
+                chain_id: request.chain_id,
+                wallet_address: Some(ME.to_owned()),
+                read_only: false,
+                now_ms: 1_000.0,
+            });
+            assert!(lookups.is_empty(), "nothing to approve, nothing looked up");
+
+            let mut sheet = Self {
+                request,
+                sign: CoreHost::<SignRequest>::new(),
+                sim,
+                plan,
+                ctx,
+                clear: clear.view(),
+                guard: guard.view(),
+                // A fee that is priced and settled, through the real fee
+                // machine (Ethereum, the gallery's own).
+                fee: crate::signing::fixtures::settled_fee(),
+                timers: Vec::new(),
+                asked: Vec::new(),
+            };
+            for event in opening {
+                sheet.dispatch(event);
+            }
+            sheet
+        }
+
+        fn dispatch(&mut self, event: SignEvent) {
+            let pending = self.sign.dispatch(event);
+            self.pump(pending);
+        }
+
+        /// `SigningHost::pump_sign`, without a window: every operation goes
+        /// to this shell's executor, and a timer is held, not slept.
+        fn pump(&mut self, pending: Vec<Pending<SignOperation>>) {
+            for effect in pending {
+                self.asked.push(effect.operation.clone());
+                match sign_executor::perform(&effect.operation, &self.ctx) {
+                    SignAnswer::Now(result) => {
+                        let next = self.sign.resolve(effect.id, result);
+                        self.pump(next);
+                    }
+                    SignAnswer::After(delay, answer) => self.timers.push(Held {
+                        effect: effect.id,
+                        delay,
+                        answer,
+                    }),
+                    _ => unreachable!(
+                        "an open sheet asks for no work of this kind: {:?}",
+                        effect.operation
+                    ),
+                }
+            }
+        }
+
+        /// The simulation answers: what `SigningHost::verdict_landed` does.
+        fn lands(&mut self, verdict: SimVerdict) {
+            let id = self.request.id.clone();
+            if let Some(event) = self.sim.land(verdict, &id) {
+                self.dispatch(event);
+            }
+        }
+
+        /// The clock is let run: every held timer passes.
+        fn time_passes(&mut self) {
+            for timer in std::mem::take(&mut self.timers) {
+                let next = self.sign.resolve(timer.effect, timer.answer);
+                self.pump(next);
+            }
+        }
+
+        /// The confirm as the page draws it: armed or not, and the line
+        /// under it — the gate's key through the corpus — in `lang`.
+        fn confirm(&self, lang: &str) -> (bool, Option<String>) {
+            let view = self.sign.view();
+            let tier = self.fee.fee.as_ref().map(|estimate| estimate.tier);
+            let state = crate::signing::live::confirm_state(
+                &view,
+                &self.guard,
+                &self.clear,
+                &self.fee,
+                tier,
+            );
+            let loc = crate::loc::Loc::for_language(lang);
+            (
+                state.enabled,
+                state.key.as_deref().map(|key| loc.t(key).to_string()),
+            )
+        }
+
+        fn block(&self) -> Option<ConfirmBlock> {
+            let tier = self.fee.fee.as_ref().map(|estimate| estimate.tier);
+            crate::signing::live::confirm_state(
+                &self.sign.view(),
+                &self.guard,
+                &self.clear,
+                &self.fee,
+                tier,
+            )
+            .block
+        }
+
+        /// The verdict's place as the page draws it, and whether it is one
+        /// to bring into view.
+        fn verdict(&self) -> Option<(Block, bool)> {
+            let s = SigningStrings::resolve(&crate::loc::Loc::for_language("en"));
+            let view = self.sign.view();
+            match crate::signing::live::verdict_block(
+                self.sim.stage,
+                &self.sim.judgments,
+                self.sim.notice.as_ref(),
+                self.sim.no_change.as_deref(),
+                view.sim_waited_out_key.as_deref(),
+                self.request.chain_id,
+                &s,
+            )? {
+                Block::Verdict { mut inner, landed } => {
+                    assert_eq!(inner.len(), 1, "one thing stands in the place");
+                    Some((inner.remove(0), landed))
+                }
+                _ => unreachable!("the place is a verdict block"),
+            }
+        }
+
+        fn timers_asked(&self) -> Vec<&SignOperation> {
+            self.asked
+                .iter()
+                .filter(|op| matches!(op, SignOperation::SimVerdictTimer { .. }))
+                .collect()
+        }
+    }
+
+    fn strings() -> SigningStrings {
+        SigningStrings::resolve(&crate::loc::Loc::for_language("en"))
+    }
+
+    /// "Checking…" in the balance card's own outline: the place while the
+    /// simulation is out.
+    fn is_checking(block: &Block) -> bool {
+        let s = strings();
+        matches!(
+            block,
+            Block::Balances { rows, note: Some(note), note_tone: crate::signing::Tone::Neutral, .. }
+                if rows.is_empty() && *note == s.sim_checking
+        )
+    }
+
+    /// The core's could-not-check sentence, as the caution it is.
+    fn is_could_not_check(block: &Block) -> bool {
+        let s = strings();
+        matches!(
+            block,
+            Block::Warning { tone: crate::signing::Tone::Caution, text }
+                if *text == s.warn_sim_unavailable
+        )
+    }
+
+    /// One coin leaves: a send's verdict, as `token_trust` judged it.
+    fn a_send() -> SimVerdict {
+        SimVerdict {
+            judgments: vec![vela_core::app::token_trust::TrustSimJudgment::Native {
+                delta: "-1000000000000000".to_owned(),
+            }],
+            notice: None,
+            no_change: None,
+        }
+    }
+
+    /// (a) A transaction: from the frame the sheet opens — reading, guard
+    /// and fee all ready — the confirm is SHUT, and the line under it is the
+    /// core's "Checking what this transaction does…". When the simulation
+    /// answers and its verdict is on the sheet, the confirm is armed and the
+    /// line is gone. The deadline passing afterwards changes nothing.
+    #[test]
+    fn a_transactions_confirm_waits_for_its_verdict_and_opens_on_it() {
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        assert_eq!(sheet.plan, SimPlan::Awaited);
+
+        // Held from the first frame: no frame shows an armed confirm.
+        assert_eq!(
+            sheet.confirm("en"),
+            (
+                false,
+                Some("Checking what this transaction does…".to_owned())
+            )
+        );
+        assert_eq!(
+            sheet.confirm("zh"),
+            (false, Some("正在检查这笔交易的结果…".to_owned()))
+        );
+        assert_eq!(sheet.block(), Some(ConfirmBlock::SimChecking));
+        assert!(sheet.sign.view().sim_checking);
+        let (place, landed) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
+        assert!(is_checking(&place) && !landed);
+
+        // The machine asked this shell for ONE thing: its own deadline, and
+        // the executor answers it with a timer of exactly that length.
+        assert_eq!(
+            sheet.timers_asked(),
+            [&SignOperation::SimVerdictTimer {
+                id: "rid-1".to_owned(),
+                round: 1,
+                ms: SIM_VERDICT_WAIT_MS,
+            }]
+        );
+        assert_eq!(sheet.timers.len(), 1);
+        assert_eq!(sheet.timers[0].delay, std::time::Duration::from_secs(4));
+
+        // An approve from a stale frame is not taken: nothing is asked of
+        // the shell, and nothing is signing.
+        let before = sheet.asked.len();
+        sheet.dispatch(SignEvent::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        assert_eq!(sheet.asked.len(), before, "no pipeline started");
+        assert!(!sheet.sign.view().is_signing && !sheet.sign.view().is_submitting);
+        // …and the host says so: nothing was approved, so its refresh
+        // control and its close are the form's still (`SigningHost::approve`).
+        assert!(!approve_taken(&sheet.sign.view(), false));
+
+        // The verdict lands — drawn and told in one step.
+        sheet.lands(a_send());
+        assert_eq!(
+            sheet.confirm("en"),
+            (true, None),
+            "armed, and the line is gone"
+        );
+        assert_eq!(sheet.block(), None);
+        let (place, landed) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
+        assert!(
+            matches!(&place, Block::Balances { rows, .. } if rows.len() == 1),
+            "the balance card"
+        );
+        assert!(landed);
+
+        // Its deadline passes afterwards: the verdict stands.
+        sheet.time_passes();
+        assert_eq!(sheet.confirm("en"), (true, None));
+        assert_eq!(sheet.sign.view().sim_waited_out_key, None);
+        let (place, _) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
+        assert!(matches!(place, Block::Balances { .. }));
+        assert_eq!(sheet.timers_asked().len(), 1, "no second timer");
+    }
+
+    /// (b) The simulation never answers. Nothing of this column's opens the
+    /// confirm: it stays shut for as long as the clock is stopped. When the
+    /// core's deadline passes, the confirm is armed and the verdict's place
+    /// says the could-not-check sentence — the key the core names — as a
+    /// caution, in place of "Checking…". An answer that still lands
+    /// replaces it.
+    #[test]
+    fn a_verdict_that_never_comes_is_waited_out_by_the_cores_deadline() {
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        assert!(!sheet.confirm("en").0, "held from the first frame");
+
+        // The column has no clock of its own: with the timer held, nothing
+        // moves, however often the sheet is drawn.
+        for _ in 0..3 {
+            assert_eq!(sheet.block(), Some(ConfirmBlock::SimChecking));
+            let (place, _) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
+            assert!(is_checking(&place));
+        }
+
+        sheet.time_passes();
+        assert_eq!(sheet.confirm("en"), (true, None), "the confirm opens");
+        let view = sheet.sign.view();
+        assert!(!view.sim_checking);
+        assert_eq!(view.sim_waited_out_key.as_deref(), Some(KEY_UNAVAILABLE));
+        // The sentence drawn IS that key's, in the corpus.
+        assert_eq!(
+            strings().warn_sim_unavailable,
+            crate::loc::Loc::for_language("en").t(KEY_UNAVAILABLE)
+        );
+        assert_eq!(sheet.sim.stage, SimStage::Out, "still no answer of its own");
+        let (place, landed) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
+        assert!(is_could_not_check(&place), "the caution, in the same place");
+        assert!(landed, "and it is brought into view like any verdict");
+
+        // A late answer replaces it, and takes the core's line back off.
+        sheet.lands(a_send());
+        assert_eq!(sheet.sign.view().sim_waited_out_key, None);
+        assert_eq!(sheet.confirm("en"), (true, None), "not shut again");
+        let (place, _) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
+        assert!(matches!(&place, Block::Balances { rows, .. } if rows.len() == 1));
+    }
+
+    /// (c) A message moves nothing: no simulation is announced, no timer is
+    /// asked for, the sheet keeps no place for a verdict — and its confirm
+    /// is never held for one.
+    #[test]
+    fn a_message_is_never_held_and_starts_no_timer() {
+        let params = format!(r#"["0x48656c6c6f","{ME}"]"#);
+        let mut sheet = Sheet::open("personal_sign", &params, false);
+        assert_eq!(sheet.plan, SimPlan::None);
+        assert!(sheet.asked.is_empty(), "nothing asked: {:?}", sheet.asked);
+        assert!(sheet.timers.is_empty());
+        assert!(!sheet.sign.view().sim_checking);
+        assert_eq!(sheet.confirm("en"), (true, None));
+        assert!(sheet.verdict().is_none(), "no place is kept");
+        assert_eq!(sheet.sim.stage, SimStage::NotAsked);
+        // Nothing to let pass, and nothing changes if time does.
+        sheet.time_passes();
+        assert_eq!(sheet.confirm("en"), (true, None));
+    }
+
+    /// (d) A chain that answers "not offered" at once: its notice is on the
+    /// sheet and the machine is told in the SAME step, so no frame after the
+    /// answer shows a held confirm. And a request that could not even be
+    /// asked about (no call, a deployment) is never held at all: nothing is
+    /// sent, nothing announced — "couldn't check" from the first frame.
+    #[test]
+    fn an_answer_of_not_offered_leaves_no_held_frame_behind_it() {
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        assert!(!sheet.confirm("en").0, "out: held");
+        // What `simulate` hands over for any answer that is not a check.
+        sheet.lands(SimVerdict::noticed(vela_core::app::sim_outcome::notice(
+            &SimOutcome::NotOffered,
+        )));
+        // The very next read of the sheet — there is no step in between.
+        assert_eq!(sheet.confirm("en"), (true, None));
+        assert!(!sheet.sign.view().sim_checking);
+        let (place, landed) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
+        assert!(is_could_not_check(&place) && landed);
+        // "Expected to fail" lands the same way, and shuts nothing.
+        let mut reverts = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        reverts.lands(SimVerdict::noticed(vela_core::app::sim_outcome::notice(
+            &SimOutcome::Reverts { reason: None },
+        )));
+        assert_eq!(reverts.confirm("en"), (true, None));
+        assert!(matches!(
+            reverts.verdict(),
+            Some((
+                Block::Warning {
+                    tone: crate::signing::Tone::Danger,
+                    ..
+                },
+                true
+            ))
+        ));
+
+        // Nothing to ask the chain: no call, or a first call that goes
+        // nowhere (a deployment) — handed off or not.
+        let deploy = FeeCall {
+            to: String::new(),
+            value: "0".to_owned(),
+            data: "0x6080604052".to_owned(),
+        };
+        for handed_off in [false, true] {
+            assert_eq!(sim_plan(Some(&[]), handed_off), SimPlan::Unaskable);
+            assert_eq!(
+                sim_plan(Some(std::slice::from_ref(&deploy)), handed_off),
+                SimPlan::Unaskable
+            );
+        }
+        let mut sim = Simulation::default();
+        assert!(sim.begin(SimPlan::Unaskable, "rid-1").is_none());
+        assert_eq!(sim.stage, SimStage::Landed);
+        assert_eq!(
+            sim.notice.as_ref().map(|notice| notice.key),
+            Some(KEY_UNAVAILABLE)
+        );
+        assert!(!SimPlan::Unaskable.sent() && !SimPlan::None.sent());
+        assert!(SimPlan::Awaited.sent() && SimPlan::Unseen.sent());
+    }
+
+    /// What the machine is told as a request opens, and in what order: the
+    /// world, the request, and only then — in the same step — that its
+    /// simulation is out. Told once; and a verdict is told once it lands,
+    /// only for a simulation that was announced.
+    #[test]
+    fn the_simulation_is_announced_with_the_request_and_settled_with_its_verdict() {
+        let request = |method: &str, params: &str| IncomingRequest {
+            id: "rid-9".to_owned(),
+            method: method.to_owned(),
+            params_json: params.to_owned(),
+            origin: "https://app.uniswap.org".to_owned(),
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            chain_id: 1,
+            granted_address: Some(ME.to_owned()),
+        };
+        let kinds = |events: &[SignEvent]| -> Vec<&'static str> {
+            events
+                .iter()
+                .map(|event| match event {
+                    SignEvent::NetworksChanged { .. } => "networks",
+                    SignEvent::AccountsChanged { .. } => "accounts",
+                    SignEvent::RequestArrived { .. } => "arrived",
+                    SignEvent::SimStarted { .. } => "sim_started",
+                    _ => "other",
+                })
+                .collect()
+        };
+        let tx = request("eth_sendTransaction", &send_of(PEER));
+
+        let mut sim = Simulation::default();
+        let events = opening_events(
+            &tx,
+            ME,
+            "cred0".to_owned(),
+            vec![1],
+            1.0,
+            SimPlan::Awaited,
+            &mut sim,
+        );
+        assert_eq!(
+            kinds(&events),
+            ["networks", "accounts", "arrived", "sim_started"]
+        );
+        assert_eq!(sim.stage, SimStage::Out);
+        // On the wire, as the core reads it.
+        assert_eq!(
+            serde_json::to_value(events.last()).ok(),
+            Some(serde_json::json!({ "type": "sim_started", "id": "rid-9" }))
+        );
+        let settled = sim.land(a_send(), "rid-9");
+        assert_eq!(
+            serde_json::to_value(&settled).ok(),
+            Some(serde_json::json!({ "type": "sim_settled", "id": "rid-9" }))
+        );
+        assert_eq!(sim.stage, SimStage::Landed);
+
+        // The hand-off draws no verdict (spec 102 D4): the simulation runs
+        // for the fee machine and the record, and nothing is announced — or
+        // settled — so its one action is never held for a verdict it will
+        // not show.
+        assert_eq!(
+            sim_plan(
+                sign_executor::calls_of(&tx.method, &tx.params_json).as_deref(),
+                true
+            ),
+            SimPlan::Unseen
+        );
+        let mut unseen = Simulation::default();
+        let events = opening_events(
+            &tx,
+            ME,
+            "cred0".to_owned(),
+            vec![1],
+            1.0,
+            SimPlan::Unseen,
+            &mut unseen,
+        );
+        assert_eq!(kinds(&events), ["networks", "accounts", "arrived"]);
+        assert_eq!(unseen.stage, SimStage::Out);
+        assert!(unseen.land(a_send(), "rid-9").is_none());
+        assert_eq!(
+            unseen.judgments.len(),
+            1,
+            "the record still keeps its lines"
+        );
+        let handed = Sheet::open("eth_sendTransaction", &send_of(PEER), true);
+        assert!(handed.asked.is_empty() && handed.timers.is_empty());
+        assert_eq!(handed.confirm("en"), (true, None));
+
+        // A message: the world and the request, and no more.
+        let message = request("personal_sign", &format!(r#"["0x48656c6c6f","{ME}"]"#));
+        let mut none = Simulation::default();
+        let events = opening_events(
+            &message,
+            ME,
+            "cred0".to_owned(),
+            vec![1],
+            1.0,
+            sim_plan(
+                sign_executor::calls_of(&message.method, &message.params_json).as_deref(),
+                false,
+            ),
+            &mut none,
+        );
+        assert_eq!(kinds(&events), ["networks", "accounts", "arrived"]);
+        assert_eq!(none.stage, SimStage::NotAsked);
+    }
+
+    /// The timer is the request's, not a pipeline's and not the column's:
+    /// the executor answers it the same whatever has become of the request
+    /// — the page gone, the column closing — and the core drops what is
+    /// stale. A request refused while it waited leaves nothing held.
+    #[test]
+    fn the_deadline_is_answered_whatever_became_of_the_request() {
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        assert_eq!(sheet.timers.len(), 1);
+        // The person closes the column while the verdict is out: a refusal.
+        sheet.ctx.asker_left();
+        let closed = sheet.sign.dispatch(SignEvent::SwipeDismissed);
+        let answered = closed
+            .iter()
+            .any(|op| matches!(op.operation, SignOperation::SendResponse { .. }));
+        assert!(answered, "the close refuses the request");
+        // The executor still answers the timer, exactly as asked…
+        let timer = SignOperation::SimVerdictTimer {
+            id: "rid-1".to_owned(),
+            round: 1,
+            ms: SIM_VERDICT_WAIT_MS,
+        };
+        assert!(matches!(
+            sign_executor::perform(&timer, &sheet.ctx),
+            SignAnswer::After(delay, SignShellResult::SimVerdictTimerFired { ref id, round: 1 })
+                if delay == std::time::Duration::from_millis(u64::from(SIM_VERDICT_WAIT_MS))
+                    && id == "rid-1"
+        ));
+        // …and the core, handed it, asks for nothing more.
+        let held = sheet.timers.remove(0);
+        let after = sheet.sign.resolve(held.effect, held.answer);
+        assert!(
+            !after
+                .iter()
+                .any(|op| matches!(op.operation, SignOperation::SimVerdictTimer { .. }))
+        );
+        assert_eq!(sheet.sign.view().sim_waited_out_key, None);
+        assert_eq!(
+            SIM_CHECKING_KEY,
+            "componentsUi.signing.confirmBlock.simChecking"
+        );
     }
 }

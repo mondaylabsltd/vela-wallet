@@ -60,11 +60,42 @@ fn stored_code_never_surfaces_before_its_rate() {
     let view = sut.view();
     assert_eq!(view.code, "USD", "JPY may not show until its rate arrives");
     assert!(!view.committed);
+    // … but it is named as the money on its way, so no figure is drawn in
+    // the placeholder's dollars meanwhile (the 102 device run).
+    assert_eq!(view.pending.as_deref(), Some("JPY"));
 
     sut.resolve(rate("JPY", Some(155.0)));
     let view = sut.view();
     assert_eq!((view.code.as_str(), view.rate), ("JPY", Some(155.0)));
     assert!(view.committed);
+    assert_eq!(view.pending, None);
+}
+
+/// Nothing is pending before the preference is read, nor while a first
+/// launch prices its region guess — that is not the person's choice yet,
+/// and it may still end on USD. A later re-read keeps the committed pair
+/// on screen and names nothing pending (no flicker on focus).
+#[test]
+fn only_a_stored_choice_is_named_pending() {
+    let mut sut = Sut::new();
+    assert_eq!(sut.view().pending, None);
+    sut.dispatch(Event::Refresh);
+    assert_eq!(sut.view().pending, None, "still reading the preference");
+    sut.resolve(stored(None));
+    sut.resolve(device(Some("CNY")));
+    let view = sut.view();
+    assert!(!view.committed);
+    assert_eq!(view.pending, None, "the seed is a guess, not a choice");
+
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Refresh);
+    sut.resolve(stored(Some("CNY")));
+    sut.resolve(rate("CNY", Some(7.1)));
+    sut.dispatch(Event::Refresh);
+    sut.resolve(stored(Some("CNY")));
+    let view = sut.view();
+    assert!(view.committed, "the pair on screen stays");
+    assert_eq!(view.pending, None);
 }
 
 /// An unpriceable DISPLAY currency commits as unpriceable — `rate: None`, not
@@ -331,4 +362,71 @@ fn refresh_picks_up_a_changed_preference() {
     sut.resolve(stored(Some("EUR")));
     sut.resolve(rate("EUR", Some(0.85)));
     assert_eq!(sut.view().code, "EUR");
+}
+
+// ---------------------------------------------------------------------------
+// The withhold rule (PR 3 notes 9 and 27)
+// ---------------------------------------------------------------------------
+
+/// No fiat figure is drawn before the currency commits — so the wait has to
+/// end. Every way a launch can go ends in a commit, whatever the sources
+/// answer: a figure withheld is a figure delayed, never one lost.
+#[test]
+fn every_launch_ends_in_a_committed_currency() {
+    // A stored choice, priced.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Refresh);
+    assert!(!sut.view().committed, "nothing may be drawn yet");
+    sut.resolve(stored(Some("CNY")));
+    assert!(!sut.view().committed, "the rate is still out");
+    sut.resolve(rate("CNY", Some(7.1)));
+    assert!(sut.view().committed);
+
+    // A stored choice no source can price: committed with no rate — the
+    // figure then formats as dollars, honestly labelled.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Refresh);
+    sut.resolve(stored(Some("VND")));
+    sut.resolve(rate("VND", None));
+    let view = sut.view();
+    assert!(view.committed);
+    assert_eq!((view.code.as_str(), view.rate), ("VND", None));
+
+    // No choice, a region with nothing to seed: dollars.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Refresh);
+    sut.resolve(stored(None));
+    sut.resolve(device(None));
+    assert!(sut.view().committed);
+
+    // No choice, a region whose currency cannot be priced now: dollars.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Refresh);
+    sut.resolve(stored(None));
+    sut.resolve(device(Some("CNY")));
+    assert!(!sut.view().committed, "the seed's rate is still out");
+    sut.resolve(rate("CNY", None));
+    let view = sut.view();
+    assert!(view.committed);
+    assert_eq!(view.code, "USD");
+}
+
+/// The rule names its surfaces once, here: a shell's list of the places it
+/// draws fiat is held to this one, so none is skipped again.
+#[test]
+fn the_withhold_rule_lists_every_fiat_surface_once() {
+    use vela_core::app::display_currency::FIAT_SURFACES;
+    let unique: std::collections::BTreeSet<&str> = FIAT_SURFACES.into_iter().collect();
+    assert_eq!(unique.len(), FIAT_SURFACES.len(), "a surface twice");
+    for surface in [
+        "send_form",
+        "signing_sheet",
+        "balance_detail",
+        "token_detail",
+    ] {
+        assert!(
+            unique.contains(surface),
+            "{surface}: the surfaces the first pass of the rule missed"
+        );
+    }
 }

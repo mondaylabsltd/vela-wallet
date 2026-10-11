@@ -51,9 +51,7 @@ struct BalanceHeroA11yTests {
     private func elements(of view: some View) async throws -> [Element] {
         _ = Self.automation
         let host = UIHostingController(rootView: view.themed(.light))
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        window.rootViewController = host
-        window.makeKeyAndVisible()
+        let window = HostedWindow.show(host, size: CGSize(width: 390, height: 844))
         defer { window.isHidden = true }
         var found: [Element] = []
         for _ in 0..<40 {

@@ -459,7 +459,11 @@ describe('a dApp record’s summary and balance changes (spec 093)', () => {
 		expect(storedSummary({ action: 'message' })).toEqual({ action: 'message', calls: 0 });
 	});
 
-	it('balance changes pass as judged; one line of another shape drops them all', () => {
+	// PR 3: the shape of an unverified token's line changed (a `delta` then, a
+	// `direction` now), and this side's own decoder asked every line for a
+	// `delta` — it would have dropped the lines of every record the newer
+	// build writes. There is one reader now, the core's, and it reads both.
+	it('balance changes go to the core as stored, in either shape', () => {
 		const lines = [
 			{ type: 'native', delta: '-1' },
 			{
@@ -470,26 +474,70 @@ describe('a dApp record’s summary and balance changes (spec 093)', () => {
 				decimals: 6,
 				in_trusted_set: true
 			},
-			{ type: 'erc20_unverified', token: null, delta: '7' }
+			{ type: 'erc20_unverified', token: null, direction: 'in' }
 		];
-		expect(storedJudgments(lines)).toEqual(lines);
-		expect(
-			toFeedRecord({
-				...SIGNATURE,
-				type: 'dapp_tx',
-				balanceChanges: lines as LocalTransaction['balanceChanges']
-			})?.balance_changes
-		).toEqual(lines);
-		for (const bad of [
-			[],
-			'x',
-			[{ type: 'native', delta: 1 }],
-			[{ type: 'erc20_trusted', token: '0x1', delta: '1', symbol: 'X' }],
-			[...lines, { type: 'nft', delta: '1' }]
-		]) {
-			expect(storedJudgments(bad), JSON.stringify(bad)).toBeNull();
+		// As written before PR 3: the unverified line still holds its figure.
+		const older = [...lines.slice(0, 2), { type: 'erc20_unverified', token: null, delta: '7' }];
+		for (const stored of [lines, older]) {
+			expect(storedJudgments(stored)).toBe(stored);
+			expect(
+				toFeedRecord({
+					...SIGNATURE,
+					type: 'dapp_tx',
+					balanceChanges: stored as LocalTransaction['balanceChanges']
+				})?.balance_changes
+			).toBe(stored);
+		}
+		// No list is no list.
+		for (const none of [[], 'x', null, undefined, { 0: lines[0] }]) {
+			expect(storedJudgments(none), JSON.stringify(none)).toBeNull();
 		}
 	});
+
+	it('through the core: both shapes make their lines, and a list it cannot read costs the lines, never the row', async () => {
+		const { feedItemsThroughCore } = await import('./feed-through-core');
+		const record = (id: string, balanceChanges: unknown): LocalTransaction => ({
+			...SIGNATURE,
+			id,
+			type: 'dapp_tx',
+			txHash: '0x' + 'f1'.repeat(32),
+			dappSummary: { action: 'call', calls: 1 },
+			balanceChanges: balanceChanges as LocalTransaction['balanceChanges']
+		});
+		const LURE = '5000000000000000000000';
+		const items = await feedItemsThroughCore(
+			[
+				record('dapp-1-tx', [{ type: 'erc20_unverified', token: '0xbad', delta: LURE }]),
+				record('dapp-2-tx', [{ type: 'erc20_unverified', token: '0xbad', direction: 'out' }]),
+				// Not a judgment at all, and one line of a kind nobody knows.
+				record('dapp-3-tx', [{ type: 'native', delta: 1 }]),
+				record('dapp-4-tx', [
+					{ type: 'native', delta: '-1' },
+					{ type: 'nft', delta: '1' }
+				])
+			],
+			ME,
+			1_700_000_100_000
+		);
+		const changes = Object.fromEntries(items.map((it) => [it.id, it.dapp?.changes ?? null]));
+		// The older record keeps its line — as a direction, its figure gone.
+		expect(changes['dapp-1-tx']).toEqual([
+			{ direction: 'in', verified: false, symbol: '', value: null, decimals: null }
+		]);
+		expect(changes['dapp-2-tx']).toEqual([
+			{ direction: 'out', verified: false, symbol: '', value: null, decimals: null }
+		]);
+		expect(JSON.stringify(items)).not.toContain('5000');
+		// All four records are rows; the two unreadable lists say nothing.
+		expect(Object.keys(changes).sort()).toEqual([
+			'dapp-1-tx',
+			'dapp-2-tx',
+			'dapp-3-tx',
+			'dapp-4-tx'
+		]);
+		expect(changes['dapp-3-tx'] ?? []).toEqual([]);
+		expect(changes['dapp-4-tx'] ?? []).toEqual([]);
+	}, 30_000);
 
 	// Spec 097: the summary carries what the sheet's reading named and the fee
 	// the wallet added; the record carries how its operation ended.

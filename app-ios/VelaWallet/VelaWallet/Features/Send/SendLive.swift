@@ -350,6 +350,20 @@ enum SendLive {
     static func lockNotice(
         _ view: SendViewWire, loc: Loc, networks: WalletNetworks = .builtin
     ) -> SendNoticeModel? {
+        // An add-network attempt that FAILED owes its own sentence — the
+        // person asked for something and it did not happen — and it is said
+        // OVER the lock it could not lift (final notes F6/F27). The core
+        // keeps `lock_error` beside `add_network_msg` after a failed add, so
+        // read lock-first the attempt's answer was never drawn: the notice
+        // went on saying "Network not supported", as if nothing had been
+        // tried.
+        if let said = addNetworkSentence(view.addNetworkMsg, loc: loc) {
+            var mark: TokenMarkModel?
+            if case .network(let chainId) = view.lockError {
+                mark = networkMark(chainId, networks: networks)
+            }
+            return SendNoticeModel(mark: mark, text: said)
+        }
         switch view.lockError {
         case .network(let chainId):
             return SendNoticeModel(
@@ -363,18 +377,17 @@ enum SendLive {
                 text: "\(loc.t("send.lock.tokenTitle")) · \(loc.t("send.lock.tokenBody"))"
             )
         case nil:
-            // An add-network attempt that FAILED still owes a sentence — the
-            // person asked for something and it did not happen.
-            switch view.addNetworkMsg {
-            case .netNotFound:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotFound"))
-            case .netNotCompatible:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netNotCompatible"))
-            case .netAddError:
-                return SendNoticeModel(mark: nil, text: loc.t("send.lock.netAddError"))
-            case nil:
-                return nil
-            }
+            return nil
+        }
+    }
+
+    /// What the last add-network attempt had to say, in the core's sentence.
+    static func addNetworkSentence(_ message: SendAddNetworkMsgWire?, loc: Loc) -> String? {
+        switch message {
+        case .netNotFound: loc.t("send.lock.netNotFound")
+        case .netNotCompatible: loc.t("send.lock.netNotCompatible")
+        case .netAddError: loc.t("send.lock.netAddError")
+        case nil: nil
         }
     }
 
@@ -483,7 +496,14 @@ enum SendLive {
                 // nobody can act on.
                 denomShown: view.denomToggleShown,
                 denomEnabled: view.denomToggleEnabled,
-                denomReason: view.denomToggleReason.map { issue in
+                // Not while the display currency is still on its way (final
+                // note F25): the machine is told "no rate" then, because
+                // there is none to type money against yet — but "can't
+                // convert" is a refusal, and this is a wait of a second or
+                // two: the line would come, go, and move the form under it
+                // both times. Once the pair commits the reason is the core's
+                // again.
+                denomReason: !display.settled ? nil : view.denomToggleReason.map { issue in
                     loc.t("send.warnCannotConvert", vars: [
                         "code": issue.code, "symbol": issue.symbol,
                     ])
@@ -572,6 +592,8 @@ enum SendLive {
                 identiconSeed: !row.address.isEmpty && issue?.address != .invalid ? row.address : "",
                 amount: "\(trim(row.amount)) \(symbol)",
                 removeLabel: loc.t("send.removeRecipient"),
+                pickLabel: loc.t("send.recipientPickAria"),
+                scanLabel: loc.t("send.scanAria"),
                 rowId: row.id,
                 problem: rowProblem(row, in: view, loc: loc)
             )
@@ -720,19 +742,25 @@ enum SendLive {
     }
 
     /// The ≈ line beside a token-denominated figure.
-    private static func fiatLine(
+    ///
+    /// A fiat figure, so the one formatter writes it (`Display.fiat`, PR 3
+    /// notes 9/27): while the person's currency is not known yet the line
+    /// keeps its height and draws nothing — the form under it does not move
+    /// when "≈ ¥…" lands. (The send form and the confirm drew "≈ $…" for
+    /// the first seconds, then changed.)
+    static func fiatLine(
         _ view: SendViewWire, token: SendTokenWire?, display: WalletLive.Display
     ) -> String {
         guard let price = token?.priceUsd, let typed = Double(view.tokenAmount) else { return "" }
-        let converted = typed * price * display.rate
+        let usd = typed * price
         // A figure this large is not a price, it is a parse going wrong
         // somewhere upstream — a device run typed an address into the amount
         // field and this line rendered ¥1.9e49. A fiat line nobody could read
         // is worse than none, and printing it lends the garbage authority.
-        guard converted.isFinite, converted < 1e15 else { return "" }
+        guard usd.isFinite, usd < 1e13 else { return "" }
         // No rate means the figure is still USD, and it says so rather than
         // wearing another currency's glyph (FR-009, since 050).
-        return "≈ \(display.glyph)\(Formats.number(converted, minimumFractionDigits: 2, maximumFractionDigits: 2))"
+        return display.fiatLine(usd, prefix: "≈ ")
     }
 
     private static func feeRow(
@@ -955,8 +983,13 @@ enum SendLive {
         else { return coin }
         let usd = units * price
         guard usd >= feeFiatMinUSD, usd.isFinite else { return coin }
-        let money = usd * display.rate
-        return "\(coin) · ≈\(display.glyph)\(Formats.number(money, minimumFractionDigits: 2, maximumFractionDigits: 2))"
+        // The fee's fiat half is a fiat figure like any other (PR 3 notes
+        // 9/27 — the send form, the confirm and the signing sheet drew it in
+        // dollars before the person's currency was known). Withheld, the row
+        // is the coin amount — which is what is signed — on the same line;
+        // the "≈" half joins it there when the currency commits.
+        guard let money = display.fiat(usd) else { return coin }
+        return "\(coin) · ≈\(money)"
     }
 
     /// The coin the fee row names, in the core's token mark — the core's
@@ -1143,11 +1176,12 @@ enum SendLive {
             breakdown = sweep.rows
             amount = loc.t("componentsTx.receipt.assetsCount", vars: ["n": String(sweep.rows.count)])
             amountUnit = nil
-            subline = loc.t("send.confirmTotalLine", vars: [
-                "fiat": money(sweep.totalUsd, display: display),
-                "network": view.multiChainId
-                    .flatMap { networks.meta($0)?.displayName } ?? chain,
-            ])
+            let network = view.multiChainId.flatMap { networks.meta($0)?.displayName } ?? chain
+            // "Total ≈ ¥200.90 · Ethereum" — withheld, the network alone on
+            // the same line: the total joins it when the currency commits.
+            subline = money(sweep.totalUsd, display: display).map { fiat in
+                loc.t("send.confirmTotalLine", vars: ["fiat": fiat, "network": network])
+            } ?? network
         } else if view.splitMode, !view.recipients.isEmpty {
             // A split: every payee by name and face, and how many there are.
             // The single "To" row has no one address to name, so it goes —
@@ -1162,7 +1196,7 @@ enum SendLive {
                 Double(view.confirmAmount).map { $0 * price }
             }
             subline = [count, chain].filter { !$0.isEmpty }.joined(separator: " · ")
-                + (fiat.map { " · ≈ \(money($0, display: display))" } ?? "")
+                + (fiat.flatMap { money($0, display: display) }.map { " · ≈ \($0)" } ?? "")
         }
 
         return SendConfirmModel(
@@ -1287,18 +1321,19 @@ enum SendLive {
             return BreakdownRowModel(
                 lead: coinMark(token),
                 label: token.symbol,
-                value: usd.map { "\(value) · ≈\(money($0, display: display))" } ?? value
+                value: usd.flatMap { money($0, display: display) }.map { "\(value) · ≈\($0)" } ?? value
             )
         }
         return (rows, total)
     }
 
     /// A USD figure in the display currency, glyph first — the form's own
-    /// "≈" arithmetic, without the "≈".
-    private static func money(_ usd: Double, display: WalletLive.Display) -> String {
-        let converted = usd * display.rate
-        guard converted.isFinite else { return "" }
-        return "\(display.glyph)\(Formats.number(converted, minimumFractionDigits: 2, maximumFractionDigits: 2))"
+    /// "≈" arithmetic, without the "≈". `nil` for a figure that is not one,
+    /// and while the person's currency is not known yet (`Display.fiat`
+    /// withholds it): each caller then leaves the fiat half off its line.
+    private static func money(_ usd: Double, display: WalletLive.Display) -> String? {
+        guard usd.isFinite else { return nil }
+        return display.fiat(usd)
     }
 
     /// What stopped the confirm page: the relay's treasury, or a submit the
@@ -1787,6 +1822,20 @@ enum SendLive {
 
     // MARK: - SD2C, the payroll importer
 
+    /// What stands where the importer's currency code will be while the
+    /// person's currency is not known (`batchImport(currencyUnknown:)`).
+    static let batchCurrencyPending = "…"
+
+    /// The currency the importer's figures are read as, as it is TOLD the
+    /// importer (final note F8): the committed code, else the stored choice
+    /// on its way — and `nil` while neither is known, when the importer keeps
+    /// the placeholder it needs to exist at all and the sheet says no code.
+    static func batchCurrency(_ currency: CurrencyViewWire?) -> String? {
+        guard let currency else { return nil }
+        if currency.committed { return WalletLive.Display.from(currency).code }
+        return currency.pending
+    }
+
     /// The web's `liveBatchImport`, word for word: the core parsed, priced and
     /// gated; this only says so.
     ///
@@ -1797,12 +1846,22 @@ enum SendLive {
     ///
     /// `replaces` is the person's choice, made on this sheet: an import ADDS to
     /// the rows already on the form unless they asked for it to replace them.
+    ///
+    /// `currencyUnknown` is the withhold rule on this surface (final note
+    /// F8): nothing has been read of the person's display currency yet, so
+    /// the code the importer was opened with is the placeholder's "USD" —
+    /// nobody's choice — and it is not SAID anywhere: the unit, the rate, the
+    /// rate's hint and the sheet's sum carry the pending mark where the code
+    /// will be, on the same lines, until `BatchStore.setFiatCode` tells the
+    /// importer the real one.
     static func batchImport(
         _ batch: BatchViewWire, view: SendViewWire, on model: BatchImportModel, loc: Loc,
-        replaces: Bool = false
+        replaces: Bool = false, currencyUnknown: Bool = false
     ) -> BatchImportModel {
         let symbol = view.selectedToken?.symbol ?? ""
         let count = batch.recipientCount
+        // The currency the sheet's figures are in, as it may be said.
+        let code = currencyUnknown ? batchCurrencyPending : batch.fiatCode
         // Whether there is anyone on the form for an import to meet — the
         // core's own count, read back from the room it reports.
         let formHasRows = view.splitImportRoom < BatchStore.maxRecipients
@@ -1813,7 +1872,7 @@ enum SendLive {
                     vars: ["count": String(count)]
                 ),
                 value: "\(trim(batch.totalToken)) \(symbol)",
-                detail: batch.totalFiat.map { "\($0) \(batch.fiatCode)" },
+                detail: batch.totalFiat.map { "\($0) \(code)" },
                 // Adding to people already typed, what is left to give out is
                 // the figure that matters; otherwise the balance itself.
                 balance: formHasRows && !replaces && view.splitRemaining != nil
@@ -1838,7 +1897,7 @@ enum SendLive {
                 ))
             : nil
         let rateValue = switch batch.rateStatus {
-        case .ok: "\(batch.rateInput) \(batch.fiatCode)"
+        case .ok: "\(batch.rateInput) \(code)"
         case .loading: loc.t("send.batchRateLoading")
         // Unknown, and said so — the core has already refused to apply.
         case .failed: loc.t("send.batchRateFailed")
@@ -1876,7 +1935,7 @@ enum SendLive {
         return BatchImportModel(
             title: model.title,
             closeLabel: model.closeLabel,
-            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": batch.fiatCode]),
+            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": code]),
             unitToken: loc.t("send.batchUnitToken", vars: ["sym": symbol]),
             unit: batch.unit,
             pasteValue: batch.rawText,
@@ -1886,7 +1945,7 @@ enum SendLive {
             rateSection: model.rateSection,
             rateLabel: loc.t("send.batchRateLabel", vars: ["sym": symbol]),
             rateValue: rateValue,
-            rateHint: loc.t("send.batchRateHint", vars: ["code": batch.fiatCode, "sym": symbol]),
+            rateHint: loc.t("send.batchRateHint", vars: ["code": code, "sym": symbol]),
             rateReset: loc.t("send.batchRateReset"),
             rateEdited: batch.rateEdited,
             // The core's own flag. In 按 xDAI 数量 the figures in the file ARE
@@ -1941,7 +2000,6 @@ enum SendLive {
             title: model.title,
             closeLabel: model.closeLabel,
             searchPlaceholder: model.searchPlaceholder,
-            scanRow: model.scanRow,
             groupsTitle: model.groupsTitle,
             groups: book.groups.enumerated().map { index, group in
                 ContactGroupModel(
@@ -1972,14 +2030,13 @@ enum SendLive {
     }
 
     /// The picker while the book is still being read: the drawn chrome —
-    /// title, search, the scan row — and nobody in it. Never the drawing's
+    /// title and search — and nobody in it. Never the drawing's
     /// people (issue #467).
     static func contactSheetReading(on model: ContactPickModel) -> ContactPickModel {
         ContactPickModel(
             title: model.title,
             closeLabel: model.closeLabel,
             searchPlaceholder: model.searchPlaceholder,
-            scanRow: model.scanRow,
             groupsTitle: model.groupsTitle,
             groups: [],
             contactsTitle: model.contactsTitle,

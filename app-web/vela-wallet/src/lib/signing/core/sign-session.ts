@@ -17,7 +17,7 @@ import type { SignEffect, SignRequestSessionOptions } from './sign-types';
 export type SignRequestSession = EffectLoop<SignEvent>;
 
 export function createSignRequestSession(options: SignRequestSessionOptions): SignRequestSession {
-	const executor = createSignExecutor(options.ports);
+	const executor = createSignExecutor(options.ports, options.timer);
 	return createJsonWasmShell<SignView, SignEvent, SignEffect, SignShellResult>(
 		new SignRequestCore(),
 		{

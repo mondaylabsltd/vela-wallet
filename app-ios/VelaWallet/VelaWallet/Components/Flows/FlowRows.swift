@@ -320,15 +320,32 @@ struct StatusChipView: View {
 /// SD2b's split row (component 13): one of N people, what they get, and the
 /// way to drop them.
 ///
-/// The ordinal ("Recipient 2") is a label above the name rather than a number
-/// beside it, because in a split the ROW is the person and the number is only
-/// there to keep three otherwise-similar cards apart.
+/// Two lines, as Android draws the same row (PR 3 note 21):
+///
+/// 1. **"Recipient 2" and the two doors** — the address book and a code, the
+///    two ways this row's OWN address is filled (issue #471), as the single
+///    field's. The ordinal heads the row: in a split the ROW is the person,
+///    and the number is only there to keep three similar cards apart.
+/// 2. **The avatar, the address, the amount and ✕** — who, how much, and the
+///    way to drop them, read left to right as one sentence.
+///
+/// The row used to put all three 44 pt targets beside the address, which left
+/// the address 34 pt on a 390 pt phone, so the amount went to a line of its
+/// own — alone, bottom right, where it read as belonging to nothing. With the
+/// doors on the ordinal's line the address has room AND the amount sits on
+/// the line it belongs to. Every target is still 44 pt; ✕ is under the scan
+/// door, so the right edge is one column.
 struct RecipientCardView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
 
     let recipient: RecipientCardModel
     var onRemove: () -> Void = {}
+    /// This row's own address book (`open_contact_picker` with the row's id).
+    var onPick: () -> Void = {}
+    /// This row's own scanner (`open_scanner` with the row's id): the code
+    /// lands in this row, address only.
+    var onScan: () -> Void = {}
     /// The live fields. `nil` renders exactly as drawn — the gallery and the
     /// screenshot sweep stay pixel-identical (the mode-not-a-type shape
     /// `AmountInputView` and `RecipientFieldView` already use).
@@ -338,13 +355,23 @@ struct RecipientCardView: View {
     @State private var amountInHand = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-            HStack(spacing: Tokens.Space.s12) {
+        VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+            // Line 1: which recipient, and the two doors to its address.
+            HStack(spacing: Tokens.Space.s0) {
+                Text(verbatim: recipient.ordinal)
+                    .typeRole(Typography.label.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .lineLimit(1)
+                Spacer(minLength: Tokens.Space.s8)
+                FlowIconButton(glyph: .userRound, label: recipient.pickLabel, action: onPick)
+                    .accessibilityIdentifier("send.row.pick.\(recipient.id)")
+                FlowIconButton(glyph: .qrCode, label: recipient.scanLabel, action: onScan)
+                    .accessibilityIdentifier("send.row.scan.\(recipient.id)")
+            }
+            // Line 2: who, how much, and the way to drop the row.
+            HStack(spacing: Tokens.Space.s8) {
                 IdenticonAvatar(seed: recipient.identiconSeed, size: WalletGeometry.rowIcon)
-                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: recipient.ordinal)
-                        .typeRole(Typography.caption.scaled(textScale))
-                        .foregroundStyle(theme.fgSubtle)
+                Group {
                     if let address {
                         TextField(recipient.name, text: address)
                             .font(Typography.monoAddressDetail.scaled(textScale).font)
@@ -361,19 +388,18 @@ struct RecipientCardView: View {
                             .truncationMode(.middle)
                     }
                 }
-                Spacer(minLength: Tokens.Space.s8)
-                if let amount {
-                    // Issue #331: the amount is a WELL a full control tall (the
-                    // web's `.amount-well`) — it was a bare one-line figure with
-                    // the ✕ 12pt to its right, and SwiftUI answers a touch NEAR
-                    // a button (its touch radius, ~20pt here), so a tap just
-                    // past the "0" dropped the recipient. The field now runs on
-                    // to the ✕'s own 44pt target: the gap between the well and
-                    // the ✕ is still field, so no point short of the ✕ is left
-                    // for the ✕ to claim. The well is seen while it is wanted:
-                    // empty, or in hand.
-                    let well = amount.wrappedValue.isEmpty || amountInHand
-                    HStack(spacing: Tokens.Space.s0) {
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // The amount runs on to ✕'s own 44 pt target with no gap
+                // between them (issue #331): no point short of ✕ is left for
+                // ✕ to claim from a tap meant for the figure.
+                HStack(spacing: Tokens.Space.s0) {
+                    if let amount {
+                        // Issue #331: the amount is a WELL a full control tall
+                        // (the web's `.amount-well`) — a bare one-line figure
+                        // invited a tap that SwiftUI handed to the ✕ beside
+                        // it. The well is seen while it is wanted: empty, or
+                        // in hand.
+                        let well = amount.wrappedValue.isEmpty || amountInHand
                         AmountTextField(
                             text: amount,
                             placeholder: "0",
@@ -381,21 +407,21 @@ struct RecipientCardView: View {
                             color: theme.fgBase,
                             alignment: .right,
                             minHeight: Tokens.Layout.hitTarget,
-                            room: (Tokens.Space.s8, Tokens.Space.s8 + Tokens.Space.s12),
+                            room: (Tokens.Space.s8, Tokens.Space.s8),
                             onEditing: { amountInHand = $0 }
                         )
                         .background(
                             RoundedRectangle(cornerRadius: Tokens.Radius.r8)
                                 .fill(well ? theme.bgBase : .clear)
-                                .padding(.trailing, Tokens.Space.s12)
                         )
                         .frame(width: WalletGeometry.splitAmountWidth + Tokens.Space.s12)
-                        removeButton
+                    } else {
+                        Text(verbatim: recipient.amount)
+                            .typeRole(Typography.rowValue.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .lineLimit(1)
+                            .padding(.horizontal, Tokens.Space.s8)
                     }
-                } else {
-                    Text(verbatim: recipient.amount)
-                        .typeRole(Typography.rowValue.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
                     removeButton
                 }
             }
@@ -405,9 +431,16 @@ struct RecipientCardView: View {
                 Text(verbatim: problem)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.errorBase)
+                    .padding(.top, Tokens.Space.s4)
             }
         }
-        .padding(Tokens.Space.s12)
+        // The doors' targets reach the card's top edge and ✕'s its right, so
+        // the glyphs sit an even margin in from both: 4 pt of padding there,
+        // 12 pt where there is text against the edge.
+        .padding(.leading, Tokens.Space.s12)
+        .padding(.trailing, Tokens.Space.s4)
+        .padding(.top, Tokens.Space.s4)
+        .padding(.bottom, Tokens.Space.s12)
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
     }
 

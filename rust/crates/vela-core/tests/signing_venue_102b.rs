@@ -248,6 +248,14 @@ const AT: u64 = 1_791_556_320_000;
 
 #[test]
 fn the_check_time_is_the_clock_today_and_the_date_before() {
+    // Each moment is one unbreakable unit (a no-break space wherever the
+    // format has a space, a word joiner inside a CJK day period); compared
+    // here as written.
+    let checked_time = |at, now, offset, date: &str, time: &str, lang: &str| {
+        let moment = checked_time(at, now, offset, date, time, lang);
+        assert!(!moment.contains(' '), "{moment:?} could break across lines");
+        moment.replace('\u{a0}', " ").replace('\u{2060}', "")
+    };
     let later = AT + 2 * 60 * 1000;
     assert_eq!(
         checked_time(AT, later, 0, "mdy_slash", "h24", "en"),
@@ -278,6 +286,73 @@ fn the_check_time_is_the_clock_today_and_the_date_before() {
     );
     // `auto` and unknown words read as the defaults.
     assert_eq!(checked_time(AT, later, 0, "auto", "auto", "en"), "14:32");
+}
+
+/// The 102 device run: 「检查于 下午」 / 「10:07」 on two lines. The day
+/// period and the clock are glued, and so are a date and its time.
+#[test]
+fn a_checked_time_never_breaks_inside() {
+    let later = AT + 2 * 60 * 1000;
+    let tomorrow = AT + 20 * 60 * 60 * 1000;
+    for (now, language, clock) in [
+        (later, "zh", "h12"),
+        (later, "ja", "h12"),
+        (later, "en", "h12"),
+        (tomorrow, "en", "h24"),
+        (tomorrow, "zh", "h12"),
+    ] {
+        let moment = checked_time(AT, now, 0, "ymd_slash", clock, language);
+        assert!(!moment.contains(' '), "{language} {clock}: {moment:?}");
+    }
+    // A CJK day period is glued too: U+00A0 binds the space, not 下|午.
+    assert_eq!(
+        checked_time(AT, later, 0, "ymd_slash", "h12", "zh"),
+        "下\u{2060}午\u{a0}2:32"
+    );
+}
+
+/// Between two CJK characters a line may break — 「下午」 split after 「下」
+/// on the web at some widths. Every such place inside a moment carries a
+/// word joiner; a Latin-script moment needs none and gets none.
+#[test]
+fn a_checked_time_never_breaks_inside_a_cjk_day_period() {
+    let later = AT + 2 * 60 * 1000;
+    let tomorrow = AT + 20 * 60 * 60 * 1000;
+    // A place a line could break: two neighbours, either of them a Han,
+    // kana or Hangul character, with no joiner and no no-break space between.
+    let cjk = |c: char| matches!(u32::from(c), 0x2E80..=0xA4CF | 0xAC00..=0xD7FF);
+    let breakable = |moment: &str| {
+        let chars: Vec<char> = moment.chars().collect();
+        chars.windows(2).any(|pair| {
+            let glue = |c: char| c == '\u{2060}' || c == '\u{a0}';
+            !glue(pair[0]) && !glue(pair[1]) && (cjk(pair[0]) || cjk(pair[1]))
+        })
+    };
+    for language in ["zh", "zh-TW", "zh-HK", "ja", "ko"] {
+        for (now, clock) in [(later, "h12"), (tomorrow, "h12"), (tomorrow, "h24")] {
+            let moment = checked_time(AT, now, 0, "ymd_slash", clock, language);
+            assert!(!breakable(&moment), "{language} {clock}: {moment:?}");
+            assert!(!moment.contains(' '), "{language} {clock}: {moment:?}");
+        }
+    }
+    assert_eq!(
+        checked_time(AT, later, 0, "ymd_slash", "h12", "ja"),
+        "午\u{2060}後\u{a0}2:32"
+    );
+    // An alphabet: exactly as before, no joiner anywhere — "ÖS" and "CH"
+    // are words, and nothing breaks inside a word.
+    for (now, clock) in [(later, "h12"), (later, "h24"), (tomorrow, "h12")] {
+        for language in [
+            "en", "de", "fr", "es-MX", "pt-BR", "it", "id", "tr", "vi", "ru",
+        ] {
+            let moment = checked_time(AT, now, 0, "ymd_slash", clock, language);
+            assert!(!moment.contains('\u{2060}'), "{language}: {moment:?}");
+        }
+    }
+    assert_eq!(
+        checked_time(AT, later, 0, "ymd_slash", "h12", "en"),
+        "2:32\u{a0}PM"
+    );
 }
 
 // ---------------------------------------------------------------------------

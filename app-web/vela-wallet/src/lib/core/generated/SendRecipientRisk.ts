@@ -3,4 +3,10 @@
 /**
  * Recipient risk signals for the confirm step, best-effort.
  */
-export type SendRecipientRisk = { is_contract: boolean | null, first_time: boolean | null, };
+export type SendRecipientRisk = { is_contract: boolean | null, 
+/**
+ * Nothing was ever sent to this address from this account — the
+ * confirm's 「第一次给这个地址转账」. `None` (unknown, or the person's
+ * own address, which is never a first transfer) draws nothing.
+ */
+first_time: boolean | null, };

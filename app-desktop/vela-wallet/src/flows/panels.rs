@@ -23,8 +23,8 @@ use super::components::{
     CopyButton, GhostPill, accent_button, address_card, danger_button, disabled_accent_button,
     fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option,
     fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row,
-    max_chip, mono_field, network_pill, network_row, qr_card, quiet_button, recipient_card,
-    search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
+    max_chip, mono_field, mono_field_ink, network_pill, network_row, qr_card, quiet_button,
+    recipient_card, search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -98,7 +98,9 @@ pub struct PanelActions {
     /// DA2L, live: opens or folds a dApp record's "Technical details"
     /// (spec 093) — opening it is what reads the stored request.
     pub toggle_technical: Option<Click>,
-    /// DSD2eL's scan row — the address that is on a screen, not in the book.
+    /// DSD2L's scan — the address that is on a screen, not in the book. The
+    /// picker no longer carries one (issue 471): every recipient row has
+    /// its own.
     pub open_scan: Option<Click>,
     /// The panel's own CTA — continue, confirm, done.
     pub advance: Option<Click>,
@@ -114,6 +116,11 @@ pub struct PanelActions {
     pub add_token_tabs: Option<(Click, Click)>,
     /// DT3L native, live: one listener per suggested chain, in order.
     pub add_token_picks: Vec<Click>,
+    /// DT3L native, live: the wizard's RPC field (its draft is the core's
+    /// `custom_rpc`) and the re-check that reads it. `None` draws the
+    /// board's read-only field and a link with nothing behind it.
+    pub add_net_rpc: Option<AddressField>,
+    pub add_net_recheck: Option<Click>,
     /// DSD1L, live: one listener per token row. Empty falls back to
     /// `open_send_form`, which the fixture gives to its first row.
     pub open_send_rows: Vec<Click>,
@@ -175,6 +182,9 @@ pub struct PanelActions {
     /// (078 F-06) — in the order the rows draw.
     pub split_address_fields: Vec<AddressField>,
     pub pick_recipient_rows: Vec<Click>,
+    /// DSD2bL, live: each split row's own scan (issue 471), in the order
+    /// the rows draw — the code lands in that row.
+    pub scan_recipient_rows: Vec<Click>,
     pub remove_recipient_rows: Vec<Click>,
     /// DSD2bL, live: "Use X for the empty rows".
     pub fill_empty: Option<Click>,
@@ -446,6 +456,8 @@ pub fn render(
                 submit: actions.add_to_wallet,
                 tabs: actions.add_token_tabs,
                 picks: actions.add_token_picks,
+                rpc: actions.add_net_rpc,
+                recheck: actions.add_net_recheck,
             },
         ),
         FlowBody::SendPick(model) => send_pick(
@@ -470,7 +482,6 @@ pub fn render(
             identicons,
             window,
             actions.search,
-            actions.open_scan,
             actions.pick_contact,
             actions.pick_group_rows,
         ),
@@ -528,7 +539,7 @@ fn receive(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(model.subtitle.clone()),
+                .child(crate::ui::prose(model.subtitle.clone())),
         )
         .child(flow_search(
             theme,
@@ -721,7 +732,7 @@ fn receive_qr(
                 div()
                     .text_size(theme::text_label())
                     .text_color(theme.fg_subtle)
-                    .child(hint)
+                    .child(crate::ui::prose(hint))
             }))
     }))
     .child(
@@ -730,7 +741,7 @@ fn receive_qr(
             .text_size(theme::text_label())
             .text_center()
             .text_color(theme.fg_subtle)
-            .child(model.warning.clone()),
+            .child(crate::ui::prose(model.warning.clone())),
     )
     .child(clickable(
         "receive-save-image",
@@ -810,7 +821,7 @@ fn deposit_section(deposits: &[DepositEntry], theme: &Theme) -> Option<Div> {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.fg_muted)
-                            .child(meta.clone()),
+                            .child(crate::ui::prose(meta.clone())),
                     ),
             );
         }
@@ -842,7 +853,7 @@ fn history(
                 .text_center()
                 .text_size(theme::text_row_title())
                 .text_color(theme.fg_muted)
-                .child(text.clone()),
+                .child(crate::ui::prose(text.clone())),
         );
     }
     let groups = &model.groups;
@@ -910,7 +921,7 @@ fn tx_detail(
                 .pt(px(4.))
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
-                .child(note.clone()),
+                .child(crate::ui::prose(note.clone())),
         );
     }
     // A dApp call that moved no coin has no figure (083 H2 review): no empty
@@ -1082,7 +1093,7 @@ fn technical_section(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(text.clone())
+                        .child(crate::ui::prose(text.clone()))
                 } else {
                     div()
                         .font_family(theme::font_mono())
@@ -1214,14 +1225,14 @@ fn assets(
                             .text_size(theme::text_row_sub())
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_base)
-                            .child(empty.hint_title.clone()),
+                            .child(crate::ui::prose(empty.hint_title.clone())),
                     )
                     .child(
                         div()
                             .text_size(theme::text_label())
                             .line_height(gpui::relative(1.6))
                             .text_color(theme.fg_muted)
-                            .child(empty.hint_body.clone()),
+                            .child(crate::ui::prose(empty.hint_body.clone())),
                     ),
             );
     }
@@ -1271,6 +1282,8 @@ struct AddTokenActions {
     submit: Option<Click>,
     tabs: Option<(Click, Click)>,
     picks: Vec<Click>,
+    rpc: Option<AddressField>,
+    recheck: Option<Click>,
 }
 
 fn add_token(
@@ -1286,6 +1299,8 @@ fn add_token(
         submit: add_to_wallet,
         tabs,
         picks,
+        rpc: rpc_field,
+        recheck,
     } = actions;
     let mut col = column().child(segmented_toggle(
         theme,
@@ -1382,7 +1397,7 @@ fn add_token(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(detail.clone()),
+                    .child(crate::ui::prose(detail.clone())),
             )
     };
     col = match &model.result {
@@ -1458,7 +1473,8 @@ fn add_token(
             mark,
             name,
             chip,
-            link,
+            note,
+            setup,
             facts,
         } => {
             let mut card = div()
@@ -1489,21 +1505,114 @@ fn add_token(
                         )
                         .child(status_chip(theme, chip)),
                 );
-            if let Some(link) = link {
+            if let Some(note) = note {
                 card = card.child(
                     div()
                         .pt(px(8.))
                         .text_size(theme::text_row_sub())
+                        .line_height(gpui::relative(1.4))
                         .text_color(theme.fg_muted)
-                        .child(link.clone()),
+                        .child(crate::ui::prose(note.clone())),
                 );
             }
             for fact in facts {
                 card = card.child(fact_row(theme, icons, identicons, fact, None));
             }
+            // Where a refused chain can be made ready — an outline button,
+            // never the accent: it is not the action somebody came for. It
+            // was a line of grey text that ended in "↗" and opened nothing.
+            if let Some((label, url)) = setup {
+                let url = url.clone();
+                let open: Click = Box::new(move |_, _, cx| cx.open_url(&url));
+                card = card.child(
+                    div().pt(px(12.)).child(clickable(
+                        ElementId::from("add-token-chain-setup"),
+                        Some(open),
+                        div()
+                            .h(px(40.))
+                            .rounded(px(10.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .border_1()
+                            .border_color(theme.outline_strong)
+                            .text_size(theme::text_row_sub())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.fg_base)
+                            .child(label.clone()),
+                    )),
+                );
+            }
             col.child(card)
         }
     };
+
+    // The wizard's RPC field and the re-check that reads it, under the
+    // result that asks for them (the core's `rpc_field`; PR 3 final notes
+    // F4, F14, F22) — the re-check directly under its field, as the stop's
+    // own sentence orders them: "Enter one, then re-check."
+    if let Some(rpc) = &model.rpc {
+        col = col.child(match rpc_field {
+            Some(field) => {
+                let strings = crate::ui::NameFieldStrings {
+                    label: rpc.label.clone(),
+                    placeholder: rpc.placeholder.clone(),
+                    helper: rpc.notice.clone(),
+                    too_long_hint: SharedString::from(""),
+                };
+                crate::ui::text_field(
+                    "add-token-rpc",
+                    theme,
+                    &strings,
+                    &field.value,
+                    false,
+                    false,
+                    &field.focus,
+                    window,
+                    field.on_change,
+                )
+            }
+            // The board's: the same field, read-only — its placeholder in
+            // the placeholder's ink until something stands in it.
+            None => {
+                let (text, ink) = if rpc.value.is_empty() {
+                    (rpc.placeholder.clone(), theme.fg_subtle)
+                } else {
+                    (rpc.value.clone(), theme.fg_base)
+                };
+                mono_field_ink(theme, Some(rpc.label.clone()), text, ink).child(
+                    div()
+                        .text_size(theme::text_flow_caption())
+                        .line_height(theme::line_height_body())
+                        .text_color(theme.fg_muted)
+                        .child(crate::ui::prose(rpc.notice.clone())),
+                )
+            }
+        });
+        // Settings' re-check, in its own clothes: a link in the info colour
+        // with its refresh.
+        col = col.child(clickable(
+            ElementId::from("add-token-recheck"),
+            recheck,
+            div()
+                .h(px(44.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .gap(px(8.))
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.info_base)
+                .child(icon_img(
+                    icons,
+                    Icon::RefreshCw,
+                    false,
+                    theme.info_base,
+                    14.,
+                ))
+                .child(rpc.recheck.clone()),
+        ));
+    }
 
     // The write that failed, said above the button that failed to do it.
     // `live.rs` has filled this from `MtokView.save_error` since phase 6; the
@@ -1582,14 +1691,16 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
         div()
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_base)
-            .child(notice.body.clone()),
+            // By the CJK line rule, as the detail under it: 「…（链 ID
+            // 424242）」 wrapped its full stop onto a line of its own.
+            .child(crate::ui::prose(notice.body.clone())),
     );
     if let Some(detail) = &notice.detail {
         card = card.child(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(detail.clone()),
+                .child(crate::ui::prose(detail.clone())),
         );
     }
     // Two ways out of the same card: the retry the core offered, and — where
@@ -1629,6 +1740,17 @@ fn notice_card(notice: &SendNotice, theme: &Theme, clicks: NoticeClicks) -> Div 
         row = row.child(clickable(
             "flow-notice-copy",
             Some(copy),
+            pill(theme, label.clone()),
+        ));
+    }
+    // So is a page to open: where a refused network can be made ready.
+    if let Some((label, url)) = &notice.link {
+        any = true;
+        let url = url.clone();
+        let open: Click = Box::new(move |_, _, cx| cx.open_url(&url));
+        row = row.child(clickable(
+            "flow-notice-link",
+            Some(open),
             pill(theme, label.clone()),
         ));
     }
@@ -1813,7 +1935,7 @@ fn send_pick(
                         .text_size(theme::text_label())
                         .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
                         .text_color(theme.fg_muted)
-                        .child(text),
+                        .child(crate::ui::prose(text)),
                 ),
         );
     }
@@ -2026,7 +2148,7 @@ fn send_form_parts(
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(sweep.summary.clone()),
+                        .child(crate::ui::prose(sweep.summary.clone())),
                 )
                 .child(rows)
         }
@@ -2278,12 +2400,14 @@ fn send_form_parts(
                         } else {
                             theme.fg_subtle
                         })
-                        .child(note)
+                        .child(crate::ui::prose(note))
                 })),
         );
     } else if let Some((label, lines, seed)) = &model.recipient {
         // The drawn form: the same raised card as the live one, holding the
-        // address it was given. Clicking it opens the book, as the mock does.
+        // address it was given. Clicking it opens the book, as the mock does;
+        // the QR beside the book is the live form's scan (issue 471), so the
+        // board draws the field the person gets.
         let line = |text: SharedString| {
             div()
                 .font_family(theme::font_mono())
@@ -2292,13 +2416,10 @@ fn send_form_parts(
                 .whitespace_nowrap()
                 .child(text)
         };
-        let card = div()
+        let book = div()
             .flex()
             .items_center()
             .gap(px(8.))
-            .p(px(12.))
-            .rounded(px(12.))
-            .bg(theme.bg_raised)
             .child(
                 div()
                     .flex_none()
@@ -2333,6 +2454,32 @@ fn send_form_parts(
                         18.,
                     )),
             );
+        // Two doors, one card: the address and the book take the card's
+        // width; the scan is its own target, never inside the book's.
+        let card = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .p(px(12.))
+            .rounded(px(12.))
+            .bg(theme.bg_raised)
+            .child(div().flex_1().min_w(px(0.)).child(clickable(
+                "flow-recipient",
+                actions.open_contact_pick.take(),
+                book,
+            )))
+            .child(clickable(
+                "flow-scan-recipient",
+                actions.open_scan.take(),
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(36.))
+                    .rounded_full()
+                    .hover(|el| el.bg(theme.bg_sunken))
+                    .child(icon_img(icons, Icon::QrCode, false, theme.fg_muted, 18.)),
+            ));
         col = col.child(
             div()
                 .flex()
@@ -2344,11 +2491,7 @@ fn send_form_parts(
                         .text_color(theme.fg_subtle)
                         .child(label.clone()),
                 )
-                .child(clickable(
-                    "flow-recipient",
-                    actions.open_contact_pick.take(),
-                    card,
-                )),
+                .child(card),
         );
     }
 
@@ -2366,6 +2509,7 @@ fn send_form_parts(
     let mut amounts = actions.split_amount_fields.drain(..);
     let mut addresses = actions.split_address_fields.drain(..);
     let mut picks = actions.pick_recipient_rows.drain(..);
+    let mut scans = actions.scan_recipient_rows.drain(..);
     let mut removes = actions.remove_recipient_rows.drain(..);
     for (index, recipient) in model.recipients.iter().enumerate() {
         col = col.child(recipient_card(
@@ -2378,6 +2522,7 @@ fn send_form_parts(
                 amount: amounts.next(),
                 address: addresses.next(),
                 pick: picks.next(),
+                scan: scans.next(),
                 remove: removes.next(),
             },
             window,
@@ -2496,7 +2641,7 @@ fn send_form_parts(
                                 div()
                                     .text_size(theme::text_label())
                                     .text_color(theme.fg_muted)
-                                    .child(detail),
+                                    .child(crate::ui::prose(detail)),
                             )
                         }),
                 ),
@@ -2599,10 +2744,16 @@ fn alert_line(theme: &Theme, icons: &mut IconCache, notice: &SendNotice) -> Div 
             color,
             14.,
         )))
-        .child(div().flex_1().min_w(px(0.)).child(match &notice.detail {
-            Some(detail) => SharedString::from(format!("{} {detail}", notice.body)),
-            None => notice.body.clone(),
-        }))
+        // The core's sentence, wrapped by the CJK line rule (`ui::prose`).
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.))
+                .child(crate::ui::prose(match &notice.detail {
+                    Some(detail) => SharedString::from(format!("{} {detail}", notice.body)),
+                    None => notice.body.clone(),
+                })),
+        )
 }
 
 /// The speed control under the fee row (spec 068): folded, the word and the
@@ -2653,48 +2804,19 @@ fn contact_pick(
     identicons: &mut IdenticonCache,
     window: &Window,
     search: Option<AddressField>,
-    open_scan: Option<Click>,
     pick: Option<PickAddress>,
     mut group_rows: Vec<Click>,
 ) -> Div {
     let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
-    let mut col = column()
-        .child(flow_search(
-            theme,
-            icons,
-            model.search_placeholder.clone(),
-            search,
-            window,
-        ))
-        // Scan sits above the saved people: most sends go to someone already in
-        // the book, but the ones that don't are the ones where a person is
-        // holding a phone in one hand and an address in the other.
-        .child(clickable(
-            "flow-scan-row",
-            open_scan,
-            div()
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .p(px(12.))
-                .rounded(px(12.))
-                .bg(theme.bg_raised)
-                .child(icon_img(icons, Icon::QrCode, false, theme.fg_subtle, 15.))
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_base)
-                        .child(model.scan_row.clone()),
-                )
-                .child(icon_img(
-                    icons,
-                    Icon::ChevronRight,
-                    false,
-                    theme.fg_subtle,
-                    12.,
-                )),
-        ));
+    // The book, and only the book (issue 471): the scan that used to head
+    // this list is now on every recipient row, beside the book's own icon.
+    let mut col = column().child(flow_search(
+        theme,
+        icons,
+        model.search_placeholder.clone(),
+        search,
+        window,
+    ));
 
     // Groups only while nothing is typed, and only when there are some: a
     // search is for a person, and the web drops the section as the query
@@ -2877,7 +2999,7 @@ fn fee_token(
         div()
             .text_size(theme::text_label())
             .text_color(theme.fg_muted)
-            .child(model.hint.clone()),
+            .child(crate::ui::prose(model.hint.clone())),
     );
     // One list, the rows flush (the web's `ul`); each padded 12 on a
     // button's line, the chosen one raised (078 F-11).
@@ -2992,7 +3114,7 @@ fn batch_import_parts(
                 div()
                     .text_size(theme::text_label())
                     .text_color(theme.fg_muted)
-                    .child(model.unit_caption.clone()),
+                    .child(crate::ui::prose(model.unit_caption.clone())),
             )
             .child(segmented_toggle(
                 theme,
@@ -3127,7 +3249,7 @@ fn batch_import_parts(
                         .gap(px(4.))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
-                        .child(lead.clone())
+                        .child(crate::ui::prose(lead.clone()))
                         .child(
                             div()
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -3149,7 +3271,7 @@ fn batch_import_parts(
             div()
                 .text_size(theme::text_label())
                 .text_color(theme.fg_muted)
-                .child(model.rate_hint.clone()),
+                .child(crate::ui::prose(model.rate_hint.clone())),
         );
     }
     col = col.child(rate);
@@ -3323,7 +3445,7 @@ fn batch_row(
             .text_right()
             .text_size(theme::text_glyph())
             .text_color(theme.warning_base)
-            .child(note.clone()),
+            .child(crate::ui::prose(note.clone())),
         None => div()
             .flex_none()
             .flex()
@@ -3504,7 +3626,7 @@ fn send_confirm(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(model.subline.clone()),
+                .child(crate::ui::prose(model.subline.clone())),
         ),
     );
 
@@ -3608,7 +3730,7 @@ fn send_confirm(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(held.clone()),
+                .child(crate::ui::prose(held.clone())),
         );
     }
     col
@@ -3900,7 +4022,7 @@ pub fn status_hero(
                 } else {
                     theme.fg_subtle
                 })
-                .child(caption.clone()),
+                .child(crate::ui::prose(caption.clone())),
         );
     }
     hero
@@ -3914,7 +4036,7 @@ fn scan_placeholder(model: &ScanModal, theme: &Theme) -> Div {
         div()
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_muted)
-            .child(model.hint.clone()),
+            .child(crate::ui::prose(model.hint.clone())),
     )
 }
 
@@ -4054,7 +4176,9 @@ pub fn scan_modal(
                 .text_size(theme::text_row_sub())
                 .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_muted)
-                .child(notice.unwrap_or_else(|| model.hint.clone())),
+                .child(crate::ui::prose(
+                    notice.unwrap_or_else(|| model.hint.clone()),
+                )),
         )
         .child(tools)
 }
@@ -4092,7 +4216,7 @@ fn receive_gate(
             div()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(gate.counterfactual.clone()),
+                .child(crate::ui::prose(gate.counterfactual.clone())),
         );
     if !gate.loading {
         card = card.child(clickable(

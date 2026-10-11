@@ -77,12 +77,13 @@ class TrustExecutor(
             TrustShellResult.Logs(operation.address, operation.chain_id, TrustLogsOutcome.Failed)
         is TrustOperation.RpcGetSafeReceivedLogs ->
             TrustShellResult.SafeReceivedLogs(operation.address, operation.chain_id, TrustLogsOutcome.Failed)
+        // Not read: the core withholds the block's transfers and asks again
+        // on a later poll. Never a clock's time in its place.
         is TrustOperation.RpcGetBlockByNumber -> TrustShellResult.BlockTimestamp(
             address = operation.address,
             chain_id = operation.chain_id,
             block_number = hexToDouble(operation.block),
             timestamp_sec = null,
-            now_ms = System.currentTimeMillis().toDouble(),
         )
         // Every requested address is answered, resolved or not — a silent
         // omission would leave the core waiting on metadata forever.
@@ -169,6 +170,12 @@ class TrustExecutor(
         )
     }
 
+    /**
+     * A block's own time — or `null` when its header could not be read, which
+     * the core treats as exactly that: the block's transfers are withheld
+     * from the feed until a later poll reads it (PR 3). This answer carried
+     * the device's clock beside it until then, "for the fallback".
+     */
     private suspend fun blockTimestamp(
         operation: TrustOperation.RpcGetBlockByNumber,
     ): TrustShellResult.BlockTimestamp {
@@ -187,7 +194,6 @@ class TrustExecutor(
             timestamp_sec = header?.optString("timestamp")
                 ?.takeIf { it.startsWith("0x") }
                 ?.let { hexToDouble(it) },
-            now_ms = System.currentTimeMillis().toDouble(),
         )
     }
 

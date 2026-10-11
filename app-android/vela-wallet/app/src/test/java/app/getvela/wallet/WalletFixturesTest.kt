@@ -47,7 +47,9 @@ class WalletFixturesTest {
         assertEquals("转账", model.actions.send)
         assertEquals("扫码", model.actions.scan)
 
-        assertEquals(listOf("今天", "昨天"), model.activityGroups.map { it.label })
+        // Issue #469: the home is the newest three — all of them today's.
+        assertEquals(listOf("今天"), model.activityGroups.map { it.label })
+        assertEquals(3, model.activityGroups.sumOf { it.rows.size })
         val sent = model.activityGroups[0].rows[0]
         assertEquals("已发送", sent.title)
         assertEquals("至 hold on", sent.subtitle)
@@ -118,14 +120,23 @@ class WalletFixturesTest {
         assertEquals(BalanceStateKind.Hidden, model.balance.state)
         assertEquals("••••••", model.balance.integer)
         assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.balance == "••••" && it.fiat == AssetFiatModel.Masked })
+        // Issue #469: the home draws the core's cut — the newest three: the
+        // received, the sent and the split (the core fixture's own cut).
         val rows = model.activityGroups.flatMap { it.rows }.associateBy { it.id }
-        for (id in listOf("received", "sent", "swap", "permit")) assertEquals(id, "••••", rows.getValue(id).amount)
-        assertEquals("•••• xDAI", rows.getValue("swap").received)
-        assertEquals(s.t("componentsUi.signingApprove.unlimitedValue"), rows.getValue("permit-unlimited").amount)
-        assertFalse(rows.getValue("signature").masked)
-        val figures = (rows.values.flatMap { listOfNotNull(it.amount, it.received) } + model.assetRows.map { it.balance } +
+        assertEquals(listOf("received", "sent", "split"), model.activityGroups.flatMap { it.rows }.map { it.id })
+        for (id in listOf("received", "sent", "split")) assertEquals(id, "••••", rows.getValue(id).amount)
+        assertEquals("the split's coin stays beside its mask", "USDC", rows.getValue("split").unit)
+        // The rest are History's, drawn by the same builder from the same feed.
+        val feed = WalletFixtures.liveHiddenFeed()
+        val history = app.getvela.wallet.feature.wallet.WalletLive.activity(feed, s).flatMap { it.rows }.associateBy { it.id }
+        assertEquals("••••", history.getValue("swap").amount)
+        assertEquals("•••• xDAI", history.getValue("swap").received)
+        assertEquals("••••", history.getValue("permit").amount)
+        assertEquals(s.t("componentsUi.signingApprove.unlimitedValue"), history.getValue("permit-unlimited").amount)
+        assertFalse(history.getValue("signature").masked)
+        val figures = ((rows.values + history.values).flatMap { listOfNotNull(it.amount, it.received) } + model.assetRows.map { it.balance } +
             listOfNotNull(model.balance.integer, model.balance.decimals)).joinToString(" ")
-        for (run in listOf("418", "376", "289", "163", "237", "352", "128")) assertFalse("$run leaks: $figures", figures.contains(run))
+        for (run in listOf("418", "376", "289", "163", "237", "352", "128", "683", "214", "469")) assertFalse("$run leaks: $figures", figures.contains(run))
     }
 
     /**
@@ -163,6 +174,43 @@ class WalletFixturesTest {
         assertTrue(model.assetRows.isEmpty())
     }
 
+    /**
+     * H13 (the 102 device run): a cold start with CNY stored, its rate still
+     * on the way — the core's `committed` is false. No figure is drawn in the
+     * placeholder's dollars: the total and each holding's worth wait, the
+     * label names the choice on its way, and what is held is shown.
+     */
+    @Test
+    fun h13DrawsNoFigureBeforeTheCurrencyIsThePersons() {
+        val model = WalletFixtures.buildMobileState(WalletScreenState.H13, zhStrings())
+        assertEquals(WalletScreenState.H13, model.state)
+        assertEquals(BalanceStateKind.Loading, model.balance.state)
+        assertEquals(null, model.balance.integer)
+        assertEquals("the label names the stored choice, never the placeholder", "CNY", model.balance.currency)
+        assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.fiat == AssetFiatModel.Loading })
+        assertEquals(listOf("418.25 xDAI", "376.54 USDC"), model.assetRows.map { it.balance })
+        val drawn = (listOfNotNull(model.balance.integer, model.balance.decimals) + model.assetRows.map { it.fiat.toString() }).joinToString(" ")
+        assertFalse("no dollar figure anywhere: $drawn", drawn.contains("$") || drawn.contains("794"))
+    }
+
+    /**
+     * H14 (the integration's note 4): Tempo's token list did not load — the
+     * real balance machine's view through the live builder. The hero keeps
+     * what it could read and says the LIST is what failed, in the core's
+     * sentence, in both languages.
+     */
+    @Test
+    fun h14SaysTheTokenListNotTheNetwork() {
+        val english = I18nRuntime { tag -> File(repoRoot, "assets/i18n/$tag.json").readBytes() }.apply { initialize("en") }
+        val en = WalletFixtures.buildMobileState(WalletScreenState.H14, english)
+        assertEquals(WalletScreenState.H14, en.state)
+        assertEquals(BalanceStateKind.Normal, en.balance.state)
+        assertEquals(BalanceStatusKind.Warning, en.balance.status?.kind)
+        assertEquals("Can't load Tempo's token list right now", en.balance.status?.text)
+        assertEquals("暂时读不到 Tempo 的代币列表", WalletFixtures.buildMobileState(WalletScreenState.H14, zhStrings()).balance.status?.text)
+        assertTrue("what could be read is shown", en.assetRows.isNotEmpty())
+    }
+
     @Test
     fun h6IsRefreshingOnCachedTotals() {
         val model = WalletFixtures.buildMobileState(WalletScreenState.H6, zhStrings())
@@ -183,7 +231,8 @@ class WalletFixturesTest {
             val refresh = WalletFixtures.buildMobileState(state, strings).balance.refresh
             assertEquals("$state", "更新中…", refresh?.updating)
             assertEquals("$state", false, refresh?.refreshing)
-            val expected = if (state == WalletScreenState.H3) null else "上次更新 · 2分钟前"
+            // Nothing read yet: H3's skeleton, and H15, whose first read is still out.
+            val expected = if (state == WalletScreenState.H3 || state == WalletScreenState.H15) null else "上次更新 · 2分钟前"
             assertEquals("$state", expected, refresh?.updated)
         }
     }

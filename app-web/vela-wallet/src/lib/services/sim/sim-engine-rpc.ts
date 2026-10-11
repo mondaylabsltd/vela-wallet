@@ -40,18 +40,9 @@ function callSucceeded(call: any): boolean {
 	return call?.error == null;
 }
 
-/**
- * Simulate `calls` (executed sequentially in one block, sharing state) sent
- * from `from` (the Safe), and net the resulting transfers for `from`.
- */
-export async function rpcSimulate(
-	from: string,
-	calls: SimCall[],
-	chainId: number
-): Promise<EngineResult | null> {
-	if (!calls.length || !calls[0]?.to) return null;
-
-	const payload = {
+/** The `eth_simulateV1` question: `calls` in one simulated block, from `from`. */
+function simulatePayload(from: string, calls: SimCall[]) {
+	return {
 		blockStateCalls: [
 			{
 				calls: calls.map((c) => ({
@@ -66,6 +57,47 @@ export async function rpcSimulate(
 		validation: false,
 		returnFullTransactions: false
 	};
+}
+
+/** The pool gave up: no node answered (the core's wire form for it). */
+const UNREACHABLE_REPLY = '{"unreachable":true}';
+
+/**
+ * The same read, UNREAD: the node's reply as it came, for the core to say
+ * what it means (`simOutcome` — PR 3 device round). The JSON-RPC envelope
+ * itself (`{"result": …}` or `{"error": …}`), or `{"unreachable":true}` when
+ * every endpoint failed. Nothing here decides whether a call ran, reverted
+ * or could not be checked: this file's own reading (`rpcSimulate`, the
+ * port) calls a status that is neither 0 nor 1 a success, and the core calls
+ * it "could not check".
+ */
+export async function rpcSimulateReply(
+	from: string,
+	calls: SimCall[],
+	chainId: number
+): Promise<string> {
+	// Nothing was asked: an answer nobody can read, never "nothing moves".
+	if (!calls.length || !calls[0]?.to) return '{}';
+	try {
+		const res = await rpcCall('eth_simulateV1', [simulatePayload(from, calls), 'latest'], chainId);
+		return JSON.stringify(res ?? {});
+	} catch {
+		return UNREACHABLE_REPLY;
+	}
+}
+
+/**
+ * Simulate `calls` (executed sequentially in one block, sharing state) sent
+ * from `from` (the Safe), and net the resulting transfers for `from`.
+ */
+export async function rpcSimulate(
+	from: string,
+	calls: SimCall[],
+	chainId: number
+): Promise<EngineResult | null> {
+	if (!calls.length || !calls[0]?.to) return null;
+
+	const payload = simulatePayload(from, calls);
 
 	let res;
 	try {

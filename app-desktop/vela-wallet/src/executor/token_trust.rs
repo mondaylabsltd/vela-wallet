@@ -63,10 +63,35 @@ use crate::core_host::CoreHost;
 use crate::executor::pool::{self, PoolError};
 use crate::executor::{abi, custom_tokens};
 
-/// One routed call, returning the `result` member.
-fn rpc(chain_id: u32, method: &str, params: Value) -> Result<Value, PoolError> {
+/// One routed call, returning the `result` member. Crate-visible: the feed's
+/// read of a receipt's block time (`activity_feed`, PR 3) goes through this
+/// same pool call, never a URL of its own.
+pub(crate) fn rpc(chain_id: u32, method: &str, params: Value) -> Result<Value, PoolError> {
     pool::call(chain_id, method, params)
         .map(|body| body.get("result").cloned().unwrap_or(Value::Null))
+}
+
+/// A block header's own time (`timestamp`, a hex quantity) in Unix seconds —
+/// `None` when the header has none this build can read. The one reading of
+/// it: the scan's block reads and the feed's repair of a receipt's time
+/// (`activity_feed::receive_time`) both answer the core from here, and
+/// neither ever answers a clock's time in its place (`token_trust`
+/// invariant ⑨).
+pub(crate) fn header_timestamp_sec(header: &Value) -> Option<f64> {
+    header
+        .get("timestamp")
+        .and_then(Value::as_str)
+        .and_then(|hex| u64::from_str_radix(hex.trim_start_matches("0x"), 16).ok())
+        // Precision: 2^53 seconds is past any block this wallet will
+        // see, but a garbage word is not, and it must not become a
+        // plausible date.
+        .filter(|seconds| *seconds < (1u64 << 53))
+        .map(|seconds| {
+            #[allow(clippy::cast_precision_loss, reason = "guarded above")]
+            {
+                seconds as f64
+            }
+        })
 }
 
 /// One `eth_getLogs`, classified as the core reads it: the logs, a span the
@@ -213,8 +238,25 @@ enum Request {
         address: String,
         chain_id: u32,
         deltas: Vec<vela_core::app::token_trust::TrustAssetDelta>,
-        reply: Sender<Vec<vela_core::app::token_trust::TrustSimJudgment>>,
+        reply: Sender<Judged>,
     },
+}
+
+/// What the core's judged view (`TrustSimView`) says of one simulation: the
+/// judgments the sheet draws rows from, and the core's quiet line when the
+/// checked answer moves nothing of the person's.
+///
+/// The default — no judgment and no line — is "nobody judged": the worker
+/// was gone, or the view was not ready. That is not "nothing moves", and the
+/// sheet says the core's could-not-check notice for it
+/// (`signing::live::verdict_block`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Judged {
+    pub judgments: Vec<vela_core::app::token_trust::TrustSimJudgment>,
+    /// `TrustSimView.no_change_key`: `componentsUi.signing.simResultNoChange`
+    /// once the view is ready with no judgment, or every one a zero. The
+    /// sheet draws "No asset changes" exactly when this is `Some`.
+    pub no_change_key: Option<String>,
 }
 
 static SESSION: OnceLock<Mutex<Sender<Request>>> = OnceLock::new();
@@ -325,14 +367,19 @@ pub fn judge(
     address: &str,
     chain_id: u32,
     deltas: Vec<vela_core::app::token_trust::TrustAssetDelta>,
-) -> Vec<vela_core::app::token_trust::TrustSimJudgment> {
+) -> Judged {
     if deltas.is_empty() {
-        return Vec::new();
+        // A checked answer with no move in it: there is nothing to judge,
+        // and the line for it is the core's own rule over no moves.
+        return Judged {
+            judgments: Vec::new(),
+            no_change_key: vela_core::app::sim_outcome::no_change_key_of(&[]).map(str::to_owned),
+        };
     }
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
-            return Vec::new();
+            return Judged::default();
         };
         if tx
             .send(Request::Judge {
@@ -343,7 +390,7 @@ pub fn judge(
             })
             .is_err()
         {
-            return Vec::new();
+            return Judged::default();
         }
     }
     answer.recv().unwrap_or_default()
@@ -378,7 +425,10 @@ fn run(rx: &std::sync::mpsc::Receiver<Request>) {
                     host.view()
                         .sim
                         .filter(|sim| sim.ready)
-                        .map(|sim| sim.judgments)
+                        .map(|sim| Judged {
+                            judgments: sim.judgments,
+                            no_change_key: sim.no_change_key,
+                        })
                         .unwrap_or_default(),
                 );
             }
@@ -421,6 +471,29 @@ fn drain(
             };
             pending.extend(host.resolve(id, result));
         }
+    }
+}
+
+/// The answer to one block read (`RpcGetBlockByNumber`): the block's own
+/// time, or `None` for a block that could not be read — no header, or a
+/// header with no readable `timestamp`. The core then WITHHOLDS that block's
+/// transfers and a later poll asks again (invariant ⑨). No clock rides
+/// beside it: this answer carried `now_ms` until PR 3, the core stamped an
+/// unread block's transfer with it, and three receipts of 2026-09-29 were
+/// stored under the day they were scanned.
+fn block_timestamp(
+    address: &str,
+    chain_id: u32,
+    block: &str,
+    header: Option<&Value>,
+) -> TrustShellResult {
+    TrustShellResult::BlockTimestamp {
+        address: address.to_owned(),
+        chain_id,
+        block_number: abi::dec_hex_quantity(block)
+            .and_then(|digits| digits.parse::<f64>().ok())
+            .unwrap_or(0.0),
+        timestamp_sec: header.and_then(header_timestamp_sec),
     }
 }
 
@@ -494,32 +567,7 @@ fn perform(operation: &TrustOperation) -> TrustShellResult {
             block,
         } => {
             let header = rpc(*chain_id, "eth_getBlockByNumber", json!([block, false])).ok();
-            let timestamp_sec = header
-                .as_ref()
-                .and_then(|value| value.get("timestamp"))
-                .and_then(Value::as_str)
-                .and_then(|hex| u64::from_str_radix(hex.trim_start_matches("0x"), 16).ok())
-                // Precision: 2^53 seconds is past any block this wallet will
-                // see, but a garbage word is not, and it must not become a
-                // plausible date.
-                .filter(|seconds| *seconds < (1u64 << 53))
-                .map(|seconds| {
-                    #[allow(clippy::cast_precision_loss, reason = "guarded above")]
-                    {
-                        seconds as f64
-                    }
-                });
-            TrustShellResult::BlockTimestamp {
-                address: address.clone(),
-                chain_id: *chain_id,
-                block_number: abi::dec_hex_quantity(block)
-                    .and_then(|digits| digits.parse::<f64>().ok())
-                    .unwrap_or(0.0),
-                // `None` = the lookup failed; the core falls the transfer back
-                // to "now" itself.
-                timestamp_sec,
-                now_ms: crate::executor::now_ms(),
-            }
+            block_timestamp(address, *chain_id, block, header.as_ref())
         }
 
         TrustOperation::MulticallErc20Meta { chain_id, addrs } => TrustShellResult::ErcMeta {
@@ -645,6 +693,85 @@ mod tests {
                 other => unreachable!("wrong variant: {other:?}"),
             }
         });
+    }
+
+    /// PR 3 fix A: a block read's answer is the block's own time or nothing.
+    /// No clock rides beside it — not as a field (`now_ms` is gone from the
+    /// wire) and not as a value: a header nobody returned, one without a
+    /// `timestamp`, and a word that is no time all answer `null`, and the
+    /// core withholds that block's transfers until a later poll reads it.
+    #[test]
+    fn a_block_reads_answer_carries_its_own_time_and_never_the_clocks() {
+        const ME: &str = "0x88cca0eedbf2c4426110bbfc998f048689266894";
+        let answer = |header: Option<Value>| block_timestamp(ME, 100, "0x2a5f1c0", header.as_ref());
+        let wire = |result: &TrustShellResult| {
+            serde_json::to_value(result).unwrap_or_else(|e| unreachable!("{e}"))
+        };
+
+        // Read: the header's seconds (0x6abb87cf = 2026-09-29T09:41:35Z).
+        let read = answer(Some(
+            json!({ "number": "0x2a5f1c0", "timestamp": "0x6abb87cf" }),
+        ));
+        assert_eq!(
+            wire(&read),
+            json!({
+                "type": "block_timestamp",
+                "address": ME,
+                "chain_id": 100,
+                "block_number": 44_429_760.0,
+                "timestamp_sec": 1_790_674_895.0,
+            }),
+            "exactly these fields: no `now_ms`"
+        );
+
+        // Not read, every way a read can come back empty: `null`, and no
+        // number anywhere on the wire that is within a year of this
+        // machine's clock (a clock's time under any name).
+        let now_s = crate::executor::now_ms() / 1000.0;
+        for header in [
+            None,
+            Some(Value::Null),
+            Some(json!({ "number": "0x2a5f1c0" })),
+            Some(json!({ "timestamp": "soon" })),
+            Some(json!({ "timestamp": 1_790_674_895 })),
+            Some(json!({ "timestamp": "0xffffffffffffffff" })),
+        ] {
+            let unread = answer(header.clone());
+            let wire = wire(&unread);
+            assert_eq!(wire["timestamp_sec"], Value::Null, "{header:?}");
+            assert!(wire.get("now_ms").is_none(), "{header:?}");
+            let fields = wire
+                .as_object()
+                .unwrap_or_else(|| unreachable!("an object"));
+            for (name, value) in fields {
+                let clockish = value.as_f64().is_some_and(|n| {
+                    (n - now_s).abs() < 31_536_000.0 || (n / 1000.0 - now_s).abs() < 31_536_000.0
+                });
+                assert!(
+                    !clockish,
+                    "{name} = {value} reads as a clock's time ({header:?})"
+                );
+            }
+        }
+
+        // And the operation itself, with the chain out of reach (the pool
+        // faulted for it on this thread): answered `null`, not skipped.
+        let unreachable = crate::executor::pool::with_fault(Some(&[100]), || {
+            super::perform(&TrustOperation::RpcGetBlockByNumber {
+                address: ME.to_owned(),
+                chain_id: 100,
+                block: "0x2a5f1c0".to_owned(),
+            })
+        });
+        assert_eq!(
+            unreachable,
+            TrustShellResult::BlockTimestamp {
+                address: ME.to_owned(),
+                chain_id: 100,
+                block_number: 44_429_760.0,
+                timestamp_sec: None,
+            }
+        );
     }
 
     /// The cache invalidation is answered even though there is nothing to drop.
@@ -902,7 +1029,6 @@ mod tests {
                 TrustShellResult::BlockTimestamp {
                     block_number,
                     timestamp_sec,
-                    now_ms,
                     ..
                 } => {
                     let seconds =
@@ -913,6 +1039,8 @@ mod tests {
                     assert!((block_number - expected).abs() < 1.0);
                     // The header's time is within an hour of this machine's,
                     // which is what says we read a timestamp and not a word.
+                    // The test's own clock: the answer carries none.
+                    let now_ms = crate::executor::now_ms();
                     assert!((seconds * 1000.0 - now_ms).abs() < 3_600_000.0);
                 }
                 other => unreachable!("wrong variant: {other:?}"),

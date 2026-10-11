@@ -534,7 +534,7 @@ struct SigningReceiptTests {
 // MARK: - The record before the bytes (spec 082 T237, RJ1)
 
 @MainActor
-@Suite(.timeLimit(.minutes(2)))
+@Suite(.hangLimit)
 struct SigningWriteAheadTests {
 
     private let fixture = TrustedSignerFixture()

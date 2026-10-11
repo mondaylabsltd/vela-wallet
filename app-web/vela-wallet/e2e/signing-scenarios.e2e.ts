@@ -14,7 +14,13 @@
  */
 import { expect, test } from '@playwright/test';
 import { en } from './live-helpers';
-import { denyOffOrigin, happyRelay, stubJsonRpc, stubRelay } from './stub-chain';
+import {
+	denyOffOrigin,
+	happyRelay,
+	seedNetworkOverrides,
+	stubJsonRpc,
+	stubRelay
+} from './stub-chain';
 
 test.use({ viewport: { width: 390, height: 844 } });
 test.setTimeout(90_000);
@@ -137,6 +143,105 @@ test('an unlimited approval is kept as asked and said in danger; a cap is one ch
 	await expect(warning).toHaveCount(0);
 	// The cap reads in tokens, never in base units ("5000000" is not 5 USDC).
 	await expect(page.getByText(/^5 /).first()).toBeVisible();
+});
+
+/**
+ * PR 3 device round, items 1 and 3. The sheet's own simulation — the read it
+ * already makes for the fee — is read by the core; when the node checked the
+ * request and nothing of the person's moves, the sheet says the core's line,
+ * "No asset changes", in a balance-changes card after the request's own
+ * blocks. It lands late (the node answers after the sheet has opened), and
+ * the confirm, in the sheet's foot outside the scroll, is where it was.
+ */
+test('a request that moves nothing says "No asset changes" — and its landing moves no confirm', async ({
+	page
+}, testInfo) => {
+	await openWallet(page);
+	// Mainnet's node is the stub, and it simulates — when the test lets it
+	// answer: an approval runs, and no asset of the account moves.
+	let asked = 0;
+	let answer: () => void = () => {};
+	const held = new Promise<void>((resolve) => (answer = resolve));
+	await page.route(/stub-rpc\.test\/rpc\/1$/, async (route) => {
+		const body = JSON.parse(route.request().postData() ?? '{}') as { method?: string; id?: number };
+		if (body.method !== 'eth_simulateV1') return route.fallback();
+		asked += 1;
+		await held;
+		return route.fulfill({
+			contentType: 'application/json',
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: body.id ?? 1,
+				result: [{ calls: [{ status: '0x1', logs: [] }] }]
+			})
+		});
+	});
+	await seedNetworkOverrides(page, [{ chainId: 1, rpcURL: 'https://stub-rpc.test/rpc/1' }]);
+	await page.reload();
+	await page.waitForFunction(
+		() => (window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,
+		null,
+		{ timeout: 20_000 }
+	);
+
+	await fire(page, 'eth_sendTransaction', [
+		{
+			to: USDC,
+			// approve(spender, 100 USDC): a cap, so the sheet is an ordinary one.
+			data: approveCalldata((100_000_000).toString(16).padStart(64, '0')),
+			value: '0x0',
+			from: '0xD400866e00B055B20752a826CD5C89b811de130b'
+		}
+	]);
+	const confirm = page.getByTestId('signing-confirm');
+	await expect(confirm).toBeVisible({ timeout: 25_000 });
+	const card = page.locator('[role="dialog"] section.balances');
+	const line = en('componentsUi.signing.simResultNoChange');
+	expect(line).toBe('No asset changes');
+
+	// The node was asked once, and has not answered: nothing is said yet.
+	// (PR 3: four seconds on, the core's deadline puts the caution that
+	// nothing could be checked in the card's place — the one card that may be
+	// there before the answer; `fee-speed.e2e.ts` walks that.)
+	await expect.poll(() => asked, { timeout: 20_000 }).toBe(1);
+	await expect(
+		card.filter({ hasNotText: en('componentsUi.signing.simUnavailableWarning') })
+	).toHaveCount(0);
+	await expect(page.getByText(line)).toHaveCount(0);
+	// The sheet has opened and its fee has had its say: where the confirm rests.
+	const restingY = async () => {
+		let last = -1;
+		await expect
+			.poll(
+				async () => {
+					const y = (await confirm.boundingBox())?.y ?? -1;
+					const still = y === last;
+					last = y;
+					return still;
+				},
+				{ timeout: 20_000, intervals: [400] }
+			)
+			.toBe(true);
+		return last;
+	};
+	const was = await restingY();
+
+	answer();
+	await expect(card).toBeVisible({ timeout: 20_000 });
+	await expect(card).toContainText(en('componentsUi.signing.balanceChangesTitle'));
+	await expect(card).toContainText(line);
+	// The card and its one line: no balance rows (spec 082 RG6 stands).
+	await expect(card.locator('.row')).toHaveCount(0);
+	await expect(card).toHaveAttribute('data-verdict', '');
+	// Whole, in sight, and the confirm has not moved.
+	await expect(card).toBeInViewport({ ratio: 1 });
+	expect(await restingY()).toBe(was);
+	await expect(confirm).toBeInViewport({ ratio: 1 });
+	// One read served the fee and the sheet.
+	expect(asked).toBe(1);
+	// Nothing else was drawn from the simulation.
+	await expect(page.getByText(en('componentsUi.signing.simUnavailableWarning'))).toHaveCount(0);
+	await page.screenshot({ path: testInfo.outputPath('no-asset-changes-en.png') });
 });
 
 test('rejecting answers the requester with 4001 — the ✕ IS the refusal', async ({ page }) => {

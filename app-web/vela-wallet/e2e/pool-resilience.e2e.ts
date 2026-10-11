@@ -35,7 +35,7 @@ test('a failing primary is routed around; its ban persists; no free retry after 
 		if (method === 'eth_blockNumber') return '0x1234';
 		return undefined;
 	});
-	// Every other candidate tier (1rpc.io, index fetches…) stays denied.
+	// Every other candidate tier (the other public nodes, index fetches…) stays denied.
 
 	await page.goto('/en/wallet');
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();

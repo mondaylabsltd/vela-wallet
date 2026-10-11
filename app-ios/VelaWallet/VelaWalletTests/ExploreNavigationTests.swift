@@ -142,7 +142,7 @@ struct ExploreNavigationTests {
     ///
     /// Each tab is a real WKWebView (see DebugModeTests): the limit only stops
     /// a hang.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func theControllerOpensWhereTheCoreSays() async throws {
         let h = BrowserHarness()
         h.browser.start()
@@ -194,7 +194,7 @@ struct ExploreNavigationTests {
     /// tab, and the dApp beside it untouched. The address loads ONCE — it
     /// used to load twice, from the engine made inside the navigation's
     /// dispatch and again straight after.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aStartPageTakesTheNextOpen() async throws {
         let h = BrowserHarness()
         let loads = recordLoads(h.browser)
@@ -252,7 +252,7 @@ struct ExploreNavigationTests {
     /// spare tab's engine starts at the new address — never at the old dApp
     /// it held, which used to load for a moment, scripts and all, when the
     /// selection woke it — and the restored tab in front never wakes.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aFullStripStillOpens() async throws {
         let h = seededTabs((1...24).map { ("t\($0)", "https://site\($0).example/") }, selected: "t3")
         let loads = recordLoads(h.browser)
@@ -274,7 +274,7 @@ struct ExploreNavigationTests {
     /// A spare tab whose page the plan had let go of (spec 099 FR-004) takes
     /// the new address as a new page: made at that address, never "reloaded
     /// to save memory" — that line is for a page coming BACK.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aSpareTabLetGoTakesTheNewAddressAsANewPage() async throws {
         let h = seededTabs((1...24).map { ("t\($0)", "https://site\($0).example/") }, selected: "t1")
         let loads = recordLoads(h.browser)
@@ -342,7 +342,7 @@ struct ExploreNavigationTests {
     /// and only that one. The tab restored in front stays dormant: under one
     /// flag for the run, the open woke it, and yesterday's dApp loaded behind
     /// the new tab, scripts and all.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func anOutsideOpenLoadsOnlyItsOwnPage() async throws {
         let h = seededTabs([("r1", "https://yesterday.example/"), ("r2", "https://older.example/")], selected: "r1")
         let loads = recordLoads(h.browser)
@@ -367,7 +367,7 @@ struct ExploreNavigationTests {
     /// Closing the tab in front — from the switcher over the home, or ⋯ →
     /// close page — selects a neighbour, and nobody asked to see that one:
     /// it stays dormant behind the home until it is resumed.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func closingThePageInFrontWakesNoNeighbour() async throws {
         let h = seededTabs(
             [("a", "http://127.0.0.1:9/a"), ("b", "http://127.0.0.1:9/b"), ("c", "http://127.0.0.1:9/c")],

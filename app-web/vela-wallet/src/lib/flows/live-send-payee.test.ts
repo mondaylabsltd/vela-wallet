@@ -44,7 +44,7 @@ const identity: WalletIdentity = {
 	address: '0x88cCA0000000000000000000000000000c266894',
 	identiconSvg: '<svg/>'
 };
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const IDLE_FEE = { options: [], fee: null, busy: false } as unknown as FeeView;
 
 /** The developer wallet of the pass; the public registry calls it "Wallet". */

@@ -12,6 +12,7 @@
  * describe screens these mocks redraw. Spec 023 minted 45 new keys and reused
  * roughly two hundred.
  */
+import type { PluralCopy } from '$lib/i18n/plural';
 
 export interface SettingsMessages {
 	title: string;
@@ -190,7 +191,29 @@ export interface SettingsMessages {
 		/** Invariant ③: an unanswered probe is "unable to verify", never "incompatible". */
 		unableToVerify: string;
 		retry: string;
-		incompatibleHint: string;
+		/**
+		 * The line under a refused network's check, BY CORPUS KEY. The core
+		 * says which one (`NetCompatibility.hint_key`): no P-256 verifier —
+		 * the network cannot run Vela wallets and money sent there would be
+		 * stuck — or contracts that are missing and can be deployed. The two
+		 * have opposite next steps, so the shell never picks between them.
+		 */
+		hints: Record<NetHintKey, string>;
+		/**
+		 * The sentence for a wizard that STOPPED, BY CORPUS KEY — the core
+		 * names which (`NetWizardView.error_key`, PR 3 notes 5, 10 and 18):
+		 * already added, chain not found, no RPC endpoint listed, a check that
+		 * could not be made, a refusal with no reason kept. A refusal that kept
+		 * its check names one of `hints` instead. No shell words a stop itself:
+		 * three of these read "Incompatible" here until the core said them.
+		 */
+		stops: Record<NetStopKey, string>;
+		/**
+		 * The RPC field's label BY CORPUS KEY — the one the core names for the
+		 * wizard's state (`NetWizardView.rpc_field_label_key`,
+		 * {@link NET_RPC_FIELD_KEYS}).
+		 */
+		rpcFieldLabels: Record<NetRpcFieldKey, string>;
 		/**
 		 * Spec 081 FR-009: the chain works, and a wallet with more than one
 		 * passkey still cannot be created on it. Said beside a green
@@ -305,8 +328,11 @@ export interface SettingsMessages {
 		title: string;
 		/** Template with `{{amount}}`. */
 		total: string;
-		/** Template with `{{count}}`. */
-		countPrefix: string;
+		/**
+		 * "{{count}} accounts · " in each plural form this locale has
+		 * (`pluralForm`): one account is "1 account · ", not "1 accounts · ".
+		 */
+		countPrefix: PluralCopy;
 		createNew: string;
 		signInExisting: string;
 		/** Taking ONE wallet off this device (2026-09-23). */
@@ -393,6 +419,12 @@ export interface SettingsMessages {
 		 */
 		unreachableOne: string;
 		unreachableMany: string;
+		/**
+		 * PR 3 note 4: the one network whose token list could not be loaded
+		 * (`{{name}}`) — the home's line and the list's title then, and the
+		 * status of that network's row in the balance breakdown.
+		 */
+		tokenListUnreachable: string;
 		/** Under the title: what is there is unaffected, only unread. */
 		unreachableBody: string;
 		/** The title once every network in the list has come back. */
@@ -424,18 +456,33 @@ export interface SettingsMessages {
 		networksNote: string;
 		statusRetrying: string;
 		statusFailed: string;
+		/**
+		 * A row's short status BY CORPUS KEY — the one the core names for a
+		 * network out of reach (`UnreachableNetwork.status_key`,
+		 * {@link BALANCE_STATUS_KEYS}): "RPC unavailable", or "Token list
+		 * unavailable" where the RPC is answering (PR 3 final note F21).
+		 */
+		statuses: Readonly<Record<string, string>>;
 		updatedLabel: string;
 		retry: string;
 	};
 	/** The Ethereum backup row (spec 062): the founding record's standing there. */
 	backup: {
-		title: string;
-		backedUp: string;
-		notBackedUp: string;
-		couldNotCheck: string;
-		checking: string;
-		/** What is being published, and what is not: PUBLIC keys only. */
-		explain: string;
+		/**
+		 * The row's words BY CORPUS KEY. The core names the key for each state
+		 * (`registry_backup::BackupRow`: its title, its second line); the shell
+		 * only looks the key up, so which words a state says is never decided
+		 * here. Every key the core can name is in `BACKUP_ROW_KEYS`.
+		 */
+		words: Record<BackupRowKey, string>;
+		/**
+		 * The paragraph under the block, BY CORPUS KEY — the core names it for
+		 * each state (`BackupRow.explain_key`) and names none for a record that
+		 * can never be copied. The one there is says what the copy makes public
+		 * — the wallet's name, and each key's name, public key, credential ID
+		 * and authenticator model — and that it costs a network fee.
+		 */
+		explains: Record<BackupExplainKey, string>;
 	};
 	/** The keys that control this wallet (spec 062). */
 	keys: {
@@ -531,6 +578,17 @@ export const UNREACHABLE_LINE_KEYS = [
 ] as const;
 
 /**
+ * The short status of a network out of reach in the balance breakdown — every
+ * `status_key` `balance_dashboard` names (`STATUS_RPC_UNAVAILABLE`,
+ * `STATUS_TOKEN_LIST_UNAVAILABLE`). `live.test.ts` holds the list to the
+ * core's source.
+ */
+export const BALANCE_STATUS_KEYS = [
+	'home.balanceDetailStatusFailed',
+	'home.balanceDetailStatusTokenList'
+] as const;
+
+/**
  * The lines a venue refusal can say (`VenueBlock::key()`): R1's two —
  * `blockedApp {{domain}}`, `blockedPage {{pageDomain}} {{domain}}` — and the
  * web's `blockedWeb` (no vars: it opens no signing page, D-16). Only what a
@@ -545,6 +603,78 @@ export const VENUE_BLOCK_KEYS = [
 ] as const;
 
 export type VenueBlockKey = (typeof VENUE_BLOCK_KEYS)[number];
+
+/**
+ * The lines a refused network's check can say — every `hint_key` the core's
+ * `NetCompatibility` names (`network_admin`: `NO_P256_HINT`,
+ * `MISSING_CONTRACTS_HINT`). Settings' wizard and a dApp's add-network sheet
+ * both resolve these; `net-refusal.test.ts` holds the list to the core's
+ * source.
+ */
+export const NET_HINT_KEYS = [
+	'settingsModals.addNetwork.noP256Hint',
+	'settingsModals.addNetwork.incompatibleHint'
+] as const;
+
+export type NetHintKey = (typeof NET_HINT_KEYS)[number];
+
+/**
+ * The sentences a stopped wizard can say that are not a check's own reason —
+ * every other key `network_admin`'s `wizard_error_key` answers with
+ * (`WIZARD_ALREADY_ADDED`, `WIZARD_NOT_FOUND`, `WIZARD_NO_RPC_ENDPOINT`,
+ * `WIZARD_CHECK_FAILED`, `WIZARD_NOT_COMPATIBLE`). Together with
+ * {@link NET_HINT_KEYS} this is everything `NetWizardView.error_key` can be;
+ * `net-refusal.test.ts` holds both lists to the core's source.
+ */
+export const NET_STOP_KEYS = [
+	'addToken.errorAlreadyAdded',
+	'addToken.errorChainNotFound',
+	'settingsModals.addNetwork.noRpcEndpoint',
+	'settingsModals.addNetwork.unableToVerify',
+	'addToken.errorNotCompatible'
+] as const;
+
+export type NetStopKey = (typeof NET_STOP_KEYS)[number];
+
+/**
+ * The labels the wizard's RPC field can wear — every key `network_admin`
+ * names for `NetWizardView.rpc_field_label_key` (`RPC_FIELD_OPTIONAL`:
+ * "Custom RPC (optional)"; `RPC_FIELD_REQUIRED`: "RPC URL", where an endpoint
+ * is the one thing asked for). `net-rpc-field.test.ts` holds the list to the
+ * core's source.
+ */
+export const NET_RPC_FIELD_KEYS = [
+	'settingsModals.addNetwork.customRpcTitle',
+	'settingsModals.network.fieldRpcUrl'
+] as const;
+
+export type NetRpcFieldKey = (typeof NET_RPC_FIELD_KEYS)[number];
+
+/**
+ * Every corpus key the core's backup row can name
+ * (`vela_core::registry_backup`: `TITLE_KEY`, `CHECKING_KEY` and each
+ * `BackupState::row()` second line). `ethereum-backup-row.test.ts` reads the
+ * core's source and fails if it names one that is not here.
+ */
+export const BACKUP_ROW_KEYS = [
+	'settingsModals.backup.title',
+	'settingsModals.backup.backedUp',
+	'settingsModals.backup.notBackedUp',
+	'settingsModals.backup.couldNotCheck',
+	'settingsModals.backup.cannotCopy',
+	'componentsUi.funding.checking'
+] as const;
+
+export type BackupRowKey = (typeof BACKUP_ROW_KEYS)[number];
+
+/**
+ * Every paragraph the core's backup row can name under the Keys block
+ * (`registry_backup::EXPLAIN_KEY`, via `BackupRow.explain_key`). Held to the
+ * core's source by the same test as the row's lines.
+ */
+export const BACKUP_EXPLAIN_KEYS = ['settingsModals.backup.explain'] as const;
+
+export type BackupExplainKey = (typeof BACKUP_EXPLAIN_KEYS)[number];
 
 /**
  * Every corpus key the settings screens consume, in the order the manifest
@@ -652,6 +782,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.backup.backedUp',
 	'settingsModals.backup.notBackedUp',
 	'settingsModals.backup.couldNotCheck',
+	'settingsModals.backup.cannotCopy',
 	'componentsUi.funding.checking',
 	'settingsModals.keys.title',
 	'settingsModals.keys.subtitle',
@@ -689,6 +820,12 @@ export const SETTINGS_KEYS = [
 	'settingsModals.addNetwork.customRpcPlaceholder',
 	'settingsModals.addNetwork.addNetworkBtn',
 	'settingsModals.addNetwork.incompatibleHint',
+	'settingsModals.addNetwork.noP256Hint',
+	// A stopped wizard's own sentences (`NetWizardView.error_key`).
+	'addToken.errorAlreadyAdded',
+	'addToken.errorChainNotFound',
+	'addToken.errorNotCompatible',
+	'settingsModals.addNetwork.noRpcEndpoint',
 	'settingsModals.addNetwork.singleKeyOnly',
 	'settingsModals.addNetwork.openChainSetupTool',
 	'settingsModals.addNetwork.recheckWithRpc',
@@ -773,7 +910,6 @@ export const SETTINGS_KEYS = [
 	'about.footer',
 	'settingsModals.account.modalTitle',
 	'settingsModals.account.total',
-	'home.switcherAccountCount',
 	'settingsModals.account.createNew',
 	'settingsModals.account.signInExisting',
 	'settings.signOut.button',
@@ -830,6 +966,7 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.removeFromViewer',
 	'assets.unreachableOne',
 	'assets.unreachableMany',
+	'assets.tokenListUnreachable',
 	'assets.unreachableBody',
 	'assets.unreachableNone',
 	// PR 2 note 11: the list's title when the read failed inside Vela.
@@ -852,6 +989,7 @@ export const SETTINGS_KEYS = [
 	'home.balanceDetailNetworksNote',
 	'home.balanceDetailStatusRetrying',
 	'home.balanceDetailStatusFailed',
+	'home.balanceDetailStatusTokenList',
 	'home.balanceDetailUpdatedLabel',
 	'home.balanceDetailRetry',
 	'componentsUi.treasuryBootstrap.title',

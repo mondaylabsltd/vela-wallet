@@ -119,6 +119,21 @@ pub enum Block {
         note: Option<SharedString>,
         note_tone: Tone,
     },
+    /// The simulation verdict's PLACE (PR 3 final note F2): room the sheet
+    /// keeps from the request's first frame, holding whatever the
+    /// simulation has to say — the quiet "being worked out" card while it is
+    /// out, then its balance card or its notice. The room is a least height
+    /// (`components::verdict_room_height`), so the usual verdict lands and
+    /// nothing under it moves; a taller one is shown whole, the place as
+    /// tall as it is (`components::verdict_room`) — nothing of a verdict is
+    /// ever under a fold of its own.
+    Verdict {
+        inner: Vec<Block>,
+        /// The simulation's answer is in (`live::SimStage::Landed`) — not
+        /// the "Checking…" card. The page brings a landed verdict into view
+        /// when part of it lies outside the column's body.
+        landed: bool,
+    },
 }
 
 pub struct FeeTokenOption {
@@ -252,6 +267,291 @@ pub const ALL_STATES: [&str; 46] = [
     // then open; with none left the row is no control.
     "cs44", "cs45", "cs46",
 ];
+
+/// One thing the simulation of a request can come back with — or not yet —
+/// as `VELA_SIM` names it ([`sim_pin`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SimPin {
+    /// Still out.
+    Out,
+    /// A send: one coin leaves.
+    Send,
+    /// A swap: one leaves, one arrives.
+    Swap,
+    /// Three coins move — taller than the least room.
+    Three,
+    /// A swap whose inflow is a token nobody vouches for: two rows and the
+    /// warning under them.
+    Unverified,
+    /// Four coins move, one of them a token nobody vouches for: four rows
+    /// and the warning — the tall verdict the device round's rule is
+    /// measured on (nothing of it hidden, the confirm not moved by it).
+    Tall,
+    /// The node could not check.
+    Caution,
+    /// The chain says it fails, with the longest reason the core prints.
+    Danger,
+    /// It ran, and nothing of the wallet's moves.
+    Nothing,
+    /// Still out past the core's deadline (PR 3 fix C): the verdict's place
+    /// says "couldn't check", and the confirm is open.
+    Waited,
+}
+
+impl SimPin {
+    pub const ALL: [(Self, &'static str); 10] = [
+        (Self::Out, "out"),
+        (Self::Send, "send"),
+        (Self::Swap, "swap"),
+        (Self::Three, "three"),
+        (Self::Unverified, "unverified"),
+        (Self::Tall, "tall"),
+        (Self::Caution, "caution"),
+        (Self::Danger, "danger"),
+        (Self::Nothing, "nothing"),
+        (Self::Waited, "waited"),
+    ];
+
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(pin, name)| (name == want.trim()).then_some(pin))
+    }
+}
+
+/// `VELA_SIM=out|send|swap|three|unverified|tall|caution|danger|nothing|waited`
+/// (developer builds), with `VELA_PAGE=gallery` and a drawn request: the
+/// verdict's place on that sheet, holding that answer — built by the LIVE
+/// builder (`live::verdict_block`) from judgments and notices the core's own
+/// types carry. A real simulation answers in a few hundred milliseconds and
+/// only one way per request; the room has to be looked at, and measured,
+/// under each. Same env-pin family as `VELA_SIGNING_STATE`.
+///
+/// And the confirm under it, as the live sheet holds it (PR 3 fix C,
+/// [`sim_pin_confirm`]): shut over "Checking what this transaction does…"
+/// while the answer is `out`, open under every answer that is in — and
+/// under `waited`, the core's deadline passed with none.
+///
+/// `VELA_SIM=out>tall` is an answer that LANDS: the first while the window
+/// opens, the second ([`sim_pin_lands`]) a moment later, as a real
+/// simulation does — what is measured before and after is whether anything
+/// under the verdict moved, and whether a verdict that landed under the
+/// body's fold was brought into view.
+#[must_use]
+pub fn sim_pin() -> Option<SimPin> {
+    let want = crate::dev_env::var!("VELA_SIM")?;
+    SimPin::named(want.split('>').next().unwrap_or_default())
+}
+
+/// The answer `VELA_SIM=<first>><then>` lands on, if it names one.
+#[must_use]
+pub fn sim_pin_lands() -> Option<SimPin> {
+    let want = crate::dev_env::var!("VELA_SIM")?;
+    SimPin::named(want.split_once('>')?.1)
+}
+
+/// How long after the window opens a pinned answer lands
+/// ([`sim_pin_lands`]): long enough for the first frame to be measured.
+pub const SIM_PIN_LANDS_AFTER: std::time::Duration = std::time::Duration::from_millis(2500);
+
+/// [`sim_pin`]'s verdict block for `pin`.
+#[must_use]
+pub fn sim_pin_block(pin: SimPin, s: &SigningStrings) -> Option<Block> {
+    use crate::signing::live::{SimStage, verdict_block};
+    use vela_core::app::clear_signing::ClearRisk;
+    use vela_core::app::sim_outcome::{
+        KEY_UNAVAILABLE, KEY_WILL_FAIL_REASON, REVERT_REASON_MAX_CHARS, SimNotice,
+    };
+    use vela_core::app::token_trust::{TrustSimDirection as Direction, TrustSimJudgment as J};
+    let trusted = |symbol: &str, delta: &str, decimals: u32| J::Erc20Trusted {
+        token: format!("0x{symbol}"),
+        delta: delta.to_owned(),
+        symbol: symbol.to_owned(),
+        decimals,
+        in_trusted_set: true,
+    };
+    let usdc_out = || trusted("USDC", "-1000000000", 6);
+    let eth_in = || J::Native {
+        delta: "405000000000000000".to_owned(),
+    };
+    let (stage, judgments, notice) = match pin {
+        SimPin::Out => (SimStage::Out, Vec::new(), None),
+        SimPin::Send => (SimStage::Landed, vec![usdc_out()], None),
+        SimPin::Swap => (SimStage::Landed, vec![usdc_out(), eth_in()], None),
+        SimPin::Three => (
+            SimStage::Landed,
+            vec![
+                usdc_out(),
+                eth_in(),
+                trusted("DAI", "-250000000000000000000", 18),
+            ],
+            None,
+        ),
+        SimPin::Unverified => (
+            SimStage::Landed,
+            vec![
+                usdc_out(),
+                J::Erc20Unverified {
+                    token: Some("0xdead".to_owned()),
+                    direction: Direction::In,
+                },
+            ],
+            None,
+        ),
+        SimPin::Tall => (
+            SimStage::Landed,
+            vec![
+                usdc_out(),
+                eth_in(),
+                trusted("DAI", "-250000000000000000000", 18),
+                J::Erc20Unverified {
+                    token: Some("0xdead".to_owned()),
+                    direction: Direction::In,
+                },
+            ],
+            None,
+        ),
+        SimPin::Caution => (
+            SimStage::Landed,
+            Vec::new(),
+            Some(SimNotice {
+                key: KEY_UNAVAILABLE,
+                risk: ClearRisk::Caution,
+                reason: None,
+            }),
+        ),
+        SimPin::Danger => (
+            SimStage::Landed,
+            Vec::new(),
+            Some(SimNotice {
+                key: KEY_WILL_FAIL_REASON,
+                risk: ClearRisk::Danger,
+                // The longest reason the core prints.
+                reason: Some(
+                    "ERC20: transfer amount exceeds balance of the sending account ok"
+                        .chars()
+                        .take(REVERT_REASON_MAX_CHARS)
+                        .collect(),
+                ),
+            }),
+        ),
+        SimPin::Nothing => (SimStage::Landed, Vec::new(), None),
+        // Out, like `Out` — what differs is the signing core's word on the
+        // wait, below.
+        SimPin::Waited => (SimStage::Out, Vec::new(), None),
+    };
+    // The line the core's judged view would carry for these judgments
+    // (`TrustSimView.no_change_key`): its own rule, once the answer is a
+    // check that landed.
+    let no_change_key = (stage == SimStage::Landed && notice.is_none())
+        .then(|| vela_core::app::sim_outcome::no_change_key_of(&judgments))
+        .flatten();
+    // What the signing core says of the wait for this answer
+    // (`SignView.sim_waited_out_key`): the could-not-check sentence once its
+    // deadline has passed, and nothing before that or after a verdict.
+    let waited_out_key = sim_pin_sign_view(pin).and_then(|view| view.sim_waited_out_key);
+    verdict_block(
+        stage,
+        &judgments,
+        notice.as_ref(),
+        no_change_key,
+        waited_out_key.as_deref(),
+        1,
+        s,
+    )
+}
+
+/// The request on the sheet as the real `sign_request` core holds it under
+/// a pinned answer (PR 3 fix C): a transaction arrives and its simulation is
+/// announced, as the signing column announces one; then nothing more
+/// (`out`), the core's own deadline passes (`waited` — its timer answered,
+/// as the executor answers it), or the verdict lands on the sheet (every
+/// other pin). So whether the confirm waits, and what the sheet says when
+/// the wait runs out, are the core's words here too — never the drawing's.
+#[must_use]
+pub fn sim_pin_sign_view(pin: SimPin) -> Option<vela_core::app::sign_request::SignView> {
+    use crate::core_host::CoreHost;
+    use vela_core::app::sign_request::{
+        Event, SignAccountRef, SignOperation, SignRequest, SignShellResult,
+    };
+    const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    const ID: &str = "rid-gallery";
+    let mut host = CoreHost::<SignRequest>::new();
+    host.dispatch(Event::NetworksChanged { chain_ids: vec![1] });
+    host.dispatch(Event::AccountsChanged {
+        accounts: vec![SignAccountRef {
+            address: ME.to_owned(),
+            credential_id: "cred0".to_owned(),
+        }],
+        active_index: 0,
+    });
+    host.dispatch(Event::RequestArrived {
+        id: ID.to_owned(),
+        method: "eth_sendTransaction".to_owned(),
+        params_json:
+            r#"[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x38d7ea4c68000"}]"#
+                .to_owned(),
+        origin: "https://app.uniswap.org".to_owned(),
+        transport_id: "tab-gallery".to_owned(),
+        dedicated_transport: true,
+        per_request_chain: Some(1),
+        dapp: None,
+        granted_address: Some(ME.to_owned()),
+        requested_address: None,
+        request_ts_ms: None,
+        now_ms: 1_000.0,
+        first_party: false,
+    });
+    let ops = host.dispatch(Event::SimStarted { id: ID.to_owned() });
+    match pin {
+        SimPin::Out => {}
+        SimPin::Waited => {
+            let timer = ops.iter().find_map(|op| match &op.operation {
+                SignOperation::SimVerdictTimer { id, round, .. } => {
+                    Some((op.id, id.clone(), *round))
+                }
+                _ => None,
+            })?;
+            let _ = host.resolve(
+                timer.0,
+                SignShellResult::SimVerdictTimerFired {
+                    id: timer.1,
+                    round: timer.2,
+                },
+            );
+        }
+        _ => {
+            let _ = host.dispatch(Event::SimSettled { id: ID.to_owned() });
+        }
+    }
+    Some(host.view())
+}
+
+/// The confirm under a pinned answer (PR 3 fix C): the core's one gate
+/// (`sign_confirm`) over [`sim_pin_sign_view`], with every other part of the
+/// sheet ready — a reading that is in, an approval guard with nothing to
+/// choose, a settled fee ([`settled_fee`]). What it says is then the
+/// simulation's doing alone: shut with the `simChecking` line while the
+/// answer is out, open once it is in or the wait has run out.
+#[must_use]
+pub fn sim_pin_confirm(pin: SimPin) -> Option<vela_core::app::sign_confirm::ConfirmState> {
+    use crate::core_host::CoreHost;
+    use vela_core::app::approval_guard::ApprovalGuard;
+    use vela_core::app::clear_signing::{ClearSigning, ClearSurface};
+    let sign = sim_pin_sign_view(pin)?;
+    let guard = CoreHost::<ApprovalGuard>::new().view();
+    // A transaction that has been read, by the rung that needs nothing
+    // fetched.
+    let mut clear = CoreHost::<ClearSigning>::new().view();
+    clear.resolving = false;
+    clear.surface = ClearSurface::BlindTransaction;
+    let fee = settled_fee();
+    let tier = fee.fee.as_ref().map(|estimate| estimate.tier);
+    Some(crate::signing::live::confirm_state(
+        &sign, &guard, &clear, &fee, tier,
+    ))
+}
 
 /// The scenario `VELA_SIGNING_STATE=cs36` names, if it names one — with
 /// `VELA_PAGE=gallery`, the window opens with the signing column on that
@@ -728,10 +1028,11 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
             m
         }
 
-        // The wallet's own key backup to Ethereum, as the live column draws
+        // "Copy this wallet's record to Ethereum", as the live column draws
         // the core's reading of it (a test holds the two together): the
-        // intent leads as the headline, then Network / Address / Public keys,
-        // each in the core's words; the confirm says the intent.
+        // intent leads as the headline, then Network / Address / Wallet name
+        // / Keys included, each in the core's words — the name is on the
+        // sheet because the copy makes it public; the confirm says the intent.
         "cs36" => {
             let term = |term: ClearTerm| s.terms.get(&term).cloned().unwrap_or_default();
             let intent = term(ClearTerm::IntentBackUpPublicKeys);
@@ -754,6 +1055,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     Block::Rows(vec![
                         row(term(ClearTerm::LabelNetwork), "Ethereum"),
                         mono_row(term(ClearTerm::LabelAddress), "0x88cCA0…266894"),
+                        row(term(ClearTerm::LabelWalletName), "Interleave"),
                         row(term(ClearTerm::LabelPublicKeys), "3"),
                     ]),
                 ],
@@ -2182,6 +2484,51 @@ fn fee_quote(
     (host, pending)
 }
 
+/// A drawn request as the LIVE sheet would say it, where money in the
+/// display currency goes (`VELA_CURRENCY_PENDING`): the fee row through the
+/// live builder in `currency` ([`settled_fee_row`]), and no worth under an
+/// amount — the live sheet draws a coin and how much of it, never "≈
+/// $1,000.00" beside it; that line is the mock's own literal, and a board
+/// about the withhold rule cannot keep a dollar figure the rule never saw.
+pub fn in_display_currency(
+    model: &mut SigningModel,
+    s: &SigningStrings,
+    currency: &crate::wallet::live::Money,
+) {
+    for block in &mut model.blocks {
+        match block {
+            Block::Amount { line, .. } => line.fiat = None,
+            Block::Swap { pay, receive } => {
+                pay.fiat = None;
+                receive.fiat = None;
+            }
+            _ => {}
+        }
+    }
+    model.fee = settled_fee_row(s, currency);
+}
+
+/// A settled fee's row as the live sheet draws it in `currency` — the
+/// quote the real `fee_policy` core produced for cs1's transfer
+/// ([`fee_coin_switch`]), through the live `fee_model`. What
+/// `VELA_CURRENCY_PENDING` puts on a drawn request: the fee in its coin,
+/// and the money beside it only once the display currency is committed.
+#[must_use]
+pub fn settled_fee_row(s: &SigningStrings, currency: &crate::wallet::live::Money) -> FeeModel {
+    let [quoted, ..] = fee_coin_switch();
+    let clear =
+        crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+    crate::signing::live::fee_model(&clear, &quoted, 1, false, s, "en", None, currency)
+}
+
+/// The fee view behind [`settled_fee_row`] — for the send's boards, which
+/// price the same quote through their own builders.
+#[must_use]
+pub fn settled_fee() -> vela_core::app::fee_policy::FeeView {
+    let [quoted, ..] = fee_coin_switch();
+    quoted
+}
+
 /// A fee coin switched, through the real `fee_policy` core with canned
 /// answers: quoted in ETH, then USDC picked (`provisional` — the switched
 /// figure, measured again with the USDC leg before it can be confirmed),
@@ -2223,6 +2570,47 @@ pub fn fee_would_fail() -> [vela_core::app::fee_policy::FeeView; 2] {
 mod tests {
     use super::*;
     use crate::loc::Loc;
+
+    /// PR 3 fix C: under a pinned answer the drawn confirm is what the
+    /// core's gate says of the real signing machine in that state — shut
+    /// over the `simChecking` line while the answer is out, open once any
+    /// answer is in, and open when the core's deadline passed with none
+    /// (the could-not-check sentence then stands in the verdict's place).
+    #[test]
+    fn a_pinned_answer_holds_the_confirm_as_the_core_does() {
+        use vela_core::app::sign_confirm::{ConfirmBlock, SIM_CHECKING_KEY};
+        use vela_core::app::sim_outcome::KEY_UNAVAILABLE;
+        for (pin, name) in SimPin::ALL {
+            let gate = sim_pin_confirm(pin).unwrap_or_else(|| unreachable!("{name}: a gate"));
+            let view = sim_pin_sign_view(pin).unwrap_or_else(|| unreachable!("{name}: a view"));
+            if pin == SimPin::Out {
+                assert!(!gate.enabled, "{name}");
+                assert_eq!(gate.block, Some(ConfirmBlock::SimChecking), "{name}");
+                assert_eq!(gate.key.as_deref(), Some(SIM_CHECKING_KEY), "{name}");
+                assert!(view.sim_checking);
+            } else {
+                assert!(gate.enabled, "{name}: {gate:?}");
+                assert_eq!((gate.block, gate.key.as_deref()), (None, None), "{name}");
+                assert!(!view.sim_checking, "{name}");
+            }
+            assert_eq!(
+                view.sim_waited_out_key.as_deref(),
+                (pin == SimPin::Waited).then_some(KEY_UNAVAILABLE),
+                "{name}"
+            );
+        }
+        // The line is in the corpus, in the reader's language.
+        let line = |lang: &str| Loc::for_language(lang).t(SIM_CHECKING_KEY).to_string();
+        assert_eq!(line("en"), "Checking what this transaction does…");
+        assert_eq!(line("zh"), "正在检查这笔交易的结果…");
+        for lang in crate::loc::LANGUAGES {
+            let said = line(lang);
+            assert!(
+                !said.is_empty() && said != SIM_CHECKING_KEY,
+                "{lang} has no line for the held confirm"
+            );
+        }
+    }
 
     /// The correctness batch's states draw what they are named for: the
     /// fee row says why it failed (the chain by name, or Vela's own fault),

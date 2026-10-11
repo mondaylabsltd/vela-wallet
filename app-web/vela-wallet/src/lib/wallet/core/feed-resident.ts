@@ -31,6 +31,9 @@ import type { LocalTransaction } from '$lib/services/transactions-model';
 /** The machine's own initial projection — mirrored until the first view lands. */
 export const INITIAL_VIEW: FeedView = {
 	rows: [],
+	// Issue 469: the home's own cut of `rows` — the newest three — is the
+	// core's; empty until its first view lands, as `rows` is.
+	home_rows: [],
 	transactions: [],
 	new_item_id: null,
 	toast: null,

@@ -98,6 +98,8 @@ fn stored(record: &SignRecord) -> FeedTxRecord {
         call_data: tx["data"].as_str().map(str::to_owned),
         summary: record.summary.clone(),
         settlement: None,
+        // A `receive`'s mark (PR 3); a dApp row carries none.
+        time_verified: None,
     }
 }
 

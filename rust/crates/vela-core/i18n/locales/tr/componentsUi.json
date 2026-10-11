@@ -63,7 +63,6 @@
       "simWillFail": "Bu işlemin başarısız olması bekleniyor — gas ücretini yine de ödersiniz.",
       "simWillFailReason": "Başarısız olması bekleniyor: {{reason}} — gas ücretini yine de ödersiniz.",
       "balanceChangesTitle": "Bakiye değişiklikleri",
-      "balanceNoAssetsMove": "Cüzdanından hiçbir varlık çıkmıyor",
       "balanceUnverifiedToken": "Doğrulanmamış token",
       "balanceSelfTransfer": "Kendi adresinize · bakiye değişmez",
       "intentContractCall": "Sözleşme etkileşimi",
@@ -149,10 +148,11 @@
       "labelYouPayMax": "En fazla ödeyeceğiniz",
       "labelYouReceive": "Aldığınız",
       "labelYouReceiveMin": "En az alacağınız",
-      "intentBackUpPublicKeys": "Açık anahtarları yedekle",
+      "intentBackUpPublicKeys": "Cüzdan kaydını kopyala",
       "labelNetwork": "Ağ",
       "labelAddress": "Adres",
-      "labelPublicKeys": "Açık anahtar sayısı",
+      "labelPublicKeys": "Dahil edilen anahtarlar",
+      "labelWalletName": "Cüzdan adı",
       "valueUnlimited": "Sınırsız",
       "valueAll": "Tümü",
       "warnOrderTerms": "Bu emrin tutarları burada gösterilmiyor — önce sitede kontrol edin.",
@@ -228,8 +228,8 @@
       "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin.",
       "integrity": {
         "checking": "Sayfa kontrol ediliyor…",
-        "matches": "Sürüm {{version}} · Vela'nın yayımlanmış derleme listesiyle eşleşiyor · {{time}} kontrol edildi",
-        "trusted": "Sürüm {{version}} · bu cihazda güvenilir · {{time}} kontrol edildi",
+        "matches": "Sürüm {{version}} · Vela'nın yayımlanmış derleme listesiyle eşleşiyor · {{time}} kontrol edildi",
+        "trusted": "Sürüm {{version}} · bu cihazda güvenilir · {{time}} kontrol edildi",
         "unchecked": "Kontrol edilmedi: bu sayfa için kontrol kapalı",
         "mismatch": "{{version}} sürümü Vela'nın yayımlanmış derleme listesinde yok. Açılmadı.",
         "blocked": "{{version}} sürümü bu cihazda engellendi.",
@@ -249,7 +249,8 @@
         "feeFailed": "Ücret hesaplanamadı — tekrar denemek için dokunun",
         "feeRetrying": "Ücret henüz hesaplanamadı. Otomatik olarak yeniden deneniyor…",
         "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
-        "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…"
+        "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…",
+        "simChecking": "Bu işlemin ne yapacağı denetleniyor…"
       }
     },
     "signingApprove": {

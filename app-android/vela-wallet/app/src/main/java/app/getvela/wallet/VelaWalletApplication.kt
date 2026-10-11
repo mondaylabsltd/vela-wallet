@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.core.format.Formats
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.getvela.wallet.feature.settings.SettingsPage
@@ -9,8 +10,6 @@ import app.getvela.wallet.feature.send.core.SendOpenParams
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.diagnostics.CrashReport
 import app.getvela.wallet.core.data.Preferences
-import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
-import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.signing.SigningAftercare
 import android.app.Application
 import app.getvela.wallet.core.data.ThemePreferenceRepository
@@ -495,14 +494,18 @@ class AppContainer(private val app: Application) {
             // now, so the pending row shows at submit, not at the next tick.
             feedChanged = { wallet.feedReconciled(1) },
             identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
-            currencyCode = { settings.currency.value.code },
+            // The importer is opened in the person's currency when that is known —
+            // committed, or the stored choice on its way (F8); only before either
+            // does it get the placeholder it needs to exist, which its sheet does
+            // not say and the wallet route replaces the moment the real one is known.
+            currencyCode = { settings.currency.value.let { SendLive.batchCurrency(it) ?: it.code } },
             fiatRate = { code -> settings.fiatRate(code) },
             documents = { documents },
-            addNetwork = { chainId ->
-                settings.addNetworkByChainId(chainId)
-                kotlinx.coroutines.withTimeoutOrNull(10_000L) { settings.networks.first { it.last_added_chain_id == chainId } }
-                    ?.let { SendAddNetworkOutcome.Added } ?: SendAddNetworkOutcome.NotFound
-            },
+            // F6 / F27: answered by the network machine's own verdict the moment
+            // it has one — added, not found, or why it stopped in the core's
+            // sentence. It was a ten-second wait that only "added" ended early,
+            // and every other ending was then reported as "not found".
+            addNetwork = { chainId -> settings.addNetworkSettled(chainId) { key -> i18nRuntime.t(key) } },
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
             trustedSigner = { trustedSigner },
@@ -809,7 +812,7 @@ class AppContainer(private val app: Application) {
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =
                         pool.call(chainId, "eth_simulateV1", params)
-                    override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): List<TrustSimJudgment>? =
+                    override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): app.getvela.wallet.feature.wallet.core.TrustSimView? =
                         this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, deltas)
                     override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> {
                         val body = (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)?.json

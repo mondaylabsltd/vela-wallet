@@ -7,6 +7,10 @@
 	 * what it holds now. Each row says what was last read there and offers the
 	 * network's RPC fix; the list follows the live view, so a network that
 	 * comes back leaves it while it is open.
+	 *
+	 * A row with no `action` (PR 3 note 4: the network's RPC is fine, its
+	 * token list could not be loaded) draws no button — there is no endpoint
+	 * to repair. Its text takes the row's whole width.
 	 */
 	import type { UnreachableModel } from '../model';
 	import ChainMark from './ChainMark.svelte';
@@ -31,7 +35,9 @@
 				<span class="name">{row.name}</span>
 				<span class="line">{row.line}</span>
 			</span>
-			<button type="button" onclick={() => onfix?.(row.chainId)}>{row.action}</button>
+			{#if row.action !== undefined}
+				<button type="button" onclick={() => onfix?.(row.chainId)}>{row.action}</button>
+			{/if}
 		</li>
 	{/each}
 </ul>

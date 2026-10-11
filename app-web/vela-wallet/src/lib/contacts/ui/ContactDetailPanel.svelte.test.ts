@@ -27,7 +27,7 @@ function model(name = 'hold on'): ContactDetailModel {
 		},
 		chips: ['team-1'],
 		addChipLabel: 'Move to group',
-		actions: { send: 'Send', receive: 'Receive', qr: 'QR code' },
+		actions: { send: 'Send' },
 		address: {
 			label: 'Address',
 			lines: [ADDRESS.slice(0, 21), ADDRESS.slice(21)],
@@ -113,6 +113,18 @@ describe('ContactDetailPanel', () => {
 		expect(gap).toBeLessThan(30);
 		edit[0].click();
 		expect(edits()).toBe(1);
+	});
+
+	it('offers Send alone, the width of the column (issue 479)', async () => {
+		const { root } = await drawn();
+		const actions = [...root.querySelectorAll('.actions button')] as HTMLElement[];
+		expect(actions.map((b) => b.textContent?.trim())).toEqual(['Send']);
+		const row = (root.querySelector('.actions') as HTMLElement).getBoundingClientRect();
+		const send = actions[0].getBoundingClientRect();
+		// One action takes the whole row; it is not a third of it with two gaps.
+		expect(Math.abs(send.width - row.width)).toBeLessThan(1);
+		// The address stays on the page, with its copy.
+		expect(root.querySelector('button[aria-label="Copy address"]')).not.toBeNull();
 	});
 
 	it('keeps the pencil inside a narrow column when the name is long', async () => {

@@ -15,9 +15,9 @@ import kotlinx.serialization.Serializable
  * is a place a scam token gets in if a shell starts deciding.
  *
  * Numeric types from the Rust: `chain_id`, `log_index`, `decimals`, `cap` are
- * `u32` → `Int`; `block_number`, `timestamp_sec`, `now_ms` are `f64` → `Double`
- * (a block number crosses as a double because it can exceed 2^32, and the core
- * takes it as one).
+ * `u32` → `Int`; `block_number`, `timestamp_sec` are `f64` → `Double` (a block
+ * number crosses as a double because it can exceed 2^32, and the core takes it
+ * as one).
  */
 
 // -- value types -------------------------------------------------------------
@@ -198,15 +198,23 @@ sealed class TrustShellResult {
         val outcome: TrustLogsOutcome,
     ) : TrustShellResult()
 
+    /**
+     * A block's own time, or that it could not be read — and nothing else.
+     * No clock crosses here (PR 3; it carried `now_ms` until then, and the
+     * core stamped a transfer whose block it could not read with it: three
+     * receipts of 2026-09-29 stood under "Today" eleven days later).
+     */
     @Serializable
     @SerialName("block_timestamp")
     data class BlockTimestamp(
         val address: String,
         val chain_id: Int,
         val block_number: Double,
-        /** `null` = the header could not be read; the transfer falls back to now. */
+        /**
+         * `null` = the header could not be read: the core WITHHOLDS the
+         * block's transfers and asks for it again on a later poll.
+         */
         val timestamp_sec: Double? = null,
-        val now_ms: Double,
     ) : TrustShellResult()
 
     @Serializable
@@ -307,7 +315,11 @@ data class TrustIncomingView(
     val tx_hash: String,
     val block_number: Double,
     val log_index: Int,
-    /** Unix seconds: block time, falling back to when it was seen. */
+    /**
+     * Unix seconds: the time of the transfer's own block, always — a transfer
+     * whose block could not be read is not in the feed yet (`token_trust`
+     * invariant ⑨). Never when it was seen.
+     */
     val timestamp_sec: Double,
     val symbol: String? = null,
     val decimals: Int? = null,
@@ -334,12 +346,41 @@ sealed class TrustSimJudgment {
         val in_trusted_set: Boolean = false,
     ) : TrustSimJudgment()
 
+    /**
+     * A token nobody vouches for: which way it moves, and NO figure. The
+     * simulation's number for it is whatever the site being signed for chose
+     * to emit, so the core does not hand it over (PR 3 — it carried the raw
+     * `delta` until then, and this sheet printed it: 「未验证代币
+     * +5,000,000,000,000,000,000,000.00」). There is no field here to print.
+     */
     @Serializable
     @SerialName("erc20_unverified")
     data class Erc20Unverified(
         val token: String? = null,
-        val delta: String,
+        val direction: TrustSimDirection,
     ) : TrustSimJudgment()
+}
+
+/**
+ * Which way an unverified token moves — all a sheet may say of it
+ * (`token_trust::TrustSimDirection`).
+ */
+@Serializable
+enum class TrustSimDirection {
+    /** The account receives it: the row's sign is "+". */
+    @SerialName("in") In,
+
+    /** It leaves the account: the row's sign is "−". */
+    @SerialName("out") Out,
+
+    /** A move of nothing (the figure was a zero): never a row. */
+    @SerialName("still") Still,
+
+    /**
+     * The figure did not read as a signed number: the row with its caution
+     * and no sign — never "nothing moves".
+     */
+    @SerialName("unreadable") Unreadable,
 }
 
 @Serializable
@@ -349,6 +390,15 @@ data class TrustSimView(
     /** False while the metadata behind the judgement is still resolving. */
     val ready: Boolean = false,
     val judgments: List<TrustSimJudgment> = emptyList(),
+    /**
+     * The verdict's quiet line when the checked answer moves nothing of the
+     * person's: `componentsUi.signing.simResultNoChange` ("No asset changes")
+     * once [ready], with no judgment or every one a zero. The sheet draws
+     * this line in the verdict's place exactly when it is set, and never
+     * picks the sentence, or the case, itself. `null` while resolving,
+     * whenever something moves, and from a core that predates the field.
+     */
+    val no_change_key: String? = null,
 )
 
 @Serializable

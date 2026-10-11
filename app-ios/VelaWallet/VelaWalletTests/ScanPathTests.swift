@@ -113,16 +113,48 @@ struct ScanPathTests {
         #expect(!(try CoreJSON.decode(SendViewWire.self, from: try view(from: closed)).showScanner))
     }
 
+    /// Issue #471: a split row's own scan icon names its row. The REAL core
+    /// takes `open_scanner` with a target and holds it while the viewfinder
+    /// is up; a viewfinder left without a code (`close_scanner`, which this
+    /// shell now sends) drops it, so the row steers nothing later; and the
+    /// single field's scan — no `target` key at all — aims at no row.
+    @Test func aRowsScanNamesItsRowAndLeavingDropsIt() throws {
+        let core = SendCore()
+        func target(_ view: [String: Any]) -> String? { view["picker_target"] as? String }
+
+        let opened = try view(from: core.dispatch(eventJson: CoreJSON.string([
+            "type": "open_scanner", "target": "rcpt_2",
+        ])))
+        #expect(opened["show_scanner"] as? Bool == true)
+        #expect(target(opened) == "rcpt_2")
+
+        let closed = try view(from: core.dispatch(eventJson: CoreJSON.string(["type": "close_scanner"])))
+        #expect(closed["show_scanner"] as? Bool == false)
+        #expect(target(closed) == nil, "a scan left without a code still aims at its row")
+
+        let plain = try view(from: core.dispatch(eventJson: CoreJSON.string(["type": "open_scanner"])))
+        #expect(plain["show_scanner"] as? Bool == true)
+        #expect(target(plain) == nil)
+    }
+
     // MARK: - The camera's refusals
 
     /// There is no camera in a simulator, and that is an ANSWER — not an
     /// error, and not silence. The surface falls back to the photo library.
+    ///
+    /// Simulator only (PR 3 note 7): this is the one test that lets a
+    /// scanner past its gate, and on hardware with a lens that would be a
+    /// real camera — which no test run may ever open.
     @Test func noCameraIsItsOwnAnswer() async {
-        let camera = CameraScanner()
+        #if targetEnvironment(simulator)
+        let camera = CameraScanner(fixtureOnly: false)
         await camera.start()
         #expect(camera.refusal == .noCamera || camera.refusal == .denied,
                 "a simulator has no camera and must say which refusal it is")
         #expect(!camera.running)
+        // The gate's counter bites: this scanner did reach for the hardware.
+        #expect(camera.hardwareReaches > 0)
+        #endif
     }
 
     /// Four refusals, four sentences. A person who denied permission and a

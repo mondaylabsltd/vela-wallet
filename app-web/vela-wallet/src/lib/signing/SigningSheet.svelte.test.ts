@@ -7,7 +7,8 @@
  * refresh control and stale note, and says why a quote failed.
  */
 import { tick } from 'svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import SigningSheet from './SigningSheet.svelte';
@@ -265,9 +266,10 @@ describe('the confirm is a button (issue 461)', () => {
 		expect(confirm.textContent?.trim()).toBe('Send');
 		expect(confirm.classList.contains('primary')).toBe(true);
 		expect(confirm.disabled).toBe(false);
-		const footer = confirm.closest('.footer') as HTMLElement;
+		// The rows' column: the signing account's row, above it in the body.
+		const column = view.sheet.querySelector('.footer') as HTMLElement;
 		expect(
-			Math.abs(confirm.getBoundingClientRect().width - footer.getBoundingClientRect().width)
+			Math.abs(confirm.getBoundingClientRect().width - column.getBoundingClientRect().width)
 		).toBeLessThanOrEqual(1);
 		confirm.click();
 		expect(onconfirm).toHaveBeenCalledOnce();
@@ -300,7 +302,7 @@ describe('the confirm is a button (issue 461)', () => {
 			model: model({ confirm: { action: 'Резервное копирование открытых ключей', enabled: true } })
 		});
 		const confirm = confirmOf(view.sheet)!;
-		(confirm.closest('.footer') as HTMLElement).style.width = '312px';
+		(confirm.closest('[data-signing-foot]') as HTMLElement).style.width = '312px';
 		await tick();
 		expect(confirm.scrollWidth).toBeLessThanOrEqual(confirm.clientWidth);
 		expect(confirm.getBoundingClientRect().width).toBeLessThanOrEqual(312.5);
@@ -387,7 +389,7 @@ describe('the signing fee row (spec 079 US2)', () => {
 // stays in every mode; a site's sheet keeps its requester row and the eyebrow
 // its drawn scenarios were built around.
 describe('the wallet’s own request (first-party)', () => {
-	const BACKUP = 'Back up public keys';
+	const BACKUP = "Copy this wallet's record";
 	const own = (over: Partial<SigningModel> = {}) =>
 		model({
 			dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)' },
@@ -574,5 +576,431 @@ describe('a fee being measured moves nothing above it', () => {
 		await tick();
 		expect(view.sheet.querySelector('.warning')).toBeNull();
 		await view.screen.unmount();
+	});
+});
+
+/*
+ * PR 3 final note F2, then the device round (item 1, security).
+ *
+ * The simulation's verdict is the one part of a signing sheet a site cannot
+ * write, so no part of it may be hidden: every row and every line is drawn
+ * whole, at its own height — nothing clipped, nothing scrolled inside a
+ * block, no fold. And the confirm is never moved by it: it stands in the
+ * sheet's foot, outside the scroll, with the line the core says under a shut
+ * one. A sheet that no longer fits scrolls its BODY, under the header and
+ * over the foot, and what landed is scrolled into sight.
+ *
+ * This sheet reserves no place for a verdict (spec 082 RG6): what lands late
+ * is the relay's "will fail" line and the "No asset changes" card. The
+ * renderer draws balance rows for the boards, so the tall card here — four
+ * rows and the unverified-token note — is the one the apps draw.
+ */
+describe('a verdict is shown whole, and the confirm does not move (device round, item 1)', () => {
+	const INTENT = { kind: 'intent', text: 'Send 1 xDAI', tone: 'neutral' } as const;
+	const ROWS = {
+		kind: 'rows',
+		rows: Array.from({ length: 4 }, (_, i) => ({
+			label: `Field ${i + 1}`,
+			value: `value ${i + 1}`
+		}))
+	} as const;
+	const WILL_FAIL = {
+		kind: 'warning',
+		tone: 'danger',
+		text: 'This transaction is expected to fail — you’d still pay gas.',
+		verdict: true
+	} as const;
+	/** The longest the relay's line gets: its sentence around a 64-character reason. */
+	const LONGEST_FAIL =
+		'This transaction is expected to fail: ERC20: transfer amount exceeds the allowance granted to it. You’d still pay gas.';
+	const UNVERIFIED =
+		'Amounts for unverified tokens are shown as the token reports them, and may not be what you receive.';
+	type Blocks = SigningModel['blocks'];
+	type Card = Extract<Blocks[number], { kind: 'balances' }>;
+	const MOVES: Card['rows'] = [
+		{ symbol: 'USDC', delta: '−1,250.00', tone: 'neutral' },
+		{ symbol: 'WETH', delta: '+0.4312', tone: 'success' },
+		{ symbol: 'SCAM-LP', delta: '+1,000,000', tone: 'caution' },
+		{ symbol: 'DAI', delta: '−18.5', tone: 'neutral' }
+	];
+	const card = (rows: number, note?: string): Card => ({
+		kind: 'balances',
+		title: 'Balance changes',
+		rows: MOVES.slice(0, rows),
+		...(note ? { note } : {}),
+		verdict: true
+	});
+	const NO_CHANGE = card(0, 'No asset changes');
+	const TALL = card(4, UNVERIFIED);
+	const fee: FeeModel = {
+		kind: 'onchain',
+		label: 'Network fee',
+		value: '0.0021 ETH',
+		valueFiat: '≈ $6.30',
+		tappable: false,
+		refreshLabel: 'Refresh fee',
+		refreshing: false,
+		chevron: false
+	};
+	/** The request's own blocks, then whatever has landed: a line under the intent, a card after them. */
+	const sheetWith = (landed: { line?: string; card?: Blocks[number] } = {}) =>
+		model({
+			fee,
+			blocks: [
+				INTENT,
+				...(landed.line ? [{ ...WILL_FAIL, text: landed.line }] : []),
+				ROWS,
+				...(landed.card ? [landed.card] : [])
+			] as Blocks
+		});
+
+	const top = (el: Element) => Math.round(el.getBoundingClientRect().top * 10) / 10;
+	const confirm = (sheet: HTMLElement) =>
+		sheet.querySelector('[data-testid="signing-confirm"]') as HTMLElement;
+	const scrollerOf = (sheet: HTMLElement) => sheet.querySelector('.content') as HTMLElement;
+	const headerOf = (sheet: HTMLElement) => sheet.querySelector('[data-signing-top]') as HTMLElement;
+	const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+	// The harness's own window, back as the other suites expect it.
+	afterAll(() => page.viewport(414, 896));
+
+	async function at(width: number, height: number, first: SigningModel = sheetWith()) {
+		await page.viewport(width, height);
+		return drawn({ model: first });
+	}
+	async function land(view: Awaited<ReturnType<typeof drawn>>, next: SigningModel) {
+		await view.screen.rerender({ model: next });
+		await tick();
+		await frame();
+		await frame();
+	}
+
+	/** Whole, on screen, and the thing a tap there reaches. */
+	function expectConfirmWhole(sheet: HTMLElement): void {
+		const box = confirm(sheet).getBoundingClientRect();
+		expect(box.top).toBeGreaterThanOrEqual(0);
+		expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
+		expect(box.bottom).toBeLessThanOrEqual(sheet.getBoundingClientRect().bottom);
+		// Outside the scroll: nothing the body holds can cover it or carry it off.
+		expect(scrollerOf(sheet).contains(confirm(sheet))).toBe(false);
+		const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+		expect(confirm(sheet).contains(hit)).toBe(true);
+	}
+
+	/**
+	 * The card is as tall as what it holds, and nothing between a row and the
+	 * sheet's one scroll cuts or scrolls it.
+	 */
+	function expectCardWhole(sheet: HTMLElement, rows: number): HTMLElement {
+		const section = sheet.querySelector('section.balances') as HTMLElement;
+		const parts = [...section.children] as HTMLElement[];
+		// A title, each row, and the note.
+		expect(section.querySelectorAll('.row')).toHaveLength(rows);
+		expect(parts).toHaveLength(rows + 2);
+		const style = getComputedStyle(section);
+		const chrome =
+			parseFloat(style.paddingTop) +
+			parseFloat(style.paddingBottom) +
+			parseFloat(style.borderTopWidth) +
+			parseFloat(style.borderBottomWidth);
+		const content = parts.reduce((sum, part) => sum + part.getBoundingClientRect().height, 0);
+		expect(Math.abs(section.getBoundingClientRect().height - (content + chrome))).toBeLessThan(1);
+		expect(section.scrollHeight).toBeLessThanOrEqual(section.clientHeight);
+		expect(section.scrollWidth).toBeLessThanOrEqual(section.clientWidth);
+		for (const part of parts) {
+			expect(part.getBoundingClientRect().height).toBeGreaterThan(0);
+			expect(part.scrollHeight).toBeLessThanOrEqual(part.clientHeight + 1);
+			expect(part.scrollWidth).toBeLessThanOrEqual(part.clientWidth + 1);
+		}
+		// No scroll, clip or height of its own on the way up to the body.
+		const scroller = scrollerOf(sheet);
+		for (let el: HTMLElement | null = section; el && el !== scroller; el = el.parentElement) {
+			const own = getComputedStyle(el);
+			expect(own.overflowY, el.className).toBe('visible');
+			expect(own.maxHeight, el.className).toBe('none');
+		}
+		expect(scroller.contains(section)).toBe(true);
+		return section;
+	}
+
+	/** In the body's window: under the header, over the foot. */
+	function inSight(sheet: HTMLElement, el: Element): boolean {
+		const box = el.getBoundingClientRect();
+		return (
+			box.top >= headerOf(sheet).getBoundingClientRect().bottom - 0.5 &&
+			box.bottom <= scrollerOf(sheet).getBoundingClientRect().bottom + 0.5
+		);
+	}
+
+	const SCREENS = [
+		['the phone sheet', 390, 844],
+		['the extension panel', 360, 640],
+		['the centred card', 1400, 900]
+	] as const;
+
+	it.each(SCREENS)(
+		'%s: four rows and the unverified note are whole, and the confirm is where it was with one row and with none',
+		async (_name, width, height) => {
+			const view = await at(width, height);
+			const none = top(confirm(view.sheet));
+			expectConfirmWhole(view.sheet);
+
+			await land(view, sheetWith({ card: card(1) }));
+			expect(top(confirm(view.sheet))).toBe(none);
+
+			await land(view, sheetWith({ card: TALL }));
+			const section = expectCardWhole(view.sheet, 4);
+			expect(section.textContent).toContain(UNVERIFIED);
+			expect(top(confirm(view.sheet))).toBe(none);
+			expectConfirmWhole(view.sheet);
+			// It landed in sight, whole: nobody has to look for it.
+			expect(inSight(view.sheet, section)).toBe(true);
+			await view.screen.unmount();
+		}
+	);
+
+	it.each([
+		['the phone sheet', 390, 520],
+		['the extension panel', 360, 480],
+		['the centred card', 1400, 560]
+	] as const)(
+		'%s on a screen too short for it: the body scrolls, every row can be read, the confirm has not moved',
+		async (_name, width, height) => {
+			const view = await at(width, height);
+			const scroller = scrollerOf(view.sheet);
+			const none = top(confirm(view.sheet));
+			expectConfirmWhole(view.sheet);
+
+			await land(view, sheetWith({ card: TALL }));
+			const section = expectCardWhole(view.sheet, 4);
+			// The sheet is as tall as it may be: its body scrolls, the card does not.
+			expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+			expect(top(confirm(view.sheet))).toBe(none);
+			expectConfirmWhole(view.sheet);
+			// What landed was scrolled into sight: all of it when the body's
+			// window can hold it, else from its top, under the header.
+			const header = headerOf(view.sheet).getBoundingClientRect();
+			const room = scroller.getBoundingClientRect().bottom - header.bottom;
+			if (section.getBoundingClientRect().height <= room) {
+				expect(inSight(view.sheet, section)).toBe(true);
+			} else {
+				expect(Math.abs(section.getBoundingClientRect().top - header.bottom)).toBeLessThan(1);
+			}
+			expect(scroller.scrollTop).toBeGreaterThan(0);
+			// Who is asking, and the ✕, are still at the top of the sheet.
+			expect(header.top).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().top - 0.5);
+
+			// Each row and the note can be brought fully into view, and reading
+			// them moves no confirm.
+			for (const part of [...section.children]) {
+				const box = part.getBoundingClientRect();
+				scroller.scrollTop += box.top - headerOf(view.sheet).getBoundingClientRect().bottom;
+				if (!inSight(view.sheet, part)) {
+					scroller.scrollTop +=
+						part.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+				}
+				expect(inSight(view.sheet, part), part.textContent ?? '').toBe(true);
+				expect(part.getBoundingClientRect().height).toBeLessThanOrEqual(room);
+				expect(top(confirm(view.sheet))).toBe(none);
+			}
+			expectConfirmWhole(view.sheet);
+
+			// The card goes (a new request's sheet has none): the confirm is still there.
+			await land(view, sheetWith());
+			expect(top(confirm(view.sheet))).toBe(none);
+			await view.screen.unmount();
+		}
+	);
+
+	it.each([...SCREENS, ['a short phone', 320, 568], ['a short card', 1400, 600]] as const)(
+		'%s: the common verdicts move no confirm',
+		async (_name, width, height) => {
+			const view = await at(width, height);
+			const none = top(confirm(view.sheet));
+			const landings: [string, SigningModel][] = [
+				['No asset changes', sheetWith({ card: NO_CHANGE })],
+				['one row', sheetWith({ card: card(1) })],
+				['two rows', sheetWith({ card: card(2) })],
+				['will fail', sheetWith({ line: WILL_FAIL.text })],
+				['the longest will-fail line', sheetWith({ line: LONGEST_FAIL })],
+				['will fail, and nothing moves', sheetWith({ line: WILL_FAIL.text, card: NO_CHANGE })],
+				['none again', sheetWith()]
+			];
+			for (const [name, next] of landings) {
+				await land(view, next);
+				expect(top(confirm(view.sheet)), name).toBe(none);
+				expectConfirmWhole(view.sheet);
+				// Whatever landed last is in sight.
+				const landed = [...view.sheet.querySelectorAll('[data-verdict]')];
+				if (name === 'will fail, and nothing moves') expect(landed).toHaveLength(2);
+			}
+			await view.screen.unmount();
+		}
+	);
+
+	it('the phone sheet grows upward for what lands, and gives the room back', async () => {
+		const view = await at(390, 844);
+		const was = top(confirm(view.sheet));
+		const sheetTop = top(view.sheet);
+		await land(view, sheetWith({ line: WILL_FAIL.text }));
+		const line = view.sheet.querySelector('[data-verdict]') as HTMLElement;
+		expect(line.textContent).toContain('expected to fail');
+		expect(top(confirm(view.sheet))).toBe(was);
+		// The sheet made the room above itself.
+		expect(top(view.sheet)).toBeLessThan(sheetTop - 20);
+		// …and gives it back when a new estimate takes the line away.
+		await land(view, sheetWith());
+		expect(top(confirm(view.sheet))).toBe(was);
+		expect(top(view.sheet)).toBe(sheetTop);
+		await view.screen.unmount();
+	});
+
+	it('the centred card grows upward only — not from its middle — and comes back to its middle', async () => {
+		const view = await at(1400, 900);
+		const was = top(confirm(view.sheet));
+		const cardTop = top(view.sheet);
+		const cardHeight = view.sheet.getBoundingClientRect().height;
+		await land(view, sheetWith({ line: WILL_FAIL.text }));
+		const grown = view.sheet.getBoundingClientRect().height - cardHeight;
+		expect(grown).toBeGreaterThan(20);
+		expect(top(confirm(view.sheet))).toBe(was);
+		// All of the growth went up (from its middle, half of it would have).
+		expect(Math.abs(cardTop - top(view.sheet) - grown)).toBeLessThanOrEqual(1);
+
+		// A longer reason: the line is taller, the confirm still does not move.
+		await land(view, sheetWith({ line: LONGEST_FAIL }));
+		expect(top(confirm(view.sheet))).toBe(was);
+
+		// The line goes: the card is where it started.
+		await land(view, sheetWith());
+		expect(top(confirm(view.sheet))).toBe(was);
+		expect(Math.abs(top(view.sheet) - cardTop)).toBeLessThanOrEqual(0.5);
+		await view.screen.unmount();
+	});
+
+	it('a card taller than the window allows keeps its margin: the body scrolls, the foot is held', async () => {
+		// Where the card's top stands when it is as tall as it may be.
+		const tallest = await at(1400, 700, sheetWith({ line: LONGEST_FAIL, card: TALL }));
+		const highest = tallest.sheet.getBoundingClientRect().top;
+		expect(highest).toBeGreaterThan(0);
+		await tallest.screen.unmount();
+
+		const view = await at(1400, 700);
+		const was = top(confirm(view.sheet));
+		const scroller = scrollerOf(view.sheet);
+		expect(scroller.scrollHeight).toBeLessThanOrEqual(scroller.clientHeight);
+		await land(view, sheetWith({ line: LONGEST_FAIL, card: TALL }));
+		expect(top(confirm(view.sheet))).toBe(was);
+		expectConfirmWhole(view.sheet);
+		// Its top stops where the tallest card's does, and no higher…
+		expect(Math.abs(view.sheet.getBoundingClientRect().top - highest)).toBeLessThan(1);
+		// …and the rest is the body's to scroll.
+		expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+		expectCardWhole(view.sheet, 4);
+		await view.screen.unmount();
+	});
+
+	it('a verdict that lands under the fold is scrolled into sight; one already in sight moves nothing', async () => {
+		// The body already scrolls, and the person is reading its top.
+		const view = await at(390, 520);
+		const scroller = scrollerOf(view.sheet);
+		expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight);
+		expect(scroller.scrollTop).toBe(0);
+
+		// Under the intent, in sight: nothing is scrolled for it.
+		await land(view, sheetWith({ line: WILL_FAIL.text }));
+		const line = view.sheet.querySelector('[data-verdict]') as HTMLElement;
+		expect(inSight(view.sheet, line)).toBe(true);
+		expect(scroller.scrollTop).toBe(0);
+
+		// After the request's own blocks, under the fold: brought into sight.
+		await land(view, sheetWith({ line: WILL_FAIL.text, card: NO_CHANGE }));
+		const landed = view.sheet.querySelector('section.balances') as HTMLElement;
+		expect(landed.textContent).toContain('No asset changes');
+		expect(scroller.scrollTop).toBeGreaterThan(0);
+		expect(inSight(view.sheet, landed)).toBe(true);
+		await view.screen.unmount();
+	});
+
+	it('two that land together are both brought into sight; when the window cannot hold both, the danger line is', async () => {
+		const both = sheetWith({ line: WILL_FAIL.text, card: NO_CHANGE });
+		const outcomes: string[] = [];
+		// From a window that holds everything down to one that holds neither whole.
+		for (let height = 760; height >= 400; height -= 40) {
+			const view = await at(390, height);
+			const scroller = scrollerOf(view.sheet);
+			const was = top(confirm(view.sheet));
+			await land(view, both);
+			const [line, landedCard] = [...view.sheet.querySelectorAll('[data-verdict]')];
+			expect(landedCard.textContent).toContain('No asset changes');
+			expect(top(confirm(view.sheet))).toBe(was);
+			const window =
+				scroller.getBoundingClientRect().bottom -
+				headerOf(view.sheet).getBoundingClientRect().bottom;
+			const span = landedCard.getBoundingClientRect().bottom - line.getBoundingClientRect().top;
+			const scrolled = scroller.scrollTop > 0;
+			if (span <= window) {
+				// They fit together: both are whole, in sight.
+				expect(inSight(view.sheet, line), `line at ${height}`).toBe(true);
+				expect(inSight(view.sheet, landedCard), `card at ${height}`).toBe(true);
+				outcomes.push(scrolled ? 'both, scrolled' : 'both');
+			} else {
+				// They do not: the body ends on the danger line.
+				expect(inSight(view.sheet, line), `line at ${height}`).toBe(true);
+				outcomes.push('line');
+			}
+			await view.screen.unmount();
+		}
+		// Each case was met — not one of them passed for want of a window.
+		expect(outcomes).toContain('both');
+		expect(outcomes).toContain('both, scrolled');
+		expect(outcomes).toContain('line');
+	});
+
+	it('a long figure wraps inside the card instead of running out of it', async () => {
+		const view = await at(320, 700);
+		await land(
+			view,
+			sheetWith({
+				card: {
+					kind: 'balances',
+					title: 'Balance changes',
+					rows: [
+						{
+							symbol: 'AVERYLONGTOKENSYMBOLTHATNEVERENDS',
+							delta: '+115,792,089,237,316,195,423,570,985,008,687,907,853,269.984665',
+							tone: 'caution'
+						}
+					],
+					note: UNVERIFIED,
+					verdict: true
+				}
+			})
+		);
+		const section = expectCardWhole(view.sheet, 1);
+		const scroller = scrollerOf(view.sheet);
+		expect(scroller.scrollWidth).toBeLessThanOrEqual(scroller.clientWidth);
+		for (const cell of section.querySelectorAll('.symbol, .delta')) {
+			const box = cell.getBoundingClientRect();
+			expect(box.left).toBeGreaterThanOrEqual(section.getBoundingClientRect().left);
+			expect(box.right).toBeLessThanOrEqual(section.getBoundingClientRect().right);
+		}
+		await view.screen.unmount();
+	});
+
+	it('a refused request’s way out stands in the foot too; a status and a hand-off have none', async () => {
+		const refused = await at(390, 844, model({ dismissOnly: 'Close' }));
+		const out = refused.sheet.querySelector('[data-signing-foot] .dismiss button') as HTMLElement;
+		expect(out.textContent?.trim()).toBe('Close');
+		expect(scrollerOf(refused.sheet).contains(out)).toBe(false);
+		await refused.screen.unmount();
+
+		const status = await at(
+			390,
+			844,
+			model({ status: { stage: 'submitting', title: 'Submitting…', captions: [], closable: true } })
+		);
+		expect(status.sheet.querySelector('[data-signing-foot]')).toBeNull();
+		await status.screen.unmount();
 	});
 });

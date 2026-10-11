@@ -24,13 +24,114 @@
 		if (spinning) return;
 		onrefresh?.();
 	}
+
+	/**
+	 * The figure is ONE line, always — as wide as it is, or scaled to the room.
+	 *
+	 * It used to wrap wherever it ran out (`overflow-wrap: anywhere`), which
+	 * broke a number in the middle of itself — "₫112,500,00 / 0.00" at 320 px —
+	 * and made the hero two lines tall, so the whole page dropped a line when a
+	 * long figure landed where the one-line skeleton had stood (measured:
+	 * 44.8 px, on the first read and again when the display currency
+	 * committed). A figure that does not fit its line is drawn smaller, by a
+	 * transform: the line box is the slot's and does not change, so nothing
+	 * under the hero moves whatever the figure's length.
+	 */
+	// `bind:this` hands back `null` when its element leaves (the skeleton
+	// taking the figure's place), not `undefined`.
+	let slot = $state<HTMLElement | null>(null);
+	let figure = $state<HTMLElement | null>(null);
+	let fit = $state(1);
+	$effect(() => {
+		const room = slot;
+		const drawn = figure;
+		if (!room || !drawn) {
+			fit = 1;
+			return;
+		}
+		const measure = () => {
+			// The figure's own width, whatever the transform on it.
+			const need = drawn.scrollWidth;
+			const have = room.clientWidth;
+			fit = need > have && need > 0 && have > 0 ? have / need : 1;
+		};
+		measure();
+		// The room changes with the window, the figure with its digits and its
+		// face (a web font landing is a resize too).
+		const watch = new ResizeObserver(measure);
+		watch.observe(room);
+		watch.observe(drawn);
+		return () => watch.disconnect();
+	});
+
+	/**
+	 * The status is ONE line, always (PR 3 final note F16).
+	 *
+	 * Its line is the hero's from the first frame, and a sentence longer than
+	 * the line wrapped onto a second one and grew it: "No podemos cargar la
+	 * lista de tokens de Tempo por ahora" at 320 px pushed the page under the
+	 * hero down a line when it landed. A sentence that does not fit is first
+	 * set a little smaller — never under 85 % — and what still does not fit
+	 * ends in "…". Nothing is lost: the whole sentence is the line's
+	 * accessible name, and the sheet the line opens says it in full at its top.
+	 */
+	const SAID_FLOOR = 0.85;
+	let saidRoom = $state<HTMLElement | null>(null);
+	let saidDoor = $state<HTMLElement | null>(null);
+	let saidWords = $state<HTMLElement | null>(null);
+	let shrink = $state(1);
+	$effect(() => {
+		const room = saidRoom;
+		const door = saidDoor;
+		const words = saidWords;
+		// Another sentence on the same line is measured again.
+		void balance.status?.text;
+		if (!room || !door || !words) {
+			shrink = 1;
+			return;
+		}
+		const measure = () => {
+			// The sentence's width at full size, whatever size it is drawn at
+			// now; and the room the line has for it beside its two glyphs.
+			const drawnAt = Number(words.dataset.shrink) || 1;
+			const natural = words.scrollWidth / drawnAt;
+			const beside = door.getBoundingClientRect().width - words.getBoundingClientRect().width;
+			const have = room.clientWidth - beside;
+			if (natural <= 0 || have <= 0) return;
+			const next = natural > have ? Math.max(SAID_FLOOR, have / natural) : 1;
+			if (Math.abs(next - drawnAt) > 0.005) shrink = next;
+		};
+		measure();
+		// The room changes with the window, the sentence with its face (a web
+		// font landing). Measured on the next frame, not inside the observer:
+		// setting the size there resizes what it observes, in its own loop.
+		let frame = 0;
+		const later = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(measure);
+		};
+		const watch = new ResizeObserver(later);
+		watch.observe(room);
+		watch.observe(words);
+		return () => {
+			cancelAnimationFrame(frame);
+			watch.disconnect();
+		};
+	});
 </script>
 
 <div class="balance">
-	<p class="label">{balance.label} · {balance.currency}</p>
+	<!-- The currency is named once it is known (`BalanceModel.currency`): the
+	     label never says the placeholder's "USD" and then changes its mind. -->
+	<p class="label">
+		{balance.currency === undefined ? balance.label : `${balance.label} · ${balance.currency}`}
+	</p>
 
 	{#if balance.state === 'loading'}
-		<SkeletonRow kind="block" />
+		<!-- The skeleton stands in the figure's own line box: when the figure
+		     arrives — the first read landing, or the display currency
+		     committing — nothing under it moves. -->
+		<div class="amount-slot"><SkeletonRow kind="block" /></div>
 	{:else if balance.state === 'hidden'}
 		<p class="amount hidden-row">
 			<span class="mask">{balance.integer}</span>
@@ -38,46 +139,40 @@
 				<Icon icon={UTILITY_ICONS['eye-off']} size="lg" />
 			</button>
 		</p>
-	{:else if ontoggle !== undefined}
-		<!-- Live (spec 025): the figure itself is the tap-to-hide target — the
-		     H5 design's gesture, with the hidden state's eye-off as its inverse.
-		     Absent a handler (the gallery), the amount stays a plain figure. -->
-		<button
-			type="button"
-			class="amount amount-toggle"
-			aria-label={balance.a11yHide}
-			onclick={ontoggle}
-		>
-			<span class="integer">{balance.integer}</span><span class="decimals"
-				>{balance.decimalMark ?? '.'}{balance.decimals}</span
-			>
-		</button>
 	{:else}
-		<p class="amount">
-			<span class="integer">{balance.integer}</span><span class="decimals"
-				>{balance.decimalMark ?? '.'}{balance.decimals}</span
-			>
-		</p>
-	{/if}
-
-	{#if balance.state === 'zero-live' && balance.liveText !== undefined}
-		<p class="live">
-			<span class="live-dot" aria-hidden="true"></span>
-			{balance.liveText}
-		</p>
-	{/if}
-
-	{#if balance.status !== undefined}
-		<button type="button" class="status {balance.status.kind}" onclick={onstatus}>
-			<Icon
-				icon={balance.status.kind === 'warning'
-					? UTILITY_ICONS['triangle-alert']
-					: UTILITY_ICONS['refresh-cw']}
-				size="sm"
-			/>
-			<span>{balance.status.text}</span>
-			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-		</button>
+		<!-- The figure's line: the same slot the skeleton stands in, so the
+		     figure landing — and a longer one replacing it — moves nothing. -->
+		<div class="amount-slot" bind:this={slot}>
+			{#if ontoggle !== undefined}
+				<!-- Live (spec 025): the figure itself is the tap-to-hide target — the
+				     H5 design's gesture, with the hidden state's eye-off as its inverse.
+				     Absent a handler (the gallery), the amount stays a plain figure. -->
+				<button
+					type="button"
+					class="amount figure amount-toggle"
+					class:fitted={fit < 1}
+					style:--fit={fit < 1 ? fit : undefined}
+					aria-label={balance.a11yHide}
+					onclick={ontoggle}
+					bind:this={figure}
+				>
+					<span class="integer">{balance.integer}</span><span class="decimals"
+						>{balance.decimalMark ?? '.'}{balance.decimals}</span
+					>
+				</button>
+			{:else}
+				<p
+					class="amount figure"
+					class:fitted={fit < 1}
+					style:--fit={fit < 1 ? fit : undefined}
+					bind:this={figure}
+				>
+					<span class="integer">{balance.integer}</span><span class="decimals"
+						>{balance.decimalMark ?? '.'}{balance.decimals}</span
+					>
+				</p>
+			{/if}
+		</div>
 	{/if}
 
 	{#if balance.refresh !== undefined}
@@ -110,6 +205,61 @@
 			</span>
 		</button>
 	{/if}
+
+	<!--
+		The line a status is said on, kept from the first frame (PR 3 note 26b).
+
+		"Can't reach Gnosis right now", "Some tokens couldn't be priced", the
+		new wallet's "Live · listening for payments": each arrived as a line of
+		its own under the figure, and each arrival pushed the refresh control
+		and the whole page under the hero down a line — and its going pulled
+		them back up. The line is the hero's now, whether or not anything is
+		said on it, and it stands under the refresh control: what a person
+		presses never moves, and a status lands in room that was already there.
+	-->
+	<div class="said" bind:this={saidRoom}>
+		{#if balance.checkingText !== undefined}
+			<!-- The first read is still out (F19): said quietly, where "Live" or
+			     "Can't reach…" will stand once a round has ended. The dot is the
+			     live line's own, not yet green — the words start where they will. -->
+			<p class="live checking">
+				<span class="live-dot" aria-hidden="true"></span>
+				{balance.checkingText}
+			</p>
+		{:else if balance.status !== undefined}
+			<!-- One line (F16): the whole sentence is its name — to a screen
+			     reader, and under a pointer — whatever part of it the line has
+			     room to draw. -->
+			<button
+				type="button"
+				class="status {balance.status.kind}"
+				aria-label={balance.status.text}
+				title={balance.status.text}
+				onclick={onstatus}
+				bind:this={saidDoor}
+			>
+				<Icon
+					icon={balance.status.kind === 'warning'
+						? UTILITY_ICONS['triangle-alert']
+						: UTILITY_ICONS['refresh-cw']}
+					size="sm"
+				/>
+				<span
+					class="sentence"
+					class:shrunk={shrink < 1}
+					style:--shrink={shrink < 1 ? shrink : undefined}
+					data-shrink={shrink}
+					bind:this={saidWords}>{balance.status.text}</span
+				>
+				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+			</button>
+		{:else if balance.state === 'zero-live' && balance.liveText !== undefined}
+			<p class="live">
+				<span class="live-dot" aria-hidden="true"></span>
+				{balance.liveText}
+			</p>
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -153,9 +303,54 @@
 		overflow-wrap: anywhere;
 	}
 
+	/* One line. A figure that fits is drawn as it is set — no transform at
+	   all, so nothing about its rendering changes. */
+	.figure {
+		flex: none;
+		white-space: nowrap;
+		overflow-wrap: normal;
+	}
+
+	/* One that does not is drawn to fit (`--fit`, under 1): scaled from its
+	   start, so a long figure ends where the column ends. */
+	.figure.fitted {
+		transform: scale(var(--fit));
+		transform-origin: 0 50%;
+	}
+
+	:global([dir='rtl']) .figure.fitted {
+		transform-origin: 100% 50%;
+	}
+
 	.decimals {
 		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	/* One line of the amount's face, exactly: the bar inside keeps its own
+	   size and sits on the line's middle. The bar alone was a third shorter
+	   than the figure, so everything under the hero dropped when it landed. */
+	.amount-slot {
+		display: flex;
+		align-items: center;
+		width: 100%;
+		height: calc(var(--text-5xl) * var(--text-scale, 1) * var(--leading-amountHero));
+		/* A figure wider than the slot is LAID OUT that wide and drawn to fit;
+		   its layout box must not give the page a sideways scroll. */
+		overflow-x: clip;
+	}
+
+	/* The status line's room: one line of the status, its own padding
+	   included, there before anything is said in it. */
+	.said {
+		display: flex;
+		align-items: flex-start;
+		width: 100%;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		/* Said out loud rather than left to the face's own metrics, so the
+		   room kept is exactly the room a status takes. */
+		line-height: var(--leading-normal);
+		min-height: calc(1lh + 2 * var(--space-sm));
 	}
 
 	.hidden-row {
@@ -185,7 +380,10 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-md);
+		/* The status line's own block padding: the two stand on one line. */
+		padding-block: var(--space-sm);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 		color: var(--color-fg-muted);
 	}
 
@@ -195,6 +393,11 @@
 		border-radius: var(--radius-full);
 		background: var(--color-success-base);
 		animation: pulse calc(var(--motion-entrance-fadeUp) * 2) ease-in-out infinite alternate;
+	}
+
+	/* Not live yet: the same dot, in the line's own quiet ink. */
+	.checking .live-dot {
+		background: var(--color-fg-subtle);
 	}
 
 	@keyframes pulse {
@@ -217,17 +420,44 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-md);
+		/* As wide as its sentence, and never wider than the line. */
+		min-width: 0;
+		max-width: 100%;
+		/* One line of the status face, said out loud: a sentence drawn smaller
+		   to fit (`.shrunk`) stands in the same line, on the same middle. */
+		box-sizing: content-box;
+		min-height: 1lh;
 		padding: var(--space-sm) 0;
 		border: none;
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		/* A line that wraps reads from its start, beside its glyph — a button
-		   centres its text by default, and Vela's own-fault sentence (PR 2
-		   note 11) is the first status long enough to wrap. */
+		line-height: var(--leading-normal);
 		text-align: start;
 		cursor: pointer;
 		border-radius: var(--radius-sm);
+	}
+
+	/* The two glyphs keep their size; the sentence between them gives. */
+	.status > :global(svg) {
+		flex: none;
+	}
+
+	/* ONE line (F16): what does not fit ends in "…" — never a second line,
+	   which would grow the line the hero keeps for it. The whole sentence is
+	   the button's name and stands at the top of the sheet it opens. */
+	.status .sentence {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+
+	/* A sentence a little too long is set a little smaller first (`--shrink`,
+	   never under 0.85). */
+	.status .sentence.shrunk {
+		font-size: calc(var(--text-base) * var(--text-scale, 1) * var(--shrink));
 	}
 
 	.warning {

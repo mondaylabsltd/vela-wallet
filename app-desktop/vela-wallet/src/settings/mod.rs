@@ -115,18 +115,11 @@ pub struct SettingsStrings {
     /// nothing after it until spec 034, because this half needs per-account
     /// balances nobody had asked the core for.
     pub accounts_total: String,
-    pub accounts_count: String,
     /// The account switcher's title (078 H-01), as the web's dialog names it.
     pub accounts_title: SharedString,
     pub account_create: SharedString,
     pub account_sign_in: SharedString,
     pub sign_out_button: SharedString,
-    /// The Ethereum backup row (spec 062).
-    pub backup_title: SharedString,
-    pub backup_backed_up: SharedString,
-    pub backup_not_backed_up: SharedString,
-    pub backup_could_not_check: SharedString,
-    pub backup_checking: SharedString,
     /// The keys block (spec 062): which passkeys control the wallet.
     pub keys_title: SharedString,
     pub keys_subtitle: SharedString,
@@ -147,8 +140,6 @@ pub struct SettingsStrings {
     pub keys_attestation: SharedString,
     pub keys_copy: SharedString,
     pub keys_copied: SharedString,
-    /// PUBLIC keys only; private keys never leave the device.
-    pub backup_explain: SharedString,
     pub sign_out_desc: SharedString,
     pub erase_title: SharedString,
     pub erase_subtitle: SharedString,
@@ -256,23 +247,22 @@ pub struct SettingsStrings {
     /// looks broken because nobody said it was working.
     pub wizard_searching: SharedString,
     pub wizard_checking: SharedString,
-    /// The four ways the wizard STOPS (`NetWizardErrorKind`). The core decides
-    /// which; these are only the words, and all four were already in the
-    /// corpus — the scan path and the add-token screen say the same things.
-    pub wizard_already_added: SharedString,
-    pub wizard_not_found: SharedString,
-    /// "Can't reach {{name}} right now" (spec 092's one-network line): the
-    /// registry listed no endpoint for the resolved chain, and no custom RPC
-    /// was typed. Carries the chain's name because at this point the wizard
-    /// HAS resolved it.
-    pub wizard_no_rpc: String,
+    /// Why the wizard STOPPED is not here: the core names the sentence
+    /// (`NetWizardView::error_key`) and `live::wizard_stop` draws it. This
+    /// struct once kept four of them and chose between them by error type —
+    /// and borrowed "Can't reach {{name}}" for a chain that lists no RPC.
+    ///
+    /// "Can't reach {{name}} right now" (spec 092's one-network line), for
+    /// the mock banner's headline (`fixtures::unavailable_text`).
+    pub unreachable_one: String,
+    /// The refused verdict's pill.
     pub wizard_incompatible: SharedString,
     /// Spec 038 #E1: the probes failed — not a verdict.
     pub wizard_unable_to_verify: SharedString,
-    /// The unverifiable verdict's CTA, and the incompatible one's sentence
-    /// (the web's `retry` / `incompatibleHint`, 078 S-05).
+    /// The unverifiable verdict's CTA (the web's `retry`, 078 S-05). The
+    /// refused verdict's sentence is the core's, by reason
+    /// (`NetCompatibility.hint_key` — `live::net_refusal`).
     pub wizard_retry: SharedString,
-    pub wizard_incompatible_hint: SharedString,
     pub endpoints_reset: SharedString,
     /// Spec 072 (FR-010): the question the reset asks first.
     pub endpoints_reset_title: SharedString,
@@ -353,6 +343,19 @@ pub struct SettingsStrings {
     pub offline: SharedString,
 }
 
+/// The account switcher's count — "1 account · ", "2 accounts · " — the
+/// first half of its summary line (PR 3 final note F15).
+///
+/// A PLURAL family (`home.switcherAccountCount_{one,few,many,other}`): the
+/// count chooses the form by the language's own rule, in the core
+/// ([`Loc::t_count`]), and fills `{{count}}`. It was one bare key filled as a
+/// plain variable, so a wallet with one account read "1 accounts · Total" —
+/// and once the corpus retired that key, the line would have been the key.
+#[must_use]
+pub fn switcher_account_count(loc: &Loc, count: usize) -> SharedString {
+    loc.t_count("home.switcherAccountCount", count)
+}
+
 impl SettingsStrings {
     pub fn resolve(loc: &Loc) -> Self {
         let s = |key: &str| loc.t(key);
@@ -426,16 +429,10 @@ impl SettingsStrings {
             bug_try_again: s("common.tryAgain"),
             bug_remove_from_viewer: s("componentsUi.bugReport.removeFromViewer"),
             accounts_total: raw("settingsModals.account.total"),
-            accounts_count: raw("home.switcherAccountCount"),
             accounts_title: s("settingsModals.account.modalTitle"),
             account_create: s("settingsModals.account.createNew"),
             account_sign_in: s("settingsModals.account.signInExisting"),
             sign_out_button: s("settings.signOut.button"),
-            backup_title: s("settingsModals.backup.title"),
-            backup_backed_up: s("settingsModals.backup.backedUp"),
-            backup_not_backed_up: s("settingsModals.backup.notBackedUp"),
-            backup_could_not_check: s("settingsModals.backup.couldNotCheck"),
-            backup_checking: s("componentsUi.funding.checking"),
             keys_title: s("settingsModals.keys.title"),
             keys_subtitle: s("settingsModals.keys.subtitle"),
             keys_key_n: raw("settingsModals.keys.keyN"),
@@ -453,7 +450,6 @@ impl SettingsStrings {
             keys_attestation: s("settingsModals.keys.attestation"),
             keys_copy: s("componentsUi.signing.copyValue"),
             keys_copied: s("receive.copied"),
-            backup_explain: s("settingsModals.backup.explain"),
             sign_out_desc: s("settings.signOut.desc"),
             erase_title: s("settings.eraseDevice.title"),
             erase_subtitle: s("settings.eraseDevice.subtitle"),
@@ -534,13 +530,10 @@ impl SettingsStrings {
             open_chain_setup_tool: s("settingsModals.addNetwork.openChainSetupTool"),
             wizard_searching: s("settingsModals.addNetwork.searching"),
             wizard_checking: s("settingsModals.addNetwork.checkingCompatibility"),
-            wizard_already_added: s("addToken.errorAlreadyAdded"),
-            wizard_not_found: s("addToken.errorChainNotFound"),
-            wizard_no_rpc: raw("assets.unreachableOne"),
+            unreachable_one: raw("assets.unreachableOne"),
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             wizard_retry: s("settingsModals.addNetwork.retry"),
-            wizard_incompatible_hint: s("settingsModals.addNetwork.incompatibleHint"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
             endpoints_reset_title: s("settingsModals.endpoints.resetTitle"),
             endpoints_reset_body: s("settingsModals.endpoints.resetBody"),
@@ -614,6 +607,57 @@ impl SettingsStrings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// PR 3 final note F15: the switcher's count is a plural family, and the
+    /// count picks the form — "1 account · ", "2 accounts · " — by the
+    /// language's own rule. A wallet with one account read "1 accounts ·
+    /// Total"; and the bare key the shell read is gone from the corpus, so
+    /// read the old way the line would be the key itself.
+    #[test]
+    fn the_switchers_count_is_plural_by_the_languages_own_rule() {
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(switcher_account_count(&en, 1).as_ref(), "1 account · ");
+        assert_eq!(switcher_account_count(&en, 2).as_ref(), "2 accounts · ");
+        assert_eq!(switcher_account_count(&en, 0).as_ref(), "0 accounts · ");
+        assert_eq!(switcher_account_count(&en, 11).as_ref(), "11 accounts · ");
+        // The bare key is retired: there is nothing to read without a count.
+        assert_eq!(
+            en.t("home.switcherAccountCount").as_ref(),
+            "home.switcherAccountCount"
+        );
+
+        // Languages with one form say it for every count…
+        let zh = crate::loc::Loc::for_language("zh");
+        assert_eq!(switcher_account_count(&zh, 1).as_ref(), "1 个账户 · ");
+        assert_eq!(switcher_account_count(&zh, 3).as_ref(), "3 个账户 · ");
+        // …and every language resolves every count to a sentence carrying
+        // the number — never the key, never an unfilled `{{count}}`.
+        for lng in [
+            "de", "en", "es-MX", "fr", "id", "it", "ja", "ko", "pt-BR", "ru", "tr", "vi", "zh",
+            "zh-HK", "zh-TW",
+        ] {
+            let loc = crate::loc::Loc::for_language(lng);
+            for count in [0_usize, 1, 2, 3, 5, 11, 21, 101] {
+                let line = switcher_account_count(&loc, count);
+                assert!(
+                    line.contains(&count.to_string())
+                        && !line.contains("switcherAccountCount")
+                        && !line.contains("{{"),
+                    "{lng} × {count}: {line}"
+                );
+            }
+        }
+
+        // The whole line, as the switcher composes it.
+        let total = en.t("settingsModals.account.total");
+        let one = live::accounts_summary(&switcher_account_count(&en, 1), &total, "$0.75");
+        assert_eq!(one.as_ref(), "1 account · Total $0.75");
+        let two = live::accounts_summary(&switcher_account_count(&en, 2), &total, "$3.00");
+        assert_eq!(two.as_ref(), "2 accounts · Total $3.00");
+        // The gallery's board says its three.
+        let board = fixtures::accounts_summary(&SettingsStrings::resolve(&en), &en);
+        assert!(board.starts_with("3 accounts · Total "), "{board}");
+    }
 
     /// Spec 091: the debug-mode words resolve — never their own keys.
     #[test]

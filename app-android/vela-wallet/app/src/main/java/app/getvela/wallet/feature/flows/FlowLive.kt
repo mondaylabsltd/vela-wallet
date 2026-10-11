@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.flows
 
 import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.tokenAmountText
 import kotlinx.serialization.json.jsonPrimitive
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.i18n.VelaStrings
@@ -13,6 +14,8 @@ import app.getvela.wallet.feature.wallet.AssetFiatModel
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedBatchKind
+import app.getvela.wallet.feature.wallet.core.FeedBatchTransfer
 import app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole
 import app.getvela.wallet.feature.wallet.core.FeedDapp
 import app.getvela.wallet.feature.wallet.core.FeedDappChange
@@ -26,6 +29,7 @@ import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.FeedTxKind
 import app.getvela.wallet.feature.wallet.core.FeedTxStatus
 import app.getvela.wallet.feature.wallet.core.PaymentRequestView
+import uniffi.vela_core_uniffi.maskedAmount
 
 /**
  * The live flow builders: the drawn flow screens, showing this device's facts.
@@ -197,10 +201,11 @@ object FlowLive {
     /**
      * A1 — the whole history, not the first few.
      *
-     * The home screen's Activity section shows a handful and offers "全部".
-     * That link opened a fixture: a person tapped past their own payments into
-     * somebody else's. Same rows, same grouping, same core ordering as the home
-     * feed — this only removes the cut-off.
+     * The home screen's Activity section shows the core's newest three
+     * (`FeedView.home_rows`, issue #469) and offers "全部". That link opened a
+     * fixture: a person tapped past their own payments into somebody else's.
+     * Same grouping, same core ordering as the home feed — but every row
+     * (`FeedView.rows`).
      */
     fun history(
         fallback: HistoryModel,
@@ -241,8 +246,12 @@ object FlowLive {
         strings: VelaStrings,
         chainNames: Map<Int, String> = emptyMap(),
         explorers: Map<Int, String> = emptyMap(),
-        /** Spec 049: the display currency; without one the fiat line is dollars, said so. */
-        money: WalletLive.Money? = null,
+        /**
+         * Spec 049: the display currency, as the ONE fiat helper — which
+         * withholds every figure while the currency is not the person's yet.
+         * A caller with no currency to give (a board, a test) draws dollars.
+         */
+        money: WalletLive.Money = WalletLive.Money.dollars(),
         /** Each network's own coin (`native_symbol`), which letters its mark under the logo. */
         nativeSymbols: Map<Int, String> = emptyMap(),
     ): TxDetailModel? {
@@ -273,23 +282,55 @@ object FlowLive {
         // Spec 043 phase 4 (device-found): the notification's deep link opened
         // this sheet with the fixture's title, status, counterparty, network,
         // date and hash around a live amount. Every line is the item's now.
+        // A folded batch opens to what it folded (spec 038 #D2, as the web and
+        // the desktop draw it): a split's people, each with their share; a
+        // sweep's coins. Each part is money on a masked surface — hidden, it
+        // is the mask and its coin, never who got how much under a masked
+        // total. This detail used to show a split as one figure and a "To"
+        // row with nobody in it.
+        val batch = item.batch
+        val parts = batch?.transfers.orEmpty()
+        val split = batch?.kind == FeedBatchKind.Split && parts.size > 1
+        val sweep = batch?.kind == FeedBatchKind.MultiSelect && parts.isNotEmpty()
+        fun partFigure(part: FeedBatchTransfer): String =
+            if (hidden) maskedAmount(part.symbol) else "${tokenAmountText(part.value)} ${part.symbol}".trim()
         val facts = buildList {
-            add(
-                FactRowModel(
-                    // Spec 082 RJ16: a call's `to` is the contract it went to,
-                    // not somebody paid — the core says which.
-                    label = when {
-                        received -> strings.t(I18nKeys.Flows.DETAIL_FROM)
-                        item.counterparty_role == FeedCounterpartyRole.Contract -> strings.t(I18nKeys.Flows.DETAIL_CONTRACT)
-                        else -> strings.t(I18nKeys.Flows.DETAIL_TO)
-                    },
-                    value = item.alias ?: shortAddress(counterparty),
-                    copyValue = counterparty,
-                    lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
-                    mono = item.alias == null,
-                    copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
-                ),
-            )
+            if (split) {
+                add(
+                    FactRowModel(
+                        label = strings.t(I18nKeys.Flows.DETAIL_TO),
+                        value = strings.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to parts.size.toString())),
+                        lines = parts.map { part -> "${partName(part.to_name, part.to)} · ${partFigure(part)}" },
+                    ),
+                )
+            } else {
+                add(
+                    FactRowModel(
+                        // Spec 082 RJ16: a call's `to` is the contract it went to,
+                        // not somebody paid — the core says which.
+                        label = when {
+                            received -> strings.t(I18nKeys.Flows.DETAIL_FROM)
+                            item.counterparty_role == FeedCounterpartyRole.Contract -> strings.t(I18nKeys.Flows.DETAIL_CONTRACT)
+                            else -> strings.t(I18nKeys.Flows.DETAIL_TO)
+                        },
+                        value = item.alias ?: shortAddress(counterparty),
+                        copyValue = counterparty,
+                        lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
+                        mono = item.alias == null,
+                        copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+                    ),
+                )
+            }
+            // A sweep is several coins to one person: each coin, under how many there are.
+            if (sweep) {
+                add(
+                    FactRowModel(
+                        label = strings.t(I18nKeys.Flows.ASSETS_COUNT, mapOf("n" to parts.size.toString())),
+                        value = partFigure(parts.first()),
+                        lines = parts.drop(1).map(::partFigure),
+                    ),
+                )
+            }
             add(networkFact(item.chain_id, strings, chainNames, nativeSymbols))
             // Spec 082 RG2: a dApp's transaction says which site asked for it.
             item.site?.takeIf { dapp && it.isNotBlank() }?.let { site ->
@@ -311,10 +352,12 @@ object FlowLive {
         return fallback.copy(
             explorerUrl = txHash?.let { tx -> explorers[item.chain_id]?.let { "${it.trimEnd('/')}/tx/$tx" } },
             explorerShown = txHash != null && explorers[item.chain_id] != null,
-            title = if (dapp) {
-                strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
-            } else {
-                strings.t(if (received) I18nKeys.Flows.TX_LABEL_RECEIVED else I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to item.symbol))
+            title = when {
+                dapp -> strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
+                // A record that names no one coin (a sweep) is "Sent", as its
+                // receipt was — never "Sent " with nothing after it.
+                item.symbol.isBlank() && !received -> strings.t(I18nKeys.Flows.TX_SENT)
+                else -> strings.t(if (received) I18nKeys.Flows.TX_LABEL_RECEIVED else I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to item.symbol))
             },
             // Spec 082 RG1: where the record stands is the core's `status` —
             // the tracker alone moves it — never a guess from whether a hash
@@ -322,8 +365,14 @@ object FlowLive {
             status = statusChip(item.status, strings),
             // A dApp's call that moved no coin of ours has no amount (RG2).
             amount = when {
+                // A sweep has no one figure and no one coin (the core sends
+                // neither): its hero says how many coins left, as its confirm
+                // did — and hidden, the mask alone, with no coin to keep.
+                amount.isBlank() && sweep && !dapp ->
+                    if (hidden) maskedAmount("") else strings.t(I18nKeys.Flows.ASSETS_COUNT, mapOf("n" to parts.size.toString()))
                 amount.isBlank() -> ""
-                hidden -> WalletLive.MASK
+                // Hidden: how much is masked, what it is stays ("•••• xDAI").
+                hidden -> maskedAmount(item.symbol)
                 else -> "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim()
             },
             positive = received,
@@ -334,8 +383,10 @@ object FlowLive {
             fiat = when {
                 !item.priced -> ""
                 hidden -> WalletLive.MASK
-                else -> "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
+                // Withheld (`null`) until the display currency is the person's: the line's room is kept.
+                else -> money.fiat(item.usd_value)?.let { "≈ $it" }.orEmpty()
             },
+            fiatWithheld = item.priced && !hidden && !money.settled,
             facts = facts,
             // The chain keeps the transaction; this is the wallet forgetting
             // it, which is why the sentence is "delete record" (spec 058).
@@ -362,7 +413,7 @@ object FlowLive {
         strings: VelaStrings,
         chainNames: Map<Int, String>,
         explorers: Map<Int, String>,
-        money: WalletLive.Money?,
+        money: WalletLive.Money,
         nativeSymbols: Map<Int, String>,
         /**
          * Balance privacy (`app::privacy`): every figure of a dApp's detail
@@ -375,17 +426,18 @@ object FlowLive {
         val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
         val allowance = dapp.allowance?.takeIf { item.value == null }
         val back = dapp.received?.let { change ->
-            listOf(if (hidden) WalletLive.MASK else WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
+            if (hidden) maskedAmount(change.symbol) else listOf(WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ")
         }
         // Spec 097 N5: nothing left and something came back (a borrow) — what
         // came back is the figure.
         val leadsWithBack = allowance == null && item.value == null && back != null
         val amount = when {
-            allowance != null && hidden && !allowance.unlimited && allowance.value != null -> WalletLive.MASK
+            // A masked figure keeps its unit (the core's `maskedAmount`).
+            allowance != null && hidden && !allowance.unlimited && allowance.value != null -> maskedAmount(allowance.symbol)
             allowance != null -> listOf(WalletLive.allowanceFigure(allowance, strings), allowance.symbol).filter { it.isNotBlank() }.joinToString(" ")
             leadsWithBack -> back.orEmpty()
             item.value == null -> ""
-            hidden -> WalletLive.MASK
+            hidden -> maskedAmount(item.symbol)
             else -> {
                 val digits = Formats.current.plain(item.value.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString() ?: item.value)
                 // 083 F1: the simulation's figure says so.
@@ -409,8 +461,10 @@ object FlowLive {
             fiat = when {
                 !item.priced || leadsWithBack -> ""
                 hidden -> WalletLive.MASK
-                else -> "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
+                // Withheld (`null`) until the display currency is the person's: the line's room is kept.
+                else -> money.fiat(item.usd_value)?.let { "≈ $it" }.orEmpty()
             },
+            fiatWithheld = item.priced && !leadsWithBack && !hidden && !money.settled,
             facts = dapp.facts.mapNotNull { dappFact(it, item, dapp, strings, chainNames, nativeSymbols, hidden) },
             technical = TxTechnicalModel(
                 title = strings.t(I18nKeys.Flows.TECHNICAL),
@@ -422,6 +476,19 @@ object FlowLive {
             deleteQuiet = item.status == FeedTxStatus.Pending || item.status == FeedTxStatus.Unknown,
         )
     }
+
+    /**
+     * Who a split's part went to, on the line that also carries their share:
+     * the name, else the short address. A long name is cut HERE, in the
+     * middle of nothing that matters, so the line's one-line limit never cuts
+     * the figure at its end.
+     */
+    private fun partName(name: String?, address: String): String {
+        val shown = name?.takeIf { it.isNotBlank() } ?: return shortAddress(address)
+        return if (shown.length <= PART_NAME_MAX) shown else shown.take(PART_NAME_MAX - 1).trimEnd() + "…"
+    }
+
+    private const val PART_NAME_MAX = 18
 
     /** Why a dApp operation failed, in the words its request ended with (spec 097 N4). */
     private fun failureText(failure: app.getvela.wallet.feature.send.core.TrackFailure, strings: VelaStrings): String = when (failure) {
@@ -465,7 +532,7 @@ object FlowLive {
             label = strings.t(I18nKeys.Flows.SPENDING_CAP),
             // A capped allowance is money (masked while hidden); "Unlimited" is a risk to see.
             value = if (hidden && !fact.allowance.unlimited && fact.allowance.value != null) {
-                WalletLive.MASK
+                maskedAmount(fact.allowance.symbol)
             } else {
                 listOf(WalletLive.allowanceFigure(fact.allowance, strings), fact.allowance.symbol).filter { it.isNotBlank() }.joinToString(" ")
             },
@@ -620,7 +687,7 @@ object FlowLive {
         val sameDay = calendar.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
             calendar.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
         // The person's date and time presets (spec 047 D2), not a fixed US shape.
-        val time = Formats.current.time(millis)
+        val time = Formats.current.time(millis, strings.language)
         return if (sameDay) "${strings.t(I18nKeys.Flows.DAY_TODAY)} $time" else "${Formats.current.date(millis)} $time"
     }
 
@@ -642,11 +709,13 @@ object FlowLive {
         // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
         val rows = WalletLive.assetRows(view, chainNames, currency)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
-        // The web's rule (`liveAssets`): empty once the core has actually
-        // looked — never while the holdings are still loading — or when the
-        // chosen network holds nothing while others do (issue #266: that list
-        // used to be blank, with nothing saying why).
-        val settledEmpty = rows.isEmpty() && !view.balance_unknown && !view.holdings_loading
+        // Empty when the core says so (`empty_key`: the first read ended and
+        // found nothing held) — it was this builder's own "no rows, not
+        // loading, not unknown", which a cached zero satisfied before anything
+        // had been read — or when the chosen network holds nothing while
+        // others do (issue #266: that list used to be blank, with nothing
+        // saying why; the filter is this screen's, the core does not hold it).
+        val settledEmpty = rows.isEmpty() && view.empty_key != null
         val filteredEmpty = rows.isEmpty() && view.tokens.isNotEmpty()
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
@@ -709,6 +778,9 @@ object FlowLive {
                 AssetFiatModel.Masked -> WalletLive.MASK
                 else -> ""
             },
+            // The worth waits with the home's while the display currency is
+            // not the person's yet — its line kept, as the row's is.
+            fiatWithheld = row.fiat == AssetFiatModel.Loading,
             // Issue #269: the facts are this token's. They were the fixture's —
             // USDT's price, its Ethereum contract, 6 decimals — under every
             // token's header, POL on Polygon included. The web's
@@ -729,10 +801,13 @@ object FlowLive {
         return listOf(
             FactRowModel(
                 label = strings.t(I18nKeys.Flows.TOKEN_PRICE),
-                // Unpriced is said, never a confident "$0.00".
+                // Unpriced is said, never a confident "$0.00". A price IS a
+                // fiat figure: withheld (`null`) until the display currency
+                // is the person's, the row's value empty and its room kept.
                 value = token.price_usd?.let { price ->
-                    strings.t(I18nKeys.Flows.TOKEN_PRICE_VALUE, mapOf("symbol" to token.symbol, "value" to money.fiat(price)))
+                    money.fiat(price)?.let { strings.t(I18nKeys.Flows.TOKEN_PRICE_VALUE, mapOf("symbol" to token.symbol, "value" to it)) }.orEmpty()
                 } ?: strings.t(I18nKeys.Wallet.NO_PRICE),
+                withheld = token.price_usd != null && !money.settled,
             ),
             FactRowModel(
                 label = strings.t(I18nKeys.Flows.TOKEN_CONTRACT),

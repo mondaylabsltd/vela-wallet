@@ -39,7 +39,7 @@ struct CableWatchdogTests {
     /// the main actor, which other suites can hold for over a minute on that
     /// runner (60 s was exceeded on main and on #455), so the backstop is
     /// generous: it is not what the test measures.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func aWatchdogLeftRunningFiresOnce() async {
         let fired = Fired()
         await withCheckedContinuation { (expired: CheckedContinuation<Void, Never>) in

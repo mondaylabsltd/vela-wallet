@@ -57,6 +57,47 @@ enum class FlowState {
      */
     SD3D, SD4D, SD2G, SD2H, SD2I, SD2J, SD3E,
     SD3F, SD3G, SD3H, SD3I, SD2K, SD2L, SD2M,
+
+    /**
+     * A2 with the balance hidden, through the live builder: a transfer's
+     * detail whose amount is the mask WITH its unit ("•••• USDT") — how much
+     * is hidden, what kind of money is not — over History masked the same
+     * way. Never on the live flow stack.
+     */
+    A2H,
+
+    /**
+     * The same feed's SPLIT (one operation, two recipients), opened — its
+     * total, then each person with their share — shown (A2S) and with the
+     * balance hidden (A2SH): the total and EVERY share are the mask with the
+     * coin kept, over History masked the same way. Who was paid stays; how
+     * much each got does not. Through the live builders, never on the live
+     * flow stack.
+     */
+    A2S, A2SH,
+
+    /**
+     * "The currency on its way" (the core's withhold rule: no fiat figure
+     * before `CurrencyView.committed`, on any surface), each with the SAME
+     * frame once the currency commits, so the pair shows that nothing moved:
+     * the send form — the "≈" line under the amount and the fee's worth —
+     * waiting (SD2N) and landed (SD2O); the confirm, its worth line and its
+     * fee (SD3J, SD3K); the token page, its worth and its price (T2W, T2C).
+     * A cold start with CNY stored; through the live builders, never on the
+     * live flow stack.
+     */
+    SD2N, SD2O, SD3J, SD3K, T2W, T2C,
+
+    /**
+     * The final round, through the live builders, never on the live flow
+     * stack. SD1L: the picker over a payment request for a network the
+     * wallet lacks — the core's `lock_error`, said on the picker's notice
+     * (it was an ordinary, wordless Send). SD2P: the batch importer opened
+     * before anything is known of the person's currency — the unit, the
+     * rate, its hint and the sum name NO currency, the pending mark where
+     * the code will be — and SD2Q: the same sheet once it is told CNY.
+     */
+    SD1L, SD2P, SD2Q,
 }
 
 /* ------------------------------------------------------------------ chrome */
@@ -138,6 +179,11 @@ data class FactRowModel(
      * for a tap the page cannot take.
      */
     val tap: Boolean = false,
+    /**
+     * The value is a fiat figure withheld until the display currency is the
+     * person's (a token's price): [value] is empty and its room is kept.
+     */
+    val withheld: Boolean = false,
 )
 
 enum class StatusTone { Success, Warning, Error, Info }
@@ -300,6 +346,8 @@ data class TxDetailModel(
     val received: String? = null,
     /** Spec 093: a dApp record's collapsed "Technical details"; `null` for everything else. */
     val technical: TxTechnicalModel? = null,
+    /** The worth is withheld until the display currency is the person's: [fiat] is empty, its line kept. */
+    val fiatWithheld: Boolean = false,
 )
 
 /** Spec 093: the collapsed "Technical details" of a dApp record, in the core's order. */
@@ -361,6 +409,8 @@ data class TokenDetailModel(
     val viewOnExplorer: String,
     /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
     val explorerUrl: String? = null,
+    /** The worth is withheld until the display currency is the person's: [fiat] is empty, its line kept. */
+    val fiatWithheld: Boolean = false,
 )
 
 /* -------------------------------------------------------------- add token  */
@@ -498,6 +548,10 @@ data class RecipientCardModel(
     val duplicateNote: String? = null,
     /** The core says the typed amount cannot be sent. */
     val amountNote: String? = null,
+    /** The row's 通讯录 door's accessible name (`send.recipientPickAria`). */
+    val pickLabel: String = "",
+    /** Issue #471: the row's scan door's accessible name (`send.scanAria`). */
+    val scanLabel: String = "",
 )
 
 /** SD2d's sweep row: one token, its amount, and a Max. */
@@ -539,6 +593,13 @@ data class FeeRowModel(
      * tap target and no chevron promising one.
      */
     val opens: Boolean = true,
+    /**
+     * The display currency is on its way (the core's `CurrencyView.committed`
+     * is false): the fee is its coin amount alone, and its worth will join
+     * the line when the currency commits. The row keeps the room that longer
+     * line needs from now, so nothing under it moves when it lands.
+     */
+    val worthRoom: Boolean = false,
 )
 
 /** One option of the speed control (spec 068). */
@@ -577,6 +638,13 @@ data class FeeSpeedModel(
     /** Whether the options carry a gas-bid line at all. */
     val gasPriceLine: Boolean,
     val options: List<FeeSpeedOptionModel>,
+    /**
+     * The display currency is on its way (the core's `CurrencyView.committed`
+     * is false): each speed's fee is its coin amount alone, and its worth will
+     * join the line when the currency commits. Each row keeps the room that longer
+     * line needs from now, so nothing under it moves when it lands.
+     */
+    val worthRoom: Boolean = false,
 )
 
 @Immutable
@@ -592,6 +660,12 @@ data class AmountFieldModel(
     /** Issue 197: the ⇄ row exists only where the core offers it, and is live only where it would change something. */
     val denomShown: Boolean = true,
     val denomEnabled: Boolean = true,
+    /**
+     * The "≈" line is a fiat figure the display currency is not ready for
+     * (the core's `CurrencyView.committed` is false): [fiat] is empty and
+     * the line keeps its room, so the figure lands in place.
+     */
+    val fiatWithheld: Boolean = false,
 )
 
 @Immutable
@@ -692,7 +766,6 @@ data class ContactPickModel(
     val title: String,
     val closeLabel: String,
     val searchPlaceholder: String,
-    val scanRow: String,
     val groupsTitle: String,
     val groups: List<ContactGroupModel>,
     val contactsTitle: String,
@@ -844,6 +917,8 @@ data class SendConfirmModel(
     val noticeAction: String? = null,
     /** Spec 045 US4: the notice's second exit — "not now" beside the treasury retry, the facts kept. */
     val noticeSecondary: String? = null,
+    /** [subline] is a fiat figure withheld until the display currency is the person's: empty, its line kept. */
+    val sublineWithheld: Boolean = false,
 )
 
 /**

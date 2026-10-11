@@ -138,9 +138,10 @@ final class FeeStore {
 
     /// A session's timers under `.stopped`: held until the machine abandons
     /// them or a test runs them out (`elapse`), and counted so `isIdle` tells
-    /// them from a read.
+    /// them from a read. The sign machine's one timer runs on the same seam
+    /// (`SignExecutor`, `sim_verdict_timer`).
     @MainActor
-    private final class HeldTimers {
+    final class HeldTimers {
         private var nextId = 0
         /// The timers held now, by the operation each stands for.
         private var held: [Int: (timer: String, wake: CheckedContinuation<Void, Never>)] = [:]
@@ -249,7 +250,9 @@ final class FeeStore {
     /// reported as a failure the code never had (`Waits.swift`). The core's
     /// own timers are the other clock under it (`timers`).
     private let deadline: Duration?
-    private let timers: Timers
+    /// Read by the send journey's executor too: one clock for the fee's
+    /// timers and the pre-check's bound (`SendExecutor`, `start_timer`).
+    let timers: Timers
 
     init(
         relay: RelayClient,

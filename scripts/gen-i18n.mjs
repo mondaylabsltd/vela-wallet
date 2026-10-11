@@ -745,8 +745,62 @@ for (let i = 1; i < PATHS.length; i++) {
 //   .confirmBlock.feeWouldFail` (the line under the held confirm, a fact
 //   asking for no tap — `feeFailed`'s "tap it to retry" was untrue there).
 //   1768 + 4 = 1772 leaves, 101 branches.
-if (PATHS.length !== 1873) fail(`expected 1873 paths (1772 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1772) fail(`expected 1772 leaf paths, got ${leafSet.size}`);
+// UI batch (2026-10-10), on top of the correctness batch's 1873: − `send.scanToFill` (issue #471: the scan
+//   moved from the contact picker to each recipient row, which says
+//   `send.scanAria`), − `contacts.actionQr` (issue #479: a contact's page
+//   offers Send only), − `contacts.{pickerTitle,pickerEmptyHint,scanToAdd}`
+//   (no reader in the core or any shell — git grep). + `settingsModals.
+//   backup.cannotCopy` (a record from before registry V13 can never be
+//   copied: a calm end, not a retry), + `componentsUi.signing.
+//   labelWalletName` (the copy's sheet names what goes public),
+//   + `settingsModals.addNetwork.noP256Hint` (no P-256 verifier: nothing to
+//   deploy, money would be stuck), + `onboarding.common.insertKeyAppleSheet
+//   {,Hint}` (iOS: a key that does not answer over USB goes through Apple's
+//   sheet). 1772 − 5 + 5 = 1772 leaves, 101 branches; 1873 paths.
+// 1875 (UI batch integration, 2026-10-10): + `assets.tokenListUnreachable`
+//   (the home line when the one network that was not read has an RPC that
+//   is fine — its token list could not be loaded: "Can't reach Tempo" named
+//   the wrong thing and offered an RPC fix), + `settingsModals.addNetwork.
+//   noRpcEndpoint` (the add-network wizard stopped because the chain lists
+//   no endpoint; the core now names every stop's sentence —
+//   `NetWizardView.error_key` — and this one had none: the desktop borrowed
+//   "Can't reach {{name}}", the web said "Incompatible"). Renamed:
+//   `onboarding.create.addKeyBtn` → `keyPlaceHeading`, reworded "Choose
+//   where it lives" — its only reader is the keys screen's zero-key
+//   heading, which repeated the screen's own title (zh 「添加通行密钥」 twice;
+//   the "+ Add a passkey" button it was written for is gone, issue #475).
+//   Shortened in place: `onboarding.create.methodHybridBody` in de, fr, it
+//   and es-MX (52–55 characters only fit a 375 pt phone's row at 80 %).
+//   1772 − 1 + 3 = 1774 leaves, 101 branches.
+// 1879 (UI batch, final integration, 2026-10-10): `home.switcherAccountCount`
+//   — the account switcher's "{{count}} accounts · " — becomes
+//   `switcherAccountCount_{one,few,many,other}`, each locale its own CLDR
+//   categories, as `explore.openTabs` did: a wallet with one account read
+//   "1 accounts · Total". Shells pass the count. + `home.
+//   balanceDetailStatusTokenList` ("Token list unavailable"): the balance
+//   breakdown's short status for a network whose RPC answers and whose
+//   token list could not be loaded — "RPC unavailable" was false there, and
+//   the desktop had borrowed the home's whole sentence. The core names the
+//   row's status (`UnreachableNetwork.status_key`). Shortened in place:
+//   `onboarding.create.methodHybridBody` in ru and pt-BR (309 / 307 pt
+//   against a 280 pt column on a 375 pt phone).
+//   1774 − 1 + 4 + 1 = 1778 leaves, 101 branches.
+// 1878 (UI batch, device round, 2026-10-10): retired `componentsUi.signing.
+//   balanceNoAssetsMove` ("No assets leave your wallet"). It was iOS's own
+//   sentence for a checked simulation that moves nothing, where the desktop
+//   and Android said `simResultNoChange` ("No asset changes") and the web
+//   said nothing. The line is the core's now — `sim_outcome::no_change_key`,
+//   carried by `TrustSimView.no_change_key` — so there is one sentence.
+//   1778 − 1 = 1777 leaves, 101 branches.
+// 1879 (UI batch, last fixes, 2026-10-11): + `componentsUi.signing.
+//   confirmBlock.simChecking` ("Checking what this transaction does…") — the
+//   one line under a confirm that waits for the simulation's verdict
+//   (`sign_confirm::ConfirmBlock::SimChecking`). The corpus had no sentence
+//   for it: the verdict's place says nothing while it checks, and "Checking…"
+//   alone (`componentsUi.funding.checking`) is the funding sheet's.
+//   1777 + 1 = 1778 leaves, 101 branches.
+if (PATHS.length !== 1879) fail(`expected 1879 paths (1778 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1778) fail(`expected 1778 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

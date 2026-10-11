@@ -6,7 +6,6 @@ import app.getvela.wallet.core.diagnostics.VelaLog
 import java.util.Calendar
 import java.util.TimeZone
 import kotlinx.coroutines.delay
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -15,10 +14,12 @@ import org.json.JSONObject
 /**
  * The only place the `activity_feed` core touches the outside world.
  *
- * Six operations. Not one decision about what the feed SAYS: the day grouping,
- * the batch folding, the de-duplication, the tombstones, the celebration and
- * its anti-stale generation token are all `activity_feed.rs`. This class reads
- * and writes a JSON array, sleeps, buzzes, and looks up a name.
+ * Eight operations. Not one decision about what the feed SAYS: the day
+ * grouping, the batch folding, the de-duplication, the tombstones, the
+ * celebration and its anti-stale generation token, and which stored receipt's
+ * time is checked against its block (PR 3) are all `activity_feed.rs`. This
+ * class reads and writes a JSON array, sleeps, buzzes, looks up a name, and
+ * reads one block's time.
  *
  * Port source: `app-web/vela-wallet/src/lib/wallet/core/feed-executor.ts`.
  *
@@ -37,6 +38,12 @@ class FeedExecutor(
     private val resolveName: suspend (String) -> String? = { null },
     private val haptic: () -> Unit = {},
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
+    /**
+     * The app's RPC pool — the one the trust executor reads through — for a
+     * stored receipt's block time ([FeedOperation.ReadReceiveTime]). `null`
+     * (a host with no chain to ask): every such read answers "not read".
+     */
+    private val pool: RpcPool? = null,
 ) {
 
     data class FeedOwnAccount(val address: String, val name: String)
@@ -98,6 +105,18 @@ class FeedExecutor(
             haptic()
             FeedShellResult.HapticPlayed
         }
+
+        // PR 3: a stored receipt's time is its block's. Transport only — the
+        // core decides which records, and what to do with the answer.
+        is FeedOperation.ReadReceiveTime -> FeedShellResult.ReceiveTimeRead(
+            id = operation.id,
+            timestamp_sec = blockTimeOf(operation.chain_id, operation.tx_hash),
+        )
+
+        is FeedOperation.WriteReceiveTime -> FeedShellResult.ReceiveTimeWritten(
+            id = operation.id,
+            ok = rewriteReceiveTime(operation.id, operation.timestamp_sec),
+        )
     }
 
     /** What to answer when the shell itself threw. Exhaustive by construction. */
@@ -114,6 +133,70 @@ class FeedExecutor(
             FeedShellResult.AliasResolved(operation.addr, null)
         is FeedOperation.Timer -> FeedShellResult.ToastExpired(operation.generation)
         is FeedOperation.Haptic -> FeedShellResult.HapticPlayed
+        // Not read — never a clock's time: the record keeps the time it has,
+        // and the core asks about it again later.
+        is FeedOperation.ReadReceiveTime -> FeedShellResult.ReceiveTimeRead(operation.id, null)
+        // Not written, and said so: the core counts it a miss.
+        is FeedOperation.WriteReceiveTime -> FeedShellResult.ReceiveTimeWritten(operation.id, ok = false)
+    }
+
+    // -- a receipt's block time (PR 3) ---------------------------------------
+
+    /**
+     * The time of the block holding [txHash] on [chainId], in Unix seconds:
+     * the transaction's receipt names its block, the block's header its time.
+     * `null` whenever either read gave no usable answer — no receipt (the
+     * endpoint does not know the transaction), a failed read, a number that
+     * does not read. **Never the device's clock and never a guess**: a record
+     * stamped with the clock is the fault this read exists to repair. Asked
+     * once; when to ask again is the core's.
+     */
+    private suspend fun blockTimeOf(chainId: Int, txHash: String): Double? {
+        val pool = pool ?: return null
+        val receipt = (pool.call(chainId, "eth_getTransactionReceipt", listOf(txHash)) as? RpcResult.Body)
+            ?.json?.optJSONObject("result") ?: return null
+        val block = receipt.optString("blockNumber").takeIf { hexQuantity(it) != null } ?: return null
+        // `false`: the header alone — its time is all that is read.
+        val header = (pool.call(chainId, "eth_getBlockByNumber", listOf(block, false)) as? RpcResult.Body)
+            ?.json?.optJSONObject("result") ?: return null
+        return hexQuantity(header.optString("timestamp"))?.toDouble()
+    }
+
+    /** A `0x` hex quantity, or `null` when it is not one. */
+    private fun hexQuantity(text: String): java.math.BigInteger? {
+        val digits = text.removePrefix("0x")
+        if (digits.length == text.length || digits.isEmpty()) return null
+        if (!digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
+        return digits.toBigIntegerOrNull(16)
+    }
+
+    /**
+     * One stored record's time, rewritten to its block's ([timestampSec],
+     * whole Unix seconds) and marked `timeVerified` — under the store's one
+     * write lock, like the merge and the delete. Only that record's two
+     * fields: every other field of it, and every other record, is written
+     * back as it was read. `false` when no record has [id] (nothing is
+     * written) or the store refused the write.
+     */
+    suspend fun rewriteReceiveTime(id: String, timestampSec: Double): Boolean = writeLock.withLock {
+        if (!timestampSec.isFinite()) return@withLock false
+        val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return@withLock false
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return@withLock false
+        var touched = false
+        for (index in 0 until array.length()) {
+            val row = array.optJSONObject(index) ?: continue
+            if (row.optString("id") != id) continue
+            // Whole seconds are stored as a whole number (what the core
+            // sends: a block's time, floored).
+            val whole = timestampSec.toLong()
+            if (whole.toDouble() == timestampSec) row.put("timestamp", whole) else row.put("timestamp", timestampSec)
+            row.put("timeVerified", true)
+            touched = true
+        }
+        if (!touched) return@withLock false
+        val ok = store.write(KeyValueStore.Keys.TRANSACTIONS, array.toString())
+        VelaLog.event("feed.time", if (ok) "rewritten to the block's" else "refused")
+        ok
     }
 
     // -- the store -----------------------------------------------------------
@@ -208,6 +291,9 @@ class FeedExecutor(
             balance_changes = if (dapp) balanceChanges(row) else null,
             summary = if (dapp) summary(row) else null,
             settlement = if (dapp) settlement(row) else null,
+            // PR 3: the mark as stored. A record that carries none stays
+            // without one — that absence is what the core repairs from.
+            time_verified = row.opt("timeVerified") as? Boolean,
         )
     }
 
@@ -233,12 +319,17 @@ class FeedExecutor(
     }
 
     /**
-     * 083 F1: the sheet's simulation judgments, as stored — all of them or
-     * none: a list with a line left out would say something it did not.
+     * 083 F1: the sheet's simulation judgments, exactly as stored. Not read
+     * here (PR 3): the core's own reader takes them — every shape they were
+     * ever stored in, all of them or none (a list with a line left out would
+     * say something it did not). A row stored before an unverified token's
+     * judgment lost its figure still holds `{"type":"erc20_unverified",
+     * "delta":"…"}`; decoded by this shell's mirror, which has no `delta` any
+     * more, that row would have lost all its lines.
      */
-    private fun balanceChanges(row: JSONObject): List<TrustSimJudgment>? {
+    private fun balanceChanges(row: JSONObject): kotlinx.serialization.json.JsonElement? {
         val stored = row.optJSONArray("balanceChanges") ?: return null
-        return runCatching { Wire.json.decodeFromString(JUDGMENTS, stored.toString()) }.getOrNull()
+        return runCatching { Wire.json.parseToJsonElement(stored.toString()) }.getOrNull()
     }
 
     /**
@@ -472,7 +563,5 @@ class FeedExecutor(
 
         /** A dApp's record: a transaction or a signature (the Expo spellings too). */
         val DAPP_TYPES = setOf("dapp_tx", "dappTx", "sign_message", "signMessage", "sign_typed_data", "signTypedData")
-
-        val JUDGMENTS = ListSerializer(TrustSimJudgment.serializer())
     }
 }

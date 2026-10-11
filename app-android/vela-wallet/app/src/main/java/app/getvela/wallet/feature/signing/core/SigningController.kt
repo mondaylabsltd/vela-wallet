@@ -19,6 +19,7 @@ import app.getvela.wallet.feature.send.core.SpeedControl
 import app.getvela.wallet.feature.send.core.TrackHandoff
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
+import app.getvela.wallet.feature.wallet.core.TrustSimView
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
@@ -94,6 +95,12 @@ class SigningController(
     trustedSigner: () -> TrustedSigner? = { null },
     /** The corpus, for the sentences a signature that cannot be made is told in (spec 102). */
     words: (key: String, vars: Map<String, String>) -> String = { key, _ -> key },
+    /**
+     * How the sign executor waits out the one timer the core asks it for —
+     * the deadline of the confirm's wait for the simulation's verdict (PR 3).
+     * The app sleeps; a test hands in a clock it can stop.
+     */
+    simVerdictTimer: suspend (ms: Long) -> Unit = { kotlinx.coroutines.delay(it) },
 ) {
     /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
     private val signers = listOf(wallet)
@@ -299,18 +306,37 @@ class SigningController(
          */
         suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult? = null
 
-        /** The core's deltas, judged by the trust machine; `null` = could not judge. */
-        suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<TrustAssetDelta>): List<TrustSimJudgment>? = null
+        /**
+         * The core's deltas, judged by the trust machine — its judged view,
+         * whole: the judgments and the line it says when nothing moves
+         * (`no_change_key`). `null` = could not judge.
+         */
+        suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<TrustAssetDelta>): TrustSimView? = null
     }
 
     /**
      * What the simulation said (spec 046 US1, 082 RG6): pending (`null`), the
-     * checked moves ([Ready]; empty = nothing of theirs moves), or the core's
-     * notice — a revert (danger) or "could not check" (caution).
+     * checked moves ([Ready]), or the core's notice — a revert (danger) or
+     * "could not check" (caution).
      */
     sealed class SimOutcome {
-        data class Ready(val judgments: List<TrustSimJudgment>) : SimOutcome()
+        /**
+         * The checked moves as the trust machine judged them, and
+         * [noChangeKey]: the core's line for a check under which nothing of
+         * the person's moves (`TrustSimView.no_change_key`, "No asset
+         * changes"). **"Nothing moves" is that key being set** — never an
+         * empty list of judgments read here, nor rows that all came out as
+         * zeros: which case it is, and which sentence, are the core's.
+         */
+        data class Ready(val judgments: List<TrustSimJudgment>, val noChangeKey: String? = null) : SimOutcome()
         data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null) : SimOutcome()
+
+        /**
+         * The simulation is out and has not answered: the sheet keeps its
+         * verdict's place, so the card does not push the sheet up when it
+         * lands. Never a verdict — nothing reads it as "nothing moves".
+         */
+        data object Pending : SimOutcome()
     }
 
     private val _sim = MutableStateFlow<SimOutcome?>(null)
@@ -397,6 +423,7 @@ class SigningController(
         origin = { _request.value?.origin.orEmpty() },
         // A page in this app's browser — never the wallet's own requests (the key backup).
         originSeenByBrowser = { _request.value?.let { it.transportId != app.getvela.wallet.feature.signing.SigningLive.WALLET_TRANSPORT } ?: false },
+        timer = simVerdictTimer,
     )
     private val clearExecutor = ClearExecutor(dataBase = { ports.dataBase() }, ethCall = { c, to, d -> ports.ethCall(c, to, d) })
     private val guardExecutor = GuardExecutor(ethCall = { c, to, d -> ports.ethCall(c, to, d).first })
@@ -546,8 +573,36 @@ class SigningController(
             speedControl.ask(request.chainId, wallet.address, publicKeyAvailable = true, calls = feeCalls, feeToken = null, autoFeeToken = true)
             // Spec 046 US1: the one block a site cannot author. Read only.
             // Its moves also tell the fee machine which coins can pay (#411).
-            scope.launch {
-                _sim.value = simulated(request.chainId, calls.map { SimDeltas.Call(it.to, it.value, it.data) }, feeCalls) ?: return@launch
+            val simParams = SimDeltas.payload(wallet.address, calls.map { SimDeltas.Call(it.to, it.value, it.data) })
+                ?.let { array -> (0 until array.length()).map(array::get) }
+            _sim.value = SimOutcome.Pending
+            // PR 3: the confirm waits for this verdict, and the wait is the
+            // core's (`sign_request`): it is told HERE, in the step that
+            // opens the request and sends the simulation — after
+            // `RequestArrived`, before anything is drawn — and only when one
+            // really goes out. From this to `SimSettled` (or its own four
+            // seconds) the core holds the confirm; nothing in this shell
+            // shuts the confirm on the simulation, or runs a clock for it.
+            if (simParams != null) dispatchSign(SignEvent.SimStarted(request.id))
+            // UNDISPATCHED: it starts now, in this step, and runs to its
+            // first real wait (the node). So an end that needs no wait — no
+            // payload to send, a host with no simulator — is on the sheet,
+            // and told to the core, before this function returns: whatever
+            // was said of the simulation is said in ONE step, and a tap that
+            // follows is never dropped behind a wait that was not on.
+            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                val outcome = try {
+                    // No simulator on this host: nothing to wait for, the place is given back.
+                    simulated(request.chainId, simParams, feeCalls)
+                } catch (error: Throwable) {
+                    // A reading that threw — or was cancelled with the request
+                    // still open — is not a verdict: "could not check". And
+                    // the wait still ends, below: no way out of the
+                    // simulation leaves the confirm held by it.
+                    if (error !is kotlinx.coroutines.CancellationException) VelaLog.failure("signing.sim", "the simulation's reading failed", error)
+                    SimDeltas.couldNotCheck()
+                }
+                simSettled(request.id, outcome)
             }
             // A quote on the sheet is priced again by the fee core itself, once
             // a block (`requote_interval_ms`) and at once when that fails —
@@ -584,8 +639,7 @@ class SigningController(
      * POL, held at 0, because nobody told the machine what the swap leaves.
      * A revert or a run nobody could check tells it nothing.
      */
-    private suspend fun simulated(chainId: Int, calls: List<SimDeltas.Call>, feeCalls: List<FeeCall>): SimOutcome? {
-        val params = SimDeltas.payload(wallet.address, calls)?.let { array -> (0 until array.length()).map(array::get) }
+    private suspend fun simulated(chainId: Int, params: List<Any?>?, feeCalls: List<FeeCall>): SimOutcome? {
         val answer = if (params == null) {
             null
         } else {
@@ -605,7 +659,27 @@ class SigningController(
             .onFailure { VelaLog.failure("signing.sim", "the trust machine could not judge the deltas", it) }
             .getOrNull()
         // Checked, but nothing could say what the moves are: "could not check".
-        return judged?.let { SimOutcome.Ready(it) } ?: SimDeltas.couldNotCheck()
+        // Whether it is "no asset changes" is the judged view's to say.
+        return judged?.let { SimOutcome.Ready(it.judgments, noChangeKey = it.no_change_key) } ?: SimDeltas.couldNotCheck()
+    }
+
+    /**
+     * PR 3: the simulation of request [id] has ended — a verdict, a notice,
+     * or no simulator at all ([outcome] `null`). What it says takes the
+     * verdict's place, and the core is told in the same step that its wait
+     * is over (`SimSettled`): for a checked answer that is now, with its
+     * tokens judged, not when the node replied. A request that is no longer
+     * the one on this sheet says nothing.
+     *
+     * The sheet draws the verdict when the CORE says the wait is over
+     * (`SigningLive.verdictShown`), so the verdict and the confirm that
+     * waited for it turn in one frame — never a verdict over a confirm still
+     * saying "checking".
+     */
+    private fun simSettled(id: String, outcome: SimOutcome?) {
+        if (_request.value?.id != id) return
+        _sim.value = outcome
+        dispatchSign(SignEvent.SimSettled(id))
     }
 
     @Volatile

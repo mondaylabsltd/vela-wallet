@@ -25,6 +25,24 @@
 //  without the off-chain and still-reading rules the sheet's own copy had;
 //  both copies are gone (`confirmState`).
 //
+//  ## The confirm waits for the simulation's verdict (PR 3)
+//
+//  The gate looked at the request, the reading, the guard and the fee — not
+//  at the simulation — so a person could confirm before the balance changes
+//  were on the sheet, and those are the one part of it a site cannot write.
+//  The wait is the core's (`sign_request`): this file only says when the
+//  simulation of the request on the sheet has been SENT (`sim_started`, in
+//  the step that opens the request) and when what stands in the verdict's
+//  place is no longer "Checking…" (`sim_settled`) — a notice at once, a
+//  checked answer once its tokens are judged (`simVerdict`). The deadline is
+//  the core's too, run by `SignExecutor`'s timer. Nothing here shuts the
+//  confirm, and nothing here keeps a clock.
+//
+//  The clocks under this file are three — the fee machine's timers, that
+//  deadline, and the write-ahead's (`SignExecutor`, `WriteAheadGate`) — and
+//  `timers: .stopped` stops all three: under a scripted relay no time
+//  passes, and what a test sees is what the code did (`isIdle`).
+//
 //  ## The order the machine is told things
 //
 //  `networks_changed` and `accounts_changed` BEFORE `request_arrived`. A
@@ -84,13 +102,15 @@ final class SigningController {
         /// The descriptor endpoint base.
         var dataBase: () -> String = { "" }
         /// The simulated deltas, to the `token_trust` machine that judges them
-        /// — the ONE entrance that may never admit a token (spec 017 ⑤).
-        var simDeltas: (_ address: String, _ chainId: Int, _ deltas: [[String: Any]]) -> Void
-        = { _, _, _ in }
-        /// The judged simulation the sheet draws its "Balance changes" from
-        /// (`token_trust`'s sim view) — read at the confirm, so the record keeps
-        /// the lines the person saw (083 F1, spec 093).
-        var simView: () -> TrustSimViewWire? = { nil }
+        /// — the ONE entrance that may never admit a token (spec 017 ⑤) — and
+        /// its judgment of THOSE deltas, once every token in them is named
+        /// (`TokenTrustStore.simJudged`): the view the sheet draws its
+        /// "Balance changes" from, and what the record keeps (083 F1, spec
+        /// 093). `nil` back — or no judge at all — is a checked answer nobody
+        /// judged: the sheet cannot report it, and says so. `@MainActor`: see
+        /// `simulate`.
+        var simJudged: (@MainActor (_ address: String, _ chainId: Int, _ deltas: [[String: Any]]) async
+            -> TrustSimViewWire?)? = nil
         /// `eth_simulateV1` with these params, its answer as it came; `nil` =
         /// through the pool (the Android twin's `Ports.simulate`). What the
         /// answer MEANS stays the core's (`simOutcome`). `@MainActor`: the
@@ -177,6 +197,8 @@ final class SigningController {
     private let wallet: (address: String, credentialId: String)
     private let relay: RelayClient
     private let spine: UserOpSpine
+    /// Kept for its one stoppable clock (`elapseSimVerdictTimer`).
+    private let signExecutor: SignExecutor
 
     /// Spec 079 (owner: one slide, not two) and 102: this account reviews and
     /// signs on a trusted page, whose own slide is the consent — so the sheet
@@ -256,6 +278,17 @@ final class SigningController {
 
     private(set) var simulation: Simulation = .pending
 
+    /// Simulations asked and not yet answered and judged (`simulate`): the
+    /// one thing in flight here that no machine's effect stands for.
+    private var simulationsOut = 0
+
+    /// THIS request's checked answer, judged: what the verdict's place draws
+    /// once `simulation` is `.answered`. `nil` until the judgment is in — the
+    /// place says "Checking…" meanwhile — and the request's own, never the
+    /// judge's last session: a verdict for another transaction is worse than
+    /// none.
+    private(set) var simVerdict: TrustSimViewWire?
+
     /// The pool, kept for the simulation — the same endpoints, bans and
     /// cooldowns the rest of the wallet uses, never one a page named.
     private let pool: RpcPool
@@ -275,7 +308,7 @@ final class SigningController {
         preferredTier: @escaping () -> String = { "standard" },
         numberPreset: @escaping () -> String = { "comma_dot" },
         ports: Ports,
-        feeTimers: FeeStore.Timers = .wallClock
+        timers: FeeStore.Timers = .wallClock
     ) {
         self.wallet = wallet
         self.relay = relay
@@ -285,11 +318,12 @@ final class SigningController {
         self.numberPreset = numberPreset
         self.fees = FeeStore(
             relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool),
-            timers: feeTimers
+            timers: timers
         )
 
         self.spine = spine
-        let signExecutor = SignExecutor(spine: spine, relay: relay, store: store)
+        let signExecutor = SignExecutor(spine: spine, relay: relay, store: store, timers: timers)
+        self.signExecutor = signExecutor
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
         let guardExecutor = GuardExecutor(pool: pool)
 
@@ -455,7 +489,9 @@ final class SigningController {
         else { return }
         feeCalls = calls.map { ["to": $0.to, "value": $0.value, "data": $0.data] }
         requestQuote(chainId: incoming.chainId)
-        simulate(chainId: incoming.chainId, calls: calls, feeCalls: feeCalls)
+        // A message never gets here: it has no calls, starts no simulation,
+        // and its confirm waits for none.
+        simulate(id: incoming.id, chainId: incoming.chainId, calls: calls, feeCalls: feeCalls)
     }
 
     /// Ask the chain what these calls WOULD do, and hand the answer to the core
@@ -477,17 +513,31 @@ final class SigningController {
     /// whose path named both stablecoins was paid in POL, held at 0, because
     /// nobody told the machine what the swap leaves. A revert, or a run
     /// nobody could check, tells it nothing.
-    private func simulate(chainId: Int, calls: [UserOpCall], feeCalls: [[String: Any]]) {
+    ///
+    /// PR 3: the confirm waits for the verdict, and the core keeps that wait.
+    /// It is told the simulation is out in THIS step (`sim_started` — after
+    /// `request_arrived`, before anything is drawn, and only when one really
+    /// is sent), and told it has settled in the very step the verdict's place
+    /// stops saying "Checking…": a notice at once; a checked answer when its
+    /// judgment is in, not when the node replied.
+    private func simulate(id: String, chainId: Int, calls: [UserOpCall], feeCalls: [[String: Any]]) {
         simulation = .pending
+        simVerdict = nil
         let legs = calls.map {
             SimDeltas.Call(to: $0.to, value: $0.value, data: $0.data)
         }
         guard let payload = SimDeltas.payload(from: wallet.address, calls: legs) else {
+            // Nothing could be asked, so nothing is: the place says the
+            // core's could-not-check line from its first frame, and the core
+            // is told of no simulation — the confirm waits for none.
             simulation = Self.simulation(of: simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#))
             return
         }
+        dispatchSign(["type": "sim_started", "id": id])
+        simulationsOut += 1
         Task { [weak self] in
             guard let self else { return }
+            defer { simulationsOut -= 1 }
             let answer: RpcOutcome
             if let simulate = ports.simulate {
                 answer = await simulate(chainId, payload)
@@ -500,6 +550,8 @@ final class SigningController {
             simulation = Self.simulation(of: outcome)
             if outcome.kind != "deltas" {
                 VelaLog.failure(.sign, kind: "sim_\(outcome.kind)", "chain=\(chainId)")
+                // The notice is the verdict, and it is on the sheet now.
+                simSettled(id)
                 return
             }
             // Checked: the person's own moves, to the machine that judges
@@ -511,9 +563,45 @@ final class SigningController {
             if let parsed, let changes = SimDeltas.feeBalanceChanges(parsed) {
                 fees.balanceChanges(calls: feeCalls, changes: changes)
             }
-            ports.simDeltas(wallet.address, chainId, deltas)
+            // The request left the sheet while the node was answering — it
+            // was refused, or is already being signed: nobody is left to read
+            // a verdict, and the judge's one session belongs to whichever
+            // sheet is up now.
+            guard sign.request?.id == id, !committed else { return }
+            var judged: TrustSimViewWire?
+            if let judge = ports.simJudged { judged = await judge(wallet.address, chainId, deltas) }
+            guard let judged else {
+                // Checked, and nobody judged it (a later simulation took the
+                // judge's session, or this host has no judge): a check this
+                // sheet cannot report. The core's could-not-check verdict,
+                // now — never "Checking…" until the deadline.
+                simulation = Self.simulation(
+                    of: simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#)
+                )
+                simSettled(id)
+                return
+            }
+            // The verdict and the word that it is on the sheet, in one step:
+            // no frame draws one without the other.
+            simVerdict = judged
+            simSettled(id)
         }
     }
+
+    /// What stands in the verdict's place for request `id` is no longer
+    /// "Checking…": the core stops holding the confirm for it, and takes the
+    /// timed-out line back off the sheet if its deadline had passed.
+    private func simSettled(_ id: String) {
+        guard request?.id == id else { return }
+        dispatchSign(["type": "sim_settled", "id": id])
+    }
+
+    /// A test's clock moving, for a controller built with `timers: .stopped`:
+    /// the simulation's deadline (`sim_verdict_timer`) runs out now.
+    func elapseSimVerdictTimer() { signExecutor.elapseSimVerdictTimer() }
+
+    /// How many simulation deadlines a stopped clock holds (tests).
+    var heldSimVerdictTimers: Int { signExecutor.heldSimVerdictTimers }
 
     /// The pool's answer, normalised into the reply `simOutcome` reads:
     /// `{"result": …}`, `{"error": {code, message}}` or `{"unreachable": true}`.
@@ -571,12 +659,24 @@ final class SigningController {
         )
     }
 
-    /// A test's clock moving, for a controller built with `feeTimers:
+    /// A test's clock moving, for a controller built with `timers:
     /// .stopped`: every held `timer` of the fee sessions runs out now.
     func elapseFeeTimer(_ timer: String) { fees.elapse(timer) }
 
     /// No fee read is out — only timers a stopped clock holds (tests).
     var feeIdle: Bool { fees.isIdle }
+
+    /// Nothing is out that could still move the sheet: no effect of the
+    /// sign, reading or guard machines, no fee read, no simulation — only
+    /// timers a stopped clock holds. A confirm that is shut now stays shut
+    /// until somebody sends an event, so a test waits on this instead of a
+    /// clock (`CoreDriver.isIdle`) and can say at once that a gate will not
+    /// open.
+    var isIdle: Bool {
+        simulationsOut == 0
+            && signCore.inFlight == signExecutor.heldSimVerdictTimers
+            && clearCore.isIdle && guardCore.isIdle && fees.isIdle
+    }
 
     // MARK: - The speed control (spec 069)
 
@@ -609,7 +709,7 @@ final class SigningController {
         approvedAtMs = Date().timeIntervalSince1970 * 1000
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
             fee: fee, clear: clear, guard: guardView,
-            balanceChanges: Self.drawnChanges(ports.simView(), simulation: simulation)
+            balanceChanges: Self.drawnChanges(simVerdict, simulation: simulation)
         )])
     }
 

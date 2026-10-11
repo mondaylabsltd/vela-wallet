@@ -35,8 +35,8 @@ enum SigningLive {
         var display: WalletLive.Display = .usd
         /// The page's host, for the sign-in verdict's words.
         var origin: String?
-        /// What the chain said this transaction would do (spec 055). `nil`
-        /// when nothing has been simulated for this account yet.
+        /// What the chain said THIS request would do, judged (spec 055;
+        /// `SigningController.simVerdict`). `nil` until its judgment is in.
         var sim: TrustSimViewWire?
         /// Where the simulation has got to. Three states, three sentences.
         var simulation: SigningController.Simulation = .pending
@@ -253,27 +253,32 @@ enum SigningLive {
         // Only a TRANSACTION has balances to change. A message moves nothing,
         // and a balance block on a signature would answer a question nobody
         // asked.
-        let balances = balanceBlocks(isTransaction: facts != nil, context: context)
+        let balances = balanceBlocks(
+            isTransaction: facts != nil, context: context, waitedOutKey: sign.simWaitedOutKey
+        )
         // Issue #314: on the wallet's own request a simulation that moves
         // nothing only confirms what the wallet itself wrote — a technical
         // fact, folded with the others, not a bordered card weighing as much as
         // the outcome. Anything else it has to say (a revert, a node that could
         // not check, a balance that would move) stays on the sheet.
+        // "Nothing moves" is the core's to say, and in its words
+        // (`noChangeLine`): this row is folded exactly when it does.
         let quietSim: SigningRow? = {
-            guard own, !refused, balances.count == 1,
-                  case .balances(_, let rows, let note, _) = balances[0], rows.isEmpty
-            else { return nil }
-            return SigningRow(label: s(loc, "simResultLabel"), value: note ?? s(loc, "simResultNoChange"))
+            guard own, !refused, facts != nil, let line = noChangeLine(context) else { return nil }
+            return SigningRow(label: s(loc, "simResultLabel"), value: line)
         }()
-        let blocks = refused
+        // What stands above the simulation's verdict, and the verdict: kept
+        // apart so the sheet can hold the verdict's PLACE from the first
+        // frame (final note F2, `verdictPlace` below).
+        let lead = refused
             ? statusBlocks(sign: sign, loc: loc)
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
             : statusBlocks(sign: sign, loc: loc, signerPageOpen: context.signerPageOpen(sign))
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
                 + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
                               dataBytes: dataBytes, context: context)
-                + (quietSim == nil ? balances : [])
-                + guardBlocks(guardView, loc: loc)
+        let verdict = refused || quietSim != nil ? [] : balances
+        let blocks = refused ? lead : lead + verdict + guardBlocks(guardView, loc: loc)
 
         // Spec 102 D4: an account whose venue is a page gets the hand-off card,
         // and its Open is shut until this phone's check admitted the page —
@@ -346,6 +351,15 @@ enum SigningLive {
                 if case .warning = $0 { return true }
                 return false
             }
+        } else if !refused, !own, facts != nil {
+            // Final note F2: a site's transaction keeps the verdict's place
+            // from its first frame. Not a message (nothing is simulated),
+            // not a refusal (nothing will be signed), not the hand-off card
+            // (the page is the preview) — and not the wallet's own request,
+            // whose usual verdict is a folded technical row (issue #314).
+            model.verdictPlace = SigningVerdictPlace(
+                at: lead.count, count: verdict.count, pending: pendingVerdict(loc)
+            )
         }
         model.receipt = refused ? nil : receipt(sign: sign, blocks: blocks, context: context)
         // Spec 099 R7: a shut confirm says which part of the gate is shut —
@@ -841,12 +855,28 @@ enum SigningLive {
         ]
     }
 
+    /// The verdict's quiet line — "No asset changes" — when this request's
+    /// simulation was a check under which nothing of the person's moves:
+    /// the judged view's `noChangeKey`, through the corpus. `nil` whenever
+    /// the core does not say so (still out, a notice, something moves).
+    ///
+    /// Both the case and the sentence are the core's. This file used to
+    /// decide the case itself ("no row came out of the judgments") and say
+    /// its own sentence for it, "No assets leave your wallet", while the
+    /// desktop and Android said another.
+    static func noChangeLine(_ context: Context) -> String? {
+        guard let sim = context.sim, sim.ready, context.simulation == .answered,
+              let key = sim.noChangeKey
+        else { return nil }
+        return context.loc.t(key)
+    }
+
     /// What the simulation found, or that it could not look.
     ///
     /// Three outcomes and they are three different sentences:
     ///
     /// - judgments → the rows, each one the CORE's verdict;
-    /// - answered, nothing moved → "checked, nothing moves";
+    /// - checked, nothing moves → the core's line for it (`noChangeLine`);
     /// - the core's notice → its sentence in its tone: "expected to fail"
     ///   (danger) or "Vela couldn't check" (caution) — never silence, because
     ///   a wallet that stays quiet when it could not check teaches people
@@ -854,7 +884,15 @@ enum SigningLive {
     ///
     /// Only for transactions: a message moves nothing, and a balance block on
     /// a signature would be an answer to a question nobody asked.
-    static func balanceBlocks(isTransaction: Bool, context: Context) -> [SigningBlock] {
+    ///
+    /// `waitedOutKey` (PR 3, `SignView.sim_waited_out_key`): the core's
+    /// deadline for the verdict passed and none is here. Its sentence stands
+    /// in the verdict's place then, as a caution — where "Checking…" stood,
+    /// drawn as the could-not-check notice is — and gives way to the verdict
+    /// if one still lands (the core clears the key in that step).
+    static func balanceBlocks(
+        isTransaction: Bool, context: Context, waitedOutKey: String? = nil
+    ) -> [SigningBlock] {
         let loc = context.loc
         guard isTransaction else { return [] }
 
@@ -864,26 +902,38 @@ enum SigningLive {
             let text = reason.map { loc.t(key, vars: ["reason": $0]) } ?? loc.t(key)
             return [.warning(tone: risk == "danger" ? .danger : .caution, text: text)]
         }
-        // Still running, or a verdict for a previous request. Silence, because
-        // a block that appears and then changes its mind is worse than one that
-        // arrives late.
-        guard let sim = context.sim, sim.ready, context.simulation == .answered else { return [] }
-        guard !sim.judgments.isEmpty else {
+        // Still running: no verdict, and the place keeps "Checking…" — a
+        // block that appears and then changes its mind is worse than one that
+        // arrives late. Past the core's deadline it says so instead.
+        guard let sim = context.sim, sim.ready, context.simulation == .answered else {
+            return waitedOutKey.map { [.warning(tone: .caution, text: loc.t($0))] } ?? []
+        }
+        // Nothing moves — said out loud, in the card's own outline, exactly
+        // when the core says so and in its sentence.
+        if let line = noChangeLine(context) {
             return [.balances(
                 title: s(loc, "balanceChangesTitle"),
                 rows: [],
-                note: s(loc, "balanceNoAssetsMove"),
+                note: line,
                 noteTone: .neutral
             )]
         }
         // A zero change is not a change: the core writes none (RJ15), and
         // the row is not drawn.
         let rows = sim.judgments.compactMap { balanceRow($0, context: context) }
+        // No row to draw and no word from the core that nothing moves: a
+        // move nobody here can write. That is not "nothing moves" — it is a
+        // check this sheet cannot report, so it says the core's
+        // could-not-check line, never an empty card.
+        guard !rows.isEmpty else {
+            return [.warning(tone: .caution, text: s(loc, "simUnavailableWarning"))]
+        }
         // One warning for the whole block, not one per row: the caution is
         // about the same thing each time, and repeating it is how people stop
-        // reading it.
+        // reading it. It stands with an unverified ROW — a move of nothing
+        // draws none.
         let unverified = sim.judgments.contains {
-            if case .erc20Unverified = $0 { return true }
+            if case .erc20Unverified(_, let direction) = $0 { return direction != .still }
             return false
         }
         return [.balances(
@@ -894,36 +944,56 @@ enum SigningLive {
         )]
     }
 
+    /// What the verdict's place holds while the simulation is out (final
+    /// note F2): the balance card's own outline and title, with "Checking…"
+    /// where its rows will be — so the card that lands fills in the card
+    /// that was there. Two existing keys, no new string.
+    static func pendingVerdict(_ loc: Loc) -> SigningBlock {
+        .balances(
+            title: s(loc, "balanceChangesTitle"),
+            rows: [],
+            note: loc.t("componentsUi.funding.checking"),
+            noteTone: .neutral
+        )
+    }
+
     /// One judgment, as a row — `nil` for a change of zero.
     ///
     /// The figure is the core's (`formatSignedTokenAmount`, spec 082 RJ15):
     /// the shell's own formatter rounded a 1000-wei outflow to "0" and kept
     /// its minus — "xDAI −0" (G49).
     ///
-    /// An unverified INFLOW shows its direction and the word "unverified
+    /// An unverified token shows its direction and the words "unverified
     /// token" and **no number**: the amount in a simulated log is whatever the
     /// site being signed for chose to emit, and printing it lends this wallet's
-    /// credibility to a stranger's arithmetic.
+    /// credibility to a stranger's arithmetic. Since PR 3 the judgment does
+    /// not carry one (`TrustSimDirectionWire`): "+" in, "−" out, no row for a
+    /// move of nothing, and the row with its caution and no sign where the
+    /// core could not read a direction.
     private static func balanceRow(
         _ judgment: TrustSimJudgmentWire, context: Context
     ) -> BalanceDeltaRow? {
         let loc = context.loc
-        let incoming = judgment.incoming
-        let tone: SigningTone = incoming ? .success : .neutral
+        // A figure the wallet vouches for states its direction by its sign,
+        // in the core's string: positive means the wallet RECEIVES.
+        func tone(_ delta: String) -> SigningTone { delta.hasPrefix("-") ? .neutral : .success }
         switch judgment {
         case .native(let delta):
             guard let text = SimDeltas.deltaText(delta, decimals: 18) else { return nil }
-            return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone)
+            return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone(delta))
         case .erc20Trusted(_, let delta, let symbol, let decimals, _):
             guard let text = SimDeltas.deltaText(delta, decimals: decimals) else { return nil }
-            return BalanceDeltaRow(symbol: symbol, delta: text, tone: tone)
-        case .erc20Unverified:
-            return BalanceDeltaRow(
-                symbol: s(loc, "balanceUnverifiedToken"),
-                // Direction only. Never the site's own number.
-                delta: incoming ? "+" : "\u{2212}",
-                tone: .caution
-            )
+            return BalanceDeltaRow(symbol: symbol, delta: text, tone: tone(delta))
+        case .erc20Unverified(_, let direction):
+            // Direction only. Never the site's own number.
+            let sign: String
+            switch direction {
+            case .in: sign = "+"
+            case .out: sign = "\u{2212}"
+            case .unreadable: sign = ""
+            case .still: return nil
+            }
+            return BalanceDeltaRow(symbol: s(loc, "balanceUnverifiedToken"), delta: sign, tone: .caution)
         }
     }
 

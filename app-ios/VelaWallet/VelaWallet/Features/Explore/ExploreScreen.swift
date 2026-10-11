@@ -921,6 +921,7 @@ struct ExploreScreen: View {
                     ) {
                         ForEach(favorites.tiles) { tile in
                             SiteTileView(tile: tile) { id in open(siteId: id) }
+                                .accessibilityIdentifier("explore.tile")
                         }
                     }
                     .padding(.vertical, Tokens.Space.s12)
@@ -983,7 +984,10 @@ struct ExploreScreen: View {
             session: liveSession,
             refusalText: scanRefusalText,
             refusalAction: grantAction,
-            torchOn: camera?.torchOn ?? false
+            torchOn: camera?.torchOn ?? false,
+            // A gallery / board / dev session — or a drawing with no camera
+            // behind it at all: the fixture frame (PR 3 note 7).
+            fixtureFrame: camera?.fixtureOnly ?? true
         )
     }
 
@@ -1115,7 +1119,7 @@ struct ExploreScreen: View {
                             onAddNetworkDismiss()
                         },
                         onSetupTool: {
-                            if let url = URL(string: ExternalLinks.chainSetup) {
+                            if let url = addNetwork.setupUrl.flatMap(URL.init(string:)) {
                                 UIApplication.shared.open(url)
                             }
                         }

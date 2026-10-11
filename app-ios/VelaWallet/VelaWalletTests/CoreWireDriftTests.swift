@@ -129,6 +129,33 @@ struct CoreWireDriftTests {
         }
     }
 
+    /// `CreateView` carries the keys screen's heading, its pinned flag
+    /// (issue #475) and whether the counter is drawn (PR 3 note 22) under
+    /// these names — the mirror defaults all three, so a rename would decode
+    /// quietly and the screen would fall back to the old label, or never
+    /// draw its counter.
+    @Test func createViewCarriesTheKeysScreenHeading() throws {
+        let json = try CoreJSON.object(CreateWalletCore().view())
+        #expect(json["add_heading_key"] as? String == I18nKeys.Create.keyPlaceHeading)
+        #expect(json["add_heading_key"] as? String == "onboarding.create.keyPlaceHeading")
+        #expect(json["methods_pinned"] is Bool)
+        // With no key the core hides the counter; the field is on the wire.
+        #expect(json["key_count_shown"] as? Bool == false)
+        let view = try CoreJSON.decode(CreateView.self, from: json)
+        #expect(view.addHeadingKey == "onboarding.create.keyPlaceHeading")
+        #expect(view.keys.isEmpty)
+        #expect(!view.keyCountShown)
+
+        // The mirror READS the field: the same view saying `true` decodes so.
+        var withKey = json
+        withKey["key_count_shown"] = true
+        #expect(try CoreJSON.decode(CreateView.self, from: withKey).keyCountShown)
+        // Absent — a core from before the field — is the core's own default.
+        var absent = json
+        absent.removeValue(forKey: "key_count_shown")
+        #expect(try !CoreJSON.decode(CreateView.self, from: absent).keyCountShown)
+    }
+
     /// `FeedView` decodes, including the tagged `FeedRow` union Swift cannot
     /// synthesise — and the feed machine asks for nothing this build cannot do.
     ///
@@ -137,9 +164,13 @@ struct CoreWireDriftTests {
     @Test func activityFeedViewDecodesAndAsksOnlyForHandledOperations() throws {
         let core = ActivityFeedCore()
 
-        let initial = try CoreJSON.decode(FeedViewWire.self, from: try CoreJSON.object(core.view()))
+        let initialJSON = try CoreJSON.object(core.view())
+        let initial = try CoreJSON.decode(FeedViewWire.self, from: initialJSON)
         #expect(initial.rows.isEmpty)
         #expect(initial.toast == nil)
+        // Issue #469: the home's cut rides on the view under this name — a
+        // rename would decode as "no rows" and the home would sit empty.
+        #expect(initialJSON["home_rows"] != nil, "the core no longer sends `home_rows`")
 
         let result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
             "type": "account_switched",

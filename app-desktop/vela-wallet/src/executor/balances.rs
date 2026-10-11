@@ -219,6 +219,12 @@ pub enum Miss {
     /// chain's worker could not be started, or it died before it answered.
     /// Never said as "can't reach" a network that was never asked.
     Internal,
+    /// The chain's node answered; its token list — the registry document
+    /// that names its stablecoins — could not be loaded, and the chain has
+    /// no native coin to read without it (Tempo, [`not_read`]). The RPC was
+    /// never the problem (PR 3 note 4): the core says "can't load its token
+    /// list", and its row is never offered an RPC fix.
+    TokenList,
 }
 
 /// One chain's native balance in base units, or why there is none.
@@ -409,8 +415,9 @@ fn custom_price(
 /// slot — Tempo): its money is the registry's stablecoins, none of which
 /// could be named, so "holds nothing" would be a guess that reads as $0.00.
 /// It fails like a chain that did not answer — its last holdings stand, and
-/// it is listed as unreachable. An index that answered "no such document"
-/// (404) is an answer, and a chain with a native coin read that coin.
+/// it is listed as unreachable, for what it is ([`Miss::TokenList`]: the
+/// node answered, the list did not). An index that answered "no such
+/// document" (404) is an answer, and a chain with a native coin read that coin.
 fn not_read(doc: &IndexDoc, plan: &[ReadSlot]) -> bool {
     *doc == IndexDoc::Unread && !plan.iter().any(|slot| slot.kind == ReadKind::Native)
 }
@@ -451,7 +458,7 @@ fn chain_tokens_for(
     // simply has no row to show for it.
     let plan = read_plan_for(chain_id, &stables, wrapped.as_deref());
     if not_read(doc, &plan) {
-        return Err(Miss::Unreachable);
+        return Err(Miss::TokenList);
     }
     let mut calls: Vec<Call3> = Vec::new();
     let mut slots: Vec<Slot> = Vec::with_capacity(plan.len());
@@ -751,6 +758,10 @@ pub struct Fetched {
     /// The failed chains whose read never left the app ([`Miss::Internal`]) —
     /// a subset of `failed`, as the core's `internal_chain_ids` is.
     pub internal: Vec<u32>,
+    /// The failed chains whose node answered and whose token list did not
+    /// ([`Miss::TokenList`]) — a subset of `failed`, as the core's
+    /// `registry_chain_ids` is.
+    pub registry: Vec<u32>,
 }
 
 /// The same fan-out, saying what it has found as it finds it.
@@ -862,6 +873,7 @@ pub fn fetch_all_streaming(address: &str, arrived: &Arc<ChainSink>) -> Fetched {
         mut tokens,
         mut failed,
         mut internal,
+        mut registry,
     } = fetched;
     inform_token_trust(address, &tokens);
     // Deterministic order: the core sorts for display, but a stable input makes
@@ -874,10 +886,12 @@ pub fn fetch_all_streaming(address: &str, arrived: &Arc<ChainSink>) -> Fetched {
     });
     failed.sort_unstable();
     internal.sort_unstable();
+    registry.sort_unstable();
     Fetched {
         tokens,
         failed,
         internal,
+        registry,
     }
 }
 
@@ -886,7 +900,8 @@ pub fn fetch_all_streaming(address: &str, arrived: &Arc<ChainSink>) -> Fetched {
 /// round, and every answer that did arrive still lands. A connection held
 /// open must never keep the round from settling. A chain whose read never
 /// left the app — or whose worker died before it answered — is failed AND
-/// internal (PR 2 note 11).
+/// internal (PR 2 note 11); one whose node answered and whose token list did
+/// not is failed AND the registry's (PR 3 note 4).
 fn collect_chain_answers(
     rx: &std::sync::mpsc::Receiver<(u32, Result<Vec<BalanceToken>, Miss>)>,
     mut out: Vec<u32>,
@@ -903,8 +918,10 @@ fn collect_chain_answers(
                     Ok(found) => fetched.tokens.extend(found),
                     Err(miss) => {
                         fetched.failed.push(chain_id);
-                        if miss == Miss::Internal {
-                            fetched.internal.push(chain_id);
+                        match miss {
+                            Miss::Unreachable => {}
+                            Miss::Internal => fetched.internal.push(chain_id),
+                            Miss::TokenList => fetched.registry.push(chain_id),
                         }
                     }
                 }
@@ -990,6 +1007,35 @@ mod tests {
         );
     }
 
+    /// PR 3 note 4: a chain whose node answered and whose token list did not
+    /// is failed AND the registry's — so the core can say "can't load its
+    /// token list" and offer no RPC fix — and neither internal nor merely
+    /// unreachable; a node that answered nothing stays the network's.
+    #[test]
+    fn a_token_list_that_did_not_load_is_the_registrys_not_the_networks() {
+        let (tx, rx) = std::sync::mpsc::channel::<(u32, Result<Vec<BalanceToken>, Miss>)>();
+        let _ = tx.send((4217, Err(Miss::TokenList)));
+        let _ = tx.send((56, Err(Miss::Unreachable)));
+        let _ = tx.send((1, Err(Miss::Internal)));
+        let _ = tx.send((100, Ok(Vec::new())));
+        drop(tx);
+        let fetched = collect_chain_answers(
+            &rx,
+            vec![1, 56, 100, 4217],
+            std::time::Duration::from_secs(5),
+        );
+        assert_eq!(fetched.failed, vec![4217, 56, 1]);
+        assert_eq!(fetched.registry, vec![4217]);
+        assert_eq!(fetched.internal, vec![1]);
+        assert!(
+            fetched
+                .registry
+                .iter()
+                .all(|id| fetched.failed.contains(id)),
+            "a subset of the failed chains, as the core reads it"
+        );
+    }
+
     /// The pool's own verdicts, as the balance read words them: a pool that
     /// is gone is Vela's fault; endpoints that failed are the chain's.
     #[test]
@@ -1068,7 +1114,8 @@ mod tests {
     /// stablecoins. With the index unread, none of them could be named, so
     /// the chain was not read: it fails like a chain that did not answer
     /// (its holdings carried, listed unreachable), never "answered, holds
-    /// nothing" — the $0.00 a person read as their money gone. An index that
+    /// nothing" — the $0.00 a person read as their money gone. And it fails
+    /// as what it is (PR 3 note 4): the token list, not the network. An index that
     /// answered (a document, or a 404) is an answer, and a chain with a
     /// native coin read that coin whatever the index said.
     #[test]
@@ -1096,7 +1143,7 @@ mod tests {
                     "0",
                     &HashMap::new(),
                 );
-                assert_eq!(read, Err(Miss::Unreachable), "chain {chain_id}");
+                assert_eq!(read, Err(Miss::TokenList), "chain {chain_id}");
             });
         }
         for chain_id in [1, 100, 8453] {

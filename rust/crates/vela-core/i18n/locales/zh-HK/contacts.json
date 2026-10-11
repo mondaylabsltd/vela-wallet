@@ -2,7 +2,6 @@
   "contacts": {
     "title": "聯絡人",
     "manageSubtitle": "已儲存的地址及近期收款人",
-    "pickerTitle": "選擇收款人",
     "searchPlaceholder": "搜尋名字、ENS 或地址",
     "filterAll": "全部",
     "sectionFavorites": "常用",
@@ -11,7 +10,6 @@
     "empty": "尚無聯絡人",
     "emptyHint": "新增常用地址，轉賬時無需再反覆貼上。也可以從檔案匯入現有聯絡人。",
     "emptyPicker": "尚無收款人",
-    "pickerEmptyHint": "貼上地址或掃描 QR 碼即可立即發送。",
     "noResults": "找不到符合「{{query}}」的結果",
     "useTyped": "使用此地址",
     "addTitle": "新增聯絡人",
@@ -34,7 +32,6 @@
     "sends_other": "{{count}} 次發送",
     "savedTag": "已儲存",
     "savedContact": "已儲存的聯絡人",
-    "scanToAdd": "掃描地址",
     "sectionGroups": "群組",
     "groupMembers": "{{count}} 位成員",
     "groupNew": "新增群組",
@@ -77,7 +74,6 @@
     "recentActivity": "最近往來",
     "viewAllActivity": "查看全部往來",
     "deleteContact": "刪除聯絡人",
-    "actionQr": "QR 碼",
     "edit": "編輯"
   }
 }

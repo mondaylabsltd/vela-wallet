@@ -2,7 +2,6 @@
   "contacts": {
     "title": "通讯录",
     "manageSubtitle": "已保存地址与最近收款人",
-    "pickerTitle": "选择收款人",
     "searchPlaceholder": "搜索名字、ENS 或地址",
     "filterAll": "全部",
     "sectionFavorites": "收藏",
@@ -11,7 +10,6 @@
     "empty": "还没有联系人",
     "emptyHint": "添加常用地址，转账时不再反复粘贴。也可以从文件导入现有通讯录。",
     "emptyPicker": "还没有收款人",
-    "pickerEmptyHint": "粘贴地址或扫码即可直接转账。",
     "noResults": "没有匹配「{{query}}」的结果",
     "useTyped": "使用此地址",
     "addTitle": "新建联系人",
@@ -34,7 +32,6 @@
     "sends_other": "{{count}} 笔转账",
     "savedTag": "已保存",
     "savedContact": "已保存联系人",
-    "scanToAdd": "扫码填写地址",
     "sectionGroups": "分组",
     "groupMembers": "{{count}} 人",
     "groupNew": "新建分组",
@@ -77,7 +74,6 @@
     "recentActivity": "最近往来",
     "viewAllActivity": "查看全部往来",
     "deleteContact": "删除联系人",
-    "actionQr": "二维码",
     "edit": "编辑"
   }
 }

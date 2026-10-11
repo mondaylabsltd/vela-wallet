@@ -107,7 +107,7 @@ struct DebugModeTests {
     ///
     /// The erase waits for WebKit (see `EraseDeviceTests`): the limit is for
     /// that, not for the switch.
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func anEraseHidesTheSwitchAgain() async {
         let (_, store) = fresh()
         booted(store).setDebugMode(true)
@@ -219,7 +219,7 @@ struct DebugModeTests {
     /// processes alone passed a one-minute limit (#395, #399). The limit only
     /// stops a hang; nothing here is about time (the same reasoning as
     /// BrowserChromeTests, #382).
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.hangLimit)
     func everyTabFollowsTheMode() async throws {
         let h = BrowserHarness()
         h.browser.start()

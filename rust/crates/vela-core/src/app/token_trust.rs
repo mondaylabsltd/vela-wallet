@@ -53,6 +53,15 @@
 //!   received token falls back to unverified, the safe direction.
 //! - ⑧ no symbol ⇒ no listing; `${chainId}_${addr}` ids never duplicate; a
 //!   successful admission invalidates the token cache (`token-autoadd.ts:60-81`).
+//! - ⑨ a receipt's time is its block's time, never the clock's (PR 3). A
+//!   transfer whose block time could not be read is WITHHELD — as ③ withholds
+//!   an ERC-20 with no metadata — and asked for again by a later poll, at
+//!   most [`TIMESTAMP_BLOCK_CAP`] blocks per chain per poll; a time once read
+//!   is kept. The TS original stamped such a transfer `Date.now()`
+//!   (`resolveTimestamps`), which is roughly right inside a live window and
+//!   wrong by as much as the endpoint is stale: three receipts of 2026-09-29
+//!   were filed under "Today" eleven days later, and a shell stores what this
+//!   feed says for good. No clock crosses into this machine at all.
 //!
 //! Resident machine (app lifetime, not screen lifetime): every shell result
 //! carries the address/chain it was fetched for, and results for a different
@@ -104,9 +113,25 @@ pub const LIVE_SCAN_BLOCKS: u64 = 100;
 /// (`activity.ts:393`).
 pub const DEFAULT_MONITOR_CHAINS: [u32; 6] = [1, 56, 137, 42_161, 8_453, 100];
 
-/// Distinct blocks whose timestamps are resolved per chain per poll — the
-/// `slice(0, 25)` cap (`transfer-monitor.ts:172`); the rest fall back to now.
+/// Distinct blocks whose timestamps are asked for per chain per poll — the
+/// `slice(0, 25)` cap (`transfer-monitor.ts:172`). The rest wait: their
+/// transfers are withheld and a later poll asks (invariant ⑨). It is also
+/// what bounds the retries — a block that will not answer costs one read a
+/// poll, never a loop.
 pub const TIMESTAMP_BLOCK_CAP: usize = 25;
+
+/// Block times kept, across every chain (invariant ⑨: a time once read is not
+/// read again). A block's time never changes, so the oldest go first only to
+/// bound the memory; one that is needed again is simply read again.
+pub const BLOCK_TIME_CACHE_CAP: usize = 512;
+
+/// Transfers kept while their block's time is still unread (invariant ⑨), per
+/// account. A scan window is [`LIVE_SCAN_BLOCKS`] wide — 25 seconds of
+/// Arbitrum — so a transfer could leave it before a rate-limited endpoint
+/// gave its block's time; without this it would be seen once and never
+/// recorded. Past the cap the oldest block's go first: they are the likeliest
+/// to be out of reach for good.
+pub const UNTIMED_TRANSFER_CAP: usize = 64;
 
 // ---------------------------------------------------------------------------
 // Wire value types
@@ -291,11 +316,11 @@ pub enum TrustShellResult {
         chain_id: u32,
         block_number: f64,
         /// Unix seconds from the block header, or `None` when the lookup
-        /// failed — the transfer then falls back to "now".
+        /// failed — the block's transfers are then withheld and a later poll
+        /// asks again (invariant ⑨). There is no clock beside it: this result
+        /// carried `now_ms` until PR 3, to stamp such a transfer with; a
+        /// shell that still sends one is read and the field ignored.
         timestamp_sec: Option<f64>,
-        /// Epoch ms, carried by the result (the 011 `now_iso` pattern) so the
-        /// core never reads a clock.
-        now_ms: f64,
     },
     /// Metadata facts — chain-global, so they are absorbed unconditionally
     /// and every flow waiting on them re-checks its needs.
@@ -751,10 +776,60 @@ pub enum TrustSimJudgment {
     },
     /// Direction + caution, no attacker-controlled amount rendering
     /// (`tx-simulation.ts:243-256`).
+    ///
+    /// It carries NO figure. The simulation's number for a token nobody
+    /// vouches for is whatever the site being signed for chose to emit, so
+    /// the judgment hands a shell only which way it moves
+    /// ([`TrustSimDirection`]): a sheet cannot print an amount it was never
+    /// given. (It carried the raw `delta` until PR 3, "to read the sign
+    /// from", and one client printed it: 「未验证代币
+    /// +5,000,000,000,000,000,000,000.00」.)
     Erc20Unverified {
         token: Option<String>,
-        delta: String,
+        direction: TrustSimDirection,
     },
+}
+
+/// Which way an unverified token moves — all a sheet may say of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum TrustSimDirection {
+    /// The account receives it: the row's sign is "+".
+    In,
+    /// It leaves the account: the row's sign is "−".
+    Out,
+    /// A move of nothing (the simulation's figure was a zero). Never a row,
+    /// and it counts as no change ([`TrustSimJudgment::moves_nothing`]).
+    Still,
+    /// The figure did not read as a signed number, so there is no direction
+    /// to state: the row is drawn with its caution and no sign. Never
+    /// "nothing moves".
+    Unreadable,
+}
+
+impl TrustSimDirection {
+    /// The direction of a signed decimal in the asset's smallest unit, as a
+    /// simulation states a move ([`TrustAssetDelta::delta`]).
+    #[must_use]
+    pub fn of_delta(delta: &str) -> Self {
+        let delta = delta.trim();
+        let (negative, digits) = match delta.strip_prefix('-') {
+            Some(rest) => (true, rest),
+            None => (false, delta.strip_prefix('+').unwrap_or(delta)),
+        };
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Self::Unreadable;
+        }
+        if digits.bytes().all(|b| b == b'0') {
+            return Self::Still;
+        }
+        if negative {
+            Self::Out
+        } else {
+            Self::In
+        }
+    }
 }
 
 /// Asymmetric-trust judgment for one delta (`enrichDeltas`,
@@ -778,7 +853,7 @@ pub fn judge_delta(
     }
     let unverified = TrustSimJudgment::Erc20Unverified {
         token: delta.token.clone(),
-        delta: delta.delta.clone(),
+        direction: TrustSimDirection::of_delta(&delta.delta),
     };
     let Some(token) = delta.token.as_deref() else {
         return unverified;
@@ -842,16 +917,14 @@ enum ChainPhase {
     SafeReceived {
         transfer_logs: Vec<TrustRawLog>,
     },
+    /// The block reads of this poll are out; their answers land in
+    /// [`Model::block_times`].
     Timestamps {
         transfers: Vec<TrustTransfer>,
         pending: BTreeSet<u64>,
-        resolved: BTreeMap<u64, f64>,
-        fallback_sec: f64,
     },
     Meta {
         transfers: Vec<TrustTransfer>,
-        resolved: BTreeMap<u64, f64>,
-        fallback_sec: f64,
         needed: BTreeSet<String>,
     },
 }
@@ -912,6 +985,15 @@ pub struct Model {
     /// The judged incoming feed for the active account, keyed by stable id
     /// (overlapping scan windows de-dupe here).
     feed: BTreeMap<String, FeedItem>,
+    /// (chain, block) → the block's own time, Unix seconds (invariant ⑨).
+    /// A fact about the chain, not about an account: it survives a switch.
+    /// At most [`BLOCK_TIME_CACHE_CAP`].
+    block_times: BTreeMap<(u32, u64), f64>,
+    /// Locally verified transfers of the active account whose block time is
+    /// still unread, by id — withheld from `feed`, and asked about again by
+    /// every later poll of their chain until it is read (invariant ⑨). At
+    /// most [`UNTIMED_TRANSFER_CAP`].
+    untimed: BTreeMap<String, TrustTransfer>,
     /// In-flight poll, per chain.
     scan: BTreeMap<u32, ChainScan>,
     /// Poll bootstrap: waiting on `ReadCustomTokens` before fanning out.
@@ -943,7 +1025,9 @@ pub struct TrustIncomingView {
     pub tx_hash: String,
     pub block_number: f64,
     pub log_index: u32,
-    /// Unix seconds (block time, falling back to receipt time).
+    /// Unix seconds: the time of the transfer's own block, as the chain
+    /// gave it — never a clock's (invariant ⑨). A shell that stores this row
+    /// stores a time that needs no checking again.
     pub timestamp_sec: f64,
     pub symbol: Option<String>,
     pub decimals: Option<u32>,
@@ -957,6 +1041,36 @@ pub struct TrustSimView {
     /// False while metadata for the judgment is still resolving.
     pub ready: bool,
     pub judgments: Vec<TrustSimJudgment>,
+    /// The verdict's quiet line when the checked answer moves nothing of the
+    /// person's: `componentsUi.signing.simResultNoChange` ("No asset
+    /// changes") once [`Self::ready`], with no judgment or every one a zero
+    /// ([`super::sim_outcome::no_change_key`]). The sheet draws this line in
+    /// the verdict's place exactly when it is `Some`, and never picks the
+    /// sentence, or the case, itself. `None` while resolving and whenever
+    /// something moves.
+    #[serde(default)]
+    pub no_change_key: Option<String>,
+}
+
+impl TrustSimJudgment {
+    /// Which way this judgment's asset moves. A figure the wallet vouches
+    /// for states it by its sign; an unverified token carries only this.
+    #[must_use]
+    pub fn direction(&self) -> TrustSimDirection {
+        match self {
+            TrustSimJudgment::Native { delta } | TrustSimJudgment::Erc20Trusted { delta, .. } => {
+                TrustSimDirection::of_delta(delta)
+            }
+            TrustSimJudgment::Erc20Unverified { direction, .. } => *direction,
+        }
+    }
+
+    /// The judgment is about a move of nothing — a zero. A figure nobody can
+    /// read is not one: what cannot be read is never "nothing moves".
+    #[must_use]
+    pub fn moves_nothing(&self) -> bool {
+        self.direction() == TrustSimDirection::Still
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1072,6 +1186,9 @@ impl App for TokenTrust {
                 chain_id: s.chain_id,
                 ready: s.judgments.is_some(),
                 judgments: s.judgments.clone().unwrap_or_default(),
+                no_change_key: s.judgments.as_ref().and_then(|judgments| {
+                    super::sim_outcome::no_change_key_of(judgments).map(str::to_owned)
+                }),
             }),
         }
     }
@@ -1093,6 +1210,7 @@ fn adopt_address(model: &mut Model, lc: &str) {
     }
     model.address = Some(lc.to_owned());
     model.feed.clear();
+    model.untimed.clear();
     model.scan.clear();
     model.poll_pending = false;
     model.scan_chains = Vec::new();
@@ -1236,12 +1354,11 @@ fn accept(
             chain_id,
             block_number,
             timestamp_sec,
-            now_ms,
         } => {
             if attempt != model.attempt || model.address.as_deref() != Some(address.as_str()) {
                 return Command::done();
             }
-            on_block_timestamp(model, chain_id, block_number, timestamp_sec, now_ms)
+            on_block_timestamp(model, chain_id, block_number, timestamp_sec)
         }
 
         // -- chain-global facts: absorbed unconditionally ---------------------
@@ -1419,28 +1536,47 @@ fn on_safe_received(
     begin_timestamps(model, chain_id, &logs)
 }
 
-/// The logs' transfers, on to their blocks' timestamps — or the chain is done
-/// when none is this wallet's.
+/// The logs' transfers — and the ones an earlier poll could not time — on to
+/// their blocks' timestamps, or the chain is done when there is none.
+///
+/// Only blocks whose time is not already kept are asked about, at most
+/// [`TIMESTAMP_BLOCK_CAP`] of them (invariant ⑨): this window's first, then
+/// the carried transfers', so a poll that finds nothing new still asks again
+/// for what it owes.
 fn begin_timestamps(
     model: &mut Model,
     chain_id: u32,
     logs: &[TrustRawLog],
 ) -> Command<TrustEffect, Event> {
     let address = model.address.clone().unwrap_or_default();
-    let transfers = decode_transfer_logs(logs, &address, chain_id);
+    let mut transfers = decode_transfer_logs(logs, &address, chain_id);
+    let carried: Vec<TrustTransfer> = model
+        .untimed
+        .values()
+        .filter(|carried| {
+            carried.chain_id == chain_id && !transfers.iter().any(|t| t.id == carried.id)
+        })
+        .cloned()
+        .collect();
+    transfers.extend(carried);
     if transfers.is_empty() {
         model.scan.remove(&chain_id);
         return render();
     }
-    // Distinct blocks in first-seen order, capped at 25; the rest
-    // fall back to now (`resolveTimestamps`).
+    // Distinct unread blocks in first-seen order, capped.
     let mut blocks: Vec<u64> = Vec::new();
     for t in &transfers {
-        if !blocks.contains(&t.block_number) {
+        if !model.block_times.contains_key(&(chain_id, t.block_number))
+            && !blocks.contains(&t.block_number)
+        {
             blocks.push(t.block_number);
         }
     }
     blocks.truncate(TIMESTAMP_BLOCK_CAP);
+    if blocks.is_empty() {
+        // Every time is already kept: straight to the metadata gate.
+        return after_timestamps(model, chain_id, transfers);
+    }
     let attempt = model.attempt;
     let mut commands = Vec::new();
     for block in &blocks {
@@ -1457,8 +1593,6 @@ fn begin_timestamps(
         entry.phase = ChainPhase::Timestamps {
             transfers,
             pending: blocks.iter().copied().collect(),
-            resolved: BTreeMap::new(),
-            fallback_sec: 0.0,
         };
     }
     commands.push(render());
@@ -1470,18 +1604,11 @@ fn on_block_timestamp(
     chain_id: u32,
     block_number: f64,
     timestamp_sec: Option<f64>,
-    now_ms: f64,
 ) -> Command<TrustEffect, Event> {
     let Some(entry) = model.scan.get_mut(&chain_id) else {
         return Command::done();
     };
-    let ChainPhase::Timestamps {
-        pending,
-        resolved,
-        fallback_sec,
-        ..
-    } = &mut entry.phase
-    else {
+    let ChainPhase::Timestamps { pending, .. } = &mut entry.phase else {
         return Command::done();
     };
     let block = exact_u64(block_number);
@@ -1491,29 +1618,67 @@ fn on_block_timestamp(
     if !pending.remove(&block) {
         return Command::done();
     }
-    if let Some(sec) = timestamp_sec {
-        resolved.insert(block, sec);
+    let done = pending.is_empty();
+    // A time that is no time (absent, not a number, not after the epoch) is
+    // an unread block: its transfers wait for a later poll (invariant ⑨).
+    if let Some(sec) = timestamp_sec.filter(|sec| sec.is_finite() && *sec > 0.0) {
+        keep_block_time(model, chain_id, block, sec);
     }
-    // `Math.floor(Date.now() / 1000)` — the fallback for failed lookups and
-    // beyond-cap blocks, from the shell's clock (never the core's).
-    *fallback_sec = (now_ms / 1000.0).floor();
-    if !pending.is_empty() {
+    if !done {
         return render();
     }
 
-    // All timestamps answered → the metadata gate (invariant ③).
-    let ChainPhase::Timestamps {
-        transfers,
-        resolved,
-        fallback_sec,
-        ..
-    } = std::mem::replace(&mut entry.phase, ChainPhase::Retry { from: 0, latest: 0 })
+    // Every read of this poll answered → the metadata gate (invariant ③).
+    let Some(entry) = model.scan.get_mut(&chain_id) else {
+        return Command::done();
+    };
+    let ChainPhase::Timestamps { transfers, .. } =
+        std::mem::replace(&mut entry.phase, ChainPhase::Retry { from: 0, latest: 0 })
     else {
         return Command::done();
     };
+    after_timestamps(model, chain_id, transfers)
+}
+
+/// Keep one block's time (invariant ⑨), within [`BLOCK_TIME_CACHE_CAP`]: past
+/// it the lowest block of the chain holding the most goes — the oldest fact
+/// of the busiest chain, and never the one just read.
+fn keep_block_time(model: &mut Model, chain_id: u32, block: u64, sec: f64) {
+    let kept = (chain_id, block);
+    model.block_times.insert(kept, sec);
+    while model.block_times.len() > BLOCK_TIME_CACHE_CAP {
+        let mut held: BTreeMap<u32, usize> = BTreeMap::new();
+        for (chain, _) in model.block_times.keys().filter(|key| **key != kept) {
+            *held.entry(*chain).or_default() += 1;
+        }
+        let busiest = held
+            .into_iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(chain, _)| chain);
+        let oldest = busiest.and_then(|busiest| {
+            model
+                .block_times
+                .keys()
+                .find(|key| key.0 == busiest && **key != kept)
+                .copied()
+        });
+        match oldest {
+            Some(key) => model.block_times.remove(&key),
+            None => break,
+        };
+    }
+}
+
+/// The block reads are in (or none was needed): the metadata gate, then the
+/// feed (invariant ③).
+fn after_timestamps(
+    model: &mut Model,
+    chain_id: u32,
+    transfers: Vec<TrustTransfer>,
+) -> Command<TrustEffect, Event> {
     let needed = meta_needed_for_scan(model, chain_id, &transfers);
     if needed.is_empty() {
-        finalize_chain(model, chain_id, transfers, &resolved, fallback_sec);
+        finalize_chain(model, chain_id, transfers);
         return render();
     }
     let attempt = model.attempt;
@@ -1525,12 +1690,7 @@ fn on_block_timestamp(
         },
     );
     if let Some(entry) = model.scan.get_mut(&chain_id) {
-        entry.phase = ChainPhase::Meta {
-            transfers,
-            resolved,
-            fallback_sec,
-            needed,
-        };
+        entry.phase = ChainPhase::Meta { transfers, needed };
     }
     Command::all([op, render()])
 }
@@ -1585,19 +1745,25 @@ fn scan_meta_of(model: &Model, chain_id: u32, token: &str) -> Option<TrustTokenM
 /// pass; an ERC-20 without resolvable metadata is withheld — persisting it
 /// would store a misleading "+0 tokens" (invariant ③, `activity.ts:408-415`).
 /// It stays inside the scan window and is retried by a later poll.
-fn finalize_chain(
-    model: &mut Model,
-    chain_id: u32,
-    transfers: Vec<TrustTransfer>,
-    resolved: &BTreeMap<u64, f64>,
-    fallback_sec: f64,
-) {
+///
+/// And a transfer whose block's time is not known is withheld too (invariant
+/// ⑨): it goes to [`Model::untimed`], every later poll of its chain asks for
+/// its block again, and it reaches the feed with the block's own time or not
+/// at all. One already in the feed keeps the time it has.
+fn finalize_chain(model: &mut Model, chain_id: u32, transfers: Vec<TrustTransfer>) {
     model.scan.remove(&chain_id);
     for transfer in transfers {
-        let timestamp_sec = resolved
-            .get(&transfer.block_number)
+        let Some(timestamp_sec) = model
+            .block_times
+            .get(&(chain_id, transfer.block_number))
             .copied()
-            .unwrap_or(fallback_sec);
+        else {
+            if !model.feed.contains_key(&transfer.id) {
+                carry_untimed(model, transfer);
+            }
+            continue;
+        };
+        model.untimed.remove(&transfer.id);
         let (symbol, decimals) = match transfer.token.as_deref() {
             None => (None, None),
             Some(token) => match scan_meta_of(model, chain_id, token) {
@@ -1614,6 +1780,23 @@ fn finalize_chain(
                 decimals,
             },
         );
+    }
+}
+
+/// Keep a transfer whose block time is unread (invariant ⑨), within
+/// [`UNTIMED_TRANSFER_CAP`]: past it, the oldest block's goes.
+fn carry_untimed(model: &mut Model, transfer: TrustTransfer) {
+    model.untimed.insert(transfer.id.clone(), transfer);
+    while model.untimed.len() > UNTIMED_TRANSFER_CAP {
+        let oldest = model
+            .untimed
+            .values()
+            .min_by_key(|carried| (carried.block_number, carried.log_index))
+            .map(|carried| carried.id.clone());
+        match oldest {
+            Some(id) => model.untimed.remove(&id),
+            None => break,
+        };
     }
 }
 
@@ -1654,14 +1837,10 @@ fn on_meta(
         .collect();
     for id in ready_chains {
         if let Some(entry) = model.scan.get_mut(&id) {
-            if let ChainPhase::Meta {
-                transfers,
-                resolved,
-                fallback_sec,
-                ..
-            } = std::mem::replace(&mut entry.phase, ChainPhase::Retry { from: 0, latest: 0 })
+            if let ChainPhase::Meta { transfers, .. } =
+                std::mem::replace(&mut entry.phase, ChainPhase::Retry { from: 0, latest: 0 })
             {
-                finalize_chain(model, id, transfers, &resolved, fallback_sec);
+                finalize_chain(model, id, transfers);
             }
         }
     }

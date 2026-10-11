@@ -91,7 +91,29 @@ failure_refusal_key: string | null,
  * ([`Self::failure_retryable`]). `#[serde(default)]`: a reader that
  * predates it reads `false`.
  */
-failure_not_sent: boolean, notice: SignNotice | null, global_chain_id: number, 
+failure_not_sent: boolean, 
+/**
+ * The wallet's own simulation of this request is out and its verdict is
+ * not on the sheet yet (PR 3, [`Event::SimStarted`]): the confirm waits —
+ * [`super::sign_confirm::confirm_state`] holds it with
+ * [`ConfirmBlock::SimChecking`] once nothing else does, and says the one
+ * line. Over when the verdict lands ([`Event::SimSettled`]) or at the
+ * deadline ([`SIM_VERDICT_WAIT_MS`]), whichever is first; a shell runs
+ * no timer of its own for it. Always `false` for a request with no
+ * simulation. `#[serde(default)]`.
+ */
+sim_checking: boolean, 
+/**
+ * The simulation's deadline passed and no verdict is on the sheet: the
+ * verdict's place says THIS line, as a caution, in place of "checking"
+ * — `componentsUi.signing.simUnavailableWarning`, "Vela couldn't check
+ * what this transaction does" ([`super::sim_outcome::KEY_UNAVAILABLE`],
+ * the sentence a node that could not simulate already draws) — and the
+ * confirm is open. `None` again once the simulation's own verdict lands
+ * ([`Event::SimSettled`]): the shell then draws that verdict.
+ * `#[serde(default)]`.
+ */
+sim_waited_out_key: string | null, notice: SignNotice | null, global_chain_id: number, 
 /**
  * Present when the request was refused because it would have changed who
  * controls the account; the sheet shows it and offers only Dismiss.

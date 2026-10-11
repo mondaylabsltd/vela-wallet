@@ -14,11 +14,9 @@ export type TrustShellResult = { "type": "block_number", address: string, chain_
 block_hex: string | null, } | { "type": "safe_received_logs", address: string, chain_id: number, outcome: TrustLogsOutcome, } | { "type": "logs", address: string, chain_id: number, outcome: TrustLogsOutcome, } | { "type": "block_timestamp", address: string, chain_id: number, block_number: number, 
 /**
  * Unix seconds from the block header, or `None` when the lookup
- * failed — the transfer then falls back to "now".
+ * failed — the block's transfers are then withheld and a later poll
+ * asks again (invariant ⑨). There is no clock beside it: this result
+ * carried `now_ms` until PR 3, to stamp such a transfer with; a
+ * shell that still sends one is read and the field ignored.
  */
-timestamp_sec: number | null, 
-/**
- * Epoch ms, carried by the result (the 011 `now_iso` pattern) so the
- * core never reads a clock.
- */
-now_ms: number, } | { "type": "erc_meta", chain_id: number, entries: Array<TrustMetaEntry>, } | { "type": "custom_tokens", tokens: Array<TrustCustomToken> | null, } | { "type": "token_written", ok: boolean, } | { "type": "cache_invalidated" };
+timestamp_sec: number | null, } | { "type": "erc_meta", chain_id: number, entries: Array<TrustMetaEntry>, } | { "type": "custom_tokens", tokens: Array<TrustCustomToken> | null, } | { "type": "token_written", ok: boolean, } | { "type": "cache_invalidated" };

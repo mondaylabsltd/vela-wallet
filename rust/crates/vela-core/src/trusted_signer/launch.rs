@@ -128,6 +128,17 @@ pub fn is_fresh_at(checked_at_ms: u64, now_ms: u64) -> bool {
 /// timezone database); `date_format` / `time_format` are the person's
 /// presets as stored (`ymd_slash`… / `h24`, `h12`), `auto` already resolved;
 /// `language` names the day period of a 12-hour clock.
+///
+/// **One unbreakable unit.** Every space inside it is a no-break space
+/// (U+00A0): a moment split over two lines reads as two things — a phone
+/// drew 「检查于 下午」 on one line and 「10:07」 on the next. And a no-break
+/// space is not enough for a day period written in CJK: a line may break
+/// between any two ideographs, kana or Hangul syllables, so 「下午」 itself
+/// split after 「下」 at some widths. A word joiner (U+2060, zero width,
+/// "no break here") goes between two neighbours when either is such a
+/// character ([`unbreakable`]). A moment in an alphabet is unchanged:
+/// nothing breaks inside "2:32", "PM", "ÖS" or "10/09/2026,". The line the
+/// moment fills may still wrap before or after it.
 #[must_use]
 pub fn checked_time(
     checked_at_ms: u64,
@@ -144,11 +155,55 @@ pub fn checked_time(
     let at = Civil::from_unix_millis(millis(checked_at_ms), utc_offset_minutes);
     let now = Civil::from_unix_millis(millis(now_ms), utc_offset_minutes);
     let clock = time_preset_of(time_format);
-    if (at.year, at.month, at.day) == (now.year, now.month, now.day) {
+    let moment = if (at.year, at.month, at.day) == (now.year, now.month, now.day) {
         format_time(&at, clock, language)
     } else {
         format_date_time(&at, date_preset_of(date_format), clock, language)
+    };
+    unbreakable(&moment)
+}
+
+/// The no-break space ([`checked_time`]).
+const NBSP: char = '\u{a0}';
+/// WORD JOINER: zero width, forbids a line break on either side of it.
+const WORD_JOINER: char = '\u{2060}';
+
+/// `text` as one unit no line may break inside: its spaces become no-break
+/// spaces, and a word joiner goes between two neighbours when a line could
+/// break beside either ([`breaks_beside`]) — between two CJK characters, or
+/// a CJK character and a digit. A no-break space already glues both its
+/// sides, so none is added beside one.
+fn unbreakable(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 8);
+    let mut previous: Option<char> = None;
+    for c in text.chars() {
+        let c = if c == ' ' { NBSP } else { c };
+        if let Some(before) = previous {
+            if before != NBSP && c != NBSP && (breaks_beside(before) || breaks_beside(c)) {
+                out.push(WORD_JOINER);
+            }
+        }
+        out.push(c);
+        previous = Some(c);
     }
+    out
+}
+
+/// May a line break right beside `c` with no space there? True for the
+/// scripts written without spaces between words — Han, kana, Hangul, their
+/// punctuation and the full-width forms (UAX #14's ID, H2/H3, CJ, NS…) —
+/// and false for every alphabet, where a break needs a space or a hyphen.
+fn breaks_beside(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x1100..=0x11FF       // Hangul Jamo
+        | 0x2E80..=0xA4CF     // CJK radicals … kana … Han … Yi
+        | 0xAC00..=0xD7FF     // Hangul syllables and extended Jamo
+        | 0xF900..=0xFAFF     // CJK compatibility ideographs
+        | 0xFE30..=0xFE4F     // CJK compatibility forms
+        | 0xFF00..=0xFFEF     // half- and full-width forms
+        | 0x2_0000..=0x3_FFFF // Han, supplementary planes
+    )
 }
 
 /// The page a wallet will fetch, check and open: one version of one

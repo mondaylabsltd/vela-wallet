@@ -32,7 +32,7 @@ import {
 
 const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const IDENTICON = () => '<svg></svg>';
 
 function token(
@@ -85,6 +85,9 @@ const FEED: FeedView = {
 	home_empty_key: 'home.emptyNoActivity',
 	hidden: false,
 	contact_rows: [],
+	// The detail is opened from History's list (`rows`); the home's cut plays
+	// no part in naming a tap.
+	home_rows: [],
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
 		{ type: 'item', item: item('a') },
@@ -113,6 +116,9 @@ function view(tokens: BalanceToken[]): BalanceView {
 		unreachable_key: null,
 		internal_chain_ids: [],
 		internal_key: null,
+		checking_key: null,
+		live_key: null,
+		empty_key: null,
 		holdings_loading: false,
 		cached_total_usd: 1000,
 		switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -329,11 +335,17 @@ describe('liveTxDetail', () => {
 			['ETH', '0.001 ETH'],
 			['USDC', '5 USDC']
 		]);
-		// Privacy hides the count with the money, as the Activity row does.
+		// Privacy hides the count with the money, as the Activity row does. A
+		// sweep's hero names no one coin, so its mask stands alone…
 		const hidden = liveTxDetail(sweep, { ...ctx, hidden: true });
-		expect(hidden.amount).not.toContain('2');
-		expect(hidden.amount).not.toBe('');
-		expect(hidden.amount).not.toBe('−');
+		expect(hidden.amount).toBe('••••');
+		// …and each coin it swept is masked too, keeping its unit. These were
+		// drawn in full under the masked hero.
+		expect(hidden.breakdown?.map((row) => [row.label, row.value])).toEqual([
+			['ETH', '•••• ETH'],
+			['USDC', '•••• USDC']
+		]);
+		expect(hidden.fiat).toBe('••••');
 		// A single send still reads as one figure and its coin.
 		expect(liveTxDetail(item('b', { direction: 'out' }), ctx)).toMatchObject({
 			title: 'Sent ETH',
@@ -341,11 +353,64 @@ describe('liveTxDetail', () => {
 		});
 	}, 30_000);
 
-	it('masks the money while privacy hides it', () => {
+	// PR 3 item 12: a hidden transfer's detail read "•••• xDAI" on iOS and a
+	// bare "••••" on Android and here. One rule now: the amount is masked and
+	// its unit is kept — what kind of money, never how much.
+	it('masks the money while privacy hides it — and keeps the coin', () => {
 		const detail = liveTxDetail(item('a'), { ...ctx, hidden: true });
+		expect(detail.amount).toBe('•••• ETH');
 		expect(detail.amount).not.toContain('1.25');
-		expect(detail.fiat).not.toContain('2');
+		// No sign either: which way it went is the title's to say.
+		expect(detail.amount).not.toMatch(/[+−-]/);
+		// A fiat worth has no unit apart from its figure: the bare mask.
+		expect(detail.fiat).toBe('••••');
+		const sent = liveTxDetail(item('b', { direction: 'out', symbol: 'xDAI' }), {
+			...ctx,
+			hidden: true
+		});
+		expect(sent.amount).toBe('•••• xDAI');
+		// Shown, nothing changes.
+		expect(liveTxDetail(item('a'), ctx).amount).toBe('+1.25 ETH');
 	});
+
+	it('a hidden split masks every recipient’s share, each with its coin', async () => {
+		const BOB = '0x' + 'b0'.repeat(20);
+		const CAROL = '0x' + 'ca'.repeat(20);
+		const part = (n: number, to: string, value: string): LocalTransaction => ({
+			id: `split-${n}`,
+			userOpHash: '0x' + 'cd'.repeat(32),
+			txHash: '0x' + 'e5'.repeat(32),
+			from: ACCOUNT,
+			to,
+			value,
+			symbol: 'USDC',
+			decimals: 6,
+			chainId: 8453,
+			timestamp: NOW_S - 60,
+			status: 'confirmed',
+			type: 'send',
+			usd: `$${value}`
+		});
+		const items = await feedItemsThroughCore(
+			[part(1, BOB, '37.5'), part(2, CAROL, '12.25')],
+			ACCOUNT,
+			NOW_S * 1000
+		);
+		expect(items).toHaveLength(1);
+		const split = items[0];
+		expect(split.batch?.kind).toBe('split');
+
+		const shown = liveTxDetail(split, ctx);
+		expect(shown.breakdown?.map((row) => row.value)).toEqual(['37.5 USDC', '12.25 USDC']);
+
+		const hidden = liveTxDetail(split, { ...ctx, hidden: true });
+		expect(hidden.breakdown?.map((row) => row.value)).toEqual(['•••• USDC', '•••• USDC']);
+		// Who was paid is not money: the recipients are still named.
+		expect(hidden.breakdown?.map((row) => row.address)).toEqual([BOB, CAROL]);
+		// Nothing on the whole detail says how much.
+		const text = JSON.stringify(hidden);
+		for (const figure of ['37.5', '12.25', '49.75']) expect(text).not.toContain(figure);
+	}, 30_000);
 
 	// 083 H2, spec 093: a dApp's call opens to what it did and where — the
 	// core's facts in its order, labelled here — and a call that moved no
@@ -684,6 +749,110 @@ const NOW_S = 1_790_000_000;
 function rowLabel(row: TxTechnicalRow): string {
 	return row.kind === 'fact' ? row.fact.label : row.label;
 }
+
+/**
+ * PR 3 — an unverified token is a direction, never a figure.
+ *
+ * Android's signing sheet printed "Unverified token
+ * +5,000,000,000,000,000,000,000.00": the simulation's raw delta, a number
+ * the site being signed for chose. The web's sheet draws no balance rows
+ * (spec 082 RG6), so the one place this shell prints an unverified judgment
+ * is here — a dApp transaction's detail in Activity, from the lines its
+ * record stored. The judgment no longer holds the figure; a record written
+ * before still does, and the core reads it for its sign and drops it.
+ */
+describe('an unverified token in a record’s balance changes is a sign and a name, never a figure (PR 3)', () => {
+	const ctx = { m: fm, wm: m, currency: USD, hidden: false, identicon: IDENTICON };
+	const LURE = '5000000000000000000000';
+	const OUT = '-7000000000000000000000';
+	const LABEL = fm['componentsUi.signing.balanceUnverifiedToken'];
+	const [, , swap] = dappActivityRecords(ACCOUNT, NOW_S);
+	const record = (balanceChanges: unknown): LocalTransaction => ({
+		...swap,
+		balanceChanges: balanceChanges as LocalTransaction['balanceChanges']
+	});
+	/** The detail of the one record, through the real core. */
+	async function detailOf(balanceChanges: unknown) {
+		const [row] = await feedItemsThroughCore(
+			[record(balanceChanges)],
+			ACCOUNT,
+			NOW_S * 1000 + 1000
+		);
+		return liveTxDetail(row, ctx);
+	}
+	/** The balance-change rows of a detail: the titled one, and the untitled ones after it. */
+	function changeRows(detail: ReturnType<typeof liveTxDetail>) {
+		const at = detail.facts.findIndex(
+			(f) => f.label === fm['componentsUi.signing.balanceChangesTitle']
+		);
+		if (at === -1) return [];
+		const rest = detail.facts.slice(at + 1);
+		const end = rest.findIndex((f) => f.label !== '');
+		return [detail.facts[at], ...rest.slice(0, end === -1 ? rest.length : end)];
+	}
+	/** Every string the detail would draw, wherever it sits in the model. */
+	function everyString(value: unknown, out: string[] = []): string[] {
+		if (typeof value === 'string') out.push(value);
+		else if (Array.isArray(value)) value.forEach((entry) => everyString(entry, out));
+		else if (value !== null && typeof value === 'object') {
+			Object.values(value).forEach((entry) => everyString(entry, out));
+		}
+		return out;
+	}
+	/** The figure in any way a formatter writes it: "5000", "5,000", "5 000", "5.000". */
+	const figure = (lead: string) => new RegExp(`${lead}[\\s,.\u00a0\u202f']?000`);
+
+	it('the label is the corpus’s, and the search for the figure finds one when it is there', () => {
+		expect(LABEL).toBe('Unverified token');
+		for (const written of ['+5000000000000000000000', '+5,000,000.00', '5\u202f000', '5.000,00']) {
+			expect(figure('5').test(written), written).toBe(true);
+		}
+		expect(figure('5').test(`+ ${LABEL}`)).toBe(false);
+	});
+
+	it.each([
+		[
+			'a record stored before (the figure still in it)',
+			[
+				{ type: 'erc20_unverified', token: '0x' + 'ba'.repeat(20), delta: LURE },
+				{ type: 'erc20_unverified', token: '0x' + 'cd'.repeat(20), delta: OUT }
+			]
+		],
+		[
+			'a record stored since (a direction, no figure)',
+			[
+				{ type: 'erc20_unverified', token: '0x' + 'ba'.repeat(20), direction: 'in' },
+				{ type: 'erc20_unverified', token: '0x' + 'cd'.repeat(20), direction: 'out' }
+			]
+		]
+	])(
+		'%s: "+" and "−" beside the label, and no digit run of the figure anywhere',
+		async (_, lines) => {
+			const detail = await detailOf(lines);
+			expect(changeRows(detail).map((f) => [f.value, f.tone])).toEqual([
+				[`+ ${LABEL}`, 'success'],
+				[`\u2212 ${LABEL}`, undefined]
+			]);
+			// Not in the rows, and not in the hero, the technical section or any
+			// other string of the page.
+			const drawn = everyString(detail);
+			expect(drawn.filter((text) => figure('5').test(text) || figure('7').test(text))).toEqual([]);
+			expect(drawn.some((text) => text.includes(LABEL))).toBe(true);
+		},
+		30_000
+	);
+
+	it('a zero is never drawn, and a line with no direction costs nothing else its place', async () => {
+		const detail = await detailOf([
+			{ type: 'erc20_unverified', token: '0x' + 'ba'.repeat(20), direction: 'still' },
+			{ type: 'erc20_unverified', token: '0x' + 'ba'.repeat(20), delta: '0' },
+			{ type: 'erc20_unverified', token: '0x' + 'cd'.repeat(20), delta: LURE },
+			{ type: 'erc20_unverified', token: null, direction: 'unreadable' }
+		]);
+		expect(changeRows(detail).map((f) => f.value)).toEqual([`+ ${LABEL}`]);
+		expect(everyString(detail).filter((text) => figure('5').test(text))).toEqual([]);
+	}, 30_000);
+});
 
 /**
  * Issue 211: a send that paid its gas in a coin the account did not hold was

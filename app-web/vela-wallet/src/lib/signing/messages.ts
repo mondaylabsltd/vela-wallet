@@ -19,6 +19,26 @@ import type { SpeedWords } from '$lib/flows/speed-control';
 import type { SettingsMessages } from '$lib/settings/messages';
 
 /**
+ * Every quiet line the core can name for the verdict's place
+ * (`sim_outcome::KEY_NO_CHANGE` — `SimVerdict.no_change_key`).
+ * `live.test.ts` holds the list to the core's source.
+ */
+export const SIM_SAID_KEYS = ['componentsUi.signing.simResultNoChange'] as const;
+
+/**
+ * The caution the core names for the verdict's place when nothing could be
+ * checked (PR 3, `sim_outcome::KEY_UNAVAILABLE`): "Vela couldn't check what
+ * this transaction does…". The core hands this key two ways — on the
+ * request's own verdict when the node does not offer the simulation or no
+ * node answered (`SimVerdict.notice_key`, with `notice_risk: 'caution'`), and
+ * on the sign view when the simulation's deadline passed with no verdict at
+ * all (`SignView.sim_waited_out_key`). Its words are
+ * `SigningMessages.warnSimUnavailable`, resolved from this key.
+ * `live.test.ts` holds it to the core's source.
+ */
+export const SIM_COULD_NOT_CHECK_KEY = 'componentsUi.signing.simUnavailableWarning';
+
+/**
  * Spec 102 (D4): the hand-off card's words. Resolved for the GALLERY only —
  * the web opens no signing page, so no live page here draws the card, and
  * these strings stay out of `SigningMessages` (which every page with a
@@ -186,11 +206,25 @@ export interface SigningMessages {
 	 * pre-signature) — the core's `terms_off_chain`.
 	 */
 	warnOrderTerms: string;
+	/**
+	 * The simulation could not check — the sentence of
+	 * {@link SIM_COULD_NOT_CHECK_KEY}. Drawn live (PR 3) when the core says
+	 * so, by that key: the request's verdict is a not-checked answer, or the
+	 * simulation's deadline passed with no verdict.
+	 */
 	warnSimUnavailable: string;
 	warnDrain: string;
 	okSelfTransfer: string;
 	okNoNetworkFee: string;
 	balancesTitle: string;
+	/**
+	 * The verdict's quiet line by the corpus key the core names for it
+	 * (`SimVerdict.no_change_key` — {@link SIM_SAID_KEYS}): "No asset changes"
+	 * when the sheet's simulation was a check and nothing of the person's
+	 * moves. The shell never picks the sentence, or the case; it only looks
+	 * the core's key up here.
+	 */
+	simSaid: Readonly<Record<string, string>>;
 	balancesMatchHero: string;
 	balancesBlindSimulated: string;
 	balancesBestEffort: string;

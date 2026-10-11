@@ -108,6 +108,14 @@ class SimDeltasTest {
         val quiet = SimDeltas.outcome(me, answer(JSONObject().put("status", "0x1").put("returnData", "0x").put("logs", JSONArray())))
         assertEquals("deltas", quiet.kind)
         assertTrue(SimDeltas.deltas(quiet)!!.isEmpty())
+        // …and the core says its line: "no asset changes" is its to say,
+        // only for a check, and never when something moves.
+        assertEquals("componentsUi.signing.simResultNoChange", quiet.noChangeKey)
+        assertNull("something moves", record.noChangeKey)
+        assertNull("a revert is no check", SimDeltas.outcome(me, answer(JSONObject().put("status", "0x0").put("returnData", "0x").put("logs", JSONArray()))).noChangeKey)
+        assertNull("nor is a node that could not", SimDeltas.outcome(me, RpcResult.Failed(rateLimited = false)).noChangeKey)
+        // The room the sheet keeps for that verdict is this reading.
+        assertEquals(SigningController.SimOutcome.Ready(emptyList(), noChangeKey = quiet.noChangeKey), SimDeltas.nothingMoves())
     }
 
     /**
@@ -123,6 +131,7 @@ class SimDeltasTest {
             revertReason = null,
             noticeRisk = null,
             noticeKey = null,
+            noChangeKey = null,
         )
         assertNull(SimDeltas.deltas(unreadable))
     }

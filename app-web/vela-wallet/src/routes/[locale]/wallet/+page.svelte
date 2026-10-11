@@ -72,6 +72,7 @@
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
 	import { FlowNav, type FlowEntry } from '$lib/flows/nav.svelte';
+	import type { FlowStateId } from '$lib/flows/model';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { feed } from '$lib/wallet/core/feed.svelte';
 	import { REFRESH_AGE_TICK_MS, RefreshHold } from '$lib/wallet/refresh-hold.svelte';
@@ -97,6 +98,9 @@
 	} from '$lib/flows/live';
 	import { createSendSession, type SendSession } from '$lib/flows/core/send-session';
 	import { toSendToken } from '$lib/flows/core/send-types';
+	import { chosenCurrencyCode, sendDisplayContext } from '$lib/flows/core/send-display';
+	import { liveSendLock } from '$lib/flows/live-send-lock';
+	import SendLock from '$lib/flows/ui/SendLock.svelte';
 	import { answerHoldings, readHoldings, type HoldingsSource } from '$lib/flows/core/send-holdings';
 	import { toApiToken } from '$lib/wallet/core/balance-executor';
 	import type { SendToken } from '$lib/core/generated/SendToken';
@@ -346,6 +350,7 @@
 			onView: (view) => (batchView = view),
 			onError: (error) => console.error('[batch_import] core fault:', error)
 		});
+		toldBatchCode = chosenCurrencyCode(currency.view);
 		batchSession.start({
 			type: 'open',
 			token: {
@@ -354,7 +359,10 @@
 				balance: token.balance,
 				price_usd: token.price_usd
 			},
-			currency_code: currency.view.code,
+			// The person's currency, not the USD/1 placeholder the view carries
+			// before the pair is committed: a sheet's fiat column is priced by
+			// this code.
+			currency_code: toldBatchCode,
 			// The importer's cap is what an import can actually add: the core's cap
 			// less the rows already started (`split_import_room`). Opened at a flat
 			// sixty, its "only the first N will be sent" was a promise the append
@@ -368,7 +376,25 @@
 		batchSession = null;
 		batchView = null;
 		importReplaces = false;
+		toldBatchCode = null;
 	}
+
+	/**
+	 * The currency the open importer was last told its sheet is priced in
+	 * (PR 3 final note F8). It was told once, at `open` — so an importer opened
+	 * before the display currency was read kept the USD placeholder's code for
+	 * as long as it stayed open, and priced a sheet of yuan as dollars. The
+	 * effect says it again whenever the person's currency becomes known or
+	 * changes (`set_fiat_code`, the core's own event for it), as Send is told
+	 * (`display_changed`).
+	 */
+	let toldBatchCode: string | null = null;
+	$effect(() => {
+		const code = chosenCurrencyCode(currency.view);
+		if (batchSession === null || toldBatchCode === null || toldBatchCode === code) return;
+		toldBatchCode = code;
+		batchSession.dispatch({ type: 'set_fiat_code', code });
+	});
 
 	const batchActions = $derived(
 		batchView === null
@@ -424,7 +450,10 @@
 					// core's own count, read back from the room it reports.
 					formHasRows: (sendView.split_import_room ?? 60) < 60,
 					replaces: importReplaces,
-					remaining: sendView.split_remaining
+					remaining: sendView.split_remaining,
+					// Nothing read of the display currency yet: the code the importer
+					// holds is the placeholder's, and is not said (PR 3 final note F8).
+					currencyUnknown: !currency.view.committed && currency.view.pending === null
 				}
 			: undefined
 	);
@@ -546,6 +575,21 @@
 							chain_id: chainId,
 							keep_custom_rpc: false
 						});
+					},
+					// The native tab's RPC field and its re-check (PR 3 final note
+					// F14) — what Settings' wizard sends: the typed endpoint to the
+					// core, and the same chain checked again with it kept.
+					customRpc: (value: string) => {
+						networkAdmin.dispatch({ type: 'custom_rpc_edited', value });
+					},
+					recheck: () => {
+						const chainId = networkAdmin.view.wizard.chain_info?.chain_id;
+						if (chainId === undefined) return;
+						networkAdmin.dispatch({
+							type: 'chain_selected',
+							chain_id: chainId,
+							keep_custom_rpc: true
+						});
 					}
 				}
 	);
@@ -634,11 +678,40 @@
 		return read.kind === 'tokens' ? read.tokens : null;
 	}
 
+	/**
+	 * The send is stopped on a request it cannot take up — a network this
+	 * wallet does not have, a token it cannot describe (`lock_error`). The
+	 * stage used to fall through to the asset picker with no word about what
+	 * had been scanned, and "Add this network" (`add_network_tapped`) had no
+	 * caller on the web (PR 3 final notes F6/F27).
+	 */
+	const sendLock = $derived(sendView ? liveSendLock(sendView, data.flowMessages) : undefined);
+
+	function addLockedNetwork(chainId: number): void {
+		sendSession?.dispatch({ type: 'add_network_tapped', chain_id: chainId });
+	}
+
 	/** What Send last heard of the holdings, so an unchanged list is not re-sent. */
 	let sentHoldingsKey: string | null = null;
 
 	/** Stops telling the send machine what is in flight; set while a send is open. */
 	let stopInFlightOps: (() => void) | null = null;
+
+	/**
+	 * The display currency the open send machine was last told
+	 * (`sendDisplayContext`). The machine was told once, at `open`, and never
+	 * again — so a Send opened before the currency committed kept the USD/1
+	 * placeholder for as long as it stayed open. The effect below says it again
+	 * whenever it changes; the machine re-denominates by its own rule.
+	 */
+	let toldSendDisplay: string | null = null;
+	$effect(() => {
+		const display = sendDisplayContext(currency.view);
+		const key = JSON.stringify(display);
+		if (sendSession === null || toldSendDisplay === null || toldSendDisplay === key) return;
+		toldSendDisplay = key;
+		sendSession.dispatch({ type: 'display_changed', display });
+	});
 
 	async function openSend(prefill?: Partial<SendOpenParams>): Promise<void> {
 		if (sendSession || !identity) return;
@@ -737,8 +810,9 @@
 				// these exactly as it reads the deep-link params on the phone.
 				...prefill
 			},
-			display: { code: currency.view.code, rate: currency.view.rate, fiat_decimals: 2 }
+			display: sendDisplayContext(currency.view)
 		});
+		toldSendDisplay = JSON.stringify(sendDisplayContext(currency.view));
 		// The account's operations still holding their nonce, on every tracker
 		// render (correctness batch item 3): while one is in flight on the
 		// form's network, the core holds this send's confirm with one line —
@@ -776,6 +850,7 @@
 		stopInFlightOps = null;
 		sendSession?.dispose();
 		sendSession = null;
+		toldSendDisplay = null;
 		sendView = null;
 		sentHoldingsKey = null;
 		feeSheetOpen = false;
@@ -1021,6 +1096,16 @@
 					},
 					openBatch: () => void openBatch(),
 					openScanner: () => sendSession?.dispatch({ type: 'open_scanner' }),
+					// The scanner, for one split row (issue 471): the code lands in the
+					// row named, exactly as `pickContactFor` names the book's. A row the
+					// view no longer has opens the plain scanner — the core then puts
+					// the code in the first row with no address yet.
+					scanFor: (index: number) => {
+						const target = sendView?.recipients[index]?.id;
+						sendSession?.dispatch(
+							target === undefined ? { type: 'open_scanner' } : { type: 'open_scanner', target }
+						);
+					},
 					continueDisabled: !sendView.can_continue,
 					continueBusy: sendView.estimating_gas,
 					confirmDisabled: !sendView.can_confirm,
@@ -1869,6 +1954,15 @@
 							: rm.relayer.title
 	);
 
+	/**
+	 * The sentence the hero's status line said when it was pressed (PR 3 final
+	 * note F16): the line is one line and ends in "…" when its sentence is
+	 * longer, so the sheet it opens says it whole at its top. The unreachable
+	 * list's title IS that sentence; the breakdown is told it here — as it was
+	 * at the press, so the sheet's first line does not change under a reader.
+	 */
+	let rescueSaid = $state<string | undefined>(undefined);
+
 	function openRescue() {
 		if (balance.view.unreachable_networks.length > 0) {
 			rescue = 'unreachable';
@@ -1877,6 +1971,7 @@
 			balance.unreachableListOpened();
 			return;
 		}
+		rescueSaid = (wide.current ? liveDesktop : liveHome).balance.status?.text;
 		rescue = 'balance-detail';
 	}
 
@@ -2224,66 +2319,8 @@
 		{/if}
 	{:else}
 		<main class="page">
-			{#if shownFlowState !== undefined}
-				<FlowsMobile
-					model={withLiveTxDetailMobile(
-						withLiveFlow(mobileFlowBase(shownFlowState), flowInputs),
-						txDetail
-					)}
-					onback={() => {
-						// Backing out of the scanner is closing the scanner, not stepping
-						// back a stage — the core opened it and the core closes it.
-						if (sendView?.show_scanner) sendSession?.dispatch({ type: 'close_scanner' });
-						else if (sendView?.show_contact_picker)
-							sendSession?.dispatch({ type: 'close_contact_picker' });
-						else if (sendView) sendSession?.dispatch({ type: 'back' });
-						else nav.back();
-					}}
-					onnavigate={(to, index) => {
-						noteTarget(to, index);
-						// The token sheet's two doors leave the assets flow for the
-						// token's own send form / code (RULING 3).
-						if (to === 'send-token') {
-							enter('send', { assetId: selectedAssetId ?? undefined });
-							return;
-						}
-						if (to === 'receive-token') {
-							enter('receive-token');
-							return;
-						}
-						if (to === 'fee-token') feeSheetOpen = true;
-						else if (to === 'batch-import') void openBatch();
-						else if (to === 'scan' && sendSession) sendSession.dispatch({ type: 'open_scanner' });
-						else if (to === 'contact-pick' && sendSession)
-							sendSession.dispatch({ type: 'open_contact_picker', target: null });
-						else if (to === 'add-token') {
-							nav.push(to);
-							void openAddToken();
-						} else nav.push(to);
-					}}
-					onsheetclose={() => {
-						// The sheet was a pushed step (a token, a transaction, a code,
-						// "add by address"); dismissing it pops the step, so the next tap
-						// on a row pushes a fresh one (issue 328).
-						if (nav.mobileTop === 't3') closeAddToken();
-						if (flowState !== undefined) nav.sheetClosed(flowState);
-						if (sendView?.show_contact_picker)
-							sendSession?.dispatch({ type: 'close_contact_picker' });
-						// The fee-coin sheet closed without a pick: it is closed, not
-						// merely hidden until the next re-render raises it again.
-						if (feeSheetOpen) feeSheetOpen = false;
-						// The import sheet likewise: left open, 导入 found it still open
-						// and opened nothing.
-						if (batchView) closeBatch();
-					}}
-					send={sendActions}
-					batch={batchActions}
-					scan={{ feed: scanFeed, notice: scanCopy, tool: scanTool }}
-					addToken={addTokenActions}
-					ondeletetx={deleteSelectedTx}
-					onchains={() => (chainSheetOpen = true)}
-					onincludenetwork={includeNetwork}
-				/>
+			{#if shownFlowState !== undefined && !nav.overHome}
+				{@render phoneFlows(shownFlowState, false)}
 			{:else}
 				<WalletHome
 					model={liveHome}
@@ -2298,6 +2335,13 @@
 					onactivity={(row) => (selectedTxId = row.id ?? null)}
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
 				/>
+				{#if shownFlowState !== undefined}
+					<!-- Note 16: a transaction or a holding tapped on the home opens
+					     its sheet over the home — which stays mounted, where it was
+					     scrolled to — and closing it is back here, not on the list
+					     the flow's stack has under that sheet. -->
+					{@render phoneFlows(shownFlowState, true)}
+				{/if}
 			{/if}
 			{#if chainSheetOpen}
 				<BottomSheet
@@ -2335,6 +2379,70 @@
 
 <SignOutHost copy={data.walletMessages.signOut} />
 
+<!--
+	The phone's flow host — one flow state, with everything a live screen
+	needs. A snippet because it is drawn in two places: as the screen, and —
+	`sheetOnly` — as a sheet over the home it was opened from (note 16).
+-->
+{#snippet phoneFlows(state: FlowStateId, sheetOnly: boolean)}
+	<FlowsMobile
+		model={withLiveTxDetailMobile(withLiveFlow(mobileFlowBase(state), flowInputs), txDetail)}
+		onback={() => {
+			// Backing out of the scanner is closing the scanner, not stepping
+			// back a stage — the core opened it and the core closes it.
+			if (sendView?.show_scanner) sendSession?.dispatch({ type: 'close_scanner' });
+			else if (sendView?.show_contact_picker)
+				sendSession?.dispatch({ type: 'close_contact_picker' });
+			else if (sendView) sendSession?.dispatch({ type: 'back' });
+			else nav.back();
+		}}
+		onnavigate={(to, index) => {
+			noteTarget(to, index);
+			// The token sheet's two doors leave the assets flow for the
+			// token's own send form / code (RULING 3).
+			if (to === 'send-token') {
+				enter('send', { assetId: selectedAssetId ?? undefined });
+				return;
+			}
+			if (to === 'receive-token') {
+				enter('receive-token');
+				return;
+			}
+			if (to === 'fee-token') feeSheetOpen = true;
+			else if (to === 'batch-import') void openBatch();
+			else if (to === 'scan' && sendSession) sendSession.dispatch({ type: 'open_scanner' });
+			else if (to === 'contact-pick' && sendSession)
+				sendSession.dispatch({ type: 'open_contact_picker', target: null });
+			else if (to === 'add-token') {
+				nav.push(to);
+				void openAddToken();
+			} else nav.push(to);
+		}}
+		onsheetclose={() => {
+			// The sheet was a pushed step (a token, a transaction, a code,
+			// "add by address"); dismissing it pops the step, so the next tap
+			// on a row pushes a fresh one (issue 328).
+			if (nav.mobileTop === 't3') closeAddToken();
+			if (flowState !== undefined) nav.sheetClosed(flowState);
+			if (sendView?.show_contact_picker) sendSession?.dispatch({ type: 'close_contact_picker' });
+			// The fee-coin sheet closed without a pick: it is closed, not
+			// merely hidden until the next re-render raises it again.
+			if (feeSheetOpen) feeSheetOpen = false;
+			// The import sheet likewise: left open, 导入 found it still open
+			// and opened nothing.
+			if (batchView) closeBatch();
+		}}
+		send={sendActions}
+		batch={batchActions}
+		scan={{ feed: scanFeed, notice: scanCopy, tool: scanTool }}
+		addToken={addTokenActions}
+		ondeletetx={deleteSelectedTx}
+		onchains={() => (chainSheetOpen = true)}
+		onincludenetwork={includeNetwork}
+		{sheetOnly}
+	/>
+{/snippet}
+
 <!-- The rescue sheets (spec 028 Phase 8): a sheet on the phone, a dialog on the desktop. -->
 {#snippet rescueBody()}
 	{#if rescue === 'unreachable'}
@@ -2348,6 +2456,7 @@
 	{:else if rescue === 'balance-detail'}
 		<BalanceDetailBody
 			panel={balanceDetailModel}
+			said={rescueSaid}
 			onretry={(id) => {
 				balance.fixChainResolved(Number(id));
 				balance.refresh(true);
@@ -2377,6 +2486,27 @@
 		/>
 	{/if}
 {/snippet}
+
+<!-- A payment request the wallet cannot take up as it is (the send core's
+     `lock_error`, PR 3 final notes F6/F27): said over the send, with "Add this
+     network" where that is the way on. Closing it closes the send — there is
+     nothing under it to go on with. -->
+{#if sendLock !== undefined && identity}
+	{#if wide.current}
+		<Dialog title={sendLock.title} closeLabel={rm.common.close} onclose={closeSend}>
+			<SendLock lock={sendLock} onadd={addLockedNetwork} />
+		</Dialog>
+	{:else}
+		<BottomSheet
+			title={sendLock.title}
+			closeLabel={rm.common.close}
+			height="half"
+			onclose={closeSend}
+		>
+			<SendLock lock={sendLock} onadd={addLockedNetwork} />
+		</BottomSheet>
+	{/if}
+{/if}
 
 {#if rescue !== null && identity}
 	{#if wide.current}

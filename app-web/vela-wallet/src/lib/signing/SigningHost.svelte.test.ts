@@ -18,7 +18,7 @@
  * surface.
  */
 import { flushSync, tick } from 'svelte';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 
@@ -69,11 +69,25 @@ import { loadCore } from '$lib/core/client';
 
 beforeAll(() => loadCore());
 
-vi.mock('$lib/settings/core/currency.svelte', () => ({ currency: { view: {} } }));
+vi.mock('$lib/settings/core/currency.svelte', () => ({
+	currency: {
+		view: {},
+		boot: async () => {
+			fake.currencyBoots += 1;
+		}
+	}
+}));
 vi.mock('$lib/wallet/identicon', () => ({ identiconSvgForClient: () => '<svg></svg>' }));
 vi.mock('$lib/services/networks', () => ({ explorerBaseURL: () => null }));
 vi.mock('$lib/signing/fee-calls', () => ({ feeCallsOf: () => fake.calls }));
-vi.mock('$lib/signing/fee-balance-changes', () => ({ tellBalanceChanges: async () => {} }));
+// The node's reply to the sheet's one simulation. `checkRequest` and the
+// core's reading of the reply (`simOutcome`) are real.
+vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
+	rpcSimulateReply: (from: string, calls: unknown[], chainId: number) => {
+		fake.simulated.push({ from, calls, chainId });
+		return fake.nodeReply();
+	}
+}));
 vi.mock('$lib/core/kernels', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/core/kernels')>()),
 	typicalInclusionSeconds: () => 5
@@ -89,6 +103,9 @@ vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 		refresh() {}
 		toggle() {}
 		pick() {}
+		balanceChanges(calls: unknown[], changes: unknown[]) {
+			fake.told.push({ calls, changes });
+		}
 		get tier() {
 			return 'standard';
 		}
@@ -124,7 +141,22 @@ vi.mock('$lib/signing/live', () => ({
 			id: 'cs1',
 			dapp: { name: 'a.example', host: '', letter: 'A', tint: 'var(--color-fg-muted)' },
 			network: { name: 'Gnosis', dot: 'var(--color-fg-muted)' },
-			blocks: [{ kind: 'intent', text: 'Send 0.001 xDAI', tone: 'neutral' }],
+			blocks: [
+				{ kind: 'intent', text: 'Send 0.001 xDAI', tone: 'neutral' },
+				// The builder's own rule is `signing/live.test.ts`'s; here, only
+				// that the host hands it this request's verdict.
+				...(raw.sim?.no_change_key
+					? [
+							{
+								kind: 'balances',
+								title: 'Balance changes',
+								rows: [],
+								note: `said:${raw.sim.no_change_key}`,
+								verdict: true
+							}
+						]
+					: [])
+			],
 			tech: { title: 'Details', params: [], identities: [], copyLabel: 'Copy', explorerLabel: 'X' },
 			techOpen: false,
 			fee: { kind: 'hidden' },
@@ -196,8 +228,17 @@ class Fake {
 	dispatched: unknown[] = [];
 	/** What `feeCallsOf` answers: `null`, a request with no fee to ask about. */
 	calls: unknown[] | null = null;
+	/** Every `eth_simulateV1` read the host made. */
+	simulated: { from: string; calls: unknown[]; chainId: number }[] = [];
+	/** What the node answers it: by default, a node that does not offer it. */
+	nodeReply: () => Promise<string> = async () =>
+		JSON.stringify({ error: { code: -32601, message: 'method not found' } });
+	/** What the fee machine was told the calls move. */
+	told: { calls: unknown[]; changes: unknown[] }[] = [];
 	quoted = 0;
 	disposed = 0;
+	/** How many times this host asked the display-currency store to boot. */
+	currencyBoots = 0;
 	trackerEntries: any[] = [];
 	trackerListeners = new Set<() => void>();
 	trackerChanged(): void {
@@ -296,6 +337,23 @@ afterEach(() => {
 });
 
 /**
+ * The sheet prices what it shows in the display currency, and no money figure
+ * is drawn until that currency is the person's (the core's rule,
+ * `CurrencyView.committed`). The wallet and Settings routes boot the store
+ * themselves; the extension's request window mounts only this host — so the
+ * host boots it, or that window's figures would wait for ever.
+ */
+describe('the host boots the display currency it prices in', () => {
+	it('asks the store to boot when it mounts, before any request', async () => {
+		const view = mount();
+		flushSync();
+		await tick();
+		expect(fake.currencyBoots).toBe(1);
+		await view.screen.unmount();
+	});
+});
+
+/**
  * PR 2 note 1: the core asks a failed fee again by itself, through the timer
  * the fee session answers. A sheet that has gone must not go on asking — in
  * the wallet, in Settings' backup, and in the extension's request window
@@ -346,6 +404,164 @@ describe('the sheet’s fee session ends with its request (PR 2 note 1)', () => 
 		await tick();
 		expect(fake.quoted).toBe(0);
 		expect(fake.disposed).toBe(0);
+		await view.screen.unmount();
+	});
+});
+
+/**
+ * PR 3 device round, item 3: the read the host already runs for the fee
+ * (`eth_simulateV1`, issue 411) is the sheet's too. What it means is the
+ * core's (`simOutcome`, real here): a check under which nothing of the
+ * person's moves hands the sheet the core's "No asset changes" key — for the
+ * request it was measured for, and no other.
+ */
+describe('the sheet’s one simulation, read by the core (device round, item 3)', () => {
+	const CALLS = [{ to: '0x' + '22'.repeat(20), value: '0', data: '0x095ea7b3' }];
+	const ME = '0x1111111111111111111111111111111111111111';
+	const NOTHING_MOVES = JSON.stringify({ result: [{ calls: [{ status: '0x1', logs: [] }] }] });
+	const REVERTS = JSON.stringify({ result: [{ calls: [{ status: '0x0', logs: [] }] }] });
+	const raise = (id: string, kind = 'transaction') => {
+		fake.sign.view = {
+			...INITIAL_SIGN_VIEW,
+			surface: 'sheet' as const,
+			request: request(id, kind)
+		};
+	};
+	const settle = async () => {
+		flushSync();
+		await tick();
+		await pause(30);
+		flushSync();
+	};
+	const card = () => document.body.querySelector('[role="dialog"] section.balances');
+	const confirmTop = () =>
+		document.body.querySelector('[data-testid="signing-confirm"]')!.getBoundingClientRect().top;
+	/** The reads about THIS suite's calls. */
+	const asked = () =>
+		fake.simulated.filter((read) => JSON.stringify(read.calls).includes(CALLS[0].to));
+	/**
+	 * The host has asked the node `count` times about these calls. The engine
+	 * and the core are loaded on first use, so how long that takes is not this
+	 * suite's to assume: what is expected to HAPPEN is waited for, with room,
+	 * and never given a fixed moment. (What is expected NOT to happen still
+	 * has only a pause to stand on — see each such check.)
+	 */
+	const read = (count = 1) =>
+		vi.waitFor(() => expect(asked()).toHaveLength(count), { timeout: 10_000, interval: 20 });
+	/** The card has landed on the sheet. */
+	const landed = () =>
+		vi.waitFor(() => expect(card()).not.toBeNull(), { timeout: 10_000, interval: 20 });
+
+	// An earlier test's host may still be on its way to the node (the engine
+	// is loaded on first use): let it land on a state nobody reads.
+	beforeEach(async () => {
+		await pause(60);
+		fake = new Fake();
+	});
+
+	it('nothing moves: one read tells the fee and lands the card — and the confirm is where it was', async () => {
+		fake.calls = CALLS;
+		// One resolver per read, in the order the reads arrived: an earlier
+		// test's host can still reach the node after this one has (its read is
+		// about other calls), and a single slot would then hold ITS promise —
+		// the answer went to nobody and the card never landed.
+		const pending: { about: unknown; resolve: (reply: string) => void }[] = [];
+		fake.nodeReply = () =>
+			// The read this call belongs to is the one the seam has just recorded.
+			new Promise((resolve) => pending.push({ about: fake.simulated.at(-1)?.calls, resolve }));
+		const answer = (reply: string) =>
+			pending
+				.filter((read) => JSON.stringify(read.about).includes(CALLS[0].to))
+				.forEach((read) => read.resolve(reply));
+		const view = mount();
+		raise('tx:1');
+		await settle();
+		await read();
+		await pause(350); // past the entry animation
+		// Asked once, about this request's calls, from the account that signs.
+		expect(asked()).toEqual([
+			{ from: ME, calls: [{ to: CALLS[0].to, value: '0', data: CALLS[0].data }], chainId: 100 }
+		]);
+		// Nothing is said while the node has not answered.
+		expect(card()).toBeNull();
+		const was = confirmTop();
+
+		answer(NOTHING_MOVES);
+		await landed();
+		await settle();
+		expect(card()?.textContent).toContain('said:componentsUi.signing.simResultNoChange');
+		expect(card()?.hasAttribute('data-verdict')).toBe(true);
+		expect(card()?.querySelectorAll('.row')).toHaveLength(0);
+		// The same read told the fee machine: a check, nothing moved.
+		expect(fake.told).toEqual([{ calls: CALLS, changes: [] }]);
+		expect(asked()).toHaveLength(1);
+		expect(Math.abs(confirmTop() - was)).toBeLessThan(0.1);
+		await view.screen.unmount();
+	});
+
+	it('a revert, or a node that cannot check: no card, and the fee is told nothing', async () => {
+		fake.calls = CALLS;
+		for (const reply of [REVERTS, undefined]) {
+			if (reply) fake.nodeReply = async () => reply;
+			const view = mount();
+			raise('tx:1');
+			await settle();
+			expect(view.sheet()).not.toBeNull();
+			await read();
+			await settle();
+			expect(card()).toBeNull();
+			expect(fake.told).toEqual([]);
+			await view.screen.unmount();
+			fake = new Fake();
+			fake.calls = CALLS;
+		}
+	});
+
+	it('it belongs to its request: the next request starts with none, and a late answer lands on nobody', async () => {
+		fake.calls = CALLS;
+		const answers: ((reply: string) => void)[] = [];
+		fake.nodeReply = () => new Promise((resolve) => answers.push(resolve));
+		const view = mount();
+		raise('tx:1');
+		await settle();
+		await read();
+		answers[0](NOTHING_MOVES);
+		await landed();
+
+		// Another request takes the sheet: no card until ITS simulation says so.
+		raise('tx:2');
+		await settle();
+		await read(2);
+		expect(card()).toBeNull();
+		answers[1](REVERTS);
+		await settle();
+		expect(card()).toBeNull();
+
+		// A third, while the second's sheet went: its predecessor's late "nothing
+		// moves" is not this one's.
+		fake.sign.view = { ...INITIAL_SIGN_VIEW };
+		await settle();
+		raise('tx:3');
+		await settle();
+		await read(3);
+		raise('tx:4');
+		await settle();
+		answers[2](NOTHING_MOVES);
+		await settle();
+		expect(card()).toBeNull();
+		// Nor was the fee machine told about calls nobody is looking at.
+		expect(fake.told).toHaveLength(1);
+		await view.screen.unmount();
+	});
+
+	it('a message is not simulated, and says nothing', async () => {
+		const view = mount();
+		raise('m:1', 'personal_sign');
+		await settle();
+		expect(view.sheet()).not.toBeNull();
+		expect(fake.simulated).toEqual([]);
+		expect(fake.told).toEqual([]);
+		expect(card()).toBeNull();
 		await view.screen.unmount();
 	});
 });

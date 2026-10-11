@@ -74,19 +74,31 @@ pub struct EditorStyle {
 }
 
 impl EditorStyle {
-    fn font(&self) -> gpui::Font {
+    /// A face as a field shapes it: with the UI face's features
+    /// (`theme::font_ui_features` — contextual alternates OFF).
+    ///
+    /// A field shapes its own runs, so it does not inherit the page root's
+    /// features the way drawn text does, and `gpui::font` alone leaves them
+    /// at the face's defaults: Plus Jakarta Sans then turns an `x` after a
+    /// digit into `×`. The add-token field's own hint read "0×…", and a
+    /// contract address typed into it "0×dAC1…" (PR 3 final notes, the "0×"
+    /// check — iOS's bug, alive here in the one place the roots do not
+    /// reach). The mono face has no such rule to lose.
+    fn face(&self, family: &SharedString) -> gpui::Font {
         gpui::Font {
             weight: self.weight,
-            ..gpui::font(self.family.clone())
+            features: crate::theme::font_ui_features(),
+            ..gpui::font(family.clone())
         }
+    }
+
+    fn font(&self) -> gpui::Font {
+        self.face(&self.family)
     }
 
     fn placeholder_run(&self, len: usize) -> TextRun {
         TextRun {
-            font: gpui::Font {
-                weight: self.weight,
-                ..gpui::font(self.placeholder_family.clone())
-            },
+            font: self.face(&self.placeholder_family),
             ..self.run(len, self.placeholder)
         }
     }
@@ -1118,6 +1130,44 @@ impl InputHandler for EditorInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The "0×" check (PR 3 final notes). A field shapes its own text, so
+    /// the page root's `calt` off never reached it: the add-token field's
+    /// hint "0x…" was drawn "0×…", and an address typed there "0×dAC1…".
+    /// Every run a field shapes — what is typed, the composing run, the
+    /// placeholder — carries the UI face's features, in the UI face and the
+    /// mono one alike.
+    #[test]
+    fn a_field_shapes_hex_as_written() {
+        let calt = |font: &gpui::Font| {
+            font.features
+                .0
+                .iter()
+                .find(|(tag, _)| &**tag == "calt")
+                .map(|(_, value)| *value)
+        };
+        for family in [crate::theme::font_ui(), crate::theme::font_mono()] {
+            let style = EditorStyle {
+                family: family.into(),
+                placeholder_family: crate::theme::font_ui().into(),
+                weight: gpui::FontWeight::NORMAL,
+                size: px(15.),
+                line_height: px(21.),
+                color: gpui::black(),
+                placeholder: gpui::black(),
+                caret: gpui::black(),
+                selection: gpui::black(),
+            };
+            let typed = style.run("0x100".len(), style.color);
+            assert_eq!(calt(&typed.font), Some(0), "{family}: what is typed");
+            assert_eq!(&*typed.font.family, family);
+            let hint = style.placeholder_run("0x…".len());
+            assert_eq!(calt(&hint.font), Some(0), "{family}: the placeholder");
+            assert_eq!(&*hint.font.family, crate::theme::font_ui());
+            // …and it is the face the page roots set, feature for feature.
+            assert_eq!(typed.font.features, crate::theme::font_ui_features());
+        }
+    }
 
     /// A mask shows one bullet per character and maps offsets both ways.
     #[test]

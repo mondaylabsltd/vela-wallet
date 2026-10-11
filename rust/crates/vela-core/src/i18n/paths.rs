@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 1873 paths = 1772 leaf + 101 branch. Repeated per locale these key bytes
-//! would cost 750870 bytes; interned once they cost 51958.
+//! 1879 paths = 1778 leaf + 101 branch. Repeated per locale these key bytes
+//! would cost 755250 bytes; interned once they cost 52250.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 1873] = [
+pub(crate) static PATHS: [&str; 1879] = [
     "about",
     "about.debugMode",
     "about.debugModeBody",
@@ -118,6 +118,7 @@ pub(crate) static PATHS: [&str; 1873] = [
     "assets.searchPlaceholder",
     "assets.sectionTitle",
     "assets.switcherTotal",
+    "assets.tokenListUnreachable",
     "assets.unreachableBody",
     "assets.unreachableMany",
     "assets.unreachableNone",
@@ -419,7 +420,6 @@ pub(crate) static PATHS: [&str; 1873] = [
     "componentsUi.signing.amountUnknown",
     "componentsUi.signing.balanceChangesTitle",
     "componentsUi.signing.balanceMatchesHero",
-    "componentsUi.signing.balanceNoAssetsMove",
     "componentsUi.signing.balanceSelfTransfer",
     "componentsUi.signing.balanceUnderfundedNative",
     "componentsUi.signing.balanceUnverifiedToken",
@@ -450,6 +450,7 @@ pub(crate) static PATHS: [&str; 1873] = [
     "componentsUi.signing.confirmBlock.feeWouldFail",
     "componentsUi.signing.confirmBlock.previousPending",
     "componentsUi.signing.confirmBlock.reading",
+    "componentsUi.signing.confirmBlock.simChecking",
     "componentsUi.signing.confirmDeposit",
     "componentsUi.signing.confirmIntentLabel",
     "componentsUi.signing.confirmLabel",
@@ -557,6 +558,7 @@ pub(crate) static PATHS: [&str; 1873] = [
     "componentsUi.signing.labelTokenId",
     "componentsUi.signing.labelTokenIds",
     "componentsUi.signing.labelValidUntil",
+    "componentsUi.signing.labelWalletName",
     "componentsUi.signing.labelYouPay",
     "componentsUi.signing.labelYouPayMax",
     "componentsUi.signing.labelYouReceive",
@@ -826,7 +828,6 @@ pub(crate) static PATHS: [&str; 1873] = [
     "connect.list.waitingStatus",
     "connect.list.walletFallback",
     "contacts",
-    "contacts.actionQr",
     "contacts.addContact",
     "contacts.addMember",
     "contacts.addTitle",
@@ -889,15 +890,12 @@ pub(crate) static PATHS: [&str; 1873] = [
     "contacts.nameLabel",
     "contacts.namePlaceholder",
     "contacts.noResults",
-    "contacts.pickerEmptyHint",
-    "contacts.pickerTitle",
     "contacts.recentActivity",
     "contacts.save",
     "contacts.saveToContacts",
     "contacts.saved",
     "contacts.savedContact",
     "contacts.savedTag",
-    "contacts.scanToAdd",
     "contacts.searchPlaceholder",
     "contacts.sectionContacts",
     "contacts.sectionFavorites",
@@ -1014,6 +1012,7 @@ pub(crate) static PATHS: [&str; 1873] = [
     "home.balanceDetailRetry",
     "home.balanceDetailStatusFailed",
     "home.balanceDetailStatusRetrying",
+    "home.balanceDetailStatusTokenList",
     "home.balanceDetailTitle",
     "home.balanceDetailUnpricedLabel",
     "home.balanceDetailUnpricedNote",
@@ -1067,7 +1066,10 @@ pub(crate) static PATHS: [&str; 1873] = [
     "home.rescanWindow6h",
     "home.rescanWindowRecent",
     "home.switchAccountTitle",
-    "home.switcherAccountCount",
+    "home.switcherAccountCount_few",
+    "home.switcherAccountCount_many",
+    "home.switcherAccountCount_one",
+    "home.switcherAccountCount_other",
     "home.tabActivity",
     "home.tabAssets",
     "home.tabConnections",
@@ -1098,6 +1100,8 @@ pub(crate) static PATHS: [&str; 1873] = [
     "onboarding.common.headerShared",
     "onboarding.common.incompatibleBody",
     "onboarding.common.incompatibleTitle",
+    "onboarding.common.insertKeyAppleSheet",
+    "onboarding.common.insertKeyAppleSheetHint",
     "onboarding.common.insertKeyBody",
     "onboarding.common.insertKeyTitle",
     "onboarding.common.keyUnavailableBody",
@@ -1145,7 +1149,6 @@ pub(crate) static PATHS: [&str; 1873] = [
     "onboarding.create.ack2Period",
     "onboarding.create.ack2PrivacyPolicy",
     "onboarding.create.ack2Terms",
-    "onboarding.create.addKeyBtn",
     "onboarding.create.addMethodLabel",
     "onboarding.create.addSecondKeyBtn",
     "onboarding.create.alertErrorTitle",
@@ -1163,6 +1166,7 @@ pub(crate) static PATHS: [&str; 1873] = [
     "onboarding.create.keyDeviceOnlyBadge",
     "onboarding.create.keyHardwareBadge",
     "onboarding.create.keyLimitReached",
+    "onboarding.create.keyPlaceHeading",
     "onboarding.create.keySyncedBadge",
     "onboarding.create.keyUnreadableBody",
     "onboarding.create.keyUnreadableTitle",
@@ -1561,7 +1565,6 @@ pub(crate) static PATHS: [&str; 1873] = [
     "send.sameFeeTokenMax",
     "send.sameFeeTokenTitle",
     "send.scanAria",
-    "send.scanToFill",
     "send.searchPlaceholder",
     "send.selectAllValuable",
     "send.selectTokenTitle",
@@ -1777,6 +1780,8 @@ pub(crate) static PATHS: [&str; 1873] = [
     "settingsModals.addNetwork.incompatibleHint",
     "settingsModals.addNetwork.modalTitle",
     "settingsModals.addNetwork.nativeLabel",
+    "settingsModals.addNetwork.noP256Hint",
+    "settingsModals.addNetwork.noRpcEndpoint",
     "settingsModals.addNetwork.openChainSetupTool",
     "settingsModals.addNetwork.recheck",
     "settingsModals.addNetwork.recheckWithRpc",
@@ -1788,6 +1793,7 @@ pub(crate) static PATHS: [&str; 1873] = [
     "settingsModals.addNetwork.unableToVerify",
     "settingsModals.backup",
     "settingsModals.backup.backedUp",
+    "settingsModals.backup.cannotCopy",
     "settingsModals.backup.couldNotCheck",
     "settingsModals.backup.explain",
     "settingsModals.backup.notBackedUp",
@@ -1889,25 +1895,25 @@ pub(crate) static PATHS: [&str; 1873] = [
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
 pub(crate) static IS_BRANCH: [u8; 235] = [
-    0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00,
-    0x00, 0x80, 0x00, 0x03, 0x00, 0x80, 0x00, 0x00, 0x00, 0x30, 0x00, 0x80, 0x08, 0x21, 0x00, 0x00,
-    0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x40, 0x21, 0x11, 0x02, 0x00, 0x00, 0x10, 0x08, 0x01, 0x05,
-    0x04, 0x00, 0x20, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00,
+    0x00, 0x00, 0x01, 0x06, 0x00, 0x00, 0x01, 0x00, 0x00, 0x60, 0x00, 0x00, 0x11, 0x42, 0x00, 0x00,
+    0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x80, 0x42, 0x22, 0x04, 0x00, 0x00, 0x20, 0x10, 0x02, 0x0a,
+    0x08, 0x00, 0x40, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
-    0x10, 0x88, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
-    0x00, 0x04, 0x00, 0x00, 0x00, 0x02, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x20, 0x00, 0x00, 0x00, 0x20, 0x00,
-    0x84, 0x00, 0x00, 0x38, 0x49, 0x92, 0x10, 0x00, 0x08, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x80,
-    0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x08, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0x42, 0x00, 0x12, 0x20, 0x04, 0x48, 0x42, 0x04,
-    0x08, 0x04, 0x02, 0x04, 0x00, 0x02, 0x00, 0x00, 0x40, 0x00, 0x43, 0x00, 0x00, 0x00, 0x82, 0x00,
-    0x00, 0x11, 0x00, 0x01, 0x10, 0x00, 0x81, 0x00, 0x82, 0x00, 0x00,
+    0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+    0x40, 0x20, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x02, 0x00, 0x00, 0x00, 0x08, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+    0x40, 0x08, 0x00, 0x80, 0x93, 0x24, 0x09, 0x01, 0x80, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
+    0x08, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x80, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x02, 0x90, 0x00, 0x21, 0x40, 0x12, 0x22,
+    0x40, 0x20, 0x10, 0x20, 0x00, 0x10, 0x00, 0x00, 0x00, 0x02, 0x18, 0x02, 0x00, 0x00, 0x40, 0x20,
+    0x00, 0x40, 0x04, 0x40, 0x00, 0x04, 0x40, 0x20, 0x80, 0x20, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 1873;
+pub(crate) const N_PATHS: usize = 1879;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

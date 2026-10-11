@@ -63,7 +63,6 @@
       "simWillFail": "Diese Transaktion wird voraussichtlich fehlschlagen — Sie zahlen trotzdem Gas.",
       "simWillFailReason": "Voraussichtlicher Fehlschlag: {{reason}} — Sie zahlen trotzdem Gas.",
       "balanceChangesTitle": "Guthabenänderungen",
-      "balanceNoAssetsMove": "Es verlassen keine Assets Ihre Wallet",
       "balanceUnverifiedToken": "Nicht verifizierter Token",
       "balanceSelfTransfer": "An Ihre eigene Adresse · Guthaben bleibt gleich",
       "intentContractCall": "Contract-Interaktion",
@@ -149,10 +148,11 @@
       "labelYouPayMax": "Sie zahlen (max.)",
       "labelYouReceive": "Sie erhalten",
       "labelYouReceiveMin": "Sie erhalten (min.)",
-      "intentBackUpPublicKeys": "Öffentliche Schlüssel sichern",
+      "intentBackUpPublicKeys": "Wallet-Eintrag kopieren",
       "labelNetwork": "Netzwerk",
       "labelAddress": "Adresse",
-      "labelPublicKeys": "Öffentliche Schlüssel",
+      "labelPublicKeys": "Enthaltene Schlüssel",
+      "labelWalletName": "Wallet-Name",
       "valueUnlimited": "Unbegrenzt",
       "valueAll": "Alles",
       "warnOrderTerms": "Die Beträge dieses Auftrags werden hier nicht angezeigt — vorher auf der Website prüfen.",
@@ -228,8 +228,8 @@
       "signerDown": "Die Signaturseite ließ sich nicht öffnen. Prüfe deine Verbindung.",
       "integrity": {
         "checking": "Seite wird geprüft…",
-        "matches": "Version {{version}} · entspricht Velas veröffentlichter Build-Liste · geprüft {{time}}",
-        "trusted": "Version {{version}} · auf diesem Gerät vertraut · geprüft {{time}}",
+        "matches": "Version {{version}} · entspricht Velas veröffentlichter Build-Liste · geprüft {{time}}",
+        "trusted": "Version {{version}} · auf diesem Gerät vertraut · geprüft {{time}}",
         "unchecked": "Nicht geprüft: Die Prüfung ist für diese Seite aus",
         "mismatch": "Version {{version}} steht nicht auf Velas veröffentlichter Build-Liste. Nicht geöffnet.",
         "blocked": "Version {{version}} ist auf diesem Gerät gesperrt.",
@@ -249,7 +249,8 @@
         "feeFailed": "Gebühr nicht berechenbar — zum Wiederholen tippen",
         "feeRetrying": "Gebühr noch nicht berechenbar. Wird automatisch erneut versucht…",
         "feeWouldFail": "So gesendet würde sie fehlschlagen.",
-        "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…"
+        "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…",
+        "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…"
       }
     },
     "signingApprove": {

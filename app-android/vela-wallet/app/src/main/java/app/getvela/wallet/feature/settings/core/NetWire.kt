@@ -279,6 +279,28 @@ enum class NetWizardPhase {
     @SerialName("error") Error,
 }
 
+/**
+ * Whether the wizard's result draws the field where a person names an RPC
+ * endpoint of their own ([NetWizardView.rpc_field]) — and with it, always and
+ * only with it, "Re-check with this RPC": a button that reads a field is drawn
+ * where the field is. The core's table (`network_admin::wizard_rpc_field`).
+ */
+@Serializable
+enum class NetRpcField {
+    /**
+     * No field, no re-check: searching and checking; a network already added
+     * or not found; and a REFUSAL (no P-256 verifier, missing contracts),
+     * which another endpoint would not change.
+     */
+    @SerialName("none") None,
+
+    /** The field, "Custom RPC (optional)": the check passed, or could not reach a verdict. */
+    @SerialName("optional") Optional,
+
+    /** The field, "RPC URL": the network lists no endpoint, so one typed here is the only way on. */
+    @SerialName("required") Required,
+}
+
 @Serializable
 data class NetWizardView(
     val phase: NetWizardPhase = NetWizardPhase.Idle,
@@ -286,8 +308,33 @@ data class NetWizardView(
     val custom_rpc: String = "",
     val suggestions: List<NetChainIndexEntry> = emptyList(),
     val chain_info: NetChainInfo? = null,
+    /**
+     * The last check's result. Present beside [phase] `checked` — and beside
+     * `error` too when the check itself raised it (the scan / auto-add path:
+     * `not_compatible`, `check_failed`), so the reason ([NetCompatibility.hint_key])
+     * and the Chain Setup link ([NetCompatibility.setup_url]) are drawn on
+     * every path a network is added by.
+     */
     val compat: NetCompatibility? = null,
     val error: NetWizardErrorKind? = null,
+    /**
+     * The corpus key of the sentence for [error] — the core words every stop
+     * (already added, not found, no RPC endpoint listed, unable to verify,
+     * and a refusal by the check's own reason). `null` with no error, and
+     * from a core that predates the field.
+     */
+    val error_key: String? = null,
+    /**
+     * The RPC field under the result, and "Re-check with this RPC" with it —
+     * ONE rule, the core's, for every surface that draws this wizard (PR 3
+     * final notes F4, F14, F22). This shell decides neither.
+     */
+    val rpc_field: NetRpcField = NetRpcField.None,
+    /**
+     * The corpus key of that field's label: "Custom RPC (optional)", or "RPC
+     * URL" where an endpoint is the one thing asked for. `null` with no field.
+     */
+    val rpc_field_label_key: String? = null,
     val can_add: Boolean = false,
 )
 
@@ -326,6 +373,21 @@ data class NetCompatibility(
     val best_rpc_url: String? = null,
     val best_rpc_latency_ms: Long? = null,
     val rpc_failure: NetRpcFailureKind? = null,
+    /**
+     * WHY a network that answered the check is refused: `no_p256` (no
+     * verifier at 0x100 — nothing can be deployed to add one, and it wins)
+     * or `missing_contracts`. A string on purpose: a reason this build does
+     * not know still has the core's [hint_key] to say.
+     */
+    val blocker: String? = null,
+    /** The corpus key of the line under the refusal — the core picks it by [blocker]. */
+    val hint_key: String? = null,
+    /**
+     * Where "Open Chain Setup Tool" goes — Chain Setup opened on THIS chain
+     * (`?chain=<id>`) — and only for missing contracts. `null`: no such
+     * button. A network with no P-256 verifier has nothing to deploy.
+     */
+    val setup_url: String? = null,
 )
 
 @Serializable

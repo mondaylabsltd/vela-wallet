@@ -9,6 +9,12 @@
 //! and a feed row's figure masks exactly when the core says it is money
 //! (`figure_maskable`). The signing sheet and Receive's "arrived" list take
 //! no privacy flag at all — they cannot mask by construction.
+//!
+//! The feed carries a SPLIT (one send to two people, PR 3 note 15): its
+//! total is a figure and so is each recipient's share, in the row and in the
+//! detail the row opens — where the shares are listed. Every row of the feed
+//! is opened here, by what it is rather than by a list of ids, so a row
+//! added to the fixture is replayed the day it is added.
 
 use gpui::SharedString;
 use serde_json::Value;
@@ -26,11 +32,11 @@ use crate::wallet::live::Money;
 const FIXTURE: &str =
     include_str!("../../../../rust/crates/vela-core/tests/fixtures/privacy-hidden.json");
 
-fn fixture() -> Value {
+pub(super) fn fixture() -> Value {
     serde_json::from_str(FIXTURE).unwrap_or_else(|error| unreachable!("the fixture reads: {error}"))
 }
 
-fn views(fixture: &Value, side: &str) -> (BalanceView, FeedView) {
+pub(super) fn views(fixture: &Value, side: &str) -> (BalanceView, FeedView) {
     let balance = serde_json::from_value(fixture[side]["balance"].clone())
         .unwrap_or_else(|error| unreachable!("{side} balance: {error}"));
     let feed = serde_json::from_value(fixture[side]["feed"].clone())
@@ -38,7 +44,7 @@ fn views(fixture: &Value, side: &str) -> (BalanceView, FeedView) {
     (balance, feed)
 }
 
-fn strings() -> (WalletStrings, FlowStrings) {
+pub(super) fn strings() -> (WalletStrings, FlowStrings) {
     let loc = crate::loc::Loc::for_language("en");
     (WalletStrings::resolve(&loc), FlowStrings::resolve(&loc))
 }
@@ -65,7 +71,7 @@ fn contacts() -> ContactsView {
     view
 }
 
-fn activity_text(rows: &[ActivityRowModel]) -> Vec<String> {
+pub(super) fn activity_text(rows: &[ActivityRowModel]) -> Vec<String> {
     rows.iter()
         .flat_map(|row| {
             [
@@ -86,10 +92,11 @@ fn fiat_text(fiat: &Fiat) -> String {
     match fiat {
         Fiat::Value(text) | Fiat::NoPrice(text) => text.to_string(),
         Fiat::Masked => crate::wallet::fixtures::MASK.to_owned(),
+        Fiat::Pending => String::new(),
     }
 }
 
-fn asset_text(rows: &[AssetRowModel]) -> Vec<String> {
+pub(super) fn asset_text(rows: &[AssetRowModel]) -> Vec<String> {
     rows.iter()
         .flat_map(|row| [row.balance.to_string(), fiat_text(&row.fiat)])
         .collect()
@@ -129,7 +136,7 @@ fn breakdown_text(rows: &[BreakdownRow]) -> Vec<String> {
         .collect()
 }
 
-fn detail_text(detail: &TxDetail) -> Vec<String> {
+pub(super) fn detail_text(detail: &TxDetail) -> Vec<String> {
     let mut out = vec![detail.amount.to_string(), detail.fiat.to_string()];
     out.extend(fact_text(&detail.facts));
     out.extend(breakdown_text(&detail.breakdown));
@@ -169,7 +176,7 @@ fn masked_surfaces(balance: &BalanceView, feed: &FeedView) -> Vec<(&'static str,
             crate::wallet::live::asset_detail(balance, feed, index, &wallet, "en", money)
         {
             token_detail.push(detail.amount.to_string());
-            token_detail.push(detail.sub.to_string());
+            token_detail.push(detail.sub.text());
             token_detail.extend(detail.facts.iter().map(|(_, value)| value.to_string()));
             token_detail.extend(activity_text(&detail.activity));
         }
@@ -188,25 +195,21 @@ fn masked_surfaces(balance: &BalanceView, feed: &FeedView) -> Vec<(&'static str,
             .flat_map(|group| activity_text(&group.rows))
             .collect(),
     ));
-    let detail_of = |id: &str| {
-        crate::flows::live::tx_detail(feed, id, &flow, &wallet, hidden, "en", money)
-            .map(|detail| detail_text(&detail))
-            .unwrap_or_default()
+    // Every row's detail, by what the row is: a transfer (a split among
+    // them — its detail lists each recipient's share) or a dApp interaction.
+    let details = |dapp: bool| -> Vec<String> {
+        feed_items(feed)
+            .into_iter()
+            .filter(|item| item.dapp.is_some() == dapp)
+            .flat_map(|item| {
+                crate::flows::live::tx_detail(feed, &item.id, &flow, &wallet, hidden, "en", money)
+                    .map(|detail| detail_text(&detail))
+                    .unwrap_or_else(|| unreachable!("row {} opens", item.id))
+            })
+            .collect()
     };
-    out.push((
-        "transfer_detail",
-        ["received", "sent"]
-            .iter()
-            .flat_map(|id| detail_of(id))
-            .collect(),
-    ));
-    out.push((
-        "dapp_detail",
-        ["swap", "permit", "permit-unlimited", "signature"]
-            .iter()
-            .flat_map(|id| detail_of(id))
-            .collect(),
-    ));
+    out.push(("transfer_detail", details(false)));
+    out.push(("dapp_detail", details(true)));
     out.push((
         "contact_activity",
         crate::contacts::live::detail(&contacts(), 0, feed, &wallet, true, hidden)
@@ -262,6 +265,17 @@ fn masked_surfaces(balance: &BalanceView, feed: &FeedView) -> Vec<(&'static str,
             .unwrap_or_default(),
     ));
     out
+}
+
+/// The feed's rows, headers aside.
+pub(super) fn feed_items(feed: &FeedView) -> Vec<&vela_core::app::activity_feed::FeedItem> {
+    feed.rows
+        .iter()
+        .filter_map(|row| match row {
+            FeedRow::Item { item } => Some(item),
+            FeedRow::Header { .. } => None,
+        })
+        .collect()
 }
 
 fn says(texts: &[String], run: &str) -> bool {
@@ -434,4 +448,101 @@ fn a_row_masks_exactly_when_its_figure_is_money() {
         seen += 1;
     }
     assert_eq!(seen, expected.len());
+}
+
+/// (5) The split (PR 3 note 15): one send to two people. Shown, its total
+/// and both shares are said — the total on the row, on the home's cut and in
+/// History; the shares in the detail the row opens. Hidden, none of the
+/// three is said anywhere, and each masked figure keeps its unit
+/// ("•••• USDC", the core's `masked_amount`) — the total AND each share. A
+/// hidden split used to mask its total and still list who got how much.
+#[test]
+fn a_split_hides_its_total_and_every_share() {
+    use vela_core::app::privacy::masked_amount;
+    const RUNS: [&str; 3] = ["683", "214", "469"];
+    let fixture = fixture();
+    let (wallet, flow) = strings();
+    let money = Money::usd();
+    for run in RUNS {
+        assert!(
+            forbidden(&fixture).iter().any(|known| known == run),
+            "`{run}` is one of the fixture's figures"
+        );
+    }
+
+    for side in ["shown", "hidden"] {
+        let (_, feed) = views(&fixture, side);
+        let hidden = feed.hidden;
+        assert_eq!(hidden, side == "hidden");
+        let split = feed_items(&feed)
+            .into_iter()
+            .find(|item| item.batch.is_some())
+            .unwrap_or_else(|| unreachable!("the fixture has a split"));
+        let batch = split
+            .batch
+            .as_ref()
+            .unwrap_or_else(|| unreachable!("a batch"));
+        assert_eq!(batch.transfers.len(), 2, "two recipients");
+        assert!(split.figure_maskable, "a split's total is money");
+        let unit = masked_amount("USDC");
+        assert_eq!(unit, "•••• USDC");
+
+        // The row — on History, and on the home's cut of three.
+        let row = crate::wallet::live::activity_row(split, &wallet, hidden);
+        let history: Vec<String> = crate::flows::live::history(&feed, &flow, &wallet, hidden)
+            .iter()
+            .flat_map(|group| activity_text(&group.rows))
+            .collect();
+        let home = activity_text(&crate::wallet::live::activity_rows(
+            &feed, &wallet, &flow, hidden,
+        ));
+        assert!(
+            feed.home_rows
+                .iter()
+                .any(|row| matches!(row, FeedRow::Item { item } if item.id == split.id)),
+            "the home draws the split too"
+        );
+        // Its detail: the total over the list of who got how much.
+        let detail =
+            crate::flows::live::tx_detail(&feed, &split.id, &flow, &wallet, hidden, "en", money)
+                .unwrap_or_else(|| unreachable!("the split opens"));
+        assert_eq!(detail.breakdown.len(), 2, "each recipient has a line");
+        let shares: Vec<&str> = detail
+            .breakdown
+            .iter()
+            .map(|line| line.value.as_ref())
+            .collect();
+        let in_detail = detail_text(&detail);
+
+        if hidden {
+            assert_eq!(row.amount.as_ref(), crate::wallet::fixtures::MASK);
+            assert_eq!(row.unit.as_ref(), "USDC", "the row keeps its unit");
+            assert_eq!(detail.amount.as_ref(), unit, "the total keeps its unit");
+            assert_eq!(shares, vec![unit.as_str(), unit.as_str()]);
+            assert!(detail.fiat.is_empty(), "no worth either: {}", detail.fiat);
+            for run in RUNS {
+                for (surface, texts) in [
+                    ("the row", activity_text(std::slice::from_ref(&row))),
+                    ("History", history.clone()),
+                    ("the home", home.clone()),
+                    ("the detail", in_detail.clone()),
+                ] {
+                    assert!(
+                        !says(&texts, run),
+                        "hidden: {surface} says `{run}`: {texts:?}"
+                    );
+                }
+            }
+            // Who it went to is not a figure: the names stay.
+            assert_eq!(detail.breakdown[0].label.as_ref(), "Bea");
+        } else {
+            assert!(row.amount.contains("683.75"), "{}", row.amount);
+            assert!(says(&history, "683") && says(&home, "683"));
+            assert!(detail.amount.contains("683.75"), "{}", detail.amount);
+            assert_eq!(shares, vec!["214.5 USDC", "469.25 USDC"]);
+            for run in RUNS {
+                assert!(says(&in_detail, run), "shown: the detail says `{run}`");
+            }
+        }
+    }
 }

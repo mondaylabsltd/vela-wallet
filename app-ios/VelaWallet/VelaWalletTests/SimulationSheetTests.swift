@@ -204,9 +204,13 @@ struct SimulationSheetTests {
         #expect(note == nil, "nothing unverified moved, so there is nothing to caution about")
     }
 
-    /// "It ran and nothing moved" is a SENTENCE, not an absence.
+    /// "It ran and nothing moved" is a SENTENCE, not an absence — and it is
+    /// the core's: the judged view names the line (`noChangeKey`), and the
+    /// sheet says that line. A renamed core field would leave the place
+    /// saying it could not check, so the key is read from the REAL machine.
     @Test func nothingMovingIsSaidOutLoud() throws {
         let sim = try judged([])
+        #expect(sim.noChangeKey == "componentsUi.signing.simResultNoChange")
         let blocks = SigningLive.balanceBlocks(
             isTransaction: true, context: context(sim: sim, simulation: .answered)
         )
@@ -215,7 +219,12 @@ struct SimulationSheetTests {
             return
         }
         #expect(rows.isEmpty)
-        #expect(note == loc.t("componentsUi.signing.balanceNoAssetsMove"))
+        #expect(note == loc.t("componentsUi.signing.simResultNoChange"))
+        #expect(note == "无资产变动")
+
+        // Something moves: the core names no such line.
+        let moving = try judged([["kind": "native", "token": NSNull(), "delta": "-1000"]])
+        #expect(moving.noChangeKey == nil)
     }
 
     /// **The one that matters.** A node that could not simulate is a warning,

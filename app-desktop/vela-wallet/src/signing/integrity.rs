@@ -203,7 +203,7 @@ pub fn words(theme: &Theme, said: SharedString, tone: Tone, reserve: bool) -> Di
         .text_size(theme::text_row_sub())
         .line_height(gpui::relative(LINE_HEIGHT))
         .text_color(words_ink(theme, tone))
-        .child(said)
+        .child(crate::ui::prose(said))
 }
 
 /// The line as a row: its mark and its sentence, wrapping under itself, in
@@ -292,6 +292,114 @@ mod tests {
         assert!(today.contains(':'), "{today}");
         let older = text_at(&loc, &admitted(at), at + 2 * 24 * 60 * 60 * 1000);
         assert!(older.contains("2025"), "{older}");
+    }
+
+    /// PR 3 item 10: the time is one unbreakable unit and the "·" before
+    /// "checked" binds to the word before it — both the core's (U+00A0), so
+    /// a wrapped line can read neither 「检查于 下午 / 10:07」 nor open with
+    /// "·". In Chinese with a 12-hour clock, yesterday's check: the date,
+    /// the day period and the clock are joined, and nothing here re-spaces
+    /// them.
+    #[test]
+    fn a_checked_time_and_its_dot_never_break_badly() {
+        let zh = Loc::for_tag("zh");
+        let at = 1_760_000_000_000;
+        let now = at + 2 * 24 * 60 * 60 * 1000;
+        let time = checked_time(at, now, zh.language());
+        assert!(!time.is_empty());
+        assert!(
+            !time.contains(' '),
+            "a breakable space inside the time: {time:?}"
+        );
+        let line = text_at(&zh, &admitted(at), now);
+        assert!(line.contains(&time), "{line:?} carries the time whole");
+        // Every "·" in the line is glued to what comes before it.
+        for (at, _) in line.match_indices('·') {
+            assert!(
+                line[..at].ends_with('\u{a0}'),
+                "a line could open with the dot: {line:?}"
+            );
+        }
+    }
+
+    /// PR 3 note 14: a no-break space does not bind two ideographs — 「下午」
+    /// itself split after 「下」. The core now puts a word joiner (U+2060)
+    /// between two neighbours when a line could break beside either, and
+    /// this shell's own wrapper (`ui::prose`) holds it: with a 12-hour clock
+    /// in Chinese, Japanese and Korean there is NO place inside the moment
+    /// where the rule allows a break — whatever gpui proposes there, the
+    /// measure is narrowed until the moment moves down whole. Nothing here
+    /// strips or re-inserts a joiner: the string is the core's, byte for
+    /// byte.
+    #[test]
+    fn a_cjk_checked_time_is_one_unbreakable_unit() {
+        use crate::ui::prose::{forbidden_break, needs_care};
+        // 2025-10-09 08:53:20 UTC; the day before "now", so the date rides.
+        let at = 1_760_000_000_000;
+        let now = at + 24 * 60 * 60 * 1000;
+        let moment = |language: &str, date: &str| {
+            vela_core::trusted_signer::launch::checked_time(at, now, 8 * 60, date, "h12", language)
+        };
+        assert_eq!(
+            vela_core::trusted_signer::launch::checked_time(
+                at,
+                at + 60_000,
+                8 * 60,
+                "auto",
+                "h12",
+                "zh"
+            ),
+            "下\u{2060}午\u{a0}4:53",
+            "the core's own bytes: a joiner inside the day period"
+        );
+        for language in ["zh", "zh-TW", "ja", "ko"] {
+            for date in ["auto", "dmy_slash"] {
+                let time = moment(language, date);
+                // Korean's day period is the core's Latin "PM": no joiner to
+                // carry, and the same rule holds its no-break spaces.
+                assert_eq!(
+                    time.contains('\u{2060}'),
+                    language != "ko",
+                    "{language}: {time:?}"
+                );
+                assert!(needs_care(&time), "{language}: the rule looks at it");
+                let line = format!("检查于 {time} 之后");
+                let start = line
+                    .find(&time)
+                    .unwrap_or_else(|| unreachable!("in the line"));
+                for (offset, _) in time.char_indices().skip(1) {
+                    let at = start + offset;
+                    let (before, after) = line.split_at(at);
+                    let pair = (before.chars().next_back(), after.chars().next());
+                    // gpui never breaks inside a run of Latin word characters
+                    // ("2025/10/9", "4:53"); everywhere else it may propose a
+                    // break, and there the rule must forbid it.
+                    let inside_a_word = matches!(
+                        pair,
+                        (Some(a), Some(b)) if is_word(a) && is_word(b)
+                    );
+                    assert!(
+                        inside_a_word || forbidden_break(&line, at),
+                        "{language}/{date}: a break is allowed at {pair:?} in {time:?}"
+                    );
+                }
+                // The line may still wrap before the moment and after it.
+                assert!(!forbidden_break(&line, start), "before the moment");
+                assert!(!forbidden_break(&line, start + time.len() + 1));
+            }
+        }
+        // A moment in an alphabet is as it was: no joiner, nothing to hold
+        // but its no-break space.
+        let en = moment("en", "auto");
+        assert!(!en.contains('\u{2060}'), "{en:?}");
+        assert!(en.contains('\u{a0}'), "{en:?}");
+    }
+
+    /// gpui's own word characters (`LineWrapper::is_word_char`, the part of
+    /// it a date or a clock can contain): no break is ever proposed between
+    /// two of them.
+    fn is_word(c: char) -> bool {
+        c.is_ascii_alphanumeric() || matches!(c, '/' | ':' | '.' | '-' | ',')
     }
 
     /// "Matches the published list" is the only good news, and it says so in

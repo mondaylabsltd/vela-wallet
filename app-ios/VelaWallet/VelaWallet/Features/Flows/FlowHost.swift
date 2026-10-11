@@ -48,6 +48,10 @@ struct ScanInputs {
     var refusalAction: (label: String, act: () -> Void)?
     var torchOn = false
     var onTool: (ScanTool) -> Void = { _ in }
+    /// A gallery, board or dev session (PR 3 note 7): the surface draws its
+    /// FIXTURE frame — a drawn viewfinder with the sample code — and there
+    /// is no camera behind it (`CameraScanner.fixtureOnly`).
+    var fixture = false
 }
 
 struct FlowHost: View {
@@ -138,6 +142,10 @@ struct FlowHost: View {
     /// Split: a row was removed, or a row was added.
     var onRemoveRecipient: ((Int) -> Void)?
     var onAddRecipient: (() -> Void)?
+    /// Split (issue #471): a row's own address book and scanner, by the
+    /// core's row id. Absent where the form is a picture.
+    var onPickRecipientRow: ((String) -> Void)?
+    var onScanRecipientRow: ((String) -> Void)?
     /// Split: "Use X for the empty rows".
     var onFillEmpty: ((String) -> Void)?
     /// The confirm page's CTA, and the receipt's exit. Absent where the flow is
@@ -312,7 +320,10 @@ struct FlowHost: View {
                 session: scan?.session,
                 refusalText: scan?.refusal,
                 refusalAction: scan?.refusalAction,
-                torchOn: scan?.torchOn ?? false
+                torchOn: scan?.torchOn ?? false,
+                // No live inputs at all is a gallery or a screenshot sweep:
+                // the fixture frame, as for a dev session's scanner.
+                fixtureFrame: scan?.fixture ?? true
             )
         case .share(let m):
             // Not a screen: the saved image, shown on its own so the gallery
@@ -386,6 +397,8 @@ struct FlowHost: View {
                         }
                     },
                     onRemoveRecipient: { index in onRemoveRecipient?(index) },
+                    onPickRecipientRow: { id in onPickRecipientRow?(id) },
+                    onScanRecipientRow: { id in onScanRecipientRow?(id) },
                     onFee: { onNavigate(.feeToken) },
                     onDenom: { onDenom?() },
                     onMax: { _ in onMax?() },
@@ -647,7 +660,6 @@ private struct FlowSheetHost: View {
         case .contactPick(let m):
             ContactPickBody(
                 model: m,
-                onScan: { onNavigate(.scan) },
                 onGroup: { id in onPickGroup?(id) },
                 onSelect: { address in onPickContact?(address) }
             )

@@ -192,6 +192,172 @@ pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
 pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay-cf.getvela.app";
 pub const DEFAULT_FIAT_RATES_URL: &str = "https://vela-currency.getvela.app/v2/rates?base=USD";
 
+/// The curated public RPCs of the built-in networks — the pool's `public`
+/// tier: below a person's own endpoint, a provider key and the network's
+/// built-in default ([`NetBuiltinChain::rpc_url`]), above whatever the chain
+/// index lists. One list for every shell, where web, iOS and desktop each
+/// held a copy (and Android none), so a dead endpoint had to be found and
+/// dropped three times (`bsc.meowrpc.com`, issue #212).
+///
+/// Measured 2026-10-10, read-only (`eth_chainId` + `eth_blockNumber`, 20
+/// rounds), from a network in China and one in the US:
+/// - every `1rpc.io` endpoint is gone — HTTP 502, or "You've reached the
+///   usage limit for your current plan" — from both (`1rpc.io/matic` timed
+///   out on every call during issue #483); replaced by each chain's Tenderly
+///   gateway (20/20 from both, CORS `*`);
+/// - `bsc.drpc.org` answers 3–7 calls in 20 ("public endpoint rate limit");
+///   replaced by `bsc-dataseed1.bnbchain.org` (20/20);
+/// - Celo's and Ink's built-in defaults (`forno.celo.org`,
+///   `rpc-gel.inkonchain.com`) time out from China, as do Optimism's and
+///   BNB Chain's (which already have a public endpoint here) — so Celo and
+///   Ink get one too.
+///
+/// Every endpoint here must answer a browser (CORS), because the web wallet
+/// reads through it.
+pub const PUBLIC_RPCS: &[(u32, &[&str])] = &[
+    (
+        1,
+        &[
+            "https://ethereum-rpc.publicnode.com",
+            "https://mainnet.gateway.tenderly.co",
+        ],
+    ),
+    (
+        56,
+        &[
+            "https://bsc-rpc.publicnode.com",
+            "https://bsc-dataseed1.bnbchain.org",
+        ],
+    ),
+    (
+        137,
+        &[
+            "https://polygon-bor-rpc.publicnode.com",
+            "https://polygon.gateway.tenderly.co",
+        ],
+    ),
+    (
+        42161,
+        &[
+            "https://arbitrum-one-rpc.publicnode.com",
+            "https://arbitrum.gateway.tenderly.co",
+        ],
+    ),
+    (
+        10,
+        &[
+            "https://optimism-rpc.publicnode.com",
+            "https://optimism.gateway.tenderly.co",
+        ],
+    ),
+    (
+        8453,
+        &[
+            "https://base-rpc.publicnode.com",
+            "https://base.gateway.tenderly.co",
+        ],
+    ),
+    (
+        43114,
+        &[
+            "https://avalanche-c-chain-rpc.publicnode.com",
+            "https://avalanche.gateway.tenderly.co",
+        ],
+    ),
+    (
+        100,
+        &[
+            "https://gnosis-rpc.publicnode.com",
+            "https://gnosis.gateway.tenderly.co",
+        ],
+    ),
+    (196, &["https://rpc.xlayer.tech", "https://xlayer.drpc.org"]),
+    (42220, &["https://celo-rpc.publicnode.com"]),
+    (57073, &["https://rpc-qnd.inkonchain.com"]),
+];
+
+/// [`PUBLIC_RPCS`] for one network, in order; empty for a network with
+/// none (a custom network, or a built-in one whose default and chain index
+/// suffice).
+#[must_use]
+pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
+    PUBLIC_RPCS
+        .iter()
+        .find(|(id, _)| *id == chain_id)
+        .map(|(_, urls)| urls.iter().map(|url| (*url).to_owned()).collect())
+        .unwrap_or_default()
+}
+
+/// Hosts known to be dead, whoever lists them: every endpoint under one
+/// answers nothing (HTTP 502, "usage limit", or a timeout on every call — the
+/// measurements above). Vela's own lists no longer name them, but the chain
+/// index is a third party's list and still may; an endpoint there costs every
+/// sweep that reaches it a full timeout. The pool drops them from every tier
+/// it fills itself ([`is_dead_rpc_host`]) — never from a person's own
+/// endpoint, which is theirs to choose (a paid plan on the same host
+/// answers), and never when nothing else is left for the chain.
+pub const DEAD_RPC_HOSTS: &[&str] = &["1rpc.io"];
+
+/// Is `url` on a host in [`DEAD_RPC_HOSTS`] (the host itself, or a subdomain
+/// of it)? The host is compared, never a substring of the URL: a path or a
+/// query that merely mentions the name is not that host.
+#[must_use]
+pub fn is_dead_rpc_host(url: &str) -> bool {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    let host = host
+        .split_once(':')
+        .map_or(host, |(host, _)| host)
+        .to_ascii_lowercase();
+    DEAD_RPC_HOSTS.iter().any(|dead| {
+        host == *dead
+            || host
+                .strip_suffix(dead)
+                .is_some_and(|sub| sub.ends_with('.'))
+    })
+}
+
+/// Vela's Chain Setup page — which contracts a network lacks, and who can
+/// deploy them. It reads `?chain=<id>` ([`chain_setup_url`]).
+pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";
+
+/// [`CHAIN_SETUP_URL`] opened on one network, so the page starts on the chain
+/// the person was checking instead of an empty search.
+#[must_use]
+pub fn chain_setup_url(chain_id: u32) -> String {
+    format!("{CHAIN_SETUP_URL}?chain={chain_id}")
+}
+
+/// The line under a refused network's check when it has no P-256 verifier
+/// ([`NetBlocker::NoP256`]).
+pub const NO_P256_HINT: &str = "settingsModals.addNetwork.noP256Hint";
+/// … when the verifier is there and contracts are missing
+/// ([`NetBlocker::MissingContracts`]).
+pub const MISSING_CONTRACTS_HINT: &str = "settingsModals.addNetwork.incompatibleHint";
+
+/// Why the add-network wizard stopped, as a sentence
+/// ([`NetWizardView::error_key`]): the network is already in the list.
+pub const WIZARD_ALREADY_ADDED: &str = "addToken.errorAlreadyAdded";
+/// … the chain index has no such chain.
+pub const WIZARD_NOT_FOUND: &str = "addToken.errorChainNotFound";
+/// … the chain is known and lists no RPC endpoint to check it through.
+pub const WIZARD_NO_RPC_ENDPOINT: &str = "settingsModals.addNetwork.noRpcEndpoint";
+/// … it was checked and refused, and the check itself names no reason.
+pub const WIZARD_NOT_COMPATIBLE: &str = "addToken.errorNotCompatible";
+/// … the check could not reach a verdict (never worded as a refusal).
+pub const WIZARD_CHECK_FAILED: &str = "settingsModals.addNetwork.unableToVerify";
+
+/// The RPC field's label where naming an endpoint is one way on among
+/// others ([`NetRpcField::Optional`]): "Custom RPC (optional)".
+pub const RPC_FIELD_OPTIONAL: &str = "settingsModals.addNetwork.customRpcTitle";
+/// … and where it is the one thing asked for ([`NetRpcField::Required`]):
+/// "RPC URL". "(optional)" under a sentence that asks for it read as a
+/// contradiction.
+pub const RPC_FIELD_REQUIRED: &str = "settingsModals.network.fieldRpcUrl";
+
 /// `SERVICE_IDENTITY` (SettingsScreen.tsx:340-344) — the `/api/health`
 /// `service` field each endpoint must report. A passkey index pointed at the
 /// wrong service is a LOGIN SAFETY problem, not a latency problem
@@ -884,6 +1050,26 @@ pub enum NetRpcFailureKind {
     AllProbesFailed,
 }
 
+/// Why a checked network cannot run Vela wallets
+/// ([`NetCompatibility::blocker`]). Each has its own words and its own next
+/// step, because what can be done about them is opposite.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum NetBlocker {
+    /// No P-256 verifier at `0x100` (EIP-7951 / RIP-7212). It is a precompile
+    /// — part of the chain's own client — so nothing can be deployed to add
+    /// it; only the network's team can, by an upgrade. A passkey signature
+    /// cannot be checked here, every wallet's verifier word names `0x100`,
+    /// and money sent to a Vela address here cannot be moved out (invariant
+    /// ②). No deploy button: Chain Setup's own verdict for such a chain is
+    /// "Vela cannot run here". Wins over [`Self::MissingContracts`].
+    NoP256,
+    /// The verifier is there and contracts Vela needs are not (yet). Chain
+    /// Setup lists which, and who can deploy them ([`chain_setup_url`]).
+    MissingContracts,
+}
+
 /// Mirror of `CompatibilityResult` (models/types.ts:257-271), with the
 /// English `error` strings replaced by data the shell words itself.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -904,6 +1090,21 @@ pub struct NetCompatibility {
     /// `Some` = inconclusive, show "unable to verify" + Retry — NEVER
     /// "not compatible" (invariant ③).
     pub rpc_failure: Option<NetRpcFailureKind>,
+    /// Why the network was refused — `Some` exactly when the check answered
+    /// and `compatible` is false. Both places a network is added (Settings
+    /// and a dApp's `wallet_addEthereumChain` sheet) draw their line and
+    /// their button from this, never from `compatible` alone.
+    #[serde(default)]
+    pub blocker: Option<NetBlocker>,
+    /// The corpus key of the line under the refusal: [`NO_P256_HINT`] or
+    /// [`MISSING_CONTRACTS_HINT`]. `None` with no blocker.
+    #[serde(default)]
+    pub hint_key: Option<String>,
+    /// Where "Open Chain Setup Tool" goes ([`chain_setup_url`]) — only for
+    /// [`NetBlocker::MissingContracts`]. `None` = no such button: for a
+    /// network with no P-256 verifier there is nothing to deploy.
+    #[serde(default)]
+    pub setup_url: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -1528,6 +1729,28 @@ pub enum NetWizardPhase {
     Error,
 }
 
+/// Whether the wizard's result draws the field where a person names an RPC
+/// endpoint of their own ([`NetWizardView::rpc_field`]) — and with it, always
+/// and only with it, "Re-check with this RPC": a button that reads a field
+/// is drawn where the field is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum NetRpcField {
+    /// No field, no re-check: searching and checking; a network already
+    /// added or not found; and a REFUSAL — no P-256 verifier, or missing
+    /// contracts — which another endpoint would not change.
+    #[default]
+    None,
+    /// The field, labelled [`RPC_FIELD_OPTIONAL`]: the check passed (an own
+    /// endpoint may be preferred), or it could not reach a verdict (another
+    /// endpoint may answer).
+    Optional,
+    /// The field, labelled [`RPC_FIELD_REQUIRED`]: the network lists no
+    /// endpoint, so one typed here is the only way on.
+    Required,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct NetWizardView {
@@ -1536,8 +1759,35 @@ pub struct NetWizardView {
     pub custom_rpc: String,
     pub suggestions: Vec<NetChainIndexEntry>,
     pub chain_info: Option<NetChainInfo>,
+    /// The check's result — in the `Checked` phase, and ALSO beside an
+    /// `Error` the check itself raised (a refusal or an inconclusive probe on
+    /// the path that saves without a confirm step): the reason
+    /// ([`NetCompatibility::hint_key`]) and the Chain Setup link
+    /// ([`NetCompatibility::setup_url`]) are drawn from it on every path a
+    /// network is added by.
     pub compat: Option<NetCompatibility>,
     pub error: Option<NetWizardErrorKind>,
+    /// The corpus key of the sentence for [`Self::error`], so no shell words
+    /// a stop itself (three of them had no words on the web and read
+    /// "Incompatible"): [`WIZARD_ALREADY_ADDED`], [`WIZARD_NOT_FOUND`],
+    /// [`WIZARD_NO_RPC_ENDPOINT`], [`WIZARD_CHECK_FAILED`], and for a refusal
+    /// the check's own reason ([`NetCompatibility::hint_key`]) when it kept
+    /// one, else [`WIZARD_NOT_COMPATIBLE`]. `None` with no error.
+    #[serde(default)]
+    pub error_key: Option<String>,
+    /// The RPC field under the result, and "Re-check with this RPC" with it —
+    /// one rule for every surface that draws this wizard (Settings → Add
+    /// network, the add-token flow's network tab, the phones' scan path).
+    /// The shells each decided it: the web and the desktop offered a re-check
+    /// under a refusal with no field to read, the add-token tab said "Enter
+    /// one, then re-check" with no field at all, and the no-RPC stop asked
+    /// for an endpoint in a field labelled "(optional)".
+    #[serde(default)]
+    pub rpc_field: NetRpcField,
+    /// The corpus key of that field's label: [`RPC_FIELD_OPTIONAL`] or
+    /// [`RPC_FIELD_REQUIRED`]. `None` with no field.
+    #[serde(default)]
+    pub rpc_field_label_key: Option<String>,
     /// The "Add network" button renders only when this is true.
     pub can_add: bool,
 }
@@ -2057,7 +2307,12 @@ fn chain_info_fetched(
     // `checkNetworkCompatibility` step 1 (network-checker.ts:49-57): HTTPS
     // filter + Set dedup, then the registry's single URL appended. (The TS
     // re-fetches chain info for that append; folded here — module doc.)
-    let candidates = probe_candidates(rpcs, &info);
+    let own = if model.wizard.auto {
+        ""
+    } else {
+        model.wizard.custom_rpc.trim()
+    };
+    let candidates = probe_candidates(rpcs, &info, own);
 
     model.wizard.chain_info = Some(info);
 
@@ -2098,7 +2353,12 @@ enum Step {
 
 /// `checkNetworkCompatibility` step 1 (network-checker.ts:49-57): HTTPS
 /// filter + Set dedup of `rpcs`, then the registry's single URL appended.
-fn probe_candidates(rpcs: Vec<String>, info: &NetChainInfo) -> Vec<String> {
+///
+/// Minus the hosts known to be dead ([`is_dead_rpc_host`]) that the chain
+/// index listed: probing one buys a timeout and tells a third party which
+/// network this wallet is about to add. `own` — the RPC the person typed —
+/// is theirs and always stays; so does a dead host when it is all there is.
+fn probe_candidates(rpcs: Vec<String>, info: &NetChainInfo, own: &str) -> Vec<String> {
     let mut candidates: Vec<String> = Vec::new();
     for url in rpcs {
         if url.starts_with("https://") && !candidates.contains(&url) {
@@ -2108,6 +2368,11 @@ fn probe_candidates(rpcs: Vec<String>, info: &NetChainInfo) -> Vec<String> {
     if !info.rpc_url.is_empty() && !candidates.contains(&info.rpc_url) {
         candidates.push(info.rpc_url.clone());
     }
+    let dropped = |url: &String| url != own && is_dead_rpc_host(url);
+    if candidates.iter().all(dropped) {
+        return candidates;
+    }
+    candidates.retain(|url| !dropped(url));
     candidates
 }
 
@@ -2151,6 +2416,11 @@ fn unverified(chain_id: u32, kind: NetRpcFailureKind) -> NetCompatibility {
         best_rpc_url: None,
         best_rpc_latency_ms: None,
         rpc_failure: Some(kind),
+        // Inconclusive is not a refusal (invariant ③): no blocker, no hint
+        // about deploying anything.
+        blocker: None,
+        hint_key: None,
+        setup_url: None,
     }
 }
 
@@ -2369,6 +2639,7 @@ fn contracts_verdict(phase: &WizardPhase) -> Step {
         .all(|c| c.deployed);
     let compatible = single_key_deployed && p256_available;
     let multi_key_ready = compatible && contracts.iter().all(|c| c.deployed);
+    let blocker = net_blocker(p256_available, single_key_deployed);
 
     Step::Done(NetCompatibility {
         chain_id,
@@ -2379,7 +2650,31 @@ fn contracts_verdict(phase: &WizardPhase) -> Step {
         best_rpc_url: Some(best_url.clone()),
         best_rpc_latency_ms: Some(best_latency_ms),
         rpc_failure: None,
+        blocker,
+        hint_key: blocker.map(|why| {
+            match why {
+                NetBlocker::NoP256 => NO_P256_HINT,
+                NetBlocker::MissingContracts => MISSING_CONTRACTS_HINT,
+            }
+            .to_owned()
+        }),
+        setup_url: (blocker == Some(NetBlocker::MissingContracts))
+            .then(|| chain_setup_url(chain_id)),
     })
+}
+
+/// Why a network that answered the check is refused: no P-256 verifier
+/// first — deploying the contracts would not make it work — else missing
+/// contracts. `None` when a one-key wallet can run.
+#[must_use]
+pub fn net_blocker(p256_available: bool, single_key_deployed: bool) -> Option<NetBlocker> {
+    if !p256_available {
+        Some(NetBlocker::NoP256)
+    } else if !single_key_deployed {
+        Some(NetBlocker::MissingContracts)
+    } else {
+        None
+    }
 }
 
 fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffect, Event> {
@@ -2393,6 +2688,7 @@ fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffec
     if compat.compatible {
         let Some(info) = model.wizard.chain_info.clone() else {
             // Unreachable by construction; refuse rather than save garbage.
+            // No reason is kept: the check found none.
             model.wizard.phase = WizardPhase::Error {
                 kind: NetWizardErrorKind::NotCompatible {
                     chain_id: compat.chain_id,
@@ -2421,6 +2717,12 @@ fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffec
             }
         },
     };
+    // The check is kept beside the error (PR 3 notes 5 and 10). This path
+    // used to drop it, so a refusal here could only say "Incompatible":
+    // whether the network has no P-256 verifier (nothing can be deployed;
+    // money sent there is stuck) or only lacks contracts (Chain Setup) was
+    // known and thrown away — on the one path with no confirm step to show it.
+    model.wizard.compat = Some(compat);
     render()
 }
 
@@ -2618,7 +2920,7 @@ fn dapp_chain_info(
             } else {
                 info.rpc_urls.clone()
             };
-            let candidates = probe_candidates(rpcs, &info);
+            let candidates = probe_candidates(rpcs, &info, "");
             (info, candidates, false)
         }
         None => (
@@ -3708,6 +4010,15 @@ fn wizard_view(model: &Model) -> NetWizardView {
     let can_add = phase == NetWizardPhase::Checked
         && !model.wizard.auto
         && model.wizard.compat.as_ref().is_some_and(|c| c.compatible);
+    let error_key = error
+        .as_ref()
+        .map(|kind| wizard_error_key(kind, model.wizard.compat.as_ref()).to_owned());
+    let rpc_field = wizard_rpc_field(phase, error.as_ref(), model.wizard.compat.as_ref());
+    let rpc_field_label_key = match rpc_field {
+        NetRpcField::None => None,
+        NetRpcField::Optional => Some(RPC_FIELD_OPTIONAL.to_owned()),
+        NetRpcField::Required => Some(RPC_FIELD_REQUIRED.to_owned()),
+    };
     NetWizardView {
         phase,
         query: model.wizard.query.clone(),
@@ -3716,7 +4027,52 @@ fn wizard_view(model: &Model) -> NetWizardView {
         chain_info: model.wizard.chain_info.clone(),
         compat: model.wizard.compat.clone(),
         error,
+        error_key,
+        rpc_field,
+        rpc_field_label_key,
         can_add,
+    }
+}
+
+/// [`NetWizardView::rpc_field`]: is naming another endpoint a way on from
+/// here? Yes when the check passed or could not reach a verdict, required
+/// when the network lists none, and no after a verdict another endpoint
+/// would not change.
+#[must_use]
+pub fn wizard_rpc_field(
+    phase: NetWizardPhase,
+    error: Option<&NetWizardErrorKind>,
+    compat: Option<&NetCompatibility>,
+) -> NetRpcField {
+    match (phase, error) {
+        (NetWizardPhase::Error, Some(NetWizardErrorKind::NoRpcEndpoint)) => NetRpcField::Required,
+        (NetWizardPhase::Error, Some(NetWizardErrorKind::CheckFailed { .. })) => {
+            NetRpcField::Optional
+        }
+        // Compatible, or inconclusive: no blocker was found.
+        (NetWizardPhase::Checked, _) if compat.is_none_or(|c| c.blocker.is_none()) => {
+            NetRpcField::Optional
+        }
+        _ => NetRpcField::None,
+    }
+}
+
+/// The sentence for a wizard stop ([`NetWizardView::error_key`]). A refusal
+/// says the check's own reason when the check was kept; an inconclusive
+/// check is never worded as one (invariant ③).
+#[must_use]
+pub fn wizard_error_key<'a>(
+    kind: &NetWizardErrorKind,
+    compat: Option<&'a NetCompatibility>,
+) -> &'a str {
+    match kind {
+        NetWizardErrorKind::AlreadyAdded { .. } => WIZARD_ALREADY_ADDED,
+        NetWizardErrorKind::NotFound { .. } => WIZARD_NOT_FOUND,
+        NetWizardErrorKind::NoRpcEndpoint => WIZARD_NO_RPC_ENDPOINT,
+        NetWizardErrorKind::NotCompatible { .. } => compat
+            .and_then(|compat| compat.hint_key.as_deref())
+            .unwrap_or(WIZARD_NOT_COMPATIBLE),
+        NetWizardErrorKind::CheckFailed { .. } => WIZARD_CHECK_FAILED,
     }
 }
 

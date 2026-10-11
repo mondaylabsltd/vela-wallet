@@ -118,9 +118,11 @@ exist from spec 015 and MUST be consumed, not duplicated.
    移入分组 / 删除 per desktop SPEC).
 10. **GroupChips** — on contact detail: one pill per group membership
     (家人) plus a trailing `+ 分组` add chip.
-11. **ContactActions** — 转账 / 收款 / 二维码. Mobile: three equal cards
-    (icon above label) — same anatomy as spec 015's ActionButtonRow;
-    desktop: three pill buttons (icon + label inline). **[reuse]** the
+11. **ContactActions** — 转账 only (issue #479, 2026-10-10: 收款 opened the
+    wallet's OWN receive screen and 二维码 did on iOS — neither is about the
+    contact). Mobile: one full-width card (icon above label) — same anatomy
+    as spec 015's ActionButtonRow; desktop: one pill button (icon + label
+    inline). No 收款 in the contact row's context menu either. **[reuse]** the
     015 component with new items where the platform implementation
     allows.
 12. **AddressBlock** — 地址 label + full address in mono (wraps to two
@@ -187,8 +189,8 @@ compare side-by-side with the mocks.
    letter section headers with the A–Z index rail present, and the 分组
    section shows 管理 › as a trailing action.
 3. **Given** contact detail (C2), **then** the hero identicon, name,
-   short address, group chip 家人 + `+ 分组` chip, the three action
-   cards, the full mono address with copy affordance, 最近往来 with two
+   short address, group chip 家人 + `+ 分组` chip, the 转账 action
+   card (issue #479), the full mono address with copy affordance, 最近往来 with two
    activity rows, and the red 删除联系人 action all render.
 4. **Given** the empty state (C3), **then** the search field and header
    remain, and the empty component shows 还没有联系人, the caption, an

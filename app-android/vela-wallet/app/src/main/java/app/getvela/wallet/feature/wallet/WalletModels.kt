@@ -23,8 +23,29 @@ import androidx.compose.ui.graphics.Color
  * Ethereum". H12: every chain's read failed inside the app and nothing is
  * cached — the core's `unreachable`: a skeleton and the fault's sentence,
  * never "$0.00" or "Deposit your first asset".
+ *
+ * H13 (the 102 device run): a cold start whose stored currency (CNY) is
+ * still being priced — the core's `CurrencyView.committed` is false. No
+ * figure is drawn in the placeholder's dollars: the total and each holding's
+ * worth wait, and the label already names the choice on its way.
+ *
+ * H13B: H13's very frame a moment later — the rate in, the currency
+ * committed: the total and each worth in the person's money, and nothing
+ * else moved.
+ *
+ * H14 (the integration's note 4): a network whose RPC is fine and whose
+ * TOKEN LIST could not be loaded (Tempo — it has no coin of its own to read
+ * without one), as the real balance machine says it: "Can't load Tempo's
+ * token list right now", never "Can't reach Tempo".
+ *
+ * H15 / H16 / H17 (PR 3 final note F19): an EMPTY wallet around its first
+ * read, as the real balance machine says it. H15: the read is out over last
+ * session's cached zero — "Checking…", never "Live". H16: it settled and
+ * every network answered — "Live · listening for payments". H17: it settled
+ * and three networks did not answer — "Can't reach 3 networks right now".
+ * One place, three lines: nothing under the hero moves between them.
  */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12 }
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H13B, H14, H15, H16, H17 }
 
 @Immutable
 data class WalletHeaderModel(
@@ -62,7 +83,19 @@ data class BalanceModel(
      * separator.
      */
     val decimalMark: String = ".",
+    /**
+     * "Live · listening for payments" — the core's `BalanceView.live_key`,
+     * resolved; `null` whenever the core does not say it. Drawn in the status
+     * line's place.
+     */
     val liveText: String? = null,
+    /**
+     * "Checking…" — the core's `BalanceView.checking_key`, resolved, while
+     * the FIRST read of the account is still out (PR 3 final note F19). It
+     * stands alone in the status line's place, quietly: nothing has been read
+     * yet, so nothing is "live", "still updating" or "out of reach".
+     */
+    val checkingText: String? = null,
     val status: BalanceStatusModel? = null,
     val a11yHide: String,
     val a11yShow: String,
@@ -147,6 +180,13 @@ sealed interface AssetFiatModel {
     data class Value(val text: String) : AssetFiatModel
     data class NoPrice(val text: String) : AssetFiatModel
     data object Masked : AssetFiatModel
+
+    /**
+     * The worth exists and is not drawn YET: the display currency is not the
+     * person's until the core commits it (`CurrencyView.committed`), and a
+     * figure in the placeholder's dollars would change under the eye.
+     */
+    data object Loading : AssetFiatModel
 
     /**
      * Spec 021 SD2d: the row has no fiat line at all. Distinct from [Masked],

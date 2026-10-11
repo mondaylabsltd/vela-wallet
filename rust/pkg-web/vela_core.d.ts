@@ -1001,6 +1001,15 @@ export function landingPace(sent_at_ms: number | null | undefined, typical_s: nu
  */
 export function markMissTtlMs(kind: string, status?: number | null): number | undefined;
 
+/**
+ * A hidden amount as every shell draws it: the mask, then the unit the
+ * shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
+ * for whether a hidden amount keeps its unit: it does. An empty `unit` (a
+ * figure with no unit of its own) is the mask alone, never a trailing
+ * space. Synchronous, so a view model can call it while it builds a row.
+ */
+export function maskedAmount(unit: string): string;
+
 export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 
 /**
@@ -1092,6 +1101,14 @@ export function prefsMigrations(entries_json: string): string;
  * numberFormat, dateFormat, timeFormat}`.
  */
 export function prefsRead(entries_json: string): string;
+
+/**
+ * The curated public RPCs of a built-in network, in order — the RPC pool's
+ * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
+ * none. One list for every shell: each used to hold its own copy, and a
+ * dead endpoint had to be found and dropped in each.
+ */
+export function publicRpcUrls(chain_id: number): string[];
 
 /**
  * Returns `null` when the two assertions do not pin down exactly one key
@@ -1327,6 +1344,18 @@ export function signingVenueBlock(domain: string, venue_json: string): string | 
  * (`settings.venue.blockedWeb`): the web shows the rows, disabled, with why.
  */
 export function signingVenueChoices(domain: string, active_json: string, saved_json: string, surface?: string | null): string | undefined;
+
+/**
+ * What the pool's `eth_simulateV1` answer means for `user` (the signing
+ * account), and every line the sheet draws for it: a `SimVerdict` JSON —
+ * `{kind, deltas, revert_reason, notice_risk, notice_key, no_change_key}`.
+ * `reply_json` is the JSON-RPC envelope as it came (`{"result": …}` or
+ * `{"error": …}`), or `{"unreachable": true}` when the pool gave up;
+ * anything else is an answer nobody can read ("could not check", never
+ * "nothing moves"). `no_change_key` is "No asset changes" for a check under
+ * which nothing of theirs moves. See `vela_core::app::sim_outcome`.
+ */
+export function simOutcome(user: string, reply_json: string): string;
 
 /**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
@@ -1752,6 +1781,7 @@ export interface InitOutput {
     readonly managetokenscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly managetokenscore_view: (a: number) => [number, number, number, number];
     readonly markMissTtlMs: (a: number, b: number, c: number) => number;
+    readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
@@ -1772,6 +1802,7 @@ export interface InitOutput {
     readonly peggedNativeUsd: (a: number, b: number) => [number, number];
     readonly prefsMigrations: (a: number, b: number) => [number, number];
     readonly prefsRead: (a: number, b: number) => [number, number];
+    readonly publicRpcUrls: (a: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1826,6 +1857,7 @@ export interface InitOutput {
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
+    readonly simOutcome: (a: number, b: number, c: number, d: number) => [number, number];
     readonly storageBytesDisplay: (a: number) => [number, number];
     readonly storageIsCacheKey: (a: number, b: number) => number;
     readonly storageIsErasableKey: (a: number, b: number) => number;

@@ -5,6 +5,7 @@
     "searchPlaceholder": "Search tokens...",
     "unreachableOne": "Can't reach {{name}} right now",
     "unreachableMany": "Can't reach {{n}} networks right now",
+    "tokenListUnreachable": "Can't load {{name}}'s token list right now",
     "unreachableBody": "Your assets there aren't affected — we just can't read them right now.",
     "unreachableNone": "Every network is reachable again.",
     "lastSeen": "Last seen {{amount}}",

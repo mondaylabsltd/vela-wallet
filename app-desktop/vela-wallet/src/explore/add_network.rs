@@ -25,7 +25,8 @@ pub struct AddNetworkSheet {
     /// The name and coin are the site's, not Vela's catalog's.
     pub from_site: Option<SharedString>,
     pub pill: Option<(Tone, SharedString)>,
-    /// A sentence under the verdict: the incompatible hint, a one-key-only
+    /// A sentence under the verdict: why the chain is refused (the core's
+    /// reason — no P-256 verifier, or contracts missing), a one-key-only
     /// chain, or why the page's RPC cannot be used.
     pub note: Option<SharedString>,
     /// Draw Settings' check list under the pill.
@@ -34,8 +35,11 @@ pub struct AddNetworkSheet {
     pub add: Option<SharedString>,
     /// Retry after "unable to verify".
     pub retry: Option<SharedString>,
-    /// The chain-setup tool, for a chain this wallet refuses.
-    pub setup_tool: Option<SharedString>,
+    /// "Open Chain Setup Tool" and where it goes — the core's `setup_url`
+    /// (`…/chain-setup?chain=<id>`), only for a refused chain whose missing
+    /// contracts can be deployed. Never for one with no P-256 verifier:
+    /// nothing can be deployed there.
+    pub setup_tool: Option<(SharedString, String)>,
     /// The way out: Cancel while a decision is open, Done after a verdict.
     pub dismiss: SharedString,
 }
@@ -105,8 +109,17 @@ pub fn sheet(view: &NetDappAddView, loc: &Loc) -> AddNetworkSheet {
         NetDappAddPhase::NotCompatible => {
             out.pill = Some((Tone::Error, loc.t("settingsModals.addNetwork.incompatible")));
             out.checks = true;
-            out.note = Some(loc.t("settingsModals.addNetwork.incompatibleHint"));
-            out.setup_tool = Some(loc.t("settingsModals.addNetwork.openChainSetupTool"));
+            // Why, and what can be done — Settings' own rule
+            // (`settings::live::net_refusal`), so the two places a network
+            // is added cannot come to say different things.
+            let refusal = view
+                .compat
+                .as_ref()
+                .and_then(|compat| crate::settings::live::net_refusal(compat, loc));
+            out.note = refusal.as_ref().map(|refusal| refusal.hint.clone());
+            out.setup_tool = refusal
+                .and_then(|refusal| refusal.setup_url)
+                .map(|url| (loc.t("settingsModals.addNetwork.openChainSetupTool"), url));
             out.dismiss = done;
         }
         NetDappAddPhase::CheckFailed => {
@@ -174,6 +187,9 @@ mod tests {
             best_rpc_url: None,
             best_rpc_latency_ms: None,
             rpc_failure: None,
+            blocker: None,
+            hint_key: None,
+            setup_url: None,
         });
         let sheet = sheet(&ready, &loc());
         assert_eq!(sheet.title.as_ref(), "Add Network");
@@ -190,12 +206,73 @@ mod tests {
         assert_eq!(sheet.from_site, None);
     }
 
+    /// A refused chain's check as the core answers it: the reason, its line
+    /// and — only for missing contracts — where Chain Setup opens.
+    fn refused(chain_id: u32, p256: bool) -> NetCompatibility {
+        use vela_core::app::network_admin::net_blocker;
+        let blocker = net_blocker(p256, false)
+            .unwrap_or_else(|| unreachable!("a chain missing contracts is refused"));
+        crate::settings::fixtures::refused_compat(chain_id, blocker)
+    }
+
+    /// The two refusals are not one (PR 3 item 9). A network with no P-256
+    /// verifier says plainly that Vela wallets cannot work there and that
+    /// money sent there would be stuck — and offers NOTHING to deploy. One
+    /// that only lacks contracts keeps Chain Setup, opened on that chain.
+    #[test]
+    fn a_refusal_says_why_and_only_a_deployable_gap_offers_chain_setup() {
+        let mut no_p256 = view(NetDappAddPhase::NotCompatible);
+        no_p256.compat = Some(refused(no_p256.chain_id, false));
+        let drawn = sheet(&no_p256, &loc());
+        assert_eq!(drawn.pill, Some((Tone::Error, "Incompatible".into())));
+        let note = drawn
+            .note
+            .unwrap_or_else(|| unreachable!("the refusal says why"));
+        assert!(note.contains("no P-256 verifier"), "{note}");
+        assert!(note.contains("It would be stuck"), "{note}");
+        assert_eq!(drawn.setup_tool, None, "nothing can be deployed: no button");
+        assert_eq!(drawn.add, None);
+
+        let mut missing = view(NetDappAddPhase::NotCompatible);
+        missing.compat = Some(refused(missing.chain_id, true));
+        let drawn = sheet(&missing, &loc());
+        let note = drawn
+            .note
+            .unwrap_or_else(|| unreachable!("the refusal says why"));
+        assert!(note.contains("contracts"), "{note}");
+        assert!(!note.contains("P-256"), "{note}");
+        assert_eq!(
+            drawn.setup_tool,
+            Some((
+                "Open Chain Setup Tool".into(),
+                "https://getvela.app/chain-setup?chain=11155111".to_owned()
+            )),
+            "Chain Setup opens on the chain that was checked"
+        );
+
+        // …and in Chinese, the same two, in the corpus's words.
+        let zh = Loc::for_tag("zh");
+        let mut no_p256 = view(NetDappAddPhase::NotCompatible);
+        no_p256.compat = Some(refused(no_p256.chain_id, false));
+        let drawn = sheet(&no_p256, &zh);
+        assert!(
+            drawn
+                .note
+                .is_some_and(|note| note.contains("转进去会被卡住")),
+            "the stuck-money warning"
+        );
+        assert_eq!(drawn.setup_tool, None);
+    }
+
     #[test]
     fn verdicts_close_with_done_and_never_offer_add() {
+        // A refusal the core gave no reason for claims none: the verdict
+        // alone, no line about contracts and no deploy button.
         let incompatible = sheet(&view(NetDappAddPhase::NotCompatible), &loc());
         assert_eq!(incompatible.add, None);
         assert_eq!(incompatible.dismiss.as_ref(), "Done");
-        assert!(incompatible.setup_tool.is_some());
+        assert_eq!(incompatible.note, None);
+        assert_eq!(incompatible.setup_tool, None);
         assert_eq!(
             incompatible.pill,
             Some((Tone::Error, "Incompatible".into()))

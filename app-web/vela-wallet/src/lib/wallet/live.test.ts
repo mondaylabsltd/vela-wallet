@@ -4,6 +4,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { maskedAmount } from '$lib/core/client';
 import { formatRelativeTime } from '$lib/core/kernels';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
@@ -14,9 +15,12 @@ import { fill } from './messages';
 import { buildMobileState } from './fixtures';
 import {
 	agoText,
+	figureCurrency,
 	liveAssetRow,
 	liveBalance,
+	MONEY_PENDING,
 	moneyParts,
+	moneyText,
 	tokenAmountText,
 	trimBalance,
 	withLiveWallet,
@@ -46,9 +50,9 @@ const RELATIVE_TIME = JSON.parse(
 		expect: { value: string };
 	}[];
 };
-const USD: CurrencyView = { code: 'USD', rate: 1, committed: true };
-const EUR: CurrencyView = { code: 'EUR', rate: 0.5, committed: true };
-const UNPRICED_JPY: CurrencyView = { code: 'JPY', rate: null, committed: true };
+const USD: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+const EUR: CurrencyView = { code: 'EUR', rate: 0.5, committed: true, pending: null };
+const UNPRICED_JPY: CurrencyView = { code: 'JPY', rate: null, committed: true, pending: null };
 
 const PRISTINE: BalanceView = {
 	address: null,
@@ -68,6 +72,9 @@ const PRISTINE: BalanceView = {
 	unreachable_key: null,
 	internal_chain_ids: [],
 	internal_key: null,
+	checking_key: null,
+	live_key: null,
+	empty_key: null,
 	holdings_loading: false,
 	cached_total_usd: null,
 	switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -79,7 +86,10 @@ function unreachableRow(chainId: number): UnreachableNetwork {
 		chain_id: chainId,
 		last_known: 'not_read',
 		last_seen_usd: null,
-		line_key: 'assets.notReadYet'
+		line_key: 'assets.notReadYet',
+		cause: 'network',
+		rpc_fixable: true,
+		status_key: 'home.balanceDetailStatusFailed'
 	};
 }
 
@@ -104,6 +114,137 @@ describe('moneyParts', () => {
 	});
 	it('a null rate shows the USD figure, never a defaulted 1 under a ¥ (024 rule)', () => {
 		expect(moneyParts(4500, UNPRICED_JPY)).toMatchObject({ code: 'USD', integer: '$4,500' });
+	});
+	// The one place a fiat figure is made answers "withheld" first (0.8): no
+	// surface can format money around the rule, because there is nothing else
+	// to format it with.
+	it('answers nothing at all — withheld — before the display currency commits', () => {
+		expect(moneyParts(4500, { code: 'USD', rate: 1, committed: false, pending: null })).toBeNull();
+		expect(moneyParts(4500, { code: 'USD', rate: 1, committed: false, pending: 'CNY' })).toBeNull();
+		expect(moneyText(4500, { code: 'USD', rate: 1, committed: false, pending: 'CNY' })).toBe(
+			MONEY_PENDING
+		);
+	});
+});
+
+/**
+ * The core's rule (`CurrencyView.committed`, the 102 device run): while the
+ * display currency is not the person's yet, the pair on the wire is the USD/1
+ * placeholder and NO money figure is drawn in it. An iPhone home showed
+ * "$1,234" for a few seconds and then jumped to "¥8,876"; here the cached
+ * total painted in dollars the same way. These are the two views the core
+ * emits before it commits (`stored_code_never_surfaces_before_its_rate`,
+ * `only_a_stored_choice_is_named_pending`).
+ */
+describe('no money figure before the display currency is the person’s', () => {
+	/** Before the preference is read, and while a first launch prices its guess. */
+	const UNREAD: CurrencyView = { code: 'USD', rate: 1, committed: false, pending: null };
+	/** A stored CNY whose rate is on its way. */
+	const CNY_ON_ITS_WAY: CurrencyView = { code: 'USD', rate: 1, committed: false, pending: 'CNY' };
+	const CNY: CurrencyView = { code: 'CNY', rate: 7.1, committed: true, pending: null };
+	const KNOWN: BalanceView = {
+		...PRISTINE,
+		balance_unknown: false,
+		display_total_usd: 1234,
+		cached_total_usd: 1234,
+		tokens: [ETH]
+	};
+
+	it('the hero keeps its skeleton, whatever the balance already knows', () => {
+		for (const placeholder of [UNREAD, CNY_ON_ITS_WAY]) {
+			const hero = liveBalance(KNOWN, placeholder, m);
+			expect(hero.state).toBe('loading');
+			expect(hero.integer).toBeUndefined();
+			expect(hero.decimals).toBeUndefined();
+			expect(JSON.stringify(hero)).not.toContain('$');
+			expect(JSON.stringify(hero)).not.toContain('1,234');
+		}
+		// …and the figure appears once, in the right money.
+		expect(liveBalance(KNOWN, CNY, m)).toMatchObject({
+			state: 'normal',
+			currency: 'CNY',
+			integer: '¥8,761',
+			decimals: '40'
+		});
+	});
+
+	it('the label names the stored choice on its way, or no currency — never the placeholder’s USD', () => {
+		expect(liveBalance(KNOWN, UNREAD, m).currency).toBeUndefined();
+		expect(liveBalance(KNOWN, CNY_ON_ITS_WAY, m).currency).toBe('CNY');
+		expect(figureCurrency(UNREAD)).toBeUndefined();
+		expect(figureCurrency(CNY_ON_ITS_WAY)).toBe('CNY');
+		// Committed: the money the figure is really in.
+		expect(figureCurrency(CNY)).toBe('CNY');
+		expect(figureCurrency(UNPRICED_JPY)).toBe('USD');
+		// The hidden hero's label follows the same rule.
+		const hidden = { ...KNOWN, hidden: true, display_total_usd: null, cached_total_usd: null };
+		expect(liveBalance(hidden, UNREAD, m)).toMatchObject({ state: 'hidden', currency: undefined });
+		expect(liveBalance(hidden, CNY_ON_ITS_WAY, m).currency).toBe('CNY');
+	});
+
+	it('every other figure is the pending mark, on the line the figure will stand on', () => {
+		expect(moneyText(1234, UNREAD)).toBe(MONEY_PENDING);
+		expect(moneyText(1234, CNY_ON_ITS_WAY)).toBe(MONEY_PENDING);
+		expect(moneyText(1234, CNY)).toBe('¥8,761.40');
+		// A holding keeps its token amount — that is no currency's — and its
+		// worth waits.
+		const row = liveAssetRow(ETH, CNY_ON_ITS_WAY, m, false);
+		expect(row.balance).toBe('1.5');
+		expect(row.fiat).toEqual({ kind: 'value', text: MONEY_PENDING });
+		expect(liveAssetRow(ETH, CNY, m, false).fiat).toEqual({ kind: 'value', text: '¥31,950.00' });
+		// Hidden is hidden, committed or not.
+		expect(liveAssetRow(ETH, CNY_ON_ITS_WAY, m, true).fiat).toEqual({ kind: 'masked' });
+	});
+
+	it('the home as a whole: nothing on it is in dollars while CNY is on its way', () => {
+		const base = buildMobileState('h1', m, () => '');
+		const waiting = withLiveWallet(base, { balance: KNOWN, currency: CNY_ON_ITS_WAY, m });
+		expect(waiting.balance.state).toBe('loading');
+		expect(JSON.stringify([waiting.balance, waiting.assetRows])).not.toMatch(/[$¥]/);
+		const wide = withLiveWalletDesktop(
+			buildDesktopState('d1', m, () => ''),
+			{
+				balance: KNOWN,
+				currency: CNY_ON_ITS_WAY,
+				m
+			}
+		);
+		expect(wide.balance.state).toBe('loading');
+		expect(JSON.stringify([wide.balance, wide.assetRows])).not.toMatch(/[$¥]/);
+	});
+
+	it('an unpriceable choice is a committed one: the USD figure, said as USD', () => {
+		expect(liveBalance(KNOWN, UNPRICED_JPY, m)).toMatchObject({
+			state: 'normal',
+			currency: 'USD',
+			integer: '$1,234'
+		});
+	});
+});
+
+describe('maskedAmount — a hidden amount keeps its unit (the core’s rule, not a mirror)', () => {
+	it('the mask, then the unit the shown figure carries', () => {
+		expect(maskedAmount('xDAI')).toBe('•••• xDAI');
+		expect(maskedAmount('USDC')).toBe('•••• USDC');
+		// Nothing of the number survives.
+		expect(maskedAmount('ETH')).not.toMatch(/\d/);
+	});
+	it('a figure with no unit is the mask alone — never a trailing space', () => {
+		expect(maskedAmount('')).toBe('••••');
+		expect(maskedAmount('  ')).toBe('••••');
+		expect(maskedAmount(' xDAI ')).toBe('•••• xDAI');
+	});
+	it('the web keeps no copy of the rule: every hidden figure with a unit is the core’s', () => {
+		// The mirror (`maskedFigure`) is gone from the builders that used it.
+		for (const file of [
+			'src/lib/wallet/live.ts',
+			'src/lib/wallet/live-detail.ts',
+			'src/lib/flows/live.ts'
+		]) {
+			const source = readFileSync(file, 'utf8');
+			expect(source, file).not.toMatch(/maskedFigure/);
+			expect(source, file).toMatch(/maskedAmount\(/);
+		}
 	});
 });
 
@@ -172,14 +313,23 @@ describe('liveBalance', () => {
 		expect(model.integer).toBe('••••••');
 		expect(model.decimals).toBeUndefined();
 	});
-	it('a live zero with nothing held is the zero-live state', () => {
+	it('the zero-live state is the core’s `live_key`, and nothing this shell derives (F19)', () => {
+		const zero = { ...PRISTINE, balance_unknown: false, display_total_usd: 0 };
+		const model = liveBalance({ ...zero, live_key: 'home.liveIndicator' }, USD, m);
+		expect(model.state).toBe('zero-live');
+		expect(model.liveText).toBe(m.balance.liveIndicator);
+		// A zero, nothing partial, no tokens — and the core has not said live.
+		expect(liveBalance(zero, USD, m).state).toBe('normal');
+		expect(liveBalance(zero, USD, m).liveText).toBeUndefined();
+	});
+	it('the first read still out is "Checking…" on the status line, alone (F19)', () => {
 		const model = liveBalance(
-			{ ...PRISTINE, balance_unknown: false, display_total_usd: 0 },
+			{ ...PRISTINE, cached_total_usd: 1383.28, checking_key: 'componentsUi.funding.checking' },
 			USD,
 			m
 		);
-		expect(model.state).toBe('zero-live');
-		expect(model.liveText).toBe(m.balance.liveIndicator);
+		expect(model).toMatchObject({ state: 'normal', integer: '$1,383', checkingText: 'Checking…' });
+		expect(model.status).toBeUndefined();
 	});
 	it('a cached total paints first, marked as refreshing', () => {
 		const model = liveBalance({ ...PRISTINE, cached_total_usd: 1383.28 }, USD, m);
@@ -413,13 +563,30 @@ describe('withLiveWallet', () => {
 		expect(JSON.stringify(model)).not.toContain('$1,383');
 	});
 
-	it('nothing held after the core has looked is the empty state, not a skeleton', () => {
+	it('the empty state is the core’s key and nothing else: a known zero alone is still being read', () => {
+		// A read ended and found nothing held: the core says so (`empty_key`).
+		const looked = { ...PRISTINE, balance_unknown: false, display_total_usd: 0 };
 		const model = withLiveWallet(base, {
-			balance: { ...PRISTINE, balance_unknown: false, display_total_usd: 0 },
+			balance: { ...looked, empty_key: 'assets.emptyTitle' },
 			currency: USD,
 			m
 		});
 		expect(model.assetsSection.mode).toBe('empty');
+		expect(model.assetsSection.empty).toEqual({
+			title: m.assets.emptyTitle,
+			caption: m.assets.emptyCaption
+		});
+		// Everything this shell's old rule read — no tokens, a known total, not
+		// loading, not unknown, reachable — with the core's word taken away
+		// (a cached zero under the first read): the skeleton, no invitation.
+		const cachedZero = withLiveWallet(base, { balance: looked, currency: USD, m });
+		expect(cachedZero.assetsSection.mode).toBe('loading');
+		// A view from before the key existed carries none: not empty.
+		const older = { ...looked } as Partial<BalanceView>;
+		delete older.empty_key;
+		expect(
+			withLiveWallet(base, { balance: older as BalanceView, currency: USD, m }).assetsSection.mode
+		).toBe('loading');
 	});
 
 	it('a first load streams the list under a skeleton hero (issue 188)', () => {
@@ -464,6 +631,7 @@ describe('empty activity, chosen by the core', () => {
 	const IDENT = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 	const EMPTY_FEED: FeedView = {
 		rows: [],
+		home_rows: [],
 		transactions: [],
 		new_item_id: null,
 		toast: null,
@@ -477,7 +645,12 @@ describe('empty activity, chosen by the core', () => {
 		history_empty_key: 'history.emptyFilter',
 		home_empty_key: 'home.emptyNoActivityNetwork'
 	};
-	const LOOKED = { ...PRISTINE, balance_unknown: false, display_total_usd: 0 };
+	const LOOKED = {
+		...PRISTINE,
+		balance_unknown: false,
+		display_total_usd: 0,
+		empty_key: 'assets.emptyTitle'
+	};
 
 	it('all networks → "no activity"; filtered → "none on this network"', () => {
 		const base = buildMobileState('h1', m, IDENT);

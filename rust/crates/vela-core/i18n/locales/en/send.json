@@ -157,7 +157,6 @@
     "multiSendSameRecipient": "Every token goes to the same address",
     "pickContactTitle": "Choose a contact",
     "pickContactSearch": "Search contacts or paste an address",
-    "scanToFill": "Scan to fill the address",
     "feeTokenHint": "Pays this transfer’s network fee. The estimate follows the network in real time.",
     "feeTokenEstimate": "Estimated fee",
     "batchRateHint": "Amounts in the sheet are read as {{code}} and converted to {{sym}} at this rate.",

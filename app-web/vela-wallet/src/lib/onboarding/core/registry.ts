@@ -13,7 +13,7 @@
 
 import { loadCore, registryResolveKeyStep, registryResolveUnitStep } from '$lib/core/client';
 import { getPasskeyIndexURL } from '$lib/services/endpoints';
-import { PUBLIC_RPCS } from '$lib/services/rpc-pool-endpoints';
+import { publicRpcs } from '$lib/services/rpc-pool-endpoints';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
 import type { VerifiedBy } from '../generated/VerifiedBy';
@@ -251,7 +251,8 @@ const MAX_RESOLVE_ROUNDS = 16;
  *  chain did not answer (every endpoint failed, or an RPC error). A bare `0x`
  *  IS an answer ("no such contract here") and is passed on as one. */
 async function ethCall(chainId: number, to: string, data: string): Promise<string | null> {
-	for (const url of PUBLIC_RPCS[chainId] ?? []) {
+	// The core's curated list; `resolve` has loaded the wasm before any call.
+	for (const url of publicRpcs(chainId)) {
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
 		try {

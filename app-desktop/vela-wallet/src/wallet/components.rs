@@ -430,32 +430,49 @@ pub fn balance_display(
             .text_color(theme.fg_subtle)
             // The code the figure beneath is DRAWN in, not a constant: the
             // hero said `总余额 · USD` over `ZAR 157.34` until 2026-09-23.
-            .child(SharedString::from(format!(
-                "{} · {}",
-                model.label, model.currency
-            ))),
+            // …and no code at all while the display currency is not
+            // committed and nobody's choice is on its way: the placeholder's
+            // "USD" is not the person's currency.
+            .child(if model.currency.is_empty() {
+                model.label.clone()
+            } else {
+                SharedString::from(format!("{} · {}", model.label, model.currency))
+            }),
     );
 
     root = match model.state {
         // The web's `SkeletonRow variant="block"` (078 H-10): 55 % of the
         // column, one `--text-4xl` tall, radius 8, breathing 1 → .4 → 1.
+        //
+        // In the FIGURE's own line box (the hero size at its 1.12 leading):
+        // the bar is 32 and the figure's line 45, so a bare bar let
+        // everything under the hero drop 13 px the moment the figure landed.
+        // The figure now lands where the bar was, and nothing moves — which
+        // is the whole point of waiting for the display currency (PR 3 item
+        // 10) instead of drawing dollars first.
         BalanceState::Loading => root.child(
             div()
-                .w(gpui::relative(0.55))
-                .h(px(32.))
-                .rounded(px(8.))
-                .bg(theme.bg_sunken)
-                .with_animation(
-                    "balance-skeleton",
-                    gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
-                    |block, delta| {
-                        let t = if delta < 0.5 {
-                            delta * 2.
-                        } else {
-                            2. - delta * 2.
-                        };
-                        block.opacity(1. - 0.6 * t)
-                    },
+                .h(theme::text_balance_hero() * 1.12)
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .w(gpui::relative(0.55))
+                        .h(px(32.))
+                        .rounded(px(8.))
+                        .bg(theme.bg_sunken)
+                        .with_animation(
+                            "balance-skeleton",
+                            gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+                            |block, delta| {
+                                let t = if delta < 0.5 {
+                                    delta * 2.
+                                } else {
+                                    2. - delta * 2.
+                                };
+                                block.opacity(1. - 0.6 * t)
+                            },
+                        ),
                 ),
         ),
         BalanceState::Hidden => root.child(pressable(
@@ -513,77 +530,17 @@ pub fn balance_display(
         }
     };
 
-    if let Some(live) = model.live.clone() {
-        root = root.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_muted)
-                // The web's `.live-dot`: it breathes — opacity 1 to .35 and
-                // back over 800 ms — so the line reads as listening, not as
-                // a label (078 H-05).
-                .child(
-                    div()
-                        .w(px(8.))
-                        .h(px(8.))
-                        .rounded(px(4.))
-                        .bg(theme.success)
-                        .with_animation(
-                            "balance-live-dot",
-                            gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
-                            |dot, delta| {
-                                // Out and back in one cycle: the web's
-                                // `alternate` over two 800 ms halves.
-                                let t = if delta < 0.5 {
-                                    delta * 2.
-                                } else {
-                                    2. - delta * 2.
-                                };
-                                dot.opacity(1. - 0.65 * t)
-                            },
-                        ),
-                )
-                .child(live),
-        );
-    }
-
-    if let Some((kind, text)) = model.status.clone() {
-        let (icon, color) = match kind {
-            StatusKind::Warning => (Icon::TriangleAlert, theme.warning),
-            StatusKind::Refreshing => (Icon::RefreshCw, theme.fg_muted),
-        };
-        // The web's `.status` button (`BalanceDisplay.svelte`): gap 8,
-        // padding 4/0, 13 text, 14 glyphs either side. It opens what the line
-        // is about — the unreachable chain's RPC editor, or the breakdown —
-        // so it is drawn as the button it is (078 H-03).
-        let line = div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .py(px(4.))
-            .text_size(theme::text_row_sub())
-            .text_color(color)
-            .child(icon_img(icons, icon, false, color, 14.))
-            .child(text)
-            .child(icon_img(icons, Icon::ChevronRight, false, color, 14.));
-        root = root.child(match on_status {
-            Some(on_status) => line
-                .id("balance-status")
-                .cursor_pointer()
-                .on_click(on_status)
-                .into_any_element(),
-            None => line.into_any_element(),
-        });
-    }
-
     // Issue #443: the hero's own refresh — the glyph and when the figure was
     // last read ("Updated 2m"). A deposit made from another device had no
     // sign here until the ten-minute poll or a restart; now the person can
-    // ask, and can see how fresh what they are looking at is. Quiet, like
-    // the status line: subtle ink, fuller on hover. Drawn without a press
-    // behind it where a board shows its states.
+    // ask, and can see how fresh what they are looking at is. Quiet: subtle
+    // ink, fuller on hover. Drawn without a press behind it where a board
+    // shows its states.
+    //
+    // Directly under the figure, and always in that place: the line that
+    // comes and goes ([`status_slot`]) is BELOW it, so nothing that arrives
+    // can push the control down under a pointer that is pressing it (issue
+    // 462) — and nothing can push the page (PR 3 note 26b).
     if on_refresh.is_some() || model.updated.is_some() {
         root = root.child(div().flex().child(refresh_control(
             theme,
@@ -594,10 +551,199 @@ pub fn balance_display(
         )));
     }
 
-    root
+    root.child(status_slot(theme, icons, model, on_status))
 }
 
-/// How long the refresh glyph takes to turn once, and in how many frames:
+/// The height of the hero's status slot: one line of its text at the body
+/// leading, and the 4 px above and below that make the line a button.
+#[must_use]
+pub fn status_slot_height() -> gpui::Pixels {
+    theme::text_row_sub() * LINE_BODY + px(8.)
+}
+
+/// What stands in the hero's one slot under the figure. Never two of them,
+/// and in this order:
+///
+/// 1. "Checking…" — the first read of the account is still out (PR 3 final
+///    note F19). It stands alone, in place of anything else the line could
+///    say: until a round has ended no chain has said the wallet is live and
+///    none has failed to answer, so there is nothing else true to say yet
+///    (the same order on every shell);
+/// 2. the status — a network out of reach, a read that failed inside Vela,
+///    a total still being brought up to date, a holding nobody prices;
+/// 3. the "listening" line of a wallet every chain answered zero for — a
+///    round with nothing wrong in it;
+/// 4. nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SlotLine {
+    Status(StatusKind, SharedString),
+    Checking(SharedString),
+    Listening(SharedString),
+    Empty,
+}
+
+impl SlotLine {
+    #[must_use]
+    pub fn of(model: &BalanceModel) -> Self {
+        match (
+            model.status.clone(),
+            model.checking.clone(),
+            model.live.clone(),
+        ) {
+            (_, Some(checking), _) => Self::Checking(checking),
+            (Some((kind, text)), None, _) => Self::Status(kind, text),
+            (None, None, Some(live)) => Self::Listening(live),
+            (None, None, None) => Self::Empty,
+        }
+    }
+}
+
+/// The hero's one line under the figure, IN A SLOT THAT IS ALWAYS THERE
+/// (PR 3 note 26b): [`status_slot_height`] tall whether or not anything is
+/// said in it ([`SlotLine`]). "Can't reach …", "Updating…", the zero
+/// wallet's "listening" line and the unpriced notice all arrive, change and
+/// go in this room — a cached total with its grey "still updating" line
+/// gives way to the fresh one on every launch — and the page under the hero
+/// never moves for it. The line used to be added and removed, and everything
+/// below it jumped a row each time.
+///
+/// One line, never two (PR 3 final note F16): it is as wide as the home
+/// column, and a sentence longer than that ends in an ellipsis rather than
+/// wrapping or growing the slot. The whole sentence is the line's accessible
+/// name, and what the line opens says it in full at its top — the
+/// unreachable list as its title, the breakdown as its subtitle
+/// (`wallet::live::breakdown_lead`).
+fn status_slot(
+    theme: &Theme,
+    icons: &mut IconCache,
+    model: &BalanceModel,
+    on_status: Option<BalanceToggle>,
+) -> Div {
+    let slot = div().h(status_slot_height()).flex().items_center();
+    // The line's accessible name is its whole sentence — on the ONE hero a
+    // session draws. A board draws several heroes side by side, and an id
+    // (which a name needs) on each would be the same id many times over.
+    let live_hero = on_status.is_some();
+    let named = |line: Div, full: SharedString| {
+        if live_hero {
+            line.id("balance-status")
+                .aria_label(full)
+                .into_any_element()
+        } else {
+            line.into_any_element()
+        }
+    };
+    let sentence = |text: SharedString| {
+        div()
+            .min_w(px(0.))
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .text_ellipsis()
+            .child(text)
+    };
+    match SlotLine::of(model) {
+        SlotLine::Status(kind, text) => {
+            let full = text.clone();
+            let (icon, color) = match kind {
+                StatusKind::Warning => (Icon::TriangleAlert, theme.warning),
+                StatusKind::Refreshing => (Icon::RefreshCw, theme.fg_muted),
+            };
+            // The web's `.status` button (`BalanceDisplay.svelte`): gap 8,
+            // padding 4/0, 13 text, 14 glyphs either side. It opens what the
+            // line is about — the unreachable chain's RPC editor, or the
+            // breakdown — so it is drawn as the button it is (078 H-03).
+            let line = div()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .min_w(px(0.))
+                .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(LINE_BODY))
+                .text_color(color)
+                .child(
+                    div()
+                        .flex_none()
+                        .child(icon_img(icons, icon, false, color, 14.)),
+                )
+                .child(sentence(text))
+                .child(div().flex_none().child(icon_img(
+                    icons,
+                    Icon::ChevronRight,
+                    false,
+                    color,
+                    14.,
+                )));
+            slot.child(match on_status {
+                // The whole sentence is the line's accessible name: what is
+                // drawn may end in an ellipsis, what is read out never does.
+                Some(on_status) => line
+                    .id("balance-status")
+                    .aria_label(full)
+                    .cursor_pointer()
+                    .on_click(on_status)
+                    .into_any_element(),
+                None => line.into_any_element(),
+            })
+        }
+        // The web's `.live-dot`: it breathes — opacity 1 to .35 and back
+        // over 800 ms — so the line reads as listening, not as a label
+        // (078 H-05).
+        SlotLine::Listening(live) => slot.child(named(
+            dotted(theme, theme.success, sentence(live.clone())),
+            live,
+        )),
+        // The same line before any chain has answered (F19): the dot is
+        // there, breathing, and not yet green — when the round settles on a
+        // live zero it turns green where it is and the words change beside
+        // it. Quiet, and not a button: there is nothing to open yet.
+        SlotLine::Checking(checking) => slot.child(named(
+            dotted(theme, theme.fg_subtle, sentence(checking.clone())),
+            checking,
+        )),
+        // Nothing to say: the room stays.
+        SlotLine::Empty => slot,
+    }
+}
+
+/// A slot line that is not a button: a breathing 8 px dot and its words, in
+/// the status line's own text box (13 px at the body leading) — "Live ·
+/// listening for payments" (green) and "Checking…" (neutral) are the same
+/// line in two colours, so one becoming the other moves nothing.
+fn dotted(theme: &Theme, dot: gpui::Hsla, words: Div) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .min_w(px(0.))
+        .text_size(theme::text_row_sub())
+        .line_height(gpui::relative(LINE_BODY))
+        .text_color(theme.fg_muted)
+        .child(
+            div()
+                .flex_none()
+                .w(px(8.))
+                .h(px(8.))
+                .rounded(px(4.))
+                .bg(dot)
+                .with_animation(
+                    "balance-live-dot",
+                    gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+                    |dot, delta| {
+                        // Out and back in one cycle: the web's `alternate`
+                        // over two 800 ms halves.
+                        let t = if delta < 0.5 {
+                            delta * 2.
+                        } else {
+                            2. - delta * 2.
+                        };
+                        dot.opacity(1. - 0.65 * t)
+                    },
+                ),
+        )
+        .child(words)
+}
+
+/// How long the refresh glyph takes to turn once, and in how many frames:/// How long the refresh glyph takes to turn once, and in how many frames:
 /// motion slow × 2 (`motion.durationSlow`, 400 ms) — the web's and iOS's
 /// pace, and the spinner's (`spinner.rs` REVOLUTION). At 1000 ms a quick
 /// refresh, held the 650 ms minimum, turned 0.65 of a revolution here and 0.8
@@ -1029,6 +1175,69 @@ pub fn token_icon_logos(
     lead_circle_logos(theme, token_glyph(theme, ticker), badge, logos, true)
 }
 
+/// The token page's line under the amount: what the holding is worth, then
+/// its network — "¥8,789.64 · Ethereum" ([`super::fixtures::AssetSub`]).
+///
+/// The worth is a cell of its own and the network's name starts where the
+/// cell ends, in the same two boxes whether the worth is said or still out —
+/// so with the same room in the cell, the name is drawn at the same x. Out,
+/// the cell holds a waiting bar over its room: the room's figure is laid out
+/// and never painted (`invisible`), exactly as wide as that figure drawn.
+pub fn asset_sub(theme: &Theme, sub: &super::fixtures::AssetSub) -> Div {
+    use super::fixtures::{AssetSub, SubWorth};
+    let line = div()
+        .flex()
+        .items_start()
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_muted);
+    // The joint belongs to the name's box: a worth that lands changes only
+    // what is in its own cell.
+    // Both boxes say where they are to a measurement pass
+    // (`crate::dev_probe`): the name's x, before and after the worth lands.
+    let after = |joint: &str| {
+        div()
+            .relative()
+            .min_w(px(0.))
+            .child(crate::ui::prose(SharedString::from(format!(
+                "{joint}{}",
+                sub.chain
+            ))))
+            .children(crate::dev_probe::mark("asset-sub-network"))
+    };
+    match &sub.worth {
+        SubWorth::Said(worth) => line
+            .child(
+                div()
+                    .relative()
+                    .flex_none()
+                    .child(worth.clone())
+                    .children(crate::dev_probe::mark("asset-sub-worth")),
+            )
+            .child(after(AssetSub::JOINT)),
+        SubWorth::Waiting { room } => line
+            .child(
+                div()
+                    .relative()
+                    .flex_none()
+                    .children(crate::dev_probe::mark("asset-sub-worth"))
+                    .child(div().invisible().child(room.clone()))
+                    // The holding row's bar (`Fiat::Pending`), as wide as
+                    // the room, on the middle of the line.
+                    .child(
+                        div().absolute().inset_0().flex().items_center().child(
+                            div()
+                                .w_full()
+                                .h(px(10.))
+                                .rounded(px(4.))
+                                .bg(theme.bg_sunken),
+                        ),
+                    ),
+            )
+            .child(after(AssetSub::JOINT)),
+        SubWorth::Absent => line.child(after("")),
+    }
+}
+
 /// Asset row. Caller chains `.on_click` (opens the detail panel — US2).
 pub fn asset_row(
     id: impl Into<ElementId>,
@@ -1041,15 +1250,32 @@ pub fn asset_row(
         Fiat::Value(text) => div()
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_subtle)
-            .child(text.clone()),
+            .child(crate::ui::prose(text.clone())),
         Fiat::NoPrice(text) => div()
             .text_size(theme::text_row_sub())
             .text_color(theme.warning)
-            .child(text.clone()),
+            .child(crate::ui::prose(text.clone())),
         Fiat::Masked => div()
             .text_size(theme::text_row_sub())
             .text_color(theme.fg_subtle)
             .child(super::fixtures::MASK),
+        // The figure's own line box, holding a skeleton bar: the row is
+        // exactly as tall with the bar as with the figure, so nothing moves
+        // when the figure lands.
+        Fiat::Pending => div()
+            .text_size(theme::text_row_sub())
+            .flex()
+            .items_center()
+            .justify_end()
+            .child(
+                div()
+                    .w(px(56.))
+                    .h(px(10.))
+                    .rounded(px(4.))
+                    .bg(theme.bg_sunken),
+            )
+            // An invisible glyph gives the box the text line's height.
+            .child(div().invisible().child("\u{200b}")),
     };
     // The web's row (078 H-09): flush with the column, no hover wash, no
     // radius — a list of holdings, not a stack of cards. Padded 12 on the
@@ -1109,11 +1335,6 @@ pub fn asset_row(
         )
 }
 
-/// Marks a line may not open with — the CJK closing punctuation 禁则 names,
-/// and their Latin kin. gpui's wrapper breaks between any two CJK glyphs,
-/// so it will happily start a line with 「。」.
-const NO_LINE_START: &str = "。，、；：？！）」』》〉】〕…%.,;:!?)]}";
-
 /// The narrowest width, at most `max`, that still wraps `text` (the UI face
 /// at `size`) into as many lines as `max` does — the web's
 /// `text-wrap: balance`. A centred caption wrapped at its full width leaves a
@@ -1148,20 +1369,17 @@ pub fn balanced_wrap_width(
                 None,
             )
             .ok()?;
-        let mut count = 0;
-        for line in &shaped {
-            for boundary in line.wrap_boundaries() {
-                // A boundary names the first glyph of the new line.
-                let at =
-                    line.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index;
-                let opens = line.text.get(at..).and_then(|rest| rest.chars().next());
-                if opens.is_some_and(|c| NO_LINE_START.contains(c)) {
-                    return None;
-                }
-            }
-            count += line.wrap_boundaries().len() + 1;
+        // The one line rule (`ui::prose`): closing marks, opening marks,
+        // glue.
+        if crate::ui::prose::strands(&shaped) {
+            return None;
         }
-        Some(count)
+        Some(
+            shaped
+                .iter()
+                .map(|line| line.wrap_boundaries().len() + 1)
+                .sum(),
+        )
     };
     let Some(target) = lines(max).filter(|&n| n > 1) else {
         return max;
@@ -1196,35 +1414,10 @@ pub fn kinsoku_width(window: &Window, text: &SharedString, size: Pixels, max: Pi
         underline: None,
         strikethrough: None,
     };
-    let strands = |width: Pixels| -> bool {
-        let Ok(shaped) = window.text_system().shape_text(
-            text.clone(),
-            size,
-            std::slice::from_ref(&run),
-            Some(width),
-            None,
-        ) else {
-            return false;
-        };
-        shaped.iter().any(|line| {
-            line.wrap_boundaries().iter().any(|boundary| {
-                let at =
-                    line.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index;
-                line.text
-                    .get(at..)
-                    .and_then(|rest| rest.chars().next())
-                    .is_some_and(|c| NO_LINE_START.contains(c))
-            })
-        })
-    };
-    let mut width = max;
-    for _ in 0..12 {
-        if !strands(width) {
-            return width;
-        }
-        width -= size;
-    }
-    max
+    // The search and the rule are `ui::prose`'s — the same ones a `prose`
+    // child wraps by, so a box sized here and a sentence drawn there break
+    // at the same places.
+    crate::ui::prose::clean_wrap_width(window, text, size, std::slice::from_ref(&run), max)
 }
 
 /// How many lines `text` takes wrapped at `width`, in the UI face at `size`
@@ -1343,7 +1536,7 @@ pub fn empty_state_wrapped(
                     .when_some(caption_w, |el, w| el.w(w))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
-                    .child(caption),
+                    .child(crate::ui::prose(caption)),
             )
         })
 }
@@ -1458,7 +1651,7 @@ pub fn qr_placeholder(theme: &Theme, caption: SharedString, side: Pixels) -> Div
             div()
                 .text_size(theme::text_label())
                 .text_color(ink.opacity(0.5))
-                .child(caption),
+                .child(crate::ui::prose(caption)),
         )
 }
 
@@ -1513,7 +1706,7 @@ pub fn receipt_toast(theme: &Theme, icons: &mut IconCache, text: SharedString) -
                 .text_size(theme::text_row_title())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_base)
-                .child(text),
+                .child(crate::ui::prose(text)),
         )
 }
 
@@ -1554,5 +1747,95 @@ mod tests {
         let at_rest = crate::wallet::fixtures::balance_refresh(&en, false);
         assert!(!refresh_turns(&at_rest, false), "still at rest");
         assert!(!refresh_turns(&at_rest, true));
+    }
+
+    /// PR 3 note 26b: the hero keeps ONE slot under its figure, always the same
+    /// height, and everything that arrives, changes and goes there does so
+    /// inside it — "Can't reach …", the grey "still updating" of a cached total
+    /// (on every launch), the zero wallet's "listening" line. The slot's height
+    /// does not depend on what is said in it, so the page under the hero has
+    /// one position.
+    #[test]
+    fn the_heros_status_slot_is_one_height_whatever_it_says() {
+        use crate::wallet::fixtures::BalanceState;
+        let hero_with = |status: Option<(StatusKind, &str)>,
+                         live: Option<&str>,
+                         checking: Option<&str>| BalanceModel {
+            label: SharedString::from("Total balance"),
+            currency: SharedString::from("USD"),
+            state: BalanceState::Normal,
+            integer: SharedString::from("$1"),
+            decimals: None,
+            live: live.map(SharedString::from),
+            checking: checking.map(SharedString::from),
+            status: status.map(|(kind, text)| (kind, SharedString::from(text))),
+            updated: None,
+            refreshing: false,
+            updating: SharedString::from("Updating…"),
+        };
+        let hero =
+            |status: Option<(StatusKind, &str)>, live: Option<&str>| hero_with(status, live, None);
+        // One line of the status text at the body leading, and the 4 px above
+        // and below that make it a button: a height that is there before any
+        // model is.
+        let height = status_slot_height();
+        assert!(
+            height > gpui::px(20.) && height < gpui::px(48.),
+            "{height:?}"
+        );
+
+        assert_eq!(SlotLine::of(&hero(None, None)), SlotLine::Empty, "kept");
+        let warning = hero(
+            Some((StatusKind::Warning, "Can't reach Tempo right now")),
+            None,
+        );
+        assert_eq!(
+            SlotLine::of(&warning),
+            SlotLine::Status(StatusKind::Warning, "Can't reach Tempo right now".into())
+        );
+        let listening = hero(None, Some("Listening for deposits"));
+        assert_eq!(
+            SlotLine::of(&listening),
+            SlotLine::Listening("Listening for deposits".into())
+        );
+        // Never two lines: a status outranks the listening line, in the one slot.
+        let both = hero(
+            Some((StatusKind::Refreshing, "Still updating")),
+            Some("Listening for deposits"),
+        );
+        assert_eq!(
+            SlotLine::of(&both),
+            SlotLine::Status(StatusKind::Refreshing, "Still updating".into())
+        );
+
+        // PR 3 final note F19 — "Checking…", the first read's line, in the
+        // same slot, and alone in it: everything else the line could say is
+        // a finished round's to say, and none has finished.
+        let checking = SlotLine::Checking("Checking…".into());
+        assert_eq!(
+            SlotLine::of(&hero_with(None, None, Some("Checking…"))),
+            checking
+        );
+        assert_eq!(
+            SlotLine::of(&hero_with(None, Some("Listening"), Some("Checking…"))),
+            checking,
+            "never live before a round has ended"
+        );
+        assert_eq!(
+            SlotLine::of(&hero_with(
+                Some((StatusKind::Refreshing, "Still updating")),
+                None,
+                Some("Checking…")
+            )),
+            checking
+        );
+        assert_eq!(
+            SlotLine::of(&hero_with(
+                Some((StatusKind::Warning, "Can't reach Tempo right now")),
+                None,
+                Some("Checking…")
+            )),
+            checking
+        );
     }
 }

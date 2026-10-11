@@ -31,8 +31,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    EntityId, ScrollDelta, ScrollHandle, ScrollWheelEvent, StatefulInteractiveElement, Styled,
-    Window, point, px,
+    Bounds, EntityId, Pixels, ScrollDelta, ScrollHandle, ScrollWheelEvent,
+    StatefulInteractiveElement, Styled, Window, point, px,
 };
 
 /// How far behind the newest trackpad report a frame is drawn: longer than
@@ -61,6 +61,9 @@ const SETTLE_PX: f32 = 0.25;
 const SETTLE_SPEED: f32 = 8.;
 /// A frame longer than this is a stall, not motion to catch up on in one go.
 const MAX_STEP_MS: f32 = 50.;
+/// The air kept around a box brought into view ([`SmoothScroll::reveal`]),
+/// so its edge is seen to be its edge and not the column's.
+const REVEAL_MARGIN: f32 = 8.;
 
 /// A column's scroll position and its glide. Clone it into the element each
 /// frame; the clones share one position.
@@ -132,6 +135,36 @@ impl SmoothScroll {
                     cx.stop_propagation();
                 }
             })
+    }
+
+    /// Bring a box of this column's content into view, gliding: the whole of
+    /// it when it fits the column, else from its top. A box already in view
+    /// moves nothing.
+    ///
+    /// `span` is the box as THIS frame laid it out, in the window, the
+    /// column's scroll already applied. So this is called while the column's
+    /// children are being placed — from a child's prepaint — when the
+    /// column's own box and its length are this frame's too. True when the
+    /// column has to move: the caller asks for the next frame, and
+    /// [`step`](Self::step) glides there.
+    pub fn reveal(&self, span: Bounds<Pixels>) -> bool {
+        let viewport = self.handle.bounds();
+        let scrolled = -f32::from(self.handle.offset().y);
+        let max = f32::from(self.handle.max_offset().y).max(0.);
+        let top = f32::from(span.top() - viewport.top()) + scrolled;
+        let bottom = f32::from(span.bottom() - viewport.top()) + scrolled;
+        let target = reveal_target(scrolled, f32::from(viewport.size.height), max, top, bottom);
+        if (target - scrolled).abs() < SETTLE_PX {
+            return false;
+        }
+        let mut motion = self.motion.borrow_mut();
+        motion.target = target;
+        motion.reports.clear();
+        if !motion.moving {
+            motion.moving = true;
+            motion.last_frame = None;
+        }
+        true
     }
 
     /// Move the target by one wheel event. False when the column cannot move
@@ -257,6 +290,24 @@ fn next_target(target: f32, delta: f32, max: f32) -> Option<f32> {
     ((next - target).abs() >= f32::EPSILON).then_some(next)
 }
 
+/// How far down a column should stand so that the box `top..bottom` of its
+/// content (px down from the content's top) is in view, from where it stands
+/// now (`scrolled`): unmoved when the box, with a little air around it, is
+/// already inside the `viewport`; else the least move that puts it there —
+/// or, for a box taller than the viewport, its top at the viewport's top.
+/// Never past either end (`max` is how far the column can scroll).
+fn reveal_target(scrolled: f32, viewport: f32, max: f32, top: f32, bottom: f32) -> f32 {
+    let (top, bottom) = (top - REVEAL_MARGIN, bottom + REVEAL_MARGIN);
+    let target = if bottom - top > viewport || top < scrolled {
+        top
+    } else if bottom > scrolled + viewport {
+        bottom - viewport
+    } else {
+        scrolled
+    };
+    target.clamp(0., max.max(0.))
+}
+
 /// Where the reports put the column at `at`: between the two around it, in
 /// proportion; before the first, the first; after the last, the last.
 fn resample(reports: &VecDeque<(Instant, f32)>, at: Instant) -> f32 {
@@ -308,6 +359,35 @@ mod tests {
             Some(500.),
             "stops at the end"
         );
+    }
+
+    /// A box of the column's content is brought into view by the least
+    /// move: none when it is in view, its bottom to the column's bottom when
+    /// it hangs under the fold, its top to the top when it is above — and a
+    /// box taller than the column from its top. Never past the ends.
+    #[test]
+    fn a_box_is_brought_into_view_by_the_least_move() {
+        let m = REVEAL_MARGIN;
+        // A column 400 tall over 1000 of content (600 to scroll).
+        let at = |scrolled, top, bottom| reveal_target(scrolled, 400., 600., top, bottom);
+        // In view: nothing moves.
+        assert_eq!(at(0., 100., 300.), 0.);
+        assert_eq!(at(250., 300., 500.), 250.);
+        // Its lower part under the fold: its bottom (and the air) comes up
+        // to the column's bottom.
+        assert_eq!(at(0., 300., 520.), 520. + m - 400.);
+        // All of it under the fold.
+        assert_eq!(at(0., 700., 900.), 900. + m - 400.);
+        // Above the column: its top comes down to the column's top.
+        assert_eq!(at(500., 300., 450.), 300. - m);
+        // Taller than the column: from its top, wherever the column stood.
+        assert_eq!(at(0., 200., 700.), 200. - m);
+        assert_eq!(at(600., 200., 700.), 200. - m);
+        // The ends hold.
+        assert_eq!(at(0., 950., 1000.), 600., "not past the bottom");
+        assert_eq!(at(300., 0., 50.), 0., "not past the top");
+        // Nothing to scroll: nothing moves, whatever is asked.
+        assert_eq!(reveal_target(0., 400., 0., 380., 500.), 0.);
     }
 
     /// A notch glides — a little on its first frame, most of the way within

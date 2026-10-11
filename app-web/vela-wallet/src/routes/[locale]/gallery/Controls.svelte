@@ -6,9 +6,15 @@
 		locale: Locale;
 		/** Current state id when on a state page; gallery root otherwise. */
 		stateId?: string;
+		/**
+		 * A state page's fiat switch: the board as drawn, or its twin with the
+		 * display currency on its way (`board-withheld.ts`). Absent on the root.
+		 */
+		fiatWithheld?: boolean;
+		onfiat?: () => void;
 	}
 
-	let { locale, stateId }: Props = $props();
+	let { locale, stateId, fiatWithheld = false, onfiat }: Props = $props();
 
 	// Gallery-only appearance override: stamps the same data-theme attribute the
 	// token layer already honors (tokens.css dormant overrides).
@@ -32,6 +38,16 @@
 		>{otherLocale}</a
 	>
 	<button type="button" onclick={cycleTheme}>{theme}</button>
+	{#if onfiat}
+		<!-- A mark, not a word: "$" is the board as drawn, "…" its twin. -->
+		<button
+			type="button"
+			aria-pressed={fiatWithheld}
+			aria-label="fiat figures: drawn / on their way"
+			data-testid="gallery-fiat"
+			onclick={onfiat}>{fiatWithheld ? '…' : '$'}</button
+		>
+	{/if}
 </nav>
 
 <style>

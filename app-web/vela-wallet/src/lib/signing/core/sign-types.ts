@@ -195,6 +195,12 @@ export interface SignShellPorts {
 
 export type SignRequestSessionOptions = SessionOptions<SignView> & {
 	ports: SignShellPorts;
+	/**
+	 * The clock behind the core's timers (PR 3: the simulation verdict's
+	 * deadline) — resolve after `ms`. Absent: `setTimeout`. A test passes one
+	 * it can stop.
+	 */
+	timer?: (ms: number) => Promise<void>;
 };
 
 /**

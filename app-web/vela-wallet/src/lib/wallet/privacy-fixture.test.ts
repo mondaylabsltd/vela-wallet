@@ -18,6 +18,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { maskedAmount } from '$lib/core/client';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
@@ -64,7 +65,7 @@ const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
 const cm = resolveContactsMessages('en');
 const sm = resolveSettingsMessages('en');
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const NOW = 1_700_000_000_000;
 
@@ -176,7 +177,8 @@ function maskedSurfaces({ balance, feed }: Side): Record<string, string> {
 		holdings: JSON.stringify(balance.tokens.map((t) => liveAssetRow(t, USD, m, balance.hidden))),
 		assets: JSON.stringify(assets.base.kind === 'assets' ? assets.base.model.rows : null),
 		token_detail: JSON.stringify(tokenDetails),
-		home_activity: JSON.stringify(liveActivityGroups(feed, m, feed.hidden)),
+		// The home draws the core's own cut (`home_rows`, issue 469).
+		home_activity: JSON.stringify(liveActivityGroups(feed.home_rows, m, feed.hidden)),
 		history: JSON.stringify(history.base.kind === 'history' ? history.base.model.groups : null),
 		transfer_detail: JSON.stringify(transfers.map(detail)),
 		dapp_detail: JSON.stringify(dapps.map(detail)),
@@ -236,6 +238,59 @@ describe('the shared hidden-balance fixture, through every web surface builder',
 		expect(feed.toast).toBeNull();
 	});
 
+	// PR 3 item 12: one rule for a masked token figure — the amount is the
+	// mask, the unit is kept ("•••• USDT"). It says what kind of money without
+	// saying how much. A hidden transfer's detail read "•••• xDAI" on iOS and
+	// a bare "••••" on Android and on the web.
+	it('hidden: a masked token figure keeps its unit, wherever the two are one string', () => {
+		const { balance, feed } = FIXTURE.hidden;
+		const detail = (id: string) =>
+			liveTxDetail(
+				feedItems(feed).find((item) => item.id === id)!,
+				{
+					m: fm,
+					wm: m,
+					currency: USD,
+					hidden: feed.hidden,
+					identicon,
+					now: NOW
+				}
+			);
+		// A transfer in, a transfer out, and a dApp's swap.
+		expect(detail('received').amount).toBe(`${MASK} USDT`);
+		expect(detail('sent').amount).toBe(`${MASK} USDC`);
+		expect(detail('swap').amount).toBe(`${MASK} USDC`);
+		// A permit's cap is money too (the core's `figure_maskable`)…
+		expect(detail('permit').amount).toMatch(new RegExp(`^${MASK} \\S+$`));
+		// …an unlimited one is a risk to see, and a signature has no figure.
+		expect(detail('permit-unlimited').amount).not.toContain(MASK);
+		expect(detail('signature').amount).toBe('');
+		// The fiat worth has no unit apart from its figure: the bare mask.
+		expect(detail('received').fiat).toBe(MASK);
+		// A token's own detail: its balance, masked, still says which token.
+		for (const token of balance.tokens) {
+			const sheet = withLiveFlow(buildFlowState('t2', fm, identicon), {
+				balance,
+				currency: USD,
+				m,
+				emptyCopy: undefined,
+				feed,
+				fm,
+				selectedToken: token
+			}).sheet;
+			if (sheet?.kind !== 'token-detail') throw new Error('t2 raises the token detail');
+			expect(sheet.model.balance, token.symbol).toBe(`${MASK} ${token.symbol}`);
+		}
+		// The rows draw the amount and the unit apart, and always kept it.
+		const row = liveActivityRow(
+			feedItems(feed).find((i) => i.id === 'received')!,
+			m,
+			true,
+			NOW
+		);
+		expect([row.amount, row.unit]).toEqual([MASK, 'USDT']);
+	});
+
 	it('a row’s figure masks exactly when the core says it is money', () => {
 		const { feed } = FIXTURE.hidden;
 		const items = feedItems(feed);
@@ -252,5 +307,128 @@ describe('the shared hidden-balance fixture, through every web surface builder',
 			// Shown, nothing masks.
 			expect(liveActivityRow(item, m, false, NOW).masked, item.id).toBe(false);
 		}
+	});
+});
+
+/**
+ * PR 3 note 15. The fixture had no BATCH row, which is how the web's hidden
+ * split leaked: its hero masked, and under it the breakdown listed who got
+ * how much, in full. The fixture carries one now — one operation, two
+ * recipients, 683.75 USDC as 214.5 to Bea and 469.25 to a stranger — and
+ * `forbidden` gained its three runs. The loops above already replay it
+ * (they walk every feed item); this walks it by NAME: the row, and its
+ * detail where the shares are listed, shown and hidden, so a share cannot
+ * leak again behind a total that is masked.
+ */
+describe('the fixture’s split: one send, two recipients (PR 3 note 15)', () => {
+	const SPLIT = '0x' + 'ef'.repeat(32);
+	const STRANGER = '0x' + 'fa'.repeat(20);
+	const TOTAL = '683';
+	const SHARES = ['214', '469'];
+	const RUNS = [TOTAL, ...SHARES];
+
+	const split = (side: Side): FeedItem => {
+		const item = feedItems(side.feed).find((candidate) => candidate.id === SPLIT);
+		if (item === undefined) throw new Error('the fixture has no split row');
+		return item;
+	};
+	const detailOf = (side: Side) =>
+		liveTxDetail(split(side), {
+			m: fm,
+			wm: m,
+			currency: USD,
+			hidden: side.feed.hidden,
+			identicon,
+			now: NOW
+		});
+	const rowOf = (side: Side) => liveActivityRow(split(side), m, side.feed.hidden, NOW);
+	/** History and the home's cut, as the screens are handed them. */
+	const lists = (side: Side) => {
+		const { balance, feed } = side;
+		const history = withLiveFlow(buildFlowState('a1', fm, identicon), {
+			balance,
+			currency: USD,
+			m,
+			emptyCopy: undefined,
+			feed,
+			fm
+		});
+		return {
+			history: JSON.stringify(history.base.kind === 'history' ? history.base.model.groups : null),
+			home: JSON.stringify(liveActivityGroups(feed.home_rows, m, feed.hidden))
+		};
+	};
+
+	it('is in the fixture as the core describes it — in History and in the home’s cut', () => {
+		for (const side of [FIXTURE.shown, FIXTURE.hidden]) {
+			const item = split(side);
+			expect(item.batch).toMatchObject({ kind: 'split', count: 2, symbol: 'USDC' });
+			expect(item.value).toBe('683.75');
+			expect(item.batch?.transfers.map((t) => [t.to, t.to_name, t.value])).toEqual([
+				[BEA, 'Bea', '214.5'],
+				[STRANGER, null, '469.25']
+			]);
+			// received / sent / the split: the swap left the home's cut.
+			expect(
+				side.feed.home_rows.flatMap((row) => (row.type === 'item' ? [row.item.id] : []))
+			).toEqual(['received', 'sent', SPLIT]);
+		}
+		for (const run of RUNS) expect(FIXTURE.forbidden).toContain(run);
+		expect(FIXTURE.figure_maskable[SPLIT]).toBe(true);
+	});
+
+	it('shown: the row says the total, and the detail the total and each share — all three runs are drawn', () => {
+		const row = rowOf(FIXTURE.shown);
+		expect([row.amount, row.unit, row.masked]).toEqual(['−683.75', 'USDC', false]);
+
+		const detail = detailOf(FIXTURE.shown);
+		expect(detail.amount).toBe('−683.75 USDC');
+		expect(detail.fiat).toContain('683.75');
+		expect(detail.breakdown?.map((part) => [part.label, part.value])).toEqual([
+			['Bea', '214.5 USDC'],
+			[expect.stringMatching(/^0xfafa/i), '469.25 USDC']
+		]);
+
+		// Not vacuous, surface by surface: the total in the row and both lists,
+		// every run in the detail.
+		const { history, home } = lists(FIXTURE.shown);
+		for (const text of [JSON.stringify(row), history, home]) expect(text).toContain(TOTAL);
+		const drawn = JSON.stringify(detail);
+		for (const run of RUNS) expect(drawn, run).toContain(run);
+	});
+
+	it('hidden: no run in the row, the detail, History or home — and every masked figure keeps its unit', () => {
+		const side = FIXTURE.hidden;
+		const row = rowOf(side);
+		// The row draws the amount and the unit apart.
+		expect([row.amount, row.unit, row.masked]).toEqual([MASK, 'USDC', true]);
+
+		const detail = detailOf(side);
+		// The total and each share are the core's masked amount: the mask, and
+		// the coin kept — "•••• USDC" (0.1), never a bare mask and never a figure.
+		expect(detail.amount).toBe(maskedAmount('USDC'));
+		expect(detail.amount).toBe(`${MASK} USDC`);
+		expect(detail.breakdown?.map((part) => part.value)).toEqual([`${MASK} USDC`, `${MASK} USDC`]);
+		// The worth has no unit apart from its figure: the bare mask.
+		expect(detail.fiat).toBe(MASK);
+		// WHO is not money: the people stay, so the row is still the split it is.
+		expect(detail.breakdown?.map((part) => part.label)).toEqual([
+			'Bea',
+			expect.stringMatching(/^0xfafa/i)
+		]);
+		expect(detail.breakdown).toHaveLength(2);
+
+		const { history, home } = lists(side);
+		for (const [surface, text] of Object.entries({
+			row: JSON.stringify(row),
+			detail: JSON.stringify(detail),
+			history,
+			home
+		})) {
+			for (const run of RUNS) expect(text.includes(run), `${surface} draws ${run}`).toBe(false);
+		}
+		// It is still listed on both: masked, not removed.
+		expect(history).toContain(SPLIT);
+		expect(home).toContain(SPLIT);
 	});
 });

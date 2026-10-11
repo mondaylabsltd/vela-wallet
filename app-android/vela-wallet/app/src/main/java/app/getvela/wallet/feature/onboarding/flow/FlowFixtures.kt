@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.feature.onboarding.core.CreateStage
 import app.getvela.wallet.feature.onboarding.core.CreateView
@@ -35,6 +36,13 @@ sealed interface Fixture {
 
     /** The "insert your security key" waiter, with and without the OTG hint. */
     data class InsertKey(val otgLooksOff: Boolean) : Fixture
+
+    /**
+     * "Phone or tablet · scan a code" (issue #480). No board drew it — it was
+     * only ever seen mid-ceremony, on a device — so a sheet too tall for a
+     * tablet or a landscape window (#447) had nowhere to be noticed.
+     */
+    data class CableQr(val chooser: KeyChooser) : Fixture
 }
 
 data class StateFixture(val group: String, val code: String, val fixture: Fixture)
@@ -124,8 +132,25 @@ object FlowFixtures {
         )
     }
 
+    /**
+     * The two words the core sends with a keys screen (issue #475), for a
+     * hand-built board: the heading by the count (`create_wallet::add_heading_key`)
+     * and `methods_pinned` (no key yet, and one may be added). Boards only —
+     * the live screen reads both off `CreateView` and decides neither.
+     */
+    private fun CreateView.withKeysHeading(): CreateView = copy(
+        addHeadingKey = when {
+            keys.isEmpty() -> I18nKeys.Create.KEY_PLACE_HEADING
+            keys.size < MAX_KEYS -> I18nKeys.Create.ADD_METHOD_LABEL
+            else -> I18nKeys.Create.KEY_LIMIT_REACHED
+        },
+        methodsPinned = keys.isEmpty() && canAddKey,
+        // The core's `key_count_shown`: from the first key on.
+        keyCountShown = keys.isNotEmpty(),
+    )
+
     val all: List<StateFixture> = buildList {
-        fun flow(code: String, view: CreateView) = add(StateFixture("Create", code, Fixture.Flow(view)))
+        fun flow(code: String, view: CreateView) = add(StateFixture("Create", code, Fixture.Flow(view.withKeysHeading())))
         fun sheet(code: String, kind: String, detail: String? = null, confirmable: Boolean = false, local: Boolean = false) =
             add(StateFixture("Failures", code, Fixture.Sheet(PromptKind(kind, detail, local = local), confirmable)))
 
@@ -282,7 +307,16 @@ object FlowFixtures {
         add(StateFixture("Usb prompts", "usb pin · retry", Fixture.UsbPin(retries = 5, isRetry = true)))
         add(StateFixture("Usb prompts", "insert key", Fixture.InsertKey(otgLooksOff = false)))
         add(StateFixture("Usb prompts", "insert key · otg off", Fixture.InsertKey(otgLooksOff = true)))
+        add(StateFixture("Phone or tablet", "scan a code · create", Fixture.CableQr(KeyChooser.Create)))
+        add(StateFixture("Phone or tablet", "scan a code · sign in", Fixture.CableQr(KeyChooser.SignIn)))
     }
+
+    /**
+     * A code the SIZE of a real hybrid one (`FIDO:/` and ~170 digits) for the
+     * scan-a-code boards. It opens no ceremony: its digits are a count, not a
+     * handshake.
+     */
+    val CABLE_PAYLOAD: String = "FIDO:/" + (0 until 168).joinToString("") { ((it * 7 + 3) % 10).toString() }
 
     fun byCode(code: String): StateFixture? = all.firstOrNull { it.code == code }
 }

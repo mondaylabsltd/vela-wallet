@@ -13,40 +13,59 @@
 	interface Props {
 		panel: BalanceDetailModel;
 		onretry?: (id: string) => void;
+		/**
+		 * The sentence of the line this sheet was opened from, in full (PR 3
+		 * final note F16). The hero's status is one line and ends in "…" when
+		 * its sentence is longer than that; here it is read whole, first.
+		 */
+		said?: string;
 	}
 
-	let { panel, onretry }: Props = $props();
+	let { panel, onretry, said }: Props = $props();
 </script>
+
+{#if said !== undefined}
+	<p class="said" data-testid="balance-detail-said">{said}</p>
+{/if}
 
 <p class="summary">{panel.summary}</p>
 
-<p class="section">{panel.sectionPending}</p>
-<p class="note">{panel.pendingNote}</p>
-<ul>
-	{#each panel.pending as row (row.id)}
-		<li>
-			<ChainMark mark={row.mark} />
-			<span class="text">
-				<span class="name">{row.name}</span>
-				<span class="status {row.tone}">{row.status}</span>
-			</span>
-			{#if row.action !== undefined}
-				<button type="button" onclick={() => onretry?.(row.id)}>{row.action}</button>
-			{/if}
-		</li>
-	{/each}
-</ul>
+<!-- A heading is drawn with the rows it is about, and not without them (PR 3
+     final note F20). "Networks still updating — These networks couldn't be
+     reached, so your cached balance is shown until they recover." headed an
+     EMPTY list: the sheet a person opens from "some tokens couldn't be
+     priced" told a healthy wallet its balance was cached. -->
+{#if panel.pending.length > 0}
+	<p class="section">{panel.sectionPending}</p>
+	<p class="note">{panel.pendingNote}</p>
+	<ul>
+		{#each panel.pending as row (row.id)}
+			<li>
+				<ChainMark mark={row.mark} />
+				<span class="text">
+					<span class="name">{row.name}</span>
+					<span class="status {row.tone}">{row.status}</span>
+				</span>
+				{#if row.action !== undefined}
+					<button type="button" onclick={() => onretry?.(row.id)}>{row.action}</button>
+				{/if}
+			</li>
+		{/each}
+	</ul>
+{/if}
 
-<p class="section">{panel.sectionDone}</p>
-<ul>
-	{#each panel.done as row (row.id)}
-		<li>
-			<ChainMark mark={row.mark} />
-			<span class="text"><span class="name">{row.name}</span></span>
-			<span class="amount">{row.amount}</span>
-		</li>
-	{/each}
-</ul>
+{#if panel.done.length > 0}
+	<p class="section">{panel.sectionDone}</p>
+	<ul>
+		{#each panel.done as row (row.id)}
+			<li>
+				<ChainMark mark={row.mark} />
+				<span class="text"><span class="name">{row.name}</span></span>
+				<span class="amount">{row.amount}</span>
+			</li>
+		{/each}
+	</ul>
+{/if}
 
 {#if panel.unpriced.length > 0}
 	<p class="section">{panel.sectionUnpriced}</p>
@@ -64,6 +83,15 @@
 {/if}
 
 <style>
+	/* The line that was pressed, whole: the sheet's first words. */
+	.said {
+		margin: 0 0 var(--space-md);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
+	}
+
 	.summary {
 		margin: 0 0 var(--space-xl);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));

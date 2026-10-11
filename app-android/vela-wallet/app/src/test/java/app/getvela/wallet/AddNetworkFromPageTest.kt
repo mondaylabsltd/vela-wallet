@@ -69,7 +69,8 @@ class AddNetworkFromPageTest {
     /** The two machines and the relay between them. [deployed]: whether the fake chain carries Vela's contracts. */
     private class Rig(val browser: CoreHost<DbrView>, val admin: CoreHost<NetView>, val store: FakeStore)
 
-    private fun rig(deployed: Boolean): Rig {
+    /** [p256]: whether the fake chain has the P-256 verifier at 0x100. */
+    private fun rig(deployed: Boolean, p256: Boolean = true): Rig {
         val store = FakeStore()
         lateinit var browser: CoreHost<DbrView>
         lateinit var admin: CoreHost<NetView>
@@ -92,7 +93,7 @@ class AddNetworkFromPageTest {
                     NetShellResult.Probed(operation.url, sepolia, 20)
                 }
                 is NetOperation.RpcGetCode -> NetShellResult.Code(operation.url, operation.address, if (deployed) "0x6080604052" else "0x")
-                is NetOperation.RpcCallP256 -> NetShellResult.P256Call(operation.url, "0x" + "0".repeat(63) + "1")
+                is NetOperation.RpcCallP256 -> NetShellResult.P256Call(operation.url, if (p256) "0x" + "0".repeat(63) + "1" else "0x")
                 else -> adminExecutor.perform(operation)
             }
         }
@@ -185,7 +186,12 @@ class AddNetworkFromPageTest {
         val model = ExploreLive.addNetwork(sheet, strings)
         assertNull("no Add for a chain this wallet refuses", model.add)
         assertEquals("Done", model.dismiss)
-        assertEquals("Open Chain Setup Tool", model.setupTool)
+        // The verifier is there and contracts are not: the core's line, and
+        // Chain Setup opened on THIS chain.
+        assertEquals("missing_contracts", sheet.compat?.blocker)
+        assertEquals(strings.t("settingsModals.addNetwork.incompatibleHint"), model.note)
+        assertEquals("Open Chain Setup Tool", model.setupTool?.label)
+        assertEquals("https://getvela.app/chain-setup?chain=11155111", model.setupTool?.url)
 
         rig.admin.dispatch(NetEvent.DappAddDeclined, NetEvent.serializer())
         assertEquals(4902, answerFor("a1").getJSONObject("error").getInt("code"))
@@ -195,6 +201,29 @@ class AddNetworkFromPageTest {
             .inspector!!.rows.first { it.id == "a1" }
         assertEquals(DbrReason.NotCompatible, row.reason)
         assertEquals(4902L, row.code)
+    }
+
+    /**
+     * A chain with no P-256 verifier, through the real machine: refused for
+     * THAT (it wins over missing contracts), said in its own words, and with
+     * no Chain Setup button — nothing can be deployed to make it work.
+     */
+    @Test
+    fun `a chain with no P-256 verifier is refused in its own words, with nothing to deploy`() = runBlocking<Unit> {
+        val rig = rig(deployed = false, p256 = false)
+        addSepolia(rig.browser, "a1")
+        val sheet = rig.admin.sheet(NetDappAddPhase.NotCompatible)
+        assertEquals("no_p256", sheet.compat?.blocker)
+        assertNull(sheet.compat?.setup_url)
+        val model = ExploreLive.addNetwork(sheet, strings)
+        assertNull(model.add)
+        assertEquals(strings.t("settingsModals.addNetwork.noP256Hint"), model.note)
+        assertTrue(model.note!!, model.note!!.contains("Vela wallets can't work here"))
+        assertNull("no Chain Setup for a chain nothing can be deployed on", model.setupTool)
+        assertFalse(model.checks.last().ok)
+
+        rig.admin.dispatch(NetEvent.DappAddDeclined, NetEvent.serializer())
+        assertEquals(4902, answerFor("a1").getJSONObject("error").getInt("code"))
     }
 
     @Test

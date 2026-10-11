@@ -1309,14 +1309,17 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		panelTitle: m.panelTitle
 	}),
 
-	// -- cs36: the wallet's OWN request (spec 062's key backup) -----------
+	// -- cs36: the wallet's OWN request (spec 062: copying its record to
+	//    Ethereum) -----------------------------------------------------------
 	//
 	// Nobody else is asking, so there is no requester to show: the header is
 	// the request's intent and (live) the ✕ — no mark, no "Vela Wallet", no
 	// network chip. The network is a row, in the core's words, as are the
-	// address being backed up and the count of its keys; the toggle names no
-	// contract, and the confirm says the intent. Every word is a core term
-	// (`componentsUi.signing.*`), so the board reads in the gallery's locale.
+	// address the record is for, the wallet's NAME (it becomes public on
+	// Ethereum too, so the sheet says it) and how many keys the record
+	// includes; the toggle names no contract, and the confirm says the
+	// intent. Every word is a core term (`componentsUi.signing.*`), so the
+	// board reads in the gallery's locale.
 	cs36: (m) => ({
 		// Who asked, for the record — not drawn while there is a headline.
 		dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)' },
@@ -1329,6 +1332,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				rows: [
 					row(m.terms.labelNetwork, NETWORK.name),
 					row(m.terms.labelAddress, ADDR.self, undefined, true),
+					row(m.terms.labelWalletName, IDENTITY.name),
 					row(m.terms.labelPublicKeys, '2')
 				]
 			}

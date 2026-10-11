@@ -18,7 +18,7 @@ import { liveChainRows, withLiveWalletDesktop } from './live';
 
 const m = resolveWalletMessages('en');
 const IDENTICON = () => '<svg></svg>';
-const USD = { code: 'USD', rate: 1, committed: true };
+const USD = { code: 'USD', rate: 1, committed: true, pending: null };
 
 function token(chain_id: number, symbol: string): BalanceToken {
 	return {
@@ -52,6 +52,9 @@ function view(tokens: BalanceToken[]): BalanceView {
 		unreachable_key: null,
 		internal_chain_ids: [],
 		internal_key: null,
+		checking_key: null,
+		live_key: null,
+		empty_key: null,
 		holdings_loading: false,
 		cached_total_usd: 300,
 		switcher: { open: false, loading: false, balances: [], hidden: false }
@@ -85,6 +88,14 @@ function item(id: string, chain_id: number): FeedItem {
 
 const HELD = view([token(1, 'ETH'), token(1, 'USDT'), token(56, 'BNB')]);
 
+const ROWS: FeedView['rows'] = [
+	{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
+	{ type: 'item', item: item('a', 1) },
+	{ type: 'item', item: item('b', 56) },
+	{ type: 'header', id: 'day-0', day_start_ms: 0, timestamp: 0 },
+	{ type: 'item', item: item('c', 1) }
+];
+
 const FEED: FeedView = {
 	transactions: [],
 	new_item_id: null,
@@ -93,13 +104,10 @@ const FEED: FeedView = {
 	home_empty_key: 'home.emptyNoActivity',
 	hidden: false,
 	contact_rows: [],
-	rows: [
-		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
-		{ type: 'item', item: item('a', 1) },
-		{ type: 'item', item: item('b', 56) },
-		{ type: 'header', id: 'day-0', day_start_ms: 0, timestamp: 0 },
-		{ type: 'item', item: item('c', 1) }
-	]
+	rows: ROWS,
+	// Three items: the home's cut (issue 469, the core's newest three) is the
+	// whole feed here. `live-home-rows.test.ts` has the longer feed.
+	home_rows: ROWS
 };
 
 describe('liveChainRows', () => {

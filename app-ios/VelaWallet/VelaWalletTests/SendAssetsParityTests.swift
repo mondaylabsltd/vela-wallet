@@ -295,8 +295,15 @@ struct SendAssetsParityTests {
         #expect(empty.rows.isEmpty)
         #expect(empty.empty?.title == loc.t("assets.emptyTitle"))
 
-        let settled = FlowsLive.assets(balance([]), currency: nil, on: drawnAssets(), loc: loc)
+        // Empty is the core's to say (`emptyKey`): a read ended and found
+        // nothing held. No rows under a known total is also what a cached
+        // zero looks like before the first read has ended.
+        var found = balance([])
+        found.emptyKey = "assets.emptyTitle"
+        let settled = FlowsLive.assets(found, currency: nil, on: drawnAssets(), loc: loc)
         #expect(settled.empty != nil, "a wallet that holds nothing, once the core has looked")
+        let unread = FlowsLive.assets(balance([]), currency: nil, on: drawnAssets(), loc: loc)
+        #expect(unread.empty == nil, "\"Deposit your first asset\" without the core's key")
 
         let loading = FlowsLive.assets(balance([], loading: true), currency: nil,
                                        on: drawnAssets(), loc: loc)

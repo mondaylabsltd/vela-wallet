@@ -868,10 +868,12 @@ enum SigningFixtures {
                 panelTitle: t(loc, "signatureRequest")
             )
 
-        // -- cs36: the wallet's own key backup (first party) --------------
+        // -- cs36: the wallet's own copy of its record (first party) ------
         case .cs36:
             // What the live sheet draws for RootView.openEthereumBackup: the
-            // core's rows in its words (Network first — there is no chip),
+            // core's rows in its words (Network first — there is no chip;
+            // then the address, the WALLET NAME — it goes onto a second
+            // public chain, so the sheet says it — and the keys included),
             // no requester header, the intent as the headline and the
             // confirm's label, and no "· Vela passkey registry" summary.
             var model = SigningModel(
@@ -883,6 +885,7 @@ enum SigningFixtures {
                     .rows([
                         SigningRow(label: t(loc, "labelNetwork"), value: network.name),
                         SigningRow(label: t(loc, "labelAddress"), value: Addr.selfShort, mono: true),
+                        SigningRow(label: t(loc, "labelWalletName"), value: WalletFixtures.identity.name),
                         SigningRow(label: t(loc, "labelPublicKeys"), value: "3"),
                     ]),
                 ],
@@ -890,7 +893,7 @@ enum SigningFixtures {
                     loc,
                     fn: (label: t(loc, "techFunction"), signature: t(loc, "intentBackUpPublicKeys")),
                     simResult: SigningRow(label: t(loc, "simResultLabel"),
-                                          value: t(loc, "balanceNoAssetsMove")),
+                                          value: t(loc, "simResultNoChange")),
                     raw: (label: t(loc, "techRawData"), hex: "0xcd438f9b0000000000000000000000000000…")
                 ),
                 techOpen: false, fee: onchainFee(loc), signer: signer(loc),

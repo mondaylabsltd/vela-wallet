@@ -259,6 +259,15 @@ class SendHoldingsTest {
         assertEquals("", fresh.recipient)
     }
 
+    /**
+     * The read-ahead asks each chain for four things at once, each in a
+     * coroutine of its own (`RelayClient.prewarmFees`): which of them reaches
+     * the relay first is the scheduler's business. This used to wait for both
+     * chains' in-band quotes and then assert a gas-price read had already
+     * been made — true on a quiet machine, and on a busy runner both quotes
+     * were in before either price (CI, PR 489). It waits for all of what it
+     * asserts: both chains' quotes and both chains' prices.
+     */
     @Test
     fun `an open picker reads ahead the fees of the chains the person holds`() = runBlocking<Unit> {
         val feed = Feed()
@@ -266,10 +275,10 @@ class SendHoldingsTest {
         val send = controller(feed)
         send.open(account = me, display = usd)
         send.awaitView("the picker") { it.stage == SendStage.SelectToken && it.tokens.size == 2 }
-        withTimeout(10_000) {
-            while (port.calls.count { it.endsWith("vela_getInBandGasQuote") } < 2) delay(20)
+        port.awaitCalls("both chains' fee quotes and gas prices are read ahead") { calls ->
+            calls.count { it.endsWith("vela_getInBandGasQuote") } >= 2 &&
+                calls.count { it.endsWith("pimlico_getUserOperationGasPrice") } >= 2
         }
-        assertTrue(port.calls.toString(), port.calls.any { it.endsWith("pimlico_getUserOperationGasPrice") })
     }
 
     private companion object {

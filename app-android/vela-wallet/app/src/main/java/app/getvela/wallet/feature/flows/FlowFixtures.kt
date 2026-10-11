@@ -59,6 +59,9 @@ object FlowFixtures {
     // Spec 018's roster, reused rather than re-invented.
     private const val ALICE_DISPLAY = "0x9F3c…21aE"
     private const val ALICE_FULL = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE"
+
+    /** The importer boards' second payee (SD2P / SD2Q). */
+    private const val SECOND_PAYEE = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
     private const val A_HAO_FULL = "0x77Bd59A302cC93D23dB0d0BA6a45C6830EF74F02"
     private const val HOLD_ON_DISPLAY = "0xCafe…F00d"
     private const val HOLD_ON_FULL = "0xCafe9078B1c2A04d33Ff21B0BC934eB8A812F00d"
@@ -287,6 +290,40 @@ object FlowFixtures {
                     ),
                 ),
             ),
+        )
+    }
+
+    /**
+     * A2H: the core privacy fixture's feed, hidden, through the live builders
+     * ([FlowLive.history], [FlowLive.txDetail]) — the received transfer's
+     * detail, its amount the mask with the coin kept.
+     */
+    private fun hiddenDetail(s: VelaStrings): FlowScreenModel {
+        val feed = WalletFixtures.liveHiddenFeed()
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        val detail = FlowLive.txDetail(txDetail(s, received = true), feed, "received", s, chains)
+            ?: txDetail(s, received = true)
+        return FlowScreenModel(
+            state = FlowState.A2H,
+            base = FlowBase.History(FlowLive.history(history(s), feed, s, chainNames = chains)),
+            sheet = FlowSheet.TxDetail(detail),
+        )
+    }
+
+    /**
+     * A2S / A2SH: the split of the same feed, opened, through the live
+     * builders — shown, and hidden (every share the mask with its coin).
+     */
+    private fun splitDetail(s: VelaStrings, hidden: Boolean): FlowScreenModel {
+        val feed = WalletFixtures.liveHiddenFeed(hidden = hidden)
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        val money = app.getvela.wallet.feature.wallet.WalletLive.Money.dollars()
+        val detail = FlowLive.txDetail(txDetail(s, received = false), feed, WalletFixtures.SPLIT_ROW, s, chains, money = money)
+            ?: txDetail(s, received = false)
+        return FlowScreenModel(
+            state = if (hidden) FlowState.A2SH else FlowState.A2S,
+            base = FlowBase.History(FlowLive.history(history(s), feed, s, chainNames = chains)),
+            sheet = FlowSheet.TxDetail(detail),
         )
     }
 
@@ -674,6 +711,8 @@ object FlowFixtures {
                         ALICE_FULL,
                         "50",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                     RecipientCardModel(
                         s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to "2")),
@@ -681,6 +720,8 @@ object FlowFixtures {
                         A_HAO_FULL,
                         "30",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                     RecipientCardModel(
                         s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to "3")),
@@ -688,6 +729,8 @@ object FlowFixtures {
                         HOLD_ON_FULL,
                         "40",
                         s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+                        pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+                        scanLabel = s.t(I18nKeys.Flows.SCAN_ARIA),
                     ),
                 ),
                 recipientActions = listOf(
@@ -731,7 +774,6 @@ object FlowFixtures {
         title = s.t(I18nKeys.Flows.PICK_CONTACT_TITLE),
         closeLabel = s.t(I18nKeys.Flows.CLOSE),
         searchPlaceholder = s.t(I18nKeys.Flows.PICK_CONTACT_SEARCH),
-        scanRow = s.t(I18nKeys.Flows.SCAN_TO_FILL),
         groupsTitle = s.t(I18nKeys.Flows.CONTACTS_GROUPS),
         groups = listOf(
             ContactGroupModel(
@@ -1057,6 +1099,18 @@ object FlowFixtures {
             )
             FlowState.SD4B -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Submitted)))
             FlowState.SD4C -> screen(FlowBase.SendReceipt(sendReceipt(s, ReceiptStage.Confirmed)))
+            FlowState.A2H -> hiddenDetail(s)
+            FlowState.A2S -> splitDetail(s, hidden = false)
+            FlowState.A2SH -> splitDetail(s, hidden = true)
+            FlowState.SD1L -> screen(FlowBase.SendPick(lockedPick(s)))
+            FlowState.SD2P -> screen(FlowBase.SendForm(sendForm(s, SendFormMode.Split)), FlowSheet.BatchImport(liveBatchImport(s, currencyKnown = false)))
+            FlowState.SD2Q -> screen(FlowBase.SendForm(sendForm(s, SendFormMode.Split)), FlowSheet.BatchImport(liveBatchImport(s, currencyKnown = true)))
+            FlowState.SD2N -> screen(FlowBase.SendForm(currencyForm(s, committed = false)))
+            FlowState.SD2O -> screen(FlowBase.SendForm(currencyForm(s, committed = true)))
+            FlowState.SD3J -> screen(FlowBase.SendConfirm(currencyConfirm(s, committed = false)))
+            FlowState.SD3K -> screen(FlowBase.SendConfirm(currencyConfirm(s, committed = true)))
+            FlowState.T2W -> currencyTokenPage(s, committed = false)
+            FlowState.T2C -> currencyTokenPage(s, committed = true)
             FlowState.SD3D -> screen(FlowBase.SendConfirm(heldConfirm(s)))
             FlowState.SD4D -> screen(FlowBase.SendReceipt(refusedReceipt(s)))
             FlowState.SD2G, FlowState.SD2H -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.ChainDown)))
@@ -1203,6 +1257,164 @@ object FlowFixtures {
         ),
         boardContext(s),
     )
+
+    // -- the currency on its way (the core's withhold rule), and landed -----------
+
+    /**
+     * The display currency of the "on its way" boards: a cold start with CNY
+     * stored. [committed] `false` is the core's USD placeholder, naming the
+     * stored choice as `pending` — every fiat figure waits; `true` is the
+     * same frame a moment later, the rate in.
+     */
+    fun boardCurrency(committed: Boolean) = if (committed) {
+        app.getvela.wallet.feature.settings.core.CurrencyView(code = "CNY", rate = 7.1, committed = true)
+    } else {
+        app.getvela.wallet.feature.settings.core.CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")
+    }
+
+    private fun currencyContext(s: VelaStrings, committed: Boolean) = app.getvela.wallet.feature.send.SendLive.Context(
+        strings = s,
+        chainNames = mapOf(1 to NETWORKS[0].name),
+        explorers = emptyMap(),
+        money = app.getvela.wallet.feature.wallet.WalletLive.Money.of(boardCurrency(committed)),
+        fromName = WalletFixtures.NAME,
+        fromAddress = WalletFixtures.ADDRESS_FULL,
+    )
+
+    /** A settled fee in the chain's own coin, with the price the relay published for it: its worth is a fiat figure. */
+    private fun pricedFee() = app.getvela.wallet.feature.send.core.FeeEstimateView(
+        chain_id = 1, total_wei = "123000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+        relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+        deployed = true, tier = app.getvela.wallet.feature.send.core.FeeTier.Standard, quoted = true,
+        fee_asset = app.getvela.wallet.feature.send.core.FeeAssetView.Native,
+    )
+
+    private fun pricedFeeView() = app.getvela.wallet.feature.send.core.FeeView(
+        fee = pricedFee(),
+        options = listOf(
+            app.getvela.wallet.feature.send.core.FeeOptionView(
+                symbol = "ETH", contract = null, decimals = 18, balance = "1200000000000000000",
+                recipient = "0x2222222222222222222222222222222222222222", usd_balance = "3072.00", usd_price = "2560",
+                amount = "123000000000000", selected = true,
+            ),
+        ),
+        confirm_fee_ready = true,
+    )
+
+    /**
+     * SD2N / SD2O: the send form, 120 USDT typed. Waiting, the "≈" line under
+     * the amount keeps its room with nothing in it and the fee is its coin
+     * amount alone; landed, both carry their worth in the person's currency —
+     * and nothing else on the form has moved.
+     */
+    private fun currencyForm(s: VelaStrings, committed: Boolean): SendFormModel =
+        app.getvela.wallet.feature.send.SendLive.form(
+            sendForm(s, SendFormMode.Single),
+            boardSend().copy(
+                stage = app.getvela.wallet.feature.send.core.SendStage.EnterDetails,
+                amount = "120",
+                fee = pricedFee(),
+                fee_coin = app.getvela.wallet.feature.send.core.SendFeeCoin(symbol = "ETH", contract = null, chain_id = 1),
+                denom_toggle_shown = true,
+                denom_toggle_enabled = true,
+                can_continue = true,
+            ),
+            pricedFeeView(),
+            currencyContext(s, committed),
+            app.getvela.wallet.feature.send.SendLive.SpeedInputs(app.getvela.wallet.feature.send.core.FeeSpeedView(), feeViewOf = { null }),
+        ).let { form ->
+            // The landed board is the waiting one a moment later: on a screen
+            // that waited, the fee row has taken the room its worth needs and
+            // keeps it (`KeptRoom`, remembered by the row). A board is a
+            // fresh composition with nothing remembered, so it says so itself.
+            form.copy(fee = form.fee.copy(worthRoom = true), speed = form.speed?.copy(worthRoom = true))
+        }
+
+    /**
+     * SD1L: a payment request for a network the wallet lacks (chain 48900),
+     * through [app.getvela.wallet.feature.send.SendLive.pick]: the core's
+     * `lock_error`, said on the picker's notice.
+     */
+    private fun lockedPick(s: VelaStrings): SendPickModel =
+        app.getvela.wallet.feature.send.SendLive.pick(
+            sendPick(s, multi = false).copy(rows = emptyList()),
+            app.getvela.wallet.feature.send.core.SendView(
+                stage = app.getvela.wallet.feature.send.core.SendStage.LockError,
+                locked = true,
+                lock_error = app.getvela.wallet.feature.send.core.SendLockError.Network(48_900),
+            ),
+            boardContext(s),
+        )
+
+    /**
+     * SD2P / SD2Q: the batch importer through
+     * [app.getvela.wallet.feature.send.SendLive.batchImport] — two rows of a
+     * sheet read in the display currency — before anything is known of that
+     * currency (the importer holds the placeholder's code and says none) and
+     * once it has been told CNY.
+     */
+    private fun liveBatchImport(s: VelaStrings, currencyKnown: Boolean): BatchImportModel {
+        val wire = app.getvela.wallet.feature.send.core.BatchView(
+            opened = true,
+            unit = app.getvela.wallet.feature.send.core.BatchUnit.Fiat,
+            fiat_code = if (currencyKnown) "CNY" else "USD",
+            raw_text = "$ALICE_FULL,5000\n$SECOND_PAYEE,8000",
+            rate_status = app.getvela.wallet.feature.send.core.BatchRateStatus.Ok,
+            rate_input = if (currencyKnown) "7.25" else "1",
+            preview = listOf(
+                app.getvela.wallet.feature.send.core.BatchPreviewRow(line = 1, address = ALICE_FULL, valid = true, raw_amount = "5000", token_amount = if (currencyKnown) "689.655172" else "5000", ok = true),
+                app.getvela.wallet.feature.send.core.BatchPreviewRow(line = 2, address = SECOND_PAYEE, valid = true, raw_amount = "8000", token_amount = if (currencyKnown) "1103.448275" else "8000", ok = true),
+            ),
+            recipient_count = 2,
+            total_token = if (currencyKnown) "1793.103447" else "13000",
+            total_fiat = "13000",
+            can_apply = currencyKnown,
+            over_balance = !currencyKnown,
+        )
+        val view = boardSend().copy(stage = app.getvela.wallet.feature.send.core.SendStage.EnterDetails, split_mode = true, show_batch_import = true)
+        return app.getvela.wallet.feature.send.SendLive.batchImport(batchImport(s), wire, view, boardContext(s), currencyUnknown = !currencyKnown)
+    }
+
+    /** SD3J / SD3K: the confirm of that send — the worth under the figure, and the fee's. */
+    private fun currencyConfirm(s: VelaStrings, committed: Boolean): SendConfirmModel =
+        app.getvela.wallet.feature.send.SendLive.confirm(
+            sendConfirm(s, SendFormMode.Single),
+            boardSend().copy(
+                stage = app.getvela.wallet.feature.send.core.SendStage.Confirm,
+                fee = pricedFee(),
+                can_confirm = true,
+            ),
+            currencyContext(s, committed),
+            pricedFeeView(),
+        )
+
+    /**
+     * T2W / T2C: a holding's page — 376.54 USDC on Ethereum — over Assets.
+     * Waiting, the worth under the balance and the price row keep their room;
+     * landed, they are in the person's currency.
+     */
+    private fun currencyTokenPage(s: VelaStrings, committed: Boolean): FlowScreenModel {
+        val usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        val view = app.getvela.wallet.feature.wallet.core.BalanceView(
+            address = WalletFixtures.ADDRESS_FULL,
+            display_total_usd = 794.79,
+            tokens = listOf(
+                app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
+                app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54", decimals = 6, token_address = usdc, price_usd = 1.0),
+            ),
+        )
+        val chains = mapOf(1 to "Ethereum", 100 to "Gnosis")
+        val currency = boardCurrency(committed)
+        val page = FlowLive.tokenDetail(
+            tokenDetail(s), view, app.getvela.wallet.feature.wallet.core.FeedView(),
+            app.getvela.wallet.feature.wallet.WalletLive.holdingId(1, usdc), chains, currency, s,
+        ) ?: tokenDetail(s)
+        return FlowScreenModel(
+            state = if (committed) FlowState.T2C else FlowState.T2W,
+            base = FlowBase.Assets(FlowLive.assets(assets(s, empty = false), view, chains, currency)),
+            sheet = FlowSheet.TokenDetail(page),
+        )
+    }
 
     /** The send the boards drive through the live builders: 120 USDT on Ethereum to Alice. */
     private fun boardSend(): app.getvela.wallet.feature.send.core.SendView = app.getvela.wallet.feature.send.core.SendView(

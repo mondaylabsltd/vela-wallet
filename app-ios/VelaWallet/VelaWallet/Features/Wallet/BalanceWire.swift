@@ -58,6 +58,68 @@ struct UnreachableNetworkWire: Decodable, Equatable {
     let lastSeenUsd: Double?
     /// The corpus key of the row's line; `assets.lastSeen` fills `{{amount}}`.
     let lineKey: String
+    /// What kept it from being read (PR 3 note 4): its nodes, or the token
+    /// list that names what to read there. Absent on the wire (a view from
+    /// before the field) reads as the network's.
+    var cause: UnreachableCauseWire = .network
+    /// May the row offer its RPC editor? The core's answer — true only when
+    /// the network itself did not answer. A row that is `false` draws no
+    /// "Fix" anywhere: the endpoint is fine, and a fix there sends a person
+    /// to repair what is working. Absent reads `true`, the core's own default.
+    var rpcFixable = true
+    /// The corpus key of the row's SHORT status in the balance breakdown
+    /// (final note F21): `home.balanceDetailStatusFailed` ("RPC unavailable")
+    /// or `home.balanceDetailStatusTokenList` ("Token list unavailable") —
+    /// the core's, because "RPC unavailable" is false of a network whose RPC
+    /// is answering. Absent on the wire (a view from before the field) reads
+    /// as the only status there was.
+    var statusKey = UnreachableNetworkWire.statusRpcUnavailable
+
+    /// The core's `STATUS_RPC_UNAVAILABLE` — `status_key`'s serde default.
+    static let statusRpcUnavailable = "home.balanceDetailStatusFailed"
+
+    private enum CodingKeys: String, CodingKey {
+        case chainId, lastKnown, lastSeenUsd, lineKey, cause, rpcFixable, statusKey
+    }
+
+    init(
+        chainId: Int, lastKnown: String, lastSeenUsd: Double?, lineKey: String,
+        cause: UnreachableCauseWire = .network, rpcFixable: Bool = true,
+        statusKey: String = UnreachableNetworkWire.statusRpcUnavailable
+    ) {
+        self.chainId = chainId
+        self.lastKnown = lastKnown
+        self.lastSeenUsd = lastSeenUsd
+        self.lineKey = lineKey
+        self.cause = cause
+        self.rpcFixable = rpcFixable
+        self.statusKey = statusKey
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chainId = try c.decode(Int.self, forKey: .chainId)
+        lastKnown = try c.decode(String.self, forKey: .lastKnown)
+        lastSeenUsd = try c.decodeIfPresent(Double.self, forKey: .lastSeenUsd)
+        lineKey = try c.decode(String.self, forKey: .lineKey)
+        // A cause this build has never heard of is not the network's to fix
+        // either way: the row's own `rpc_fixable` decides the button.
+        cause = try c.decodeIfPresent(String.self, forKey: .cause)
+            .flatMap(UnreachableCauseWire.init(rawValue:)) ?? .network
+        rpcFixable = try c.decodeIfPresent(Bool.self, forKey: .rpcFixable) ?? true
+        statusKey = try c.decodeIfPresent(String.self, forKey: .statusKey)
+            ?? Self.statusRpcUnavailable
+    }
+}
+
+/// Why a network in the unreachable list could not be read — the core's
+/// `UnreachableCause`.
+enum UnreachableCauseWire: String, Decodable {
+    /// None of its RPC endpoints answered.
+    case network
+    /// Its RPC answers; the token list that names what to read there could
+    /// not be loaded, and it has no native coin to read without one (Tempo).
+    case tokenList = "token_list"
 }
 
 struct BalanceSwitcherViewWire: Decodable, Equatable {
@@ -122,7 +184,9 @@ struct BalanceViewWire: Decodable, Equatable {
     /// default only serves Swift-built test views.
     var unreachableNetworks: [UnreachableNetworkWire] = []
     /// The corpus key of the home line over them (`assets.unreachableOne` /
-    /// `assets.unreachableMany`); `nil` when every network answered.
+    /// `assets.unreachableMany`, or `assets.tokenListUnreachable` when the
+    /// one network's token list is what could not be loaded — PR 3 note 4);
+    /// `nil` when every network answered.
     var unreachableKey: String? = nil
     /// The failed chains whose read never left the app (PR 2 note 11) — not
     /// in `unreachableNetworks`: nothing there is the network's doing. The
@@ -133,6 +197,29 @@ struct BalanceViewWire: Decodable, Equatable {
     /// fault): drawn where the unreachable line goes, in place of any "Can't
     /// reach …" — an internal fault never reads "Can't reach Ethereum".
     var internalKey: String? = nil
+    /// The hero's line while the FIRST read of this account is still out
+    /// (final note F19): `componentsUi.funding.checking`, "Checking…". Until
+    /// a round has ended nothing here was said by a chain — a cached total
+    /// of 0 is last session's. `nil` from the first round's end on: a later
+    /// refresh is not "checking". Absent on the wire reads as `nil`.
+    var checkingKey: String? = nil
+    /// The hero's line under a LIVE zero: `home.liveIndicator`, "Live ·
+    /// listening for payments". Set only when the last round SETTLED, every
+    /// chain it asked answered and the wallet holds nothing. **The "zero,
+    /// live" state is this key and nothing else** — never derived here from
+    /// the total and the partial flag, which a cached zero satisfies before
+    /// anything has been read.
+    var liveKey: String? = nil
+    /// The Assets list's empty state: `assets.emptyTitle`, "Deposit your
+    /// first asset", with its caption and its action. Set only when a read
+    /// of this account has ENDED and found nothing held — never while the
+    /// first read is out (`checkingKey`), while holdings load, or when
+    /// nothing is known or nothing could be read. **The list is empty when
+    /// this key is set and at no other time**: a wallet that held nothing
+    /// last session opens with a cached total of 0, and "no tokens, a known
+    /// total" invited a first deposit under "Checking…". Absent on the wire
+    /// (an older core, a stored fixture) reads as `nil`: not empty.
+    var emptyKey: String? = nil
     let holdingsLoading: Bool
     let cachedTotalUsd: Double?
     let switcher: BalanceSwitcherViewWire

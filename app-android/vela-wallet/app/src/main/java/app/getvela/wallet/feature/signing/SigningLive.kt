@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.signing
 
+import app.getvela.wallet.feature.wallet.core.TrustSimDirection
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.VelaStrings
@@ -106,7 +107,23 @@ object SigningLive {
         val page: String,
         val key: app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.KeyLabel?,
         val line: uniffi.vela_core_uniffi.SignerIntegrityLine,
+        /**
+         * The page as Settings keeps it — the person's label, whose keys it
+         * reaches, official or not — so the card NAMES it as Settings does.
+         * `null`: a page no longer in the list (removing one changes no
+         * account); it is named from its address alone.
+         */
+        val saved: app.getvela.wallet.feature.settings.core.SigningPageRow? = null,
     )
+
+    /** The saved row for [page], however its trailing slash was typed. */
+    fun savedPage(
+        pages: List<app.getvela.wallet.feature.settings.core.SigningPageRow>,
+        page: String,
+    ): app.getvela.wallet.feature.settings.core.SigningPageRow? {
+        val key = app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.key(page)
+        return pages.firstOrNull { app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks.key(it.url) == key }
+    }
 
     /**
      * A key row in the person's words — the core's `KeyLabel`: the label its
@@ -131,10 +148,24 @@ object SigningLive {
      */
     fun handoffModel(handoff: Handoff, strings: VelaStrings, fee: HandoffFeeModel? = null): HandoffModel {
         val integrity = app.getvela.wallet.feature.settings.components.integrityModel(handoff.line, strings)
+        val address = handoff.page.substringAfter("://").trimEnd('/')
+        // The page by its NAME, as Settings and iOS name it (「Vela 官方签名页」,
+        // the person's label, "Self-hosted · domain") — the card said only the
+        // host, and "sign.getvela.app" does not say whose page it is.
+        val checks = app.getvela.wallet.feature.signing.trustedsigner.SignerPageChecks
+        val pageName = app.getvela.wallet.feature.settings.SettingsLive.pageName(
+            name = handoff.saved?.name.orEmpty(),
+            official = handoff.saved?.official
+                ?: (checks.key(handoff.page) == checks.key(uniffi.vela_core_uniffi.trustedSignerDefaultUrl())),
+            domain = handoff.saved?.domain?.takeIf { it.isNotBlank() } ?: uniffi.vela_core_uniffi.signingPageDomain(handoff.page),
+            address = address,
+            s = strings,
+        )
         return HandoffModel(
             title = strings.s("handoffTitle"),
             key = keyRow(handoff.key, strings),
-            page = handoff.page.substringAfter("://").trimEnd('/'),
+            pageName = pageName,
+            page = address,
             integrity = integrity,
             open = strings.s("openSigner"),
             fee = fee,
@@ -321,13 +352,36 @@ object SigningLive {
         // says so (`first_party`, set in the one place the backup is raised) —
         // never this sheet, from bytes or an origin any page could send.
         val own = sign.request?.first_party == true
-        val sims = simBlocks(sim, ctx)
+        // PR 3: what stands in the verdict's place is the simulation's
+        // outcome as the core's wait for it allows ([verdictShown]).
+        val verdict = verdictShown(sim, sign)
+        val sims = simBlocks(verdict, ctx)
         // Issue #314: on the wallet's own request a simulation that moves
         // nothing only confirms what the wallet itself wrote — a technical
         // fact, folded with the others, not a bordered card weighing as much as
         // the outcome. Anything else it has to say (a revert, a node that could
-        // not check, a balance that would move) stays on the sheet.
-        val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
+        // not check, a balance that would move) stays on the sheet. "Moves
+        // nothing" is the core's line being there (`no_change_key`), and the
+        // fact folded is that line.
+        val quietSim = (verdict as? SigningController.SimOutcome.Ready)?.noChangeKey?.takeIf { own }?.let { s.t(it) }
+        // The verdict's place is kept from the first frame, at least the size
+        // of the tallest verdict a sheet usually ends on ([verdictRooms]; a
+        // taller one is shown whole and the place grows). The sheet is
+        // bottom-anchored: a card landing a second late pushed the whole form
+        // up — "Vela couldn't check what this transaction does" on every
+        // request on a chain whose nodes have no simulator, Gnosis among
+        // them, and then, once that card's room alone was kept, every verdict
+        // taller than it (a swap's two balance rows). Not on the wallet's own
+        // request, whose verdict folds into the technical details and takes
+        // no place at all.
+        val simPlace: List<SigningBlock> = when {
+            quietSim != null -> emptyList()
+            own && sims.isEmpty() -> emptyList()
+            verdict == null -> emptyList()
+            // While it is out the place holds a skeleton, said as the
+            // corpus's plain "Checking…" (F2: it was blank).
+            else -> listOf(heldPlace(sims.singleOrNull(), ctx))
+        }
         // Spec 102 D4: a page venue's sheet does not repeat the preview — the
         // page is the authority. What stays is what only Vela can decide
         // before it hands off: an approval's amount (the guard), and the fee.
@@ -336,7 +390,7 @@ object SigningLive {
             if (refused) statusBlocks(sign, s)
             else if (handoff != null) statusBlocks(sign, s, ctx.trustedSignerWaiting) + guardBlocks(guard, s)
             else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
-                (if (quietSim != null) emptyList() else sims) + guardBlocks(guard, s)
+                simPlace + guardBlocks(guard, s)
         val hidePreview = refused || handoff != null
         // The wallet's own request leads with what it does, as the header's
         // title beside the ✕ — so that intent is not said a second time under it.
@@ -371,7 +425,7 @@ object SigningLive {
                 signature = if (hidePreview) null else clear.result?.intent,
                 params = emptyList(),
                 identities = emptyList(),
-                simResult = quietSim?.takeIf { !hidePreview }?.let { SigningRow(s.s("simResultLabel"), it.note ?: s.s("simResultNoChange")) },
+                simResult = quietSim?.takeIf { !hidePreview }?.let { SigningRow(s.s("simResultLabel"), it) },
                 rawLabel = if (!hidePreview && (dataBytes > 0 || wholeBatch)) s.s("techRawData") else null,
                 rawHex = when {
                     hidePreview -> null
@@ -1174,6 +1228,82 @@ object SigningLive {
     }
 
     /**
+     * What stands in the verdict's place (PR 3, fix C): the simulation's
+     * outcome as this shell holds it ([sim]), read with the core's word on
+     * the wait the confirm keeps for it ([sign]).
+     *
+     * - No simulation ([sim] `null`): nothing, and no place.
+     * - **The core is still waiting** ([SignView.sim_checking]): "checking" —
+     *   the skeleton. Also for the instant between this shell holding the
+     *   answer and the core hearing so (`SimSettled` is on its way): the
+     *   verdict and the confirm that waited for it are both the core's one
+     *   commit, so they turn in the SAME frame — never a verdict standing
+     *   over a confirm that still says "Checking what this transaction
+     *   does…".
+     * - **The wait is over and the simulation is still out** — the core's
+     *   deadline passed ([SignView.sim_waited_out_key]): that sentence, a
+     *   caution, exactly as the could-not-check notice of a node that cannot
+     *   simulate is drawn ([simBlocks]), in the same place.
+     * - Otherwise the outcome itself: a verdict that lands after the deadline
+     *   replaces the caution at once.
+     *
+     * Nothing here shuts or opens the confirm: that is the gate's
+     * ([confirmState]), which reads the same view.
+     */
+    internal fun verdictShown(sim: SigningController.SimOutcome?, sign: SignView): SigningController.SimOutcome? = when {
+        sim == null -> null
+        sign.sim_checking -> SigningController.SimOutcome.Pending
+        sim == SigningController.SimOutcome.Pending ->
+            sign.sim_waited_out_key?.let { key -> SigningController.SimOutcome.Notice(ClearRisk.Caution, key) } ?: sim
+        else -> sim
+    }
+
+    /** The verdict's place, holding [shown] — or, with none yet, its skeleton, said as the corpus's plain "Checking…". */
+    internal fun heldPlace(shown: SigningBlock?, ctx: Context): SigningBlock.Held =
+        SigningBlock.Held(verdictRooms(ctx), shown, waiting = ctx.strings.t(I18nKeys.SettingsUi.BACKUP_CHECKING))
+
+    /**
+     * The verdict's place on a site's request, for [sim] under [sign]'s wait
+     * ([verdictShown]) — what [model] puts on the sheet, for a board that
+     * draws that place over a body of its own. Empty with no simulation.
+     */
+    internal fun verdictPlace(sim: SigningController.SimOutcome?, sign: SignView, ctx: Context): List<SigningBlock> {
+        val verdict = verdictShown(sim, sign) ?: return emptyList()
+        return listOf(heldPlace(simBlocks(verdict, ctx).singleOrNull(), ctx))
+    }
+
+    /**
+     * The verdicts a sheet usually ends on, as rooms: its place is at least
+     * as tall as the tallest of them from the first frame
+     * ([SigningBlock.Held]), so whichever lands moves nothing — not the form
+     * above it, not the confirm under it.
+     *
+     * - the core's "could not check" line (a node with no simulator);
+     * - its "expected to fail" line at the longest reason it prints (the
+     *   core caps a revert reason; this is that cap, read back from the core);
+     * - "no asset changes", in the core's line (a check under which nothing
+     *   moves, read by the core: `SimDeltas.nothingMoves`);
+     * - a balance card of [USUAL_MOVES] rows — what a send (one) and a swap
+     *   (two) show.
+     *
+     * Each is built by [simBlocks], the builder that draws the real one, so a
+     * room is the card it stands for. What can still be taller is only the
+     * unusual: a third balance row, or the warning under an unverified
+     * token — shown whole, the place as tall as they are (the device round,
+     * item 1): the sheet's body scrolls, never the place.
+     */
+    internal fun verdictRooms(ctx: Context): List<SigningBlock> {
+        val s = ctx.strings
+        return simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx) +
+            simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.longestRevert(), ctx) +
+            simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.nothingMoves(), ctx) +
+            SigningBlock.Balances(s.s("balanceChangesTitle"), List(USUAL_MOVES) { BalanceDeltaRow("0", "0", SigningTone.Neutral) })
+    }
+
+    /** The balance rows a sheet keeps room for: a swap's — what leaves and what comes back. */
+    internal const val USUAL_MOVES = 2
+
+    /**
      * Spec 046 US1 — the one block a site cannot author: the simulated balance
      * changes as the trust machine judged them. Sent amounts render whenever
      * the token's symbol resolved; a received unverified token says so and
@@ -1182,7 +1312,8 @@ object SigningLive {
     fun simBlocks(sim: SigningController.SimOutcome?, ctx: Context): List<SigningBlock> {
         val s = ctx.strings
         return when (sim) {
-            null -> emptyList()
+            // Not a verdict yet: nothing to say ([model] keeps its place).
+            null, SigningController.SimOutcome.Pending -> emptyList()
             // Spec 082 RG6: the core's line in the core's tone — a revert is a
             // danger (with its sanitised reason), a node that could not check
             // is a caution. Never "nothing changes" for either.
@@ -1193,8 +1324,12 @@ object SigningLive {
                 ),
             )
             is SigningController.SimOutcome.Ready -> {
-                if (sim.judgments.isEmpty()) {
-                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")))
+                // "No asset changes" is the core's line, drawn exactly when
+                // the judged view carries it (`no_change_key`): which case
+                // this is, and the sentence, were this builder's own — "no
+                // judgments", then "every row came out a zero".
+                sim.noChangeKey?.let { key ->
+                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.t(key)))
                 }
                 var unverified = false
                 // A delta the core writes as nothing (a zero) is not drawn
@@ -1203,15 +1338,20 @@ object SigningLive {
                     when (judgment) {
                         is TrustSimJudgment.Native -> deltaRow(ctx.nativeSymbol, judgment.delta, 18, ctx.numberPreset)
                         is TrustSimJudgment.Erc20Trusted -> deltaRow(judgment.symbol, judgment.delta, judgment.decimals, ctx.numberPreset)
-                        is TrustSimJudgment.Erc20Unverified -> signedRaw(judgment.delta, ctx.numberPreset)?.let { raw ->
+                        // PR 3: a direction, never a figure — the judgment
+                        // carries none (this row printed the simulation's raw
+                        // number, which the site being signed for chooses).
+                        is TrustSimJudgment.Erc20Unverified -> unverifiedSign(judgment.direction)?.let { sign ->
                             unverified = true
-                            BalanceDeltaRow(s.s("balanceUnverifiedToken"), raw, SigningTone.Caution)
+                            BalanceDeltaRow(s.s("balanceUnverifiedToken"), sign, SigningTone.Caution)
                         }
                     }
                 }
-                // Every move was a zero: nothing of theirs moves.
+                // No row to draw and no line from the core: moves nobody
+                // here can write out. That is not "nothing moves" — the
+                // core's could-not-check notice, never an empty card.
                 if (rows.isEmpty()) {
-                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")))
+                    return simBlocks(app.getvela.wallet.feature.signing.core.SimDeltas.couldNotCheck(), ctx)
                 }
                 listOf(
                     SigningBlock.Balances(
@@ -1237,12 +1377,18 @@ object SigningLive {
     }
 
     /**
-     * An unverified token's change in its raw units — its decimals are not
-     * known, so no decimal point is guessed. The core writes the sign and
-     * drops a zero; the units stay whole (decimals 0).
+     * All an unverified token's row says beside its label (PR 3,
+     * `TrustSimDirection`): "+" coming in, "−" (U+2212, the sign every other
+     * row is written with) going out, nothing at all for a figure nobody
+     * could read — the row still stands, with its caution. `null` for a move
+     * of nothing: a zero is never drawn.
      */
-    private fun signedRaw(delta: String, preset: String): String? =
-        uniffi.vela_core_uniffi.formatSignedTokenAmount(delta, 0u, preset)
+    private fun unverifiedSign(direction: TrustSimDirection): String? = when (direction) {
+        TrustSimDirection.In -> "+"
+        TrustSimDirection.Out -> "−"
+        TrustSimDirection.Unreadable -> ""
+        TrustSimDirection.Still -> null
+    }
 
     fun feeModel(clear: ClearSigningView, fee: FeeView, ctx: Context, speed: SendLive.SpeedInputs? = null): FeeModel {
         if (offChain(clear)) return FeeModel.OffChain(ctx.strings.s("noNetworkFee"))
@@ -1336,8 +1482,11 @@ object SigningLive {
             chevronRoom = choosable,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->
-                SendLive.speedModel(inputs, ctx.strings) { quote, view -> feeLine(quote, view ?: fee, ctx) }
+                SendLive.speedModel(inputs, ctx.strings, worthRoom = !ctx.money.settled) { quote, view -> feeLine(quote, view ?: fee, ctx) }
             },
+            // The fee's worth joins the line when the display currency
+            // commits: the row keeps the longer line's room from now.
+            worthRoom = !ctx.money.settled,
         )
     }
 

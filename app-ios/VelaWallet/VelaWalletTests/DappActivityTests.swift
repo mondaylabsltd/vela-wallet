@@ -157,7 +157,7 @@ struct DappActivityTests {
         let judgments = try CoreJSON.decoder.decode([TrustSimJudgmentWire].self, from: Data(#"""
         [{"type":"erc20_trusted","token":"\#(F.usdc)","delta":"-100000000","symbol":"USDC","decimals":6,"in_trusted_set":true},
          {"type":"native","delta":"30000000000000000"},
-         {"type":"erc20_unverified","token":null,"delta":"5"}]
+         {"type":"erc20_unverified","token":null,"direction":"in"}]
         """#.utf8))
         let opts = SigningController.approveOpts(
             fee: nil, clear: clear, guard: .empty, balanceChanges: judgments
@@ -173,6 +173,10 @@ struct DappActivityTests {
         #expect(changes[0]["in_trusted_set"] as? Bool == true, "the trust bit survives the round trip")
         #expect(changes[1]["type"] as? String == "native")
         #expect(changes[2]["token"] is NSNull)
+        // PR 3, fix B: an unverified token goes back as its direction — the
+        // only thing the core handed over — and never with a figure.
+        #expect(changes[2]["direction"] as? String == "in")
+        #expect(Set(changes[2].keys) == ["type", "token", "direction"])
 
         // Nothing drawn, nothing recorded.
         let none = SigningController.approveOpts(fee: nil, clear: .empty, guard: .empty)
@@ -478,6 +482,47 @@ struct DappActivityTests {
                 == Formats.date(Date(timeIntervalSince1970: old / 1000)), "the header says the same date")
         let decoded = try? CoreJSON.decoder.decode(FeedLineWire.self, from: Data(#"{"type":"day","day_start_ms":1.5}"#.utf8))
         #expect(decoded == .day(dayStartMs: 1.5))
+    }
+
+    /// PR 3, fix B: a dApp row stored before the unverified judgment lost its
+    /// figure still holds `{"type":"erc20_unverified","delta":"…"}`. This
+    /// shell does not decode it — `toWire` hands the stored lines to the core
+    /// as they are, and the core reads both shapes: the row keeps its line as
+    /// a direction, the rest of the feed reads, and no digit of the stored
+    /// figure is drawn anywhere on the row or its detail.
+    @Test func aStoredUnverifiedLineWithAnOldFigureReadsAsItsDirection() throws {
+        let lure = "5000000000000000000000"
+        var rows = F.stored(nowMs: now)
+        rows[0]["balanceChanges"] = [
+            ["type": "native", "delta": "-30000000000000000"],
+            ["type": "erc20_unverified", "token": "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a", "delta": lure],
+            ["type": "erc20_unverified", "token": NSNull(), "direction": "out"],
+        ]
+        let wire = try #require(TxRecords.toWire(rows[0])?["balance_changes"] as? [[String: Any]])
+        #expect((wire as NSArray) == (rows[0]["balanceChanges"] as? NSArray), "handed to the core untouched")
+
+        let view = try feed(rows)
+        #expect(items(view).count == 3, "one old line never stops the feed")
+        let swap = try item("dapp-swap-tx", in: view)
+        let changes = try #require(swap.dapp?.changes)
+        #expect(changes.map(\.verified) == [true, false, false])
+        #expect(changes.map(\.direction) == [.out, .in, .out], "the old figure's sign, and the new shape's word")
+        #expect(changes[1].value == nil && changes[2].value == nil, "no figure is kept for an unverified token")
+
+        let detail = FlowsLive.txDetail(swap, record: nil, on: try drawnDetail, loc: en)
+        let lines = try #require(
+            detail.facts.first { $0.label == en.t("componentsUi.signing.balanceChangesTitle") }?.lines
+        )
+        let unverified = en.t("componentsUi.signing.balanceUnverifiedToken")
+        #expect(lines.map(\.symbol) == ["ETH", unverified, unverified])
+        #expect(lines[1].delta == "+" && lines[2].delta == "\u{2212}", "\(lines.map(\.delta))")
+        #expect(lines[1].tone == .caution && lines[2].tone == .caution)
+        let drawn = ([detail.title, detail.amount, detail.received ?? ""]
+            + detail.facts.flatMap { [$0.label, $0.value] + $0.lines.flatMap { [$0.symbol, $0.delta] } })
+            .joined(separator: " | ")
+        for figure in ["5000", "5,000", "5 000", "5.000"] {
+            #expect(!drawn.contains(figure), "the stored figure is on the detail: \(drawn)")
+        }
     }
 
     /// A summary this build cannot read (an action from a newer build) never

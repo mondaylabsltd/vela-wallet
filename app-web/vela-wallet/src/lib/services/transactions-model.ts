@@ -32,6 +32,15 @@ export interface LocalTransaction {
 	chainId: number;
 	/** Unix seconds. */
 	timestamp: number;
+	/**
+	 * `receive` only (PR 3): `timestamp` is the time of the transaction's own
+	 * block, as a chain gave it. Written `true` on every receipt taken from the
+	 * `token_trust` feed (whose times are block times) and by the feed's
+	 * `write_receive_time`. Absent on a record from before the mark, when a
+	 * receipt whose block could not be read was stamped with the clock: the
+	 * feed core re-reads such a record's block time and rewrites it.
+	 */
+	timeVerified?: boolean;
 	status: 'pending' | 'confirmed' | 'failed';
 	/** Defaults to 'send' for records older than the field. */
 	type?: TransactionType;
@@ -63,6 +72,10 @@ export interface LocalTransaction {
 	 * What the wallet's own simulation said the operation moves, as the sheet
 	 * drew it when the person approved — the core's `SignRecord.balance_changes`,
 	 * verbatim (083 F1, spec 093). Absent when the sheet recorded none.
+	 *
+	 * A record from before PR 3 holds an unverified token's line in its older
+	 * shape (`delta` where there is `direction` now). Nothing on this side
+	 * reads the lines: they go back to the core as stored, and it reads both.
 	 */
 	balanceChanges?: TrustSimJudgment[];
 	/** Opaque to this feature; carried so a stored record survives a rewrite. */

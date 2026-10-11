@@ -4,9 +4,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.espresso.Espresso
@@ -64,7 +67,7 @@ class WalletRescueSheetTest {
     }
 
     private fun openFix() {
-        compose.onAllNodesWithText(model.unreachable.rows[1].action)[1].performClick()
+        compose.onAllNodesWithText(model.unreachable.rows[1].action!!)[1].performClick()
         compose.waitForIdle()
         assertEquals(SettingsOverlay.RpcFix, rescue.overlay)
         assertEquals(model.unreachable.rows[1].chainId.toLong(), rescue.chainId)
@@ -86,6 +89,106 @@ class WalletRescueSheetTest {
         compose.onNodeWithContentDescription(model.closeLabel).performClick()
         compose.waitForIdle()
         assertEquals(SettingsOverlay.None, rescue.overlay)
+    }
+
+    /**
+     * The integration's note 4: a network on the list for its TOKEN LIST
+     * (Tempo — its RPC answers) draws no "Fix", and nothing on its row opens
+     * the RPC editor. The real balance machine's view (SR7).
+     */
+    @Test
+    fun aNetworkDownForItsTokenListOffersNoRpcFix() {
+        val tempo = SettingsFixtures.buildState(SettingsScreenState.SR7, strings)
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    WalletRescueSheet(rescue = rescue, model = tempo, onMove = { rescue = it })
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Can't load Tempo's token list right now").assertExists()
+        compose.onNodeWithText("Tempo").assertExists()
+        compose.onAllNodesWithText(strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.RPC_FIX)).assertCountEquals(0)
+        compose.onNodeWithText("Tempo").performClick()
+        compose.waitForIdle()
+        assertEquals("the row is no door to the RPC editor", SettingsOverlay.Unreachable, rescue.overlay)
+    }
+
+    private fun showBreakdown(state: SettingsScreenState): app.getvela.wallet.feature.settings.BalanceDetailModel {
+        val board = SettingsFixtures.buildState(state, strings)
+        rescue = WalletRescue(SettingsOverlay.BalanceDetail)
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides strings) {
+                VelaTheme(darkTheme = false) {
+                    WalletRescueSheet(rescue = rescue, model = board, onMove = { rescue = it })
+                }
+            }
+        }
+        compose.waitForIdle()
+        return board.balanceDetail
+    }
+
+    /**
+     * PR 3 final note F20: "Networks still updating — These networks couldn't
+     * be reached, so your cached balance is shown until they recover." headed
+     * an EMPTY list. The sheet a person opens from "Some tokens couldn't be
+     * priced." told a healthy wallet that networks could not be reached and
+     * its balance was cached. A heading is drawn with its rows, and not
+     * without them. The real balance machine's round (SR3E).
+     */
+    @Test
+    fun theBreakdownDrawsNoStillUpdatingHeadingOverAnEmptyList() {
+        val detail = showBreakdown(SettingsScreenState.SR3E)
+        assertEquals("Networks still updating", detail.sectionPending)
+        compose.onNodeWithText(detail.title).assertExists()
+        compose.onNodeWithText(detail.sectionPending).assertDoesNotExist()
+        compose.onNodeWithText(detail.pendingNote).assertDoesNotExist()
+        // What it does have is headed: the networks that answered, and the token with no price.
+        compose.onNodeWithText(detail.sectionDone).assertExists()
+        compose.onNodeWithText("Gnosis").assertExists()
+        compose.onNodeWithText("ODD").assertExists()
+        // The home line's sentence is that last heading: said once, not twice.
+        compose.onAllNodesWithText("Some tokens couldn't be priced.").assertCountEquals(1)
+    }
+
+    /**
+     * …and WITH its rows when there are some — where the row of a network
+     * whose token list did not load says the core's short status (F21):
+     * "Token list unavailable", never "RPC unavailable" over an RPC that
+     * answers. The real machine's round (SR3D).
+     */
+    @Test
+    fun theBreakdownHeadsANetworkOutOfReachAndSaysItsShortStatus() {
+        val detail = showBreakdown(SettingsScreenState.SR3D)
+        compose.onNodeWithText(detail.sectionPending).assertExists()
+        compose.onNodeWithText(detail.pendingNote).assertExists()
+        compose.onNodeWithText("Tempo").assertExists()
+        compose.onNodeWithText("Token list unavailable").assertExists()
+        compose.onAllNodesWithText("RPC unavailable").assertCountEquals(0)
+        compose.onNodeWithText(strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY)).assertExists()
+    }
+
+    /**
+     * PR 3 final note F16: the home's line is ONE line and cuts a sentence
+     * longer than it — so the sheet the line opens says the sentence in full,
+     * at its top. A read that failed inside the app (SR3F).
+     */
+    @Test
+    fun theBreakdownLeadsWithTheHomeLinesWholeSentence() {
+        val detail = showBreakdown(SettingsScreenState.SR3F)
+        val sentence = "Something went wrong inside Vela. If it keeps happening, reopen the app."
+        assertEquals(sentence, detail.lead)
+        val lead = compose.onNodeWithTag(app.getvela.wallet.feature.settings.SHEET_LEAD_TAG, useUnmergedTree = true)
+        lead.assertTextEquals(sentence)
+        // Whole: on as many lines as it takes, never cut.
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        lead.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        assertEquals(false, layouts.first().hasVisualOverflow)
+        // At the top: above the total and every row.
+        val top = lead.fetchSemanticsNode().boundsInRoot.top
+        assertEquals(true, top < compose.onNodeWithText(detail.summary).fetchSemanticsNode().boundsInRoot.top)
+        assertEquals(true, top > compose.onNodeWithText(detail.title).fetchSemanticsNode().boundsInRoot.top)
     }
 
     @Test

@@ -475,7 +475,12 @@ mod tests {
             false,
             &IntegrityLine::checking(),
         );
-        assert_eq!(row.name.as_ref(), "自己部署的签名页 · sign.example.com");
+        // The "·" binds to the word before it (U+00A0, the corpus's): a
+        // wrapped line breaks after the dot, never starts with it.
+        assert_eq!(
+            row.name.as_ref(),
+            "自己部署的签名页\u{a0}· sign.example.com"
+        );
         let official = page_row(
             &zh,
             "https://sign.getvela.app/",

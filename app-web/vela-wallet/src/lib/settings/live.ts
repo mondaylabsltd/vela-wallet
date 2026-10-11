@@ -11,6 +11,7 @@
 
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
+import { pluralForm } from '$lib/i18n/plural';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
 import { moneyText, trimBalance, unreachableLine } from '$lib/wallet/live';
@@ -29,6 +30,7 @@ import { encodeQr } from '$lib/wallet/qr';
 import { MASK } from '$lib/wallet/fixtures';
 
 import type { NetChainIndexEntry } from '$lib/core/generated/NetChainIndexEntry';
+import type { NetCompatibility } from '$lib/core/generated/NetCompatibility';
 import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
 import type { NetProbeHealth } from '$lib/core/generated/NetProbeHealth';
 import type { NetServiceHealth } from '$lib/core/generated/NetServiceHealth';
@@ -85,7 +87,14 @@ import {
 	type DeviceFacts,
 	type EnvironmentLabels
 } from '$lib/services/bug-report';
-import type { EthereumBackupState } from '$lib/services/registry-backup';
+import type { EthereumBackupRow } from '$lib/services/registry-backup';
+import {
+	netRefusal,
+	netRpcField,
+	netStopLine,
+	stopIsRefusal,
+	type NetRefusal
+} from './net-refusal';
 import type { EthereumBackupRowModel, WalletKeysModel } from './model';
 import type { WalletKeys } from '$lib/services/wallet-keys';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
@@ -223,9 +232,15 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		searchPlaceholder: m.addNetwork.searchPlaceholder
 	};
 
-	// Search phases: the list is the whole surface.
+	// Search phases: the list is the whole surface. The field shows the
+	// core's query — the model always had a place for it and nothing filled
+	// it, so the field kept its text only for as long as it stayed mounted.
 	if (wizard.phase === 'idle' || wizard.phase === 'searching' || wizard.phase === 'suggested') {
-		return { ...base, results: wizard.suggestions.map((s) => suggestionRow(s, m)) };
+		return {
+			...base,
+			query: wizard.query,
+			results: wizard.suggestions.map((s) => suggestionRow(s, m))
+		};
 	}
 
 	const info = wizard.chain_info;
@@ -248,21 +263,81 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		};
 	}
 
+	// What the check found, row by row — the checked verdict's list, and a
+	// refusal's wherever it is drawn.
+	const checksOf = (compat: NetCompatibility): CheckItemModel[] => [
+		...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
+		{ label: m.addNetwork.checkSigner, ok: compat.p256_available === true }
+	];
+	// The RPC field and "Re-check with this RPC" are the core's to give, and
+	// it gives them together or not at all (`rpc_field`, PR 3 final notes F4,
+	// F14, F22): the field where another endpoint is a way on, labelled by the
+	// key the core names, and the re-check exactly where the field is. This
+	// decided both per state: a stop always drew them, a refused check drew
+	// the re-check with no field to read, and a check that passed drew the
+	// field with nothing to read it.
+	const field = netRpcField(wizard, m.addNetwork.rpcFieldLabels);
+	const rpc: Pick<AddNetworkModel, 'customRpc' | 'recheck'> =
+		field === undefined
+			? {}
+			: {
+					customRpc: {
+						id: 'custom-rpc',
+						label: field.label,
+						value: wizard.custom_rpc,
+						placeholder: m.addNetwork.customRpcPlaceholder,
+						hint: m.networks.relayNotice
+					},
+					recheck: m.addNetwork.recheckWithRpc
+				};
+
 	if (wizard.phase === 'error') {
-		// The wizard stopped. The core says why as data; the words are ours —
-		// and inconclusive is NEVER worded as incompatible (invariant ③). The
-		// scan path now keeps the two apart too (spec 038 #E1): a probe that
-		// failed is "unable to verify", with the re-check, and no setup tool.
-		const inconclusive = wizard.error?.type === 'check_failed';
+		// The wizard stopped, and the core says why in a sentence of its own
+		// (`error_key`, PR 3 notes 5, 10 and 18). This used to map `error.type`
+		// to words here, and had words for two of five: "already added", "chain
+		// not found" and "no RPC endpoint listed" all read "Incompatible".
+		const text = netStopLine(wizard.error_key, m.addNetwork);
+		// A refusal the check itself raised keeps its check now (the path that
+		// saves without a confirm step used to drop it): drawn as the wizard
+		// draws a refused check — the same rows, the same reason, and Chain
+		// Setup only where there is something to deploy. An inconclusive check
+		// is never that, whatever the check beside it holds (invariant ③).
+		const refused = stopIsRefusal(wizard.error_key, wizard.compat);
+		const refusal = refused ? netRefusal(wizard.compat, m.addNetwork.hints) : {};
+		const callout = text === undefined ? {} : { callout: { tone: 'warning' as const, text } };
+		if (info === null) {
+			// No chain to show (already added; its document not found): the
+			// sentence, under the search it answers. Typing again clears it.
+			// The search still says what was asked for: a stop that came back
+			// from the "resolving" candidate re-drew the field EMPTY, and
+			// "Chain info not found" stood under a placeholder.
+			// (No RPC field here: the core gives one only with a network in
+			// hand — there is no chain to check again.)
+			return { ...base, query: wizard.query, results: [], ...callout };
+		}
 		return {
 			...base,
+			subtitle: `${name} · ${meta}`,
 			results: [],
-			callout: {
-				tone: 'warning',
-				text: inconclusive ? m.addNetwork.unableToVerify : m.addNetwork.incompatibleHint
+			candidate: {
+				mark,
+				name,
+				meta: m.addNetwork.compatibilityCheck,
+				...(refused
+					? { badge: { tone: 'error' as const, label: m.addNetwork.incompatible, dot: true } }
+					: {})
 			},
-			secondary: inconclusive ? undefined : m.addNetwork.openChainSetupTool,
-			recheck: m.addNetwork.recheckWithRpc
+			...(refused && wizard.compat !== null
+				? { checksTitle: m.addNetwork.compatibilityCheck, checks: checksOf(wizard.compat) }
+				: {}),
+			...callout,
+			// "Enter one, then re-check": the field the sentence points at and
+			// the re-check that reads it — under the stops the core gives them
+			// to (no endpoint listed, where the field is "RPC URL" and not
+			// "(optional)"; a check that could not be made), and under no
+			// refusal: another endpoint would not change that verdict.
+			...rpc,
+			secondary: setupLink(refusal, m)
 		};
 	}
 
@@ -271,13 +346,7 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 	const unverified = compat === null || compat.rpc_failure !== null;
 	const compatible = compat !== null && compat.compatible && compat.rpc_failure === null;
 
-	const checks: CheckItemModel[] =
-		compat === null
-			? []
-			: [
-					...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
-					{ label: m.addNetwork.checkSigner, ok: compat.p256_available === true }
-				];
+	const checks: CheckItemModel[] = compat === null ? [] : checksOf(compat);
 
 	if (compatible) {
 		return {
@@ -302,13 +371,7 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 			callout: compat.multi_key_ready
 				? undefined
 				: { tone: 'warning', text: m.addNetwork.singleKeyOnly },
-			customRpc: {
-				id: 'custom-rpc',
-				label: m.addNetwork.customRpcTitle,
-				value: wizard.custom_rpc,
-				placeholder: m.addNetwork.customRpcPlaceholder,
-				hint: m.networks.relayNotice
-			},
+			...rpc,
 			primary: m.addNetwork.addNetworkBtn
 		};
 	}
@@ -324,18 +387,12 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 				meta: m.addNetwork.compatibilityCheck,
 				badge: { tone: 'warn', label: m.addNetwork.unableToVerify, dot: true }
 			},
-			customRpc: {
-				id: 'custom-rpc',
-				label: m.addNetwork.customRpcTitle,
-				value: wizard.custom_rpc,
-				placeholder: m.addNetwork.customRpcPlaceholder,
-				hint: m.networks.relayNotice
-			},
-			primary: m.addNetwork.retry,
-			recheck: m.addNetwork.recheckWithRpc
+			...rpc,
+			primary: m.addNetwork.retry
 		};
 	}
 
+	const refusal = netRefusal(compat, m.addNetwork.hints);
 	return {
 		...base,
 		subtitle: `${name} · ${meta}`,
@@ -348,10 +405,22 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 		},
 		checksTitle: m.addNetwork.compatibilityCheck,
 		checks,
-		callout: { tone: 'warning', text: m.addNetwork.incompatibleHint },
-		secondary: m.addNetwork.openChainSetupTool,
-		recheck: m.addNetwork.recheckWithRpc
+		// The refusal says WHY, in the core's words: no P-256 verifier (the
+		// network cannot run Vela wallets; nothing to deploy, so no button), or
+		// missing contracts (Chain Setup, opened on this chain).
+		callout: refusal.hint === undefined ? undefined : { tone: 'warning', text: refusal.hint },
+		secondary: setupLink(refusal, m),
+		// No re-check under a refusal (F22): the core gives it no field, and a
+		// button that reads a field is drawn where the field is.
+		...rpc
 	};
+}
+
+/** "Open Chain Setup Tool", only where the core gave it somewhere to go. */
+function setupLink(refusal: NetRefusal, m: SettingsMessages): AddNetworkModel['secondary'] {
+	return refusal.setupUrl === undefined
+		? undefined
+		: { label: m.addNetwork.openChainSetupTool, href: refusal.setupUrl };
 }
 
 // ---------------------------------------------------------------------------
@@ -529,7 +598,9 @@ export function withLiveCurrency(
 			...section,
 			// The phone's row says the code alone — the drawn ST1 shape, and the
 			// width a phone row has; the desktop's row carries the sample too.
-			rows: section.rows.map((row) => (row.id === 'currency' ? { ...row, value: view.code } : row))
+			rows: section.rows.map((row) =>
+				row.id === 'currency' ? { ...row, value: chosenCurrency(view) ?? '' } : row
+			)
 		})),
 		currencySheet: {
 			...model.currencySheet,
@@ -597,12 +668,26 @@ export interface LiveCurrencyCatalog {
 }
 
 /**
+ * The currency the person CHOSE, as Settings names it: the committed code, or
+ * — while nothing is committed yet — the stored choice whose rate is on its
+ * way (`CurrencyView.pending`). `null` while even that is unknown: the
+ * uncommitted view's own `code` is the USD placeholder, never the person's,
+ * and a row that read "USD" and then "CNY" is the jump the core's rule ends.
+ */
+export function chosenCurrency(view: CurrencyView): string | null {
+	return view.committed ? view.code : view.pending;
+}
+
+/**
  * "USD · $1,234.56" — the code and a sample in it, once a rate is committed;
  * the code alone while the currency cannot be priced (024's rule: a defaulted
- * 1 under a ¥ is a lie).
+ * 1 under a ¥ is a lie) or while its rate is still on its way; nothing at all
+ * before the choice is known.
  */
 function currencyRowValue(view: CurrencyView): string {
-	return view.rate === null ? view.code : `${view.code} · ${moneyText(1234.56, view)}`;
+	const code = chosenCurrency(view);
+	if (code === null) return '';
+	return !view.committed || view.rate === null ? code : `${code} · ${moneyText(1234.56, view)}`;
 }
 
 function liveCurrencyRows(
@@ -611,7 +696,7 @@ function liveCurrencyRows(
 	catalog?: LiveCurrencyCatalog
 ): SelectRowModel[] {
 	if (catalog === undefined || catalog.codes.length === 0) {
-		return drawn.map((row) => ({ ...row, selected: row.id === view.code }));
+		return drawn.map((row) => ({ ...row, selected: row.id === chosenCurrency(view) }));
 	}
 	return catalog.codes.map((code) => ({
 		id: code,
@@ -619,7 +704,7 @@ function liveCurrencyRows(
 		glyph: currencyGlyph(code),
 		caption:
 			currencyDisplayName(code, catalog.locale) ?? drawn.find((row) => row.id === code)?.caption,
-		selected: code === view.code
+		selected: code === chosenCurrency(view)
 	}));
 }
 
@@ -1047,7 +1132,8 @@ function liveAccountRows(input: LiveAccountsInput) {
 function liveAccountsSummary(input: LiveAccountsInput, m: SettingsMessages['accounts']): string {
 	let total = 0;
 	for (const row of input.rows) total += input.balances.get(row.account.address.toLowerCase()) ?? 0;
-	return `${fill(m.countPrefix, { count: input.rows.length })}${fill(m.total, {
+	const count = input.rows.length;
+	return `${fill(pluralForm(m.countPrefix, count), { count })}${fill(m.total, {
 		// Hidden: the total masks with the rows — it IS their sum.
 		amount: input.hidden ? MASK : moneyText(total, input.currency)
 	})}`;
@@ -1353,7 +1439,11 @@ export function liveUnreachable(
 				amount:
 					view.hidden || row.last_seen_usd === null ? MASK : moneyText(row.last_seen_usd, currency)
 			}),
-			action: m.rescue.rpcFix
+			// The core's rule, not the shell's (PR 3 note 4): only a network that
+			// itself did not answer is offered its RPC editor. One whose token
+			// list could not be loaded has an endpoint that works — "Fix" there
+			// sent a person to repair what was not broken.
+			...(row.rpc_fixable ? { action: m.rescue.rpcFix } : {})
 		}))
 	};
 }
@@ -1377,13 +1467,20 @@ export function liveBalanceDetail(
 		status: m.balanceDetail.statusRetrying,
 		tone: 'neutral'
 	}));
-	for (const { chain_id: id } of view.unreachable_networks) {
+	for (const { chain_id: id, status_key: statusKey } of view.unreachable_networks) {
 		if (pending.some((row) => row.id === String(id))) continue;
 		pending.push({
 			id: String(id),
 			mark: rescueMark(id),
 			name: chainName(id),
-			status: m.balanceDetail.statusFailed,
+			// The row's short status is the core's to name (`status_key`, PR 3
+			// final note F21): "RPC unavailable" is only true of a network that
+			// did not answer, and one whose token list could not be loaded says
+			// "Token list unavailable" — a status as short as its neighbours',
+			// where this shell had borrowed the home line's whole sentence. A
+			// key this build has no words for reads as the one status there
+			// was, never a dotted path. Reading again is the way out of both.
+			status: m.balanceDetail.statuses[statusKey] ?? m.balanceDetail.statusFailed,
 			tone: 'error',
 			action: m.balanceDetail.retry
 		});
@@ -1522,49 +1619,41 @@ export function liveRelayReport(m: RescueMessages, facts: DeviceFacts): Feedback
 // The Ethereum backup row (spec 062 §5a)
 // ---------------------------------------------------------------------------
 
-/** The row for a state, or `undefined` when there is nothing to draw:
- *  no registry on Ethereum (the feature is dark) or no record to back up. */
+/**
+ * The row the core says to draw (`registry_backup::BackupRow`), in words —
+ * or `undefined` when it says to draw nothing: no registry on Ethereum (the
+ * feature is dark) or no record to copy.
+ *
+ * Nothing here maps a state. Which words a state says, in which tone, what a
+ * tap does and whether a paragraph stands under it are the core's, the same
+ * on all four apps; this looks the corpus keys up. A key the manifest does not carry draws no row rather
+ * than a dotted path — `ethereum-backup-row.test.ts` holds the manifest to
+ * every key the core can name.
+ */
 export function ethereumBackupRow(
-	state: EthereumBackupState | 'checking',
+	row: EthereumBackupRow | null,
 	m: SettingsMessages
 ): EthereumBackupRowModel | undefined {
-	switch (state) {
-		case 'checking':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.checking,
-				tone: 'neutral',
-				actionable: false
-			};
-		case 'backed_up':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.backedUp,
-				tone: 'positive',
-				actionable: false
-			};
-		case 'not_backed_up':
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.notBackedUp,
-				tone: 'caution',
-				actionable: true
-			};
-		case 'could_not_check':
-			// Tappable, and what it does is ask again — the state a person is
-			// most likely to tap, and the only one where "nothing happened"
-			// was the whole experience.
-			return {
-				title: m.backup.title,
-				subtitle: m.backup.couldNotCheck,
-				tone: 'neutral',
-				actionable: true,
-				retry: true
-			};
-		case 'unavailable':
-		case 'not_registered':
-			return undefined;
-	}
+	if (row === null) return undefined;
+	const words = m.backup.words as Record<string, string | undefined>;
+	const title = words[row.title_key];
+	const subtitle = words[row.subtitle_key];
+	if (title === undefined || subtitle === undefined) return undefined;
+	// The paragraph under the row is the core's too (`explain_key`, PR 3 note
+	// 6): present while a copy can still be made or checked, absent for a
+	// record that can never be copied — which used to be told how to copy it.
+	const explains = m.backup.explains as Record<string, string | undefined>;
+	const explain =
+		row.explain_key && Object.hasOwn(explains, row.explain_key)
+			? explains[row.explain_key]
+			: undefined;
+	return {
+		title,
+		subtitle,
+		tone: row.tone,
+		action: row.action,
+		...(explain === undefined ? {} : { explain })
+	};
 }
 
 /**
@@ -1602,7 +1691,8 @@ function keyFingerprint(publicKeyHex: string): string {
 
 export function walletKeysModel(
 	keys: WalletKeys | null,
-	backup: EthereumBackupState | 'checking',
+	/** The core's row for where the record stands — `CHECKING_ROW` while asking. */
+	backup: EthereumBackupRow | null,
 	m: SettingsMessages,
 	/**
 	 * Spec 102 (P2-10): the account's signing domain when it is NOT the apps'
@@ -1677,7 +1767,6 @@ export function walletKeysModel(
 			customDomain === undefined ? undefined : fill(m.signing.keysOn, { domain: customDomain }),
 		rows,
 		backup: ethereumBackupRow(backup, m),
-		backupExplain: m.backup.explain,
 		copy: { action: m.keys.copy, done: m.keys.copied }
 	};
 }

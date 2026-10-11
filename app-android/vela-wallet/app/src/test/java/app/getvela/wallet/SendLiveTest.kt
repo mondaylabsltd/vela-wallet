@@ -83,7 +83,7 @@ class SendLiveTest {
     private val me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private val recipient = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
 
-    private fun ctx(currency: CurrencyView = CurrencyView(code = "USD"), relaySentAtMs: Double? = null) = SendLive.Context(
+    private fun ctx(currency: CurrencyView = CurrencyView(code = "USD", committed = true), relaySentAtMs: Double? = null) = SendLive.Context(
         strings = strings,
         chainNames = mapOf(100 to "Gnosis", 56 to "BNB Chain"),
         explorers = mapOf(100 to "https://gnosisscan.io"),
@@ -428,7 +428,7 @@ class SendLiveTest {
                 tokens = listOf(app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "ETH", name = "ETH", balance = eth.balance, decimals = 18, price_usd = 1.0)),
             ),
             app.getvela.wallet.feature.wallet.core.FeedView(),
-            CurrencyView(code = "USD"),
+            CurrencyView(code = "USD", committed = true),
             strings,
             mapOf(100 to "Gnosis"),
         )
@@ -697,7 +697,7 @@ class SendLiveTest {
     @Test
     fun `a sweep's receipt lists every coin it sent and names none alone`() {
         val baseEth = SendToken(network = "chain-8453", chain_id = 8453, symbol = "ETH", balance = "0.001", decimals = 18, token_address = null, price_usd = 2400.0)
-        val c = SendLive.Context(strings, mapOf(8453 to "Base"), emptyMap(), WalletLive.Money.of(CurrencyView(code = "USD")), "Me", me)
+        val c = SendLive.Context(strings, mapOf(8453 to "Base"), emptyMap(), WalletLive.Money.of(CurrencyView(code = "USD", committed = true)), "Me", me)
         val wallet = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
         val coins = listOf(
             SendReceiptCoin(amount = "0.000418", symbol = "ETH", token_address = null, usd_value = 1.0),
@@ -1633,7 +1633,84 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.SCAN_ARIA), empty.scanLabel)
     }
 
+    /**
+     * PR 3 final notes F6 / F27: a payment request the wallet cannot fulfil
+     * SAYS so on the picker. The core stops on `lock_error`, and this shell
+     * drew its ordinary picker with no word of it; nor was the outcome of an
+     * attempt to add the network (`add_network_msg`) ever drawn.
+     */
+    @Test
+    fun `a payment request that cannot be fulfilled says why on the picker`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        val locked = SendView(stage = SendStage.LockError, locked = true, lock_error = app.getvela.wallet.feature.send.core.SendLockError.Network(48900))
+        val notice = SendLive.pick(drawn.model, locked, ctx()).notice!!
+        assertEquals("Network not supported — This payment request is on a network Vela doesn't support yet (chain 48900).", notice.text)
+
+        // An attempt to add it that the network machine refused: its reason, in the core's words.
+        val reason = strings.t("settingsModals.addNetwork.noP256Hint")
+        val refused = SendLive.pick(drawn.model, locked.copy(add_network_msg = app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotCompatible(reason)), ctx()).notice!!
+        assertEquals(reason, refused.text)
+        // …and the three the send machine words itself.
+        fun after(msg: app.getvela.wallet.feature.send.core.SendAddNetworkMsg) = SendLive.pick(drawn.model, locked.copy(add_network_msg = msg), ctx()).notice!!.text
+        assertEquals("We couldn't find that network.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotFound))
+        assertEquals("That network isn't compatible with Vela smart accounts yet.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotCompatible()))
+        assertEquals("Couldn't add the network. Please try again.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetAddError))
+
+        // A token the request names and the wallet cannot recognise.
+        val token = SendLive.pick(drawn.model, locked.copy(lock_error = app.getvela.wallet.feature.send.core.SendLockError.Token), ctx()).notice!!
+        assertEquals("Unknown token — We couldn't recognize the token in this payment request on this network.", token.text)
+
+        // No lock: the notice is whatever it was (none, on an ordinary Send).
+        assertNull(SendLive.pick(drawn.model, SendView(stage = SendStage.SelectToken), ctx()).notice)
+    }
+
     // -- Spec 045 US3: the batch sheet ---------------------------------------
+
+    /**
+     * PR 3 final note F8 — the core's withhold rule on the importer. Opened
+     * before the display currency has been read, the importer holds the
+     * placeholder's "USD": nobody's choice, and it is not said anywhere.
+     */
+    @Test
+    fun `the batch sheet names no currency while the person's is not known`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, split_mode = true, show_batch_import = true)
+        val opened = BatchView(
+            opened = true, unit = WireBatchUnit.Fiat, fiat_code = "USD", raw_text = "a,5000", rate_status = BatchRateStatus.Ok, rate_input = "1",
+            preview = listOf(BatchPreviewRow(line = 1, address = recipient, valid = true, raw_amount = "5000", token_amount = "5000", ok = true)),
+            recipient_count = 1, total_token = "5000", total_fiat = "5000", can_apply = true,
+            recipients = listOf(BatchRecipient(recipient, "5000")),
+        )
+        val unknown = SendLive.batchImport(drawn.model, opened, view, ctx(), currencyUnknown = true)
+        val mark = SendLive.BATCH_CURRENCY_PENDING
+        assertEquals("In $mark", unknown.unitFiat)
+        assertEquals("1 $mark", unknown.rateValue)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to mark, "sym" to "XDAI")), unknown.rateHint)
+        assertTrue(unknown.total!!.value, unknown.total!!.value.endsWith("5000 $mark"))
+        val said = listOfNotNull(unknown.unitFiat, unknown.rateValue, unknown.rateHint, unknown.total?.value, unknown.total?.label) + unknown.rows.flatMap { listOfNotNull(it.conversion, it.note) }
+        assertTrue("the placeholder's code is said nowhere: $said", said.none { it.contains("USD") })
+        // Its own unit is still a unit: the token is the token.
+        assertEquals("In XDAI", unknown.unitToken)
+
+        // Known: the code the importer holds is said, on the same lines.
+        val known = SendLive.batchImport(drawn.model, opened.copy(fiat_code = "CNY", rate_input = "7.1"), view, ctx())
+        assertEquals("In CNY", known.unitFiat)
+        assertEquals("7.1 CNY", known.rateValue)
+        assertTrue(known.total!!.value.endsWith("5000 CNY"))
+    }
+
+    /** F8: what the importer is told its currency is — and when there is nothing to tell. */
+    @Test
+    fun `the importer's currency is the person's committed code, else the stored choice, else none`() {
+        assertEquals("CNY", SendLive.batchCurrency(CurrencyView(code = "CNY", rate = 7.1, committed = true)))
+        // The stored choice on its way: known before its rate is.
+        assertEquals("CNY", SendLive.batchCurrency(CurrencyView(code = "USD", rate = null, committed = false, pending = "CNY")))
+        // Nothing read yet: the placeholder is nobody's.
+        assertNull(SendLive.batchCurrency(CurrencyView(code = "USD", rate = null, committed = false)))
+        assertNull(SendLive.batchCurrency(CurrencyView(code = "USD", rate = null, committed = false, pending = "")))
+        // A committed choice nothing could price is dollars, as every figure then is.
+        assertEquals("USD", SendLive.batchCurrency(CurrencyView(code = "CNY", rate = null, committed = true)))
+    }
 
     @Test
     fun `the batch sheet says what the core parsed, priced and gated`() {

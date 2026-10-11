@@ -5,7 +5,7 @@
 //  The only place the `activity_feed` core touches the outside world.
 //
 //  Ported from `app-web/vela-wallet/src/lib/wallet/core/feed-executor.ts` and
-//  the write half of `services/activity.ts`. Six operations, one service call
+//  the write half of `services/activity.ts`. Eight operations, one service call
 //  each; the dedupe, the batch fold, the tombstone filter, the celebration gate
 //  and every "when to read again" decision live in Rust.
 //
@@ -26,6 +26,20 @@
 //  read with the same table — `STABLE_SYMBOLS`, mirrored in
 //  `activity_feed.rs`, so the two sides cannot disagree.
 //
+//  ## A receipt's time is its block's time (PR 3)
+//
+//  Three receipts of 2026-09-29 stood under "Today" on 2026-10-10: the scan
+//  could not read their block, the core stamped them with the clock this
+//  shell handed it, and this file stored that for good. The scan no longer
+//  does it (`token_trust` invariant ⑨), so every `receive` written here is
+//  marked `timeVerified` — its time is a block's by construction. The records
+//  stored before carry no mark, and the core repairs them through two
+//  operations this file only carries out: `read_receive_time` (the receipt,
+//  then its block, through the pool the scan reads through — `null` when
+//  either gave no answer, never a clock's time, never a second try) and
+//  `write_receive_time` (that one record's time and its mark, nothing else).
+//  Which records, when, and when to ask again are the core's.
+//
 
 import Foundation
 import VelaCore
@@ -41,7 +55,14 @@ final class ActivityExecutor {
         "resolve_recipient_identity",
         "timer",
         "haptic",
+        "read_receive_time",
+        "write_receive_time",
     ]
+
+    /// One JSON-RPC read through the app's pool. `@MainActor`: the executor
+    /// calls it there, and an unannotated async function type is a call to
+    /// NULL on iOS 17 (087 F33).
+    typealias ChainRead = @MainActor (_ chainId: Int, _ method: String, _ params: [Any]) async -> RpcOutcome
 
     /// The chains a brand-new wallet is watched on, so a first receipt is
     /// still caught before it holds anything. Mirrored from
@@ -63,6 +84,9 @@ final class ActivityExecutor {
     /// counterparty cannot be named one thing in the feed and another in the
     /// address book — and so the 24-hour cache is shared rather than doubled.
     private let identity: RecipientIdentity?
+    /// The chain, for a receipt's block time: the pool `token_trust` scans
+    /// through (`TokenTrustStore.chainRead`), unless a test hands its own.
+    private let read: ChainRead
     /// One scan per account at a time. The shell issues this from three places
     /// that can overlap — the account hand-off, the focus tick and the 10s
     /// poll — and a follower answering the leader's count would make the core
@@ -74,13 +98,17 @@ final class ActivityExecutor {
         accounts: AccountStore,
         held: HeldTokens,
         trust: TokenTrustStore,
-        identity: RecipientIdentity? = nil
+        identity: RecipientIdentity? = nil,
+        read: ChainRead? = nil
     ) {
         self.store = store
         self.accounts = accounts
         self.held = held
         self.trust = trust
         self.identity = identity
+        self.read = read ?? { [trust] chainId, method, params in
+            await trust.chainRead(chainId: chainId, method: method, params: params)
+        }
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -133,6 +161,27 @@ final class ActivityExecutor {
             VelaHaptic.success.play()
             return CoreJSON.string(["type": "haptic_played"])
 
+        case "read_receive_time":
+            let id = operation["id"] as? String ?? ""
+            let seconds = await blockTime(
+                chainId: (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
+                txHash: operation["tx_hash"] as? String ?? ""
+            )
+            return CoreJSON.string([
+                "type": "receive_time_read", "id": id,
+                // The block's own seconds, or `null`: not read. Never a
+                // clock's time — the record then keeps the one it has, and
+                // the core asks again when it chooses to.
+                "timestamp_sec": seconds.map { $0 as Any } ?? NSNull(),
+            ])
+
+        case "write_receive_time":
+            let id = operation["id"] as? String ?? ""
+            let written = (operation["timestamp_sec"] as? NSNumber).map {
+                TxRecords.writeReceiveTime(id: id, timestampSec: $0.doubleValue, store: store)
+            } ?? false
+            return CoreJSON.string(["type": "receive_time_written", "id": id, "ok": written])
+
         default:
             // See `ContactsExecutor`: logged, not trapped. An empty store load
             // leaves the core able to read again rather than stalled holding
@@ -159,11 +208,36 @@ final class ActivityExecutor {
         let chainIds = active.isEmpty ? Self.defaultMonitorChains : active
 
         let incoming = await trust.pollIncoming(address: address, chainIds: chainIds)
-        guard !incoming.isEmpty else { return 0 }
+        return ingest(incoming, address: address)
+    }
 
+    /// The judged feed, stored: each transfer as a `receive` record, merged.
+    /// Answers how many were new.
+    func ingest(_ incoming: [TrustIncomingWire], address: String) -> Int {
         let records = incoming.compactMap { record($0, address: address) }
         guard !records.isEmpty else { return 0 }
         return TxRecords.merge(records, store: store)
+    }
+
+    // MARK: - A receipt's block time
+
+    /// The time of the block that holds `txHash`, as the chain gives it: the
+    /// receipt for its block, that block for its `timestamp`. `nil` whenever
+    /// either read gave no usable answer — no receipt, an RPC error, a hex
+    /// nobody can read. One pass and no retry: when to ask again is the
+    /// core's, and "now" is never an answer.
+    private func blockTime(chainId: Int, txHash: String) async -> Double? {
+        guard chainId > 0, !txHash.isEmpty,
+              case .ok(let found) = await read(chainId, "eth_getTransactionReceipt", [txHash]),
+              let receipt = found as? [String: Any],
+              let block = receipt["blockNumber"] as? String,
+              TokenTrustExecutor.hexToNumber(block) != nil,
+              case .ok(let held) = await read(chainId, "eth_getBlockByNumber", [block, false]),
+              let header = held as? [String: Any],
+              let hex = header["timestamp"] as? String,
+              let seconds = TokenTrustExecutor.hexToNumber(hex), seconds > 0
+        else { return nil }
+        return seconds
     }
 
     /// One judged transfer as a persistable `receive` record.
@@ -192,6 +266,9 @@ final class ActivityExecutor {
             "decimals": decimals,
             "chainId": transfer.chainId,
             "timestamp": transfer.timestampSec,
+            // The feed's time is the transfer's own block's (`token_trust`
+            // invariant ⑨), so this record's needs no checking again.
+            "timeVerified": true,
             "status": "confirmed",
             "type": "receive",
             "usd": usd(amount: amount, symbol: symbol, transfer: transfer, address: address),

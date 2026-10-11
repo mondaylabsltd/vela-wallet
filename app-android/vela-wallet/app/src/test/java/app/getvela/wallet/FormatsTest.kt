@@ -7,6 +7,7 @@ import app.getvela.wallet.core.format.TimeFormatKey
 import java.util.Locale
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The web's presets, read back (spec 047 D2). */
@@ -61,10 +62,32 @@ class FormatsTest {
             assertEquals("13.06.2026", f(DateFormatKey.DmyDot, TimeFormatKey.H24).date(noon))
             assertEquals("2026-06-13", f(DateFormatKey.Iso, TimeFormatKey.H24).date(noon))
             assertEquals("13:45", f(DateFormatKey.Iso, TimeFormatKey.H24).time(noon))
-            assertEquals("1:45 PM", f(DateFormatKey.Iso, TimeFormatKey.H12).time(noon))
+            assertEquals("1:45 PM", f(DateFormatKey.Iso, TimeFormatKey.H12).time(noon).plain())
+            // PR 3 final note F5 — the clock is the CORE's, in the language's
+            // own day-period convention: this shell wrote "1:45 PM" in every
+            // language, and Settings → Time format showed that as its Chinese
+            // example while the core's own lines said 「下午」.
+            fun clock(tag: String, key: TimeFormatKey = TimeFormatKey.H12) =
+                Formats(date = DateFormatKey.Iso, time = key, locale = Locale.forLanguageTag(tag)).time(noon).plain()
+            assertEquals("下午 1:45", clock("zh-CN"))
+            assertEquals("下午 1:45", clock("zh"))
+            assertEquals("午後 1:45", clock("ja"))
+            assertEquals("ÖS 1:45", clock("tr"))
+            assertEquals("13:45", clock("zh-CN", TimeFormatKey.H24))
+            // The morning, and midnight's twelve.
+            assertEquals("上午 9:05", Formats(time = TimeFormatKey.H12, locale = Locale.SIMPLIFIED_CHINESE).time(noon - (4 * 60 + 40) * 60_000L).plain())
+            assertEquals("12:10 AM", f(DateFormatKey.Iso, TimeFormatKey.H12).time(noon - (13 * 60 + 35) * 60_000L).plain())
+            // The language can be named apart from the format's locale: the app's.
+            assertEquals("下午 1:45", f(DateFormatKey.Iso, TimeFormatKey.H12).time(noon, "zh").plain())
+            // One unit on a line: the core's no-break space, and a joiner beside a CJK period.
+            assertEquals("1:45\u00A0PM", f(DateFormatKey.Iso, TimeFormatKey.H12).time(noon))
+            assertTrue(Formats(time = TimeFormatKey.H12, locale = Locale.SIMPLIFIED_CHINESE).time(noon).contains('\u00A0'))
             assertEquals("2026-06-13 13:45", f(DateFormatKey.Iso, TimeFormatKey.H24).dateTime(noon))
         } finally {
             TimeZone.setDefault(tz)
         }
     }
+
+    /** A time as read: the core's no-break space as a space, its zero-width joiners gone. */
+    private fun String.plain(): String = replace('\u00A0', ' ').replace("\u2060", "")
 }

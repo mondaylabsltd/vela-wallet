@@ -401,7 +401,7 @@ pub fn outcome_sheet(
                         .text_size(theme::text_body())
                         .line_height(theme::line_height_body())
                         .text_color(theme.fg_muted)
-                        .child(spec.body),
+                        .child(crate::ui::prose(spec.body)),
                 ),
         );
 

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { Scanner, scanNotice, type ScanStatus } from './scanner.svelte';
+import { boardSession, Scanner, scanNotice, type ScanStatus } from './scanner.svelte';
 
 /** Drive `start()` with a `getUserMedia` that rejects the way a browser does. */
 async function statusAfterRejecting(name: string): Promise<string> {
@@ -61,6 +61,89 @@ describe('a camera that will not open says which kind of no it is', () => {
 		vi.stubGlobal('window', { isSecureContext: true });
 		expect(Scanner.supported()).toBe(false);
 		vi.unstubAllGlobals();
+	});
+});
+
+/**
+ * PR 3 note 7 — PRIVACY. A gallery sweep on the desktop walked onto its
+ * scanner state, the real camera started, and a frame of the person at the
+ * machine was captured. On the web the same door stood open: the Explore
+ * boards' scan button reached `getUserMedia` from a gallery page.
+ *
+ * A board never opens a camera. The gate is where the camera is started —
+ * the one place — and it is decided by where the page lives, so a board
+ * cannot forget to say what it is.
+ */
+describe('a board never opens a camera', () => {
+	/** Every camera door, each counting the times it is walked through. */
+	function watchedCamera() {
+		const getUserMedia = vi.fn(() => Promise.reject(new Error('the camera was asked for')));
+		const enumerateDevices = vi.fn(() => Promise.resolve([]));
+		let touched = 0;
+		const navigator = {
+			get mediaDevices() {
+				touched += 1;
+				return { getUserMedia, enumerateDevices };
+			}
+		};
+		return { navigator, getUserMedia, enumerateDevices, touched: () => touched };
+	}
+
+	async function startedAt(pathname: string) {
+		const camera = watchedCamera();
+		vi.stubGlobal('navigator', camera.navigator);
+		vi.stubGlobal('window', { isSecureContext: true });
+		vi.stubGlobal('location', { pathname });
+		const scanner = new Scanner();
+		await scanner.start({} as HTMLVideoElement);
+		// The tools a person may still press on the board.
+		await scanner.flip();
+		await scanner.toggleTorch();
+		const status = scanner.status;
+		vi.unstubAllGlobals();
+		return { status, camera };
+	}
+
+	it.each([
+		'/dev/gallery',
+		'/dev/gallery/',
+		'/en/gallery',
+		'/en/gallery/e1',
+		'/zh/gallery/s1',
+		'/zh-HK/gallery/ds1',
+		'/en/gallery/sd2e'
+	])('%s: the fixture frame, and the camera API is not so much as looked at', async (pathname) => {
+		expect(boardSession(pathname)).toBe(true);
+		const { status, camera } = await startedAt(pathname);
+		expect(status).toBe('fixture');
+		expect(camera.getUserMedia).not.toHaveBeenCalled();
+		expect(camera.enumerateDevices).not.toHaveBeenCalled();
+		// Not even `navigator.mediaDevices` is read: nothing can prompt.
+		expect(camera.touched()).toBe(0);
+	});
+
+	it.each(['/en/wallet', '/zh/wallet', '/en', '/en/settings', '/en/request', '/en/parallel'])(
+		'%s is the app itself: its scanner asks for the camera as it always did',
+		async (pathname) => {
+			expect(boardSession(pathname)).toBe(false);
+			const { status, camera } = await startedAt(pathname);
+			expect(camera.getUserMedia).toHaveBeenCalledTimes(1);
+			// (This camera refuses, so the scan says so — never the fixture.)
+			expect(status).not.toBe('fixture');
+		}
+	);
+
+	it('a page that only mentions a gallery is not one', () => {
+		for (const pathname of ['/en/wallet/gallery', '/gallery', '/en/galleryx', '/developer', '']) {
+			expect(boardSession(pathname), pathname).toBe(false);
+		}
+	});
+
+	it('the fixture frame says the hint, like a live viewfinder — it is not a refusal', () => {
+		const m = resolveWalletFlowMessages('en');
+		expect(
+			scanNotice({ status: 'fixture', nothingFound: false, unusable: false }, m)
+		).toBeUndefined();
 	});
 });
 

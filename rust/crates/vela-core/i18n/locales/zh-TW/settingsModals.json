@@ -63,9 +63,11 @@
       "bestRpc": "最佳 RPC：{{latencyMs}}ms",
       "compatibilityCheck": "相容性檢查",
       "unableToVerify": "無法驗證 — RPC 請求失敗",
+      "noRpcEndpoint": "這個網路沒有列出 RPC 端點。請填寫一個，再重新檢查。",
       "retry": "重試",
       "addNetworkBtn": "新增網路",
-      "incompatibleHint": "此鏈上尚未部署部分必要合約。\n請使用 Vela Wallet 鏈設定工具部署，再回來重新檢查。",
+      "incompatibleHint": "這個網路上還缺少 Vela 需要的部分合約。鏈設定工具會列出缺哪些、誰能部署。",
+      "noP256Hint": "這個網路無法驗證通行密鑰簽署：它沒有 P-256 驗證器（EIP-7951 / RIP-7212，位址 0x100），只有這個網路自己的團隊能加上。Vela 錢包無法在這裡使用。請不要往你在這個網路上的 Vela 地址轉錢，轉進去會被卡住。",
       "openChainSetupTool": "開啟鏈設定工具",
       "recheck": "重新檢查",
       "chainIdLabel": "Chain ID：{{chainId}}",
@@ -92,11 +94,12 @@
       "invalid": "無效"
     },
     "backup": {
-      "title": "把公鑰備份到以太坊",
-      "backedUp": "已備份到以太坊",
-      "notBackedUp": "尚未備份",
-      "couldNotCheck": "無法檢查",
-      "explain": "只發布公鑰，用於從以太坊找回並重建這個錢包。私鑰始終留在你的裝置裡。"
+      "title": "把錢包紀錄複製到以太坊",
+      "backedUp": "已複製到以太坊",
+      "notBackedUp": "尚未複製（可選）",
+      "couldNotCheck": "無法檢查，點按重試",
+      "cannotCopy": "這個較早建立的錢包無法複製",
+      "explain": "錢包在 Gnosis 上的紀錄是公開的：錢包的地址和名稱，以及每把金鑰的名稱、公鑰、憑證 ID 和驗證器型號。有你通行密鑰的裝置就是靠它找到這個錢包的。這裡會在以太坊上再存一份副本。這是一筆以太坊交易：由你用通行密鑰確認，並用你在以太坊上持有的幣支付網路費。副本不能動用資金，也不能找回遺失的通行密鑰。"
     },
     "keys": {
       "title": "金鑰",

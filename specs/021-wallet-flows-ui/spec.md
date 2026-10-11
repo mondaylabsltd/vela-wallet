@@ -197,7 +197,6 @@ against keys that already exist. What is genuinely new:
 | `send.multiSendSameRecipient` | Every token goes to the same address | SD2d |
 | `send.pickContactTitle` | Choose a contact | SD2e |
 | `send.pickContactSearch` | Search contacts or paste an address | SD2e |
-| `send.scanToFill` | Scan to fill the address | SD2e |
 | `send.feeTokenHint` | Pays this transfer's network fee… | SD2f |
 | `send.feeTokenEstimate` | Estimated fee | SD2f |
 | `send.batchRateHint` | Amounts are read as {{code}}… | SD2c |

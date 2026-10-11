@@ -35,6 +35,7 @@ import {
 	buildMobileState as buildSettingsMobileState,
 	DESKTOP_STATES as SETTINGS_DESKTOP_STATES,
 	MOBILE_STATES as SETTINGS_MOBILE_STATES,
+	unreachableBoards,
 	webVenue
 } from '$lib/settings/fixtures';
 import { boardCheckTime } from '$lib/settings/board-check';
@@ -137,6 +138,8 @@ export const load: PageServerLoad = ({ params }) => {
 			clearCachesSheet: st1b.clearCachesSheet,
 			checks: { compatible: st10b.addNetwork, incompatible: st10c.addNetwork },
 			banner: sr1.rpcBanner,
+			// Spec 092's list, and PR 3 note 4's token-list state beside it.
+			unreachable: unreachableBoards(settingsMessages),
 			rpcFixFailing: st1b.rpcFix,
 			rpcFixRestored: sr2b.rpcFix,
 			balanceDetail: st1b.balanceDetail,

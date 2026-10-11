@@ -5,6 +5,7 @@
     "searchPlaceholder": "搜尋代幣⋯",
     "unreachableOne": "暫時連唔到 {{name}}",
     "unreachableMany": "暫時連唔到 {{n}} 個網絡",
+    "tokenListUnreachable": "暫時讀唔到 {{name}} 嘅代幣清單",
     "unreachableBody": "資產唔受影響，只係而家讀唔到。",
     "unreachableNone": "所有網絡都已經連返。",
     "lastSeen": "上次讀到 {{amount}}",

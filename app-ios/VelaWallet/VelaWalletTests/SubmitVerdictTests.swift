@@ -30,7 +30,7 @@ import VelaCore
 /// asked, which no machine's idleness bounds (`Waits.swift`). With no limit,
 /// one that never came would have taken the job with it; this reports it.
 @MainActor
-@Suite(.timeLimit(.minutes(5)))
+@Suite(.hangLimit)
 struct SubmitVerdictTests {
 
     private let local = "0x" + String(repeating: "11", count: 32)
@@ -240,7 +240,9 @@ struct SubmitVerdictTests {
                     local.signed.append((hash, block, false))
                     gate.arm(hash)
                     signed.set()
-                    return await gate.wait(hash, ms: 60_000)
+                    // "However long that takes": no deadline, so the wait
+                    // ends by the clearance alone, whatever the runner did.
+                    return await gate.wait(hash, ms: nil)
                 }
             )
         }
@@ -322,9 +324,12 @@ struct SubmitVerdictTests {
 
     /// The executor, with the core's write-ahead played by the test: on
     /// `op_signed` the record is persisted and the POST cleared, in that
-    /// order — unless `clears` is false, when nothing ever clears it.
+    /// order — unless `clears` is false, when nothing ever clears it. The
+    /// clearance has no deadline (`nil`) unless the test is about the
+    /// deadline: a clock under a clearance that always comes only measures
+    /// the runner (`Waits.swift`).
     private func signExecutor(
-        _ port: ScriptedRelayPort, clears: Bool = true, clearanceWaitMs: Double = 60_000
+        _ port: ScriptedRelayPort, clears: Bool = true, clearanceWaitMs: Double? = nil
     ) -> (SignExecutor, Recorded) {
         let (spine, _) = spine(port)
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)

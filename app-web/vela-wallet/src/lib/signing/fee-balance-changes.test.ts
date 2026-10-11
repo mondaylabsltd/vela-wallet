@@ -143,8 +143,10 @@ vi.mock('$lib/flows/core/fee-session', async () => {
 import { FeeQuote, type FeeQuoteRequest } from '$lib/flows/core/fee-quote.svelte';
 import { TierPreview } from '$lib/flows/core/tier-preview.svelte';
 import {
+	checkRequest,
 	feeBalanceChanges,
 	measureBalanceChanges,
+	simulateVerdict,
 	tellBalanceChanges
 } from './fee-balance-changes';
 
@@ -273,14 +275,60 @@ describe('#411 — the swap the simulation measured pays its fee in a coin that 
 	});
 });
 
+/*
+ * PR 3 device round, item 3: what the node's reply MEANS is the core's
+ * (`simOutcome`), read here over the REAL wasm — the replies below are
+ * `eth_simulateV1` envelopes as a node sends them. One read serves the fee
+ * (a check's moves) and the sheet (the core's "No asset changes").
+ */
+const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const topic = (address: string) => '0x' + bare(address).padStart(64, '0');
+const word = (amount: bigint) => '0x' + amount.toString(16).padStart(64, '0');
+const moved = (token: string, from: string, to: string, amount: bigint) => ({
+	address: token,
+	topics: [TRANSFER, topic(from), topic(to)],
+	data: word(amount)
+});
+/** The node's envelope around one block of call results. */
+const answered = (...calls: object[]) =>
+	JSON.stringify({ jsonrpc: '2.0', id: 1, result: [{ calls }] });
+/** The swap ran: pUSD out, USDC back. */
+const SWAPPED = answered({
+	status: '0x1',
+	logs: [
+		moved(net.PUSD, SAFE, ROUTER, 128510000n),
+		moved(net.USDC, ROUTER, SAFE, 128494600n),
+		// Somebody else's transfer in the same call: not the account's.
+		moved(net.USDC, ROUTER, '0x' + '99'.repeat(20), 7n)
+	]
+});
+/** It ran, and nothing of the account's moved (an approval). */
+const NOTHING_MOVED = answered({ status: '0x1', logs: [] });
+/** `Error("STF")`, as a node reports a revert. */
+const REVERTED = answered({
+	status: '0x0',
+	error: { code: 3, message: 'execution reverted' },
+	returnData:
+		'0x08c379a0' + '20'.padStart(64, '0') + '03'.padStart(64, '0') + '535446'.padEnd(64, '0')
+});
+/** A status that is neither 0 nor 1, and no error beside it. */
+const UNREADABLE_STATUS = answered({ status: '0x2', logs: [] });
+/** A node that does not offer the method (Arbitrum's public one). */
+const NOT_OFFERED = JSON.stringify({
+	jsonrpc: '2.0',
+	id: 1,
+	error: { code: -32603, message: 'method handler crashed' }
+});
+const UNREACHABLE = JSON.stringify({ unreachable: true });
+
 describe('#411 — what the simulation hands the fee machine', () => {
-	it('maps deltas as the desktop’s fee_balance_changes does', () => {
+	it('maps a check’s moves as the desktop’s fee_balance_changes does', () => {
 		expect(
 			feeBalanceChanges([
-				{ kind: 'native', delta: -1000n },
-				{ kind: 'erc20', token: net.PUSD.toLowerCase(), delta: -128510000n },
+				{ kind: 'native', token: null, delta: '-1000' },
+				{ kind: 'erc20', token: net.PUSD.toLowerCase(), delta: '-128510000' },
 				// A token move with no contract names no coin: dropped, never native.
-				{ kind: 'erc20', delta: 5n }
+				{ kind: 'erc20', token: null, delta: '5' }
 			])
 		).toEqual([
 			{ token: null, delta: '-1000' },
@@ -289,13 +337,7 @@ describe('#411 — what the simulation hands the fee machine', () => {
 	});
 
 	it('a clean run is told; a revert, a node that could not check, or a gone request tells nothing', async () => {
-		const clean = vi.fn(async () => ({
-			ok: true,
-			deltas: [
-				{ kind: 'erc20' as const, token: net.PUSD.toLowerCase(), delta: -128510000n },
-				{ kind: 'erc20' as const, token: net.USDC.toLowerCase(), delta: 128494600n }
-			]
-		}));
+		const clean = vi.fn(async () => SWAPPED);
 		const told: unknown[] = [];
 		const sink = {
 			balanceChanges: (calls: FeeCall[], changes: FeeBalanceChange[]) =>
@@ -304,19 +346,110 @@ describe('#411 — what the simulation hands the fee machine', () => {
 		const request = { from: SAFE, calls: CALLS, chainId: 137 };
 
 		expect(await tellBalanceChanges(sink, request, () => true, clean)).toBe(true);
+		// The core's own reading of the logs: the account's two moves, by the
+		// contract that emitted each — the issue's numbers.
 		expect(told).toEqual([{ calls: CALLS, changes: CHANGES }]);
 		expect(clean).toHaveBeenCalledWith(SAFE, [{ to: ROUTER, value: '0', data: SWAP_DATA }], 137);
 
-		const reverted = vi.fn(async () => ({ ok: false, revertReason: 'STF', deltas: [] }));
-		const unanswered = vi.fn(async () => null);
 		const thrown = vi.fn(async () => {
 			throw new Error('every endpoint failed');
 		});
-		for (const simulate of [reverted, unanswered, thrown]) {
+		const silent = [REVERTED, UNREADABLE_STATUS, NOT_OFFERED, UNREACHABLE, 'not json', '{}'].map(
+			(reply) => vi.fn(async () => reply)
+		);
+		for (const simulate of [...silent, thrown]) {
 			expect(await measureBalanceChanges(SAFE, CALLS, 137, simulate)).toBeNull();
 			expect(await tellBalanceChanges(sink, request, () => true, simulate)).toBe(false);
 		}
 		expect(await tellBalanceChanges(sink, request, () => false, clean)).toBe(false);
 		expect(told).toHaveLength(1);
+		// Nothing to ask: nobody is asked.
+		const unasked = vi.fn(async () => SWAPPED);
+		expect(await simulateVerdict(SAFE, [], 137, unasked)).toBeNull();
+		expect(unasked).not.toHaveBeenCalled();
+	});
+});
+
+describe('one read, the core’s verdict — for the fee and for the sheet (device round, item 3)', () => {
+	const request = { from: SAFE, calls: CALLS, chainId: 137 };
+	const sinkOf = () => {
+		const told: FeeBalanceChange[][] = [];
+		return {
+			told,
+			balanceChanges: (_calls: FeeCall[], changes: FeeBalanceChange[]) => void told.push(changes)
+		};
+	};
+
+	it('a check under which nothing moves: the fee is told "nothing", the sheet gets the core’s line', async () => {
+		const sink = sinkOf();
+		const simulate = vi.fn(async () => NOTHING_MOVED);
+		const verdict = await checkRequest(sink, request, () => true, simulate);
+		expect(verdict).toMatchObject({
+			kind: 'deltas',
+			deltas: [],
+			no_change_key: 'componentsUi.signing.simResultNoChange',
+			notice_key: null
+		});
+		// One read served both.
+		expect(simulate).toHaveBeenCalledOnce();
+		expect(sink.told).toEqual([[]]);
+	});
+
+	it('a check under which something moves carries no line', async () => {
+		const sink = sinkOf();
+		const verdict = await checkRequest(
+			sink,
+			request,
+			() => true,
+			async () => SWAPPED
+		);
+		expect(verdict?.kind).toBe('deltas');
+		expect(verdict?.no_change_key).toBeNull();
+		expect(sink.told).toEqual([CHANGES]);
+	});
+
+	it('a revert, a status nobody can read, a node that cannot check, no node: never "nothing moves"', async () => {
+		const cases: [string, string, string][] = [
+			[REVERTED, 'reverts', 'componentsUi.signing.simWillFailReason'],
+			// This shell's own port read this one as a success with no moves.
+			[UNREADABLE_STATUS, 'not_offered', 'componentsUi.signing.simUnavailableWarning'],
+			[NOT_OFFERED, 'not_offered', 'componentsUi.signing.simUnavailableWarning'],
+			[UNREACHABLE, 'unreachable', 'componentsUi.signing.simUnavailableWarning'],
+			['{}', 'not_offered', 'componentsUi.signing.simUnavailableWarning']
+		];
+		for (const [reply, kind, notice] of cases) {
+			const sink = sinkOf();
+			const verdict = await checkRequest(
+				sink,
+				request,
+				() => true,
+				async () => reply
+			);
+			expect(verdict, reply).toMatchObject({ kind, notice_key: notice, no_change_key: null });
+			expect(sink.told, reply).toEqual([]);
+		}
+		// The pool threw: the same "no node answered".
+		const thrown = await checkRequest(
+			sinkOf(),
+			request,
+			() => true,
+			async () => {
+				throw new Error('every endpoint failed');
+			}
+		);
+		expect(thrown).toMatchObject({ kind: 'unreachable', no_change_key: null });
+	});
+
+	it('a request that is gone by the time the node answers has no verdict, and nobody is told', async () => {
+		const sink = sinkOf();
+		expect(
+			await checkRequest(
+				sink,
+				request,
+				() => false,
+				async () => NOTHING_MOVED
+			)
+		).toBeNull();
+		expect(sink.told).toEqual([]);
 	});
 });

@@ -84,7 +84,7 @@ class I18nEngineSmokeTest {
         I18nKeys.Create.KEY_DEVICE_ONLY_BADGE,
         I18nKeys.Create.KEY_LIMIT_REACHED,
         I18nKeys.Create.NEED_SECOND_KEY_HINT,
-        I18nKeys.Create.ADD_KEY_BTN,
+        I18nKeys.Create.KEY_PLACE_HEADING,
         I18nKeys.Create.ADD_SECOND_KEY_BTN,
         I18nKeys.Create.CONFIRM_KEY_BTN,
         I18nKeys.Create.REMOVE_KEY_BTN,

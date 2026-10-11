@@ -63,7 +63,6 @@
       "simWillFail": "Esta transação deve falhar — você ainda pagaria o gas.",
       "simWillFailReason": "Deve falhar: {{reason}} — você ainda pagaria o gas.",
       "balanceChangesTitle": "Mudanças no saldo",
-      "balanceNoAssetsMove": "Nenhum ativo sai da sua carteira",
       "balanceUnverifiedToken": "Token não verificado",
       "balanceSelfTransfer": "Para seu próprio endereço · o saldo não muda",
       "intentContractCall": "Interação com contrato",
@@ -149,10 +148,11 @@
       "labelYouPayMax": "Você paga (máx.)",
       "labelYouReceive": "Você recebe",
       "labelYouReceiveMin": "Você recebe (mín.)",
-      "intentBackUpPublicKeys": "Backup das chaves públicas",
+      "intentBackUpPublicKeys": "Copiar o registro da carteira",
       "labelNetwork": "Rede",
       "labelAddress": "Endereço",
-      "labelPublicKeys": "Chaves públicas",
+      "labelPublicKeys": "Chaves incluídas",
+      "labelWalletName": "Nome da carteira",
       "valueUnlimited": "Ilimitado",
       "valueAll": "Tudo",
       "warnOrderTerms": "Os valores desta ordem não aparecem aqui — confira-os primeiro no site.",
@@ -228,8 +228,8 @@
       "signerDown": "A página de assinatura não abriu. Verifique sua conexão.",
       "integrity": {
         "checking": "Verificando a página…",
-        "matches": "Versão {{version}} · confere com a lista de builds publicada pela Vela · verificada {{time}}",
-        "trusted": "Versão {{version}} · confiável neste aparelho · verificada {{time}}",
+        "matches": "Versão {{version}} · confere com a lista de builds publicada pela Vela · verificada {{time}}",
+        "trusted": "Versão {{version}} · confiável neste aparelho · verificada {{time}}",
         "unchecked": "Não verificada: a verificação está desligada para esta página",
         "mismatch": "A versão {{version}} não está na lista de builds publicada pela Vela. Não foi aberta.",
         "blocked": "A versão {{version}} está bloqueada neste aparelho.",
@@ -249,7 +249,8 @@
         "feeFailed": "Não foi possível calcular a taxa — toque para tentar de novo",
         "feeRetrying": "Ainda não foi possível calcular a taxa. Tentando de novo automaticamente…",
         "feeWouldFail": "Falharia se fosse enviada assim.",
-        "previousPending": "Aguardando sua transação anterior nesta rede terminar…"
+        "previousPending": "Aguardando sua transação anterior nesta rede terminar…",
+        "simChecking": "Verificando o que esta transação faz…"
       }
     },
     "signingApprove": {
