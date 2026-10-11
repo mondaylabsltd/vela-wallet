@@ -62,10 +62,17 @@ final class BrowserHarness {
     final class Clock { var ms = t0 }
     let clock: Clock
 
-    init(seed: (VelaStore) -> Void = { _ in }, signingSheet: Bool = true) {
-        let suite = "vela.tests.dbr.\(UUID().uuidString)"
-        UserDefaults().removePersistentDomain(forName: suite)
-        store = VelaStore(defaults: UserDefaults(suiteName: suite)!)
+    /// - Parameter defaults: the storage of a device a test built itself, so a
+    ///   second harness over it is that device's next launch. `nil` is a
+    ///   suite of this harness's own.
+    init(defaults: UserDefaults? = nil, seed: (VelaStore) -> Void = { _ in }, signingSheet: Bool = true) {
+        if let defaults {
+            store = VelaStore(defaults: defaults)
+        } else {
+            let suite = "vela.tests.dbr.\(UUID().uuidString)"
+            UserDefaults().removePersistentDomain(forName: suite)
+            store = VelaStore(defaults: UserDefaults(suiteName: suite)!)
+        }
         seed(store)
         let clock = Clock()
         self.clock = clock

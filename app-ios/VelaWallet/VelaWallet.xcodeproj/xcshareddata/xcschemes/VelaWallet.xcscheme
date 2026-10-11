@@ -141,6 +141,9 @@
                   Identifier = "ParallelSpaceDeviceTests">
                </Test>
                <Test
+                  Identifier = "ParallelSpaceSitesDeviceTests">
+               </Test>
+               <Test
                   Identifier = "FeeSpeedDeviceTests">
                </Test>
                <Test

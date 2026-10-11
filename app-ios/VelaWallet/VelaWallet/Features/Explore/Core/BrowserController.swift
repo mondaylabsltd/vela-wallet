@@ -188,14 +188,19 @@ final class BrowserController {
     var ports: Ports
 
     private let now: () -> Double
+    /// Whether an address is the parallel space's test wallet
+    /// (`ParallelSpaceHook.isSpaceAccount`; never, in a Release build).
+    private let isSpaceAccount: @MainActor (String) -> Bool
 
     init(
         store: VelaStore,
         ports: Ports = Ports(),
-        now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 }
+        now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 },
+        isSpaceAccount: @escaping @MainActor (String) -> Bool = { ParallelSpaceHook.isSpaceAccount($0) }
     ) {
         self.ports = ports
         self.now = now
+        self.isSpaceAccount = isSpaceAccount
         self.exploreExecutor = ExploreExecutor(store: store)
         self.historyExecutor = BhistExecutor(store: store)
         self.dbrExecutor = DbrExecutor(store: store, now: now)
@@ -300,19 +305,50 @@ final class BrowserController {
     ///
     /// All of them first: a grant whose account left the wallet is dropped
     /// only against a KNOWN list (an empty one is "not known yet", never
-    /// "nobody"). Then the active one — every grant follows it, and each open
-    /// tab of a re-pinned site hears `accountsChanged`. Repeating it with the
-    /// same account changes nothing.
+    /// "nobody"). Then the active one — every grant of the person's follows
+    /// it, and each open tab of a re-pinned site hears `accountsChanged`.
+    /// Repeating it with the same account changes nothing.
+    ///
+    /// Unless the account in front is the parallel space's test wallet
+    /// (`accountEvents`' `space`): then the person's sites are not this
+    /// switch's to move.
     func accountsChanged(addresses: [String], active: String?) {
-        dbrCore.dispatch(CoreJSON.string([
+        for event in Self.accountEvents(
+            addresses: addresses, active: active, nowMs: now(), isSpaceAccount: isSpaceAccount
+        ) {
+            dbrCore.dispatch(CoreJSON.string(event))
+        }
+    }
+
+    /// What the browser machine is told when the wallet's accounts change:
+    /// the whole list, then the account in front.
+    ///
+    /// `space` on the switch is the one thing decided here, and it is decided
+    /// from the ACCOUNT (`ParallelSpaceHook.isSpaceAccount`): true exactly
+    /// when the account now in front is the parallel space's test wallet. To
+    /// the session, the space's wallet coming to the front is an account
+    /// switch like any other, and the core used to treat it as one — every
+    /// site the person had connected was re-pinned to the test wallet and
+    /// written, and leaving, which removes that wallet's record, then dropped
+    /// them all. The owner's Arc Orbs connection went that way (2026-10-11).
+    /// Told `space`, the core sets the person's sites aside untouched, keeps
+    /// the space's own in memory, writes nothing to the site store while in
+    /// there, and puts the person's back on the next switch that is not the
+    /// space's.
+    static func accountEvents(
+        addresses: [String], active: String?, nowMs: Double, isSpaceAccount: @MainActor (String) -> Bool
+    ) -> [[String: Any]] {
+        var events: [[String: Any]] = [[
             "type": "accounts_updated",
             "addresses": addresses.isEmpty ? NSNull() : addresses as Any,
-        ]))
+        ]]
         if let active, !active.isEmpty {
-            dbrCore.dispatch(CoreJSON.string([
-                "type": "account_switched", "address": active, "now_ms": now(),
-            ]))
+            events.append([
+                "type": "account_switched", "address": active, "now_ms": nowMs,
+                "space": isSpaceAccount(active),
+            ])
         }
+        return events
     }
 
     // MARK: - A page from outside (spec 088 FR-004)
@@ -1105,6 +1141,12 @@ extension BrowserController {
 
     func rendererGoneForTesting(tab: String) {
         dbrCore.dispatch(CoreJSON.string(["type": "renderer_gone", "tab": tab, "now_ms": now()]))
+    }
+
+    /// The browser machine's own events, in the order a test gives them —
+    /// `accountsChanged` always says the list first.
+    func eventsForTesting(_ events: [[String: Any]]) {
+        for event in events { dbrCore.dispatch(CoreJSON.string(event)) }
     }
 
     /// The read deadline in place of the core's 30 s.

@@ -100,6 +100,21 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
         isActive ? FixtureUserOpSigner(preferred: preferredSigner) : nil
     }
 
+    // MARK: - Whose account is in front
+
+    /// The test wallet's address, read once: one keyset per build, one Safe
+    /// for it. `nil` only if the keyset could not be read — and then no
+    /// account is the space's, which is also what `enter` concludes.
+    private lazy var spaceAddress: String? = try? fixtureMultiAddress()
+
+    /// The account at `address` is the record `enter` writes — the Safe of the
+    /// whole fixture keyset — whatever `isActive` says and however the
+    /// address is cased.
+    func isSpaceAccount(_ address: String) -> Bool {
+        guard let spaceAddress, !address.isEmpty else { return false }
+        return spaceAddress.caseInsensitiveCompare(address) == .orderedSame
+    }
+
     // MARK: - Enter and leave
 
     /// `alreadyInside`: the flag was persisted — a relaunch inside the space,
