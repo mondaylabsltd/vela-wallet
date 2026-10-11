@@ -20,7 +20,7 @@ use crate::wallet::components::{
 };
 
 use super::components::{
-    CopyButton, GhostPill, accent_button, address_card, danger_button, disabled_accent_button,
+    CopyButton, GhostPill, accent_button, address_card, destructive_text, disabled_accent_button,
     fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option,
     fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row,
     max_chip, mono_field, mono_field_ink, network_pill, network_row, qr_card, quiet_button,
@@ -1000,26 +1000,39 @@ fn tx_detail(
             &model.breakdown,
         )));
     }
-    let plan = tx_cta(model);
     let mut cta = div().flex().flex_col().gap(px(8.)).pt(px(16.));
-    if plan.explorer {
-        cta = cta.child(explorer_button(
-            "tx-explorer",
-            theme,
-            model.view_on_explorer.clone(),
-            model.explorer_url.as_ref(),
-        ));
-    }
-    // Under the explorer. It removes the local record only; the chain keeps
-    // the transaction.
-    if let (Some(label), Some(style)) = (&model.delete_label, plan.delete) {
-        let face = match style {
-            DeleteStyle::Quiet => quiet_button(theme, label.clone()),
-            DeleteStyle::Danger => danger_button(theme, label.clone()),
+    let mut delete_tx = delete_tx;
+    for action in tx_cta(model).actions() {
+        cta = match action {
+            TxAction::Explorer => cta.child(explorer_button(
+                "tx-explorer",
+                theme,
+                model.view_on_explorer.clone(),
+                model.explorer_url.as_ref(),
+            )),
+            // Last, and the lightest thing here. It removes the local record
+            // only; the chain keeps the transaction.
+            TxAction::Delete(style) => match &model.delete_label {
+                Some(label) => cta.child(clickable(
+                    "tx-delete",
+                    delete_tx.take(),
+                    delete_face(theme, style, label.clone()),
+                )),
+                None => cta,
+            },
         };
-        cta = cta.child(clickable("tx-delete", delete_tx, face));
     }
     col.child(cta)
+}
+
+/// A record's delete, as drawn: a text action in both styles — no fill and
+/// no outline, so it is never heavier than the outlined "View on explorer"
+/// above it.
+fn delete_face(theme: &Theme, style: DeleteStyle, label: SharedString) -> Div {
+    match style {
+        DeleteStyle::Quiet => quiet_button(theme, label),
+        DeleteStyle::Destructive => destructive_text(theme, label),
+    }
 }
 
 /// A dApp record's "Technical details" (spec 093): a quiet disclosure row
@@ -1122,36 +1135,59 @@ pub struct TxCta {
 pub fn tx_cta(model: &TxDetail) -> TxCta {
     TxCta {
         explorer: model.explorer_url.is_some(),
-        // A signature (no chip) is done, not in flight: the danger delete.
+        // A signature (no chip) is done, not in flight: said as a delete.
         delete: model.delete_label.as_ref().map(|_| {
             model
                 .status
                 .as_ref()
-                .map_or(DeleteStyle::Danger, delete_style)
+                .map_or(DeleteStyle::Destructive, delete_style)
         }),
     }
 }
 
-/// How a record's delete is drawn (spec 082 RJ18, G51).
+/// One of a transaction detail's actions under its facts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TxAction {
+    Explorer,
+    Delete(DeleteStyle),
+}
+
+impl TxCta {
+    /// The actions in the order they are drawn: what is useful first, the
+    /// record's delete below it — always last.
+    #[must_use]
+    pub fn actions(self) -> Vec<TxAction> {
+        self.explorer
+            .then_some(TxAction::Explorer)
+            .into_iter()
+            .chain(self.delete.map(TxAction::Delete))
+            .collect()
+    }
+}
+
+/// How a record's delete is drawn (spec 082 RJ18, G51; PR 4 item 10). Both
+/// are text actions ([`delete_face`]): a transfer's 「删除记录」 was a filled
+/// red button — the heaviest control on a page whose useful action, "View
+/// on explorer", is an outline.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeleteStyle {
     /// A pending (may-have-been-sent) record: the record IS the "do not send
-    /// it again" trace, so its delete is there but quiet — a full-width red
-    /// button was the most prominent control on 处理中.
+    /// it again" trace, so its delete is there but in muted ink, not even
+    /// the danger colour.
     Quiet,
-    /// Confirmed or failed: filled in the danger colour (the web's
-    /// `variant="danger"`).
-    Danger,
+    /// Confirmed, failed, or a signature: the same text action in the danger
+    /// colour — destructive, and said quietly.
+    Destructive,
 }
 
 /// The rule: pending — the status that wears the info tone (the live
 /// builder's `FeedTxStatus::Pending`, and `Unknown`, a pending record nothing
-/// will settle) — is quiet; the rest are danger.
+/// will settle) — is quiet; the rest say what they are.
 #[must_use]
 pub fn delete_style(status: &StatusChip) -> DeleteStyle {
     match status.tone {
         StatusTone::Info => DeleteStyle::Quiet,
-        StatusTone::Success | StatusTone::Warning | StatusTone::Error => DeleteStyle::Danger,
+        StatusTone::Success | StatusTone::Warning | StatusTone::Error => DeleteStyle::Destructive,
     }
 }
 
@@ -4311,9 +4347,87 @@ mod tests {
         }
     }
 
+    /// PR 4 item 10: 「删除记录」 was the heaviest button on a transfer's
+    /// detail — filled red, under an outlined "View on explorer". In every
+    /// state of a record (a transfer's and a dApp's are this one page) the
+    /// delete is a text action: no fill, no outline, lighter type and a
+    /// shorter box than the explorer button, and the last thing drawn.
+    #[test]
+    fn deleting_a_record_is_never_the_heaviest_action() {
+        let theme = Theme::light();
+        let label = SharedString::from("Delete record");
+        let mut explorer = ghost_button(&theme, "View on Explorer".into());
+        let outlined = explorer.style().border_color.is_some();
+        assert!(outlined, "the useful action is the outlined one");
+        let explorer_weight = explorer.style().text.font_weight;
+        assert_eq!(explorer_weight, Some(gpui::FontWeight::SEMIBOLD));
+
+        for (style, ink) in [
+            (DeleteStyle::Quiet, theme.fg_muted),
+            (DeleteStyle::Destructive, theme.error_base),
+        ] {
+            let mut face = delete_face(&theme, style, label.clone());
+            let drawn = face.style();
+            assert!(drawn.background.is_none(), "{style:?}: no fill");
+            assert!(drawn.border_color.is_none(), "{style:?}: no outline");
+            assert_eq!(drawn.text.color, Some(ink), "{style:?}");
+            assert_eq!(drawn.text.font_weight, None, "{style:?}: plain weight");
+            assert_eq!(
+                drawn.text.font_size,
+                Some(theme::text_row_sub().into()),
+                "{style:?}: the row's small type, under the button's"
+            );
+            assert_eq!(
+                drawn.min_size.height,
+                Some(px(40.).into()),
+                "{style:?}: shorter than a button's 52"
+            );
+        }
+        assert_ne!(theme.error_base, theme.fg_muted);
+
+        // Below the useful action, whatever the record's state — a
+        // confirmed transfer, a failed one, a pending one, a dApp's
+        // signature (no chip) and its technical record.
+        let confirmed = detail(StatusTone::Success, Some("https://gnosisscan.io/tx/0x1"));
+        let mut signature = detail(StatusTone::Info, None);
+        signature.status = None;
+        for model in [
+            confirmed,
+            detail(StatusTone::Error, Some("https://gnosisscan.io/tx/0x1")),
+            detail(StatusTone::Warning, Some("https://gnosisscan.io/tx/0x1")),
+            detail(StatusTone::Info, Some("https://gnosisscan.io/tx/0x1")),
+            signature,
+        ] {
+            let actions = tx_cta(&model).actions();
+            assert!(
+                matches!(actions.last(), Some(TxAction::Delete(_))),
+                "the delete is last: {actions:?}"
+            );
+            assert_eq!(
+                actions
+                    .iter()
+                    .filter(|action| matches!(action, TxAction::Delete(_)))
+                    .count(),
+                1
+            );
+        }
+        let with_page = tx_cta(&detail(
+            StatusTone::Success,
+            Some("https://gnosisscan.io/tx/0x1"),
+        ));
+        assert_eq!(
+            with_page.actions(),
+            vec![
+                TxAction::Explorer,
+                TxAction::Delete(DeleteStyle::Destructive)
+            ]
+        );
+    }
+
     /// Spec 082 RJ18, G51 (DX-LD3): on a pending record — the "don't send it
-    /// again" trace — the delete is quiet; a confirmed or failed one keeps
-    /// the danger button.
+    /// again" trace — the delete is quiet, in muted ink; a confirmed or
+    /// failed one says it is a delete, in the danger colour. Neither is a
+    /// button any more (PR 4 item 10).
     #[test]
     fn a_pending_records_delete_is_quiet() {
         assert_eq!(
@@ -4323,7 +4437,7 @@ mod tests {
             ))
             .delete,
             Some(DeleteStyle::Quiet),
-            "no danger button on 处理中"
+            "muted on 处理中"
         );
         assert_eq!(
             tx_cta(&detail(
@@ -4331,21 +4445,21 @@ mod tests {
                 Some("https://gnosisscan.io/tx/0x1")
             ))
             .delete,
-            Some(DeleteStyle::Danger)
+            Some(DeleteStyle::Destructive)
         );
         assert_eq!(
             tx_cta(&detail(StatusTone::Error, None)).delete,
-            Some(DeleteStyle::Danger)
+            Some(DeleteStyle::Destructive)
         );
         let mut picture = detail(StatusTone::Info, None);
         picture.delete_label = None;
         assert_eq!(tx_cta(&picture).delete, None, "a mock deletes nothing");
         // A dApp's signature has no chip (spec 093): it was given, nothing
         // will settle it, so its record is not a "do not send it again"
-        // trace — the delete is the danger one.
+        // trace — the delete says what it is.
         let mut signature = detail(StatusTone::Info, None);
         signature.status = None;
-        assert_eq!(tx_cta(&signature).delete, Some(DeleteStyle::Danger));
+        assert_eq!(tx_cta(&signature).delete, Some(DeleteStyle::Destructive));
     }
 
     /// Spec 082 G52 (DX-W3): an op the relay refused never reached the chain
