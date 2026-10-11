@@ -1859,6 +1859,15 @@ fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEf
         let chain_id = session.chain_id;
         model.unreached_chains.insert(chain_id);
     }
+    // A chain with no node to ask is not swept again: a second pass would
+    // find the same nothing, after a backoff the caller waits through.
+    let no_node = model
+        .calls
+        .get(call_id)
+        .is_some_and(|s| s.kind == RpcKind::Rpc && !has_rpc_endpoints(model, s.chain_id));
+    if no_node {
+        return conclude_failed(model, call_id);
+    }
     let Some(session) = model.calls.get_mut(call_id) else {
         return Command::done();
     };
@@ -1890,6 +1899,14 @@ fn conclude_failed(model: &mut Model, call_id: &str) -> Command<RpcEffect, Event
         // Spec 082 RG7: a method a node may simply not offer never says
         // anything about the chain — neither banner nor notice.
         RpcKind::Rpc if is_optional_method(&session.method) => throttled,
+        // A chain with NO endpoint is not a network that failed: it is a
+        // network this wallet does not have. A name service's registry lives
+        // on its own chain (`.g` on 1625), and a wallet without that chain
+        // has nothing to ask and nothing a person could fix — yet every
+        // launch listed "1625" among the networks that cannot be reached
+        // (the 2026-10-11 phone walk). The call still fails, at once and
+        // without a request; the chain is simply not counted.
+        RpcKind::Rpc if !has_rpc_endpoints(model, session.chain_id) => false,
         RpcKind::Rpc => {
             model.failed_chains.insert(session.chain_id);
             if throttled {
@@ -1915,6 +1932,17 @@ fn conclude_failed(model: &mut Model, call_id: &str) -> Command<RpcEffect, Event
         ),
         render(),
     ])
+}
+
+/// Whether the wallet has `chain_id` at all: its pool holds a node to ask.
+/// Every network of the wallet has one — a built-in's defaults, or the
+/// endpoint a custom network cannot be saved without — so an empty pool
+/// means the shell had no row for the chain.
+fn has_rpc_endpoints(model: &Model, chain_id: u32) -> bool {
+    model
+        .pools
+        .get(&chain_id)
+        .is_some_and(|pool| !pool.rpc.is_empty())
 }
 
 // ---------------------------------------------------------------------------

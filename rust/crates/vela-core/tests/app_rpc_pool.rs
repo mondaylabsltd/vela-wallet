@@ -3210,3 +3210,58 @@ fn a_persons_own_endpoint_and_a_chains_last_one_are_kept() {
     ));
     assert_eq!(ops, vec![rpc_post("c0", DEAD, "eth_call")]);
 }
+
+// ---------------------------------------------------------------------------
+// A chain the wallet does not have (the 2026-10-11 phone walk)
+// ---------------------------------------------------------------------------
+
+/// A name service's registry lives on its own chain (`.g` on 1625). A wallet
+/// without that chain has no node for it: the shell's row lookup answers
+/// with no endpoints. That is not a network that cannot be reached — there
+/// is nothing to reach, and nothing a person could fix — so the call fails
+/// at once, with no request and no second pass, and the chain is in none of
+/// the lists a banner, a notice or a report reads. It used to be in
+/// `failed_chains` after every launch, and the feedback sheet said
+/// "Unreachable RPCs: 1625".
+#[test]
+fn a_chain_the_wallet_does_not_have_is_not_a_chain_that_failed() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(rpc_call("c1", "eth_call", T0));
+    assert_eq!(ops, vec![Op::LoadPoolConfig { chain_id: CHAIN }]);
+    // The shell has no row for this chain: nothing to ask, nothing to pay through.
+    let ops = sut.resolve(config(Vec::new(), Vec::new(), T0));
+    assert_eq!(
+        ops,
+        vec![Op::Conclude {
+            call_id: "c1".to_owned(),
+            verdict: RpcCallVerdict::Failed {
+                rate_limited: false,
+                maybe_delivered: false,
+            },
+        }],
+        "failed at once: no request, no jitter, no backoff"
+    );
+    let view = sut.view();
+    assert!(view.failed_chains.is_empty(), "not a failed network");
+    assert!(view.unreached_chains.is_empty(), "not an unreached one");
+    assert!(view.rate_limited_chains.is_empty());
+
+    // Asked again (every launch asks), it is still nobody's trouble.
+    assert!(sut.resolve(Res::Concluded).is_empty());
+    let ops = sut.dispatch(rpc_call("c2", "eth_call", T0 + 1_000.0));
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::JsonRpcPost { .. })),
+        "still nothing to ask: {ops:?}"
+    );
+    assert!(sut.view().failed_chains.is_empty());
+}
+
+/// The rule is about having NO endpoint. A network the wallet has, whose one
+/// node does not answer, is exactly what the lists are for.
+#[test]
+fn a_chain_the_wallet_has_still_fails_when_its_nodes_do_not_answer() {
+    let mut sut = Sut::new();
+    let verdict = sweep_to_verdict(&mut sut, "c1", |_| Out::Network);
+    assert!(matches!(verdict, RpcCallVerdict::Failed { .. }));
+    assert_eq!(sut.view().failed_chains, vec![CHAIN]);
+}
