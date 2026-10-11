@@ -77,7 +77,9 @@ pub struct TitlePart {
 }
 
 impl TitleParts {
-    /// The title as one run of text — what a row with no parts would say.
+    /// The title as one run of text — what a row with no parts would say,
+    /// and what the tests hold the parts to.
+    #[cfg(test)]
     #[must_use]
     pub fn joined(&self) -> String {
         let texts: Vec<&str> = self.parts.iter().map(|part| part.text.as_ref()).collect();

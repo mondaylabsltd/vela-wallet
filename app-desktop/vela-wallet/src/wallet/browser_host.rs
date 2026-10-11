@@ -3310,7 +3310,10 @@ mod tests {
                 all
             };
             assert_eq!(strip(&before), strip(&store_file()));
-            assert_eq!(accounts_of(driver, tab, origin, doc), [test_wallet.clone()]);
+            assert_eq!(
+                accounts_of(driver, tab, origin, doc),
+                std::slice::from_ref(&test_wallet)
+            );
         }
         let writes = storage::generation();
         let out = ask_in(
