@@ -12,7 +12,7 @@
  *
  * Chain and relay are stubbed per call; nothing leaves the machine.
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
 import { speedDefaults, type Speed } from './core-facts';
 import { en, seedSignedIn } from './live-helpers';
@@ -167,9 +167,12 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	page
 }) => {
 	const sent: unknown[][] = [];
+	// How many times the relay has been asked to price the operation.
+	let priced = 0;
 	await stubChain(page);
 	await stubRelay(page, RELAY, (method, params) => {
 		if (method === 'eth_sendUserOperation') sent.push(params);
+		if (method === 'eth_estimateUserOperationGas') priced += 1;
 		return tieredRelay(() => 'pending')(method, params);
 	});
 	await enterWallet(page);
@@ -202,18 +205,29 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	await expect(option(factory, true)).toHaveCount(1);
 	await expect(page.getByRole('button', { pressed: true })).toHaveCount(1);
 	const economy = option('slow', factory === 'slow');
-	await expect(economy).toContainText('ETH', { timeout: 30_000 });
-	await expect(option('fast', factory === 'fast')).toContainText('ETH', { timeout: 30_000 });
-	const fastFee = await option('fast', factory === 'fast').textContent();
-	const slowFee = await economy.textContent();
-	const defaultFee = await option(factory, true).textContent();
-	expect(defaultFee, 'the option in force shows a figure').toMatch(/[\d.]+\s*ETH/);
-	expect(fastFee).toMatch(/[\d.]+\s*ETH/);
-	expect(slowFee).toMatch(/[\d.]+\s*ETH/);
+	/**
+	 * An option's words once it holds a figure. An option says "…" while it is
+	 * measured, and can say it again after it has shown a figure: one look
+	 * read NaN here with all three at "…" under a fee row still at 0.0009 ETH.
+	 * A figure is read when it is there, not at the instant the test looks.
+	 */
+	const figure = async (shown: Locator, what: string): Promise<string> => {
+		let text = '';
+		await expect
+			.poll(async () => (text = (await shown.textContent()) ?? ''), {
+				timeout: 30_000,
+				message: what
+			})
+			.toMatch(/[\d.]+\s*ETH/);
+		return text;
+	};
+	const fastFee = await figure(option('fast', factory === 'fast'), 'Fast shows a figure');
+	const slowFee = await figure(economy, 'Slow shows a figure');
+	const defaultFee = await figure(option(factory, true), 'the option in force shows a figure');
 	const coin = (text: string | null) => Number(/([\d.]+)\s*ETH/.exec(text ?? '')?.[1] ?? 'NaN');
 	expect(coin(slowFee), 'Slow really is cheaper than Fast').toBeLessThan(coin(fastFee));
 
-	const otherFee = await option(other, false).textContent();
+	const otherFee = await figure(option(other, false), 'the other speed shows a figure');
 	expect(coin(otherFee), 'the pick below really is another price').not.toBeCloseTo(
 		coin(defaultFee),
 		12
@@ -222,10 +236,12 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	// The row as it stands BEFORE any pick, so what follows is a move and not
 	// a coincidence.
 	const feeRow = page.getByRole('button', { name: en('send.feeTokenLabel') });
-	expect(coin(await feeRow.textContent()), 'the row starts at the default tier').toBeCloseTo(
-		coin(defaultFee),
-		12
-	);
+	await expect
+		.poll(async () => coin(await feeRow.textContent()), {
+			timeout: 30_000,
+			message: 'the row starts at the default tier'
+		})
+		.toBeCloseTo(coin(defaultFee), 12);
 
 	// 3. Pick another speed. The control folds, the summary says what this send
 	//    is now running at — AND THE MONEY MOVES WITH THE NAME. That last part is
@@ -246,11 +262,47 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	//     the send core is token | payee | fee-coin and knows nothing about a
 	//     speed, so anything that re-prices by re-asking the core for the same
 	//     three is a no-op from here on, and only the second pick says so.
+	// Opened again, the other speeds are priced again (`tierPreview.show`, and
+	// the pick above reset its stamp) — and until that pricing lands, a row
+	// goes on showing the figure it had. Tapped then, it is not a settled
+	// quote: the session in force cannot adopt it, asks the relay itself, and
+	// the fee row says "…" in between. That is the right thing to do, and not
+	// what this step is about; an idle machine got there first in 5 runs of
+	// 120 (the tap came 53 ms after the control opened, the relay's question
+	// 20 ms after the tap). So the row is tapped once it IS a settled quote:
+	// the relay has been asked again since the control opened, nothing is
+	// still out, the row holds a figure — and all of that is still so two
+	// painted frames on.
+	const asking = new Set<unknown>();
+	page.on('request', (request) => {
+		if (RELAY.test(request.url()) || request.url().startsWith(STUB)) asking.add(request);
+	});
+	page.on('requestfinished', (request) => asking.delete(request));
+	page.on('requestfailed', (request) => asking.delete(request));
+	const pricedBefore = priced;
 	await speed.click();
 	const economyAgain = page
 		.getByRole('button', { pressed: false })
 		.filter({ hasText: en('send.gasTier.slow') });
-	await expect(economyAgain).toContainText('ETH', { timeout: 30_000 });
+	const quoted = async () =>
+		priced > pricedBefore &&
+		asking.size === 0 &&
+		/[\d.]+\s*ETH/.test((await economyAgain.textContent()) ?? '');
+	await expect
+		.poll(
+			async () => {
+				if (!(await quoted())) return false;
+				await page.evaluate(
+					() =>
+						new Promise<void>((painted) =>
+							requestAnimationFrame(() => requestAnimationFrame(() => painted()))
+						)
+				);
+				return quoted();
+			},
+			{ timeout: 30_000, message: 'the reopened control priced its rows again' }
+		)
+		.toBe(true);
 
 	// Everything the fee row says from the tap onward (issue 681).
 	//
@@ -296,12 +348,11 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	const fastOption = page
 		.getByRole('button', { pressed: false })
 		.filter({ hasText: en('send.gasTier.fast') });
-	await expect(fastOption).toContainText('ETH', { timeout: 30_000 });
-	const reopenedFast = await fastOption.textContent();
-	const reopenedSlow = await page
-		.getByRole('button', { pressed: true })
-		.filter({ hasText: en('send.gasTier.slow') })
-		.textContent();
+	const reopenedFast = await figure(fastOption, 'Fast shows a figure again');
+	const reopenedSlow = await figure(
+		page.getByRole('button', { pressed: true }).filter({ hasText: en('send.gasTier.slow') }),
+		'the tier in force shows a figure again'
+	);
 	expect(coin(reopenedSlow), 'the tier in force still shows its own fee').toBeCloseTo(
 		coin(slowFee),
 		12
