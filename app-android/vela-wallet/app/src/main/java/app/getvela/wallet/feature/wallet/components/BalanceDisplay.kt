@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,6 +29,7 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
+import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.wallet.BalanceModel
@@ -35,9 +38,9 @@ import app.getvela.wallet.feature.wallet.BalanceStateKind
 /**
  * Hero balance (spec vocabulary #4): label line (总余额 · USD), amount with
  * de-emphasised decimals, and exactly one of normal / zero-live / loading /
- * hidden, then the status line's place, then the refresh control (issue 462)
- * under it. The refresh the control starts adds no status line
- * (WalletLive.balanceStatus), so nothing above it moves when it is tapped.
+ * hidden, then ONE line: the status's place and, at its end, the refresh
+ * control (issue 462). The refresh the control starts adds no status line
+ * (WalletLive.balanceStatus), so nothing moves when it is tapped.
  *
  * **The line under the figure keeps its place from the first frame** (the
  * integration's note 26b). It comes and goes with the wallet's state — "Some
@@ -84,28 +87,49 @@ fun BalanceDisplay(
         // of the account is out, else the empty wallet's live line. The last
         // two are the core's words (PR 3 final note F19): each is drawn when
         // the core says it, and by nothing this screen works out.
+        //
+        // And the refresh control is on the SAME line, at its end (the
+        // 2026-10-11 walk, item 4): one line of one height in every state —
+        // checking, read, failed, offline, hidden. When nothing above is said
+        // the place says how fresh the figure is: the control's own words.
         Spacer(modifier = Modifier.height(VelaSpacing.md))
-        Box(modifier = Modifier.testTag(BALANCE_STATUS_PLACE_TAG), contentAlignment = Alignment.CenterStart) {
-            BalanceStatusRoom()
-            val status = model.status
-            val checking = model.checkingText
-            val live = model.liveText
-            when {
-                status != null -> BalanceStatusLine(model = status, onClick = onStatusClick)
-                // Quiet: the live line's own row, its dot not yet green.
-                checking != null -> QuietIndicatorRow(checking, colors.fgSubtle)
-                live != null -> QuietIndicatorRow(live, colors.successBase)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // The control's height, whether or not this hero has one.
+                .heightIn(min = VelaSizing.controlSm)
+                .testTag(BALANCE_STATE_LINE_TAG),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.weight(1f).testTag(BALANCE_STATUS_PLACE_TAG),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                BalanceStatusRoom()
+                val status = model.status
+                val checking = model.checkingText
+                val live = model.liveText
+                val refresh = model.refresh
+                when {
+                    status != null -> BalanceStatusLine(model = status, onClick = onStatusClick)
+                    // Quiet: the live line's own row, its dot not yet green.
+                    checking != null -> QuietIndicatorRow(checking, colors.fgSubtle)
+                    live != null -> QuietIndicatorRow(live, colors.successBase)
+                    refresh != null -> BalanceRefreshStamp(model = refresh, spinning = refreshSpinning, onRefresh = onRefresh)
+                }
             }
-        }
-        model.refresh?.let { refresh ->
-            Spacer(modifier = Modifier.height(VelaSpacing.sm))
-            BalanceRefreshControl(model = refresh, spinning = refreshSpinning, onRefresh = onRefresh)
+            model.refresh?.let { refresh ->
+                BalanceRefreshControl(model = refresh, spinning = refreshSpinning, onRefresh = onRefresh)
+            }
         }
     }
 }
 
 /** The status line's place under the figure — there in every state. */
 const val BALANCE_STATUS_PLACE_TAG = "balance-status-place"
+
+/** The whole line under the figure: the status's place and, at its end, the refresh control. */
+const val BALANCE_STATE_LINE_TAG = "balance-state-line"
 
 /**
  * The figure's own line, held in every state (PR 2 polish): the mask and the

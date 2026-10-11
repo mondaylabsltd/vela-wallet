@@ -6,11 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -36,29 +32,33 @@ import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
-import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.wallet.BalanceRefreshModel
 
 /**
- * The hero's "↻ Updated 2m" (issue 462) — the same control on all four
- * shells, under the total and its status line.
+ * The hero's refresh control (issue 462) — the same control on all four
+ * shells: the glyph at the trailing edge of the line under the total.
  *
  * Tapping it reads every chain again (`RefreshRequested{force, pull}` plus
  * the activity tick — the caller's [onRefresh]). While that is out
- * ([spinning], which the screen holds for at least 650 ms) the glyph turns,
- * the words read "Updating…", and a second tap does nothing.
+ * ([spinning], which the screen holds for at least 650 ms) the glyph turns
+ * and a second tap does nothing.
  *
- * **Nothing moves.** Both labels are laid out in the same box, the one not
- * showing invisible, so the box is the wider one's width in both states,
- * and its height never changes: the control does not slide out from under
- * the finger that tapped it. Quiet ink like the status line — a figure that
- * is fresh is the normal case.
+ * **One line with the status, and it never moves** (the 2026-10-11 phone
+ * walk, item 4). The control used to be a row of its own UNDER the status
+ * line's place: on a cold start a lone ⟳ sat on its own line beneath
+ * 「● 正在检查…」, and once the read settled an empty line stood between the
+ * figure and 「⟳ 上次更新 · 刚刚」. It is the glyph alone now, in a box of one
+ * size at the END of that line ([BalanceDisplay] composes the two), and its
+ * words — "Updated 2m", "Updating…" — are said in the line's own place when
+ * nothing more pressing is ([BalanceRefreshStamp]). So the hero is one line
+ * shorter, the same height in every state, and the glyph is where the finger
+ * left it whatever the line says.
  *
- * **Always named.** Turning or read, the words on screen name it ("Updating…",
- * "Updated 2m"). Before any read has settled it is the glyph alone, so it
- * carries [BalanceRefreshModel.idleLabel] ("Refresh balance") — never a bare
- * "Button", and never "Updating…" over a control at rest.
+ * **Always named.** Its words are its name whether or not they are on
+ * screen: "Updating…" while it turns, "Updated 2m" once a read has settled,
+ * and before any has, [BalanceRefreshModel.idleLabel] ("Refresh balance") —
+ * never a bare "Button", and never "Updating…" over a control at rest.
  *
  * [onRefresh] `null` (the gallery) draws the control and accepts no tap.
  */
@@ -69,18 +69,18 @@ fun BalanceRefreshControl(
     onRefresh: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val colors = VelaTheme.colors
-    val ink = colors.fgSubtle
-    Row(
+    val ink = VelaTheme.colors.fgSubtle
+    val name = if (spinning) model.updating else model.updated ?: model.idleLabel
+    Box(
         modifier = modifier
             .testTag(TEST_TAG)
-            .heightIn(min = VelaSizing.controlSm)
+            // One box in every state: a finger's width, the line's height —
+            // the glyph at its end, on the screen's margin.
+            .size(width = VelaSizing.hitTarget, height = VelaSizing.controlSm)
             .clip(RoundedCornerShape(VelaRadius.md))
             .clickable(enabled = onRefresh != null && !spinning, role = Role.Button) { onRefresh?.invoke() }
-            .semantics { if (!spinning && model.updated == null) contentDescription = model.idleLabel }
-            .padding(end = VelaSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
+            .semantics { contentDescription = name },
+        contentAlignment = Alignment.CenterEnd,
     ) {
         if (spinning) {
             TurningGlyph(tint = ink)
@@ -92,10 +92,35 @@ fun BalanceRefreshControl(
                 modifier = Modifier.size(VelaIconSize.sm),
             )
         }
-        Box {
-            Label(text = model.updated.orEmpty(), shown = !spinning)
-            Label(text = model.updating, shown = spinning)
-        }
+    }
+}
+
+/**
+ * The refresh control's words, in the status line's place: "Updated 2m", or
+ * "Updating…" while a refresh the person asked for is out. Drawn only when
+ * the line has nothing more pressing to say ([BalanceDisplay]) — a status, a
+ * first read, the empty wallet's live line each take the place instead.
+ *
+ * Both are laid out in the same box, the one not showing invisible, so the
+ * words swap without the line changing. A tap on them refreshes, as a tap on
+ * the glyph does. Unsaid to TalkBack: the control at the line's end carries
+ * the same words as its name, and would say them twice.
+ */
+@Composable
+fun BalanceRefreshStamp(
+    model: BalanceRefreshModel,
+    spinning: Boolean,
+    onRefresh: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .testTag(BALANCE_REFRESH_STAMP_TAG)
+            .clickable(enabled = onRefresh != null && !spinning) { onRefresh?.invoke() }
+            .clearAndSetSemantics { },
+    ) {
+        Label(text = model.updated.orEmpty(), shown = !spinning)
+        Label(text = model.updating, shown = spinning)
     }
 }
 
@@ -132,13 +157,16 @@ private fun Label(text: String, shown: Boolean) {
         fontSize = VelaTextSize.sm,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        // The one not showing keeps its room and says nothing to TalkBack.
-        modifier = if (shown) Modifier else Modifier.alpha(0f).clearAndSetSemantics {},
+        // The one not showing keeps its room.
+        modifier = if (shown) Modifier else Modifier.alpha(0f),
     )
 }
 
 /** The control's test hook — the desktop's element id for the same control. */
 const val BALANCE_REFRESH_TEST_TAG = "balance-refresh"
+
+/** The control's words where the line says them ([BalanceRefreshStamp]). */
+const val BALANCE_REFRESH_STAMP_TAG = "balance-refresh-stamp"
 private const val TEST_TAG = BALANCE_REFRESH_TEST_TAG
 
 /**

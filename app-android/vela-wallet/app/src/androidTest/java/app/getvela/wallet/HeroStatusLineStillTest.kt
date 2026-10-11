@@ -11,7 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
+import app.getvela.wallet.feature.wallet.components.BALANCE_REFRESH_STAMP_TAG
 import app.getvela.wallet.feature.wallet.components.BALANCE_REFRESH_TEST_TAG
+import app.getvela.wallet.feature.wallet.components.BALANCE_STATE_LINE_TAG
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -76,9 +78,15 @@ class HeroStatusLineStillTest {
         assertTrue(updating.balance.status != null && unreachable.balance.status != null)
         assertEquals(BalanceStateKind.ZeroLive, live.balance.state)
 
-        val anchors = listOf(plain.balance.refresh!!.updated!!, plain.actions.receive, plain.actions.send, plain.activitySection.title)
-        fun places() = anchors.map { text ->
-            compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot.let { it.top to it.bottom }
+        val anchors = listOf(BALANCE_REFRESH_TEST_TAG, plain.actions.receive, plain.actions.send, plain.activitySection.title)
+        fun places() = anchors.map { anchor ->
+            // The refresh control by its tag (its words are on screen only while the line has nothing else to say).
+            val node = if (anchor == BALANCE_REFRESH_TEST_TAG) {
+                compose.onNodeWithTag(anchor, useUnmergedTree = true).fetchSemanticsNode()
+            } else {
+                compose.onAllNodesWithText(anchor, useUnmergedTree = true).fetchSemanticsNodes().first()
+            }
+            node.boundsInRoot.let { it.top to it.bottom }
         }
         fun place() = compose.onNodeWithTag(BALANCE_STATUS_PLACE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
 
@@ -242,6 +250,101 @@ class HeroStatusLineStillTest {
         android.util.Log.i("HeroStatusLineStill", measured.toString())
         // The check is not vacuous: the longest sentence at the narrowest width IS cut.
         assertTrue(measured.toString(), measured.contains("ellipsis true"))
+    }
+
+    /**
+     * The 2026-10-11 phone walk, item 4: on a cold start a lone ⟳ sat on a
+     * line of its own under 「● 正在检查…」, and once the read settled an empty
+     * line stood between the figure and 「⟳ 上次更新 · 刚刚」 — the status had
+     * one row and the refresh control another.
+     *
+     * They are ONE line now, the control at its end. One home, one
+     * composition, its hero walked through every state it has — the first
+     * read out (checking), read (updated), a refresh the person asked for
+     * (updating), a network that failed, every network out of reach
+     * (offline), a fault inside the app, the empty wallet's live line, and
+     * the balance hidden: the figure, the line, the control at its end and
+     * the first row under the hero are where they were, and the line and the
+     * control are the size they were. The control is INSIDE the line's own
+     * row in every state — never a row of its own.
+     */
+    @Test
+    fun theStatusAndTheRefreshAreOneLineOfOneHeightInEveryState() {
+        val zh = runtime("zh")
+        fun board(state: WalletScreenState) = WalletFixtures.buildMobileState(state, zh)
+        val read = board(WalletScreenState.H1)
+        // The same home with only its hero changed — what a session does.
+        fun hero(state: WalletScreenState, refresh: app.getvela.wallet.feature.wallet.BalanceRefreshModel? = read.balance.refresh) =
+            read.copy(balance = board(state).balance.copy(refresh = refresh))
+        val never = WalletFixtures.refresh(zh, read = false)
+        val states = listOf(
+            "checking (the first read is out)" to hero(WalletScreenState.H15, never),
+            "updated" to read,
+            "still updating" to hero(WalletScreenState.H6),
+            "a network failed" to hero(WalletScreenState.H9),
+            "offline (every network out of reach)" to hero(WalletScreenState.H17),
+            "a fault inside the app" to hero(WalletScreenState.H11),
+            "live (an empty wallet)" to hero(WalletScreenState.H16),
+            "hidden" to hero(WalletScreenState.H10),
+            "updated, again" to read,
+            // Last: the screen holds a spin it was shown for 650 ms of the device's own clock, which a test's does not run.
+            "updating (the person's refresh)" to read.copy(balance = read.balance.copy(refresh = WalletFixtures.refresh(zh, refreshing = true))),
+        )
+        assertEquals("the walk's cold start says Checking…", zh.t("componentsUi.funding.checking"), states[0].second.balance.checkingText)
+        assertEquals(BalanceStateKind.Hidden, states.first { it.first == "hidden" }.second.balance.state)
+
+        var current by mutableStateOf<WalletHomeModel>(states.first().second)
+        compose.setContent {
+            CompositionLocalProvider(LocalVelaStrings provides zh) {
+                VelaTheme(darkTheme = false) { WalletScreen(model = current) }
+            }
+        }
+        fun box(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        data class Hero(val label: Float, val line: Pair<Float, Float>, val place: Pair<Float, Float>, val control: List<Float>, val under: Float, val section: Float) {
+            override fun toString() = "label top $label · line ${line.first}..${line.second} (${line.second - line.first} px) · control ${control[1]}..${control[3]} at x ${control[0]}..${control[2]} · first row under the hero $under · next section $section"
+        }
+        fun hero(model: WalletHomeModel): Hero {
+            val line = box(BALANCE_STATE_LINE_TAG)
+            val place = box(BALANCE_STATUS_PLACE_TAG)
+            val control = box(BALANCE_REFRESH_TEST_TAG)
+            fun topOf(text: String) = compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot.top
+            return Hero(
+                // The hero's first thing: its label 「总余额 · …」 — every state has one.
+                label = compose.onAllNodesWithText(model.balance.label, substring = true, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot.top,
+                line = line.top to line.bottom,
+                place = place.top to place.bottom,
+                control = listOf(control.left, control.top, control.right, control.bottom),
+                under = topOf(model.actions.receive),
+                section = topOf(model.activitySection.title),
+            )
+        }
+        compose.waitForIdle()
+        val first = hero(states.first().second)
+        val measured = StringBuilder()
+        for ((name, model) in states) {
+            current = model
+            compose.waitForIdle()
+            val now = hero(model)
+            // Evidence for the review: the screen as measured, in the app's cache.
+            InstrumentationRegistry.getInstrumentation().let { run ->
+                run.uiAutomation.takeScreenshot()?.let { shot ->
+                    val file = name.replace(Regex("[^A-Za-z0-9]+"), "-").trim('-')
+                    java.io.File(run.targetContext.cacheDir, "hero-line-$file.png").outputStream().use { shot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                }
+            }
+            measured.append("\n$name: $now")
+            assertEquals("the hero moved or changed size at \"$name\"$measured", first, now)
+            // One line: the control stands inside the line's own row, beside the status's place — not under it.
+            assertTrue("the control is not on the status's line ($name)$measured", now.control[1] >= now.line.first && now.control[3] <= now.line.second)
+            assertTrue("the control is under the status, not beside it ($name)$measured", now.control[0] >= box(BALANCE_STATUS_PLACE_TAG).right - 1)
+            // What the line says: the status, the first read, the live line — else how fresh the figure is.
+            val says = model.balance.status?.text ?: model.balance.checkingText ?: model.balance.liveText
+            val stamp = compose.onAllNodes(androidx.compose.ui.test.hasTestTag(BALANCE_REFRESH_STAMP_TAG), useUnmergedTree = true).fetchSemanticsNodes()
+            assertEquals("the control's words stand in the line exactly when nothing else does ($name: 「$says」)", if (says == null) 1 else 0, stamp.size)
+        }
+        android.util.Log.i("pr4-hero", "the hero's line, zh, ${compose.density.density}x:$measured")
+        // The hero is the figure's label down to the line's end, and the page starts a fixed step below it.
+        android.util.Log.i("pr4-hero", "hero ${first.line.second - first.label} px tall (label ${first.label} → line end ${first.line.second}); Receive at ${first.under}")
     }
 
     /** The laid-out text of the status line that says [sentence] (its content description). */
