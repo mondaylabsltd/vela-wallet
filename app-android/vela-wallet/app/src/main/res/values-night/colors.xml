@@ -2,12 +2,14 @@
 <resources>
     <!-- color.bg.base (dark) — see docs/design-tokens.json. -->
     <color name="vela_window_bg">#141412</color>
-    <!-- Splash follows appearance (spec 012 FR-022). This can only track the OS
-         uiMode: the system paints the splash window before MainActivity can read
-         the stored ThemePreference. When the two agree — the overwhelmingly
-         common case, since the default preference is Auto — the hand-off to the
-         launch animation shows no background flash (SC-008). When the user has
-         overridden the theme in-app to the opposite of their OS, FR-023's
-         crossfade is what keeps the change reading as deliberate. -->
+    <!-- Splash follows appearance (spec 012 FR-022) — the APP's: the system
+         paints the splash window before MainActivity can read the stored
+         ThemePreference, so the choice is told to the system when it is made
+         (AppNightMode, `UiModeManager.setApplicationNightMode`, Android 12+)
+         and the system picks this night value or the day one by it. The
+         hand-off to the launch animation then shows no background flash
+         (SC-008), whatever the OS's own appearance. On Android 10 and 11 the
+         starting window can only track the OS, and FR-023's crossfade is
+         what softens a theme set opposite to it. -->
     <color name="vela_splash_bg">#141412</color>
 </resources>

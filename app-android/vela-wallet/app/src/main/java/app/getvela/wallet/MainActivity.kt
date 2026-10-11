@@ -386,9 +386,16 @@ class MainActivity : ComponentActivity() {
         // the same place, so when the app paints in the splash's appearance it
         // goes at once. The platform's own exit animation faded it while the
         // app's first frame slid in under it — the mark dipped and settled
-        // (measured on a Xiaomi, 30 fps). An in-app theme opposite to the OS's
-        // (the splash can only follow the OS) still fades, over the launch's
-        // crossfade, never cuts (spec 012 FR-023).
+        // (measured on a Xiaomi, 30 fps).
+        //
+        // The splash is in the app's own theme now (AppNightMode tells the
+        // system the person's choice, and the system paints the next launch's
+        // splash by it), so the two agree and it goes at once. Where they
+        // still differ — Android 10 and 11, the one launch after a choice made
+        // on an older build, a debug override — it fades over the launch's
+        // crossfade, never cuts (spec 012 FR-023). What the splash looks like
+        // is read off the splash itself: the resources' night mode is already
+        // the app's by the time this runs, whatever the system painted.
         splash.setOnExitAnimationListener { view ->
             val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
                 android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -397,7 +404,10 @@ class MainActivity : ComponentActivity() {
                 ThemePreference.Dark -> true
                 ThemePreference.Auto, null -> systemDark
             }
-            if (appDark == systemDark) {
+            val splashDark = (view.view.background as? android.graphics.drawable.ColorDrawable)
+                ?.let { painted -> android.graphics.Color.luminance(painted.color) < 0.5f }
+                ?: systemDark
+            if (appDark == splashDark) {
                 view.remove()
             } else {
                 view.view.animate()
