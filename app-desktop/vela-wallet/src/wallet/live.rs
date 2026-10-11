@@ -13,7 +13,7 @@ use vela_core::app::balance_dashboard::{
     BalanceNotice, BalanceToken, BalanceView, TOKEN_LIST_UNREACHABLE, UNREACHABLE_MANY,
     UNREACHABLE_ONE,
 };
-use vela_core::l10n::currency::format_fiat;
+use vela_core::l10n::currency::{fiat_symbol, format_fiat};
 use vela_core::l10n::number::format_token_amount;
 
 use crate::wallet::WalletStrings;
@@ -179,10 +179,15 @@ impl Money {
             Some(rate) => (self.code.as_str(), usd * rate),
             None => ("USD", usd),
         };
+        // The one place a fiat figure gets its symbol: the core's, for the
+        // app's language (`locale`) — "¥" is the yuan to a Chinese reader
+        // and the yen to everyone else, and the other one says its country
+        // (PR 4 item 8). The desktop kept a table of its own that gave both
+        // the same bare sign.
         format_fiat(
             amount,
             code,
-            crate::settings::live::symbol_for(code),
+            &fiat_symbol(code, locale),
             locale,
             crate::executor::format_prefs::fiat_options(),
         )
@@ -2805,6 +2810,31 @@ mod tests {
     }
 
     /// A locale whose group separator is `.` must not be cut in half.
+    /// PR 4 item 8: a figure's symbol is the core's, for the app's language.
+    /// The owner's balance read 「CN¥188.44」 on one phone and 「¥34.03」 on
+    /// the other; the desktop wrote the yuan and the yen with the same bare
+    /// "¥". One rule now: "¥" alone is the reader's own of the two.
+    #[test]
+    fn a_figure_wears_the_cores_symbol_for_the_apps_language() {
+        let cny = Money::new("CNY", Some(7.2));
+        assert_eq!(cny.alone(26.17, "zh"), "¥188.42");
+        assert_eq!(cny.alone(26.17, "zh-HK"), "¥188.42");
+        assert_eq!(cny.alone(26.17, "en"), "CN¥188.42");
+        let jpy = Money::new("JPY", Some(150.0));
+        assert_eq!(jpy.alone(10.0, "zh"), "JP¥1,500");
+        assert_eq!(jpy.alone(10.0, "en"), "¥1,500");
+        assert_eq!(jpy.alone(10.0, "ja"), "¥1,500");
+        let hkd = Money::new("HKD", Some(7.8));
+        assert_eq!(hkd.alone(10.0, "zh"), "HK$78.00");
+        assert_eq!(hkd.alone(10.0, "en"), "HK$78.00");
+        // The other shapes a figure is drawn in go through the same place.
+        assert_eq!(cny.figure(26.17, "en").as_deref(), Some("CN¥188.42"));
+        assert_eq!(cny.room(26.17, "zh"), "¥188.42");
+        // A currency without a glyph is its code, spaced from the digits.
+        let chf = Money::new("CHF", Some(1.0));
+        assert_eq!(chf.alone(10.0, "en"), "CHF\u{a0}10.00");
+    }
+
     /// The rule the whole type exists for: a currency nobody could price is
     /// drawn as USD, **never** as that currency at rate 1. "A rate of 1 is a
     /// claim (1 USD = 1 CNY)", and the core answers `None` rather than 1 for

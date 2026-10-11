@@ -18,7 +18,7 @@ use vela_core::app::network_admin::{
     NetProbeHealth, NetProviderId, NetServiceHealth, NetView, NetWizardErrorKind, NetWizardPhase,
     NetWizardView,
 };
-use vela_core::l10n::currency::format_fiat;
+use vela_core::l10n::currency::{fiat_symbol, format_fiat};
 use vela_core::l10n::datetime::{Civil, DatePreset, TimePreset, format_date, format_time};
 use vela_core::l10n::number::{FractionDigits, NumberPreset, format_number, format_token_amount};
 use vela_core::storage_catalog::StorageGroup as CatalogGroup;
@@ -372,27 +372,6 @@ impl FieldCommit {
     }
 }
 
-/// Symbols for the codes a person can actually reach today.
-///
-/// Deliberately small, and it does not need to be big: an unknown code falls
-/// back to the code itself, which `format_fiat` spaces correctly
-/// (`CHF 1,234.56`) because CLDR's `currencySpacing` keys off the symbol being
-/// alphabetic. The rate endpoint prices about thirty currencies and most of
-/// them have no symbol anybody would recognise anyway.
-pub fn symbol_for(code: &str) -> &str {
-    match code {
-        "USD" => "$",
-        "EUR" => "€",
-        "GBP" => "£",
-        "JPY" | "CNY" => "¥",
-        "KRW" => "₩",
-        "VND" => "₫",
-        "INR" => "₹",
-        "HKD" => "HK$",
-        other => other,
-    }
-}
-
 /// The value the 货币 row shows.
 ///
 /// Two cases, and the split is the core's rule rather than a style choice:
@@ -407,6 +386,11 @@ pub fn symbol_for(code: &str) -> &str {
 /// person's stored choice on its way, by its code alone — or nothing. Never
 /// the USD/1 placeholder, which would read "USD · $1,234.56" for a moment on
 /// a wallet set to CNY.
+///
+/// The sample wears the core's symbol for the app's language
+/// (`fiat_symbol(code, locale)`, PR 4 item 8) — the same string every figure
+/// on every screen wears, so the row can never say "CNY · ¥" over a balance
+/// that reads "CN¥188.44". `locale` is the app's language tag.
 #[must_use]
 pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
     if !view.committed {
@@ -417,7 +401,7 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
             let sample = format_fiat(
                 SAMPLE * rate,
                 &view.code,
-                symbol_for(&view.code),
+                &fiat_symbol(&view.code, locale),
                 locale,
                 crate::executor::format_prefs::fiat_options(),
             );
@@ -463,7 +447,7 @@ pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> 
             let sample = format_fiat(
                 SAMPLE * rate,
                 code,
-                symbol_for(code),
+                &fiat_symbol(code, locale),
                 locale,
                 crate::executor::format_prefs::fiat_options(),
             );
@@ -621,6 +605,59 @@ mod tests {
             currency_row_value(&view("USD", Some(1.0)), "en"),
             SharedString::from("USD · $1,234.56")
         );
+    }
+
+    /// PR 4 item 8: one symbol for a currency. On the phones the balance
+    /// read 「CN¥188.44」 under a Settings row that said 「CNY · ¥」; the
+    /// desktop's own table gave the yen and the yuan the same bare sign. The
+    /// row, the picker and a figure on any screen wear the core's symbol for
+    /// the app's language: "¥" is the yuan in Chinese and the yen everywhere
+    /// else, the other one says its country, and the Hong Kong dollar is
+    /// never the US dollar's "$".
+    #[test]
+    fn the_row_the_picker_and_every_figure_wear_one_symbol() {
+        use crate::wallet::live::Money;
+        let row =
+            |code: &str, lang: &str| currency_row_value(&view(code, Some(1.0)), lang).to_string();
+        for chinese in ["zh", "zh-TW", "zh-HK"] {
+            assert_eq!(row("CNY", chinese), "CNY · ¥1,234.56", "{chinese}");
+            assert_eq!(row("JPY", chinese), "JPY · JP¥1,235", "{chinese}");
+            assert_eq!(row("HKD", chinese), "HKD · HK$1,234.56", "{chinese}");
+        }
+        assert_eq!(row("CNY", "en"), "CNY · CN¥1,234.56");
+        assert_eq!(row("JPY", "en"), "JPY · ¥1,235");
+        assert_eq!(row("JPY", "ja"), "JPY · ¥1,235");
+        assert_eq!(row("HKD", "en"), "HKD · HK$1,234.56");
+        assert_eq!(row("USD", "zh"), "USD · $1,234.56");
+
+        // Every currency a picker offers (the core's own list), in every
+        // language the app ships: the row's sample, the picker's sample and a figure drawn
+        // anywhere (`Money`) are one string, and it wears the core's symbol.
+        const OFFERED: [&str; 34] = [
+            "USD", "EUR", "GBP", "CNY", "JPY", "KRW", "HKD", "VND", "AUD", "CAD", "CHF", "BRL",
+            "MXN", "PHP", "SGD", "NZD", "TRY", "IDR", "ARS", "BGN", "CZK", "DKK", "HUF", "ILS",
+            "INR", "ISK", "MYR", "NOK", "PLN", "RON", "SEK", "THB", "ZAR", "TWD",
+        ];
+        for lang in crate::loc::LANGUAGES {
+            let priced: Vec<(String, f64)> = OFFERED
+                .iter()
+                .map(|code| ((*code).to_owned(), 1.0))
+                .collect();
+            let menu = currency_menu(&priced, "USD", lang);
+            let mut seen = std::collections::BTreeSet::new();
+            for code in OFFERED {
+                let symbol = fiat_symbol(code, lang);
+                let figure = Money::new(code, Some(1.0)).alone(SAMPLE, lang);
+                assert!(figure.contains(&symbol), "{lang} {code}: {figure}");
+                assert_eq!(row(code, lang), format!("{code} · {figure}"), "{lang}");
+                let picked = menu
+                    .iter()
+                    .find(|entry| entry.0.as_ref() == code)
+                    .and_then(|entry| entry.1.clone());
+                assert_eq!(picked.as_deref(), Some(figure.as_str()), "{lang} {code}");
+                assert!(seen.insert(symbol), "{lang}: {code} shares its symbol");
+            }
+        }
     }
 
     /// The lie this function exists not to tell. An unpriced JPY must not be
