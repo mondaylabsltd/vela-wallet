@@ -5,6 +5,7 @@
  */
 import '$lib/tokens/tokens.css';
 import { describe, expect, it } from 'vitest';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import type { ActivityRowModel, ActivityTitlePart } from '../model';
 import ActivityRow from './ActivityRow.svelte';
@@ -138,8 +139,12 @@ describe('a dApp row’s title wraps only between what was done and where', () =
 			const view = drawn(row({ title, titleParts, ...figure }), width);
 			const action = view.title.querySelector<HTMLElement>('.action')!;
 			const place = view.title.querySelector<HTMLElement>('.place')!;
-			// Nothing is lost or added: the text is the title exactly.
-			expect(view.title.textContent, at).toBe(title);
+			// Nothing is lost or added: what is said is the title, and what is
+			// drawn, piece after piece, is the title too.
+			expect(view.title.querySelector('.said')!.textContent, at).toBe(title);
+			const drawnParts = view.title.querySelector<HTMLElement>('.drawn')!;
+			expect(drawnParts.textContent?.replace(/[\n\t]/g, ''), at).toBe(title);
+			expect(drawnParts.getAttribute('aria-hidden'), at).toBe('true');
 			// What was done: never broken — unless it is, ALONE, wider than
 			// the whole column ("Contract interaction" beside a figure at
 			// 320): then it gives between its own words, and only there.
@@ -224,6 +229,20 @@ describe('a dApp row’s title wraps only between what was done and where', () =
 			expect(linesOf(view.title.querySelector('.action')!.firstChild!), String(width)).toBe(1);
 			view.done();
 		}
+	});
+
+	it('is named by its whole title — a host cut in two for its ellipsis is not read in two', async () => {
+		const [title, titleParts] = en('app.uniswap.org', 'app', '.uniswap.org');
+		const view = drawn(row({ title, titleParts, subtitle: 'Ethereum' }), 358);
+		// The row is a button named from its content: the title as it is said.
+		await expect
+			.element(page.getByRole('button', { name: /Contract interaction on app\.uniswap\.org/ }))
+			.toBeInTheDocument();
+		// What is said takes no room: the title is as tall as what is drawn.
+		expect(view.title.getBoundingClientRect().height).toBe(
+			view.title.querySelector('.drawn')!.getBoundingClientRect().height
+		);
+		view.done();
 	});
 
 	it('a row with no place to break before is one text, as before', () => {
