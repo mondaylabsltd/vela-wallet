@@ -119,7 +119,8 @@ class WalletFixturesTest {
         assertEquals(WalletScreenState.H10, model.state)
         assertEquals(BalanceStateKind.Hidden, model.balance.state)
         assertEquals("••••••", model.balance.integer)
-        assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.balance == "••••" && it.fiat == AssetFiatModel.Masked })
+        // A hidden holding keeps its coin (the core's `maskedAmount`), its worth is the bare mask.
+        assertTrue(model.assetRows.isNotEmpty() && model.assetRows.all { it.balance == "•••• ${it.ticker}" && it.fiat == AssetFiatModel.Masked })
         // Issue #469: the home draws the core's cut — the newest three: the
         // received, the sent and the split (the core fixture's own cut).
         val rows = model.activityGroups.flatMap { it.rows }.associateBy { it.id }
