@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.onboarding.flow
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +77,7 @@ fun FlowSheet(kind: PromptKind, confirmable: Boolean, onAnswer: (Boolean) -> Uni
             modifier = Modifier
                 .fillMaxWidth()
                 .imePadding()
+                .sheetScrolls()
                 .padding(
                     start = VelaSizing.screenPaddingX,
                     end = VelaSizing.screenPaddingX,

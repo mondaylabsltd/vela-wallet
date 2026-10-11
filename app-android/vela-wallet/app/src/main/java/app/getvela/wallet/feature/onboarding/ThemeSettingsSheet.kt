@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.onboarding
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Row
@@ -46,6 +47,7 @@ fun ThemeSettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .sheetScrolls()
                 .padding(
                     start = VelaSizing.screenPaddingX,
                     end = VelaSizing.screenPaddingX,

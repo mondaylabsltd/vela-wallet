@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.wallet.components
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import app.getvela.wallet.core.platform.Clipboard
 import android.content.Context
 import androidx.compose.foundation.background
@@ -72,6 +73,7 @@ fun IdenticonViewerSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .sheetScrolls()
                 .padding(
                     start = VelaSizing.screenPaddingX,
                     end = VelaSizing.screenPaddingX,
