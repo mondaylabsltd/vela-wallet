@@ -617,8 +617,8 @@ enum SendLive {
                 // dash, not a bare symbol with no figure in front of it.
                 value: view.confirmAmount.isEmpty ? "—" : "\(trim(view.confirmAmount)) \(symbol)",
                 over: view.splitOverBalance,
-                remaining: view.splitRemaining.map { left in
-                    loc.t("send.splitRemaining", vars: ["amount": "\(trim(left)) \(symbol)"])
+                remaining: remainderText(view).map { left in
+                    loc.t("send.splitRemaining", vars: ["amount": "\(left) \(symbol)"])
                 }
             )
             : live.summary
@@ -1877,7 +1877,7 @@ enum SendLive {
                 // the figure that matters; otherwise the balance itself.
                 balance: formHasRows && !replaces && view.splitRemaining != nil
                     ? loc.t("send.splitRemaining", vars: [
-                        "amount": "\(trim(view.splitRemaining ?? "")) \(symbol)",
+                        "amount": "\(remainderText(view) ?? "") \(symbol)",
                     ])
                     : loc.t("send.balanceLabel", vars: [
                         "amount": "\(trim(view.selectedToken?.balance ?? "")) \(symbol)",
@@ -2103,6 +2103,22 @@ enum SendLive {
 
     static func fromBase(_ base: String, decimals: Int) -> String {
         TokenReads.scaled(decimal: base, decimals: decimals) ?? base
+    }
+
+    /// What is left to give out in a split, as it is drawn beside the
+    /// balance: the core's cut figure (`split_remaining_display`) with the
+    /// person's decimal mark — `nil` when there is no remainder to say.
+    ///
+    /// The exact `split_remaining` was drawn as it came, and on a phone it
+    /// read 「还剩 0.000300194967818323 BNB」 beside 「余额 0.0003」. The cut is
+    /// the core's (the token ladder, never rounded up: a figure of what is
+    /// THERE may lose digits but not gain value); a view from before the
+    /// field is cut by the same rule (`cutTokenAmount`). Ungrouped, like the
+    /// balance it sits beside (`WalletLive.tokenAmountText`).
+    static func remainderText(_ view: SendViewWire) -> String? {
+        guard let exact = view.splitRemaining else { return nil }
+        let cut = view.splitRemainingDisplay ?? cutTokenAmount(plain: exact)
+        return cut.replacingOccurrences(of: ".", with: Formats.separators(Formats.current.number).decimal)
     }
 
     /// Trailing zeros off, nothing else. Never a rounding.

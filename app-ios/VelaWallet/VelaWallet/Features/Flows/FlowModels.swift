@@ -678,7 +678,7 @@ struct SummaryLineModel {
     /// The split's total is over the balance — the core's
     /// `split_over_balance`, the same predicate `Continue` refuses on.
     var over = false
-    /// "1.5 XDAI left" — the core's `split_remaining`, worded.
+    /// "1.5 XDAI left" — the core's `split_remaining_display`, worded.
     var remaining: String?
 }
 
