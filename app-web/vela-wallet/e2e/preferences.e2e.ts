@@ -200,11 +200,32 @@ test('erasing leaves nothing of this wallet in the browser (SC-407)', async ({ p
 	expect(await velaKeys(page)).toContain('vela.accounts');
 	expect(await kvKeys(page)).toContain('vela.contacts');
 
+	// An erase that finds a key still there after its sweep stays on the sheet
+	// and says "try again" — and this test then only timed out waiting to
+	// leave (once in eight runs of the whole suite, on WebKit, never when
+	// repeated alone). The app logs which keys survived; a failure says them.
+	const survived: string[] = [];
+	page.on('console', (message) => {
+		if (!message.text().startsWith('[erase] incomplete')) return;
+		void message
+			.args()[1]
+			?.evaluate((error) => (error as { remaining?: string[] }).remaining ?? String(error))
+			.then(
+				(left) => survived.push(JSON.stringify(left)),
+				() => survived.push(message.text())
+			);
+	});
+
 	await page.getByText(en('settings.eraseDevice.title'), { exact: true }).click();
 	await page.getByRole('button', { name: en('settings.eraseDevice.confirm') }).click();
 
 	// First run: the guard sends a browser with no wallet back to Welcome.
-	await page.waitForURL(/\/en$/, { timeout: 20_000 });
+	await page.waitForURL(/\/en$/, { timeout: 20_000 }).catch((error: Error) => {
+		const said = survived.length
+			? `The erase reported itself incomplete; still present: ${survived.join(' ')}`
+			: 'The erase logged nothing.';
+		throw new Error(`${error.message}\n${said}`);
+	});
 
 	// The IndexedDB store is empty of ours, and so is localStorage — except the
 	// passkey outbox, because a deleted upload can never be retried and that
