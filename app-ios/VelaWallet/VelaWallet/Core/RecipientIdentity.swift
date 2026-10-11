@@ -89,15 +89,22 @@ final class RecipientIdentity {
     /// Verification is three `eth_call`s at most; this only stops a spin.
     private static let maxVerifyRounds = 8
 
+    /// One routed JSON-RPC call: the pool's, or a test's recording stand-in.
+    typealias ChainCall = @MainActor (_ chainId: Int, _ method: String, _ params: [Any]) async -> RpcOutcome
+
     private let store: VelaStore
     private let pool: RpcPool
     private let accounts: AccountStore
     private let verifyStep: (Int, String, String, String, String) -> String
+    private let chainCall: ChainCall
+    private let walletChains: @MainActor () -> Set<Int>
     private var memo: [String: Identity] = [:]
 
     /// `verifyStep` is `verifiedNameStep` from the core, held as a closure so a
     /// test can script a verdict without the network — the seam
-    /// `RegistryNameLookup` already keeps for its own walk.
+    /// `RegistryNameLookup` already keeps for its own walk. `chainCall` and
+    /// `walletChains` are the pool's call and the wallet's own networks,
+    /// unless a test supplies its own.
     init(
         store: VelaStore,
         pool: RpcPool,
@@ -107,12 +114,44 @@ final class RecipientIdentity {
                 chainId: UInt32(truncatingIfNeeded: $0),
                 registry: $1, address: $2, name: $3, answersJson: $4
             )
-        }
+        },
+        chainCall: ChainCall? = nil,
+        walletChains: (@MainActor () -> Set<Int>)? = nil
     ) {
         self.store = store
         self.pool = pool
         self.accounts = accounts
         self.verifyStep = verifyStep
+        self.chainCall = chainCall ?? { [pool] chainId, method, params in
+            await pool.call(chainId: chainId, method: method, params: params)
+        }
+        self.walletChains = walletChains ?? { [store] in Self.walletChains(store: store) }
+    }
+
+    /// The networks this wallet has: the built-ins, and the ones the person
+    /// added — the list Settings → Networks shows. Read per lookup, so a
+    /// network added a moment ago counts for the next one.
+    static func walletChains(store: VelaStore) -> Set<Int> {
+        var chains = Set(ChainCatalog.chains.map(\.chainId))
+        for row in store.readList(VelaStore.Key.customNetworks) {
+            if let chainId = (row["chainId"] as? NSNumber)?.intValue, chainId > 0 { chains.insert(chainId) }
+        }
+        return chains
+    }
+
+    /// A call to `chainId` — only if that chain is one of the wallet's.
+    ///
+    /// A name service lives on ONE chain, and `.g`'s is chain 1625, which is
+    /// not a network this wallet has. The pool can still find public nodes
+    /// for it in the chain index, so every lookup — at every launch — sent
+    /// real requests to third-party nodes of a network the person never
+    /// added, and a report could list it as "unreachable" (device walk
+    /// 2026-10-11: 「无法连接的 RPC 1625」). Nothing is asked of a chain the
+    /// wallet does not have: no pool call, no request. If the person adds
+    /// that network, its service is asked.
+    private func ask(_ chainId: Int, _ method: String, _ params: [Any]) async -> RpcOutcome {
+        guard walletChains().contains(chainId) else { return .failed(rateLimited: false) }
+        return await chainCall(chainId, method, params)
     }
 
     /// A display identity for `address`, or `nil` when nobody could name it.
@@ -137,8 +176,14 @@ final class RecipientIdentity {
         // Every service is asked in parallel and the first match **by
         // priority** wins — not the first to answer. A race would give the
         // same address different names on different days.
+        //
+        // Every service ON ONE OF THE WALLET'S NETWORKS, that is: a service
+        // on any other chain is skipped outright (`ask`), and resolution
+        // falls through to the next in priority order exactly as when that
+        // service has no name for the address.
+        let chains = walletChains()
         let answers = await withTaskGroup(of: (Int, String?).self) { group in
-            for (index, service) in Self.services.enumerated() {
+            for (index, service) in Self.services.enumerated() where chains.contains(service.chainId) {
                 group.addTask { [weak self] in
                     (index, await self?.reverseResolve(address, service: service) ?? nil)
                 }
@@ -169,11 +214,9 @@ final class RecipientIdentity {
 
     private lazy var registryNames = RegistryNameLookup(
         store: store,
-        ethCall: { [pool] chainId, to, data in
-            let outcome = await pool.call(
-                chainId: chainId, method: "eth_call",
-                params: [["to": to, "data": data], "latest"]
-            )
+        ethCall: { [weak self] chainId, to, data in
+            guard let self else { return nil }
+            let outcome = await self.ask(chainId, "eth_call", [["to": to, "data": data], "latest"])
             // The RAW result, a bare `0x` included: a chain without the signer
             // contract is an answer ("not here"), not a silence.
             guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
@@ -275,9 +318,7 @@ final class RecipientIdentity {
     /// One `eth_call`, routed, as the RAW result hex the core reads. `nil` is
     /// "nobody answered"; a bare `0x` comes back as the answer it is.
     private func rawCall(_ chainId: Int, to: String, data: String) async -> String? {
-        let outcome = await pool.call(
-            chainId: chainId, method: "eth_call", params: [["to": to, "data": data], "latest"]
-        )
+        let outcome = await ask(chainId, "eth_call", [["to": to, "data": data], "latest"])
         guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
         else { return nil }
         return hex
@@ -287,10 +328,7 @@ final class RecipientIdentity {
     /// failure, an empty answer, a chain nobody serves — because the caller
     /// treats them all as "this service does not know them".
     private func call(_ chainId: Int, to: String, data: Data) async -> Data? {
-        let outcome = await pool.call(
-            chainId: chainId, method: "eth_call",
-            params: [["to": to, "data": "0x" + data.hexString], "latest"]
-        )
+        let outcome = await ask(chainId, "eth_call", [["to": to, "data": "0x" + data.hexString], "latest"])
         guard case .ok(let value) = outcome, let hex = value as? String, hex != "0x",
               let bytes = Data(hexString: hex), !bytes.isEmpty
         else { return nil }
