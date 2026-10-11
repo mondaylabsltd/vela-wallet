@@ -757,7 +757,8 @@ pub fn assets_variants(s: &WalletStrings) -> Vec<AssetRowModel> {
             ticker: "BNB".into(),
             chain: "BNB Chain".into(),
             badge: chain_bnb(),
-            balance: MASK.into(),
+            // A hidden coin amount keeps its unit (`privacy::masked_amount`).
+            balance: vela_core::app::privacy::masked_amount("BNB").into(),
             fiat: Fiat::Masked,
             logos: crate::marks::Logos::default(),
         },
@@ -889,7 +890,9 @@ pub enum SubWorth {
     /// is, so this is the closest room there is — exactly the figure's when
     /// the currency that commits is the placeholder's own.
     Waiting { room: SharedString },
-    /// Hidden: no figure and no room for one — the network alone.
+    /// No holding to speak of (it left the list under an open page): no
+    /// figure and no room for one — the line's second part alone. Never
+    /// "hidden": a hidden worth is said, as the mask ([`MASK`]).
     Absent,
 }
 

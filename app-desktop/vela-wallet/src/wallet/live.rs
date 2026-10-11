@@ -716,8 +716,10 @@ pub fn balance_detail(
                 SharedString::from(format!(
                     "{} · {}",
                     crate::executor::custom_tokens::network_name(token.chain_id),
+                    // A coin amount: hidden, it keeps its unit like every
+                    // other (`privacy::masked_amount`).
                     if view.hidden {
-                        crate::wallet::fixtures::MASK.to_owned()
+                        vela_core::app::privacy::masked_amount(&token.symbol)
                     } else {
                         token_amount_text(&token.balance)
                     }
@@ -3106,15 +3108,20 @@ mod tests {
             let unpriced = asset_detail(&held, &feed, 1, &s, "en-US", &waiting)
                 .unwrap_or_else(|| unreachable!("row 1 exists"));
             assert_eq!(unpriced.sub, mon.sub);
-            // Hidden says the network and no figure — and keeps no room for
-            // one: nothing of the worth, drawn or not, is on the line.
+            // Hidden, the worth is the bare mask in the worth's own place
+            // (PR 4 item 3) — whether or not the currency has committed:
+            // there is no figure to wait for, and none of it on the line.
             let mut masked = held.clone();
             masked.hidden = true;
             for money in [Money::default(), waiting.clone()] {
                 let hidden = asset_detail(&masked, &feed, 0, &s, "en-US", &money)
                     .unwrap_or_else(|| unreachable!("row 0 exists"));
-                assert_eq!(hidden.sub.worth, SubWorth::Absent);
-                assert_eq!(hidden.sub.text(), "Gnosis");
+                assert_eq!(
+                    hidden.sub.worth,
+                    SubWorth::Said(SharedString::from(crate::wallet::fixtures::MASK))
+                );
+                assert_eq!(hidden.sub.text(), "•••• · Gnosis");
+                assert_eq!(hidden.amount.as_ref(), "•••• xDAI");
             }
             // …and the id that row opens, from the same walk.
             assert_eq!(xdai.activity_ids, vec!["a".to_owned()]);
@@ -3649,8 +3656,12 @@ pub fn asset_rows(
                     token.chain_id,
                 )),
                 badge: badge(token.chain_id),
+                // Hidden, a coin amount keeps its unit on every surface (the
+                // core's `privacy::masked_amount`, PR 4 item 3): "•••• BNB",
+                // as the token's own page and a feed row read. The worth
+                // beside it is fiat, and masks bare.
                 balance: if view.hidden {
-                    SharedString::from(crate::wallet::fixtures::MASK)
+                    SharedString::from(vela_core::app::privacy::masked_amount(&token.symbol))
                 } else {
                     SharedString::from(token_amount_text(&token.balance))
                 },
@@ -3898,8 +3909,13 @@ pub fn asset_detail(
         // the name after it is drawn where it will stay.
         sub: crate::wallet::fixtures::AssetSub {
             worth: if view.hidden {
-                // Hidden says the network and no figure.
-                crate::wallet::fixtures::SubWorth::Absent
+                // Hidden, the worth is the bare mask — a fiat figure has no
+                // unit to keep — in the worth's own place: "•••• · Gnosis".
+                // Hiding turns digits into dots and moves nothing else; the
+                // line used to drop the worth and slide the network over.
+                crate::wallet::fixtures::SubWorth::Said(SharedString::from(
+                    crate::wallet::fixtures::MASK,
+                ))
             } else {
                 match token.price_usd {
                     Some(price) => match money.figure(amount * price, locale) {

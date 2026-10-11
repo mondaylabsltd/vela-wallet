@@ -51,7 +51,7 @@ use crate::flows::fixtures::{
     SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, SweepForm, SweepRow,
     TokenMark, address_lines,
 };
-use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
+use crate::wallet::fixtures::{AssetRowModel, Fiat};
 
 /// A chain's colour, from the one table every surface reads.
 /// A chain's colour, for anything drawn outside this module — the share
@@ -102,8 +102,11 @@ fn asset_row(
         ticker: SharedString::from(token.symbol.clone()),
         chain: SharedString::from(chain_name(token.chain_id)),
         badge: tint(token.chain_id),
+        // Hidden, a coin amount keeps its unit (the core's
+        // `privacy::masked_amount`, PR 4 item 3): "•••• BNB", as the home's
+        // row and the token's own page read. The worth is fiat: the bare mask.
         balance: if hidden {
-            SharedString::from(MASK)
+            SharedString::from(vela_core::app::privacy::masked_amount(&token.symbol))
         } else {
             SharedString::from(format_token_amount(
                 amount,
@@ -6321,9 +6324,10 @@ mod tests {
             None,
             crate::wallet::live::Money::usd(),
         );
-        assert_eq!(panel.rows[0].balance, MASK);
+        // The unit survives — H5's rule, and on the figure itself (PR 4
+        // item 3). The digits are what goes; the worth masks bare.
+        assert_eq!(panel.rows[0].balance, "•••• xDAI");
         assert!(matches!(panel.rows[0].fiat, Fiat::Masked));
-        // The unit survives — H5's rule. The figure is what goes.
         assert_eq!(panel.rows[0].ticker, "xDAI");
     }
 
