@@ -103,6 +103,7 @@
       "disconnectBody": "Trang web sẽ cần kết nối lại trước khi có thể xem địa chỉ của bạn hoặc yêu cầu bạn ký.",
       "a11ySecure": "Trang an toàn",
       "a11yInsecure": "Trang không an toàn — không mã hóa",
+      "a11yLocal": "Trang cục bộ — không mã hóa",
       "historyTitle": "dApp gần đây",
       "historyOpen": "Gần đây",
       "historyEmpty": "Chưa có dApp gần đây",

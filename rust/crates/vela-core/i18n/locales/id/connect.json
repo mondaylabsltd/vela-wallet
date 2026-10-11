@@ -103,6 +103,7 @@
       "disconnectBody": "Situs perlu terhubung kembali sebelum dapat melihat alamat Anda atau meminta Anda menandatangani.",
       "a11ySecure": "Situs aman",
       "a11yInsecure": "Situs tidak aman — tidak terenkripsi",
+      "a11yLocal": "Halaman lokal — tidak terenkripsi",
       "historyTitle": "dApp terbaru",
       "historyOpen": "Terbaru",
       "historyEmpty": "Belum ada dApp terbaru",

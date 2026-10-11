@@ -799,8 +799,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   for it: the verdict's place says nothing while it checks, and "Checking…"
 //   alone (`componentsUi.funding.checking`) is the funding sheet's.
 //   1777 + 1 = 1778 leaves, 101 branches.
-if (PATHS.length !== 1879) fail(`expected 1879 paths (1778 leaf + 101 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1778) fail(`expected 1778 leaf paths, got ${leafSet.size}`);
+// 1881 (device-walk findings, 2026-10-11): + `connect.browser.a11yLocal` and
+//   `explore.localSite` — the address bar's mark for an http page on this
+//   device or the person's own network, which is neither the padlock nor the
+//   warning. (`componentsUi.bugReport.previewRpc` is reworded, not added.)
+//   1778 + 2 = 1780 leaves, 101 branches.
+if (PATHS.length !== 1881) fail(`expected 1881 paths (1780 leaf + 101 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1780) fail(`expected 1780 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 101) fail(`expected 101 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

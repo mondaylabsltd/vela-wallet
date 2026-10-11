@@ -398,7 +398,7 @@
       "previewVersion": "Versi aplikasi",
       "previewPlatform": "Platform",
       "previewLanguage": "Bahasa",
-      "previewRpc": "RPC tak terjangkau",
+      "previewRpc": "Jaringan tak terjangkau",
       "previewFailures": "Kegagalan terbaru",
       "previewNone": "Tidak ada"
     },

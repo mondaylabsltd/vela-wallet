@@ -398,7 +398,7 @@
       "previewVersion": "Phiên bản ứng dụng",
       "previewPlatform": "Nền tảng",
       "previewLanguage": "Ngôn ngữ",
-      "previewRpc": "RPC không truy cập được",
+      "previewRpc": "Mạng không kết nối được",
       "previewFailures": "Lỗi gần đây",
       "previewNone": "Không có"
     },

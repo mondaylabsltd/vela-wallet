@@ -103,6 +103,7 @@
       "disconnectBody": "The site will need to reconnect before it can see your address or ask you to sign.",
       "a11ySecure": "Secure site",
       "a11yInsecure": "Insecure site — not encrypted",
+      "a11yLocal": "Local page — not encrypted",
       "historyTitle": "Recent dApps",
       "historyOpen": "Recent",
       "historyEmpty": "No recent dApps yet",

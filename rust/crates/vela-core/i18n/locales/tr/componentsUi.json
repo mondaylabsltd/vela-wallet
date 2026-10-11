@@ -398,7 +398,7 @@
       "previewVersion": "Uygulama sürümü",
       "previewPlatform": "Platform",
       "previewLanguage": "Dil",
-      "previewRpc": "Ulaşılamayan RPC",
+      "previewRpc": "Ulaşılamayan ağlar",
       "previewFailures": "Son hatalar",
       "previewNone": "Yok"
     },

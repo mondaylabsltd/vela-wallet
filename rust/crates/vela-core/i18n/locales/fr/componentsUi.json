@@ -398,7 +398,7 @@
       "previewVersion": "Version de l'app",
       "previewPlatform": "Plateforme",
       "previewLanguage": "Langue",
-      "previewRpc": "RPC injoignable",
+      "previewRpc": "Réseaux injoignables",
       "previewFailures": "Échecs récents",
       "previewNone": "Aucun"
     },

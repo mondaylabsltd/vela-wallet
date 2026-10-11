@@ -103,6 +103,7 @@
       "disconnectBody": "El sitio deberá volver a conectarse antes de poder ver tu dirección o pedirte que firmes.",
       "a11ySecure": "Sitio seguro",
       "a11yInsecure": "Sitio no seguro: sin cifrar",
+      "a11yLocal": "Página local: sin cifrar",
       "historyTitle": "dApps recientes",
       "historyOpen": "Recientes",
       "historyEmpty": "Aún no hay dApps recientes",
