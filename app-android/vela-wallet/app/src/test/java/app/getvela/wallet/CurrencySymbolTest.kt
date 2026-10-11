@@ -161,6 +161,51 @@ class CurrencySymbolTest {
         }
     }
 
+    /**
+     * A screen's figures are in the language of its WORDS. A builder with
+     * strings in hand writes the symbol for those strings' language, whatever
+     * the app-wide one says — a board drawn in English on a Chinese phone
+     * read 「≈¥2.24」 under English words (`CurrencyLandingStillTest`, on an
+     * emulator set to zh-CN), and the reverse.
+     */
+    @Test
+    fun `a screen with strings in hand writes the symbol for its own language`() {
+        val yuan = CurrencyView(code = "CNY", rate = 7.1, committed = true)
+        val view = app.getvela.wallet.feature.wallet.core.BalanceView(
+            address = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            display_total_usd = 100.0,
+            tokens = listOf(app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 1, symbol = "USDC", name = "USDC", balance = "100", decimals = 6, price_usd = 1.0)),
+        )
+        val chains = mapOf(1 to "Ethereum")
+        for ((appLanguage, screen, sign) in listOf(Triple("zh", "en", "CN¥"), Triple("en", "zh", "¥"), Triple("en", "zh-TW", "¥"), Triple("zh", "ja", "CN¥"))) {
+            AppLanguage.tag = appLanguage
+            val words = strings(screen)
+            val home = WalletLive.home(
+                app.getvela.wallet.feature.wallet.WalletFixtures.buildMobileState(app.getvela.wallet.feature.wallet.WalletScreenState.H1, words),
+                view, app.getvela.wallet.feature.wallet.core.FeedView(), yuan, words, chains,
+            )
+            val what = "the app in $appLanguage, the screen in $screen"
+            assertEquals("$what: the hero", "${sign}710", home.balance.integer)
+            assertEquals("$what: a holding's worth", app.getvela.wallet.feature.wallet.AssetFiatModel.Value("${sign}710.00"), home.assetRows.single().fiat)
+            val switcher = WalletLive.accountSwitcher(
+                listOf("Main" to view.address.orEmpty()), 0,
+                app.getvela.wallet.feature.wallet.core.BalanceSwitcherView(balances = listOf(app.getvela.wallet.feature.wallet.core.BalanceCacheEntry(address = view.address.orEmpty(), usd = 100.0))),
+                yuan, words,
+            )
+            assertTrue("$what: the switcher — ${switcher.summary} / ${switcher.rows.map { it.amount }}", switcher.rows.all { it.amount.startsWith(sign) && !it.amount.startsWith("CN$sign") })
+            val detail = SettingsLive.balanceDetail(SettingsFixtures.buildState(SettingsScreenState.ST1, words).balanceDetail, view, yuan, chains, words)
+            assertTrue("$what: the balance detail — ${detail.summary}", detail.summary.contains("${sign}710.00") && !detail.summary.contains("CN$sign"))
+            val token = app.getvela.wallet.feature.flows.FlowLive.tokenDetail(
+                (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.T2, words).sheet as app.getvela.wallet.feature.flows.FlowSheet.TokenDetail).model,
+                view, app.getvela.wallet.feature.wallet.core.FeedView(), view.tokens.single().let { t -> WalletLive.holdingId(t.chain_id, t.token_address) }, chains, yuan, words,
+            )!!
+            assertEquals("$what: the token's page", "${sign}710.00", token.fiat)
+            // The signing sheet's fee, on its board: the worth joins the fee's line in the board's language.
+            val fee = (app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS60, words).fee as app.getvela.wallet.feature.signing.FeeModel.OnChain).value
+            assertTrue("$what: the signing fee's worth — $fee", fee.endsWith("≈${sign}2.24"))
+        }
+    }
+
     /** Nothing here asks the platform for a currency's symbol any more. */
     @Test
     fun `no builder asks the platform for a symbol`() {

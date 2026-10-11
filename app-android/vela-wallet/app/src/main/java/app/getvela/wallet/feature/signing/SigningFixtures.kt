@@ -474,7 +474,7 @@ object SigningFixtures {
         }
         val ctx = SigningLive.Context(
             this, NETWORK, networkDot, "ETH", WalletFixtures.NAME, WalletFixtures.ADDRESS_FULL, chainId = 1,
-            money = app.getvela.wallet.feature.wallet.WalletLive.Money.of(currency),
+            money = app.getvela.wallet.feature.wallet.WalletLive.Money.of(currency, language),
         )
         val fee = app.getvela.wallet.feature.send.core.FeeView(
             fee = app.getvela.wallet.feature.send.core.FeeEstimateView(

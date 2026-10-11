@@ -1097,7 +1097,7 @@ object SettingsLive {
         chainNames: Map<Int, String>,
         strings: VelaStrings,
     ): UnreachableModel {
-        val money = WalletLive.Money.of(currency)
+        val money = WalletLive.Money.of(currency, strings.language)
         val rows = view.unreachable_networks.map { network ->
             val id = network.chain_id
             val name = chainNames[id] ?: id.toString()
@@ -1142,7 +1142,7 @@ object SettingsLive {
         chainNames: Map<Int, String>,
         strings: VelaStrings,
     ): BalanceDetailModel {
-        val money = WalletLive.Money.of(currency)
+        val money = WalletLive.Money.of(currency, strings.language)
         fun name(id: Int) = chainNames[id] ?: id.toString()
         fun mark(id: Int) = name(id).let { ChainMarkModel(it.take(1).uppercase(), markColour(id.toLong()), Marks.chainLogoUrl(id)) }
         val pending = view.rate_limited_chain_ids.distinct().map { id ->

@@ -622,7 +622,7 @@ fun VelaNavHost(
                 // already on screen.
                 fun sendAccount() = SendAccountRef(id = session.address, address = session.address, name = session.activeName)
                 fun sendDisplay(): SendDisplayContext {
-                    val money = WalletLive.Money.of(currency)
+                    val money = WalletLive.Money.of(currency, strings.language)
                     return SendDisplayContext(
                         code = money.code,
                         rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
@@ -845,7 +845,7 @@ fun VelaNavHost(
                         nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
                         walletName = session.activeName,
                         walletAddress = session.address,
-                        money = WalletLive.Money.of(currency),
+                        money = WalletLive.Money.of(currency, strings.language),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
                         chainId = signChain,
                         feeOpen = feeOpen,
@@ -1152,7 +1152,7 @@ fun VelaNavHost(
                             strings = strings,
                             chainNames = chainNames,
                             explorers = explorers,
-                            money = WalletLive.Money.of(currency),
+                            money = WalletLive.Money.of(currency, strings.language),
                             fromName = session.activeName,
                             fromAddress = session.address,
                             relaySentAtMs = sendRelaySentAt,
@@ -1382,7 +1382,7 @@ fun VelaNavHost(
                                 }
                             },
                             onExplorer = {
-                                val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency), session.activeName, session.address)
+                                val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency, strings.language), session.activeName, session.address)
                                 SendLive.explorerUrl(sendView, ctx)?.let { url ->
                                     runCatching {
                                         activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
@@ -1668,7 +1668,7 @@ fun VelaNavHost(
                                 names = chainNames,
                                 siteChain = siteChain,
                                 balances = application.container.wallet.balances.value,
-                                fiat = WalletLive.Money.of(currency)::fiat,
+                                fiat = WalletLive.Money.of(currency, strings.language)::fiat,
                             ),
                             onPickNetwork = { id -> id.toIntOrNull()?.let(browser::pickSiteChain) },
                             accountOptions = app.getvela.wallet.feature.browser.ExploreLive.accountOptions(session.accounts, session.address),
@@ -2716,7 +2716,7 @@ fun VelaNavHost(
                         strings = csStrings,
                         chainNames = handoffNetworks.networks.associate { it.chain_id.toInt() to it.display_name },
                         explorers = emptyMap(),
-                        money = WalletLive.Money.of(handoffCurrency),
+                        money = WalletLive.Money.of(handoffCurrency, strings.language),
                         fromName = "",
                         fromAddress = "",
                     ),
@@ -3009,7 +3009,7 @@ private fun liveFlow(
         is FlowBase.History ->
             FlowBase.History(FlowLive.history(base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames))
         is FlowBase.Assets ->
-            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings)))
+            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings), strings.language))
         else -> drawn.base
     },
     sheet = when (val sheet = drawn.sheet) {
@@ -3020,7 +3020,7 @@ private fun liveFlow(
         // authoritative, and only one of them is wrong.
         is FlowSheet.TxDetail ->
             FlowLive.txDetail(
-                sheet.model, feed, selected, strings, chainNames, explorers, WalletLive.Money.of(currency),
+                sheet.model, feed, selected, strings, chainNames, explorers, WalletLive.Money.of(currency, strings.language),
                 nativeSymbols = networks.networks.associate { it.chain_id.toInt() to it.native_symbol },
             )?.let(FlowSheet::TxDetail)
         is FlowSheet.TokenDetail -> FlowLive.tokenDetail(

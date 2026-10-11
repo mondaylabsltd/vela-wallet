@@ -113,8 +113,9 @@ object WalletLive {
          */
         chainFilter: Int? = null,
     ): WalletHomeModel {
-        val money = Money.of(currency)
-        val rows = assetRows(view, chainNames, currency)
+        // The symbol is the language's (`fiatSymbol`): this screen's own, as its words are.
+        val money = Money.of(currency, strings.language)
+        val rows = assetRows(view, chainNames, currency, strings.language)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         // Issue #469: the home draws the core's short list (`home_rows`, the
         // newest three); History keeps every row. The cut is the core's — the
@@ -398,8 +399,10 @@ object WalletLive {
         view: BalanceView,
         chainNames: Map<Int, String>,
         currency: CurrencyView,
+        /** The language a worth's symbol is written for — the screen's own when it has strings in hand. */
+        language: String = AppLanguage.tag,
     ): List<AssetRowModel> {
-        val money = Money.of(currency)
+        val money = Money.of(currency, language)
         return view.tokens.map { token -> assetRow(token, chainNames, money, view.hidden) }
     }
 
@@ -682,7 +685,7 @@ object WalletLive {
         currency: CurrencyView,
         strings: VelaStrings,
     ): AccountsSheetModel {
-        val money = Money.of(currency)
+        val money = Money.of(currency, strings.language)
         // "2 accounts · Total $5.65": the corpus's count line ends in the
         // separator so the total follows it, the way the web's sheet reads.
         val total = switcher.balances.sumOf { it.usd }
