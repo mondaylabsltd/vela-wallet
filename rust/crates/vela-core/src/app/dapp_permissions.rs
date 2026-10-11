@@ -372,6 +372,12 @@ pub enum Event {
         /// The account the wallet switched TO.
         active_address: String,
         now_ms: f64,
+        /// The wallet is in a dev space (the parallel space): the accounts in
+        /// `current_addresses` are the space's, and the person's own are set
+        /// aside, not gone ([`space_keeps_grant`]). Absent = the person's own
+        /// wallet.
+        #[serde(default)]
+        space: bool,
     },
     /// One authored operation came back from the shell. Every operation here is
     /// fire-and-forget ([`DpermShellResult::Ack`]); the core keeps no
@@ -452,12 +458,14 @@ impl App for DappPermissions {
                 current_addresses,
                 active_address,
                 now_ms,
+                space,
             } => popup_account_switch(
                 &origin,
                 grant.as_ref(),
                 current_addresses.as_deref(),
                 &active_address,
                 now_ms,
+                space,
             ),
             Event::ShellCompleted => Command::done(),
         }
@@ -645,17 +653,25 @@ fn popup_approved(
 /// address. Everything else — including a cold read, where `current_addresses`
 /// is not known yet — writes nothing, because invariant ② forbids logging a
 /// site out on an empty read.
+///
+/// In a dev space (`space`) a grant that is not one of the space's own is the
+/// person's, set aside: it is neither removed nor re-pinned
+/// ([`space_keeps_grant`]).
 fn popup_account_switch(
     origin: &str,
     grant: Option<&DpermGrant>,
     current_addresses: Option<&[String]>,
     active_address: &str,
     now_ms: f64,
+    space: bool,
 ) -> Command<DpermEffect, Event> {
     let Some(grant) = grant else {
         return Command::done();
     };
     if origin.is_empty() || active_address.is_empty() {
+        return Command::done();
+    }
+    if space && space_keeps_grant(grant, current_addresses) {
         return Command::done();
     }
     if should_drop_grant(Some(grant), current_addresses) {
@@ -789,6 +805,28 @@ pub fn should_drop_grant(grant: Option<&DpermGrant>, current_addresses: Option<&
         .any(|a| a.eq_ignore_ascii_case(&grant.address))
 }
 
+/// Whether a grant is the person's own while the wallet is in a dev space
+/// (the parallel space) — and so is left exactly as it is.
+///
+/// Entering a dev space is not the person changing account, and leaving it is
+/// not an account leaving the wallet: the person's accounts are set aside for
+/// the visit, and so is everything granted to them. A device walk through the
+/// parallel space used to re-pin every connected site to the test wallet on
+/// the way in and drop them all on the way out — the owner's own connection
+/// with them (the 2026-10-11 phone walk).
+///
+/// `space_addresses` is every account of the space. A grant for one of them
+/// was made inside the space and follows its accounts like any other; a grant
+/// for any other address — or any grant while the space's accounts are not
+/// known — is the person's.
+#[must_use]
+pub fn space_keeps_grant(grant: &DpermGrant, space_addresses: Option<&[String]>) -> bool {
+    !space_addresses
+        .unwrap_or_default()
+        .iter()
+        .any(|address| address.eq_ignore_ascii_case(&grant.address))
+}
+
 /// How a request still pending when a window goes away is settled (070 T063).
 ///
 /// 4900, never 4001 — invariant ⑤, and the whole reason a settle carries a code
@@ -869,6 +907,40 @@ pub fn is_insecure_public_origin(origin: &str) -> bool {
     match parse_origin(origin) {
         None => true,
         Some((scheme, host, _)) => scheme == "http" && !is_loopback_or_private_host(&host),
+    }
+}
+
+/// What the address bar's mark says about the connection to a page.
+///
+/// A padlock means one thing to a person: the connection is encrypted. So it
+/// is drawn for `https` and for nothing else. A page on this device or on the
+/// person's own network over plain `http` is not dangerous the way a public
+/// `http` page is — nobody between here and there to rewrite it — but it is
+/// not encrypted either, and a padlock on `http://127.0.0.1:8137` said it was
+/// (the 2026-10-11 phone walk). It gets a mark of its own.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum OriginLock {
+    /// `https`: the padlock.
+    Secure,
+    /// `http` on loopback, a private network, link-local or `.local`: a
+    /// neutral "local" mark — never a padlock, never a warning.
+    Local,
+    /// Public `http`, or an origin that cannot be read: the warning.
+    #[default]
+    Insecure,
+}
+
+/// The mark for a page at `origin` ([`OriginLock`]).
+#[must_use]
+pub fn origin_lock(origin: &str) -> OriginLock {
+    match parse_origin(origin) {
+        Some((scheme, _, _)) if scheme == "https" => OriginLock::Secure,
+        Some((scheme, host, _)) if scheme == "http" && is_loopback_or_private_host(&host) => {
+            OriginLock::Local
+        }
+        _ => OriginLock::Insecure,
     }
 }
 

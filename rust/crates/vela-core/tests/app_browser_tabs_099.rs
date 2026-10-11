@@ -620,6 +620,7 @@ mod navigation {
             methods: vec!["eth_requestAccounts".to_owned()],
             address: None,
             chain_id: 1,
+            lock: Default::default(),
         });
         assert_eq!(waiting_tab(&dapp).as_deref(), Some("t1"));
         // The same answer over JSON, from the whole view.

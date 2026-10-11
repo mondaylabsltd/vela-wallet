@@ -49,6 +49,7 @@ fn booted(sites: Vec<DbrStoredSite>) -> Sut {
     sut.dispatch(Event::AccountSwitched {
         address: A1.to_owned(),
         now_ms: T0,
+        space: false,
     });
     sut.resolve(Res::SitesListed { sites });
     sut
@@ -840,6 +841,7 @@ fn every_grant_follows_the_active_account() {
     let ops = sut.dispatch(Event::AccountSwitched {
         address: A2.to_owned(),
         now_ms: T0 + 9.0,
+        space: false,
     });
     let writes: Vec<&Op> = ops
         .iter()
@@ -1859,6 +1861,7 @@ fn messages_before_the_sites_are_listed_are_held_not_refused() {
     sut.dispatch(Event::AccountSwitched {
         address: A1.to_owned(),
         now_ms: T0,
+        space: false,
     });
     hello(&mut sut, "t1", "d1", DAPP);
     assert!(ask(&mut sut, "t1", "d1", DAPP, "1", "eth_accounts", json!([])).is_empty());
@@ -2618,6 +2621,7 @@ fn account_changed_carries_the_connect_spelling() {
     sut.dispatch(Event::AccountSwitched {
         address: V_LOWER.to_owned(),
         now_ms: T0,
+        space: false,
     });
     sut.resolve(Res::SitesListed { sites: Vec::new() });
     hello(&mut sut, "t1", "d1", DAPP);
@@ -2657,10 +2661,12 @@ fn account_changed_carries_the_connect_spelling() {
     sut.dispatch(Event::AccountSwitched {
         address: A1.to_owned(),
         now_ms: T0 + 2.0,
+        space: false,
     });
     let ops = sut.dispatch(Event::AccountSwitched {
         address: V_LOWER.to_owned(),
         now_ms: T0 + 3.0,
+        space: false,
     });
     assert_eq!(
         events(&ops),
@@ -2692,6 +2698,7 @@ fn loaded_lower_case_sites_are_normalised() {
     sut.dispatch(Event::AccountSwitched {
         address: V.to_owned(),
         now_ms: T0,
+        space: false,
     });
     let ops = sut.resolve(Res::SitesListed {
         sites: vec![DbrStoredSite {

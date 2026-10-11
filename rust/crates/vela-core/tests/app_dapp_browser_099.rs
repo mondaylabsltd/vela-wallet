@@ -37,6 +37,7 @@ fn booted(connected: bool) -> Sut {
     sut.dispatch(Event::AccountSwitched {
         address: A1.to_owned(),
         now_ms: T0,
+        space: false,
     });
     let sites = if connected {
         vec![DbrStoredSite {

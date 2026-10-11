@@ -163,6 +163,7 @@ fn an_account_switch_repins_a_connected_site_without_rewriting_its_chain() {
         current_addresses: Some(vec![A1.to_owned(), A2.to_owned()]),
         active_address: A2.to_owned(),
         now_ms: T0 + 2_000.0,
+        space: false,
     });
     assert_eq!(
         ops,
@@ -191,6 +192,7 @@ fn an_account_switch_removes_a_grant_whose_account_left_the_wallet() {
         current_addresses: Some(vec![A1.to_owned(), A2.to_owned()]),
         active_address: A1.to_owned(),
         now_ms: T0 + 2_000.0,
+        space: false,
     });
     assert_eq!(
         ops,
@@ -213,7 +215,99 @@ fn switch(
         current_addresses: addresses,
         active_address: active.to_owned(),
         now_ms: T0 + 2_000.0,
+        space: false,
     }
+}
+
+/// The same question, asked from inside a dev space (the parallel space).
+fn space_switch(grant: Option<DpermGrant>, addresses: Option<Vec<String>>, active: &str) -> Event {
+    Event::PopupAccountSwitch {
+        origin: ORIGIN.to_owned(),
+        grant,
+        current_addresses: addresses,
+        active_address: active.to_owned(),
+        now_ms: T0 + 2_000.0,
+        space: true,
+    }
+}
+
+/// The 2026-10-11 phone walk: entering the parallel space re-pinned every
+/// connected site to the test wallet, and leaving dropped them — the owner's
+/// own connection with them. In a space, a grant that is not one of the
+/// space's is the person's, set aside: nothing is written, nothing removed,
+/// whatever the space's account list says.
+#[test]
+fn a_dev_space_never_touches_a_grant_of_the_persons_own_accounts() {
+    // A1 is the person's account; the space holds A2 and A3 only.
+    let space_accounts = Some(vec![A2.to_owned(), A3.to_owned()]);
+    for addresses in [space_accounts, None, Some(Vec::new())] {
+        let mut sut = Sut::new();
+        let ops = sut.dispatch(space_switch(Some(grant(A1)), addresses.clone(), A2));
+        assert!(
+            ops.is_empty(),
+            "{addresses:?}: the person's grant is neither re-pinned nor removed: {ops:?}"
+        );
+    }
+    // Outside a space the very same facts DO remove it: that is the rule a
+    // space is the exception to.
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(switch(
+        Some(grant(A1)),
+        Some(vec![A2.to_owned(), A3.to_owned()]),
+        A2,
+        ORIGIN,
+    ));
+    assert_eq!(
+        ops,
+        vec![Op::RemoveGrant {
+            origin: ORIGIN.to_owned()
+        }]
+    );
+}
+
+/// A grant made INSIDE the space is the space's, and follows its accounts
+/// like any other: re-pinned on a switch between them.
+#[test]
+fn a_dev_space_grant_follows_the_spaces_own_accounts() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(space_switch(
+        Some(grant(A2)),
+        Some(vec![A2.to_owned(), A3.to_owned()]),
+        A3,
+    ));
+    assert_eq!(
+        ops,
+        vec![Op::WriteGrant {
+            grant: DpermGrant {
+                origin: ORIGIN.to_owned(),
+                address: A3.to_owned(),
+                chain_id: 8453,
+                granted_at_ms: T0 + 2_000.0,
+            },
+        }]
+    );
+}
+
+/// Leaving: the wallet is the person's again (`space: false`), and a grant
+/// still pinned to a space account is one whose account left — removed, as
+/// any other. The person's own grant, never touched inside, needs nothing.
+#[test]
+fn leaving_a_dev_space_drops_the_spaces_grants_and_keeps_the_persons() {
+    let own = Some(vec![A1.to_owned()]);
+    let mut sut = Sut::new();
+    assert_eq!(
+        sut.dispatch(switch(Some(grant(A2)), own.clone(), A1, ORIGIN)),
+        vec![Op::RemoveGrant {
+            origin: ORIGIN.to_owned()
+        }],
+        "the space's grant ends with the space"
+    );
+    let mut sut = Sut::new();
+    assert!(
+        sut.dispatch(switch(Some(grant(A1)), own, A1, ORIGIN))
+            .is_empty(),
+        "the person's grant is exactly as it was"
+    );
 }
 
 /// Invariant ②: a transient empty account list is NOT evidence that the
