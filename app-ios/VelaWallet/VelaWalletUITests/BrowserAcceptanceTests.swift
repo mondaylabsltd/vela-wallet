@@ -222,6 +222,10 @@ final class BrowserAcceptanceTests: XCTestCase {
                       "the address bar shows a host the page is not on")
         XCTAssertFalse(app.images["explore.insecure"].exists,
                        "a loopback dev server is not public http, and is not flagged as it")
+        // …and it is not https either: no padlock, the local page's own mark
+        // (device walk 2026-10-11 — a padlock beside 127.0.0.1:8137).
+        XCTAssertTrue(app.descendants(matching: .any)["explore.local"].waitForExistence(timeout: 10),
+                      "the address bar does not mark a loopback page as local")
 
         attach(app.screenshot(), named: "device-browser-address-bar")
     }

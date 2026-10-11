@@ -96,6 +96,10 @@ final class ParallelSpaceSitesDeviceTests: XCTestCase {
         // 1. Outside: the person connects the page and puts it on Gnosis.
         var app = launch(space: false, page: firstPage)
         XCTAssertTrue(pageIsUp(app), "the page never loaded outside the space")
+        // The page is plain http on this device: the address bar marks it a
+        // local page — never the padlock, which is for https alone.
+        XCTAssertTrue(app.descendants(matching: .any)["explore.local"].waitForExistence(timeout: 10),
+                      "127.0.0.1 is not marked as a local page in the address bar")
         XCTAssertFalse(app.staticTexts["PARALLEL SPACE"].exists, "launched outside, and the space is open")
         // On a simulator that has run this before, the grant is still there
         // and the page is answered with no sheet: the walk starts from "the
@@ -215,6 +219,8 @@ final class ParallelSpaceSitesDeviceTests: XCTestCase {
         ).firstMatch
         let asked = approve.waitForExistence(timeout: 12)
         if asked {
+            XCTAssertTrue(app.descendants(matching: .any)["explore.connection.local"].exists,
+                          "the sheet asking for 127.0.0.1 does not mark it a local page")
             attach(app.screenshot(), named: "consent")
             approve.tap()
         }

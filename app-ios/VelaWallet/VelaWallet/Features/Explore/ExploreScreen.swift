@@ -258,9 +258,46 @@ struct ExploreScreen: View {
         return engine.bar
     }
     private var browserHost: String { addressBar?.host ?? model.browser.host }
-    /// The lock tells the truth: the core's judgement of the tab's origin.
-    private var browserSecure: Bool {
-        engine == nil ? model.browser.secure : (currentTab?.secure ?? false)
+    /// The mark tells the truth: the core's judgement of the tab's origin
+    /// (`DbrTabView.lock`) — the padlock for https only. A drawn board's is
+    /// its own.
+    private var browserLock: OriginLock {
+        engine == nil ? model.browser.lock : (currentTab?.mark ?? .insecure)
+    }
+
+    /// The ADDRESS BAR's mark, and whether it has one.
+    ///
+    /// WHETHER is the core's `browserAddressBar` (spec 082 RE1): none over a
+    /// failure panel, a load that has not committed, an empty tab. WHICH is
+    /// the core's `OriginLock` of the bar's own committed address — host and
+    /// mark from one URL — not the tab view's, whose origin moves when a
+    /// load starts: a page must not borrow another site's padlock by
+    /// starting a load that never commits. `closed` for http on loopback is
+    /// that rule's "the wallet may be used here", not "encrypted": the mark
+    /// is asked of the origin, and only https gets the padlock. A core that
+    /// one day answers `local` itself is taken at its word.
+    static func barMark(_ bar: BrowserAddressBar) -> OriginLock? {
+        switch bar.lock {
+        case "none": return nil
+        case "local": return .local
+        case "open": return .insecure
+        default:
+            // `closed`: asked of the origin. Only https answers `secure`;
+            // an address that rule cannot vouch for gets no padlock.
+            return OriginLock.of(origin: dappOriginOf(url: bar.url))
+        }
+    }
+
+    private var barMark: OriginLock? {
+        addressBar.map(Self.barMark) ?? browserLock
+    }
+
+    /// The site menu's mark: the tab's own for the page in front, the origin
+    /// rule's for another site's row — and none for a row that is only a host.
+    private func menuLock(_ site: SiteModel) -> OriginLock? {
+        guard controller != nil else { return model.browser.lock }
+        if let tab = currentTab, tab.origin == site.id { return tab.mark }
+        return site.id.contains("://") ? OriginLock.of(origin: site.id) : nil
     }
 
     /// The chrome's model, with the engine's facts substituted where it has
@@ -273,7 +310,7 @@ struct ExploreScreen: View {
         return BrowserModel(
             url: engine.url,
             host: engine.host,
-            secure: browserSecure,
+            lock: browserLock,
             connected: currentTab?.connectedAddress != nil,
             canBack: engine.canGoBack,
             canForward: engine.canGoForward,
@@ -779,11 +816,12 @@ struct ExploreScreen: View {
         case .browsing:
             AddressBarView(
                 host: browserHost,
-                secure: addressBar.map { $0.lock == "closed" } ?? browserSecure,
+                lock: barMark ?? .insecure,
                 backLabel: loc.t("explore.back"),
                 menuLabel: loc.t("explore.siteMenu"),
                 insecureLabel: loc.t("connect.browser.a11yInsecure"),
-                showsLock: addressBar.map { $0.lock != "none" } ?? true,
+                localLabel: loc.t("connect.browser.a11yLocal"),
+                showsLock: barMark != nil,
                 url: addressBar?.url ?? model.browser.url,
                 addressLabel: loc.t("explore.addressBar"),
                 progress: loadProgress,
@@ -1095,8 +1133,9 @@ struct ExploreScreen: View {
                 SiteMenuSheetView(
                     site: site, statusLine: statusLine, items: items,
                     closeLabel: loc.t("explore.close"),
-                    secure: controller == nil || browserSecure,
+                    lock: menuLock(site),
                     insecureLabel: loc.t("connect.browser.a11yInsecure"),
+                    localLabel: loc.t("connect.browser.a11yLocal"),
                     onClose: { self.sheet = nil },
                     onPick: { id in
                         self.sheet = nil
@@ -1131,6 +1170,7 @@ struct ExploreScreen: View {
                 ConnectionPanelView(
                     connection: connection, closeLabel: loc.t("explore.close"),
                     insecureLabel: loc.t("connect.browser.a11yInsecure"),
+                    localLabel: loc.t("connect.browser.a11yLocal"),
                     onClose: { self.sheet = nil },
                     onSwitch: {
                         guard controller != nil else { return }

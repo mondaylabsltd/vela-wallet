@@ -23,6 +23,8 @@ struct ConnectionPanelView: View {
     let closeLabel: String
     /// The http lock's screen-reader words (`connect.browser.a11yInsecure`).
     var insecureLabel = ""
+    /// A local page's mark, named (`connect.browser.a11yLocal`).
+    var localLabel = ""
     var onClose: (() -> Void)?
     var onSwitch: () -> Void = {}
     var onDisconnect: () -> Void = {}
@@ -61,17 +63,17 @@ struct ConnectionPanelView: View {
                             .lineLimit(1)
                     }
                     HStack(spacing: Tokens.Space.s4) {
-                        // The lock follows the SCHEME, not the layout, and
+                        // The mark follows the SCHEME, not the layout, and
                         // says nothing more (spec 079, owner: "你标记的安全站点
-                        // 只是https 而已，并不代表这个站点真的安全"): closed and
-                        // quiet for https, open in the warning colour for http,
-                        // and no word either way. "已连接" stays — a fact about
-                        // the connection, not a claim about the site.
-                        LucideIcon(connection.secure ? .lock : .lockOpen, size: LucideIconSize.addressLock)
-                            .foregroundStyle(connection.secure ? theme.fgMuted : theme.warningBase)
-                            .accessibilityLabel(connection.secure ? "" : insecureLabel)
-                            .accessibilityHidden(connection.secure)
-                            .accessibilityIdentifier(connection.secure ? "explore.connection.lock" : "explore.connection.insecure")
+                        // 只是https 而已，并不代表这个站点真的安全"): the padlock,
+                        // quiet, for https and for nothing else; a neutral
+                        // mark for a page on this device or the person's own
+                        // network; the open lock in the warning colour for
+                        // public http — and no word either way. "已连接" stays
+                        // — a fact about the connection, not a claim about
+                        // the site.
+                        SiteLockMark(lock: connection.lock, localLabel: localLabel,
+                                     insecureLabel: insecureLabel, idPrefix: "explore.connection")
                         if !connection.statusLine.isEmpty {
                             Text(verbatim: connection.statusLine)
                                 .typeRole(Typography.rowSub.scaled(textScale))

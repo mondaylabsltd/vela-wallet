@@ -197,7 +197,10 @@ enum ExploreFixtures {
                                     action: loc.t("explore.edit"), tiles: tiles) : nil,
             groups: populated ? groups(loc) : [],
             browser: BrowserModel(
-                url: "https://\(uniswap.host)/swap", host: uniswap.host, secure: true, connected: true,
+                // The drawn page asks the core about its own origin, like a
+                // live one: https, so the padlock.
+                url: "https://\(uniswap.host)/swap", host: uniswap.host,
+                lock: OriginLock.of(origin: "https://\(uniswap.host)"), connected: true,
                 canBack: true, canForward: canForward, bookmarked: false,
                 account: (name: WalletFixtures.identity.name,
                           seed: WalletFixtures.identity.addressFull),

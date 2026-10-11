@@ -19,12 +19,16 @@ struct SiteMenuSheetView: View {
     let statusLine: String
     let items: [SiteMenuItem]
     let closeLabel: String
-    /// The lock follows the scheme (spec 070) and says nothing more (spec
-    /// 079, owner: https is not "safe"): closed and quiet for https, open in
-    /// the warning colour for plain http, no words either way.
-    var secure: Bool = true
+    /// The mark follows the scheme (spec 070) and says nothing more (spec
+    /// 079, owner: https is not "safe") — the core's `OriginLock`: the
+    /// padlock for https only, a neutral mark for a local page, the open
+    /// lock in the warning colour for public http. `nil`: a row that is only
+    /// a host names no scheme, and wears no mark.
+    var lock: OriginLock? = .secure
     /// The http lock's screen-reader words (`connect.browser.a11yInsecure`).
     var insecureLabel = ""
+    /// A local page's mark, named (`connect.browser.a11yLocal`).
+    var localLabel = ""
     var onClose: () -> Void = {}
     var onPick: (String) -> Void = { _ in }
 
@@ -38,11 +42,10 @@ struct SiteMenuSheetView: View {
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(1)
                     HStack(spacing: Tokens.Space.s4) {
-                        LucideIcon(secure ? .lock : .lockOpen, size: LucideIconSize.addressLock)
-                            .foregroundStyle(secure ? theme.fgMuted : theme.warningBase)
-                            .accessibilityLabel(secure ? "" : insecureLabel)
-                            .accessibilityHidden(secure)
-                            .accessibilityIdentifier(secure ? "explore.menu.lock" : "explore.menu.insecure")
+                        if let lock {
+                            SiteLockMark(lock: lock, localLabel: localLabel, insecureLabel: insecureLabel,
+                                         idPrefix: "explore.menu")
+                        }
                         if !statusLine.isEmpty {
                             Text(verbatim: statusLine)
                                 .typeRole(Typography.rowSub.scaled(textScale))

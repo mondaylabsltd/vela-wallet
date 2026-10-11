@@ -296,9 +296,10 @@ enum ExploreLive {
             url: engine?.url ?? "",
             host: engine?.host ?? "",
             // The core's judgement of the tab's origin, never a prefix check
-            // here: a loopback dev server is not "insecure", and a page that
-            // has not said hello yet is not "secure" either.
-            secure: tab?.secure ?? false,
+            // here — its `lock`, not its `secure`: a loopback dev server may
+            // use the wallet and is still not encrypted (no padlock), and a
+            // page that has not said hello yet has nothing to vouch for.
+            lock: tab?.mark ?? .insecure,
             connected: tab?.connectedAddress != nil,
             canBack: engine?.canGoBack ?? false,
             canForward: engine?.canGoForward ?? false,
@@ -336,7 +337,9 @@ enum ExploreLive {
         let asked = site(host: host, name: host, origin: origin)
         // The asker's own facts: the tab that asked, when it is not in front.
         let facts = consent.flatMap { dbr.tab($0.tab) } ?? tab
-        let secure = facts?.secure ?? false
+        // The mark beside the name: the consent's own while a site asks (the
+        // core's word about the ASKING origin), the tab's otherwise.
+        let lock = consent?.mark ?? facts?.mark ?? .insecure
         let connected = consent == nil && tab?.connectedAddress != nil
         let chainId = consent?.chainId ?? tab?.chainId ?? 1
 
@@ -359,7 +362,7 @@ enum ExploreLive {
             // the core's fact about the grant — "已连接", or that there is
             // none (spec 097 E).
             statusLine: consent == nil
-                ? statusLine(secure: secure, connected: connected, host: host, loc: loc)
+                ? statusLine(connected: connected, loc: loc)
                 : "",
             // WHICH account this site holds, not which one the wallet is on.
             //
@@ -396,7 +399,7 @@ enum ExploreLive {
                 : connected ? loc.t("explore.connectionExplainer") : "",
             disconnect: loc.t("explore.disconnect"),
             footnote: connected ? loc.t("explore.autoRequestHint") : "",
-            secure: secure,
+            lock: lock,
             // The approve word every client uses (spec 079): "连接" — it was
             // "批准" here alone.
             consent: consent == nil ? nil : (
@@ -463,7 +466,7 @@ enum ExploreLive {
     /// Spec 097 E: a site with no grant says so — "No active connection"
     /// (`home.connEmptyTitle`) — where the line used to go blank over a panel
     /// that still said what the site could see.
-    static func statusLine(secure: Bool, connected: Bool, host: String, loc: Loc) -> String {
+    static func statusLine(connected: Bool, loc: Loc) -> String {
         loc.t(connected ? "explore.connectedTag" : "home.connEmptyTitle")
     }
 
