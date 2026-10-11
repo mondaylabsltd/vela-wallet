@@ -385,6 +385,18 @@ describe('what nobody had said', () => {
 		expect(build(ready, { balance: '3' }).total?.balance).toBe('Balance 3 USDT');
 	});
 
+	it('draws what is left as the core cut it — it rounds nothing up itself', () => {
+		// `remaining` is the core's figure for reading
+		// (`split_remaining_display`). The balance's formatter rounds half up,
+		// and a remainder put through it read "1.2 left" of 1.19999….
+		const ready = { preview: [ROW], recipient_count: 1, total_token: '0.3', can_apply: true };
+		const left = (remaining: string) =>
+			build(ready, { formHasRows: true, remaining, balance: '2' }).total?.balance;
+		expect(left('1.1999')).toBe('1.1999 USDT left');
+		expect(left('1.19999')).toBe('1.19999 USDT left');
+		expect(left('0.0000000004')).toBe('0.0000000004 USDT left');
+	});
+
 	it('asks the question the unit toggle answers', () => {
 		expect(build({}).unitCaption).toBe('How the amounts are written');
 	});

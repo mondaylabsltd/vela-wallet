@@ -23,7 +23,12 @@ import type { BatchPreviewRow } from '$lib/core/generated/BatchPreviewRow';
 import type { BatchView } from '$lib/core/generated/BatchView';
 import { amountToInput, groupDigits, numberSeparators } from '$lib/services/locale-format';
 import { shortenAddress } from '$lib/wallet/identity';
-import { exactAmount as exact, MONEY_PENDING, tokenAmountText } from '$lib/wallet/live';
+import {
+	cutFigureText,
+	exactAmount as exact,
+	MONEY_PENDING,
+	tokenAmountText
+} from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
 import type { BatchImportModel, BatchRefusedModel, BatchRowModel } from './model';
@@ -41,9 +46,11 @@ export interface BatchLiveInputs {
 	/** The person chose to REPLACE them with this import instead. */
 	replaces?: boolean;
 	/**
-	 * What the form has NOT yet given out (the core's `split_remaining`). When
-	 * this import adds to people already on the form, that — not the whole
-	 * balance — is what it draws from, so that is the figure beside the total.
+	 * What the form has NOT yet given out, as the core writes it for a person
+	 * to read (`split_remaining_display`: cut to the token ladder, never
+	 * rounded up). When this import adds to people already on the form, that
+	 * — not the whole balance — is what it draws from, so that is the figure
+	 * beside the total.
 	 */
 	remaining?: string | null;
 	/**
@@ -265,7 +272,7 @@ export function liveBatchImport(
 						balance:
 							inputs.formHasRows && !inputs.replaces && inputs.remaining != null
 								? fill(m['send.splitRemaining'], {
-										amount: `${tokenAmountText(inputs.remaining)} ${symbol}`
+										amount: `${cutFigureText(inputs.remaining)} ${symbol}`
 									})
 								: fill(m['send.balanceLabel'], {
 										amount: `${tokenAmountText(balance)} ${symbol}`

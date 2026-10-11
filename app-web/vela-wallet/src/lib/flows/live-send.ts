@@ -31,6 +31,7 @@ import { shortenAddress } from '$lib/wallet/identity';
 import { amountToInput } from '$lib/services/locale-format';
 import { fromBaseUnits, isHexAddress } from '$lib/services/eip681';
 import {
+	cutFigureText,
 	exactAmount,
 	moneyText,
 	tokenAmountText,
@@ -913,11 +914,19 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 							: `${tokenAmountText(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
 					detail: splitUsd === null ? undefined : `≈ ${moneyText(splitUsd, currency)}`,
 					over: send.split_over_balance,
+					// The core's own figure for a person to read
+					// (`split_remaining_display`): cut to the token ladder and
+					// never rounded up, so it never says more is left than is.
+					// `split_remaining` is the exact subtraction, for whoever
+					// counts — drawn as it came it read "0.000300194967818323 BNB
+					// left" on a phone, and rounded here it read "1.2 left" of
+					// 1.199999999999999999.
 					remaining:
-						send.split_remaining == null
+						send.split_remaining_display == null
 							? undefined
 							: fill(m['send.splitRemaining'], {
-									amount: `${tokenAmountText(send.split_remaining)} ${token?.symbol ?? ''}`.trim()
+									amount:
+										`${cutFigureText(send.split_remaining_display)} ${token?.symbol ?? ''}`.trim()
 								})
 				}
 			: undefined,

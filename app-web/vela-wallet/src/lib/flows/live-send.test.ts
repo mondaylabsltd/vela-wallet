@@ -91,6 +91,7 @@ const EMPTY_SEND: SendView = {
 	split_duplicates: [],
 	split_row_issues: [],
 	split_remaining: null,
+	split_remaining_display: null,
 	split_import_room: 60,
 	picker_target: null,
 	multi_select_mode: false,
@@ -1131,9 +1132,16 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			expect(second.amountNote).toBeUndefined();
 		});
 
-		it('says what is left to give out — the core’s subtraction, not this file’s', () => {
-			expect(split({ split_remaining: '0.75' }).summary?.remaining).toBe('0.75 ETH left');
-			expect(split({ split_remaining: null }).summary?.remaining).toBeUndefined();
+		it('says what is left to give out — the core’s figure for reading, not this file’s', () => {
+			const left = (exact: string | null, display: string | null) =>
+				split({ split_remaining: exact, split_remaining_display: display }).summary?.remaining;
+			expect(left('0.75', '0.75')).toBe('0.75 ETH left');
+			expect(left(null, null)).toBeUndefined();
+			// The figure DRAWN is the display one, as it came: the exact
+			// subtraction is not printed, and it is not rounded here either
+			// (`live-send-remaining.test.ts` walks the real core).
+			expect(left('1.199999999999999999', '1.1999')).toBe('1.1999 ETH left');
+			expect(left('0.000300194967818323', '0.0003')).toBe('0.0003 ETH left');
 		});
 
 		it('offers one amount for every empty row, only while it would do something', () => {

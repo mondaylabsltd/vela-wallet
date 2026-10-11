@@ -326,6 +326,21 @@ export function trimBalance(balance: string, maxDecimals = 6): string {
 }
 
 /**
+ * A figure the core has ALREADY cut for reading (`cut_token_amount` — the
+ * remainder of a split, `SendView.split_remaining_display`), with the
+ * person's decimal mark and nothing else done to it.
+ *
+ * Not `tokenAmountText`: that rounds half up, which is right for a balance
+ * and wrong for what is LEFT — "1.199999999999999999" left read "1.2 left",
+ * more than there is. The core cuts, never rounds; this only writes its
+ * figure the way the balance beside it is written. Every digit the core gave
+ * is kept: dust is cut at its first significant digit, not to "0".
+ */
+export function cutFigureText(figure: string): string {
+	return trimBalance(figure, figure.length);
+}
+
+/**
  * A token amount as every money surface reads it — the asset list's rows, the
  * Send picker and token card, the confirm and the receipt — ONE call, so the
  * balance on the home row and the balance beside the token on Send are the

@@ -793,7 +793,7 @@ export interface SendFormModel {
 		value: string;
 		detail?: string;
 		over?: boolean;
-		/** split only: "2.25 ETH left" — the core's `split_remaining`. */
+		/** split only: "2.25 ETH left" — the core's `split_remaining_display`. */
 		remaining?: string;
 	};
 	/**

@@ -450,7 +450,7 @@
 					// core's own count, read back from the room it reports.
 					formHasRows: (sendView.split_import_room ?? 60) < 60,
 					replaces: importReplaces,
-					remaining: sendView.split_remaining,
+					remaining: sendView.split_remaining_display,
 					// Nothing read of the display currency yet: the code the importer
 					// holds is the placeholder's, and is not said (PR 3 final note F8).
 					currencyUnknown: !currency.view.committed && currency.view.pending === null
