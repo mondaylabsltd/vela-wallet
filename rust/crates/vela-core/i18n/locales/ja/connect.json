@@ -103,6 +103,7 @@
       "disconnectBody": "このサイトがあなたのアドレスを確認したり署名を求めたりするには、再接続が必要になります。",
       "a11ySecure": "安全なサイト",
       "a11yInsecure": "安全でないサイト — 暗号化されていません",
+      "a11yLocal": "ローカルページ — 暗号化されていません",
       "historyTitle": "最近の dApp",
       "historyOpen": "最近",
       "historyEmpty": "最近の dApp はまだありません",

@@ -160,6 +160,15 @@ split_row_issues: Array<SendSplitRowIssue>,
  */
 split_remaining: string | null, 
 /**
+ * [`Self::split_remaining`] as a person reads it: the same figure cut
+ * to the token ladder ([`crate::l10n::cut_token_amount`]) — "0.0003",
+ * not the balance's eighteen places — and never rounded up, so it
+ * never says more is left than is. This is the one a shell DRAWS
+ * ("0.0003 BNB left"), with the person's decimal mark, as it draws the
+ * balance beside it; `split_remaining` stays exact for whoever counts.
+ */
+split_remaining_display: string | null, 
+/**
  * How many more recipients an import may add before the cap: the cap less
  * the rows already started (blank rows do not count — an import drops
  * them). The shell opens the importer with this as ITS cap.

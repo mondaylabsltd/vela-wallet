@@ -240,6 +240,26 @@ struct FeeRefreshModel: Equatable {
     let refreshing: Bool
 }
 
+/// What a fee card can come to say after the sheet is up — each line's room
+/// kept from the first frame, so nothing under the card moves when one lands
+/// (device walks 2026-10-10 / 10-11: the fee's worth arrived with the
+/// speed's note and "no coin can pay", and the signing account was pushed to
+/// the body's fold; on the other phone the whole sheet stepped upward twice).
+///
+/// - `speedNote`: the note a fee lands with where a faster speed costs no
+///   more ("Fast costs no more on this network…"), said INSIDE the card.
+/// - `reasons`: what a landed fee says under the card when it cannot be
+///   paid — no coin can pay, the paying coin is short. The room is the
+///   tallest of them.
+///
+/// A failure's own sentence is not named: a fee that failed brings no
+/// speed's note, so it stands in the room the others keep. A room of its
+/// own would be a second empty line under every fee card.
+struct FeeRooms: Equatable {
+    var speedNote: String?
+    var reasons: [String] = []
+}
+
 struct SigningModel {
     let id: SigningStateId
     let dapp: (name: String, host: String, letter: String, tint: Color)
@@ -310,6 +330,10 @@ struct SigningModel {
     /// sheet's confirm dropped 26 pt when that figure landed (iPhone pass
     /// 2026-10-09); after a line has been said, `SigningFeeView` holds it.
     var feeReserve: String?
+    /// The lines the fee card comes to say BY ITSELF, named so their room is
+    /// there from the sheet's first frame (`FeeRooms`). `nil` on a drawn
+    /// board, which keeps the height it was drawn at.
+    var feeRooms: FeeRooms?
     /// PR 3 final note F2: the simulation verdict's place among `blocks`.
     /// `nil` where nothing is kept: a request nothing simulates (a message,
     /// typed data), a refusal, the hand-off card, a drawn board — and the

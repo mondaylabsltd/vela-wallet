@@ -234,6 +234,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
         ActivityRowModel {
             kind: ActivityKind::Received,
             title: s.label_received.clone(),
+            title_parts: None,
             subtitle: format!("{} 20:15 · Ethereum", s.yesterday).into(),
             amount: "+50".into(),
             unit: "USDC".into(),
@@ -247,6 +248,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
         ActivityRowModel {
             kind: ActivityKind::Sent,
             title: s.label_sent.clone(),
+            title_parts: None,
             subtitle: "8 月 5 日 · Arbitrum".into(),
             amount: "−0.2".into(),
             unit: "ETH".into(),

@@ -96,6 +96,7 @@ const BASE: SendView = {
 	split_duplicates: [],
 	split_row_issues: [],
 	split_remaining: null,
+	split_remaining_display: null,
 	split_import_room: 60,
 	picker_target: null,
 	multi_select_mode: false,

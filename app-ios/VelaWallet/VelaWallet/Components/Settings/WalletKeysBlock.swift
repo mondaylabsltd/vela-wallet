@@ -67,8 +67,10 @@ struct WalletKeysBlock: View {
                 .accessibilityIdentifier("keys.domain")
             }
 
-            if model.loading {
-                // The shape of one row, so the block does not jump when the answer lands.
+            if model.loading && model.rows.isEmpty {
+                // Nothing is known yet — not even this device's own record,
+                // which is read before anybody can open Settings. The shape of
+                // one row, for that instant.
                 HStack(spacing: Tokens.Space.s12) {
                     Circle().fill(theme.borderBase).frame(width: LucideIconSize.action, height: LucideIconSize.action)
                     Capsule().fill(theme.borderBase).frame(width: 140, height: 8)
@@ -79,6 +81,12 @@ struct WalletKeysBlock: View {
                 .accessibilityHidden(true)
                 SettingsDivider()
             } else {
+                // While the registry is still being asked these are the
+                // device's own rows: every key the wallet has, in its final
+                // place and at its final height, saying only what the record
+                // knows for certain. The answer fills the rest in place; it
+                // adds no row, moves nothing under the block and takes back
+                // nothing that was said.
                 ForEach(model.rows) { row in
                     keyRow(row)
                     SettingsDivider()
@@ -117,42 +125,38 @@ struct WalletKeysBlock: View {
         .padding(.top, Tokens.Space.s16)
     }
 
+    /// One key. A `pending` row (the registry has not answered) writes only
+    /// what this device's record knows for certain — the name it holds, the
+    /// short id, "Signed in" — and draws a quiet shape, of its own size,
+    /// where the mark, the words for where the key lives, an unheld name and
+    /// the registry's badges will stand. Nothing it shows can be taken back
+    /// by the answer, and the answer moves nothing.
     private func keyRow(_ row: WalletKeyRowModel) -> some View {
         let expandable = !row.details.isEmpty
-        let isOpen = open.contains(row.id)
+        let isOpen = expandable && open.contains(row.id)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: Tokens.Space.s12) {
-                PasskeyProviderMark(key: row.key, label: "", size: LucideIconSize.action, glyphFallback: true)
-                    .foregroundStyle(theme.fgMuted)
-                    .frame(width: LucideIconSize.action, height: LucideIconSize.action)
+                mark(row)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(row.name)
-                        .typeRole(Typography.fieldLabel)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(theme.fgBase)
-                        .lineLimit(1)
-                    (Text(row.holder)
-                        + Text(row.fingerprint.isEmpty ? "" : "  ·  ")
-                        + Text(row.fingerprint).font(.system(.caption, design: .monospaced)))
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(theme.fgSubtle)
-                        .lineLimit(1)
+                    nameLine(row)
+                    holderLine(row)
                     // Under the name, not beside it: a phone has no room for a
                     // name AND the pills on one line, and the name is what loses.
                     // They wrap rather than squeeze — three pills in Russian do
                     // not fit one line.
-                    if !row.pills.isEmpty {
-                        PillFlow(spacing: Tokens.Space.s4) {
-                            ForEach(row.pills, id: \.text) { pill in pillView(pill) }
-                        }
+                    //
+                    pillLine(row, pending: row.pending)
                         .padding(.top, Tokens.Space.s2)
-                    }
                 }
                 Spacer(minLength: Tokens.Space.s8)
-                if expandable {
+                // A row still being asked about has nothing to open yet; the
+                // chevron's place is kept, so the words beside it wrap the
+                // same way before and after the answer.
+                if expandable || row.pending {
                     LucideIcon(.chevronDown, size: LucideIconSize.rowGlyph)
                         .foregroundStyle(theme.fgSubtle)
                         .rotationEffect(.degrees(isOpen ? 180 : 0))
+                        .opacity(expandable ? 1 : 0)
                 }
             }
             .frame(minHeight: 52)
@@ -165,11 +169,102 @@ struct WalletKeysBlock: View {
             }
             // One sentence for VoiceOver, not five fragments.
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(([row.name, row.holder] + row.pills.map(\.text)).joined(separator: ", "))
+            .accessibilityLabel(Self.spoken(row))
             .accessibilityAddTraits(expandable ? .isButton : [])
+            .accessibilityIdentifier("keys.row")
 
-            if expandable && isOpen { details(row) }
+            if isOpen { details(row) }
         }
+    }
+
+    /// What VoiceOver says of a row. Settled: its name, where the key lives,
+    /// its badges. Pending: only what is known — the name the record holds
+    /// and the short id (with "Signed in", which the device itself vouches
+    /// for); no kind, which nobody has said yet.
+    static func spoken(_ row: WalletKeyRowModel) -> String {
+        let facts = row.pending ? [row.name, row.fingerprint] : [row.name, row.holder]
+        return (facts.filter { !$0.isEmpty } + row.pills.map(\.text)).joined(separator: ", ")
+    }
+
+    /// The provider's mark — or, while nobody has said whose key this is, its
+    /// place: the mark's own box, no glyph.
+    @ViewBuilder
+    private func mark(_ row: WalletKeyRowModel) -> some View {
+        if let key = row.key {
+            PasskeyProviderMark(key: key, label: "", size: LucideIconSize.action, glyphFallback: true)
+                .foregroundStyle(theme.fgMuted)
+                .frame(width: LucideIconSize.action, height: LucideIconSize.action)
+        } else {
+            RoundedRectangle(cornerRadius: Tokens.Radius.r8)
+                .fill(theme.borderBase)
+                .frame(width: LucideIconSize.action, height: LucideIconSize.action)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// The key's name. One the record does not hold is not guessed while the
+    /// registry may still give it: a bar the size of "Key 2", on the line the
+    /// name will take.
+    @ViewBuilder
+    private func nameLine(_ row: WalletKeyRowModel) -> some View {
+        if row.name.isEmpty {
+            Text(row.nameRoom.isEmpty ? " " : row.nameRoom)
+                .typeRole(Typography.fieldLabel)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .hidden()
+                .background(alignment: .leading) { Self.bar(theme.borderBase) }
+                .accessibilityHidden(true)
+        } else {
+            Text(row.name)
+                .typeRole(Typography.fieldLabel)
+                .fontWeight(.semibold)
+                .foregroundStyle(theme.fgBase)
+                .lineLimit(1)
+        }
+    }
+
+    /// Where the key lives, then its short id — one line.
+    ///
+    /// Pending, the words are a bar and only the id is written: the id is
+    /// the device's own fact. The bar is as wide as the widest of the lines
+    /// this can come to read (`holderRoom`, measured unseen), so it is the
+    /// same bar whatever this device believes of the key — and the line is
+    /// the height it is with the words in it, because the id beside the bar
+    /// carries both of the line's faces.
+    @ViewBuilder
+    private func holderLine(_ row: WalletKeyRowModel) -> some View {
+        let id = (Text(row.fingerprint.isEmpty ? "" : "  ·  ")
+            + Text(row.fingerprint).font(.system(.caption, design: .monospaced)))
+        if row.pending {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                ZStack(alignment: .leading) {
+                    ForEach(model.holderRoom.isEmpty ? [" "] : model.holderRoom, id: \.self) { words in
+                        Text(words).typeRole(Typography.flowCaption).lineLimit(1)
+                    }
+                }
+                .hidden()
+                .background(alignment: .leading) { Self.bar(theme.borderBase) }
+                .accessibilityHidden(true)
+                id.typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.fgSubtle)
+                    .lineLimit(1)
+                    // The id is never the one cut to make room for a placeholder.
+                    .fixedSize()
+                    .layoutPriority(1)
+            }
+        } else {
+            (Text(row.holder) + id)
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(theme.fgSubtle)
+                .lineLimit(1)
+        }
+    }
+
+    /// The house skeleton's weight: a quiet bar across the words it stands
+    /// for, on the middle of their line.
+    private static func bar(_ colour: Color) -> some View {
+        Capsule().fill(colour).frame(height: Tokens.Space.s8)
     }
 
     /// A long hex value with a zero-width break opportunity every eight
@@ -212,6 +307,49 @@ struct WalletKeysBlock: View {
                 .padding(.vertical, Tokens.Space.s2)
                 .overlay(Self.pillShape.strokeBorder(tint, lineWidth: 1))
         }
+    }
+
+    /// A row's badges, in the room they can ever take.
+    ///
+    /// The line is ALWAYS there, and always as tall as the fullest set of
+    /// badges this row can end with (`badgeRoom`, at this width and text
+    /// size — three pills in English wrap to two lines): a row is the same
+    /// height while its badges are being asked for, when they arrive, and
+    /// when nobody could vouch for any. So an answer — or a registry that
+    /// never gives one — moves nothing under the row.
+    private func pillLine(_ row: WalletKeyRowModel, pending: Bool) -> some View {
+        // What the device itself vouches for stays in every outcome.
+        let own = row.pills.filter { $0.tone == .signsHere }
+        return ZStack(alignment: .topLeading) {
+            pillView(KeyPillModel(text: " ", tone: .local)).hidden()
+            ForEach(Array(model.badgeRoom.enumerated()), id: \.offset) { _, texts in
+                PillFlow(spacing: Tokens.Space.s4) {
+                    ForEach(own, id: \.text) { pill in pillView(pill) }
+                    ForEach(texts, id: \.self) { text in pillView(KeyPillModel(text: text, tone: .local)) }
+                }
+                .hidden()
+            }
+            PillFlow(spacing: Tokens.Space.s4) {
+                ForEach(row.pills, id: \.text) { pill in pillView(pill) }
+                if pending {
+                    ForEach(model.badgeRoom.first ?? [" "], id: \.self) { text in pendingPill(text) }
+                }
+            }
+        }
+        .accessibilityHidden(row.pills.isEmpty)
+    }
+
+    /// Where a badge will stand, while the registry is still being asked: the
+    /// badge's own size, nothing to read.
+    private func pendingPill(_ text: String) -> some View {
+        Text(text)
+            .typeRole(Typography.flowCaption)
+            .fixedSize(horizontal: false, vertical: true)
+            .hidden()
+            .padding(.horizontal, Tokens.Space.s8)
+            .padding(.vertical, Tokens.Space.s2)
+            .background(Self.pillShape.fill(theme.borderBase))
+            .accessibilityHidden(true)
     }
 
     /// A capsule on one line; on two (Russian or German at the largest text

@@ -278,6 +278,59 @@ pub fn format_token_amount(value: f64, preset: NumberPreset, compact: bool) -> S
     }
 }
 
+/// An exact token figure, CUT to the precision a person reads — the
+/// [`format_token_amount`] ladder (`>= 1000` → 2 places, `>= 1` → 4, `< 1` →
+/// 6) without a float and without rounding.
+///
+/// For a figure that says how much is THERE: a balance, or what is left of
+/// one ("0.0003 BNB left"). Such a figure may lose digits but must never
+/// gain value — rounded up it would promise more than the wallet holds — so
+/// the digits past the ladder are dropped, never carried. A figure smaller
+/// than the ladder's last place is not written "0" (there IS something
+/// left): it is cut at its first significant digit instead.
+///
+/// `plain` is a non-negative dot-decimal figure ("0.000300194967818323");
+/// the result is one too, with no grouping and no trailing zeros. A shell
+/// writes it with the person's decimal mark, as it writes the balance
+/// beside it. Text that is not such a figure comes back unchanged: this
+/// trims a figure, it does not judge one.
+///
+/// The Send form's remainder printed all eighteen places of a balance beside
+/// "Balance 0.0003" (the 2026-10-10 iPhone walk).
+#[must_use]
+pub fn cut_token_amount(plain: &str) -> String {
+    let text = plain.trim();
+    let (whole, frac) = text.split_once('.').unwrap_or((text, ""));
+    let digits = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    if whole.is_empty() || !digits(whole) || !digits(frac) {
+        return plain.to_owned();
+    }
+    let whole = match whole.trim_start_matches('0') {
+        "" => "0",
+        rest => rest,
+    };
+    let places = if whole.len() >= 4 {
+        2
+    } else if whole != "0" {
+        4
+    } else {
+        6
+    };
+    let mut kept = frac.get(..places.min(frac.len())).unwrap_or(frac);
+    if whole == "0" && kept.bytes().all(|b| b == b'0') {
+        // Dust: something is there, and "0" would say nothing is.
+        if let Some(first) = frac.bytes().position(|b| b != b'0') {
+            kept = &frac[..=first];
+        }
+    }
+    let kept = kept.trim_end_matches('0');
+    if kept.is_empty() {
+        whole.to_owned()
+    } else {
+        format!("{whole}.{kept}")
+    }
+}
+
 /// ERC-20 `decimals` is a `uint8`: a wider claim is no amount.
 pub const MAX_TOKEN_DECIMALS: u32 = 255;
 
@@ -514,5 +567,69 @@ mod signed_amount_tests {
             format_signed_token_amount("-1000", 18, NumberPreset::SpaceComma).as_deref(),
             Some("\u{2212}0,000000000000001")
         );
+    }
+}
+
+#[cfg(test)]
+mod cut_amount_tests {
+    use super::cut_token_amount;
+
+    /// The ladder, cut: a figure of what is there never gains value.
+    #[test]
+    fn a_cut_token_amount_follows_the_ladder_and_never_rounds_up() {
+        for (plain, cut) in [
+            // The iPhone walk's own figure, beside "Balance 0.0003".
+            ("0.000300194967818323", "0.0003"),
+            // < 1: six places, the seventh dropped, not carried.
+            ("0.1234569", "0.123456"),
+            ("0.9999999", "0.999999"),
+            ("0.5", "0.5"),
+            ("0.500000", "0.5"),
+            // >= 1: four places.
+            ("1.23456789", "1.2345"),
+            ("999.99999", "999.9999"),
+            ("12", "12"),
+            ("12.0", "12"),
+            // >= 1000: two places.
+            ("1000.999", "1000.99"),
+            ("123456.789", "123456.78"),
+            ("1000", "1000"),
+            // Dust is cut at its first significant digit, never to "0".
+            ("0.000000194967818323", "0.0000001"),
+            ("0.000000000000000001", "0.000000000000000001"),
+            ("0.0000009", "0.0000009"),
+            // Nothing is nothing.
+            ("0", "0"),
+            ("0.000", "0"),
+            ("000.50", "0.5"),
+        ] {
+            assert_eq!(cut_token_amount(plain), cut, "{plain}");
+        }
+    }
+
+    /// Never more than what is there, whatever the digits.
+    #[test]
+    fn a_cut_token_amount_is_never_more_than_the_figure() {
+        for plain in [
+            "0.000300194967818323",
+            "0.9999999999",
+            "1.99999",
+            "999.99999",
+            "1999.999",
+            "0.0000019",
+        ] {
+            let cut: f64 = cut_token_amount(plain).parse().unwrap_or(f64::NAN);
+            let exact: f64 = plain.parse().unwrap_or(f64::NAN);
+            assert!(cut <= exact, "{plain} was cut to {cut}");
+            assert!(cut > 0.0, "{plain} is something");
+        }
+    }
+
+    /// It trims a figure; it does not judge one.
+    #[test]
+    fn text_that_is_not_a_figure_comes_back_unchanged() {
+        for text in ["", ".5", "abc", "1,5", "-1.5", "1e-7", "1.2.3"] {
+            assert_eq!(cut_token_amount(text), text);
+        }
     }
 }

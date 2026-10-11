@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.contacts.components
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -40,6 +41,7 @@ fun ContactNoticeSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .sheetScrolls()
                 .padding(horizontal = VelaSpacing.xl)
                 .navigationBarsPadding(),
         ) {

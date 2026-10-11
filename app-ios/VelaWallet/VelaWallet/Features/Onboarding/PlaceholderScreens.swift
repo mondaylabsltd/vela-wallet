@@ -20,6 +20,6 @@ struct IntentPlaceholderScreen: View {
                 .foregroundStyle(theme.fgBase)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
     }
 }

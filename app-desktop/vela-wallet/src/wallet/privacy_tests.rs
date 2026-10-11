@@ -10,6 +10,11 @@
 //! (`figure_maskable`). The signing sheet and Receive's "arrived" list take
 //! no privacy flag at all — they cannot mask by construction.
 //!
+//! `holdings_masked` is what each holding reads while hidden, on every
+//! surface that draws it (PR 4 item 3): the home's row, the Assets row and
+//! the token's own page are built here from `hidden.balance.tokens` and read
+//! exactly those strings — the amount with its unit, the worth the bare mask.
+//!
 //! The feed carries a SPLIT (one send to two people, PR 3 note 15): its
 //! total is a figure and so is each recipient's share, in the row and in the
 //! detail the row opens — where the shares are listed. Every row of the feed
@@ -544,5 +549,107 @@ fn a_split_hides_its_total_and_every_share() {
                 assert!(says(&in_detail, run), "shown: the detail says `{run}`");
             }
         }
+    }
+}
+
+/// (6) PR 4 item 3. On the phones a hidden holding read 「••••」 where the
+/// shown one read 「0.0003 BNB」: the unit went with the digits, on the
+/// holdings rows and on the token's own page. Every holding of the fixture,
+/// on every surface that draws it — the home's row, the Assets row, the
+/// token's page — reads exactly what the core's fixture says a hidden
+/// holding reads: the amount as the mask and its unit, the worth as the bare
+/// mask. Shown, the same places say the figures.
+#[test]
+fn a_hidden_holding_keeps_its_unit_on_its_rows_and_its_page() {
+    use crate::wallet::fixtures::SubWorth;
+    let fixture = fixture();
+    let (wallet, flow) = strings();
+    let money = Money::usd();
+    let expected = fixture["holdings_masked"]
+        .as_array()
+        .unwrap_or_else(|| unreachable!("holdings_masked per holding"));
+    let text = |value: &Value| value.as_str().unwrap_or_default().to_owned();
+
+    let (balance, feed) = views(&fixture, "hidden");
+    assert!(balance.hidden);
+    assert_eq!(expected.len(), balance.tokens.len(), "one per holding");
+    let home = crate::wallet::live::asset_rows(&balance, &wallet, "en", None, money);
+    let assets = crate::flows::live::assets(&balance, &flow, &wallet, "en", None, money).rows;
+    assert_eq!(home.len(), expected.len(), "the home draws every holding");
+    assert_eq!(assets.len(), expected.len(), "and so does Assets");
+    for (index, want) in expected.iter().enumerate() {
+        let token = &balance.tokens[index];
+        let (symbol, amount, worth) = (
+            text(&want["symbol"]),
+            text(&want["amount"]),
+            text(&want["worth"]),
+        );
+        assert_eq!(token.symbol, symbol, "holding {index}");
+        assert_eq!(
+            u64::from(token.chain_id),
+            want["chain_id"].as_u64().unwrap_or(0)
+        );
+        assert_eq!(
+            token.token_address.as_deref(),
+            want["token_address"].as_str()
+        );
+        // The fixture's own strings are the core's rule, not a third thing.
+        assert_eq!(amount, vela_core::app::privacy::masked_amount(&symbol));
+        assert_eq!(worth, crate::wallet::fixtures::MASK);
+
+        for (surface, rows) in [("the home's row", &home), ("the Assets row", &assets)] {
+            let row = rows
+                .iter()
+                .find(|row| row.ticker.as_ref() == symbol)
+                .unwrap_or_else(|| unreachable!("{surface} for {symbol}"));
+            assert_eq!(row.balance.as_ref(), amount, "{surface}: {symbol}");
+            assert_eq!(fiat_text(&row.fiat), worth, "{surface}: {symbol}'s worth");
+            assert!(matches!(row.fiat, Fiat::Masked), "{surface}: {symbol}");
+        }
+
+        let page = crate::wallet::live::asset_detail(&balance, &feed, index, &wallet, "en", money)
+            .unwrap_or_else(|| unreachable!("{symbol} has a page"));
+        assert_eq!(page.ticker.as_ref(), symbol);
+        assert_eq!(page.amount.as_ref(), amount, "the token's page: {symbol}");
+        assert_eq!(
+            page.sub.worth,
+            SubWorth::Said(SharedString::from(worth.clone())),
+            "the token's page: {symbol}'s worth"
+        );
+        // The line as drawn: the worth in its own place, then the network.
+        assert_eq!(
+            page.sub.text(),
+            format!("{worth} · {}", page.sub.chain),
+            "{symbol}"
+        );
+    }
+
+    // Shown, the same places say the figures the fixture forbids hidden —
+    // so the replay above really is of the rows a person reads.
+    let (balance, feed) = views(&fixture, "shown");
+    let home = crate::wallet::live::asset_rows(&balance, &wallet, "en", None, money);
+    let assets = crate::flows::live::assets(&balance, &flow, &wallet, "en", None, money).rows;
+    for (index, token) in balance.tokens.iter().enumerate() {
+        let run: String = token.balance.chars().take(3).collect();
+        assert!(forbidden(&fixture).contains(&run), "`{run}` is a figure");
+        for rows in [&home, &assets] {
+            let row = rows
+                .iter()
+                .find(|row| row.ticker.as_ref() == token.symbol)
+                .unwrap_or_else(|| unreachable!("a row for {}", token.symbol));
+            assert!(row.balance.contains(&run), "{}", row.balance);
+            assert!(fiat_text(&row.fiat).contains(&run));
+        }
+        let page = crate::wallet::live::asset_detail(&balance, &feed, index, &wallet, "en", money)
+            .unwrap_or_else(|| unreachable!("a page"));
+        assert_eq!(
+            page.amount.as_ref(),
+            format!(
+                "{} {}",
+                crate::wallet::live::token_amount_text(&token.balance),
+                token.symbol
+            )
+        );
+        assert!(page.sub.text().contains(&run), "{}", page.sub.text());
     }
 }

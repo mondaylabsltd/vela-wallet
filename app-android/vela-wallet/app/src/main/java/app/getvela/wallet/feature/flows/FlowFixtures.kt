@@ -1276,7 +1276,7 @@ object FlowFixtures {
         strings = s,
         chainNames = mapOf(1 to NETWORKS[0].name),
         explorers = emptyMap(),
-        money = app.getvela.wallet.feature.wallet.WalletLive.Money.of(boardCurrency(committed)),
+        money = app.getvela.wallet.feature.wallet.WalletLive.Money.of(boardCurrency(committed), s.language),
         fromName = WalletFixtures.NAME,
         fromAddress = WalletFixtures.ADDRESS_FULL,
     )
@@ -1411,7 +1411,7 @@ object FlowFixtures {
         ) ?: tokenDetail(s)
         return FlowScreenModel(
             state = if (committed) FlowState.T2C else FlowState.T2W,
-            base = FlowBase.Assets(FlowLive.assets(assets(s, empty = false), view, chains, currency)),
+            base = FlowBase.Assets(FlowLive.assets(assets(s, empty = false), view, chains, currency, language = s.language)),
             sheet = FlowSheet.TokenDetail(page),
         )
     }

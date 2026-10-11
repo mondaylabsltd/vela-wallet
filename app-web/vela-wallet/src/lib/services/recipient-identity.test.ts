@@ -95,6 +95,7 @@ vi.mock('$lib/services/rpc-pool', () => ({
 	})
 }));
 
+import { refreshCustomNetworks } from './networks';
 import { decodeString, resolveRecipientIdentity } from './recipient-identity';
 
 const ADDR = '0x14fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d1e';
@@ -125,13 +126,16 @@ function serve(chainId: number, registry: string, name: string, forwardsTo: stri
 	chain.set(chainId, m);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
 	kv.clear();
 	chain.clear();
 	rpcCalls.length = 0;
 	index.record = null;
 	index.calls = 0;
 	coreVerifier = standInVerifier;
+	// The wallet's own networks, read again from the (emptied) store: the
+	// built-in ones and nothing the person added.
+	await refreshCustomNetworks();
 });
 
 describe('resolveRecipientIdentity', () => {
@@ -226,11 +230,104 @@ describe('resolveRecipientIdentity', () => {
 		expect(a).toBeNull();
 		expect(b).toBeNull();
 		expect(index.calls).toBe(1);
-		expect(rpcCalls).toHaveLength(5); // one reverse lookup per name service, not ten
+		// One reverse lookup per name service on a network the wallet has, not
+		// two: four of the five (`.g`'s chain is not one of them — below).
+		expect(rpcCalls).toHaveLength(4);
 
 		// Coalescing is not caching: a miss is asked again the next time.
 		await resolveRecipientIdentity(ADDR);
 		expect(index.calls).toBe(2);
+	});
+});
+
+/**
+ * Device walk of 2026-10-11, item 9 — "stop probing a network the wallet
+ * doesn't have". `.g` lives on chain 1625, which is not one of the wallet's
+ * networks. The web asked it anyway, through endpoints the pool collects from
+ * the public chain index: a request to a stranger's node, for every
+ * counterparty, at every launch, on a network the person never added — and a
+ * "Chain 1625" line in the feedback sheet when those nodes did not answer.
+ *
+ * The real resolver and the real network list (`networks.ts`, over the stored
+ * custom networks); the pool is the recorder above, which sees every call that
+ * would have become a request.
+ */
+describe('a name service is asked only on a network the wallet has', () => {
+	const G_CHAIN = 1625;
+	const G_REGISTRY = '0x5dC881dDA4e4a8d312be3544AD13118D1a04Cb17';
+	const ENS_REGISTRY = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+	/** Gravity, as Settings → Networks stores a network the person added. */
+	const addGravity = async () => {
+		kv.set(
+			'vela.customNetworks',
+			JSON.stringify([
+				{
+					id: 'custom-1625',
+					displayName: 'Gravity Alpha',
+					chainId: G_CHAIN,
+					iconLabel: 'G',
+					iconColor: '',
+					iconBg: '',
+					logoURL: '',
+					isL2: true,
+					rpcURL: 'https://rpc.gravity.example',
+					explorerURL: '',
+					bundlerURL: '',
+					nativeSymbol: 'G',
+					addedAt: '2026-10-11T00:00:00.000Z'
+				}
+			])
+		);
+		// What the settings executor does after it writes.
+		await refreshCustomNetworks();
+	};
+
+	it('without the network: no call for chain 1625, and nobody is named by it', async () => {
+		// The address HAS a `.g` name, verified forward — on a chain this
+		// wallet does not have.
+		serve(G_CHAIN, G_REGISTRY, 'alice.g');
+		expect(await resolveRecipientIdentity(ADDR)).toBeNull();
+		expect(rpcCalls).not.toContain(G_CHAIN);
+		// The four services on the wallet's own networks were each asked.
+		expect([...new Set(rpcCalls)].sort((a, b) => a - b)).toEqual([1, 56, 8453, 42161]);
+	});
+
+	it('…and resolution still goes on through the services whose chains the wallet has', async () => {
+		serve(G_CHAIN, G_REGISTRY, 'alice.g');
+		serve(1, ENS_REGISTRY, 'alice.eth');
+		// `.g` comes before ENS in priority; skipped, it is as if it had no name.
+		expect(await resolveRecipientIdentity(ADDR)).toEqual({ name: 'alice.eth', source: 'ENS' });
+		expect(rpcCalls).not.toContain(G_CHAIN);
+	});
+
+	it('once the person adds the network, `.g` is asked — and answers in its own place in the order', async () => {
+		serve(G_CHAIN, G_REGISTRY, 'alice.g');
+		serve(1, ENS_REGISTRY, 'alice.eth');
+		// Asked before the network is added: ENS, and nothing kept of a "no".
+		expect((await resolveRecipientIdentity(ADDR))?.source).toBe('ENS');
+		kv.delete(`recipient_id.v2:${ADDR.toLowerCase()}`);
+		rpcCalls.length = 0;
+
+		await addGravity();
+		expect(await resolveRecipientIdentity(ADDR)).toEqual({ name: 'alice.g', source: '.g' });
+		expect(rpcCalls).toContain(G_CHAIN);
+	});
+
+	it('removing the network stops the asking again', async () => {
+		await addGravity();
+		serve(G_CHAIN, G_REGISTRY, 'alice.g');
+		expect((await resolveRecipientIdentity(ADDR))?.source).toBe('.g');
+		kv.clear();
+		await refreshCustomNetworks();
+		rpcCalls.length = 0;
+		expect(await resolveRecipientIdentity(ADDR)).toBeNull();
+		expect(rpcCalls).not.toContain(G_CHAIN);
+	});
+
+	it('every built-in service’s chain IS one of the wallet’s networks: only `.g` is skipped', async () => {
+		await resolveRecipientIdentity(ADDR);
+		// .bnb, .arb, Basename, ENS — one reverse lookup each.
+		expect(rpcCalls.slice().sort((a, b) => a - b)).toEqual([1, 56, 8453, 42161]);
 	});
 });
 

@@ -221,6 +221,7 @@ fn browser_with_forwarded(origin: &str, params: Value) -> Browser {
     browser.dispatch(DbrEvent::AccountSwitched {
         address: SAFE.to_owned(),
         now_ms: NOW,
+        space: false,
     });
     browser.resolve(DbrShellResult::SitesListed {
         sites: vec![DbrStoredSite {

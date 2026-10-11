@@ -391,6 +391,7 @@ enum SigningLive {
                 return tap == .open || tap == .chooseCoin
             } ?? false
             model.feeReserve = feeReserve(fee, loc: loc)
+            model.feeRooms = feeRooms(clear: clear, fee: fee, speed: model.feeSpeed != nil, context: context)
         }
         return model
     }
@@ -1544,6 +1545,30 @@ enum SigningLive {
     /// measured: "no coin can pay", when the core knows it already.
     static func feeReserve(_ fee: FeeViewWire?, loc: Loc) -> String? {
         fee?.nothingToPayFrom == true ? loc.t("componentsUi.gas.noCoinPays") : nil
+    }
+
+    /// The lines an on-chain fee card comes to say by itself, named in EVERY
+    /// state of the fee — measuring, priced, failed, asked again — so their
+    /// room is the same from the sheet's first frame (`FeeRooms`):
+    /// - the speed's note, where the sheet has a speed control at all;
+    /// - under the card, what a landed fee says when it cannot be paid: no
+    ///   coin can pay, or the paying coin is short — the coin in force when
+    ///   the fee names one, the chain's own until then (the line's height is
+    ///   what is kept; a ticker does not change it).
+    /// A message has no fee and no rooms.
+    static func feeRooms(
+        clear: ClearSigningViewWire, fee: FeeViewWire?, speed: Bool, context: Context
+    ) -> FeeRooms? {
+        guard !isOffChain(clear) else { return nil }
+        let loc = context.loc
+        let paying = fee?.options.first { $0.selected }?.symbol ?? context.nativeSymbol
+        return FeeRooms(
+            speedNote: speed ? loc.t("send.feeSpeedFree") : nil,
+            reasons: [
+                loc.t("componentsUi.gas.noCoinPays"),
+                loc.t("send.warnInsufficientGas", vars: ["sym": paying]),
+            ]
+        )
     }
 
     /// Spec 079: the fee row's refresh — the send form's own control, dimmed

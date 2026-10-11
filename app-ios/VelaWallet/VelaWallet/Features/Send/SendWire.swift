@@ -445,6 +445,11 @@ struct SendViewWire: Decodable, Equatable {
     /// The balance less the rows' sum, in token units — "how much is left to
     /// give out". `nil` while a row cannot be summed or the sum is over.
     let splitRemaining: String?
+    /// The same remainder as it is DRAWN: cut to the token ladder by the
+    /// core, never rounded up ("0.0003", where the exact figure is
+    /// "0.000300194967818323"). Dot-decimal. Absent from a core built before
+    /// the field — and then the core's own `cutTokenAmount` cuts the exact one.
+    let splitRemainingDisplay: String?
     /// How many more recipients an import may add: the cap less the rows
     /// already started. The importer is opened with this as ITS cap, and it
     /// is also how the shell knows the form already has people on it

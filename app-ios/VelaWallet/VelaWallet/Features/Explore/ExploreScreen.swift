@@ -113,6 +113,10 @@ struct ExploreScreen: View {
     /// so Close page — the last row, and since DESIGN N the way to close a
     /// page — never sits under a half-height sheet's edge.
     @State private var siteMenuHeight: CGFloat = 0
+    /// The connection panel's own height, measured the same way: its sheet —
+    /// connected, or a site asking — is exactly that tall, so the last
+    /// action is on it without a drag.
+    @State private var connectionHeight: CGFloat = 0
     /// **Which** sheet is open — never a snapshot of what it said when it
     /// opened. A sheet holding a captured model shows the section you hid,
     /// the site you unpinned, and — the one that matters — a CONNECTED panel
@@ -258,9 +262,46 @@ struct ExploreScreen: View {
         return engine.bar
     }
     private var browserHost: String { addressBar?.host ?? model.browser.host }
-    /// The lock tells the truth: the core's judgement of the tab's origin.
-    private var browserSecure: Bool {
-        engine == nil ? model.browser.secure : (currentTab?.secure ?? false)
+    /// The mark tells the truth: the core's judgement of the tab's origin
+    /// (`DbrTabView.lock`) — the padlock for https only. A drawn board's is
+    /// its own.
+    private var browserLock: OriginLock {
+        engine == nil ? model.browser.lock : (currentTab?.mark ?? .insecure)
+    }
+
+    /// The ADDRESS BAR's mark, and whether it has one.
+    ///
+    /// WHETHER is the core's `browserAddressBar` (spec 082 RE1): none over a
+    /// failure panel, a load that has not committed, an empty tab. WHICH is
+    /// the core's `OriginLock` of the bar's own committed address — host and
+    /// mark from one URL — not the tab view's, whose origin moves when a
+    /// load starts: a page must not borrow another site's padlock by
+    /// starting a load that never commits. `closed` for http on loopback is
+    /// that rule's "the wallet may be used here", not "encrypted": the mark
+    /// is asked of the origin, and only https gets the padlock. A core that
+    /// one day answers `local` itself is taken at its word.
+    static func barMark(_ bar: BrowserAddressBar) -> OriginLock? {
+        switch bar.lock {
+        case "none": return nil
+        case "local": return .local
+        case "open": return .insecure
+        default:
+            // `closed`: asked of the origin. Only https answers `secure`;
+            // an address that rule cannot vouch for gets no padlock.
+            return OriginLock.of(origin: dappOriginOf(url: bar.url))
+        }
+    }
+
+    private var barMark: OriginLock? {
+        addressBar.map(Self.barMark) ?? browserLock
+    }
+
+    /// The site menu's mark: the tab's own for the page in front, the origin
+    /// rule's for another site's row — and none for a row that is only a host.
+    private func menuLock(_ site: SiteModel) -> OriginLock? {
+        guard controller != nil else { return model.browser.lock }
+        if let tab = currentTab, tab.origin == site.id { return tab.mark }
+        return site.id.contains("://") ? OriginLock.of(origin: site.id) : nil
     }
 
     /// The chrome's model, with the engine's facts substituted where it has
@@ -273,7 +314,7 @@ struct ExploreScreen: View {
         return BrowserModel(
             url: engine.url,
             host: engine.host,
-            secure: browserSecure,
+            lock: browserLock,
             connected: currentTab?.connectedAddress != nil,
             canBack: engine.canGoBack,
             canForward: engine.canGoForward,
@@ -486,7 +527,7 @@ struct ExploreScreen: View {
                 content
             }
         }
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
         .overlay(alignment: .bottom) { toastView }
         .environment(\.walletTextScale, 1)
         .sheet(item: $sheet, onDismiss: {
@@ -668,10 +709,15 @@ struct ExploreScreen: View {
         }
     }
 
-    /// How tall a sheet may be: the site menu as tall as its rows, the rest
+    /// How tall a sheet may be: the site menu as tall as its rows, and the
+    /// connection panel — which is also the sheet a site asks to connect on —
+    /// as tall as what it holds, so its answers are on it from the first
+    /// frame at any text size (at half the screen, a longer explainer put
+    /// 连接 and 拒绝 under the edge until the sheet was dragged up); the rest
     /// half or whole.
     private func detents(for kind: ExploreSheetKind) -> Set<PresentationDetent> {
         if kind == .siteMenu, siteMenuHeight > 0 { return [.height(siteMenuHeight)] }
+        if kind == .connection, connectionHeight > 0 { return [.height(connectionHeight)] }
         return [.medium, .large]
     }
 
@@ -779,11 +825,12 @@ struct ExploreScreen: View {
         case .browsing:
             AddressBarView(
                 host: browserHost,
-                secure: addressBar.map { $0.lock == "closed" } ?? browserSecure,
+                lock: barMark ?? .insecure,
                 backLabel: loc.t("explore.back"),
                 menuLabel: loc.t("explore.siteMenu"),
                 insecureLabel: loc.t("connect.browser.a11yInsecure"),
-                showsLock: addressBar.map { $0.lock != "none" } ?? true,
+                localLabel: loc.t("connect.browser.a11yLocal"),
+                showsLock: barMark != nil,
                 url: addressBar?.url ?? model.browser.url,
                 addressLabel: loc.t("explore.addressBar"),
                 progress: loadProgress,
@@ -1095,8 +1142,9 @@ struct ExploreScreen: View {
                 SiteMenuSheetView(
                     site: site, statusLine: statusLine, items: items,
                     closeLabel: loc.t("explore.close"),
-                    secure: controller == nil || browserSecure,
+                    lock: menuLock(site),
                     insecureLabel: loc.t("connect.browser.a11yInsecure"),
+                    localLabel: loc.t("connect.browser.a11yLocal"),
                     onClose: { self.sheet = nil },
                     onPick: { id in
                         self.sheet = nil
@@ -1131,6 +1179,7 @@ struct ExploreScreen: View {
                 ConnectionPanelView(
                     connection: connection, closeLabel: loc.t("explore.close"),
                     insecureLabel: loc.t("connect.browser.a11yInsecure"),
+                    localLabel: loc.t("connect.browser.a11yLocal"),
                     onClose: { self.sheet = nil },
                     onSwitch: {
                         guard controller != nil else { return }
@@ -1155,7 +1204,9 @@ struct ExploreScreen: View {
                         controller?.pickSiteChain(origin: connection.origin, chainId: chainId)
                     }
                 )
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { connectionHeight = $0 }
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
     }
 }

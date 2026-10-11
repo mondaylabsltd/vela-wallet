@@ -91,7 +91,7 @@ struct ContactsScreen: View {
 
             WalletTabBar(tabs: model.tabs, selected: .contacts, onSelect: onSelectTab)
         }
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
         .walletTextScale(model.textScale)
         // ONE sheet, whose CONTENT changes — never two `.sheet` modifiers on
         // one view.

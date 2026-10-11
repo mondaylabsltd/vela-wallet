@@ -398,7 +398,7 @@
       "previewVersion": "アプリのバージョン",
       "previewPlatform": "プラットフォーム",
       "previewLanguage": "言語",
-      "previewRpc": "到達できない RPC",
+      "previewRpc": "接続できないネットワーク",
       "previewFailures": "直近の失敗",
       "previewNone": "なし"
     },

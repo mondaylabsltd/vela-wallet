@@ -78,7 +78,7 @@ struct GroupDetailScreen: View {
             )
                 .padding(.bottom, Tokens.Space.s8)
         }
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
         .walletTextScale(model.textScale)
         // ONE sheet, whose content changes — the rule the contacts list paid
         // for in dead taps.

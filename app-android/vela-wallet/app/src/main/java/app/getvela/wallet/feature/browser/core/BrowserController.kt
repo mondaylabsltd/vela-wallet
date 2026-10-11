@@ -23,6 +23,7 @@ import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
@@ -556,6 +557,38 @@ class BrowserEngine(
 }
 
 /**
+ * What the browser machine is told when the session's accounts change: the
+ * whole list, then the account in front.
+ *
+ * `space` on the switch is the one thing decided here, and it is decided from
+ * the ACCOUNT ([ParallelSpaceHook.isSpaceAccount]): true exactly when the
+ * account now in front is the parallel space's test wallet. Entering the
+ * space is an account switch like any other to the session, and the core
+ * used to treat it as one — every site the person had connected was re-pinned
+ * to the test wallet and written, and leaving, which removes that wallet,
+ * then dropped them all. The owner's Arc Orbs connection went that way on
+ * the 2026-10-11 walk. Told `space`, the core sets the person's sites aside
+ * untouched, keeps the space's own in memory, writes nothing to the site
+ * store while in there, and puts the person's back on the next switch that
+ * is not the space's.
+ *
+ * Not from the space's "active" flag: on the way out that flag is cleared
+ * before the test wallet's record is removed, and a switch stated as
+ * ordinary in between is the same loss again.
+ */
+object BrowserAccounts {
+    fun events(
+        addresses: List<String>,
+        active: String?,
+        nowMs: Double,
+        isSpaceAccount: (String) -> Boolean = ParallelSpaceHook::isSpaceAccount,
+    ): List<DbrEvent> = buildList {
+        add(DbrEvent.AccountsUpdated(addresses.takeIf { it.isNotEmpty() }))
+        if (!active.isNullOrBlank()) add(DbrEvent.AccountSwitched(active, nowMs, space = isSpaceAccount(active)))
+    }
+}
+
+/**
  * Settings' debug mode in the in-app browser (spec 091), kept by
  * [BrowserController]. The core's page gate hears it at start and on every
  * change (`debug_mode_changed`); every open engine swaps its script
@@ -754,10 +787,13 @@ class BrowserController(
     /** Settings' debug mode changed (spec 091). */
     fun debugModeChanged(on: Boolean) = debug.set(on)
 
-    /** Every wallet address and the active one: the core re-pins every grant to it. */
+    /**
+     * Every wallet address and the active one: the person's grants follow
+     * their active account — and stay exactly as they are while the parallel
+     * space's test wallet is in front ([BrowserAccounts]).
+     */
     fun accountsChanged(addresses: List<String>, active: String?) {
-        dispatch(DbrEvent.AccountsUpdated(addresses.takeIf { it.isNotEmpty() }))
-        if (!active.isNullOrBlank()) dispatch(DbrEvent.AccountSwitched(active, now()))
+        BrowserAccounts.events(addresses, active, now()).forEach(::dispatch)
     }
 
     /** The chains a site may switch or add to — the wallet's networks. */

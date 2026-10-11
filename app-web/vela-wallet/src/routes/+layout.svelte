@@ -29,6 +29,7 @@
 	import { inExtension } from '$lib/dapp/transport';
 	import { session } from '$lib/session/core/session.svelte';
 	import { localeOfPath } from '$lib/i18n/locales';
+	import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 	import { trackPageview } from '$lib/analytics';
 
 	let { children } = $props();
@@ -70,6 +71,16 @@
 	 * a request was owed, its sheet with it (issue 317, `localeOfPath`).
 	 */
 	const locale = $derived(page.params.locale ?? localeOfPath(page.url.pathname) ?? 'en');
+
+	/**
+	 * Said once, for the money formatter: which currency a bare "¥" names
+	 * depends on the reader's language (the core's `fiat_symbol`), and a
+	 * figure is formatted far from anything that knows the locale
+	 * (`page-language.svelte.ts`). A pre-effect runs as it is created, so
+	 * this is before any page below renders its first figure — and again
+	 * whenever the locale in the path changes (`layout.svelte.test.ts`).
+	 */
+	$effect.pre(() => setPageLanguage(locale));
 
 	const parallelHref = $derived(resolve('/[locale]/parallel', { locale }));
 

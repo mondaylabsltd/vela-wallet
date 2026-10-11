@@ -398,7 +398,7 @@
       "previewVersion": "Versione app",
       "previewPlatform": "Piattaforma",
       "previewLanguage": "Lingua",
-      "previewRpc": "RPC irraggiungibile",
+      "previewRpc": "Reti irraggiungibili",
       "previewFailures": "Errori recenti",
       "previewNone": "Nessuno"
     },

@@ -371,7 +371,7 @@ struct SigningSheet: View {
                            refresh: onRefreshFee == nil ? nil : model.feeRefresh,
                            onRefresh: onRefreshFee, chevron: model.feeChevron,
                            measuring: model.feeRefresh?.refreshing ?? false,
-                           reserve: model.feeReserve)
+                           reserve: model.feeReserve, rooms: model.feeRooms)
         }
     }
 

@@ -54,6 +54,7 @@ fn browser() -> Browser {
     sut.dispatch(DEvent::AccountSwitched {
         address: A1.to_owned(),
         now_ms: T0,
+        space: false,
     });
     sut.resolve(DRes::SitesListed { sites: Vec::new() });
     sut.dispatch(page("t1", json!({"t":"hello","doc":"d1"})));

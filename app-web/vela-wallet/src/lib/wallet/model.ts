@@ -71,11 +71,33 @@ export interface BalanceModel {
 
 export type ActivityKind = 'sent' | 'received' | 'dapp';
 
+/**
+ * A dApp row's title in the two parts it may be broken between (device walk
+ * of 2026-10-11, item 1): what was done, and where — "Contract interaction" /
+ * "on arcorbs.game3.app", 「在 arcorbs.game3.app」 / 「合约交互」. In the
+ * language's own order; joined, they are the title exactly.
+ */
+export type ActivityTitlePart =
+	/** What was done. Whole, on one line. */
+	| { kind: 'action'; text: string }
+	/**
+	 * Where: the words that join it to the action (" on ", 「在 」, 「で」) stay
+	 * with it, around the place itself — which is the one part that may be
+	 * cut, in its middle: `head` gives way, `tail` (the end of a host, the part
+	 * that says whose site it is) is kept.
+	 */
+	| { kind: 'place'; before: string; head: string; tail: string; after: string };
+
 export interface ActivityRowModel {
 	/** Live rows only: the feed item's id, so a tap can name what it hit. */
 	id?: string;
 	kind: ActivityKind;
 	title: string;
+	/**
+	 * `title`, in the parts a line may be broken between. Present on a live
+	 * dApp row that names a place; absent, the title is one text.
+	 */
+	titleParts?: ActivityTitlePart[];
 	subtitle: string;
 	amount: string;
 	unit: string;

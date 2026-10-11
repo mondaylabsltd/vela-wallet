@@ -6,6 +6,7 @@
  * browser engine and a real dApp registry arrive, they replace the fixture
  * layer that builds these and nothing else.
  */
+import type { OriginLock } from '$lib/core/generated/OriginLock';
 
 export type ExploreStateId =
 	| 'e1'
@@ -79,10 +80,25 @@ export interface DemoPageModel {
 	ctaTint: string;
 }
 
+/**
+ * The mark a site's address wears, and its words — decided by the core
+ * (`OriginLock`, `site-mark.ts`), never here and never from "is it safe to use
+ * the wallet from": a padlock means the connection is encrypted, and is drawn
+ * for https alone.
+ */
+export interface SiteMarkModel {
+	lock: OriginLock;
+	/** What a status line says: "Secure site" / "Local page" / "Insecure site — not encrypted". */
+	words: string;
+	/** The mark's own name, where it stands with no words beside it (an address bar). */
+	label: string;
+}
+
 export interface BrowserModel {
 	url: string;
 	host: string;
-	secure: boolean;
+	/** The address's mark — a padlock, the local mark, or the warning. */
+	mark: SiteMarkModel;
 	connected: boolean;
 	/**
 	 * The page has somewhere to go back to. Back is never disabled on the
@@ -124,6 +140,8 @@ export interface GroupManageRow {
 export interface ConnectionModel {
 	title: string;
 	site: SiteModel;
+	/** The site's mark; the status line leads with its words. */
+	mark: SiteMarkModel;
 	statusLine: string;
 	account: { name: string; address: string; identiconSvg: string };
 	switchLabel: string;
@@ -143,6 +161,12 @@ export interface GroupManageSheet {
 export interface SiteMenuSheet {
 	kind: 'site-menu';
 	site: SiteModel;
+	/**
+	 * The open page's mark. Absent on a history row's menu: its second line
+	 * is where the site has BEEN — there is no page open to be secure, and a
+	 * padlock beside a bare host said there was.
+	 */
+	mark?: SiteMarkModel;
 	statusLine: string;
 	items: MenuItemModel[];
 }

@@ -26,7 +26,7 @@ import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedLine } from '$lib/core/generated/FeedLine';
 import type { FeedRow } from '$lib/core/generated/FeedRow';
 import type { FeedView } from '$lib/core/generated/FeedView';
-import { maskedAmount } from '$lib/core/client';
+import { fiatSymbol, maskedAmount } from '$lib/core/client';
 import { formatRelativeTime } from '$lib/core/kernels';
 import {
 	formatDate,
@@ -38,7 +38,7 @@ import { chainName, explorerAddressURL, explorerBaseURL } from '$lib/services/ne
 import { balanceTokenMark, chainLogoURL } from '$lib/flows/marks';
 import { shortenAddress } from './identity';
 import { fill } from './messages';
-import { currencyGlyph, currencySymbol } from '$lib/settings/fixtures';
+import { pageLanguage } from '$lib/i18n/page-language.svelte';
 import { BALANCE_MASK, chainColor, MASK } from './fixtures';
 import type { WalletMessages } from './messages';
 
@@ -51,6 +51,7 @@ export type RowMessages = Pick<WalletMessages, 'activity'>;
 import type {
 	ActivityGroupModel,
 	ActivityRowModel,
+	ActivityTitlePart,
 	AssetDetailPanelModel,
 	AssetRowModel,
 	BalanceModel,
@@ -205,6 +206,32 @@ export function figureCurrency(currency: CurrencyView): string | undefined {
 	return currency.rate !== null ? currency.code : 'USD';
 }
 
+/** The pattern space between a symbol that ends in a letter and its digits. */
+const NBSP = '\u00A0';
+
+/**
+ * The symbol a figure in `code` LEADS with, as the page's language writes it
+ * — or `null` when the currency has no glyph of its own and is named by its
+ * code instead.
+ *
+ * The symbol is the core's (`fiat_symbol`, device walk of 2026-10-11, item 8):
+ * one rule for all four apps, so a figure reads the same string on the home
+ * total, a fee's worth, the send form and Settings' currency row. The web's
+ * own table wrote the Hong Kong dollar with the US dollar's "$" and the yen
+ * and the yuan with one "¥"; under the core's rule no two currencies are
+ * written alike within a language ("¥" is the reader's own of the two, the
+ * other is "JP¥" / "CN¥").
+ *
+ * What is the web's is only the spacing, and it is the core formatter's too:
+ * a symbol that ends in a letter ("zł", "Rp") is held off the digits by a
+ * no-break space, and a glyph sits against them.
+ */
+function leadingSymbol(code: string): string | null {
+	const symbol = fiatSymbol(code, pageLanguage());
+	if (symbol === code.trim().toUpperCase()) return null;
+	return /\p{L}$/u.test(symbol) ? symbol + NBSP : symbol;
+}
+
 /** A fiat figure, in the pieces a surface draws it from. */
 export interface MoneyParts {
 	code: string;
@@ -240,7 +267,9 @@ export function moneyParts(usd: number, currency: CurrencyView): MoneyParts | nu
 	// way here and another way on the next machine is a wallet whose totals a
 	// person has to re-read before believing.
 	const grouped = groupDigits(whole);
-	const glyph = currencyGlyph(code);
+	// A currency with no glyph leads with its code, held off the digits the
+	// same way ("CHF 4.00").
+	const glyph = leadingSymbol(code) ?? code + NBSP;
 	return { code, glyph, integer: `${glyph}${grouped}`, decimals: frac };
 }
 
@@ -263,8 +292,8 @@ export function moneyText(usd: number, currency: CurrencyView): string {
  * the figure is in token units, and the unit is the token's symbol.
  *
  * A currency with a real symbol leads the figure ("$4.00"), exactly as
- * `moneyText` writes it on the line beneath; one the catalog has no symbol for
- * follows it as its code ("4.00 PLN"), and a token always follows
+ * `moneyText` writes it on the line beneath; one the core has no symbol for
+ * follows it as its code ("4.00 CHF"), and a token always follows
  * ("0.00075 BNB"). Nothing here defaults to "$": an unknown unit is no
  * adornment at all, which is a gap a person can see rather than a claim.
  */
@@ -273,7 +302,7 @@ export function unitAdornment(
 	tokenSymbol: string
 ): { prefix?: string; suffix?: string } {
 	if (code === null) return tokenSymbol === '' ? {} : { suffix: tokenSymbol };
-	const symbol = currencySymbol(code);
+	const symbol = leadingSymbol(code);
 	return symbol === null ? { suffix: code } : { prefix: symbol };
 }
 
@@ -295,6 +324,21 @@ export function trimBalance(balance: string, maxDecimals = 6): string {
 	const [whole, frac] = balance.split('.');
 	const cut = frac.slice(0, maxDecimals).replace(/0+$/, '');
 	return cut === '' ? whole : `${whole}${numberSeparators().decimal}${cut}`;
+}
+
+/**
+ * A figure the core has ALREADY cut for reading (`cut_token_amount` — the
+ * remainder of a split, `SendView.split_remaining_display`), with the
+ * person's decimal mark and nothing else done to it.
+ *
+ * Not `tokenAmountText`: that rounds half up, which is right for a balance
+ * and wrong for what is LEFT — "1.199999999999999999" left read "1.2 left",
+ * more than there is. The core cuts, never rounds; this only writes its
+ * figure the way the balance beside it is written. Every digit the core gave
+ * is kept: dust is cut at its first significant digit, not to "0".
+ */
+export function cutFigureText(figure: string): string {
+	return trimBalance(figure, figure.length);
 }
 
 /**
@@ -628,7 +672,12 @@ export function liveAssetRow(
 		logoUrls: art.logoUrls,
 		badgeLogoUrl: art.badgeLogoUrl,
 		badgeHidden: art.badgeHidden,
-		balance: hidden ? MASK : tokenAmountText(token.balance),
+		// Hidden, the coin stays (the core's `masked_amount`, device walk of
+		// 2026-10-11, item 3): "•••• BNB" says what kind of money without
+		// saying how much, on this row as on a feed row and the token's own
+		// page. The worth beside it is the bare mask — its unit is the
+		// display currency, which every figure on the screen shares.
+		balance: hidden ? maskedAmount(token.symbol) : tokenAmountText(token.balance),
 		fiat,
 		masked: hidden
 	};
@@ -689,6 +738,7 @@ export function liveActivityRow(
 	// unlimited allowance or a figureless signature does not.
 	const masked = hidden && item.figure_maskable;
 	const back = item.dapp?.received ?? null;
+	const titleParts = item.dapp ? dappTitleParts(item.dapp, m) : undefined;
 	return {
 		id: item.id,
 		kind,
@@ -699,6 +749,8 @@ export function liveActivityRow(
 				: kind === 'sent'
 					? m.activity.sent
 					: m.activity.dapp,
+		// Where the title may be broken (item 1 of the 2026-10-11 walk).
+		...(titleParts === undefined ? {} : { titleParts }),
 		// The core's second line (spec 093), worded: status first when the
 		// tracker has not closed the row (RG2, 087 F04), then the site, the
 		// network, or whom a transfer went to — in the core's order.
@@ -832,6 +884,84 @@ export function dappTitle(dapp: FeedDapp, m: RowMessages): string {
 }
 
 /**
+ * The same title, in the two parts a row may break it between (device walk of
+ * 2026-10-11, item 1).
+ *
+ * The owner's row read 「在 arcorbs.game3.app 合 / 约交互」 on the phone: the
+ * title was one wrapping text, and a wrapping text breaks wherever the width
+ * runs out — inside the action, in a language written without spaces. The
+ * rule: a title wraps only BETWEEN what was done and where; the action is
+ * never broken; the site is cut in its middle if it must be.
+ *
+ * The parts are read off the corpus's own template (`history.dappRowTitle`,
+ * "{{intent}} on {{place}}" / 「在 {{place}} {{intent}}」 / 「{{place}}で
+ * {{intent}}」), so the order and the joining words are each language's. What
+ * joins them stays with the place — 「在 arcorbs.game3.app」 over 「合约交互」,
+ * "Contract interaction" over "on arcorbs.game3.app" — and the white space
+ * between the two parts ends the first, so the parts joined are the title
+ * exactly. `undefined` when there is no place, or the template is not the two
+ * placeholders this reads: the title is then drawn as one text.
+ */
+export function dappTitleParts(dapp: FeedDapp, m: RowMessages): ActivityTitlePart[] | undefined {
+	if (dapp.place == null) return undefined;
+	const template = m.activity.dappRowTitle;
+	const INTENT = '{{intent}}';
+	const PLACE = '{{place}}';
+	const i = template.indexOf(INTENT);
+	const p = template.indexOf(PLACE);
+	if (i < 0 || p < 0) return undefined;
+	const intent = dappVerb(dapp, m);
+	const { head, tail } = middleCut(dapp.place);
+	if (i < p) {
+		// "<a>{{intent}}<b>{{place}}<c>": the space that opens <b> ends the action.
+		const between = template.slice(i + INTENT.length, p);
+		const space = /^\s*/.exec(between)?.[0] ?? '';
+		return [
+			{ kind: 'action', text: template.slice(0, i) + intent + space },
+			{
+				kind: 'place',
+				before: between.slice(space.length),
+				head,
+				tail,
+				after: template.slice(p + PLACE.length)
+			}
+		];
+	}
+	// "<a>{{place}}<b>{{intent}}<c>": <b> stays with the place, its space included.
+	return [
+		{
+			kind: 'place',
+			before: template.slice(0, p),
+			head,
+			tail,
+			after: template.slice(p + PLACE.length, i)
+		},
+		{ kind: 'action', text: intent + template.slice(i + INTENT.length) }
+	];
+}
+
+/**
+ * Where a place gives way when its line is too short for it: `head` is cut
+ * (and ends in "…"), `tail` is kept. A site's host keeps its end — the
+ * registrable domain, the part that says whose site it is
+ * (`app.uniswap.org.evil.xyz` must never read as `app.uniswap.org…`): its
+ * last two labels, when they are short enough to leave the head something.
+ * Anything else — a protocol's name — keeps its last few characters. A place
+ * too short to be worth cutting in two is all head.
+ */
+export function middleCut(place: string): { head: string; tail: string } {
+	const KEPT = 6;
+	const LONGEST_KEPT = 18;
+	if (place.length <= KEPT * 2) return { head: place, tail: '' };
+	const labels = place.split('.');
+	const host = labels.length >= 3 && !/\s/.test(place);
+	const domain = host ? '.' + labels.slice(-2).join('.') : '';
+	const at =
+		host && domain.length <= LONGEST_KEPT ? place.length - domain.length : place.length - KEPT;
+	return { head: place.slice(0, at), tail: place.slice(at) };
+}
+
+/**
  * The core emits headers and items already interleaved (invariant ⑥).
  *
  * `rows` is the list to draw, and WHICH list is the caller's to say: History
@@ -889,8 +1019,15 @@ export function liveAssetDetail(
 	const hidden = view.hidden;
 	const art = balanceTokenMark(token);
 	const held = parseFloat(token.balance) || 0;
+	// A worth that exists is masked in place when hidden, never dropped: the
+	// line read "$496.46 · BNB Chain" shown and "BNB Chain" hidden, as if the
+	// token had no price. One with no price has no worth to hide.
 	const fiat =
-		hidden || token.price_usd === null ? undefined : moneyText(held * token.price_usd, currency);
+		token.price_usd === null
+			? undefined
+			: hidden
+				? MASK
+				: moneyText(held * token.price_usd, currency);
 	const rows = (inputs.feed?.rows ?? [])
 		.flatMap((row) => (row.type === 'item' ? [row.item] : []))
 		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol)

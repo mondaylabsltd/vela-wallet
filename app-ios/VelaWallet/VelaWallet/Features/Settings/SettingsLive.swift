@@ -476,14 +476,35 @@ enum SettingsLive {
     /// that did not answer leaves the device's own memory on screen, labelled,
     /// without sync badges; one that answered with nothing is NOT called
     /// unreachable.
+    ///
+    /// `device` is what this device's own record says (`WalletKeys
+    /// .deviceOnly`), known before any chain is asked: while still asking,
+    /// the block draws THOSE rows — every key the wallet has, each with the
+    /// room its badges will take — so the registry's answer fills rows in
+    /// instead of adding them, and nothing under the block moves (iPhone walk
+    /// 2026-10-10: one skeleton row, then three keys, and the page dropped
+    /// ~250 pt). Such a row is `pending`: it says what the record knows for
+    /// certain and nothing the answer may contradict — no kind, no mark, no
+    /// made-up name, nothing to open. With neither there is one skeleton
+    /// row, for the instant before the record is read.
     static func withWalletKeys(
         _ keys: WalletKeys.Result?,
+        device: WalletKeys.Result? = nil,
         backup: RegistryBackup.Check?,
         on model: SettingsScreenModel,
         loc: Loc
     ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
-        let rows = (keys?.rows ?? []).enumerated().map { index, row -> WalletKeyRowModel in
+        let known = keys ?? device
+        // The registry is still being asked: the rows are the device's own,
+        // and say only what its record knows for certain. What the answer
+        // may contradict is left unsaid (owner's iPhone, 2026-10-11: a key
+        // read 「内置通行密钥」 with a person glyph for three seconds, then
+        // 「安全密钥」 with a key — the record's method falls back to
+        // "platform"). A registry that did not answer is `keys` with the
+        // device as its source: final, and shown as the device reads it.
+        let pending = keys == nil
+        let rows = (known?.rows ?? []).enumerated().map { index, row -> WalletKeyRowModel in
             var body = row.publicKeyHex.hasPrefix("0x") ? String(row.publicKeyHex.dropFirst(2)) : row.publicKeyHex
             if body.count == 130, body.hasPrefix("04") { body = String(body.dropFirst(2)) }
             // Where the key LIVES, by its place — never "Trusted Signer"
@@ -496,12 +517,13 @@ enum SettingsLive {
             }
             // The vault's name outranks the generic line.
             let holder = row.key.providerName.isEmpty ? loc.t(line) : row.key.providerName
+            let numbered = loc.t(k.keysKeyN).replacingOccurrences(of: "{{n}}", with: String(index + 1))
             return WalletKeyRowModel(
                 id: index,
-                name: row.key.name.isEmpty
-                    ? loc.t(k.keysKeyN).replacingOccurrences(of: "{{n}}", with: String(index + 1))
-                    : row.key.name,
-                holder: holder,
+                // A name the record holds is the device's fact and stays; one
+                // it does not hold is the registry's to give, or nobody's.
+                name: row.key.name.isEmpty ? (pending ? "" : numbered) : row.key.name,
+                holder: pending ? "" : holder,
                 fingerprint: body.count >= 8 ? "\(body.prefix(4))…\(body.suffix(4))".lowercased() : "",
                 pills: [
                     // The key this device signs with stands out, first
@@ -511,7 +533,10 @@ enum SettingsLive {
                     row.synced.map { KeyPillModel(text: loc.t($0 ? k.keysSynced : k.keysNotSynced), tone: $0 ? .synced : .local) },
                 ].compactMap { $0 },
                 // The registry explorer's facts, in its order; what is absent is left out.
-                details: [
+                // None while it is still being asked: a row opened on the
+                // device's two facts would grow by the registry's three when
+                // they land, under the person's finger.
+                details: pending ? [] : [
                     KeyDetailModel(label: loc.t(k.keysPublicKey), value: row.publicKeyHex.isEmpty ? "" : "0x" + body130(row.publicKeyHex), mono: true, copy: true),
                     KeyDetailModel(label: loc.t(k.keysCredential), value: row.credentialId, mono: true, copy: true),
                     KeyDetailModel(label: "AAGUID", value: row.key.aaguid, mono: true, copy: false),
@@ -522,12 +547,15 @@ enum SettingsLive {
                     ),
                     KeyDetailModel(label: loc.t(k.keysAttestation), value: row.attestationHex, mono: true, copy: false),
                 ].filter { !$0.value.isEmpty },
-                key: row.key
+                key: pending ? nil : row.key,
+                pending: pending,
+                nameRoom: numbered
             )
         }
         // A record with no key at all (the DEBUG read-only seed) has nothing to
-        // list and nothing to back up: no block, rather than "Keys 0".
-        if keys != nil, rows.isEmpty { return model }
+        // list and nothing to back up: no block, rather than "Keys 0" — and
+        // none while asking either, when the device already says so.
+        if known != nil, rows.isEmpty { return model }
         var next = model
         next.keys = WalletKeysModel(
             title: loc.t(k.keysTitle),
@@ -539,7 +567,12 @@ enum SettingsLive {
             backup: ethereumBackupRow(backup, loc: loc),
             backupExplain: backupExplain(backup, loc: loc),
             copyLabel: loc.t(k.keysCopy),
-            copiedLabel: loc.t(k.keysCopied)
+            copiedLabel: loc.t(k.keysCopied),
+            badgeRoom: [
+                [loc.t(k.keysUserVerified), loc.t(k.keysSynced)],
+                [loc.t(k.keysUserVerified), loc.t(k.keysNotSynced)],
+            ],
+            holderRoom: [k.keysProviderPlatform, k.keysProviderSecurityKey, k.keysProviderGeneric].map { loc.t($0) }
         )
         return next
     }
@@ -702,7 +735,7 @@ enum SettingsLive {
             updated.rows = section.rows.map { row in
                 guard row.id == "currency" else { return row }
                 var changed = row
-                changed.value = currencyRowValue(view)
+                changed.value = currencyRowValue(view, language: loc.resolvedLanguage)
                 return changed
             }
             return updated
@@ -711,7 +744,10 @@ enum SettingsLive {
             title: model.currencySheet.title,
             rows: CurrencyCatalog.entries.map { entry in
                 SelectRowModel(
-                    id: entry.code, label: entry.code, glyph: entry.glyph,
+                    // The sign a figure in it is written with — the core's,
+                    // in this language: no two rows of the picker alike.
+                    id: entry.code, label: entry.code,
+                    glyph: FiatSign.symbol(entry.code, language: loc.resolvedLanguage),
                     caption: entry.name, selected: entry.code == view.code
                 )
             },
@@ -736,7 +772,12 @@ enum SettingsLive {
     /// to fall back to "USD · $1,234.56" whenever the rate was missing, which
     /// told somebody who had picked CNY that they had not — the code alone is
     /// the honest row: their choice, and no figure (spec 072).
-    static func currencyRowValue(_ view: CurrencyViewWire) -> String {
+    ///
+    /// The sample wears the sign every figure in that currency wears (the
+    /// core's, `FiatSign`): 「CNY · ¥8,262.68」 for a Chinese reader, "CNY ·
+    /// CN¥8,262.68" for an English one. A currency whose only sign is its
+    /// code says the code once: "CHF 1,113.20".
+    static func currencyRowValue(_ view: CurrencyViewWire, language: String) -> String {
         let sample = 1_234.56
         guard view.committed else {
             // The person's own choice, on its way (PR 3, `pending`): named
@@ -751,10 +792,11 @@ enum SettingsLive {
             // its value lands with the commit.
             return ""
         }
-        guard let rate = view.rate, rate > 0, let entry = CurrencyCatalog.entry(view.code) else {
+        guard let rate = view.rate, rate > 0, !view.code.isEmpty else {
             return view.code
         }
-        return "\(view.code) · \(entry.glyph)\(format(sample * rate))"
+        let figure = FiatSign.lead(view.code, language: language) + format(sample * rate)
+        return FiatSign.isCode(view.code, language: language) ? figure : "\(view.code) · \(figure)"
     }
 
     /// In the person's own number format, as every other figure is.
@@ -1458,11 +1500,27 @@ enum SettingsLive {
         let platform: String
         /// The UI language tag in use.
         let language: String
-        /// Display NAMES of networks whose whole RPC pool failed. Never URLs.
+        /// Display NAMES of networks whose whole RPC pool failed
+        /// (`unreachableNames`). Never URLs, never a bare chain id.
         let unreachable: [String]
         /// The last failures the app logged, as `scope: kind` (spec 082 RE11,
         /// `VelaLog.recentFailures`) — no host and no hash is ever in one.
         var failures: [String] = []
+    }
+
+    /// The networks a report says could not be reached, each by its NAME —
+    /// the wallet's own name for it, the person's own networks included —
+    /// and one nobody has a name for in the corpus's words, "Chain 1625"
+    /// (`assets.chainFallback`). Never a bare id: 「无法连接的 RPC 1625」 read
+    /// like a count on the phone (device walk 2026-10-11), and this shell's
+    /// "chain-1625" was a string of its own that no language had.
+    static func unreachableNames(_ chainIds: [Int], name: (Int) -> String?, loc: Loc) -> [String] {
+        chainIds.map { chainId in
+            let named = name(chainId)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return named.isEmpty
+                ? loc.t("assets.chainFallback", vars: ["chainId": String(chainId)])
+                : named
+        }
     }
 
     /// The feedback sheet's "what will be sent" block, from THIS device

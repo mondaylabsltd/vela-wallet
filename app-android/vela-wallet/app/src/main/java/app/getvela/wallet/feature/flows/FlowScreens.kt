@@ -17,7 +17,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.core.platform.VelaHaptic
-import app.getvela.wallet.core.designsystem.components.VelaDangerButton
 import app.getvela.wallet.core.platform.Clipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -31,6 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -585,23 +587,48 @@ fun TxDetailBody(
             )
         }
         if (model.deleteLabel != null && onDelete != null) {
-            if (model.explorerShown) Spacer(modifier = Modifier.height(VelaSpacing.md))
-            // Spec 082 RJ18: a pending record's delete is quiet — the trace
-            // that says "don't send it again" is not one red tap from gone.
-            if (model.deleteQuiet) {
-                VelaSecondaryButton(
-                    text = model.deleteLabel,
-                    onClick = onDelete,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
-                VelaDangerButton(
-                    text = model.deleteLabel,
-                    onClick = onDelete,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            if (model.explorerShown) Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            TxDeleteAction(label = model.deleteLabel, quiet = model.deleteQuiet, onDelete = onDelete)
         }
+    }
+}
+
+/** The detail's "Delete record" — a transfer's and a dApp record's alike. */
+const val TX_DELETE_TAG = "tx-delete"
+
+/**
+ * 删除记录, as a quiet text action under the useful ones.
+ *
+ * It was a full-width button filled with the error colour: the heaviest
+ * thing on the sheet, under a hash and "View on explorer" — the 2026-10-11
+ * walk — for an action that only forgets a local record and that hardly
+ * anybody opens the sheet for. It is words now, in the error colour, with a
+ * finger's height to tap and no fill and no border: last, and lightest.
+ *
+ * Spec 082 RJ18 still holds: a PENDING record's delete is quieter again —
+ * plain ink — so the trace that says "don't send it again" is not one red
+ * tap from gone while the operation may still land.
+ */
+@Composable
+private fun TxDeleteAction(label: String, quiet: Boolean, onDelete: () -> Unit) {
+    val colors = VelaTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = VelaSizing.hitTarget)
+            .clip(RoundedCornerShape(VelaRadius.md))
+            .clickable(role = Role.Button, onClick = onDelete)
+            .testTag(TX_DELETE_TAG),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (quiet) colors.fgMuted else colors.errorBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.medium,
+            fontSize = VelaTextSize.base,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

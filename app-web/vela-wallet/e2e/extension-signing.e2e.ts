@@ -126,6 +126,54 @@ test.describe('signing for a dApp', () => {
 		await context.close();
 	});
 
+	/**
+	 * Device walk of 2026-10-11, item 7. On Android a page that signed before
+	 * it connected left 「此网站尚未连接 · personal_sign」 on its tab for as long
+	 * as the tab lived. The extension has no tab banner; what it has is the
+	 * request surface, and this walks it: a signature asked too early is
+	 * refused to the SITE (4100) and its window goes; once the site connects,
+	 * the same request is taken up, and no page of the extension — the wallet,
+	 * the request window — says the site is not connected.
+	 */
+	test('a signature asked before connecting is refused, and nothing says so once the site is connected', async () => {
+		const context = await loadExtension();
+		const id = extensionId();
+		await seedWallet(context, id);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+
+		const ask = () =>
+			page.evaluate(([message, address]) => window.__ask('personal_sign', [message, address]), [
+				MESSAGE_HEX,
+				FIXTURE_ONE
+			] as const) as Promise<AskResult>;
+
+		const early = await ask();
+		expect(early.ok).toBe(false);
+		expect(early.code).toBe(4100);
+		// The window that rose for it has nothing left to say, and goes.
+		await noRequestWindow(context);
+
+		await connect(context, page);
+
+		const asked = ask();
+		const win = await requestWindow(context);
+		await expect(win.getByText('Hello, Vela')).toBeVisible({ timeout: 30_000 });
+		const said: string[] = [];
+		for (const open of context.pages()) {
+			if (!open.url().startsWith('chrome-extension://')) continue;
+			said.push(await open.evaluate(() => document.body.innerText));
+		}
+		expect(said.length).toBeGreaterThan(1);
+		for (const text of said) {
+			expect(text).not.toMatch(/isn.t connected|Connect Vela Wallet to this site first/i);
+		}
+
+		await win.getByRole('button', { name: 'Close', exact: true }).click();
+		expect((await asked).code).toBe(4001);
+		await context.close();
+	});
+
 	test('the sheet is the ONLY signing path: dismissing it refuses', async () => {
 		const context = await loadExtension();
 		const id = extensionId();

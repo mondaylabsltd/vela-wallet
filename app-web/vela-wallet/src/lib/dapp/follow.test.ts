@@ -10,7 +10,7 @@
  * writes exactly those into the extension's storage.
  */
 import '$lib/i18n/wasm-init.server';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
 import { SessionFollower, followActiveAccount, normalizeGrantSpelling } from './follow';
@@ -37,7 +37,8 @@ describe('what the core says an account switch tells a site', () => {
 			storedGrant: toWireGrant(grantFor('https://app.example', ALICE, 8453))!,
 			currentAddresses: [ALICE, BOB],
 			activeAddress: BOB,
-			nowMs: NOW
+			nowMs: NOW,
+			space: false
 		});
 		expect(plan.kind).toBe('repin');
 		if (plan.kind !== 'repin') return;
@@ -56,7 +57,8 @@ describe('what the core says an account switch tells a site', () => {
 			storedGrant: toWireGrant(grantFor('https://app.example', ALICE))!,
 			currentAddresses: [BOB, CAROL],
 			activeAddress: CAROL,
-			nowMs: NOW
+			nowMs: NOW,
+			space: false
 		});
 		expect(plan.kind).toBe('remove');
 	});
@@ -70,9 +72,52 @@ describe('what the core says an account switch tells a site', () => {
 			storedGrant: toWireGrant(grantFor('https://app.example', ALICE))!,
 			currentAddresses: null,
 			activeAddress: BOB,
-			nowMs: NOW
+			nowMs: NOW,
+			space: false
 		});
 		expect(plan.kind).not.toBe('remove');
+	});
+});
+
+/**
+ * Device walk of 2026-10-11, item 5. The parallel space swaps the wallet's
+ * account list for its fixtures, so asked the ordinary way every grant of the
+ * person's is "a site whose account left the wallet" — and entering the space
+ * removed them all. `space` tells the core whose list it is being shown.
+ */
+describe('what the core says inside the parallel space', () => {
+	// ALICE is the person's account; the space holds BOB and CAROL.
+	const question = {
+		origin: 'https://app.example',
+		storedGrant: toWireGrant(grantFor('https://app.example', ALICE, 8453))!,
+		currentAddresses: [BOB, CAROL],
+		activeAddress: BOB,
+		nowMs: NOW
+	};
+
+	it('leaves a grant of the person’s alone — not removed, not re-pinned', () => {
+		expect(planAccountSwitch({ ...question, space: true })).toEqual({ kind: 'none' });
+		// Whatever the space's account list says, a cold read included.
+		for (const currentAddresses of [null, []]) {
+			expect(planAccountSwitch({ ...question, currentAddresses, space: true })).toEqual({
+				kind: 'none'
+			});
+		}
+		// The very same facts outside a space DO remove it: that is the rule
+		// the space is the exception to, and what entering it used to ask.
+		expect(planAccountSwitch({ ...question, space: false })).toEqual({ kind: 'remove' });
+	});
+
+	it('a grant made inside follows the space’s own accounts', () => {
+		const plan = planAccountSwitch({
+			...question,
+			storedGrant: toWireGrant(grantFor('https://app.example', BOB))!,
+			activeAddress: CAROL,
+			space: true
+		});
+		expect(plan.kind).toBe('repin');
+		if (plan.kind !== 'repin') return;
+		expect(plan.grant.address).toBe(checksumAddress(CAROL));
 	});
 });
 
@@ -95,6 +140,7 @@ describe('followActiveAccount writes what the core authored', () => {
 	afterEach(() => {
 		store.clear();
 		delete (globalThis as { chrome?: unknown }).chrome;
+		vi.unstubAllGlobals();
 	});
 
 	it('re-pins every granted site, removes the orphaned one, leaves the current one alone', async () => {
@@ -122,6 +168,44 @@ describe('followActiveAccount writes what the core authored', () => {
 		expect(store.get(PERM_PREFIX + 'https://c.example')).toEqual(
 			grantFor('https://c.example', BOB)
 		);
+	});
+
+	it('told it is in the parallel space, touches no grant of the person’s', async () => {
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
+		// The person's: one on ALICE, one on an account long gone. The space's
+		// own: made inside, on BOB.
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		store.set(
+			PERM_PREFIX + 'https://b.example',
+			grantFor('https://b.example', `0x${'d4'.repeat(20)}`)
+		);
+		store.set(PERM_PREFIX + 'https://c.example', grantFor('https://c.example', BOB, 1));
+		const before = JSON.stringify([...store]);
+
+		// In the space on BOB: nothing to do at all.
+		expect(
+			await followActiveAccount({ activeAddress: BOB, addresses: [BOB, CAROL], space: true })
+		).toEqual({ repinned: [], removed: [] });
+		expect(JSON.stringify([...store])).toBe(before);
+
+		// A switch INSIDE the space: its own site follows, the person's stay.
+		const outcome = await followActiveAccount({
+			activeAddress: CAROL,
+			addresses: [BOB, CAROL],
+			nowMs: NOW,
+			space: true
+		});
+		expect(outcome).toEqual({ repinned: ['https://c.example'], removed: [] });
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual(
+			grantFor('https://a.example', ALICE)
+		);
+		expect(store.get(PERM_PREFIX + 'https://b.example')).toEqual(
+			grantFor('https://b.example', `0x${'d4'.repeat(20)}`)
+		);
+		expect(store.get(PERM_PREFIX + 'https://c.example')).toMatchObject({
+			address: checksumAddress(CAROL),
+			chainId: 1
+		});
 	});
 
 	it('is a no-op off the extension', async () => {
@@ -253,6 +337,41 @@ describe('followActiveAccount writes what the core authored', () => {
 		expect(outcome).toEqual({ repinned: ['https://a.example'], removed: [] });
 		expect(store.get(PERM_PREFIX + 'https://a.example')).toMatchObject({
 			address: checksumAddress(BOB)
+		});
+	});
+
+	/**
+	 * Item 5 of the 2026-10-11 walk. The follower is what runs on every boot
+	 * and every switch; inside the parallel space the session it is shown holds
+	 * the fixtures. It reads the space's stored flag — the one fact a side
+	 * panel that was already open shares with the tab the space was entered
+	 * in — and the person's sites are left exactly as they were.
+	 */
+	it('inside the parallel space, leaves every site of the person’s as it was', async () => {
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		const before = JSON.stringify([...store]);
+		vi.stubGlobal('localStorage', {
+			getItem: (key: string) => (key === 'vela.parallelSpace' ? '1' : null)
+		});
+
+		// The space's accounts are BOB and CAROL; ALICE is nowhere among them.
+		const follower = new SessionFollower(recording([]));
+		expect(await follower.note(view(BOB, [BOB, CAROL]), { nowMs: NOW })).toEqual({
+			repinned: [],
+			removed: []
+		});
+		expect(await follower.note(view(CAROL, [BOB, CAROL]), { nowMs: NOW })).toEqual({
+			repinned: [],
+			removed: []
+		});
+		expect(JSON.stringify([...store])).toBe(before);
+
+		// Out of the space, the same session IS a wallet ALICE has left.
+		vi.unstubAllGlobals();
+		expect(await follower.note(view(CAROL, [BOB, CAROL]), { nowMs: NOW })).toEqual({
+			repinned: [],
+			removed: ['https://a.example']
 		});
 	});
 

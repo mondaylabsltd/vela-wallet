@@ -34,6 +34,9 @@ struct SigningFeeView: View {
     /// Before any line was said: the one the core already knows the first
     /// figure will bring (`SigningModel.feeReserve`), held the same way.
     var reserve: String?
+    /// The lines the card comes to say by itself, their room kept from the
+    /// first frame (`FeeRooms`); `nil` — a drawn board — keeps none.
+    var rooms: FeeRooms?
 
     /// The line under the card, the last time it was said. While the fee is
     /// measured again that verdict is about the last quote, so it is not said
@@ -52,10 +55,14 @@ struct SigningFeeView: View {
         case .onchain(let label, let value, let selector, let warning, let tappable):
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                 onchainBody(label: label, value: value, selector: selector, tappable: tappable)
-                // Issue #262: the reason the confirm below is shut, said where
-                // the fix is — and spec 079's "the service cannot be reached,
-                // it will be asked again".
-                if let warning {
+                if let rooms, selector == nil {
+                    // The card and the place under it are ONE height from the
+                    // sheet's first frame, whatever the fee comes to say.
+                    place(rooms, warning: warning)
+                } else if let warning {
+                    // Issue #262: the reason the confirm below is shut, said
+                    // where the fix is — and spec 079's "the service cannot
+                    // be reached, it will be asked again".
                     reason(warning)
                         .accessibilityIdentifier("signing.fee.reason")
                 } else if measuring, let held = heldWarning ?? reserve {
@@ -74,6 +81,38 @@ struct SigningFeeView: View {
                 }
             }
         }
+    }
+
+    /// The place under the card, with its rooms.
+    ///
+    /// As tall as the tallest line a landed fee can say there, plus — until
+    /// the card has said it — the speed's note: each unseen and unsaid, at
+    /// the width and in the face it would be said in. A line that arrives
+    /// fills room that was there; the note is said inside the card, which
+    /// grows by exactly the room given up here. So from the first settled
+    /// frame the card and this place are one height, and the signing account
+    /// under them never moves: not when the fee is priced, not when no coin
+    /// can pay it, not when it fails and is asked again.
+    private func place(_ rooms: FeeRooms, warning: String?) -> some View {
+        // The card says the note itself once the fee brings it.
+        let noteSaid = speed?.freeNote != nil
+        return ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+                ZStack(alignment: .topLeading) {
+                    ForEach(rooms.reasons, id: \.self) { line in reason(line) }
+                }
+                if let note = rooms.speedNote, speed != nil, !noteSaid {
+                    FeeSpeedControlView.noteRoom(note, textScale: textScale)
+                }
+            }
+            .hidden()
+            .accessibilityHidden(true)
+            if let warning {
+                reason(warning)
+                    .accessibilityIdentifier("signing.fee.reason")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     /// What the line under the card follows.

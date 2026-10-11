@@ -398,7 +398,7 @@
       "previewVersion": "앱 버전",
       "previewPlatform": "플랫폼",
       "previewLanguage": "언어",
-      "previewRpc": "연결 불가 RPC",
+      "previewRpc": "연결할 수 없는 네트워크",
       "previewFailures": "최근 실패",
       "previewNone": "없음"
     },

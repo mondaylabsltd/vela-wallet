@@ -23,9 +23,22 @@ const messages = resolveExploreMessages('zh');
 /** The plural keys: no bare value, a form per category the locale has. */
 const PLURAL_KEYS = ['siteCount', 'openTabs'] as const;
 
+/**
+ * The words that are not `explore.*`: the names of an address's mark where no
+ * words stand beside it, which are the connect sheet's (`connect.browser.*`).
+ */
+const BORROWED_KEYS: Record<string, string> = {
+	a11yLocal: 'connect.browser.a11yLocal',
+	a11yInsecure: 'connect.browser.a11yInsecure'
+};
+
 /** Every corpus key this layer names, derived from the resolver's own output. */
 const EXPLORE_KEYS = Object.keys(resolveExploreMessages('en')).filter(
-	(k) => k !== 'nav' && k !== 'closeLabel' && !(PLURAL_KEYS as readonly string[]).includes(k)
+	(k) =>
+		k !== 'nav' &&
+		k !== 'closeLabel' &&
+		!(k in BORROWED_KEYS) &&
+		!(PLURAL_KEYS as readonly string[]).includes(k)
 );
 
 describe('explore messages', () => {
@@ -34,6 +47,11 @@ describe('explore messages', () => {
 			const value = rawResolve(locale, `explore.${key}`);
 			expect(value, `explore.${key} in ${locale}`).not.toBe(`explore.${key}`);
 			expect(value.trim()).not.toBe('');
+		}
+		for (const [field, key] of Object.entries(BORROWED_KEYS)) {
+			const value = rawResolve(locale, key);
+			expect(value, `${key} in ${locale}`).not.toBe(key);
+			expect(resolveExploreMessages(locale)[field as 'a11yLocal'], field).toBe(value);
 		}
 		// A plural key ships every form the locale has, each counting.
 		for (const key of PLURAL_KEYS) {

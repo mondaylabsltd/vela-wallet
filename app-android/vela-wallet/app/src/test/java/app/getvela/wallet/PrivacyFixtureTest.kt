@@ -229,16 +229,34 @@ class PrivacyFixtureTest {
         val home = WalletLive.home(WalletFixtures.buildMobileState(WalletScreenState.H1, strings), view, feed, usd, strings, chains)
         assertEquals(BalanceStateKind.Hidden, home.balance.state)
         assertEquals("the hero's mask is the wider one", balanceMask, home.balance.integer)
-        assertTrue("holdings: amount AND worth", home.assetRows.all { it.balance == mask && it.fiat == AssetFiatModel.Masked && it.masked })
+        // The 2026-10-11 walk, item 3: a hidden holding keeps its coin — shown
+        // 「0.0003 BNB」 read 「••••」 hidden, on the home's rows, in Assets and
+        // on the token's own page, while the iPhone's token page read
+        // 「•••• BNB」. Every shell now reads the SAME strings for the same
+        // holdings: the fixture's `holdings_masked`, written by the core.
+        val masked = fixture.getJSONArray("holdings_masked").let { a -> (0 until a.length()).map(a::getJSONObject) }
+        assertEquals("the fixture names every holding", view.tokens.map { it.symbol to it.chain_id }, masked.map { it.getString("symbol") to it.getInt("chain_id") })
+        val assets = FlowLive.assets((FlowFixtures.build(FlowState.T1, strings).base as FlowBase.Assets).model, view, chains, usd)
+        for ((surface, rows) in listOf("home" to home.assetRows, "assets" to assets.rows)) {
+            assertEquals("$surface: a row per holding", masked.size, rows.size)
+            masked.forEach { expected ->
+                val row = rows.single { it.id == WalletLive.holdingId(expected.getInt("chain_id"), expected.optString("token_address").takeIf { !expected.isNull("token_address") }) }
+                assertEquals("$surface, ${expected.getString("symbol")}: the amount keeps its coin", expected.getString("amount"), row.balance)
+                assertEquals("$surface, ${expected.getString("symbol")}: the worth is the bare mask", expected.getString("worth"), assetFigures(row)[1])
+                assertTrue(row.fiat == AssetFiatModel.Masked && row.masked)
+            }
+        }
         val switcher = WalletLive.accountSwitcher(listOf("Main" to view.address.orEmpty(), "Other" to other), 0, view.switcher, usd, strings)
         assertTrue("the switcher's rows", switcher.rows.all { it.amount == mask })
         assertTrue("the switcher's total: ${switcher.summary}", switcher.summary.contains(mask))
         val tokenFallback = (FlowFixtures.build(FlowState.T2, strings).sheet as FlowSheet.TokenDetail).model
-        view.tokens.forEach { token ->
+        view.tokens.zip(masked).forEach { (token, expected) ->
             val detail = FlowLive.tokenDetail(tokenFallback, view, feed, WalletLive.holdingId(token.chain_id, token.token_address), chains, usd, strings)!!
-            assertEquals(mask, detail.balance)
-            assertEquals(mask, detail.fiat)
+            assertEquals("the token's own page, ${token.symbol}: the amount keeps its coin", expected.getString("amount"), detail.balance)
+            assertEquals("the token's own page, ${token.symbol}: the worth is the bare mask", expected.getString("worth"), detail.fiat)
         }
+        // And the rule those strings come from, so a new coin cannot drift: the mask, a space, the ticker.
+        masked.forEach { assertEquals("$mask ${it.getString("symbol")}", it.getString("amount")); assertEquals(mask, it.getString("worth")) }
         val txFallback = (FlowFixtures.build(FlowState.A2, strings).sheet as FlowSheet.TxDetail).model
         // Item 12: a masked figure keeps its unit — how much is hidden, what
         // kind of money is not ("•••• xDAI", as iOS reads). A transfer's

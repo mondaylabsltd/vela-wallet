@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import VelaCore
 
 /// One per-origin grant, one-for-one with the `vela.perm.<origin>` document
 /// (`dapp_permissions::DpermGrant`, which this machine reuses verbatim).
@@ -45,6 +46,35 @@ struct DpermGrantWire: Codable, Equatable {
     }
 }
 
+/// What the mark beside a site's name says about the connection to it
+/// (`dapp_browser::OriginLock`).
+///
+/// A padlock means "encrypted" and is drawn for `secure` alone: `https`.
+/// `local` is plain `http` on this device or the person's own network —
+/// nobody in between to rewrite it, but not encrypted either: a neutral
+/// mark, never a padlock, never the warning. `insecure` is public `http`:
+/// the open lock, in the warning colour.
+///
+/// The phones drew a padlock beside `127.0.0.1:8137` (device walk
+/// 2026-10-11): the mark was taken from `secure`, which means "safe to use
+/// the wallet from" and is true of http on loopback.
+enum OriginLock: String, Equatable {
+    case secure, local, insecure
+
+    /// The core's word; `nil` for one this build has never heard of (or none).
+    init?(wire: String?) {
+        guard let wire, let lock = OriginLock(rawValue: wire) else { return nil }
+        self = lock
+    }
+
+    /// The core's rule for an origin alone (`dappOriginLock`), for a surface
+    /// with no view of the machine. No origin is nothing to vouch for.
+    static func of(origin: String?) -> OriginLock {
+        guard let origin, !origin.isEmpty else { return .insecure }
+        return OriginLock(wire: dappOriginLock(origin: origin)) ?? .insecure
+    }
+}
+
 /// The connection sheet's contents: a site is ASKING.
 struct DbrConsentViewWire: Decodable, Equatable {
     /// The tab whose page asked first.
@@ -56,6 +86,12 @@ struct DbrConsentViewWire: Decodable, Equatable {
     let address: String?
     /// The chain the grant would start on — the site's own.
     let chainId: Int
+    /// The mark beside the asking site's name (`OriginLock`'s wire name): a
+    /// padlock for `https` only. Absent from a view built before the field.
+    var lock: String? = nil
+
+    /// The mark to draw: the core's, or its own rule for the origin.
+    var mark: OriginLock { OriginLock(wire: lock) ?? .of(origin: origin) }
 }
 
 /// One open tab, as the core sees it.
@@ -68,8 +104,9 @@ struct DbrTabViewWire: Decodable, Equatable, Identifiable {
     let connectedAddress: String?
     /// The site's chain — per origin, persisted (`vela.chain.<origin>`).
     let chainId: Int
-    /// https, or a loopback / private-network http host. The lock is drawn
-    /// from this and from nothing else.
+    /// Safe to use the wallet from: https, or a loopback / private-network
+    /// http host. NOT what the mark draws — that is `lock`: http on loopback
+    /// is `secure` here and is not encrypted.
     let secure: Bool
     /// The renderer died. Cleared by the next document's hello.
     let crashed: Bool
@@ -88,8 +125,14 @@ struct DbrTabViewWire: Decodable, Equatable, Identifiable {
     var failedRecent: Int = 0
     /// The latest of them — the status entry's line.
     var lastFailure: DbrFailureNoteWire? = nil
+    /// The mark beside the site's name (`OriginLock`'s wire name): a padlock
+    /// for `https` only. Absent from a view built before the field.
+    var lock: String? = nil
 
     var id: String { tab }
+
+    /// The mark to draw: the core's, or its own rule for the origin.
+    var mark: OriginLock { OriginLock(wire: lock) ?? .of(origin: origin) }
 }
 
 /// The status entry's one line about a tab's latest trouble

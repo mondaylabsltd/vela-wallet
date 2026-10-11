@@ -33,7 +33,10 @@ struct AddressBarView: View {
     @Environment(\.walletTextScale) private var textScale
 
     let host: String
-    let secure: Bool
+    /// The mark beside the host — the core's `OriginLock`: the padlock for
+    /// https only, a neutral mark for a local page, the open lock for public
+    /// http (`SiteLockMark`).
+    let lock: OriginLock
     /// `explore.back`.
     let backLabel: String
     let menuLabel: String
@@ -41,6 +44,8 @@ struct AddressBarView: View {
     /// drawn only for a secure origin; an insecure one is named, not merely
     /// left unpraised.
     var insecureLabel: String = ""
+    /// What a local page's mark is called (`connect.browser.a11yLocal`).
+    var localLabel: String = ""
     /// Spec 082 RE1: whether any lock is drawn. A failure panel, and a load
     /// that has not committed in an empty tab, show NO lock — nothing from
     /// that host is on screen to vouch for (the core's `browserAddressBar`).
@@ -169,22 +174,11 @@ struct AddressBarView: View {
 
     private var pill: some View {
         HStack(spacing: Tokens.Space.s8) {
-            // Spec 079 (owner): a lock, and only a lock. Closed and quiet for
-            // https — which says the line is encrypted, not that the site is
-            // honest, so it is decorative to a screen reader too (the host is
-            // read out); open and in the warning colour for plain http.
-            if !showsLock {
-                // Nothing on screen from this host: no lock either way.
-            } else if secure {
-                LucideIcon(.lock, size: LucideIconSize.addressLock)
-                    .foregroundStyle(theme.fgMuted)
-                    .accessibilityHidden(true)
-                    .accessibilityIdentifier("explore.lock")
-            } else if !host.isEmpty, !insecureLabel.isEmpty {
-                LucideIcon(.lockOpen, size: LucideIconSize.addressLock)
-                    .foregroundStyle(theme.warningBase)
-                    .accessibilityLabel(insecureLabel)
-                    .accessibilityIdentifier("explore.insecure")
+            // Spec 079 (owner): a lock, and only a lock — and the padlock
+            // only for https (`SiteLockMark`): a local page has a neutral
+            // mark, public http the open lock in the warning colour.
+            if showsLock, !host.isEmpty {
+                SiteLockMark(lock: lock, localLabel: localLabel, insecureLabel: insecureLabel, idPrefix: "explore")
             }
             Text(verbatim: host)
                 .typeRole(Typography.body.scaled(textScale))

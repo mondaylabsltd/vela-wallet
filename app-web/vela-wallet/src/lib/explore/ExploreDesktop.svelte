@@ -74,7 +74,6 @@
 			toolbar={model.toolbar}
 			browser={model.browser}
 			{browsing}
-			secureLabel={copy.secureSite}
 			accountLabel={copy.account}
 			connectedLabel={copy.connectedTag}
 			onaccount={() => (panelOverride = panel === 'connection' ? 'none' : 'connection')}

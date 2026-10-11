@@ -82,14 +82,16 @@
 			<Button variant="secondary" href={model.explorerUrl} external>{model.viewOnExplorer}</Button>
 		{/if}
 		{#if model.deleteLabel !== undefined}
-			<!-- Removes the local record only; the chain keeps the transaction. On
-			     a pending record it is a quiet control (RJ18): the record is the
-			     "don't send it again" trace, not something to clear first. -->
-			{#if model.deleteQuiet}
-				<button type="button" class="quiet" onclick={ondelete}>{model.deleteLabel}</button>
-			{:else}
-				<Button variant="danger" onclick={ondelete}>{model.deleteLabel}</Button>
-			{/if}
+			<!-- Removes the local record only; the chain keeps the transaction.
+			     A text action under the useful one, never a filled button: it
+			     was the heaviest thing on the page — full width, in the error
+			     colour — and it is the one thing here nobody came to do. It says
+			     "destructive" by its colour alone. On a pending record it is
+			     quieter still (RJ18): the record is the "don't send it again"
+			     trace, not something to clear first. -->
+			<button type="button" class="delete" class:muted={model.deleteQuiet} onclick={ondelete}>
+				{model.deleteLabel}
+			</button>
 		{/if}
 	</div>
 </div>
@@ -143,7 +145,7 @@
 		padding-top: var(--space-xl);
 	}
 
-	.quiet {
+	.delete {
 		align-self: center;
 		min-height: var(--size-control-md);
 		padding-inline: var(--space-lg);
@@ -151,11 +153,20 @@
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-muted);
+		color: var(--color-error-base);
 		cursor: pointer;
 	}
 
-	.quiet:hover {
+	.delete:hover {
+		text-decoration: underline;
+	}
+
+	.delete.muted {
+		color: var(--color-fg-muted);
+	}
+
+	.delete.muted:hover {
 		color: var(--color-fg-base);
+		text-decoration: none;
 	}
 </style>

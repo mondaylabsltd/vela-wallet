@@ -179,6 +179,11 @@ struct RootView: View {
     @State private var backupCheck: (address: String, check: RegistryBackup.Check)?
     /// Which passkeys control that wallet, and for which wallet it was asked.
     @State private var walletKeys: (address: String, result: WalletKeys.Result)?
+    /// The same wallet's keys as this device's own record has them — known
+    /// without asking a chain, and read when the account comes to the front,
+    /// so Settings draws every key from its first frame and the registry's
+    /// answer only fills the rows in (`SettingsLive.withWalletKeys`).
+    @State private var deviceKeys: (address: String, result: WalletKeys.Result)?
     /// Spec 102: how the active account signs on this device — its key,
     /// domain and venue (`signingPlan`), for "Where you review and sign" and
     /// the keys block's domain line.
@@ -381,7 +386,10 @@ struct RootView: View {
         return ZStack(alignment: .top) {
             themedBackground
 
-            content(router: $router.path)
+            // Erased (`StackGauge`): every modifier below this body's ZStack
+            // would otherwise carry the whole router's value in a new
+            // temporary on the main thread's one megabyte of stack.
+            AnyView(content(router: $router.path))
                 // Composed from the first frame, hidden by the opaque overlay,
                 // so the hand-off has nothing left to build (FR-013a).
                 .opacity(pageOpacity)
@@ -673,7 +681,8 @@ struct RootView: View {
             #endif
         case nil:
             NavigationStack(path: path) {
-                signedInOrWelcome
+                // Erased, for the stack's sake (`StackGauge`).
+                AnyView(signedInOrWelcome)
                     .navigationDestination(for: AppRoute.self) { route in
                         switch route {
                         case .create:
@@ -829,7 +838,9 @@ struct RootView: View {
                 let state = sendStates.contains(drawn)
                     ? (send.view.map { SendLive.flowState($0, feeSheetOpen: feeSheetOpen) } ?? drawn)
                     : drawn
-                flowScreen(state)
+                // Erased, for the stack's sake (`StackGauge`): the twenty
+                // modifiers below each wrap what is under them.
+                AnyView(flowScreen(state))
                 .transition(.move(edge: .trailing))
                 // The field holds what is typed and the core holds the value:
                 // a field bound straight to a machine loses characters on the
@@ -1150,7 +1161,7 @@ struct RootView: View {
                                        address: session.view.address),
                             chainIds: browser.chainIds,
                             holdings: WalletLive.networkHoldings(
-                                wallet.balance, display: WalletLive.Display.live(settings.currency)
+                                wallet.balance, display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             networks: walletNetworks,
@@ -2070,7 +2081,7 @@ struct RootView: View {
     private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
-            let display = WalletLive.Display.live(settings.currency)
+            let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
             model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
                                                    networks: walletNetworks)
             model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
@@ -2247,6 +2258,10 @@ struct RootView: View {
     /// add-token sheet is `manage_tokens`. Every other flow is a picture, and
     /// visibly so.
     private func flowModel(_ state: FlowStateId) -> FlowScreenModel {
+        // The deepest frame of the router's own: body → appBody → content →
+        // signedInOrWelcome → flowScreen → here, and a screen's whole model
+        // is still to be built under it.
+        StackGauge.note("flowModel")
         var model = WalletFlowFixtures.build(state, loc: loc)
         // The fee coins opened from the confirm — a fee that would fail,
         // "Pay with another coin" (PR 2 polish) — sit over the confirm the
@@ -2300,7 +2315,7 @@ struct RootView: View {
                 on: detail, loc: loc,
                 hidden: feed.hidden,
                 // No fiat before the person's currency is known (PR 3).
-                display: WalletLive.Display.live(settings.currency),
+                display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
@@ -2312,7 +2327,7 @@ struct RootView: View {
             model.sheet = .tokenDetail(FlowsLive.tokenDetail(
                 balance.tokens[assetRow],
                 feed: activity.feed,
-                display: WalletLive.Display.live(settings.currency),
+                display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
                 on: detail, loc: loc,
                 hidden: balance.hidden || (activity.feed?.hidden ?? false),
                 networks: walletNetworks
@@ -2322,7 +2337,7 @@ struct RootView: View {
         // already found; SD2 and SD3 are the core's figures, its refusals and
         // its gates.
         if let view = send.view {
-            let display = WalletLive.Display.live(settings.currency)
+            let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
             if case .sendPick(let pick) = model.base {
                 model.base = .sendPick(
                     SendLive.pick(
@@ -2766,11 +2781,10 @@ struct RootView: View {
             commit: BuildInfo.commit,
             platform: "iOS \(UIDevice.current.systemVersion)",
             language: loc.resolvedLanguage,
-            unreachable: pool.failedChains.map { chainId in
+            unreachable: SettingsLive.unreachableNames(pool.failedChains, name: { chainId in
                 names.first { $0.chainId == chainId }?.displayName
                     ?? ChainCatalog.meta(chainId)?.displayName
-                    ?? "chain-\(chainId)"
-            },
+            }, loc: loc),
             failures: VelaLog.recentFailures
         )
     }
@@ -2824,7 +2838,7 @@ struct RootView: View {
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             chainId: chain,
-            display: WalletLive.Display.live(settings.currency),
+            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
             origin: live?.request?.origin,
             // What the chain said THIS request would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it —
@@ -3554,7 +3568,7 @@ struct RootView: View {
             // PR 2: hidden, the core withholds the figures — every row and
             // the total draw the mask instead of summing nothing to $0.00.
             hidden: wallet.balance?.switcher.hidden ?? false,
-            display: WalletLive.Display.live(settings.currency),
+            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
             on: model,
             loc: loc
         )
@@ -3565,12 +3579,15 @@ struct RootView: View {
         let keys = walletKeys.flatMap {
             $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.result : nil
         }
+        let ownKeys = deviceKeys.flatMap {
+            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.result : nil
+        }
         // No wallet, no block. With no address nothing is ever asked, so "still
         // asking" would never end: on a signed-out iPhone the block sat on its
         // loading skeleton and the backup on 正在检查… for good (device-found
         // 2026-09-19).
         if !session.view.address.isEmpty {
-            model = SettingsLive.withWalletKeys(keys, backup: backedUp, on: model, loc: loc)
+            model = SettingsLive.withWalletKeys(keys, device: ownKeys, backup: backedUp, on: model, loc: loc)
         }
         // Spec 102: the account's venue (and its domain over the keys), and
         // Settings → Signing pages — every row's line this phone's check.
@@ -3721,7 +3738,25 @@ struct RootView: View {
             else { return nil }
             return hex
         })
+        // What the device knows, before the first chain is asked.
+        deviceKeys = (address, reader.deviceOnly(device: device, signInCredential: signingKey))
         walletKeys = (address, await reader.read(address: address, device: device, signInCredential: signingKey))
+    }
+
+    /// The account in front's keys as this device's record has them — no
+    /// chain asked. Read as the account comes to the front, long before a
+    /// person can reach Settings, so the keys block opens on its rows.
+    private func readDeviceKeys(of address: String) async {
+        guard !address.isEmpty else { return }
+        let device = await WalletKeys.deviceKeys(
+            of: address, walletName: session.view.activeName, in: sendAccountPort
+        )
+        let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
+        guard address.caseInsensitiveCompare(session.view.address) == .orderedSame else { return }
+        deviceKeys = (
+            address,
+            WalletKeys(ethCall: { _, _, _ in nil }).deviceOnly(device: device, signInCredential: signingKey)
+        )
     }
 
     /// Reads, from the chains themselves, whether this wallet's founding keys
@@ -3866,6 +3901,7 @@ struct RootView: View {
         wallet.open(address: address)
         activity.open(address: address, hidden: wallet.balance?.hidden ?? false)
         contacts.open(myAddress: address)
+        Task { await readDeviceKeys(of: address) }
     }
 
     /// The home switcher closed. The balance core is told, so it stops

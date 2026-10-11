@@ -27,6 +27,20 @@ import uniffi.vela_core_uniffi.keccak256
  *    `.bnb`, `.arb`, `.g`, Basename, ENS — each name forward-verified
  *    before it counts.
  *
+ * ## A name service is asked only on a network the wallet has
+ *
+ * Each service's registry lives on one chain, and `.g`'s is chain 1625 — not
+ * one of the wallet's networks. The pool has no endpoint for such a chain, so
+ * nothing ever left the device for it; but the resolver still ASKED the pool
+ * on every lookup, the pool counted the chain as one it could not reach, and
+ * the feedback sheet on the owner's phone read 「无法连接的 RPC  1625」 after
+ * every launch (the 2026-10-11 walk). The core no longer counts it. The rule
+ * is said here as well, as the web, iOS and the desktop say it: a service
+ * whose chain is not among the wallet's networks — built-in or custom, the
+ * list Settings → Networks shows ([walletChains]) — is SKIPPED: no call at
+ * all, and the answer falls to the next service in priority order exactly as
+ * when that service has no name. Add the network and the service is asked.
+ *
  * ## Only positive results are cached
  *
  * The core says so (`ContactShellResult::IdentityResolved`, invariant ⑦): a
@@ -50,6 +64,13 @@ class IdentityResolver(
     private val registryName: suspend (String) -> String? = { null },
     /** `eth_call` on one chain: the `result` hex, or `null` for "no answer" / `0x`. */
     private val ethCall: suspend (chainId: Int, to: String, data: String) -> String?,
+    /**
+     * The chains of the wallet's own networks — built-in and custom, the list
+     * Settings → Networks shows — read at each lookup, so a network added a
+     * moment ago counts. A name service on any other chain is not asked. No
+     * default: whoever builds a resolver has to say which networks it has.
+     */
+    private val walletChains: suspend () -> Set<Int>,
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
     /**
      * `verifiedNameStep` from the core. A seam so the JVM tests can script the
@@ -93,11 +114,16 @@ class IdentityResolver(
         runCatching { registryName(address) }.getOrNull()?.takeIf { it.isNotBlank() }?.let {
             return Identity(it, "passkey").also { identity -> remember(wanted, identity) }
         }
-        // 4. Name services — asked together, the first by priority wins.
+        // 4. Name services — those on a network the wallet has — asked
+        //    together, the first by priority wins. One on any other chain is
+        //    skipped, as though it had no name; a list that cannot be read is
+        //    no networks, and nothing is asked.
+        val chains = runCatching { walletChains() }.getOrDefault(emptySet())
+        val asked = askedServices(chains)
         val answers = coroutineScope {
-            NAME_SERVICES.map { service -> async { runCatching { reverseResolve(wanted, service) }.getOrNull() } }.awaitAll()
+            asked.map { service -> async { runCatching { reverseResolve(wanted, service, chains) }.getOrNull() } }.awaitAll()
         }
-        NAME_SERVICES.forEachIndexed { index, service ->
+        asked.forEachIndexed { index, service ->
             answers[index]?.let { name -> return Identity(name, service.label).also { remember(wanted, it) } }
         }
         return null
@@ -107,7 +133,12 @@ class IdentityResolver(
      * One service's answer for one address, forward-verified, or `null`. A
      * name this returns has been proven to resolve back to `address`.
      */
-    internal suspend fun reverseResolve(address: String, service: NameService): String? {
+    internal suspend fun reverseResolve(address: String, service: NameService, chains: Set<Int>): String? {
+        // Every call of this lookup goes through here: a chain the wallet
+        // does not have is never asked, whoever names it.
+        val ethCall: suspend (Int, String, String) -> String? = { chainId, to, data ->
+            if (chainId in chains) this.ethCall(chainId, to, data) else null
+        }
         val stripped = address.removePrefix("0x").lowercase()
         val reverseNode = when (val registrar = service.reverseRegistrar) {
             null -> namehash("$stripped.addr.reverse")
@@ -128,7 +159,7 @@ class IdentityResolver(
         val nameWord = ethCall(service.chainId, "0x$resolver", "0x$SEL_NAME$node") ?: return null
         // What the address CLAIMS to be called. Nothing may draw it yet.
         val claimed = decodeName(nameWord) ?: return null
-        return forwardVerified(address, service, claimed)
+        return forwardVerified(address, service, claimed, chains)
     }
 
     /**
@@ -141,7 +172,12 @@ class IdentityResolver(
      * failing open on the second would let whoever poisons a record choose the
      * moment.
      */
-    internal suspend fun forwardVerified(address: String, service: NameService, claimed: String): String? {
+    internal suspend fun forwardVerified(address: String, service: NameService, claimed: String, chains: Set<Int>): String? {
+        // The core names the chain of each call it wants; one the wallet does
+        // not have is answered "failed" without a request.
+        val ethCall: suspend (Int, String, String) -> String? = { chainId, to, data ->
+            if (chainId in chains) this.ethCall(chainId, to, data) else null
+        }
         val answers = JSONArray()
         repeat(MAX_VERIFY_ROUNDS) {
             val next = runCatching {
@@ -217,6 +253,9 @@ class IdentityResolver(
             NameService("Basename", 8453, "0xb94704422c2a1e396835a571837aa5ae53285a95", reverseRegistrar = "0x79ea96012eea67a83431f1701b3dff7e37f9e282"),
             NameService("ENS", 1, "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e"),
         )
+
+        /** The services a lookup asks, in priority order: those whose chain is one of the wallet's [chains]. */
+        fun askedServices(chains: Set<Int>): List<NameService> = NAME_SERVICES.filter { it.chainId in chains }
 
         /** `resolver(bytes32)`, `name(bytes32)`, and ENSIP-19's `node(address)`. */
         const val SEL_RESOLVER = "0178b8bf"

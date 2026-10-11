@@ -2340,6 +2340,14 @@ pub struct SendView {
     /// The fee is NOT held back: for the native coin the pre-check still has
     /// the last word, and this figure never promises otherwise.
     pub split_remaining: Option<String>,
+    /// [`Self::split_remaining`] as a person reads it: the same figure cut
+    /// to the token ladder ([`crate::l10n::cut_token_amount`]) — "0.0003",
+    /// not the balance's eighteen places — and never rounded up, so it
+    /// never says more is left than is. This is the one a shell DRAWS
+    /// ("0.0003 BNB left"), with the person's decimal mark, as it draws the
+    /// balance beside it; `split_remaining` stays exact for whoever counts.
+    #[serde(default)]
+    pub split_remaining_display: Option<String>,
     /// How many more recipients an import may add before the cap: the cap less
     /// the rows already started (blank rows do not count — an import drops
     /// them). The shell opens the importer with this as ITS cap.
@@ -2822,6 +2830,9 @@ impl Send {
                     .checked_sub(total)
                     .map(|left| from_base_units(left, token.decimals))
             });
+        let split_remaining_display = split_remaining
+            .as_deref()
+            .map(crate::l10n::cut_token_amount);
 
         // The confirm's gate — and the same amount question `Continue`
         // asks, which this twin never asked.
@@ -2901,6 +2912,7 @@ impl Send {
             },
             split_row_issues: split_issues,
             split_remaining,
+            split_remaining_display,
             split_import_room: split_import_room(model),
             picker_target: model.picker_target.clone(),
             multi_select_mode: model.multi_select_mode,

@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.onboarding.flow
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,6 +46,7 @@ fun LocationAskSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .sheetScrolls()
                 .padding(
                     start = VelaSizing.screenPaddingX,
                     end = VelaSizing.screenPaddingX,

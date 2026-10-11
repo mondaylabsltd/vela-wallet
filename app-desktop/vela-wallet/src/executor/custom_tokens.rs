@@ -46,21 +46,30 @@ pub struct StoredToken {
 /// blank.
 #[must_use]
 pub fn network_name(chain_id: u32) -> String {
+    own_network_name(chain_id).unwrap_or_else(|| format!("Chain {chain_id}"))
+}
+
+/// The chain's OWN name — the built-in one, or the person's for a network
+/// they added — and `None` for a chain that has none. For a surface that
+/// says such a chain in the reader's words (`assets.chainFallback`, 「链
+/// 1625」) rather than [`network_name`]'s fixed "Chain 1625".
+#[must_use]
+pub fn own_network_name(chain_id: u32) -> Option<String> {
     if let Some(chain) = BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id) {
-        return chain.display_name.to_owned();
+        return Some(chain.display_name.to_owned());
     }
     if let Ok(Some(Value::Array(items))) = storage::read_value(storage::KEY_CUSTOM_NETWORKS) {
         for item in items {
             if item.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id)) {
                 if let Some(name) = item.get("displayName").and_then(Value::as_str) {
-                    if !name.is_empty() {
-                        return name.to_owned();
+                    if !name.trim().is_empty() {
+                        return Some(name.to_owned());
                     }
                 }
             }
         }
     }
-    format!("Chain {chain_id}")
+    None
 }
 
 /// The chain's explorer, trailing slash stripped — the built-in's, or the one

@@ -10,6 +10,7 @@ import app.getvela.wallet.feature.browser.ExploreLive
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.feature.flows.TokenMarkModel
+import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyView
@@ -26,6 +27,7 @@ import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.FeedTxKind
 import app.getvela.wallet.feature.wallet.core.FeedTxStatus
+import uniffi.vela_core_uniffi.fiatSymbol
 import uniffi.vela_core_uniffi.maskedAmount
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -69,12 +71,17 @@ object WalletLive {
     const val BALANCE_MASK = "••••••"
 
     // A masked amount written WITH its unit ("•••• xDAI") is the core's own
-    // function now — `maskedAmount(unit)`, the export of `privacy::masked_amount`
-    // — called wherever one is drawn (a dApp row's "received" here, a
-    // detail's figures in `FlowLive`). This file used to spell the rule
-    // itself, and before that a transfer's detail dropped the unit while iOS
-    // kept it. A figure with no unit of its own — a holding under its ticker,
-    // a worth in the display currency — is [MASK] alone.
+    // function — `maskedAmount(unit)`, the export of `privacy::masked_amount`
+    // — called wherever a coin amount is drawn hidden: a holdings row (home
+    // and Assets), the token's own page, a dApp row's "received" here, a
+    // detail's figures in `FlowLive`. One rule: a row that reads "0.0003 BNB"
+    // shown reads "•••• BNB" hidden — hiding turns digits into dots and moves
+    // nothing else. This file used to spell the rule itself, a transfer's
+    // detail then dropped the unit while iOS kept it, and the holdings rows
+    // and the token page went on dropping it until the 2026-10-11 walk
+    // (shown 「0.0003 BNB」, hidden 「••••」). A worth in the display currency
+    // is [MASK] alone: its unit is the currency every figure on the screen
+    // shares.
 
     /**
      * The home screen, from the person's own holdings.
@@ -106,8 +113,9 @@ object WalletLive {
          */
         chainFilter: Int? = null,
     ): WalletHomeModel {
-        val money = Money.of(currency)
-        val rows = assetRows(view, chainNames, currency)
+        // The symbol is the language's (`fiatSymbol`): this screen's own, as its words are.
+        val money = Money.of(currency, strings.language)
+        val rows = assetRows(view, chainNames, currency, strings.language)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         // Issue #469: the home draws the core's short list (`home_rows`, the
         // newest three); History keeps every row. The cut is the core's — the
@@ -297,7 +305,8 @@ object WalletLive {
     fun dappTitleParts(dapp: FeedDapp, strings: VelaStrings): TitlePlace? {
         val place = dapp.place?.takeIf { it.isNotBlank() } ?: return null
         val mark = "\uFFFC"
-        val pieces = strings.t(I18nKeys.Wallet.DAPP_ROW_TITLE, mapOf("intent" to dappVerb(dapp, strings), "place" to mark))
+        val verb = dappVerb(dapp, strings)
+        val pieces = strings.t(I18nKeys.Wallet.DAPP_ROW_TITLE, mapOf("intent" to verb, "place" to mark))
             .split(mark)
         if (pieces.size != 2) return null
         return TitlePlace(
@@ -306,6 +315,7 @@ object WalletLive {
             trail = pieces[1].trim(),
             gapBefore = pieces[0].lastOrNull()?.isWhitespace() == true,
             gapAfter = pieces[1].firstOrNull()?.isWhitespace() == true,
+            intent = verb,
         )
     }
 
@@ -389,8 +399,10 @@ object WalletLive {
         view: BalanceView,
         chainNames: Map<Int, String>,
         currency: CurrencyView,
+        /** The language a worth's symbol is written for — the screen's own when it has strings in hand. */
+        language: String = AppLanguage.tag,
     ): List<AssetRowModel> {
-        val money = Money.of(currency)
+        val money = Money.of(currency, language)
         return view.tokens.map { token -> assetRow(token, chainNames, money, view.hidden) }
     }
 
@@ -612,7 +624,7 @@ object WalletLive {
         token: BalanceToken,
         chainNames: Map<Int, String>,
         money: Money,
-        /** Balance privacy: the amount AND its worth draw the mask (`privacy`). */
+        /** Balance privacy (`privacy`): the amount is the mask and its coin, its worth the mask alone. */
         hidden: Boolean,
     ): AssetRowModel {
         val mark = mark(token.chain_id, token.symbol, token.token_address)
@@ -628,7 +640,9 @@ object WalletLive {
             badgeHidden = mark.badgeHidden,
             // The ONE token-amount rule (spec 078): Send's picker, token card,
             // confirm and receipt call the same function on the same holding.
-            balance = if (hidden) MASK else "${tokenAmountText(token.balance)} ${token.symbol}",
+            // Hidden, the coin stays (the core's `maskedAmount`): how much is
+            // hidden, what kind of money is not.
+            balance = if (hidden) maskedAmount(token.symbol) else "${tokenAmountText(token.balance)} ${token.symbol}",
             fiat = when {
                 hidden -> AssetFiatModel.Masked
                 // A holding's worth is a figure in the display currency: it
@@ -671,7 +685,7 @@ object WalletLive {
         currency: CurrencyView,
         strings: VelaStrings,
     ): AccountsSheetModel {
-        val money = Money.of(currency)
+        val money = Money.of(currency, strings.language)
         // "2 accounts · Total $5.65": the corpus's count line ends in the
         // separator so the total follows it, the way the web's sheet reads.
         val total = switcher.balances.sumOf { it.usd }
@@ -827,25 +841,47 @@ object WalletLive {
             /** Dollars, unconverted — the default before a currency is known. */
             fun dollars(): Money = Money("USD", "$", null)
 
-            fun of(view: CurrencyView): Money {
+            /**
+             * [language]: the app's language tag — which of the yuan and the
+             * yen is written "¥" alone depends on it ([fiatSign]). A builder
+             * with strings in hand passes `strings.language`; the rest read
+             * the app's ([AppLanguage]).
+             */
+            fun of(view: CurrencyView, language: String = AppLanguage.tag): Money {
                 // No settled choice yet: the placeholder's dollars, marked as
                 // not the person's — figures drawn in the display currency wait.
                 if (!view.committed) return Money("USD", "$", null, settled = false, label = view.pending.orEmpty())
                 val rate = view.rate?.takeIf { it.isFinite() && it > 0.0 }
                 // A settled choice nothing could price means dollars — and saying so.
                 if (rate == null) return Money("USD", "$", null)
-                return Money(view.code, symbolFor(view.code), rate)
+                return Money(view.code, fiatPrefix(view.code, language), rate)
             }
 
             /**
-             * The currency's own sign, from the JVM's ISO-4217 table rather
-             * than a table of this app's own. An unknown code falls back to the
-             * code itself, which reads as "CHF 12.00" — plain, and never the
-             * wrong sign in front of a number.
+             * The symbol a fiat figure in [code] is written with — the CORE's
+             * rule (`l10n::fiat_symbol`), one table for all four shells: "$"
+             * alone is the US dollar's and every other dollar carries its
+             * country (HK$, CA$…); "¥" alone is the yuan in Chinese and the
+             * yen in every other language, the other one carrying its country
+             * (JP¥ / CN¥); a currency with no glyph anybody would recognise is
+             * its code.
+             *
+             * This shell used to ask the platform (`Currency.getSymbol(Locale.US)`)
+             * and wrote the owner's balance 「CN¥188.44」 under a Settings row
+             * that said 「CNY · ¥」, beside an iPhone that wrote 「¥34.03」.
              */
-            private fun symbolFor(code: String): String = runCatching {
-                java.util.Currency.getInstance(code).getSymbol(java.util.Locale.US)
-            }.getOrNull()?.takeIf { it != code } ?: "$code "
+            fun fiatSign(code: String, language: String = AppLanguage.tag): String = fiatSymbol(code, language)
+
+            /**
+             * [fiatSign] as it stands before the digits: a symbol that ends
+             * in a letter — a code, "zł", "Rp", "R" — is held apart from them
+             * by a no-break space ("CHF 12.00"); a glyph is not ("HK$12.00").
+             * CLDR's currency spacing, as the core's `format_fiat` applies it.
+             */
+            internal fun fiatPrefix(code: String, language: String = AppLanguage.tag): String {
+                val sign = fiatSign(code, language)
+                return if (sign.lastOrNull()?.isLetter() == true) "$sign\u00A0" else sign
+            }
         }
     }
 

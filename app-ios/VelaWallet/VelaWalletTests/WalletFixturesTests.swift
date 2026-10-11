@@ -110,7 +110,8 @@ struct WalletFixturesTests {
         #expect(model.activityGroups[0].rows[1].positive)
         for row in model.assetRows {
             #expect(row.masked)
-            #expect(row.balance == "••••")
+            // A hidden coin amount keeps its coin (PR 4 item 3).
+            #expect(row.balance == "•••• \(row.ticker)")
             if case .masked = row.fiat {} else { Issue.record("masked asset must mask fiat") }
         }
     }

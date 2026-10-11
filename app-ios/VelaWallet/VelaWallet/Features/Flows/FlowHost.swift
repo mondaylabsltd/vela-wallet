@@ -332,7 +332,7 @@ struct FlowHost: View {
                 ShareCardArtwork(model: m).padding(.vertical, Tokens.Space.s24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(theme.bgSunken.ignoresSafeArea())
+            .pageGround(theme.bgSunken)
         case .receive(let m):
             FlowScaffold(header: m.header, onBack: onBack) {
                 ReceiveListBody(model: m, onQr: { index in

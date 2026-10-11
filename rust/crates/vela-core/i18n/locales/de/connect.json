@@ -103,6 +103,7 @@
       "disconnectBody": "Die Website muss sich erneut verbinden, bevor sie Ihre Adresse sehen oder Sie um eine Signatur bitten kann.",
       "a11ySecure": "Sichere Website",
       "a11yInsecure": "Unsichere Website – nicht verschlüsselt",
+      "a11yLocal": "Lokale Seite – nicht verschlüsselt",
       "historyTitle": "Zuletzt genutzte dApps",
       "historyOpen": "Zuletzt",
       "historyEmpty": "Noch keine dApps geöffnet",

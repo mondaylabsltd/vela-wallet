@@ -269,7 +269,7 @@ object ExploreFixtures {
             browser = BrowserModel(
                 url = "https://${uniswap.host}/swap",
                 host = uniswap.host,
-                secure = true,
+                lock = SiteLock.Secure,
                 connected = true,
                 canBack = true,
                 canForward = canForward,

@@ -105,6 +105,33 @@ class SendSplitVerdictsTest {
         )
     }
 
+    /** [host], holding [token] alone. */
+    private fun hostHolding(token: SendToken): CoreHost<SendView> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        scopes += scope
+        return CoreHost(
+            bridge = SendCore().asBridge(),
+            scope = scope,
+            initial = SendView(),
+            serializer = SendView.serializer(),
+            perform = JsonShell.perform(SendOperation.serializer(), SendShellResult.serializer()) { operation ->
+                when (operation) {
+                    is SendOperation.FetchTokens -> SendShellResult.TokensLoaded(
+                        tokens = listOf(token),
+                        chains = listOf(SendChainInfo(token.chain_id, token.network, token.symbol)),
+                    )
+                    is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(null)
+                    is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(null)
+                    is SendOperation.Haptic -> SendShellResult.HapticPlayed
+                    is SendOperation.ShowAlert -> SendShellResult.AlertAcknowledged
+                    else -> awaitCancellation()
+                }
+            },
+            escapedFailure = JsonShell.escapedFailure(SendOperation.serializer(), SendShellResult.serializer(), fallback = SendShellResult.Closed, answer = { SendShellResult.Closed }),
+            onFault = { error -> throw AssertionError("shell fault: $error", error) },
+        )
+    }
+
     private fun CoreHost<SendView>.settle(predicate: (SendView) -> Boolean): SendView =
         runBlocking { withTimeout(TIMEOUT) { view.first(predicate) } }
 
@@ -165,6 +192,74 @@ class SendSplitVerdictsTest {
         val under = h.settle { !it.split_over_balance && it.split_remaining != null }
         assertEquals("0.41697", under.split_remaining)
         assertEquals("0.41697 xDAI left", SendLive.form(drawn.model, under, FeeView(), ctx()).summary?.remaining)
+    }
+
+    /**
+     * The 2026-10-11 walk, item 13: send to several recipients printed the
+     * remainder as the exact subtraction — 「还剩 0.000300194967818323 BNB」
+     * beside 「余额 0.0003」. The REAL machine holding exactly that balance:
+     * its view carries the exact figure for whoever counts and the cut one a
+     * shell draws, and the form says 「还剩 0.0003 BNB」 — with the person's
+     * decimal mark, and never a digit more than is there.
+     */
+    @Test
+    fun whatIsLeftOfASplitIsTheCoresCutFigureNeverRoundedUp() {
+        val zh = I18nRuntime { tag -> File(System.getProperty("vela.repo.root"), "assets/i18n/$tag.json").readBytes() }.apply { initialize("zh") }
+        fun ctxOf(words: I18nRuntime) = SendLive.Context(words, mapOf(56 to "BNB Chain"), emptyMap(), WalletLive.Money.of(CurrencyView(code = "USD", committed = true)), "Main", ME)
+        val drawn = FlowFixtures.build(FlowState.SD2, zh).base as FlowBase.SendForm
+        val was = app.getvela.wallet.core.format.Formats.current
+        try {
+            for ((balance, rows, exact, shown) in listOf(
+                // The walk's wallet: nothing given out yet.
+                Case("0.000300194967818323", listOf("", ""), "0.000300194967818323", "0.0003"),
+                // A remainder a half-up rule would round UP (…9996 → 0.42): the core cuts.
+                Case("0.719999600000000001", listOf("0.1", "0.2"), "0.419999600000000001", "0.419999"),
+                // Dust is cut at its first digit, never to "0".
+                Case("0.000000000000000009", listOf("", ""), "0.000000000000000009", "0.000000000000000009"),
+            )) {
+                val bnb = SendToken(network = "chain-56", chain_id = 56, symbol = "BNB", balance = balance, decimals = 18, price_usd = 600.0)
+                val h = hostHolding(bnb)
+                h.send(SendEvent.Open(account = SendAccountRef("acct", ME), display = SendDisplayContext("USD", 1.0, 2)))
+                h.send(SendEvent.SelectToken(SendLive.tokenId(h.reached { it.tokens.isNotEmpty() }.tokens.single())))
+                h.reached { it.selected_token != null }
+                h.send(SendEvent.EnterSplitMode)
+                h.reached { it.split_mode }
+                h.send(SendEvent.RecipientsChanged(rows.mapIndexed { i, amount -> SendRecipientDraft("", if (i == 0) PAYEE else ME, amount) }))
+                val view = h.reached { it.recipients.size == rows.size && it.split_remaining != null && it.recipients.map { row -> row.amount } == rows }
+                assertEquals("the exact remainder, for whoever counts", exact, view.split_remaining)
+                assertEquals("the core's own cut ($balance)", uniffi.vela_core_uniffi.cutTokenAmount(exact), view.split_remaining_display)
+                if (shown != exact) assertEquals(shown, view.split_remaining_display)
+                // Never more than is there.
+                assertTrue(java.math.BigDecimal(view.split_remaining_display!!) <= java.math.BigDecimal(exact))
+
+                app.getvela.wallet.core.format.Formats.current = app.getvela.wallet.core.format.Formats(number = app.getvela.wallet.core.format.NumberFormatKey.CommaDot)
+                val left = SendLive.form(drawn.model, view, FeeView(), ctxOf(zh)).summary?.remaining
+                assertEquals("还剩 ${view.split_remaining_display} BNB", left)
+                // The person's decimal mark, as the balance beside it is written.
+                app.getvela.wallet.core.format.Formats.current = app.getvela.wallet.core.format.Formats(number = app.getvela.wallet.core.format.NumberFormatKey.DotComma)
+                assertEquals("还剩 ${view.split_remaining_display!!.replace('.', ',')} BNB", SendLive.form(drawn.model, view, FeeView(), ctxOf(zh)).summary?.remaining)
+            }
+            // The walk's own line, spelled out.
+            app.getvela.wallet.core.format.Formats.current = app.getvela.wallet.core.format.Formats(number = app.getvela.wallet.core.format.NumberFormatKey.CommaDot)
+            val walk = SendView(split_mode = true, selected_token = SendToken(network = "chain-56", chain_id = 56, symbol = "BNB", balance = "0.000300194967818323", decimals = 18),
+                recipients = listOf(SendRecipientDraft("rcpt_1", "", ""), SendRecipientDraft("rcpt_2", "", "")),
+                split_remaining = "0.000300194967818323", split_remaining_display = "0.0003")
+            assertEquals("还剩 0.0003 BNB", SendLive.form(drawn.model, walk, FeeView(), ctxOf(zh)).summary?.remaining)
+            // A view with no cut of its own is cut by the same core function — never drawn exact.
+            assertEquals("还剩 0.0003 BNB", SendLive.form(drawn.model, walk.copy(split_remaining_display = null), FeeView(), ctxOf(zh)).summary?.remaining)
+        } finally {
+            app.getvela.wallet.core.format.Formats.current = was
+        }
+    }
+
+    private data class Case(val balance: String, val rows: List<String>, val exact: String, val shown: String)
+
+    /**
+     * [settle], woken by the view and held to no deadline: the limit only
+     * turns a machine that never gets there into a failure that says so.
+     */
+    private fun CoreHost<SendView>.reached(predicate: (SendView) -> Boolean): SendView = runBlocking {
+        kotlinx.coroutines.withTimeoutOrNull(HANG_MS) { view.first(predicate) } ?: throw AssertionError("the send machine never got there: ${view.value}")
     }
 
     /** "Use X for the empty rows", end to end: the core flags the empty row, the offer copies the typed figure, the core accepts it. */
@@ -230,5 +325,8 @@ class SendSplitVerdictsTest {
         const val PAYEE = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
         const val WALLET = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
         const val TIMEOUT = 20_000L
+
+        /** A hang limit, not a deadline (see [reached]). */
+        const val HANG_MS = 120_000L
     }
 }

@@ -39,8 +39,10 @@ import init, {
 	CreateWalletCore,
 	DappPermissionsCore,
 	DappSessionCore,
+	dappOriginLock,
 	dpermSettleOnClose,
 	DisplayCurrencyCore,
+	fiatSymbol,
 	ExtCacheCore,
 	FeePolicyCore,
 	FeeSpeedCore,
@@ -134,6 +136,12 @@ export { minGasPriceWei, peggedNativeUsd };
 // Synchronous, and callable once `loadCore()` has resolved — every caller is
 // a view-model builder over a core view, which cannot exist before that.
 export { maskedAmount };
+// The symbol a fiat figure is written with (`l10n::fiat_symbol`): one rule for
+// all four apps, where the web kept a table of its own that wrote the Hong
+// Kong dollar with the US dollar's "$" and the yen and the yuan with one "¥".
+// `language` is the page's locale; a currency with no glyph of its own comes
+// back as its code. Synchronous, callable once `loadCore()` has resolved.
+export { fiatSymbol };
 export { identiconNormalizeSeed, identiconSvgCircular };
 // Which plural form a count takes in a language (CLDR, issue 409): flow copy
 // ships every form, and the screen asks this rather than `count === 1`.
@@ -149,6 +157,12 @@ export { publicRpcUrls };
 // How a pending request is settled when the request window goes away: 4900,
 // never 4001 (spec 070 T063). The window asks rather than restating it.
 export { dpermSettleOnClose };
+// The mark a site's address wears (`dapp_browser::origin_lock`): `secure` for
+// https — the only padlock — `local` for http on this device or the person's
+// own network, `insecure` for public http. One rule for all four apps; a
+// padlock used to be drawn from "safe to use the wallet from", which is true
+// of `http://127.0.0.1:8137` and says nothing about encryption.
+export { dappOriginLock };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 export { registryResolveKeyStep, registryResolveUnitStep };
 // Settings' shared rules (spec 072): how every shell's preference spellings

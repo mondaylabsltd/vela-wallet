@@ -103,6 +103,7 @@
       "disconnectBody": "Sitenin adresinizi görebilmesi veya imzalamanızı isteyebilmesi için yeniden bağlanması gerekir.",
       "a11ySecure": "Güvenli site",
       "a11yInsecure": "Güvenli olmayan site — şifrelenmemiş",
+      "a11yLocal": "Yerel sayfa — şifrelenmemiş",
       "historyTitle": "Son dApp'ler",
       "historyOpen": "Son",
       "historyEmpty": "Henüz son dApp yok",

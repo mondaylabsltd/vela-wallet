@@ -13,7 +13,9 @@
 //! 2. **Cache**, positive entries only, 24 hours.
 //! 3. **The passkey index** — the name a Vela user registered, by address
 //!    (chain → founding key → index units; `vela_core::registry_lookup`).
-//! 4. **Name services**, in priority order: `.bnb`, `.arb`, `.g`, Basename, ENS.
+//! 4. **Name services**, in priority order: `.bnb`, `.arb`, `.g`, Basename, ENS
+//!    — each one only while its chain is one of the wallet's networks
+//!    ([`name_service_identity`]).
 //!
 //! ## Only positive results are cached
 //!
@@ -138,25 +140,40 @@ fn hex(bytes: &[u8]) -> String {
 // Reverse resolution
 // ---------------------------------------------------------------------------
 
-fn eth_call(chain_id: u32, to: &str, data: &str) -> Option<String> {
+/// One `eth_call` on a chain — `(chain_id, to, data)` — answered with the RAW
+/// `result`, a bare `0x` included, or `None` when nobody answered. The name
+/// services' only way out to a network: [`pool_call`] in a session, a
+/// recorder under test.
+type Transport<'a> = &'a dyn Fn(u32, &str, &str) -> Option<String>;
+
+/// [`Transport`] through the request pool.
+fn pool_call(chain_id: u32, to: &str, data: &str) -> Option<String> {
     let result = pool::call(
         chain_id,
         "eth_call",
         json!([{ "to": to, "data": data }, "latest"]),
     )
     .ok()?;
-    let hex = result.get("result").and_then(Value::as_str)?;
-    (hex != "0x").then(|| hex.to_owned())
+    result
+        .get("result")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
+/// An `eth_call` whose bare `0x` — no contract there, nothing returned — is
+/// `None`.
+fn eth_call(call: Transport<'_>, chain_id: u32, to: &str, data: &str) -> Option<String> {
+    call(chain_id, to, data).filter(|hex| hex != "0x")
 }
 
 /// One service's answer for one address, forward-verified, or `None`. A name
 /// this returns has been proven to resolve back to `address`.
-fn reverse_resolve(address: &str, service: &NameService) -> Option<String> {
+fn reverse_resolve(address: &str, service: &NameService, call: Transport<'_>) -> Option<String> {
     let stripped = address.trim_start_matches("0x").to_lowercase();
     let reverse_node = match service.reverse_registrar {
         Some(registrar) => {
             let data = format!("0x{SEL_NODE}{stripped:0>64}");
-            let answer = eth_call(service.chain_id, registrar, &data)?;
+            let answer = eth_call(call, service.chain_id, registrar, &data)?;
             // A node is one word. Anything shorter is not one.
             (answer.trim_start_matches("0x").len() >= 64).then_some(answer)?
         }
@@ -165,6 +182,7 @@ fn reverse_resolve(address: &str, service: &NameService) -> Option<String> {
     let node = reverse_node.trim_start_matches("0x");
 
     let resolver = eth_call(
+        call,
         service.chain_id,
         service.registry,
         &format!("0x{SEL_RESOLVER}{node}"),
@@ -178,18 +196,19 @@ fn reverse_resolve(address: &str, service: &NameService) -> Option<String> {
     }
 
     let answer = eth_call(
+        call,
         service.chain_id,
         &format!("0x{resolver_address}"),
         &format!("0x{SEL_NAME}{node}"),
     )?;
     // What the address CLAIMS to be called. Nothing may draw it yet.
     let claimed = decode_name(&answer)?;
-    forward_verified(address, service, &claimed)
+    forward_verified(address, service, &claimed, call)
 }
 
 /// Perform one `eth_call` the core handed over. Every failure is `Failed`, and
 /// the core decides what a failure means — here, that the name stays unshown.
-fn perform(request: &LookupRequest) -> LookupAnswer {
+fn perform(request: &LookupRequest, call: Transport<'_>) -> LookupAnswer {
     let LookupRequest::EthCall {
         id,
         chain_id,
@@ -207,7 +226,7 @@ fn perform(request: &LookupRequest) -> LookupAnswer {
     };
     // The RAW result, a bare `0x` included: a chain without the contract is an
     // ANSWER ("not here"), not a silence, and the core's verdicts differ.
-    match eth_call_raw(*chain_id, to, data) {
+    match call(*chain_id, to, data) {
         Some(body) => LookupAnswer {
             id: id.clone(),
             outcome: LookupOutcome::Ok,
@@ -221,21 +240,6 @@ fn perform(request: &LookupRequest) -> LookupAnswer {
     }
 }
 
-/// Like [`eth_call`], but `0x` comes back as the answer it is rather than as
-/// `None`.
-fn eth_call_raw(chain_id: u32, to: &str, data: &str) -> Option<String> {
-    let result = pool::call(
-        chain_id,
-        "eth_call",
-        json!([{ "to": to, "data": data }, "latest"]),
-    )
-    .ok()?;
-    result
-        .get("result")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-}
-
 /// The claimed name, but only if resolving it forward lands back on `address`.
 ///
 /// The rule — what is asked, in what order, what an unanswered call means, and
@@ -243,7 +247,12 @@ fn eth_call_raw(chain_id: u32, to: &str, data: &str) -> Option<String> {
 /// other three shells. `None` covers both "this name is somebody else's" and
 /// "nobody answered": either way the shell shows the address alone, because
 /// failing open would let whoever poisons the record choose the moment.
-fn forward_verified(address: &str, service: &NameService, claimed: &str) -> Option<String> {
+fn forward_verified(
+    address: &str,
+    service: &NameService,
+    claimed: &str,
+    call: Transport<'_>,
+) -> Option<String> {
     let mut answers: Vec<LookupAnswer> = Vec::new();
     for _ in 0..MAX_VERIFY_ROUNDS {
         match name_verify::step(
@@ -254,7 +263,7 @@ fn forward_verified(address: &str, service: &NameService, claimed: &str) -> Opti
             &answers,
         ) {
             VerifyStep::Ask { requests } => {
-                answers.extend(requests.iter().map(perform));
+                answers.extend(requests.iter().map(|request| perform(request, call)));
             }
             VerifyStep::Done {
                 forward_state: ForwardState::Verified,
@@ -389,23 +398,45 @@ pub fn resolve(address: &str) -> Option<ContactIdentity> {
         return Some(identity);
     }
 
-    // 4. Name services, in priority order.
-    //
-    // The web races all five and takes the first match BY PRIORITY, not by
-    // arrival. Asked in order here: five sequential lookups against a name
-    // nobody has is the slow path, and it is also the rare one — a stranger's
-    // address is looked up once and then not asked again for a day.
-    for service in NAME_SERVICES {
-        if let Some(name) = reverse_resolve(address, service) {
-            let identity = ContactIdentity {
+    // 4. Name services, in priority order — on the wallet's own networks.
+    let networks = crate::executor::network_admin::wallet_chain_ids();
+    let identity = name_service_identity(address, &networks, &pool_call)?;
+    remember(address, &identity, now_ms);
+    Some(identity)
+}
+
+/// The name services' answer for `address`, in priority order, each forward
+/// verified — asked through `call`.
+///
+/// **A service is asked only while its chain is one of the wallet's
+/// networks** (`networks`: built in, or added by the person — the list
+/// Settings → Networks shows). A service on any other chain is skipped: no
+/// pool call, no request, and the walk goes on to the next one exactly as
+/// when a service has no name for the address. `.g` lives on chain 1625,
+/// which the wallet does not have: on the owner's phone every launch's
+/// lookups left "1625" among the networks that could not be reached (PR 4
+/// item 9). A wallet has no business asking a network its person never added
+/// — and once they add it, its service is asked from the next lookup; nothing
+/// remembers a "no" (only positives are cached).
+///
+/// The web races all five and takes the first match BY PRIORITY, not by
+/// arrival. Asked in order here: sequential lookups against a name nobody has
+/// is the slow path, and it is also the rare one — a stranger's address is
+/// looked up once and then not asked again for a day.
+fn name_service_identity(
+    address: &str,
+    networks: &[u32],
+    call: Transport<'_>,
+) -> Option<ContactIdentity> {
+    NAME_SERVICES
+        .iter()
+        .filter(|service| networks.contains(&service.chain_id))
+        .find_map(|service| {
+            reverse_resolve(address, service, call).map(|name| ContactIdentity {
                 name,
                 source: service.label.to_owned(),
-            };
-            remember(address, &identity, now_ms);
-            return Some(identity);
-        }
-    }
-    None
+            })
+        })
 }
 
 #[cfg(test)]
@@ -536,6 +567,182 @@ mod tests {
             );
             assert_eq!(cached(ADDR, now + CACHE_TTL_MS + 1.0), None, "expired");
         });
+    }
+
+    // -- PR 4 item 9: a name service is asked only on a network the wallet has
+
+    /// The chain the `.g` registry lives on — not one of the wallet's.
+    const GRAVITY: u32 = 1625;
+    const SOMEBODY: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+
+    /// ENS-shaped chains, and a record of everything asked of them. On a
+    /// chain in `named` the registry has a resolver for every node, the
+    /// resolver's reverse record says that chain's name, and the name
+    /// resolves forward to [`SOMEBODY`] — a name that passes verification.
+    /// On any other chain the registry has no resolver: "no record".
+    struct Chains {
+        named: Vec<(u32, &'static str)>,
+        asked: std::cell::RefCell<Vec<u32>>,
+    }
+
+    impl Chains {
+        fn named(named: &[(u32, &'static str)]) -> Self {
+            Self {
+                named: named.to_vec(),
+                asked: std::cell::RefCell::default(),
+            }
+        }
+
+        /// The transport: every call that would have gone to the pool.
+        fn call(&self, chain_id: u32, _to: &str, data: &str) -> Option<String> {
+            self.asked.borrow_mut().push(chain_id);
+            let name = self
+                .named
+                .iter()
+                .find(|(id, _)| *id == chain_id)
+                .map(|(_, name)| *name);
+            let word = |hex: &str| format!("0x{hex:0>64}");
+            Some(match (data.get(2..10)?, name) {
+                // ENSIP-19's reverse node, where a chain derives one.
+                (SEL_NODE, _) => word(&"11".repeat(32)),
+                (SEL_RESOLVER, Some(_)) => word("5e501be5"),
+                (SEL_RESOLVER, None) => word("0"),
+                (SEL_NAME, Some(name)) => {
+                    let text: String = name.bytes().map(|byte| format!("{byte:02x}")).collect();
+                    let padded = text.len().div_ceil(64) * 64;
+                    format!("0x{:064x}{:064x}{text:0<padded$}", 32, name.len())
+                }
+                // `addr(bytes32)`: the forward record.
+                ("3b3b57de", Some(_)) => word(&SOMEBODY.trim_start_matches("0x").to_lowercase()),
+                _ => "0x".to_owned(),
+            })
+        }
+
+        /// The chains asked, each once, in the order they were first asked.
+        fn chains(&self) -> Vec<u32> {
+            let mut seen = Vec::new();
+            for chain_id in self.asked.borrow().iter() {
+                if !seen.contains(chain_id) {
+                    seen.push(*chain_id);
+                }
+            }
+            seen
+        }
+    }
+
+    fn named_by(chains: &Chains) -> Option<(String, String)> {
+        let networks = crate::executor::network_admin::wallet_chain_ids();
+        name_service_identity(SOMEBODY, &networks, &|chain_id, to, data| {
+            chains.call(chain_id, to, data)
+        })
+        .map(|identity| (identity.name, identity.source))
+    }
+
+    /// PR 4 item 9, the other half: stop asking a network the wallet does not
+    /// have. `.g`'s registry lives on chain 1625, which is not one of the
+    /// wallet's networks; the resolver asked it on every lookup all the same.
+    /// With the real resolver over the real network list, and a transport
+    /// that records every call that would have reached the pool:
+    ///
+    /// - 1625 absent: an address that HAS a verified `.g` name is asked
+    ///   about on the other four services' chains only, in priority order —
+    ///   not one call names 1625 — and nobody names it; with an ENS name too
+    ///   it resolves through ENS, as if `.g` had no name for it;
+    /// - 1625 added as a custom network: `.g` is asked, and answers in its
+    ///   own place in the order, before Basename and ENS are reached;
+    /// - removed again: not asked again.
+    #[test]
+    fn a_name_service_is_asked_only_on_a_network_the_wallet_has() {
+        storage::tests::with_temp_state("identity-wallet-networks", || {
+            // The premise: `.g` is on 1625, the wallet has no such network,
+            // and every other service is on one it does have.
+            let networks = crate::executor::network_admin::wallet_chain_ids();
+            assert!(!networks.contains(&GRAVITY), "1625 is not built in");
+            let elsewhere: Vec<u32> = NAME_SERVICES
+                .iter()
+                .filter(|service| !networks.contains(&service.chain_id))
+                .map(|service| service.chain_id)
+                .collect();
+            assert_eq!(
+                elsewhere,
+                [GRAVITY],
+                "`.g` alone is off the wallet's networks"
+            );
+            let order: Vec<u32> = NAME_SERVICES.iter().map(|s| s.chain_id).collect();
+            assert_eq!(order, [56, 42_161, GRAVITY, 8_453, 1]);
+
+            let only_g = Chains::named(&[(GRAVITY, "somebody.g")]);
+            assert_eq!(
+                named_by(&only_g),
+                None,
+                "nobody the wallet may ask names it"
+            );
+            assert_eq!(only_g.chains(), [56, 42_161, 8_453, 1]);
+            assert!(
+                !only_g.asked.borrow().contains(&GRAVITY),
+                "no call for 1625"
+            );
+
+            let g_and_ens = Chains::named(&[(GRAVITY, "somebody.g"), (1, "somebody.eth")]);
+            assert_eq!(
+                named_by(&g_and_ens),
+                Some(("somebody.eth".to_owned(), "ENS".to_owned())),
+                "the walk goes on to the next service"
+            );
+            assert_eq!(g_and_ens.chains(), [56, 42_161, 8_453, 1]);
+
+            // The person adds the network: its service is asked from the next
+            // lookup, in its place.
+            let added = storage::write_value(
+                storage::KEY_CUSTOM_NETWORKS,
+                json!([{
+                    "id": "custom-1625",
+                    "displayName": "Gravity",
+                    "chainId": GRAVITY,
+                    "rpcURL": "https://rpc.gravity.example",
+                    "nativeSymbol": "G",
+                }]),
+            );
+            assert!(added.is_ok());
+            assert!(crate::executor::network_admin::wallet_chain_ids().contains(&GRAVITY));
+            let with_gravity = Chains::named(&[(GRAVITY, "somebody.g"), (1, "somebody.eth")]);
+            assert_eq!(
+                named_by(&with_gravity),
+                Some(("somebody.g".to_owned(), ".g".to_owned()))
+            );
+            assert_eq!(
+                with_gravity.chains(),
+                [56, 42_161, GRAVITY],
+                "asked third, and the walk ends at its answer"
+            );
+
+            // And removes it: not asked again.
+            assert!(storage::remove_value(storage::KEY_CUSTOM_NETWORKS).is_ok());
+            let removed = Chains::named(&[(GRAVITY, "somebody.g"), (1, "somebody.eth")]);
+            assert_eq!(
+                named_by(&removed).map(|(_, source)| source).as_deref(),
+                Some("ENS")
+            );
+            assert!(!removed.asked.borrow().contains(&GRAVITY));
+        });
+    }
+
+    /// The same rule for any service: with a network list that has none of
+    /// their chains nothing is asked at all, and the recorder that answers
+    /// "no record" everywhere is asked once per service the wallet may ask.
+    #[test]
+    fn a_wallet_with_none_of_their_networks_asks_no_name_service() {
+        let nobody = Chains::named(&[]);
+        let ask = |networks: &[u32]| {
+            name_service_identity(SOMEBODY, networks, &|chain_id, to, data| {
+                nobody.call(chain_id, to, data)
+            })
+        };
+        assert_eq!(ask(&[]), None);
+        assert_eq!(ask(&[100, 137]), None);
+        assert!(nobody.asked.borrow().is_empty(), "not one call");
+        assert_eq!(ask(&[1, 56]), None);
+        assert_eq!(nobody.chains(), [56, 1], "priority order, not the list's");
     }
 
     /// The live waterfall against a name that exists — and, since FR-010, one

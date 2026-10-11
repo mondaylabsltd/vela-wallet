@@ -46,10 +46,54 @@ pub enum ActivityKind {
     Dapp,
 }
 
+/// A dApp row's title in the parts it is made of — what was done and where
+/// ("Contract interaction" · "on arcorbs.game3.app"; 「在 arcorbs.game3.app」
+/// · 「合约交互」), in the order the reader's language writes them (PR 4
+/// item 1).
+///
+/// The title may wrap BETWEEN its parts and nowhere else. Drawn as one run
+/// of text it wrapped wherever the line ended: 「在 arcorbs.game3.app 合 /
+/// 约交互」 on the phone, the action cut in two — and on the desktop, under a
+/// long host, inside the host's own name. Each part is one unbroken line;
+/// the place, when it is longer than the row by itself, loses its middle
+/// (both ends of a host are what tell two sites apart), never the action
+/// its words.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TitleParts {
+    /// In reading order.
+    pub parts: Vec<TitlePart>,
+    /// The language writes a space between them (not Japanese: 「…で兑换」).
+    pub spaced: bool,
+}
+
+/// One part of a [`TitleParts`] title.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TitlePart {
+    pub text: SharedString,
+    /// This part names the place — the site or protocol, with the word that
+    /// ties it to the action ("on …", 「在 …」): the one that may lose its
+    /// middle.
+    pub place: bool,
+}
+
+impl TitleParts {
+    /// The title as one run of text — what a row with no parts would say,
+    /// and what the tests hold the parts to.
+    #[cfg(test)]
+    #[must_use]
+    pub fn joined(&self) -> String {
+        let texts: Vec<&str> = self.parts.iter().map(|part| part.text.as_ref()).collect();
+        texts.join(if self.spaced { " " } else { "" })
+    }
+}
+
 #[derive(Clone)]
 pub struct ActivityRowModel {
     pub kind: ActivityKind,
     pub title: SharedString,
+    /// The same title in its parts, when it has more than one (a dApp row
+    /// that names a place): where it may wrap. `None`: one run of text.
+    pub title_parts: Option<TitleParts>,
     pub subtitle: SharedString,
     pub amount: SharedString,
     pub unit: SharedString,
@@ -390,6 +434,77 @@ pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
     host.view()
 }
 
+/// `VELA_HERO=checking|updated|updating|failed|offline|hidden` (developer
+/// builds, with `VELA_PAGE=gallery`): the home's hero AS A SESSION DRAWS IT —
+/// its refresh control with it — in each state its one line under the figure
+/// can be in, every view the real balance core's. A session cannot be held in
+/// the half second its first read takes, nor made to fail on request; and the
+/// states have to be measured side by side (PR 4 item 4: the line and the
+/// control are one line of one height in all of them). The same env-pin
+/// family as `VELA_FIRST_READ`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeroBoard {
+    /// The first read is still out: "Checking…", and nothing read yet.
+    Checking,
+    /// A wallet that holds something, read a moment ago: nothing to say.
+    Updated,
+    /// The same, while a read the person asked for is out.
+    Updating,
+    /// A read failed inside Vela: its sentence, a button.
+    Failed,
+    /// Networks out of reach: "Can't reach 3 networks".
+    Offline,
+    /// The balance hidden.
+    Hidden,
+}
+
+impl HeroBoard {
+    pub const ALL: [(Self, &'static str); 6] = [
+        (Self::Checking, "checking"),
+        (Self::Updated, "updated"),
+        (Self::Updating, "updating"),
+        (Self::Failed, "failed"),
+        (Self::Offline, "offline"),
+        (Self::Hidden, "hidden"),
+    ];
+
+    /// The board a pin's value names (`VELA_HERO`).
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find_map(|(board, name)| (name == want.trim()).then_some(board))
+    }
+
+    /// The board `VELA_HERO` pins, if it pins one.
+    #[must_use]
+    pub fn pinned() -> Option<Self> {
+        Self::named(&crate::dev_env::var!("VELA_HERO")?)
+    }
+
+    /// The balance core's view on this board.
+    #[must_use]
+    pub fn view(self) -> vela_core::app::balance_dashboard::BalanceView {
+        match self {
+            Self::Checking => first_read_view(FirstRead::Checking),
+            Self::Updated | Self::Updating => held_view(),
+            Self::Failed => internal_view(),
+            Self::Offline => unreachable_view(),
+            Self::Hidden => {
+                let mut view = held_view();
+                view.hidden = true;
+                view
+            }
+        }
+    }
+
+    /// Whether the figure has been read at all — the control then says when.
+    #[must_use]
+    pub fn read_before(self) -> bool {
+        self != Self::Checking
+    }
+}
+
 /// Where the first read of a wallet that held nothing last session stands —
 /// the three things the hero's one line says about a zero (PR 3 final note
 /// F19), each a view the real balance core produced.
@@ -637,6 +752,7 @@ fn row(
     ActivityRowModel {
         kind,
         title,
+        title_parts: None,
         subtitle: subtitle.into(),
         amount: amount.into(),
         unit: unit.into(),
@@ -757,7 +873,8 @@ pub fn assets_variants(s: &WalletStrings) -> Vec<AssetRowModel> {
             ticker: "BNB".into(),
             chain: "BNB Chain".into(),
             badge: chain_bnb(),
-            balance: MASK.into(),
+            // A hidden coin amount keeps its unit (`privacy::masked_amount`).
+            balance: vela_core::app::privacy::masked_amount("BNB").into(),
             fiat: Fiat::Masked,
             logos: crate::marks::Logos::default(),
         },
@@ -889,7 +1006,9 @@ pub enum SubWorth {
     /// is, so this is the closest room there is — exactly the figure's when
     /// the currency that commits is the placeholder's own.
     Waiting { room: SharedString },
-    /// Hidden: no figure and no room for one — the network alone.
+    /// No holding to speak of (it left the list under an open page): no
+    /// figure and no room for one — the line's second part alone. Never
+    /// "hidden": a hidden worth is said, as the mask ([`MASK`]).
     Absent,
 }
 
@@ -1246,6 +1365,55 @@ pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
     ]);
     let _ = host.dispatch(Event::PrivacyChanged { hidden });
     host.view()
+}
+
+/// The site of the phone walk's row — 「在 arcorbs.game3.app 合约交互」.
+pub const WALK_SITE: &str = "arcorbs.game3.app";
+/// A host too long for any row: 54 characters.
+pub const LONG_SITE: &str = "portfolio.staging.some-very-long-protocol-name.finance";
+
+/// Four dApp records through the real feed core, for the row's TITLE (PR 4
+/// item 1): a contract call on [`WALK_SITE`], the same on [`LONG_SITE`], a
+/// call that moved a coin on each. What `VELA_ACTIVITY_FIXTURE=dapp` draws —
+/// on the home and in History — so the title's wrap can be looked at and
+/// measured in any language without a wallet that has used a dApp.
+#[must_use]
+pub fn dapp_feed() -> vela_core::app::activity_feed::FeedView {
+    use vela_core::app::activity_feed::{FeedTxKind, FeedTxRecord, FeedTxStatus};
+    const DAY_MS: f64 = 1_756_000_000_000.0 - 1_756_000_000_000.0 % 86_400_000.0;
+    let record = |id: &str, site: &str, value: &str, at: f64| FeedTxRecord {
+        id: id.to_owned(),
+        user_op_hash: format!("0x{}", id.repeat(16)),
+        tx_hash: format!("0x{}", id.repeat(16)),
+        from: "0xme".to_owned(),
+        to: "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE".to_owned(),
+        to_name: None,
+        value: value.to_owned(),
+        symbol: "BNB".to_owned(),
+        decimals: 18,
+        logo_urls: None,
+        chain_id: 56,
+        timestamp: DAY_MS / 1000.0 + at,
+        day_start_ms: DAY_MS,
+        status: FeedTxStatus::Confirmed,
+        kind: Some(FeedTxKind::DappTx),
+        usd: None,
+        dapp_url: Some(format!("https://{site}/play")),
+        intent: None,
+        balance_changes: None,
+        calldata: None,
+        call_data: None,
+        summary: None,
+        settlement: None,
+        time_verified: None,
+    };
+    core_feed_host(vec![
+        record("a1b2", WALK_SITE, "0", 54_000.0),
+        record("c3d4", LONG_SITE, "0", 50_400.0),
+        record("e5f6", WALK_SITE, "0.00012", 46_800.0),
+        record("0718", LONG_SITE, "0.00012", 43_200.0),
+    ])
+    .view()
 }
 
 /// The REAL feed core over `records`, loaded the way the executor answers it

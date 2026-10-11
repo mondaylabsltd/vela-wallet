@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import SiteMark from './SiteMark.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import type { BrowserModel } from '../model';
 	import type { ExploreMessages } from '../messages';
@@ -10,7 +11,7 @@
 	 * navigation). The app's tab bar stays under the page, so everything the
 	 * old bottom toolbar held moved up here or into the site menu:
 	 *
-	 *   ‹  [ 🔒 host ]  (account)  [n]  ⋯
+	 *   ‹  [ mark host ]  (account)  [n]  ⋯
 	 *
 	 * - ‹ walks the page's history; with none left it returns to the Explore
 	 *   home, tab kept alive. It is never greyed: there is always somewhere
@@ -101,9 +102,13 @@
 		/>
 	{:else}
 		<button type="button" class="pill" title={copy.addressBar} onclick={edit}>
-			{#if browser.secure}
-				<span class="lock"><Icon icon={UTILITY_ICONS.lock} size="xs" /></span>
-			{/if}
+			<!-- The address's mark, by the core's `OriginLock`: a padlock for
+			     https alone, the local mark for a page on this device or the
+			     person's own network, the warning for public http. It used to be
+			     a padlock whenever the wallet could be used from the page —
+			     `http://127.0.0.1:8137` included. Named here: no words stand
+			     beside it. -->
+			<span class="lock"><SiteMark mark={browser.mark} named /></span>
 			<span class="host"><bdi>{browser.host}</bdi></span>
 		</button>
 

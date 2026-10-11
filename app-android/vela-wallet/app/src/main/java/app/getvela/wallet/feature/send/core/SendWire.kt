@@ -747,8 +747,15 @@ data class SendView(
     val split_duplicates: List<SendDuplicateRowView> = emptyList(),
     /** Split only: the gate's reasons, row by row. Empty exactly when the rows pass. */
     val split_row_issues: List<SendSplitRowIssue> = emptyList(),
-    /** Split only: balance less the rows' sum, token units; `null` while unsummable or over. */
+    /** Split only: balance less the rows' sum, token units; `null` while unsummable or over. EXACT — for whoever counts. */
     val split_remaining: String? = null,
+    /**
+     * [split_remaining] as a person reads it: cut to the token ladder by the
+     * core, never rounded up ("0.0003", not "0.000300194967818323") — a
+     * figure of what is THERE may lose digits but must never gain value.
+     * Dot-decimal; the one a shell draws.
+     */
+    val split_remaining_display: String? = null,
     /** How many more rows an import may add: the cap less the rows already started (the importer's own cap). */
     val split_import_room: Int = BATCH_MAX_RECIPIENTS,
     val picker_target: String? = null,

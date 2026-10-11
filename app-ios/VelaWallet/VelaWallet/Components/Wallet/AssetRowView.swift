@@ -17,6 +17,11 @@ struct AssetRowView: View {
 
     let model: AssetRowModel
 
+    /// What a hidden worth reads: the bare mask — a fiat figure's unit is the
+    /// display currency, which every figure on the screen shares. (The coin
+    /// amount above it keeps its coin: `maskedAmount(unit:)`, in the model.)
+    static let maskedWorth = WalletFixtures.mask
+
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
             if let mark = model.mark {
@@ -73,7 +78,7 @@ struct AssetRowView: View {
                 }
                 .accessibilityHidden(true)
         case .masked:
-            Text(verbatim: WalletFixtures.mask)
+            Text(verbatim: Self.maskedWorth)
                 .typeRole(Typography.rowSub.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
         case .none:

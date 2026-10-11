@@ -57,6 +57,12 @@
 //!   [`dapp_rpc::add_outcome_error`] names. One such sheet at a time: a second
 //!   request is -32002 while it is open.
 //! - Every grant follows the wallet's active account (`followActiveAccount`).
+//! - A dev space (the parallel space) has its own sites
+//!   ([`Event::AccountSwitched`]'s `space`): while its account is in front
+//!   the person's own sites are set aside whole — not re-pinned, not dropped,
+//!   not written — and come back exactly when the person's account does. What
+//!   a site is granted inside the space lives in this machine only and ends
+//!   with the visit; nothing about a site is written to the store from there.
 //! - Every address a page is given is spelled EIP-55
 //!   ([`dapp_spelling`], spec 082 RG10): the active account as it arrives, and
 //!   a stored grant as it loads.
@@ -94,8 +100,8 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::dapp_permissions::{
-    dapp_spelling, is_insecure_public_origin, offers_wallet, origin_of, resolve_granted,
-    should_drop_grant, DpermGrant,
+    dapp_spelling, is_insecure_public_origin, offers_wallet, origin_lock, origin_of,
+    resolve_granted, should_drop_grant, DpermGrant, OriginLock,
 };
 use super::dapp_record::{
     endpoint_error_why, read_failure_why, report, row_log_line, sign_error_why, tab_log_line,
@@ -293,9 +299,17 @@ pub enum Event {
     },
     /// The active account changed (initial load included). Every grant
     /// follows it.
+    ///
+    /// `space` says the account now in front belongs to a dev space (the
+    /// parallel space's test wallet), not to the person. Going there is not
+    /// the person changing account: their sites are set aside, the space
+    /// shows its own, and the next switch to an account of theirs brings
+    /// theirs back exactly. Absent = the person's own account.
     AccountSwitched {
         address: String,
         now_ms: f64,
+        #[serde(default)]
+        space: bool,
     },
     /// One string from the bridge. `frame_origin` is the PLATFORM's origin of
     /// the frame that sent it (Android `sourceOrigin`, iOS
@@ -559,6 +573,12 @@ pub struct Model {
     clock_ms: f64,
     /// The tab whose whole record the view carries.
     inspected: Option<String>,
+    /// A dev space's account is in front (the parallel space).
+    in_space: bool,
+    /// The person's own sites while a dev space is in front: set aside whole
+    /// when it is entered, put back exactly when it is left. `None` outside
+    /// a space, and inside one until the stored sites have been read.
+    aside: Option<BTreeMap<String, Site>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -574,6 +594,10 @@ pub struct DbrConsentView {
     /// The account a grant would be made for (the active one).
     pub address: Option<String>,
     pub chain_id: u32,
+    /// The mark beside the site's name ([`OriginLock`]): a padlock for
+    /// `https` only.
+    #[serde(default)]
+    pub lock: OriginLock,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -583,9 +607,16 @@ pub struct DbrTabView {
     pub origin: Option<String>,
     pub connected_address: Option<String>,
     pub chain_id: u32,
-    /// https, or a loopback / private-network http host — the lock tells the
-    /// truth from this.
+    /// Not a public `http` page: https, or a loopback / private-network
+    /// http host. Whether the page is SAFE to use the wallet from — not what
+    /// the address bar's mark draws; that is [`Self::lock`].
     pub secure: bool,
+    /// The address bar's mark ([`OriginLock`]): a padlock for `https` only,
+    /// a neutral "local" mark for `http` on this device or the person's own
+    /// network, the warning for public `http`. A tab with no page yet has no
+    /// connection to mark (`insecure`, drawn by `secure` as before).
+    #[serde(default)]
+    pub lock: OriginLock,
     pub crashed: bool,
     /// Something of this tab's is open — a request, a read, a consent, a
     /// signature: its engine is never suspended (spec 099 R2).
@@ -673,12 +704,23 @@ impl App for DappBrowser {
                 model.wallet_addresses = addresses;
                 reconcile_grants(model, None, &mut out);
             }
-            Event::AccountSwitched { address, now_ms } => {
+            Event::AccountSwitched {
+                address,
+                now_ms,
+                space,
+            } => {
                 // The one spelling every page is given, whatever the shell
                 // sent (spec 082 RG10): the re-pinned grant, the
                 // `accountsChanged` it announces and every later connect
                 // answer all read from here.
                 model.active_address = Some(dapp_spelling(&address));
+                // Before anything follows the account: a dev space's sites
+                // are its own, and the person's are not this switch's to move.
+                if space {
+                    enter_space(model, &mut out);
+                } else {
+                    leave_space(model, &mut out);
+                }
                 reconcile_grants(model, Some(now_ms), &mut out);
             }
             Event::SitesListed { sites } => {
@@ -827,6 +869,17 @@ impl App for DappBrowser {
                 for origin in granted {
                     revoke(model, &origin, &mut out);
                 }
+                // "Every connection on this device" is the person's own
+                // words, wherever they say them: asked from inside a dev
+                // space it takes the sites set aside too, and those ARE in
+                // the store.
+                for (origin, site) in model.aside.iter_mut().flatten() {
+                    if site.grant.take().is_some() {
+                        out.op(DbrOperation::RemoveGrant {
+                            origin: origin.clone(),
+                        });
+                    }
+                }
             }
             Event::SigningAnswered {
                 tab,
@@ -889,21 +942,33 @@ impl App for DappBrowser {
                 methods: consent.entries.iter().map(|e| e.method.clone()).collect(),
                 address: model.active_address.clone(),
                 chain_id: site_chain(model, &consent.origin),
+                lock: origin_lock(&consent.origin),
             }),
             tabs: model
                 .tabs
                 .iter()
                 .map(|(id, tab)| {
                     let origin = tab.doc_origin.clone().or(tab.shown_origin.clone());
+                    // Only where the page is offered the wallet: a LAN
+                    // site connected in debug mode is not connected while
+                    // debug mode is off (spec 091).
+                    let connected_address = origin
+                        .as_deref()
+                        .filter(|origin| offers_wallet(origin, model.debug_mode))
+                        .and_then(|origin| granted(model, origin).into_iter().next());
+                    // "This site is not connected" is a statement about now.
+                    // Once the site IS connected it is no longer true, and a
+                    // banner still saying it is the app contradicting itself
+                    // (the 2026-10-11 phone walk). The row stays in the
+                    // record; it stops being the tab's trouble.
+                    let connected = connected_address.is_some();
+                    let troubles = move |row: &&Row| {
+                        row.row.is_issue()
+                            && !(connected && row.row.reason == Some(DbrReason::NotConnected))
+                    };
                     DbrTabView {
                         tab: id.clone(),
-                        // Only where the page is offered the wallet: a LAN
-                        // site connected in debug mode is not connected while
-                        // debug mode is off (spec 091).
-                        connected_address: origin
-                            .as_deref()
-                            .filter(|origin| offers_wallet(origin, model.debug_mode))
-                            .and_then(|origin| granted(model, origin).into_iter().next()),
+                        connected_address,
                         chain_id: origin
                             .as_deref()
                             .map(|origin| site_chain(model, origin))
@@ -911,6 +976,7 @@ impl App for DappBrowser {
                         secure: origin
                             .as_deref()
                             .is_some_and(|origin| !is_insecure_public_origin(origin)),
+                        lock: origin.as_deref().map(origin_lock).unwrap_or_default(),
                         crashed: tab.crashed,
                         busy: !tab.open.is_empty(),
                         page: page_state(tab),
@@ -921,7 +987,7 @@ impl App for DappBrowser {
                                 .iter()
                                 .rev()
                                 .take(RECENT_ROWS)
-                                .filter(|row| row.row.is_issue())
+                                .filter(troubles)
                                 .count(),
                         )
                         .unwrap_or(u32::MAX),
@@ -930,7 +996,7 @@ impl App for DappBrowser {
                             .iter()
                             .rev()
                             .take(RECENT_ROWS)
-                            .find(|row| row.row.is_issue())
+                            .find(troubles)
                             .and_then(|row| {
                                 let reason = row.row.reason?;
                                 Some(DbrFailureNote {
@@ -1122,6 +1188,10 @@ fn sites_listed(model: &mut Model, sites: Vec<DbrStoredSite>, out: &mut Out) {
         }
     }
     model.ready = true;
+    if model.in_space {
+        // A launch inside a dev space: what the store holds is the person's.
+        set_aside(model, out);
+    }
     reconcile_grants(model, None, out);
     for held in std::mem::take(&mut model.held) {
         page_message(model, held, out);
@@ -1182,7 +1252,7 @@ fn reconcile_grants(model: &mut Model, now_ms: Option<f64>, out: &mut Out) {
         if let Some(site) = model.sites.get_mut(&origin) {
             site.grant = Some(repinned.clone());
         }
-        out.op(DbrOperation::WriteGrant { grant: repinned });
+        store(model, out, DbrOperation::WriteGrant { grant: repinned });
         emit_to_origin(
             model,
             &origin,
@@ -1193,6 +1263,115 @@ fn reconcile_grants(model: &mut Model, now_ms: Option<f64>, out: &mut Out) {
     }
 }
 
+/// A write to the site store. Made for the person's own wallet only: a dev
+/// space's sites live in this machine and end with the visit, so nothing a
+/// site is granted, loses or switches to in there can reach — or overwrite —
+/// what the store holds for the person.
+fn store(model: &Model, out: &mut Out, op: DbrOperation) {
+    if !model.in_space {
+        out.op(op);
+    }
+}
+
+/// A dev space's account came to the front: from here the sites are the
+/// space's own.
+fn enter_space(model: &mut Model, out: &mut Out) {
+    if model.in_space {
+        return;
+    }
+    model.in_space = true;
+    // Before the stored sites are read there is nothing to set aside yet;
+    // `sites_listed` does it the moment they arrive.
+    if model.ready {
+        set_aside(model, out);
+    }
+}
+
+/// Set the person's sites aside, whole, and start the space's own: no site
+/// is connected there until it is connected THERE. A site keeps the network
+/// it was on — where a page is is not a grant, and a page that found itself
+/// on another chain for no reason it could see would be a jump of its own.
+fn set_aside(model: &mut Model, out: &mut Out) {
+    let own = std::mem::take(&mut model.sites);
+    for (origin, site) in &own {
+        let chain_id = site
+            .chain_id
+            .or(site.grant.as_ref().map(|grant| grant.chain_id))
+            .filter(|chain| *chain > 0);
+        if chain_id.is_some() {
+            model.sites.insert(
+                origin.clone(),
+                Site {
+                    grant: None,
+                    chain_id,
+                },
+            );
+        }
+    }
+    model.aside = Some(own);
+    for (origin, site) in model.aside.iter().flatten() {
+        if site.grant.is_some() {
+            emit_to_origin(model, origin, "accountsChanged", Some(json!([])), out);
+        }
+    }
+}
+
+/// An account of the person's is in front again: their sites come back
+/// exactly as they were set aside, and the space's are gone. Each open page
+/// hears what changed for it, and only that.
+fn leave_space(model: &mut Model, out: &mut Out) {
+    if !model.in_space {
+        return;
+    }
+    model.in_space = false;
+    let Some(own) = model.aside.take() else {
+        return;
+    };
+    let space = std::mem::replace(&mut model.sites, own);
+    let origins: std::collections::BTreeSet<String> =
+        space.keys().chain(model.sites.keys()).cloned().collect();
+    for origin in origins {
+        let was = space.get(&origin);
+        let was_account = was.and_then(|site| site.grant.as_ref().map(|g| g.address.clone()));
+        let was_chain = was
+            .and_then(|site| {
+                site.chain_id
+                    .or(site.grant.as_ref().map(|grant| grant.chain_id))
+            })
+            .filter(|chain| *chain > 0)
+            .unwrap_or(DEFAULT_CHAIN_ID);
+        let now_account = granted(model, &origin).into_iter().next();
+        if !same_account(was_account.as_deref(), now_account.as_deref()) {
+            let accounts: Vec<String> = now_account.into_iter().collect();
+            emit_to_origin(
+                model,
+                &origin,
+                "accountsChanged",
+                Some(json!(accounts)),
+                out,
+            );
+        }
+        let now_chain = site_chain(model, &origin);
+        if now_chain != was_chain {
+            emit_to_origin(
+                model,
+                &origin,
+                "chainChanged",
+                Some(Value::String(hex_chain_id(now_chain))),
+                out,
+            );
+        }
+    }
+}
+
+fn same_account(a: Option<&str>, b: Option<&str>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
 fn revoke(model: &mut Model, origin: &str, out: &mut Out) {
     let Some(site) = model.sites.get_mut(origin) else {
         return;
@@ -1200,9 +1379,13 @@ fn revoke(model: &mut Model, origin: &str, out: &mut Out) {
     if site.grant.take().is_none() {
         return;
     }
-    out.op(DbrOperation::RemoveGrant {
-        origin: origin.to_owned(),
-    });
+    store(
+        model,
+        out,
+        DbrOperation::RemoveGrant {
+            origin: origin.to_owned(),
+        },
+    );
     emit_to_origin(model, origin, "accountsChanged", Some(json!([])), out);
     emit_to_origin(model, origin, "disconnect", None, out);
 }
@@ -1213,10 +1396,14 @@ fn set_site_chain(model: &mut Model, origin: &str, chain_id: u32, out: &mut Out)
     }
     let changed = site_chain(model, origin) != chain_id;
     model.sites.entry(origin.to_owned()).or_default().chain_id = Some(chain_id);
-    out.op(DbrOperation::WriteSiteChain {
-        origin: origin.to_owned(),
-        chain_id,
-    });
+    store(
+        model,
+        out,
+        DbrOperation::WriteSiteChain {
+            origin: origin.to_owned(),
+            chain_id,
+        },
+    );
     if changed {
         emit_to_origin(
             model,
@@ -1857,7 +2044,7 @@ fn consent_approved(model: &mut Model, now_ms: f64, out: &mut Out) {
     };
     model.sites.entry(origin.clone()).or_default().grant = Some(grant.clone());
     // Persist, audit, answer, then announce — the order every client used.
-    out.op(DbrOperation::WriteGrant { grant });
+    store(model, out, DbrOperation::WriteGrant { grant });
     out.op(DbrOperation::SaveConnectionRecord {
         address: active.clone(),
         chain_id,

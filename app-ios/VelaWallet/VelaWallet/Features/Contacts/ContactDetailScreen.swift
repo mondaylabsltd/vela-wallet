@@ -104,7 +104,7 @@ struct ContactDetailScreen: View {
                 .padding(.bottom, Tokens.Space.s32)
             }
         }
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
         .walletTextScale(model.textScale)
         // ONE sheet, whose CONTENT changes. Three `.sheet` modifiers on one
         // view is what stopped the contacts list responding to taps at all

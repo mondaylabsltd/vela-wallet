@@ -75,8 +75,26 @@
 		if (fee.kind === 'onchain' && fee.valueFiatWithheld === true) stackedOnce = true;
 	});
 	const stacked = $derived(
-		stackedOnce || (fee.kind === 'onchain' && fee.valueFiatWithheld === true)
+		stackedOnce ||
+			(fee.kind === 'onchain' && (fee.valueFiatWithheld === true || fee.moneyLine === true))
 	);
+
+	/**
+	 * The lines a landed fee may come to say under its card, held as room
+	 * (`FeeModel.rooms`, device walk of 2026-10-11, item 2): each is laid out
+	 * in the one place such a line is said — unseen, unsaid — so that place is
+	 * as tall as the tallest of them, at this width, in this language and at
+	 * this text size, from the first frame. What IS said stands over them.
+	 *
+	 * A failure's reason is said there too and may be longer than any of them
+	 * ("The relay couldn't test-run this transaction yet. Retrying
+	 * automatically."). It runs on below the place instead of growing it — into
+	 * the standing line under it (`FeeStaleNote`), which is blank whenever a
+	 * fee has failed: a failed fee has no figure to be old. While that line
+	 * has its own words the place grows in the ordinary way instead.
+	 */
+	const rooms = $derived(fee.kind === 'onchain' ? (fee.rooms ?? []) : []);
+	const held = $derived(rooms.length > 0 && fee.kind === 'onchain' && fee.staleNote === undefined);
 </script>
 
 <!--
@@ -194,16 +212,25 @@
 				/>
 			{/if}
 		</div>
-		{#if warningLine?.said}
-			<!-- Issue 262: the reason the confirm is shut, right under the fee it is
-			     about (spec 082 G47 — it sat under the speed row) — the coin cannot
-			     pay, or (spec 079) the fee could not be asked and the sheet is
-			     asking again. -->
-			<p class="warning" role="alert">{warningLine.text}</p>
-		{:else if warningLine}
-			<!-- Measuring again: the last words are not this ask's, but their
-			     line keeps its height, so nothing above or below jumps (G47). -->
-			<p class="warning reserved" aria-hidden="true">{warningLine.text}</p>
+		{#if rooms.length > 0 || warningLine}
+			<!-- The one place a line is said under the card. With rooms named
+			     (a live sheet) it has its height before anything is said in it. -->
+			<div class="said" class:held>
+				{#each rooms as room (room)}
+					<p class="warning room" aria-hidden="true">{room}</p>
+				{/each}
+				{#if warningLine?.said}
+					<!-- Issue 262: the reason the confirm is shut, right under the fee it is
+					     about (spec 082 G47 — it sat under the speed row) — the coin cannot
+					     pay, or (spec 079) the fee could not be asked and the sheet is
+					     asking again. -->
+					<p class="warning" role="alert">{warningLine.text}</p>
+				{:else if warningLine}
+					<!-- Measuring again: the last words are not this ask's, but their
+					     line keeps its height, so nothing above or below jumps (G47). -->
+					<p class="warning reserved" aria-hidden="true">{warningLine.text}</p>
+				{/if}
+			</div>
 		{/if}
 		{#if fee.refreshLabel !== undefined}
 			<!-- The send form's calm note, in its standing line: the confirm
@@ -221,15 +248,37 @@
 {/if}
 
 <style>
-	.warning {
+	/* The place a line is said under the card: every line that may be said
+	   there shares one cell, so the place is as tall as the tallest of them. */
+	.said {
+		position: relative;
+		display: grid;
 		margin: var(--space-sm) var(--space-xl) 0;
+	}
+
+	.said > .warning {
+		grid-area: 1 / 1;
+	}
+
+	/* Held (see `held`): the place is its rooms' height and no more. What is
+	   said stands over them from the top and, if it is longer, runs on below
+	   — into the blank standing line under it — instead of growing the sheet. */
+	.said.held > .warning:not(.room) {
+		position: absolute;
+		inset-inline: 0;
+		top: 0;
+	}
+
+	.warning {
+		margin: 0;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: 500;
 		color: var(--color-error-base);
 	}
 
-	.warning.reserved {
+	.warning.reserved,
+	.warning.room {
 		visibility: hidden;
 	}
 
@@ -249,6 +298,13 @@
 		column-gap: var(--space-md);
 		row-gap: var(--space-xs);
 		min-width: 0;
+		/* The row is a <button> when a tap does something (a failed fee asked
+		   again, a list of coins) and a <div> when it does not — and a button
+		   inherits neither its type size nor its line height. The figure was
+		   set smaller in a control than in a fact, and the row lost 4 px the
+		   moment a fee failed. Both take the sheet's. */
+		font-size: inherit;
+		line-height: inherit;
 		padding: var(--space-lg) var(--space-xl);
 		border: none;
 		border-radius: var(--radius-lg);

@@ -15,6 +15,8 @@ import { pluralForm } from '$lib/i18n/plural';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
 import { moneyText, trimBalance, unreachableLine } from '$lib/wallet/live';
+import { fiatSymbol, maskedAmount } from '$lib/core/client';
+import { pageLanguage } from '$lib/i18n/page-language.svelte';
 import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
 import {
 	formatBytes,
@@ -49,14 +51,7 @@ import {
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
 import { chainLogoURL } from '$lib/flows/marks';
-import {
-	chainMeta,
-	feedbackPanel,
-	languageRows,
-	markFor,
-	currencyGlyph,
-	PROVIDER_KEY_URLS
-} from './fixtures';
+import { chainMeta, feedbackPanel, languageRows, markFor, PROVIDER_KEY_URLS } from './fixtures';
 import type { SettingsMessages } from './messages';
 import type {
 	AboutModel,
@@ -695,13 +690,22 @@ function liveCurrencyRows(
 	view: CurrencyView,
 	catalog?: LiveCurrencyCatalog
 ): SelectRowModel[] {
+	// The badge is the core's symbol for the currency, in the page's language
+	// — the same string every figure in that currency is written with, so the
+	// picker never shows one symbol for two currencies ("¥" is the reader's
+	// own of the yen and the yuan; a currency with no glyph shows its code).
+	const language = catalog?.locale ?? pageLanguage();
 	if (catalog === undefined || catalog.codes.length === 0) {
-		return drawn.map((row) => ({ ...row, selected: row.id === chosenCurrency(view) }));
+		return drawn.map((row) => ({
+			...row,
+			glyph: fiatSymbol(row.id, language),
+			selected: row.id === chosenCurrency(view)
+		}));
 	}
 	return catalog.codes.map((code) => ({
 		id: code,
 		label: code,
-		glyph: currencyGlyph(code),
+		glyph: fiatSymbol(code, language),
 		caption:
 			currencyDisplayName(code, catalog.locale) ?? drawn.find((row) => row.id === code)?.caption,
 		selected: code === chosenCurrency(view)
@@ -1520,7 +1524,9 @@ export function liveBalanceDetail(
 			id: `${token.chain_id}:${token.token_address ?? token.symbol}`,
 			mark: rescueMark(token.chain_id),
 			name: token.symbol,
-			detail: `${chainName(token.chain_id)} · ${view.hidden ? MASK : trimBalance(token.balance)}`
+			// Hidden, the coin is kept ("•••• BNB") — the one rule for a
+			// hidden coin amount, wherever it is drawn.
+			detail: `${chainName(token.chain_id)} · ${view.hidden ? maskedAmount(token.symbol) : trimBalance(token.balance)}`
 		}))
 	};
 }
@@ -1661,10 +1667,12 @@ export function ethereumBackupRow(
  * (spec 062). ONE block on both layouts: a person reads which keys there are,
  * then what backing them up means.
  *
- * `keys === null` is "still asking" — the block is drawn with its title and a
- * quiet loading line, never a guessed count. A registry that did not answer
- * leaves the device's own memory on screen, labelled as such and without sync
- * badges: a badge nobody can vouch for is not drawn.
+ * `keys === null` is "the device's record is not read yet" — the block is drawn
+ * with its title and one quiet row, never a guessed count. `keys.asking` is
+ * "the record is read and a chain is being asked": every row stands where it
+ * will stand, saying only what the device itself knows. A registry that did
+ * not answer leaves the device's own memory on screen, labelled as such and
+ * without sync badges: a badge nobody can vouch for is not drawn.
  */
 /** The registry explorer's facts for one key, in its order. Absent values are left out. */
 function keyDetails(key: WalletKeys['keys'][number], m: SettingsMessages) {
@@ -1725,23 +1733,32 @@ export function walletKeysModel(
 			: method === 'hybrid'
 				? m.keys.providerGeneric
 				: m.keys.providerPlatform;
+	// Still asking a chain: the rows are the device's record (`deviceOnlyKeys`).
+	const asking = keys?.asking === true;
+	const signsHere = { text: m.keys.signsHere, tone: 'signs_here' as const };
+	const verified = { text: m.keys.userVerified, tone: 'verified' as const };
+	const synced = { text: m.keys.synced, tone: 'synced' as const };
+	const local = { text: m.keys.notSynced, tone: 'local' as const };
 	const rows = (keys?.keys ?? []).map((key, index) => ({
-		name: key.name !== '' ? key.name : m.keys.keyN.replace('{{n}}', String(index + 1)),
+		// A key the device has no name for is "Key n" — once the registry, whose
+		// record may name it, has had its say.
+		name:
+			key.name !== '' ? key.name : asking ? '' : m.keys.keyN.replace('{{n}}', String(index + 1)),
 		holderFallback: fallbackFor(key.method),
 		fingerprint: keyFingerprint(key.public_key_hex),
 		pills: [
-			...(key.signs_here ? [{ text: m.keys.signsHere, tone: 'signs_here' as const }] : []),
-			...(key.user_verified === true
-				? [{ text: m.keys.userVerified, tone: 'verified' as const }]
-				: []),
-			...(key.synced === null
-				? []
-				: [
-						key.synced
-							? { text: m.keys.synced, tone: 'synced' as const }
-							: { text: m.keys.notSynced, tone: 'local' as const }
-					])
+			...(key.signs_here ? [signsHere] : []),
+			...(key.user_verified === true ? [verified] : []),
+			...(key.synced === null ? [] : [key.synced ? synced : local])
 		],
+		// Which key this device signs with is the device's own knowledge, so
+		// that badge is in the room only on its row; the other two are the
+		// registry's to give, and "synced" has two wordings of two widths.
+		pillRoom: [synced, local].map((last) => [
+			...(key.signs_here ? [signsHere] : []),
+			verified,
+			last
+		]),
 		details: keyDetails(key, m),
 		// The row as the create flow's components expect it. `method` here is
 		// already the authenticator's REPORT (`wallet_keys::method_of`), so it
@@ -1762,11 +1779,22 @@ export function walletKeysModel(
 		subtitle: m.keys.subtitle,
 		count: keys === null ? '' : String(rows.length),
 		loading: keys === null,
-		note: keys !== null && keys.source === 'device' ? m.keys.fromDevice : undefined,
+		asking,
+		// "Couldn't reach the registry" is said once it could not be — never
+		// while it is still being asked.
+		note: keys !== null && !asking && keys.source === 'device' ? m.keys.fromDevice : undefined,
 		domain:
 			customDomain === undefined ? undefined : fill(m.signing.keysOn, { domain: customDomain }),
 		rows,
 		backup: ethereumBackupRow(backup, m),
+		// The words map is keyed by every line the core's row can name
+		// (`BACKUP_ROW_KEYS`); all but the title are second lines.
+		backupLines:
+			backup === null
+				? []
+				: Object.entries(m.backup.words as Record<string, string>)
+						.filter(([key]) => key !== backup.title_key)
+						.map(([, line]) => line),
 		copy: { action: m.keys.copy, done: m.keys.copied }
 	};
 }

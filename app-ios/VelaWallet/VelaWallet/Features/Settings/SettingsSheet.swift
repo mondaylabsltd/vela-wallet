@@ -90,10 +90,18 @@ struct SettingsSheet: View {
 
     private var host: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
-        // SheetTitle, so one overlay pinned top-trailing lands on the title
+        // SheetTitle, so one header pinned at the top lands on the title
         // line for all of them — and none of them can forget it. The drag
         // indicator alone is not an affordance a first-time reader recognises.
-        ZStack(alignment: .topTrailing) {
+        //
+        // The ✕ belongs to a HEADER, and the body scrolls under it. It used
+        // to float over the page: scrolled, "Report a problem" ran its
+        // "Optional · up to 5" straight through the ✕ (iPhone walk
+        // 2026-10-10). A body's `SheetTitle` keeps its place in the page and
+        // says its words up to here; the host draws them — on the sheet's own
+        // ground, exactly over that place — with the ✕ on their line. At
+        // rest nothing has moved; scrolled, the page passes beneath the
+        // title and the ✕ instead of through them.
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 switch overlay {
@@ -214,40 +222,100 @@ struct SettingsSheet: View {
         // "Report a problem" with no way down.
         .scrollDismissesKeyboard(.interactively)
         .background(theme.bgBase)
+        .overlayPreferenceValue(SheetTitleKey.self, alignment: .top) { pinned in
+            header(pinned)
+        }
+        .background(theme.bgBase)
+    }
 
+    /// The sheet's header: the body's title, pinned, and the ✕ on its line.
+    /// A body that says no title (a report already filed) has the ✕ alone.
+    private func header(_ pinned: SheetTitleValue?) -> some View {
+        ZStack(alignment: .topTrailing) {
+            if let pinned {
+                SheetTitleWords(value: pinned)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Tokens.Space.s24)
+                    .padding(.top, Tokens.Space.s24)
+                    // Opaque: what scrolls up goes under it.
+                    .background(theme.bgBase)
+            }
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(theme.fgMuted)
-                    .frame(width: 32, height: 32)
+                    .frame(width: SheetTitleWords.closeSide, height: SheetTitleWords.closeSide)
                     .background(theme.bgRaised, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(model.closeLabel)
+            .accessibilityIdentifier("sheet.close")
             .padding(.trailing, Tokens.Space.s24)
             .padding(.top, Tokens.Space.s24)
         }
-        .background(theme.bgBase)
     }
 }
 
-private struct SheetTitle: View {
-    @Environment(\.theme) private var theme
+/// What a sheet's body says its title is, for the host to pin.
+struct SheetTitleValue: Equatable {
     let title: String
     var subtitle: String?
+    /// The room under the words that belongs to the title.
+    var bottom: CGFloat = Tokens.Space.s12
+}
+
+struct SheetTitleKey: PreferenceKey {
+    static let defaultValue: SheetTitleValue? = nil
+    static func reduce(value: inout SheetTitleValue?, nextValue: () -> SheetTitleValue?) {
+        value = value ?? nextValue()
+    }
+}
+
+/// A sheet title's words, laid out one way for the two places they stand:
+/// the body's own (unseen — it keeps the room) and the host's header over it.
+/// The title leaves the ✕ its corner, so the two never share a line's end.
+struct SheetTitleWords: View {
+    @Environment(\.theme) private var theme
+    let value: SheetTitleValue
+
+    /// The ✕'s side — the host's button, and the room the title leaves it.
+    static let closeSide: CGFloat = 32
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-            Text(title)
+            Text(value.title)
                 .typeRole(Typography.title)
                 .foregroundStyle(theme.fgBase)
-            if let subtitle {
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.trailing, Self.closeSide + Tokens.Space.s8)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("sheet.title")
+            if let subtitle = value.subtitle {
                 Text(subtitle)
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.fgSubtle)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.bottom, Tokens.Space.s12)
+        .padding(.bottom, value.bottom)
+    }
+}
+
+/// The title a sheet's body opens with. It holds the title's PLACE in the
+/// page and hands the words to the host (`SettingsSheet.header`), which draws
+/// them pinned over that place: the page scrolls under its title.
+struct SheetTitle: View {
+    let title: String
+    var subtitle: String?
+    var bottom: CGFloat = Tokens.Space.s12
+
+    private var value: SheetTitleValue { SheetTitleValue(title: title, subtitle: subtitle, bottom: bottom) }
+
+    var body: some View {
+        SheetTitleWords(value: value)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .hidden()
+            .preference(key: SheetTitleKey.self, value: value)
     }
 }
 
@@ -533,7 +601,9 @@ struct FeedbackSheetBody: View {
                     typing = nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + FeedbackGeometry.focusDelay) {
                         withAnimation(.easeOut(duration: FeedbackGeometry.tileAnimation * 2)) {
-                            proxy.scrollTo(Self.fallbackAnchor, anchor: .top)
+                            // The centre, not the top: the top of the page
+                            // is under the sheet's pinned header.
+                            proxy.scrollTo(Self.fallbackAnchor, anchor: .center)
                         }
                     }
                     focusSoon(.fallback)

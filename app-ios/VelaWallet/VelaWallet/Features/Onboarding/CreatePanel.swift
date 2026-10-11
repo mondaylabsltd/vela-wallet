@@ -55,7 +55,7 @@ struct FlowShell<Content: View>: View {
         }
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
     }
 }
 

@@ -1,7 +1,11 @@
 /**
- * Issue 462: the hero's "↻ Updated 2m". A press asks for a read; while it is
+ * Issue 462: the hero's "Updated 2m ↻". A press asks for a read; while it is
  * out the glyph turns, the words say "Updating…", the control takes no second
  * press — and nothing on the hero moves, the control's own box included.
+ *
+ * Since the 2026-10-11 walk (item 4) the control stands at the trailing edge
+ * of the hero's ONE line, beside whatever the wallet has to say there;
+ * `hero-line.svelte.test.ts` holds that line's geometry in the real home.
  */
 import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,7 +15,16 @@ import '$lib/tokens/tokens.css';
 import type { BalanceModel } from '../model';
 import BalanceDisplay from './BalanceDisplay.svelte';
 
-/** `null`: no read has settled yet. */
+/**
+ * A hero with something said on its line. `null`: no read has settled yet.
+ * `quiet` is the same hero with nothing to say — where the control wears its
+ * words on a phone.
+ */
+const quiet = (spinning: boolean, updated: string | null = 'Updated 2m'): BalanceModel => ({
+	...hero(spinning, updated),
+	status: undefined
+});
+
 function hero(spinning: boolean, updated: string | null = 'Updated 2m'): BalanceModel {
 	return {
 		label: 'Total balance',
@@ -48,7 +61,7 @@ function shownWords(button: HTMLElement): string {
 describe('BalanceDisplay — the refresh control (issue 462)', () => {
 	it('says when the figure was read, and a press asks for a read', async () => {
 		const onrefresh = vi.fn();
-		const screen = render(BalanceDisplay, { props: { balance: hero(false), onrefresh } });
+		const screen = render(BalanceDisplay, { props: { balance: quiet(false), onrefresh } });
 		const button = control(screen.container);
 		expect(shownWords(button)).toBe('Updated 2m');
 		// Its name is what it says.
@@ -61,7 +74,7 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 
 	it('turns and says "Updating…" while the read is out, and takes no second press', async () => {
 		const onrefresh = vi.fn();
-		const screen = render(BalanceDisplay, { props: { balance: hero(true), onrefresh } });
+		const screen = render(BalanceDisplay, { props: { balance: quiet(true), onrefresh } });
 		const button = control(screen.container);
 		expect(shownWords(button)).toBe('Updating…');
 		await expect.element(page.getByRole('button', { name: 'Updating…' })).toBeInTheDocument();
@@ -73,9 +86,9 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		button.click();
 		expect(onrefresh).not.toHaveBeenCalled();
 		// Busy is never dimmed: the same ink as at rest.
-		await screen.rerender({ balance: hero(false), onrefresh });
+		await screen.rerender({ balance: quiet(false), onrefresh });
 		const rest = getComputedStyle(control(screen.container)).color;
-		await screen.rerender({ balance: hero(true), onrefresh });
+		await screen.rerender({ balance: quiet(true), onrefresh });
 		expect(getComputedStyle(control(screen.container)).color).toBe(rest);
 		expect(getComputedStyle(control(screen.container)).opacity).toBe('1');
 	});
@@ -99,6 +112,67 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 			expect(status().top).toBe(before.status.top);
 			expect(host.getBoundingClientRect().height).toBe(before.hero.height);
 		}
+		screen.unmount();
+		host.remove();
+	});
+
+	/*
+	 * Item 4 of the 2026-10-11 walk. On a phone the line says one thing at a
+	 * time: what the wallet has to say, or — when it has nothing to say — when
+	 * the figure was read. Both do not fit 358 px, and the sentence is the one
+	 * a person needs whole. The wide layout's line has room for both.
+	 */
+	it('on a phone the control’s words step aside for what the wallet says; its name does not', async () => {
+		const host = document.createElement('div');
+		host.style.width = '358px';
+		document.body.appendChild(host);
+		const screen = render(BalanceDisplay, { target: host, props: { balance: quiet(false) } });
+		const glyph = () => control(screen.container).querySelector('.glyph')!.getBoundingClientRect();
+		const at = { right: glyph().right, top: glyph().top };
+		expect(shownWords(control(screen.container))).toBe('Updated 2m');
+
+		for (const said of [
+			{ ...hero(false) },
+			{ ...quiet(false), checkingText: 'Checking…' },
+			{
+				...quiet(false),
+				state: 'zero-live' as const,
+				liveText: 'Live · listening for payments'
+			}
+		]) {
+			await screen.rerender({ balance: said });
+			await tick();
+			expect(shownWords(control(screen.container))).toBe('');
+			// Still named by what it would say…
+			expect(control(screen.container).getAttribute('aria-label')).toBe('Updated 2m');
+			// …and the glyph a finger presses has not moved.
+			expect({ right: glyph().right, top: glyph().top }).toEqual(at);
+		}
+		// Turning, with a sentence beside it: named "Updating…", glyph in place.
+		await screen.rerender({ balance: hero(true) });
+		expect(control(screen.container).getAttribute('aria-label')).toBe('Updating…');
+		expect({ right: glyph().right, top: glyph().top }).toEqual(at);
+
+		// Nothing left to say: the words are back, and the glyph is where it was.
+		await screen.rerender({ balance: quiet(false) });
+		expect(shownWords(control(screen.container))).toBe('Updated 2m');
+		expect({ right: glyph().right, top: glyph().top }).toEqual(at);
+		screen.unmount();
+		host.remove();
+	});
+
+	it('the wide layout keeps the words beside what is said', async () => {
+		const host = document.createElement('div');
+		host.style.width = '800px';
+		document.body.appendChild(host);
+		const screen = render(BalanceDisplay, {
+			target: host,
+			props: { balance: hero(false), wide: true }
+		});
+		expect(shownWords(control(screen.container))).toBe('Updated 2m');
+		expect(screen.container.querySelector('.status')?.textContent).toContain(
+			"Some tokens couldn't be priced."
+		);
 		screen.unmount();
 		host.remove();
 	});
@@ -213,10 +287,14 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 			const status = screen.container.querySelector('.status') as HTMLElement;
 			expect(status.textContent, at).toContain("Can't reach Gnosis right now");
 			expect(measure(), at).toEqual(before);
-			// …under the control a person presses, which is why that never moves.
-			expect(status.getBoundingClientRect().top, at).toBeGreaterThanOrEqual(
-				control(screen.container).getBoundingClientRect().bottom
-			);
+			// …on the control's own line, before it: the control keeps the
+			// trailing edge, which is why what a person presses never moves.
+			const line = screen.container.querySelector('.said')!.getBoundingClientRect();
+			const pressed = control(screen.container).getBoundingClientRect();
+			expect(status.getBoundingClientRect().top, at).toBeGreaterThanOrEqual(line.top);
+			expect(status.getBoundingClientRect().bottom, at).toBeLessThanOrEqual(line.bottom + 0.5);
+			expect(status.getBoundingClientRect().right, at).toBeLessThanOrEqual(pressed.left);
+			expect(pressed.right, at).toBeCloseTo(line.right, 1);
 			// …and inside the hero's own box: it took room that was already there.
 			expect(status.getBoundingClientRect().bottom, at).toBeLessThanOrEqual(
 				host.getBoundingClientRect().bottom + 0.5
@@ -486,10 +564,14 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		};
 		const middle = doorMiddle();
 
-		// The column narrows until the sentence is a little too long for it.
+		// The column narrows until the sentence is a little too long for the
+		// room it has: the line, less what the control at its end takes.
 		const full = sentence().getBoundingClientRect().width;
 		const beside = door().getBoundingClientRect().width - full;
-		host.style.width = `${Math.floor(full * 0.93 + beside)}px`;
+		const taken =
+			screen.container.querySelector('.said')!.getBoundingClientRect().width -
+			screen.container.querySelector('.saying')!.getBoundingClientRect().width;
+		host.style.width = `${Math.floor(full * 0.93 + beside + taken)}px`;
 		await frames();
 		await frames();
 		expect(sizeRatio()).toBeGreaterThanOrEqual(0.85);

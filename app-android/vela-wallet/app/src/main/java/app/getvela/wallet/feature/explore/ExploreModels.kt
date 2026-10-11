@@ -95,11 +95,26 @@ data class DemoPageModel(
     data class Field(val value: String, val symbol: String)
 }
 
+/**
+ * The mark beside a site's name: what the CONNECTION to it is (the core's
+ * `OriginLock`). A padlock means "encrypted" to a person, so [Secure] —
+ * `https` — is the only padlock. [Local] is plain `http` on this device or the
+ * person's own network: a neutral mark and the words "Local page", never a
+ * padlock (the address bar drew one for `http://127.0.0.1:8137`, the
+ * 2026-10-11 walk) and never the warning. [Insecure] is public `http`: the
+ * open lock, in the warning colour.
+ *
+ * Not "is this page safe to use the wallet from" — that is the core's
+ * `secure`, true for a local page too, and no mark is drawn from it.
+ */
+enum class SiteLock { Secure, Local, Insecure }
+
 @Immutable
 data class BrowserModel(
     val url: String,
     val host: String,
-    val secure: Boolean,
+    /** The address bar's mark, when it shows one ([lockShown]). */
+    val lock: SiteLock,
     val connected: Boolean,
     /** The page has history behind it. The bar's ‹ is never greyed: without history it goes to the home. */
     val canBack: Boolean,
@@ -206,8 +221,8 @@ data class ConnectionModel(
     val explainer: String,
     val disconnect: String,
     val footnote: String,
-    /** Spec 070: the lock tells the truth — `false` draws the warning, never a green padlock. */
-    val secure: Boolean = true,
+    /** Spec 070: the lock tells the truth — a padlock for `https` alone ([SiteLock]). */
+    val lock: SiteLock = SiteLock.Secure,
     /** Spec 079: the network's logo; the dot shows until it lands. */
     val networkLogoUrl: String? = null,
     /** Spec 079: the consent card — its action is the primary one. */
@@ -273,7 +288,7 @@ sealed interface ExploreSheet {
         val site: SiteModel,
         val statusLine: String,
         val items: List<SiteMenuItem>,
-        val secure: Boolean = true,
+        val lock: SiteLock = SiteLock.Secure,
     ) : ExploreSheet
 
     data class Connection(val connection: ConnectionModel) : ExploreSheet

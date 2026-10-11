@@ -228,6 +228,10 @@ describe('the fee the sheet shows', () => {
 			// what it costs — the row stands the money under the coin whole.
 			value: '0.0021 ETH',
 			valueFiat: '≈ $6.30',
+			// Item 2 of the 2026-10-11 walk: the money's line and the room for
+			// what a landed fee may say under the card, named in every state.
+			moneyLine: true,
+			rooms: [m.feeNoCoinPays, fill(m.feeShort, { sym: 'ETH' })],
 			selector: undefined,
 			speed: undefined,
 			warning: undefined,
@@ -418,6 +422,48 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		busy: true,
 		failed: null,
 		failure: failureOf(failed, true)
+	});
+
+	/**
+	 * Device walk of 2026-10-11, item 2. The sheet is anchored at the bottom,
+	 * so a line that ARRIVES in the fee card moves its top, its header and its
+	 * ✕. The builder names the room such a line needs in EVERY state of the
+	 * fee — being worked out, landed, failed, asked again — so the card is one
+	 * height before and after (`signing-still.e2e.ts` measures the sheet).
+	 */
+	it('names the same rooms in every state of the fee: the money’s line, and what a landed fee may say', () => {
+		const ROOMS = [m.feeNoCoinPays, fill(m.feeShort, { sym: 'ETH' })];
+		const states: [string, FeeView][] = [
+			['estimating', { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false }],
+			['priced', { ...QUOTED_FEE, options: [ETH_OPTION] }],
+			['no coin pays', { ...QUOTED_FEE, options: [ETH_OPTION], no_coin_pays: true }],
+			['failed', failedWith('quote_unavailable')],
+			['asked again', retryingAfter('quote_unavailable')]
+		];
+		for (const [state, fee] of states) {
+			const model = buildSigningModel(inputs({ fee }))?.fee;
+			expect(model, state).toMatchObject({ kind: 'onchain', moneyLine: true, rooms: ROOMS });
+		}
+		// What is SAID is one of the rooms, word for word — or a failure's
+		// reason, which stands in their place.
+		const said = (fee: FeeView) => {
+			const model = buildSigningModel(inputs({ fee }))?.fee;
+			return model?.kind === 'onchain' ? model.warning : undefined;
+		};
+		expect(said({ ...QUOTED_FEE, options: [ETH_OPTION], no_coin_pays: true })).toBe(ROOMS[0]);
+		expect(
+			said({
+				...QUOTED_FEE,
+				confirm_fee_ready: false,
+				options: [{ ...ETH_OPTION, insufficient: true }]
+			})
+		).toBe(ROOMS[1]);
+		// Before the fee names the coin that pays, the chain's own coin stands
+		// in for it: the room is a line of the same length.
+		const unknown = buildSigningModel(
+			inputs({ fee: { ...QUOTED_FEE, fee: null, busy: true, options: [] } })
+		)?.fee;
+		expect(unknown).toMatchObject({ rooms: [m.feeNoCoinPays, expect.stringContaining('ETH')] });
 	});
 
 	it('a shown fee carries the send form’s refresh, still while nothing is measuring', () => {
@@ -847,6 +893,23 @@ describe('the speed under the fee', () => {
 		core.free();
 		return view;
 	}
+
+	/**
+	 * Item 2 of the 2026-10-11 walk: the speed's note ("Fast costs no more on
+	 * this network…") is only known once every speed is priced, and its line
+	 * arriving moved a bottom-anchored sheet's top. Its room is named whether
+	 * or not it is said.
+	 */
+	it('holds its note’s room from the first frame, said or not', () => {
+		for (const view of [speedView('fast'), speedView('slow'), speedView('fast', 'slow')]) {
+			const fee = buildSigningModel(inputs({ speed: { view, feeOptions: () => [] } }))?.fee;
+			if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
+			expect(fee.speed?.freeRoom).toBe(m.speed.free);
+			expect(m.speed.free.trim()).not.toBe('');
+			// Said, it is that same sentence.
+			if (fee.speed?.freeNote !== undefined) expect(fee.speed.freeNote).toBe(fee.speed.freeRoom);
+		}
+	});
 
 	it('is drawn folded under the fee, naming the tier in force', () => {
 		const model = buildSigningModel(
@@ -2892,9 +2955,9 @@ describe('no fiat figure before the display currency commits — the signing she
 		expect(JSON.stringify(amount)).toContain('100 USDC');
 		expect(JSON.stringify(amount)).toContain(`≈ ${MONEY_PENDING}`);
 		const landed = buildSigningModel(inputs({ fee: PRICED_FEE, currency: COMMITTED }))!;
-		expect(landed.fee).toMatchObject({ value: '0.0021 ETH', valueFiat: '≈ ¥45.36' });
+		expect(landed.fee).toMatchObject({ value: '0.0021 ETH', valueFiat: '≈ CN¥45.36' });
 		expect(landed.fee).not.toHaveProperty('valueFiatWithheld');
-		expect(JSON.stringify(landed.blocks)).toContain('≈ ¥720.00');
+		expect(JSON.stringify(landed.blocks)).toContain('≈ CN¥720.00');
 	});
 
 	it('signing_sheet: with the fee coins open, no coin’s fee is priced in a placeholder', () => {

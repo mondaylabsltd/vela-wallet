@@ -207,15 +207,10 @@ struct SelectRow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Tokens.Space.s8) {
+                // The currency's sign, whole, on a badge of one size (`SignBadge`:
+                // "HK$" was cut to "H…" here, and "JP¥" ran rim to rim).
                 if let glyph = row.glyph {
-                    Circle()
-                        .fill(theme.bgRaised)
-                        .frame(width: 32, height: 32)
-                        .overlay(
-                            Text(glyph)
-                                .typeRole(Typography.body)
-                                .foregroundStyle(theme.fgMuted)
-                        )
+                    SignBadge(sign: glyph)
                 }
                 // The chosen row is stated twice — accent text and a check —
                 // because the check alone disappears at the note's type size.

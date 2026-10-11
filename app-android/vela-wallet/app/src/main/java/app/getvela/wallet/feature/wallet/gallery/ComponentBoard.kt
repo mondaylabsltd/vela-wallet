@@ -84,12 +84,19 @@ internal fun ComponentBoard() {
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         BalanceDisplay(model = h6.balance)
 
-        // Issue 462: the refresh control, idle and turning — the same box in
-        // both, so the board shows nothing moves.
-        BoardLabel("BalanceRefreshControl · idle / updating / never read")
-        BalanceRefreshControl(model = WalletFixtures.refresh(strings), spinning = false, onRefresh = null)
-        BalanceRefreshControl(model = WalletFixtures.refresh(strings, refreshing = true), spinning = true, onRefresh = null)
-        BalanceRefreshControl(model = WalletFixtures.refresh(strings, read = false), spinning = false, onRefresh = null)
+        // Issue 462: the refresh control with its words, idle and turning —
+        // the same boxes in both, so the board shows nothing moves.
+        BoardLabel("BalanceRefreshStamp + BalanceRefreshControl · idle / updating / never read")
+        for ((refresh, spinning) in listOf(
+            WalletFixtures.refresh(strings) to false,
+            WalletFixtures.refresh(strings, refreshing = true) to true,
+            WalletFixtures.refresh(strings, read = false) to false,
+        )) {
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                app.getvela.wallet.feature.wallet.components.BalanceRefreshStamp(model = refresh, spinning = spinning, onRefresh = null, modifier = Modifier.weight(1f))
+                BalanceRefreshControl(model = refresh, spinning = spinning, onRefresh = null)
+            }
+        }
 
         BoardLabel("ActionButtonRow")
         ActionButtonRow(actions = h1.actions)

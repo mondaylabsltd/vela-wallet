@@ -1158,7 +1158,9 @@ class SendLiveTest {
         assertEquals(null to null, SendLive.unitAdornment(null, ""))
         assertEquals("$" to null, SendLive.unitAdornment("USD", "BNB"))
         assertEquals("€" to null, SendLive.unitAdornment("EUR", "BNB"))
-        assertEquals(null to "PLN", SendLive.unitAdornment("PLN", "BNB"))
+        // The sign is the core's (`fiatSymbol`): the złoty has one, the franc's is its code.
+        assertEquals("zł" to null, SendLive.unitAdornment("PLN", "BNB"))
+        assertEquals(null to "CHF", SendLive.unitAdornment("CHF", "BNB"))
         assertEquals(null to "XYZ", SendLive.unitAdornment("XYZ", "BNB"))
         // The ⇄ row obeys the core's two flags, and the typed unit is the figure's.
         val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm

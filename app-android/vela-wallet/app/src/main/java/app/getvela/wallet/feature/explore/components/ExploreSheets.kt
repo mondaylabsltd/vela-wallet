@@ -74,15 +74,14 @@ fun SiteMenuSheetContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
                 ) {
-                    // Spec 079 (owner): a lock, and only a lock — https is not "safe".
-                    Icon(
-                        if (sheet.secure) VelaIcons.Lock else VelaIcons.LockOpen, null,
-                        tint = if (sheet.secure) colors.fgMuted else colors.warningBase,
-                        modifier = Modifier.size(VelaIconSize.xs),
-                    )
-                    if (sheet.statusLine.isNotBlank()) {
+                    // Spec 079 (owner): a mark, and only a mark — https is not "safe".
+                    // A local page says what its mark is: a screen is not a sign anybody knows.
+                    val strings = app.getvela.wallet.core.i18n.LocalVelaStrings.current
+                    SiteLockMark(sheet.lock, local = strings.t("connect.browser.a11yLocal"), insecure = strings.t("connect.browser.a11yInsecure"))
+                    val words = siteLockWords(sheet.lock, sheet.statusLine, strings.t("explore.localSite"))
+                    if (words.isNotBlank()) {
                         Text(
-                            text = sheet.statusLine,
+                            text = words,
                             color = colors.fgMuted,
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.base,
@@ -258,15 +257,14 @@ fun ConnectionPanel(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
                 ) {
-                    // Spec 079 (owner): a lock, and only a lock — https is not "safe".
-                    Icon(
-                        if (connection.secure) VelaIcons.Lock else VelaIcons.LockOpen, null,
-                        tint = if (connection.secure) colors.fgMuted else colors.warningBase,
-                        modifier = Modifier.size(VelaIconSize.xs),
-                    )
-                    if (connection.statusLine.isNotBlank()) {
+                    // Spec 079 (owner): a mark, and only a mark — https is not "safe".
+                    // A local page says what its mark is: a screen is not a sign anybody knows.
+                    val strings = app.getvela.wallet.core.i18n.LocalVelaStrings.current
+                    SiteLockMark(connection.lock, local = strings.t("connect.browser.a11yLocal"), insecure = strings.t("connect.browser.a11yInsecure"))
+                    val words = siteLockWords(connection.lock, connection.statusLine, strings.t("explore.localSite"))
+                    if (words.isNotBlank()) {
                         Text(
-                            text = connection.statusLine,
+                            text = words,
                             color = colors.fgMuted,
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.base,
@@ -937,4 +935,15 @@ fun BrowserNotice(
             )
         }
     }
+}
+
+/**
+ * The words beside a site's mark on a sheet: "Local page" for a local page —
+ * its mark alone would not say it — ahead of whatever the line already says
+ * ("Local page · Connected"). A padlock and an open lock say themselves.
+ */
+internal fun siteLockWords(lock: app.getvela.wallet.feature.explore.SiteLock, line: String, local: String): String = when {
+    lock != app.getvela.wallet.feature.explore.SiteLock.Local -> line
+    line.isBlank() -> local
+    else -> "$local · $line"
 }

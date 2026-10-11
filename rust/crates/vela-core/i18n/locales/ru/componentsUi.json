@@ -398,7 +398,7 @@
       "previewVersion": "Версия приложения",
       "previewPlatform": "Платформа",
       "previewLanguage": "Язык",
-      "previewRpc": "Недоступные RPC",
+      "previewRpc": "Недоступные сети",
       "previewFailures": "Недавние сбои",
       "previewNone": "Нет"
     },

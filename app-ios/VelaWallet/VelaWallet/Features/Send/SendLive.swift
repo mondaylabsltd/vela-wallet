@@ -475,7 +475,7 @@ enum SendLive {
         // unit. When the figure is already fiat the other unit is the token's,
         // which is `token_amount` — the very number the signed batch is built
         // from, so the two can never disagree.
-        let unit = unitAdornment(code: view.amountFiatCode, symbol: symbol)
+        let unit = unitAdornment(code: view.amountFiatCode, symbol: symbol, language: loc.resolvedLanguage)
         live.amount = model.amount.map { drawn in
             AmountFieldModel(
                 value: view.amount.isEmpty ? "0" : view.amount,
@@ -617,8 +617,8 @@ enum SendLive {
                 // dash, not a bare symbol with no figure in front of it.
                 value: view.confirmAmount.isEmpty ? "—" : "\(trim(view.confirmAmount)) \(symbol)",
                 over: view.splitOverBalance,
-                remaining: view.splitRemaining.map { left in
-                    loc.t("send.splitRemaining", vars: ["amount": "\(trim(left)) \(symbol)"])
+                remaining: remainderText(view).map { left in
+                    loc.t("send.splitRemaining", vars: ["amount": "\(left) \(symbol)"])
                 }
             )
             : live.summary
@@ -688,15 +688,16 @@ enum SendLive {
     /// The unit drawn beside a figure being typed (issue 231, the web's
     /// `unitAdornment`). `code` is the figure's OWN currency
     /// (`amount_fiat_code`); `nil` means token units, and the unit is the
-    /// token's symbol. A currency with a symbol leads the figure, one the
-    /// catalog has no symbol for follows it as its code, a token always
-    /// follows. Nothing defaults to "$".
-    static func unitAdornment(code: String?, symbol: String) -> (prefix: String?, suffix: String?) {
+    /// token's symbol. A currency with a sign leads the figure — the core's
+    /// sign for the app's `language` (`FiatSign`), the one every fiat figure
+    /// in the app wears — one whose only sign is its code follows it as that
+    /// code, a token always follows. Nothing defaults to "$".
+    static func unitAdornment(
+        code: String?, symbol: String, language: String
+    ) -> (prefix: String?, suffix: String?) {
         guard let code else { return (nil, symbol.isEmpty ? nil : symbol) }
-        if let glyph = CurrencyCatalog.entry(code)?.glyph, !glyph.isEmpty {
-            return (glyph, nil)
-        }
-        return (nil, code)
+        if FiatSign.isCode(code, language: language) { return (nil, code) }
+        return (FiatSign.symbol(code, language: language), nil)
     }
 
     /// What is wrong with **this** row, in the core's words.
@@ -1877,7 +1878,7 @@ enum SendLive {
                 // the figure that matters; otherwise the balance itself.
                 balance: formHasRows && !replaces && view.splitRemaining != nil
                     ? loc.t("send.splitRemaining", vars: [
-                        "amount": "\(trim(view.splitRemaining ?? "")) \(symbol)",
+                        "amount": "\(remainderText(view) ?? "") \(symbol)",
                     ])
                     : loc.t("send.balanceLabel", vars: [
                         "amount": "\(trim(view.selectedToken?.balance ?? "")) \(symbol)",
@@ -2103,6 +2104,22 @@ enum SendLive {
 
     static func fromBase(_ base: String, decimals: Int) -> String {
         TokenReads.scaled(decimal: base, decimals: decimals) ?? base
+    }
+
+    /// What is left to give out in a split, as it is drawn beside the
+    /// balance: the core's cut figure (`split_remaining_display`) with the
+    /// person's decimal mark — `nil` when there is no remainder to say.
+    ///
+    /// The exact `split_remaining` was drawn as it came, and on a phone it
+    /// read 「还剩 0.000300194967818323 BNB」 beside 「余额 0.0003」. The cut is
+    /// the core's (the token ladder, never rounded up: a figure of what is
+    /// THERE may lose digits but not gain value); a view from before the
+    /// field is cut by the same rule (`cutTokenAmount`). Ungrouped, like the
+    /// balance it sits beside (`WalletLive.tokenAmountText`).
+    static func remainderText(_ view: SendViewWire) -> String? {
+        guard let exact = view.splitRemaining else { return nil }
+        let cut = view.splitRemainingDisplay ?? cutTokenAmount(plain: exact)
+        return cut.replacingOccurrences(of: ".", with: Formats.separators(Formats.current.number).decimal)
     }
 
     /// Trailing zeros off, nothing else. Never a rounding.

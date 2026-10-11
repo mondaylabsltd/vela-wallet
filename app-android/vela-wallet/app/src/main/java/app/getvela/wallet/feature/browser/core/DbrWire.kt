@@ -28,6 +28,33 @@ data class DbrStoredSite(
     val chain_id: Int? = null,
 )
 
+/**
+ * What the mark beside a site's name says about the connection to it
+ * (`dapp_browser::OriginLock`). A padlock means "encrypted" and is drawn for
+ * [Secure] alone: `https`. [Local] is plain `http` on this device or the
+ * person's own network — nobody in between to rewrite it, but not encrypted
+ * either: a neutral mark, never a padlock, never the warning. [Insecure] is
+ * public `http`: the warning.
+ */
+@Serializable
+enum class OriginLock {
+    @SerialName("secure") Secure,
+
+    @SerialName("local") Local,
+
+    @SerialName("insecure") Insecure,
+    ;
+
+    companion object {
+        /** The core's word for an origin alone (`dappOriginLock`), for a surface with no view of the machine. */
+        fun of(origin: String?): OriginLock = when (origin?.let { uniffi.vela_core_uniffi.dappOriginLock(it) }) {
+            "secure" -> Secure
+            "local" -> Local
+            else -> Insecure
+        }
+    }
+}
+
 @Serializable
 data class DbrConsentView(
     val tab: String = "",
@@ -35,6 +62,8 @@ data class DbrConsentView(
     val methods: List<String> = emptyList(),
     val address: String? = null,
     val chain_id: Int = 1,
+    /** The mark beside the site's name: a padlock for `https` only. */
+    val lock: OriginLock = OriginLock.Insecure,
 )
 
 @Serializable
@@ -43,7 +72,10 @@ data class DbrTabView(
     val origin: String? = null,
     val connected_address: String? = null,
     val chain_id: Int = 1,
+    /** Safe to use the wallet from (https, or http on loopback / a private network) — NOT what the mark draws. */
     val secure: Boolean = false,
+    /** The address bar's mark: a padlock for `https` only ([OriginLock]). */
+    val lock: OriginLock = OriginLock.Insecure,
     val crashed: Boolean = false,
     /** Spec 099 R2: something of this tab's is open — its engine is never suspended. */
     val busy: Boolean = false,
@@ -431,9 +463,16 @@ sealed class DbrEvent {
     @SerialName("debug_mode_changed")
     data class DebugModeChanged(val on: Boolean) : DbrEvent()
 
+    /**
+     * [space]: the account now in front is the parallel space's test wallet,
+     * not one of the person's. The core then sets the person's connected
+     * sites aside — not re-pinned, not dropped, not written — keeps the
+     * space's own in memory only, and puts the person's back exactly on the
+     * next switch with `space = false`.
+     */
     @Serializable
     @SerialName("account_switched")
-    data class AccountSwitched(val address: String, val now_ms: Double) : DbrEvent()
+    data class AccountSwitched(val address: String, val now_ms: Double, val space: Boolean = false) : DbrEvent()
 
     /** [now_ms] (spec 099): when the request arrived, for its row in the record — the shell's clock, ms since the epoch. */
     @Serializable

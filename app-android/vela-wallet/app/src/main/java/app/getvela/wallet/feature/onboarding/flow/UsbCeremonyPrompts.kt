@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.onboarding.flow
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -236,6 +237,7 @@ fun UsbWalletPicker(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .sheetScrolls()
                 .padding(horizontal = VelaSpacing.xl2)
                 .padding(bottom = VelaSpacing.xl2),
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
@@ -309,6 +311,7 @@ fun UsbTouchIndicator(kind: String, product: String, onCancel: () -> Unit = {}) 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .sheetScrolls()
                 .padding(horizontal = VelaSpacing.xl2)
                 .padding(bottom = VelaSpacing.xl3),
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),

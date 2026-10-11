@@ -240,6 +240,20 @@ data class SettingsRowModel(
      * states has to say otherwise.
      */
     val actionable: Boolean = true,
+    /**
+     * Every line the second line can come to read, for a row whose second
+     * line is a STATE ("Checking…" → "Not copied yet (optional)" → "Couldn't
+     * check. Tap to try again."). The line keeps the room of the tallest of
+     * them at this width and text size, so a state arriving moves nothing
+     * under the row. Empty for a row whose second line never changes.
+     */
+    val subtitleRoom: List<String> = emptyList(),
+    /**
+     * The trailing glyph's place is kept when the row has none: this row's
+     * glyph comes and goes with its state, and a title that wraps one way
+     * beside a chevron and another way without it moves the page.
+     */
+    val trailingRoom: Boolean = false,
 )
 
 @Immutable
@@ -816,15 +830,26 @@ data class IndexDownModel(
 /**
  * The keys that control this wallet (spec 062) — drawn under the account and
  * above everything else, with the Ethereum backup as the block's last row.
- * [rows] is empty while the first answer is in flight; [note] is set only when
- * the registry did not answer and the rows are what this device remembers.
+ *
+ * While the registry is being asked ([loading]) the [rows] are the ones this
+ * device's own record gives — every key the wallet has, where it will stand,
+ * saying only what the record knows — and the answer fills them in place. They
+ * are empty only for the instant before the record itself is read. [note] is
+ * set only when the registry did not answer and the rows are what this device
+ * remembers.
  */
 data class WalletKeysModel(
     val title: String,
     val subtitle: String,
-    /** "3"; empty while loading — never a guessed count. */
+    /** "3" — the record's own count while loading; empty only before the record is read. Never guessed. */
     val count: String,
+    /** The registry has not answered yet. */
     val loading: Boolean,
+    /**
+     * "Couldn't reach the registry. Showing what this device remembers." —
+     * said in the caption's place under the title, instead of [subtitle],
+     * when the registry did not answer. `null` otherwise.
+     */
     val note: String?,
     val rows: List<WalletKeyRowModel>,
     val backup: SettingsRowModel?,
@@ -842,6 +867,29 @@ data class WalletKeysModel(
     val backupExplain: String?,
     val copyLabel: String,
     val copiedLabel: String,
+    /**
+     * The fullest sets of badges the registry can vouch for on one key
+     * ("Verify to use" with "Cloud-synced", or with "Device-bound"), in this
+     * language. A row keeps the room of the tallest of them — three pills
+     * wrap to two lines in English at the largest text — from its first
+     * frame, so it is as tall while asking as when the answer lands and when
+     * no answer ever comes.
+     */
+    val badgeRoom: List<List<String>> = emptyList(),
+    /**
+     * What the line under a key's name can come to read before its
+     * fingerprint: the three places a key lives, in this language, and a
+     * vault's name. The line keeps the room of the tallest (one line, or two
+     * where the widest wraps).
+     */
+    val holderRoom: List<String> = emptyList(),
+    /**
+     * [note]'s sentence whether or not it is said: the caption under the
+     * title keeps the room of the taller of it and [subtitle], so a registry
+     * that turns out to be silent changes the caption's words and moves
+     * nothing.
+     */
+    val noteRoom: String = "",
 )
 
 /** [SignsHere] is the one filled pill — the key this device signs with; the rest are outlined. */
@@ -852,8 +900,14 @@ data class KeyPillModel(val text: String, val tone: KeyPillTone)
 data class KeyDetailModel(val label: String, val value: String, val mono: Boolean, val copy: Boolean)
 
 data class WalletKeyRowModel(
+    /** Empty only on a [pending] row whose key the device's record does not name: nobody has said yet. */
     val name: String,
-    /** The vault's name when the catalog knows it; else the method's generic line. */
+    /**
+     * The vault's name when the catalog knows it; else the method's generic
+     * line. Empty on a [pending] row — what holds a key is the registry's to
+     * say, and a guess here ("Built-in passkey") was contradicted three
+     * seconds later ("Security key").
+     */
     val holder: String,
     /** `197d…647b` — what tells two unnamed keys apart. */
     val fingerprint: String,
@@ -862,6 +916,15 @@ data class WalletKeyRowModel(
     /** What the row opens onto: the explorer's facts. Empty = nothing to open. */
     val details: List<KeyDetailModel>,
     val key: app.getvela.wallet.feature.onboarding.core.CreateKeyRow,
+    /**
+     * The registry has not answered for this key: the row states only what
+     * the device's record knows for certain (the name it holds, the
+     * fingerprint, "Signed in"), and what holds the key, its mark and the
+     * registry's badges are drawn as quiet shapes of their own size.
+     */
+    val pending: Boolean = false,
+    /** "Key 2" — what an unnamed key is called once nobody names it; the size of the bar drawn while [name] is empty. */
+    val nameRoom: String = "",
 )
 
 data class SettingsScreenModel(

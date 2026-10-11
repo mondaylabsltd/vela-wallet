@@ -91,6 +91,7 @@ const EMPTY_SEND: SendView = {
 	split_duplicates: [],
 	split_row_issues: [],
 	split_remaining: null,
+	split_remaining_display: null,
 	split_import_room: 60,
 	picker_target: null,
 	multi_select_mode: false,
@@ -508,9 +509,13 @@ describe('the form', () => {
 			expect(typedIn('EUR')?.adornment).toEqual({ prefix: '€' });
 		});
 
-		it('follows the figure with the code when the catalog has no symbol for it', () => {
-			// Never a borrowed "$": an unknown currency is named, not guessed.
-			expect(typedIn('PLN')?.adornment).toEqual({ suffix: 'PLN' });
+		it('follows the figure with the code when the core has no symbol for it', () => {
+			// Never a borrowed "$": a currency with no glyph is named, not guessed.
+			expect(typedIn('CHF')?.adornment).toEqual({ suffix: 'CHF' });
+			expect(typedIn('XYZ')?.adornment).toEqual({ suffix: 'XYZ' });
+			// One with a symbol made of letters leads like any other, held off
+			// the digits the way the "≈" line holds it.
+			expect(typedIn('PLN')?.adornment).toEqual({ prefix: 'zł\u00A0' });
 		});
 
 		it('follows a token figure with the token', () => {
@@ -521,7 +526,8 @@ describe('the form', () => {
 			// Typed in yuan; the display currency has since become euros. "€"
 			// over these digits would be a relabel — the same number, a new unit.
 			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true, pending: null });
-			expect(figure?.adornment).toEqual({ prefix: '¥' });
+			// On an English page the yuan is "CN¥": the bare sign is the yen's.
+			expect(figure?.adornment).toEqual({ prefix: 'CN¥' });
 			expect(figure?.denomLabel).toBe('CNY');
 		});
 
@@ -1126,9 +1132,16 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			expect(second.amountNote).toBeUndefined();
 		});
 
-		it('says what is left to give out — the core’s subtraction, not this file’s', () => {
-			expect(split({ split_remaining: '0.75' }).summary?.remaining).toBe('0.75 ETH left');
-			expect(split({ split_remaining: null }).summary?.remaining).toBeUndefined();
+		it('says what is left to give out — the core’s figure for reading, not this file’s', () => {
+			const left = (exact: string | null, display: string | null) =>
+				split({ split_remaining: exact, split_remaining_display: display }).summary?.remaining;
+			expect(left('0.75', '0.75')).toBe('0.75 ETH left');
+			expect(left(null, null)).toBeUndefined();
+			// The figure DRAWN is the display one, as it came: the exact
+			// subtraction is not printed, and it is not rounded here either
+			// (`live-send-remaining.test.ts` walks the real core).
+			expect(left('1.199999999999999999', '1.1999')).toBe('1.1999 ETH left');
+			expect(left('0.000300194967818323', '0.0003')).toBe('0.0003 ETH left');
 		});
 
 		it('offers one amount for every empty row, only while it would do something', () => {
@@ -3004,8 +3017,8 @@ describe('no fiat figure before the display currency commits — Send', () => {
 		// The row is told, so it can keep the layout a long figure will need.
 		expect(form.fee.valueFiatWithheld).toBe(true);
 		const landed = liveSendForm(formModel(), withCurrency(COMMITTED, { ...typed, fee: QUOTE }));
-		expect(landed.amount?.fiat).toBe('≈ ¥10,800.00');
-		expect(landed.fee.valueFiat).toBe('≈ ¥45.36');
+		expect(landed.amount?.fiat).toBe('≈ CN¥10,800.00');
+		expect(landed.fee.valueFiat).toBe('≈ CN¥45.36');
 		expect(landed.fee.valueFiatWithheld).toBeUndefined();
 		// No money half at all (an unpriced coin): nothing is withheld either.
 		const unpriced = liveSendForm(

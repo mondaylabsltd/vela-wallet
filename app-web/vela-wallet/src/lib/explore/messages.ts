@@ -51,7 +51,14 @@ export interface ExploreMessages {
 	openInSystemBrowser: string;
 	disconnect: string;
 	closePage: string;
+	/** "Secure site" — an https page, the only one that wears a padlock. */
 	secureSite: string;
+	/** "Local page" — http on this device or the person's own network. */
+	localSite: string;
+	/** "Local page — not encrypted": the local mark's name where no words stand beside it. */
+	a11yLocal: string;
+	/** "Insecure site — not encrypted": a public http page, in words and as the mark's name. */
+	a11yInsecure: string;
 	connectedTag: string;
 	connectionTitle: string;
 	switchAccount: string;

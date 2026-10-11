@@ -2,17 +2,19 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import type { BrowserModel, ExploreDesktopModel } from '../model';
+	import SiteMark from './SiteMark.svelte';
 
 	/**
 	 * The desktop browser toolbar (DE1–DE4). On the start page the address
 	 * field is the search box; while browsing it collapses to the domain with
-	 * its padlock — one control, two states, never two controls.
+	 * its mark — one control, two states, never two controls. The mark is the
+	 * page's own (`browser.mark`, the core's `OriginLock`): a padlock for
+	 * https and for nothing else. It was a padlock for every page.
 	 */
 	interface Props {
 		toolbar: ExploreDesktopModel['toolbar'];
 		browser: BrowserModel;
 		browsing: boolean;
-		secureLabel: string;
 		accountLabel: string;
 		connectedLabel: string;
 		onback?: () => void;
@@ -27,7 +29,6 @@
 		toolbar,
 		browser,
 		browsing,
-		secureLabel,
 		accountLabel,
 		connectedLabel,
 		onback,
@@ -64,7 +65,7 @@
 
 	<div class="address">
 		{#if browsing}
-			<Icon icon={UTILITY_ICONS.lock} size="xs" label={secureLabel} />
+			<SiteMark mark={browser.mark} named />
 			<span class="host">{browser.host}</span>
 		{:else}
 			<Icon icon={UTILITY_ICONS.search} size="sm" />

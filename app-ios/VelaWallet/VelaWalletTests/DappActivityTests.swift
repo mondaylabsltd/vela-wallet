@@ -668,18 +668,21 @@ struct DappActivityTests {
     @Test func aRowsTitleIsSplitAroundItsPlace() throws {
         let view = try feed(F.stored(nowMs: now))
         let ja = Loc(overrideTag: "ja", preferredLanguages: [])
-        for (loc, lead, trail, gaps) in [
-            (zh, "在", zh.t("componentsUi.signing.intentSwap"), (true, true)),
-            (en, en.t("componentsUi.signing.intentSwap") + " on", "", (true, false)),
-            (ja, "", "で" + ja.t("componentsUi.signing.intentSwap"), (false, false)),
+        for (loc, lead, joiner, trail, gaps) in [
+            (zh, "在", "", zh.t("componentsUi.signing.intentSwap"), (true, true)),
+            // The action first: "on" is the place's, on the place's line.
+            (en, en.t("componentsUi.signing.intentSwap"), "on", "", (true, false)),
+            (ja, "", "", "で" + ja.t("componentsUi.signing.intentSwap"), (false, false)),
         ] {
             let row = WalletLive.activityRow(try item("dapp-swap-tx", in: view), loc: loc, hidden: false)
             let parts = try #require(row.titlePlace, "no parts for \(loc.resolvedLanguage)")
             #expect(parts.lead == lead)
+            #expect(parts.joiner == joiner)
+            #expect(parts.joinerGap == !joiner.isEmpty)
             #expect(parts.place == "Uniswap")
             #expect(parts.trail == trail)
             #expect(parts.gapBefore == gaps.0 && parts.gapAfter == gaps.1)
-            let spoken = [parts.lead, parts.place, parts.trail].filter { !$0.isEmpty }
+            let spoken = [parts.lead, parts.joiner, parts.place, parts.trail].filter { !$0.isEmpty }
             #expect(row.title.replacingOccurrences(of: " ", with: "") == spoken.joined().replacingOccurrences(of: " ", with: ""))
         }
         // A row with no place has no parts: its title is the verb alone.

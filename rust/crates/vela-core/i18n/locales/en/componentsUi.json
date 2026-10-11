@@ -44,7 +44,7 @@
       "previewVersion": "App version",
       "previewPlatform": "Platform",
       "previewLanguage": "Language",
-      "previewRpc": "Unreachable RPCs",
+      "previewRpc": "Unreachable networks",
       "previewFailures": "Recent failures",
       "previewNone": "none"
     },

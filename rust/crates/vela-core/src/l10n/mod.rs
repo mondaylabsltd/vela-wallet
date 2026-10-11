@@ -20,12 +20,13 @@ mod datetime_data;
 pub mod number;
 
 pub use bidi::{isolate, isolate_into, text_direction};
-pub use currency::{currency_fraction_digits, format_fiat, FiatOptions};
+pub use currency::{currency_fraction_digits, fiat_symbol, format_fiat, FiatOptions};
 pub use datetime::{
     date_preset_of, format_date, format_date_time, format_time, time_preset_of, weekday_name,
     Civil, DatePreset, TimePreset,
 };
 pub use number::{
-    format_compact, format_number, format_signed_token_amount, format_token_amount, group_digits,
-    parse_locale_number, FractionDigits, NumberPreset, Separators,
+    cut_token_amount, format_compact, format_number, format_signed_token_amount,
+    format_token_amount, group_digits, parse_locale_number, FractionDigits, NumberPreset,
+    Separators,
 };

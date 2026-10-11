@@ -23,6 +23,9 @@
 	let addresses = $state<{ name: string; address: string }[]>([]);
 	let multi = $state('');
 	let busy = $state(false);
+	/** Leaving was refused: the connected sites set aside on the way in could
+	 *  not be written back, so the space is still on (see `exitParallelSpace`). */
+	let held = $state(false);
 
 	onMount(async () => {
 		// The core first: a fixture Safe is DERIVED, never stored, so nothing
@@ -50,8 +53,9 @@
 	async function leave(): Promise<void> {
 		busy = true;
 		const mod = await import('$lib/dev/parallel-space');
-		await mod.exitParallelSpace();
+		held = !(await mod.exitParallelSpace());
 		busy = false;
+		if (held) return;
 		window.location.assign(walletDocument);
 	}
 </script>
@@ -68,6 +72,12 @@
 	<p class="state">
 		Status: <strong>{parallelActive() || parallelFlagSet() ? 'ACTIVE' : 'off'}</strong>
 	</p>
+	{#if held}
+		<p class="warn" role="alert">
+			Your connected sites could not be put back, so the parallel space is still on. Nothing was
+			lost — press Leave again.
+		</p>
+	{/if}
 
 	<div class="actions">
 		<button type="button" onclick={enter} disabled={busy}>Enter (seed fixture wallet)</button>

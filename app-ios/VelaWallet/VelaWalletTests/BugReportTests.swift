@@ -92,6 +92,47 @@ struct BugReportTests {
         #expect(BugReport.issueTitle(long) == "[iOS] " + String(repeating: "a", count: 80))
     }
 
+    /// The facts name each network that could not be reached — the wallet's
+    /// name for it, the person's own networks included — and one nobody has
+    /// a name for in the corpus's words, "Chain 1625". Never a bare id:
+    /// 「无法连接的 RPC 1625」 read like a count (device walk 2026-10-11), and
+    /// the line's label now says what the list is.
+    @Test func unreachableNetworksAreNamedAndAnUnnamedOneIsAChainInWords() {
+        let en = Loc(overrideTag: "en")
+        let zh = Loc(overrideTag: "zh")
+        let custom = [777: "My Testnet"]
+        func name(_ chainId: Int) -> String? { custom[chainId] ?? ChainCatalog.meta(chainId)?.displayName }
+
+        #expect(SettingsLive.unreachableNames([100, 1625, 777, 56], name: name, loc: en)
+                == ["Gnosis", "Chain 1625", "My Testnet", "BNB Chain"])
+        #expect(SettingsLive.unreachableNames([100, 1625], name: name, loc: zh) == ["Gnosis", "链 1625"])
+        // A name that is only spaces is no name.
+        #expect(SettingsLive.unreachableNames([9], name: { _ in "  " }, loc: en) == ["Chain 9"])
+        #expect(SettingsLive.unreachableNames([], name: name, loc: en).isEmpty)
+        for names in [SettingsLive.unreachableNames([1625, 31337, 5], name: { _ in nil }, loc: en),
+                      SettingsLive.unreachableNames([1625, 31337, 5], name: { _ in nil }, loc: zh)] {
+            for entry in names {
+                #expect(Int(entry) == nil, "a bare chain id reached the report: \(entry)")
+                #expect(!entry.hasPrefix("chain-"), "this shell's own spelling is back: \(entry)")
+            }
+        }
+
+        // The line as the sheet shows it and the report sends it.
+        func line(_ loc: Loc, _ chainIds: [Int]) -> String? {
+            SettingsLive.withFeedback(
+                SettingsLive.FeedbackFacts(
+                    version: "1.0.0", commit: "abc1234", platform: "iOS 26.2", language: loc.resolvedLanguage,
+                    unreachable: SettingsLive.unreachableNames(chainIds, name: name, loc: loc)
+                ),
+                on: SettingsFixtures.build(.st15, loc: loc), loc: loc
+            ).feedback.previewLines.first { $0.hasPrefix(loc.t("componentsUi.bugReport.previewRpc")) }
+        }
+        #expect(line(en, [100, 1625]) == "Unreachable networks: Gnosis, Chain 1625")
+        #expect(line(zh, [100, 1625]) == "连不上的网络: Gnosis, 链 1625")
+        #expect(line(zh, [1625]) == "连不上的网络: 链 1625")
+        #expect(line(en, []) == "Unreachable networks: \(en.t("componentsUi.bugReport.previewNone"))")
+    }
+
     @Test func noAddressOrEndpointURLReachesTheWire() throws {
         // A custom network can be named anything — including its own RPC URL.
         let shown = lines(unreachable: [rpcWithKey, address])

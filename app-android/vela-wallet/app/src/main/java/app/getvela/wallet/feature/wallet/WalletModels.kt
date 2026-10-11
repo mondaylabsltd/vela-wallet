@@ -331,4 +331,12 @@ data class TitlePlace(
     val gapBefore: Boolean,
     /** …and between the place and the trail. */
     val gapAfter: Boolean,
+    /**
+     * The action the title names (「合约交互」, "Contract interaction"), as it
+     * stands inside [lead] or [trail]: a title too wide for one line breaks
+     * between the action and the place, and what joins them (「在 」, " on ",
+     * 「で」) stays on the place's line. `""` when it is not known — the row
+     * then breaks at the place's edge.
+     */
+    val intent: String = "",
 )

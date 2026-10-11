@@ -8,6 +8,8 @@ use gpui::{
     SharedString, Stateful, StatefulInteractiveElement as _, Styled, div, px,
 };
 
+use vela_core::app::dapp_permissions::OriginLock;
+
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
@@ -645,12 +647,11 @@ pub struct AddressBar {
     /// A page is open: its host and a lock. Otherwise the search box.
     pub browsing: bool,
     pub host: SharedString,
-    /// The core's `address_bar` lock (spec 082 RE1): closed for https or a
-    /// loopback / private-network http host, open (in the warning colour) for
-    /// public http — a padlock there would vouch for a connection anybody on
-    /// the path can read — and none at all over a failure panel or a load
-    /// that has not committed: nothing from that host is on screen.
-    pub lock: vela_core::app::browser_load::BarLock,
+    /// The mark beside the host ([`lock_glyph`]): the core's [`OriginLock`]
+    /// for the document the bar names — and none at all over a failure panel
+    /// or a load that has not committed: nothing from that host is on screen
+    /// (spec 082 RE1, `browser_host::bar_mark`).
+    pub lock: Option<OriginLock>,
     pub placeholder: SharedString,
     /// Somebody is typing: the text so far, drawn with a caret.
     pub draft: Option<SharedString>,
@@ -734,14 +735,12 @@ pub fn address_field(
     if bar.browsing {
         // Spec 079 (owner: "用一把锁代表 https 和非https 就行了，不文字标记"): a
         // closed lock, quiet, for https — it says the line is encrypted, not
-        // that the site is honest — and an open one in the warning colour for
-        // plain http. No word beside either, and no lock at all when nothing
-        // of the host is on screen (spec 082 RE1).
-        let lock = match bar.lock {
-            vela_core::app::browser_load::BarLock::Closed => Some(lock_glyph(theme, true)),
-            vela_core::app::browser_load::BarLock::Open => Some(lock_glyph(theme, false)),
-            vela_core::app::browser_load::BarLock::None => None,
-        };
+        // that the site is honest — an open one in the warning colour for
+        // public http, and for http on this computer or the person's own
+        // network a mark that is neither (`lock_glyph`). No word beside any
+        // of them, and no mark at all when nothing of the host is on screen
+        // (spec 082 RE1).
+        let lock = bar.lock.map(|lock| lock_glyph(theme, lock));
         return row
             .children(lock.map(|(glyph, tint)| icon_img(icons, glyph, false, tint, 12.)))
             .child(
@@ -858,15 +857,25 @@ pub fn network_pick_card_size(rows: usize) -> gpui::Size<gpui::Pixels> {
     )
 }
 
-/// The lock for a page's scheme (spec 079 FR-015): closed and neutral for
-/// https, open in the warning colour for http. The one security mark every
-/// browser surface draws, and never with a word.
+/// The mark for a page's connection (spec 079 FR-015), from the core's
+/// [`OriginLock`] and nothing else: the one security mark every browser
+/// surface draws, and never with a word.
+///
+/// - `Secure` (https): the padlock, closed and quiet. The ONLY padlock.
+/// - `Local` (http on this computer, the person's own network): a quiet
+///   "i" — the mark browsers give `localhost`. Not a padlock: nothing on
+///   that line is encrypted, and a page at `http://127.0.0.1:8137` wore one
+///   (the 2026-10-11 phone walk; the desktop drew it from the same "safe to
+///   use the wallet from" flag). Not the warning either: the line never
+///   leaves the person's own machines.
+/// - `Insecure` (public http, or an origin that cannot be read): the open
+///   lock in the warning colour.
 #[must_use]
-pub fn lock_glyph(theme: &Theme, secure: bool) -> (Icon, Hsla) {
-    if secure {
-        (Icon::Lock, theme.fg_muted)
-    } else {
-        (Icon::LockOpen, theme.warning_base)
+pub fn lock_glyph(theme: &Theme, lock: OriginLock) -> (Icon, Hsla) {
+    match lock {
+        OriginLock::Secure => (Icon::Lock, theme.fg_muted),
+        OriginLock::Local => (Icon::Info, theme.fg_muted),
+        OriginLock::Insecure => (Icon::LockOpen, theme.warning_base),
     }
 }
 
@@ -1143,15 +1152,30 @@ mod tests {
         );
     }
 
-    /// Spec 079 FR-015: the scheme is a lock and only a lock — closed and
-    /// quiet for https, open in the warning colour for http.
+    /// Spec 079 FR-015 and PR 4 item 11: the mark is the core's lock and
+    /// nothing else — the padlock for https alone, the open lock in the
+    /// warning colour for public http, and for a local http page a quiet
+    /// mark that is neither of them.
     #[test]
-    fn the_lock_says_the_scheme_and_nothing_else() {
-        let theme = Theme::light();
-        assert_eq!(lock_glyph(&theme, true), (Icon::Lock, theme.fg_muted));
-        assert_eq!(
-            lock_glyph(&theme, false),
-            (Icon::LockOpen, theme.warning_base)
-        );
+    fn the_padlock_is_for_https_alone() {
+        for theme in [Theme::light(), Theme::dark()] {
+            assert_eq!(
+                lock_glyph(&theme, OriginLock::Secure),
+                (Icon::Lock, theme.fg_muted)
+            );
+            assert_eq!(
+                lock_glyph(&theme, OriginLock::Insecure),
+                (Icon::LockOpen, theme.warning_base)
+            );
+            let (local, tint) = lock_glyph(&theme, OriginLock::Local);
+            assert!(
+                !matches!(local, Icon::Lock | Icon::LockOpen | Icon::TriangleAlert),
+                "a local page is neither locked nor warned about"
+            );
+            assert_eq!(tint, theme.fg_muted, "and it is quiet");
+            // Three states, three marks: none can be read as another.
+            assert_ne!(local, lock_glyph(&theme, OriginLock::Secure).0);
+            assert_ne!(local, lock_glyph(&theme, OriginLock::Insecure).0);
+        }
     }
 }

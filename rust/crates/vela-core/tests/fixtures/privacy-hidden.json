@@ -1,5 +1,5 @@
 {
-  "about": "A real balance and feed, driven through vela-core's balance_dashboard and activity_feed (tests/app_privacy.rs), shown and hidden. Replay both through every surface builder: shown, every `forbidden` run appears; hidden, no masked surface's output contains one and every masked figure is `mask` (`balance_mask` on the home total); the visible surfaces keep their figures; a row's figure masks exactly when `figure_maskable` says so. The feed carries a SPLIT (one send to two people, the row whose `batch` is set): its total and each recipient's share are figures too, in the row and in its detail. Regenerate: VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_privacy",
+  "about": "A real balance and feed, driven through vela-core's balance_dashboard and activity_feed (tests/app_privacy.rs), shown and hidden. Replay both through every surface builder: shown, every `forbidden` run appears; hidden, no masked surface's output contains one and every masked figure is `mask` (`balance_mask` on the home total); the visible surfaces keep their figures; a row's figure masks exactly when `figure_maskable` says so. The feed carries a SPLIT (one send to two people, the row whose `batch` is set): its total and each recipient's share are figures too, in the row and in its detail. `holdings_masked` is what each holding reads while hidden, on EVERY surface that draws it — a home or Assets row, the token's own page: its `amount` (the mask and the coin's unit, `privacy::masked_amount`) and its `worth` (the bare mask: a fiat worth has no unit to keep). Regenerate: VELA_WRITE_FIXTURES=1 cargo test -p vela-core --features crux --test app_privacy",
   "balance_mask": "••••••",
   "figure_maskable": {
     "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef": true,
@@ -964,6 +964,22 @@
       ]
     }
   },
+  "holdings_masked": [
+    {
+      "amount": "•••• xDAI",
+      "chain_id": 100,
+      "symbol": "xDAI",
+      "token_address": null,
+      "worth": "••••"
+    },
+    {
+      "amount": "•••• USDC",
+      "chain_id": 1,
+      "symbol": "USDC",
+      "token_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "worth": "••••"
+    }
+  ],
   "mask": "••••",
   "masked_surfaces": [
     "home_total",

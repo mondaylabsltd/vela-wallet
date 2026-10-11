@@ -562,13 +562,17 @@ struct IndexDownModel {
 /// Everything one settings state needs.
 /// The keys that control this wallet (spec 062) — drawn under the account and
 /// above everything else, with the Ethereum backup as the block's last row.
-/// `rows` is empty while the first answer is in flight; `note` is set only when
-/// the registry did not answer and the rows are what this device remembers.
+/// While the registry's answer is in flight (`loading`), `rows` are what this
+/// device's own record says — every key, each drawn with the room its badges
+/// will take — and empty only for the instant before that record is read;
+/// `note` is set only when the registry did not answer and the rows are what
+/// this device remembers.
 struct WalletKeysModel {
     let title: String
     let subtitle: String
     /// "3"; empty while loading — never a guessed count.
     let count: String
+    /// The registry has not answered yet: the rows' badges are still unknown.
     let loading: Bool
     let note: String?
     let rows: [WalletKeyRowModel]
@@ -585,6 +589,18 @@ struct WalletKeysModel {
     /// Spec 102: "Keys on {{domain}}" for an account on its own domain —
     /// once, above the list; `nil` on `getvela.app`.
     var domainLine: String? = nil
+    /// The badges the registry's answer can put on a row, as alternative
+    /// sets, in the core's words ("Verified" beside "Cloud-synced", or beside
+    /// "Device-bound"). Every row keeps the room of the fullest of them, so
+    /// the answer changes no row's height; the first set is what stands in,
+    /// unread, while the registry is asked. Empty on a drawn board.
+    var badgeRoom: [[String]] = []
+    /// What the line under a key's name can come to say of where the key
+    /// lives, in this language — the three kinds a key can be. A pending row
+    /// draws a quiet bar as wide as the widest of them where those words
+    /// will stand: its size is the same whatever this device believes of the
+    /// key, and none of them is written. Empty on a drawn board.
+    var holderRoom: [String] = []
 }
 
 enum KeyPillTone {
@@ -608,8 +624,13 @@ struct KeyDetailModel: Equatable, Identifiable {
 
 struct WalletKeyRowModel: Identifiable {
     let id: Int
+    /// Empty only on a `pending` row whose key this device's record does not
+    /// name: the registry may name it, so "Key 2" is not said in its place.
     let name: String
-    /// The vault's name when the catalog knows it; else the method's generic line.
+    /// The vault's name when the catalog knows it; else the method's generic
+    /// line. Empty on a `pending` row: where a key lives is the registry's
+    /// to say, and this device's guess ("Built-in passkey") was taken back
+    /// three seconds later ("Security key") on the owner's phone.
     let holder: String
     /// `197d…647b` — what tells two unnamed keys apart.
     let fingerprint: String
@@ -618,7 +639,22 @@ struct WalletKeyRowModel: Identifiable {
     let pills: [KeyPillModel]
     /// What the row opens onto: the explorer's facts. Empty = nothing to open.
     let details: [KeyDetailModel]
-    let key: CreateKeyRow
+    /// What the provider's mark is drawn from. `nil` on a `pending` row: the
+    /// device's record does not know the key's kind for certain (its method
+    /// falls back to "platform"), so there is nothing here to draw a mark
+    /// from until the registry answers — or is known not to.
+    let key: CreateKeyRow?
+    /// The registry is still being asked about this key. The row says only
+    /// what this device's record knows for certain — the name it holds, the
+    /// short id, "Signed in" — and what the answer may contradict (where the
+    /// key lives, its mark, a name the record does not hold, the registry's
+    /// badges) is a quiet shape of its own size, filled in place when the
+    /// answer lands. A registry that never answers is not "pending": then,
+    /// and only then, the device's own reading is shown, under its note.
+    var pending = false
+    /// "Key 2": what an unnamed key is called when nobody names it — the
+    /// size of the bar drawn while `name` is empty.
+    var nameRoom = ""
 }
 
 /// The settings screen's model: every page, sheet and rescue of it, by

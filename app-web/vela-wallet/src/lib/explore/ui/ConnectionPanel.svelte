@@ -3,6 +3,7 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
 	import type { ConnectionModel } from '../model';
+	import SiteMark from './SiteMark.svelte';
 
 	/**
 	 * What a connected site can and cannot do (E7 / DE3), in that order: who
@@ -25,8 +26,8 @@
 		<LetterAvatar letter={connection.site.letter} tint={connection.site.tint} size={40} />
 		<span class="who">
 			<span class="host">{connection.site.host}</span>
-			<span class="status">
-				<Icon icon={UTILITY_ICONS.lock} size="xs" />
+			<span class="status" data-lock={connection.mark.lock}>
+				<SiteMark mark={connection.mark} />
 				{connection.statusLine}
 			</span>
 		</span>
@@ -121,7 +122,17 @@
 		align-items: center;
 		gap: var(--space-sm);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	/* The words wear their mark's tone (see `SiteMark`): green beside a
+	   padlock, the warning for public http, plain for a local page. */
+	.status[data-lock='secure'] {
 		color: var(--color-success-base);
+	}
+
+	.status[data-lock='insecure'] {
+		color: var(--color-warning-base);
 	}
 
 	.address {

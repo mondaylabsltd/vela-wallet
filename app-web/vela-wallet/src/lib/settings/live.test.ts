@@ -33,6 +33,8 @@ import { DisplayCurrencyCore, FeeTierPrefCore } from '$lib/core/client';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
+import { SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
+import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { UnreachableNetwork } from '$lib/core/generated/UnreachableNetwork';
@@ -953,9 +955,95 @@ describe('the currency row, before and after the core commits', () => {
 	it('committed: the code, and on the wide row a sample in it', () => {
 		expect(phoneRow(CNY)?.value).toBe('CNY');
 		expect(phoneTicked(CNY)).toEqual(['CNY']);
-		expect(wideRow(CNY)?.value).toBe('CNY · ¥8,641.92');
+		expect(wideRow(CNY)?.value).toBe('CNY · CN¥8,641.92');
 		// Unpriceable is committed too: the code alone, never a rate of 1.
 		expect(wideRow(UNPRICED_JPY)?.value).toBe('JPY');
+	});
+});
+
+/**
+ * Device walk of 2026-10-11, item 8. The web kept a symbol table of its own:
+ * the Hong Kong dollar wore the US dollar's "$", and the yen and the yuan one
+ * "¥" — two rows of the picker a person could not tell apart by their badge,
+ * and a figure that read differently on the phone beside it. The symbol is
+ * the core's now (`fiat_symbol`), in the page's language.
+ */
+describe('the currency picker writes each currency the way every figure does', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const USD: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+	/** The 34 the core's own picker test covers: every code with a symbol of
+	 *  its own, and two that have none. */
+	const OFFERED = [
+		...['USD', 'EUR', 'GBP', 'CNY', 'JPY', 'KRW', 'VND', 'INR', 'TRY', 'PHP', 'ILS', 'THB'],
+		...['UAH', 'NGN', 'RUB', 'PLN', 'CZK', 'HUF', 'IDR', 'MYR', 'ZAR', 'BRL', 'HKD', 'CAD'],
+		...['AUD', 'NZD', 'SGD', 'TWD', 'MXN', 'ARS', 'CHF', 'SEK', 'NOK', 'DKK']
+	];
+	const badges = (locale: Locale, codes: string[]) => {
+		const lm = resolveSettingsMessages(locale);
+		const rows = withLiveCurrency(buildMobileState('st1', lm, IDENTICON), USD, { codes, locale })
+			.currencySheet.rows;
+		return Object.fromEntries(rows.map((row) => [row.id, row.glyph]));
+	};
+
+	it('"¥" is the reader’s own of the yen and the yuan; the other carries its country', () => {
+		for (const zh of ['zh', 'zh-TW', 'zh-HK'] as const) {
+			expect(badges(zh, OFFERED)).toMatchObject({ CNY: '¥', JPY: 'JP¥' });
+		}
+		for (const other of ['en', 'ja', 'ko', 'de'] as const) {
+			expect(badges(other, OFFERED)).toMatchObject({ CNY: 'CN¥', JPY: '¥' });
+		}
+	});
+
+	it('"$" is the US dollar’s alone', () => {
+		expect(badges('en', OFFERED)).toMatchObject({ USD: '$', HKD: 'HK$', CAD: 'CA$', AUD: 'A$' });
+		expect(badges('zh-HK', OFFERED)).toMatchObject({ USD: '$', HKD: 'HK$' });
+	});
+
+	it('a currency with no glyph of its own shows its code', () => {
+		expect(badges('en', OFFERED)).toMatchObject({ CHF: 'CHF', SEK: 'SEK', PLN: 'zł' });
+	});
+
+	it('no two rows show the same symbol, in any language — offered, or the drawn eight', () => {
+		for (const locale of SUPPORTED_LOCALES) {
+			for (const codes of [OFFERED, []]) {
+				const shown = Object.values(badges(locale, codes));
+				expect(shown.length).toBe(codes.length || 8);
+				expect(new Set(shown).size, `${locale}: ${shown.join(' ')}`).toBe(shown.length);
+			}
+		}
+	});
+
+	it('the drawn sheet — before any of this is live — is written by the same rule', () => {
+		const drawn = (locale: Locale) =>
+			Object.fromEntries(
+				buildMobileState('st1', resolveSettingsMessages(locale), IDENTICON).currencySheet.rows.map(
+					(row) => [row.id, row.glyph]
+				)
+			);
+		expect(drawn('zh')).toMatchObject({ USD: '$', CNY: '¥', JPY: 'JP¥', HKD: 'HK$' });
+		expect(drawn('en')).toMatchObject({ USD: '$', CNY: 'CN¥', JPY: '¥', HKD: 'HK$' });
+		expect(drawn('zh')).toEqual(badges('zh', []));
+	});
+
+	it('the wide menu’s options and the row’s sample use it too', () => {
+		const wide = (locale: Locale, view: CurrencyView) => {
+			setPageLanguage(locale);
+			try {
+				return withLiveCurrencyDesktop(
+					buildDesktopState('dst3', resolveSettingsMessages(locale), IDENTICON),
+					view,
+					{ codes: ['USD', 'CNY', 'JPY', 'HKD'], locale }
+				).localization.rows.find((r) => r.id === 'currency');
+			} finally {
+				setPageLanguage('en');
+			}
+		};
+		const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true, pending: null };
+		const HKD: CurrencyView = { code: 'HKD', rate: 7.8, committed: true, pending: null };
+		expect(wide('zh', CNY)?.value).toBe('CNY · ¥8,641.92');
+		expect(wide('en', CNY)?.value).toBe('CNY · CN¥8,641.92');
+		expect(wide('en', HKD)?.value).toBe('HKD · HK$9,629.57');
+		expect(wide('zh', CNY)?.options?.map((o) => o.glyph)).toEqual(['$', '¥', 'JP¥', 'HK$']);
 	});
 });
 

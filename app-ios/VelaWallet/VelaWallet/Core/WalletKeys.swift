@@ -134,9 +134,28 @@ final class WalletKeys {
             }
             answers.append(contentsOf: round)
         }
-        // Never settled: what the device alone says, asked with no address so
-        // that it can ask nobody.
-        return Self.object(step("", deviceJson, "[]", signInCredential)).map(Self.parse) ?? empty
+        // Never settled: what the device alone says.
+        return deviceOnly(device: device, signInCredential: signInCredential)
+    }
+
+    /// What this device's own record says, with nobody asked: the walk run
+    /// with no address, so that it can ask no chain. The rows are the core's —
+    /// in founding order, named as the registry's answer will name them where
+    /// the record knows, the sign-in key marked — and carry no badge nobody
+    /// has vouched for yet.
+    ///
+    /// Settings draws these from its first frame (iPhone walk 2026-10-10: the
+    /// block was ONE skeleton row until the registry answered, then grew to
+    /// the wallet's three keys and pushed the page down ~250 pt).
+    func deviceOnly(device: [DeviceKey], signInCredential: String) -> Result {
+        let deviceJson = Self.json(device.map {
+            [
+                "credential_id": $0.credentialId,
+                "public_key_hex": $0.publicKeyHex, "name": $0.name, "transports": $0.transports,
+            ]
+        })
+        return Self.object(step("", deviceJson, "[]", signInCredential)).map(Self.parse)
+            ?? Result(source: .device, rows: [])
     }
 
     private func perform(_ request: [String: Any]) async -> [String: Any] {

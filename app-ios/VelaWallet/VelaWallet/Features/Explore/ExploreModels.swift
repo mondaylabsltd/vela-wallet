@@ -100,7 +100,8 @@ struct DemoPageModel {
 struct BrowserModel {
     let url: String
     let host: String
-    let secure: Bool
+    /// The mark beside the host: the padlock for https only (`OriginLock`).
+    let lock: OriginLock
     let connected: Bool
     /// The page has somewhere to go back to. ‹ is never disabled: with no
     /// history it returns to the Explore home (DESIGN N).
@@ -148,8 +149,10 @@ struct ConnectionModel {
     let explainer: String
     let disconnect: String
     let footnote: String
-    /// Whether the origin is on TLS. Drives the padlock, and nothing else may.
-    var secure: Bool = true
+    /// The mark beside the site's name — the core's `OriginLock`: the
+    /// padlock for https only, a neutral mark for a local page, the open
+    /// lock for public http. Nothing else may draw one.
+    var lock: OriginLock = .secure
     /// The panel's **not-yet-connected** form: a site is asking, and the two
     /// answers replace 断开连接. Same panel, because the facts a person needs
     /// in order to decide are exactly the facts they need in order to review

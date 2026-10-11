@@ -180,12 +180,12 @@ struct SettingsParityTests {
     /// A chosen currency is named even while it cannot be priced — not
     /// reported as USD, which says the choice did not take.
     @Test func aChosenUnpricedCurrencyIsNamed() {
-        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "CNY", rate: nil, committed: true)) == "CNY")
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "CNY", rate: nil, committed: true), language: "en") == "CNY")
         // Not committed, nothing on its way: no figure yet (PR 3 notes 9/27).
-        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: false)) == "")
-        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: true))
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: false), language: "en") == "")
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: true), language: "en")
                 .hasPrefix("USD · $"))
-        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "EUR", rate: 0.5, committed: true))
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "EUR", rate: 0.5, committed: true), language: "en")
                 .hasPrefix("EUR · €"))
     }
 }

@@ -11,6 +11,7 @@
  */
 import { PERM_PREFIX } from './keys';
 import { revokeGrant, type DAppGrant } from './grants';
+import { revokeSitesSetAside } from './space-sites';
 
 interface StorageAreaLike {
 	get(keys: null): Promise<Record<string, unknown>>;
@@ -41,10 +42,15 @@ export async function listGrants(): Promise<DAppGrant[]> {
 
 export { revokeGrant };
 
-/** Cut every site off at once — the drawn "Disconnect all". */
+/**
+ * Cut every site off at once — the drawn "Disconnect all". Asked from inside
+ * the parallel space it takes the person's own sites too, the ones set aside
+ * for the visit: "all" is about this browser, not about the list in view.
+ */
 export async function revokeAll(): Promise<void> {
 	const store = area();
 	if (!store) return;
+	await revokeSitesSetAside();
 	const grants = await listGrants();
 	if (grants.length === 0) return;
 	try {

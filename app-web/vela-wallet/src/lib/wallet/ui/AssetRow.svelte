@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { MASK } from '../fixtures';
 	import type { AssetRowModel } from '../model';
 	import TokenIcon from './TokenIcon.svelte';
 
@@ -49,13 +50,23 @@
 		<span class="chain">{row.chain}</span>
 	</span>
 	<span class="numbers" class:masked={row.masked}>
-		<span class="balance">{row.balance}</span>
+		<span class="balance">
+			{#if row.masked && row.balance.startsWith(MASK)}
+				<!-- Hidden, the amount is the mask and the coin ("•••• BNB"). Only
+				     the dots are set wide: the coin's name is a word, and reads
+				     as one. No whitespace of the template's between the two —
+				     the string's own space is the only one. -->
+				<span class="dots">{MASK}</span>{row.balance.slice(MASK.length)}
+			{:else}
+				{row.balance}
+			{/if}
+		</span>
 		{#if row.fiat.kind === 'value'}
 			<span class="fiat">{row.fiat.text}</span>
 		{:else if row.fiat.kind === 'no-price'}
 			<span class="fiat no-price">{row.fiat.text}</span>
 		{:else if row.fiat.kind === 'masked'}
-			<span class="fiat">••••</span>
+			<span class="fiat">{MASK}</span>
 		{/if}
 	</span>
 	{#if trailing}<span class="trailing">{@render trailing()}</span>{/if}
@@ -173,7 +184,7 @@
 		color: var(--color-warning-base);
 	}
 
-	.masked .balance,
+	.masked .dots,
 	.masked .fiat {
 		letter-spacing: var(--space-xs);
 	}

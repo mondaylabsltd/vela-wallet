@@ -450,7 +450,7 @@
 					// core's own count, read back from the room it reports.
 					formHasRows: (sendView.split_import_room ?? 60) < 60,
 					replaces: importReplaces,
-					remaining: sendView.split_remaining,
+					remaining: sendView.split_remaining_display,
 					// Nothing read of the display currency yet: the code the importer
 					// holds is the placeholder's, and is not said (PR 3 final note F8).
 					currencyUnknown: !currency.view.committed && currency.view.pending === null
@@ -2080,7 +2080,10 @@
 	/** The extension worker's failure lines, read when a report opens. */
 	let relayWorkerFailures = $state<string[]>([]);
 	const relayReportModel = $derived(
-		liveRelayReport(rm, deviceFacts(data.locale ?? 'en', relayWorkerFailures))
+		liveRelayReport(
+			rm,
+			deviceFacts(data.locale ?? 'en', relayWorkerFailures, rm.bugReport.chainFallback)
+		)
 	);
 
 	function openRelayReport(from: 'relayer' | 'relay-unreachable'): void {
@@ -2123,7 +2126,7 @@
 			area: report.area,
 			fingerprint: report.fingerprint,
 			labels: feedbackLabels(rm),
-			facts: deviceFacts(data.locale ?? 'en', relayWorkerFailures),
+			facts: deviceFacts(data.locale ?? 'en', relayWorkerFailures, rm.bugReport.chainFallback),
 			screenshots: typed.screenshots
 		});
 		await relayReportSend.send(() => fileReport(payload), copy);

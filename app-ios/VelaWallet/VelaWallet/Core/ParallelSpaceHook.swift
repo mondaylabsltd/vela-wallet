@@ -40,6 +40,10 @@ protocol ParallelSpaceProvider {
 
     /// The signer to use while the space is active.
     func signer() -> UserOpSigner?
+
+    /// Whether `address` is the space's own test wallet — asked of the
+    /// ACCOUNT, never of `isActive` (`ParallelSpaceHook.isSpaceAccount`).
+    func isSpaceAccount(_ address: String) -> Bool
 }
 
 enum ParallelSpaceHook {
@@ -52,6 +56,30 @@ enum ParallelSpaceHook {
     @MainActor
     static func applyIfRequested(store: VelaStore, accounts: AccountStore) async {
         await provider?.applyIfRequested(store: store, accounts: accounts)
+    }
+
+    /// Whether `address` is the parallel space's test wallet.
+    ///
+    /// What the in-app browser tells the core about the account in front
+    /// (`account_switched.space`): the core then keeps the person's connected
+    /// sites apart from the space's — not re-pinned to the test wallet, not
+    /// dropped when its record goes, not written at all while it is in front.
+    /// A walk through the space on the owner's phone cost them a real
+    /// connection (Arc Orbs, 2026-10-11) because the test wallet coming to
+    /// the front was told as an ordinary account switch.
+    ///
+    /// Asked of the ACCOUNT, not of `isActive`. The flag says the space was
+    /// entered at this launch; it does not say whose the account in front is.
+    /// Inside the space the person can switch to one of their own wallets —
+    /// their sites must follow them there — and back to the test wallet,
+    /// which must set them aside again. The address is a fact about the
+    /// build's keyset; it does not move when a preference does.
+    ///
+    /// `false` in every Release build: no provider, no keyset, no such account.
+    @MainActor
+    static func isSpaceAccount(_ address: String?) -> Bool {
+        guard let address, !address.isEmpty else { return false }
+        return provider?.isSpaceAccount(address) ?? false
     }
 
     /// The signer for a user operation: the fixture's while the space is

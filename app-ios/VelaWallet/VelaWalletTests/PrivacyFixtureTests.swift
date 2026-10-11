@@ -208,7 +208,7 @@ struct PrivacyFixtureTests {
         #expect(applied.balance.state == .hidden)
         #expect(applied.balance.integer == nil)
         #expect(WalletGeometry.hiddenDotCount == Self.fixture.balanceMask.count)
-        #expect(applied.assetRows.allSatisfy { $0.balance == Self.fixture.mask && $0.masked })
+        #expect(applied.assetRows.allSatisfy { $0.balance.hasPrefix(Self.fixture.mask) && $0.masked })
         #expect(surfaces["account_switcher"]?.contains { $0.contains(Self.fixture.mask) } == true,
                 "the switcher's total is not the mask")
         let sheet = SettingsLive.withAccounts(
@@ -324,6 +324,52 @@ struct PrivacyFixtureTests {
         }
         // The fiat worth is a figure in a currency: masked whole, no unit to keep.
         #expect(transfers.allSatisfy { [mask, ""].contains(detail($0).fiat) })
+    }
+
+    /// 8. PR 4 item 3 — a hidden holding reads ONE way on every surface that
+    /// draws it: the fixture's `holdings_masked`. Its amount is the mask and
+    /// the coin ("•••• xDAI") on the home's row, the Assets page's row and
+    /// the token's own page; its worth is the bare mask on all three. On an
+    /// iPhone the rows read 「••••」 while the token page read 「•••• BNB」.
+    @Test func everyHiddenHoldingReadsTheFixturesAmountAndWorth() throws {
+        let (balance, feed) = try views("hidden")
+        let expected = Self.fixture.raw["holdings_masked"] as? [[String: Any]] ?? []
+        #expect(!expected.isEmpty, "the fixture has no holdings_masked")
+        #expect(expected.count == balance.tokens.count, "one line per holding")
+
+        let applied = WalletLive.apply(balance, feed: feed, feedRead: true, on: home, loc: loc)
+        let assets = FlowsLive.assets(balance, currency: nil, on: drawnAssets, loc: loc).rows
+        #expect(applied.assetRows.count == balance.tokens.count)
+        #expect(assets.count == balance.tokens.count)
+
+        for (index, token) in balance.tokens.enumerated() {
+            let want = expected[index]
+            let amount = try #require(want["amount"] as? String)
+            let worth = try #require(want["worth"] as? String)
+            #expect(want["symbol"] as? String == token.symbol, "the fixture's lines are in the holdings' order")
+            #expect((want["chain_id"] as? NSNumber)?.intValue == token.chainId)
+            // The fixture's own two rules, so a drifted fixture is seen here.
+            #expect(amount == maskedAmount(unit: token.symbol))
+            #expect(worth == maskedAmount(unit: ""))
+
+            for (surface, rows) in [("home", applied.assetRows), ("assets", assets)] {
+                let row = rows[index]
+                #expect(row.ticker == token.symbol)
+                #expect(row.balance == amount, "\(surface): \(token.symbol) reads \(row.balance)")
+                #expect(row.masked)
+                // The row's worth line, as `AssetRowView` draws a masked one.
+                guard case .masked = row.fiat else {
+                    Issue.record("\(surface): \(token.symbol)'s worth is not masked: \(row.fiat)")
+                    continue
+                }
+                #expect(AssetRowView.maskedWorth == worth, "\(surface): the worth reads \(AssetRowView.maskedWorth)")
+            }
+
+            let page = FlowsLive.tokenDetail(token, feed: feed, display: .usd, on: drawnTokenDetail, loc: loc,
+                                             hidden: true)
+            #expect(page.balance == amount, "the token's page reads \(page.balance)")
+            #expect(page.fiat == worth, "the token's page worth reads \(page.fiat)")
+        }
     }
 
     /// 7. PR 3 note 15 — the SPLIT: one send to two people. Its total and

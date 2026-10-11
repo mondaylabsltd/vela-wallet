@@ -398,7 +398,7 @@
       "previewVersion": "App 版本",
       "previewPlatform": "平台",
       "previewLanguage": "語言",
-      "previewRpc": "連唔到嘅 RPC",
+      "previewRpc": "連唔到嘅網絡",
       "previewFailures": "最近失敗",
       "previewNone": "冇"
     },

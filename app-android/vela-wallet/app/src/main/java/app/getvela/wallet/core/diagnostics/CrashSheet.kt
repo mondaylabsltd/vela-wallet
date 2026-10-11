@@ -1,6 +1,7 @@
 package app.getvela.wallet.core.diagnostics
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
@@ -48,7 +49,7 @@ fun CrashSheet(strings: VelaStrings, version: String) {
         report = null
     }
     VelaModalSheet(onDismissRequest = dismiss, containerColor = colors.bgRaised) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = VelaSpacing.xl).navigationBarsPadding()) {
+        Column(modifier = Modifier.fillMaxWidth().sheetScrolls().padding(horizontal = VelaSpacing.xl).navigationBarsPadding()) {
             Text(
                 text = strings.t(I18nKeys.Flow.UNKNOWN_TITLE),
                 color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.bold, fontSize = VelaTextSize.xl,

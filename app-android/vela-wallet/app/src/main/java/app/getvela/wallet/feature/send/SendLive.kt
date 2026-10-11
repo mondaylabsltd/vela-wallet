@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.flows.ContactGroupModel
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.ContactsView
@@ -472,7 +473,7 @@ object SendLive {
                     // Adding to people already on the form draws from what the form
                     // has not given out yet (`split_remaining`), not the whole balance.
                     remaining = if (formHasRows && !replaces && view.split_remaining != null) {
-                        s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${trim(view.split_remaining)} $symbol".trim()))
+                        s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${splitLeft(view)} $symbol".trim()))
                     } else {
                         s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to "${trim(view.selected_token?.balance ?: "0")} $symbol".trim()))
                     },
@@ -706,7 +707,7 @@ object SendLive {
     }
 
     private fun amountModel(view: SendView, symbol: String, fiatLine: String, fiatWithheld: Boolean, ctx: Context): AmountFieldModel {
-        val (prefix, suffix) = unitAdornment(view.amount_fiat_code, symbol)
+        val (prefix, suffix) = unitAdornment(view.amount_fiat_code, symbol, ctx.strings.language)
         // Typing in fiat, the line under the figure is the TOKEN amount — not
         // a fiat figure, so never withheld.
         val typingFiat = view.amount_fiat_code != null
@@ -740,12 +741,12 @@ object SendLive {
      * leads it ("$4.00"); one without follows as its code ("4.00 PLN").
      * Nothing defaults to "$" — an unknown unit is no adornment at all.
      */
-    internal fun unitAdornment(code: String?, tokenSymbol: String): Pair<String?, String?> {
+    internal fun unitAdornment(code: String?, tokenSymbol: String, language: String = AppLanguage.tag): Pair<String?, String?> {
         if (code == null) return null to tokenSymbol.ifEmpty { null }
-        // The same ISO-4217 table `WalletLive.Money` writes the "≈" line with,
-        // so the figure and the line beneath it agree on what a currency looks like.
-        val sign = runCatching { java.util.Currency.getInstance(code).getSymbol(java.util.Locale.US) }
-            .getOrNull()?.takeIf { it != code }
+        // The core's symbol (`fiatSymbol`), the one `WalletLive.Money` writes
+        // the "≈" line with — so the figure and the line beneath it agree on
+        // what a currency looks like, in this language.
+        val sign = WalletLive.Money.fiatSign(code, language).takeIf { it != code }
         return if (sign == null) null to code else sign to null
     }
 
@@ -822,8 +823,26 @@ object SendLive {
             // same predicate Continue refuses on, shown while typing — and how
             // much is still left to give out when they do not.
             over = view.split_over_balance,
-            remaining = view.split_remaining?.let { s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${trim(it)} $symbol".trim())) },
+            remaining = splitLeft(view)?.let { s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "$it $symbol".trim())) },
         )
+    }
+
+    /**
+     * What is left of a split to give out, as the line under the rows says it
+     * ("0.0003 BNB left"): the CORE's cut of the exact remainder
+     * (`split_remaining_display` — the token ladder, never rounded up), in the
+     * person's decimal mark, ungrouped like every token figure. `null` when
+     * there is no remainder to say.
+     *
+     * It used to go through this shell's own token rule, which rounds half
+     * up: a remainder is what is THERE, and rounding it up by a digit says
+     * there is more to give out than there is. (The iPhone drew the exact
+     * string, eighteen places of it.) A view with no cut of its own — a hand
+     * built one — is cut by the same core function.
+     */
+    internal fun splitLeft(view: SendView): String? {
+        val cut = view.split_remaining_display ?: view.split_remaining?.let { uniffi.vela_core_uniffi.cutTokenAmount(it) }
+        return cut?.let { Formats.current.plain(it) }
     }
 
     /** The core's live refusal on the form — the amount warning, or the same-asset fee ceiling. */

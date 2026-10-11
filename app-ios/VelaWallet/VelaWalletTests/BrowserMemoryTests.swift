@@ -279,14 +279,15 @@ struct BrowserMemoryTests {
     /// connection — "已连接" — and never "安全站点" or "不安全站点"; the http
     /// lock carries `connect.browser.a11yInsecure` for a screen reader.
     @Test func theStatusLineMakesNoClaimAboutTheSite() {
-        let words = [loc().t("explore.secureSite"), loc().t("connect.browser.a11yInsecure")]
-        for secure in [true, false] {
-            for connected in [true, false] {
-                let line = ExploreLive.statusLine(secure: secure, connected: connected, host: "x.io", loc: loc())
-                for word in words { #expect(!line.contains(word), "\(line) makes a claim about the site") }
-                // Spec 097 E: no grant says so, rather than going blank.
-                #expect(line == loc().t(connected ? "explore.connectedTag" : "home.connEmptyTitle"))
-            }
+        let words = [
+            loc().t("explore.secureSite"), loc().t("connect.browser.a11yInsecure"),
+            loc().t("explore.localSite"), loc().t("connect.browser.a11yLocal"),
+        ]
+        for connected in [true, false] {
+            let line = ExploreLive.statusLine(connected: connected, loc: loc())
+            for word in words { #expect(!line.contains(word), "\(line) makes a claim about the site") }
+            // Spec 097 E: no grant says so, rather than going blank.
+            #expect(line == loc().t(connected ? "explore.connectedTag" : "home.connEmptyTitle"))
         }
     }
 

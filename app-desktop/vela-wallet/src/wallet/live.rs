@@ -13,7 +13,7 @@ use vela_core::app::balance_dashboard::{
     BalanceNotice, BalanceToken, BalanceView, TOKEN_LIST_UNREACHABLE, UNREACHABLE_MANY,
     UNREACHABLE_ONE,
 };
-use vela_core::l10n::currency::format_fiat;
+use vela_core::l10n::currency::{fiat_symbol, format_fiat};
 use vela_core::l10n::number::format_token_amount;
 
 use crate::wallet::WalletStrings;
@@ -179,10 +179,15 @@ impl Money {
             Some(rate) => (self.code.as_str(), usd * rate),
             None => ("USD", usd),
         };
+        // The one place a fiat figure gets its symbol: the core's, for the
+        // app's language (`locale`) — "¥" is the yuan to a Chinese reader
+        // and the yen to everyone else, and the other one says its country
+        // (PR 4 item 8). The desktop kept a table of its own that gave both
+        // the same bare sign.
         format_fiat(
             amount,
             code,
-            crate::settings::live::symbol_for(code),
+            &fiat_symbol(code, locale),
             locale,
             crate::executor::format_prefs::fiat_options(),
         )
@@ -486,17 +491,27 @@ pub fn unreachable_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedS
     Some(SharedString::from(line))
 }
 
-/// The NAMES of the networks whose RPC is failing — what a problem report's
-/// "RPC failing" line may say. The core's `rpc_fixable` rows only: a network
-/// whose node answers (its token list is what could not be loaded, PR 3
-/// note 4) is not an RPC failure, and a report that said so would send
-/// whoever reads it after an endpoint that is working.
+/// The NAMES of the networks that cannot be reached — what a problem
+/// report's "Unreachable networks" line says. The core's `rpc_fixable` rows
+/// only: a network whose node answers (its token list is what could not be
+/// loaded, PR 3 note 4) is not out of reach, and a report that said so would
+/// send whoever reads it after an endpoint that is working.
+///
+/// Each by its own name; one that has none in the reader's words —
+/// `chain_fallback` is the corpus's `assets.chainFallback` ("Chain
+/// {{chainId}}", 「链 {{chainId}}」). Never a bare id: on the owner's phone
+/// the line read 「无法连接的 RPC 1625」, which is a count of RPCs to anyone
+/// who does not know 1625 is a chain (PR 4 item 9).
 #[must_use]
-pub fn rpc_failing_names(view: &BalanceView) -> Vec<String> {
+pub fn rpc_failing_names(view: &BalanceView, chain_fallback: &str) -> Vec<String> {
     view.unreachable_networks
         .iter()
         .filter(|network| network.rpc_fixable)
-        .map(|network| crate::executor::custom_tokens::network_name(network.chain_id))
+        .map(|network| {
+            crate::executor::custom_tokens::own_network_name(network.chain_id).unwrap_or_else(
+                || crate::wallet::fill(chain_fallback, "chainId", &network.chain_id.to_string()),
+            )
+        })
         .collect()
 }
 
@@ -711,8 +726,10 @@ pub fn balance_detail(
                 SharedString::from(format!(
                     "{} · {}",
                     crate::executor::custom_tokens::network_name(token.chain_id),
+                    // A coin amount: hidden, it keeps its unit like every
+                    // other (`privacy::masked_amount`).
                     if view.hidden {
-                        crate::wallet::fixtures::MASK.to_owned()
+                        vela_core::app::privacy::masked_amount(&token.symbol)
                     } else {
                         token_amount_text(&token.balance)
                     }
@@ -851,8 +868,18 @@ mod tests {
         assert_eq!(token_amount_text_down("1.22456789"), "1.2245");
         assert_eq!(token_amount_text_down("999.99996"), "999.9999");
         assert_eq!(token_amount_text_down("1234.567"), "1234.56");
-        assert_eq!(token_amount_text_down("0.0000001234"), "0.00000012");
         assert_eq!(token_amount_text_down("3"), "3");
+        // Dust is cut at its first digit — the core's rule. The desktop's
+        // own copy of the ladder rounded dust half up: 0.000000196 read
+        // "0.0000002", more than there is.
+        assert_eq!(token_amount_text_down("0.0000001234"), "0.0000001");
+        assert_eq!(token_amount_text_down("0.000000196"), "0.0000001");
+        // The owner's balance on the walk (PR 4 item 13).
+        assert_eq!(token_amount_text_down("0.000300194967818323"), "0.0003");
+        // The person's decimal mark, ungrouped.
+        let comma = vela_core::l10n::number::NumberPreset::DotComma;
+        assert_eq!(with_mark_of("1234.56".to_owned(), comma), "1234,56");
+        assert_eq!(with_mark_of("0.0003".to_owned(), comma), "0,0003");
     }
 
     /// Spec 079: the picker's figure per network — the home screen's own
@@ -1816,6 +1843,132 @@ mod tests {
         assert!(rows[1].positive);
     }
 
+    /// PR 4 item 1. On the phone a row read 「在 arcorbs.game3.app 合 /
+    /// 约交互」 — the action cut in two; on the desktop a long host did the
+    /// same to the action on the home and broke the host mid-name in
+    /// History. A dApp row's title is carried in its parts, in every
+    /// language the app ships: what was done, whole, in a part of its own,
+    /// and the place with the word that ties it to the action in another —
+    /// in the language's order, saying together exactly what the one-run
+    /// title says. Through the real feed core's rows, too.
+    #[test]
+    fn a_dapp_rows_title_is_carried_in_what_was_done_and_where() {
+        use crate::wallet::fixtures::{LONG_SITE, TitlePart, WALK_SITE};
+        let part = |text: &str, place: bool| TitlePart {
+            text: SharedString::from(text.to_owned()),
+            place,
+        };
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            let s = WalletStrings::resolve(&loc);
+            let verb = s.intent_contract_call.to_string();
+            for site in [WALK_SITE, LONG_SITE, "Uniswap"] {
+                let Some(parts) = title_parts_of(&s.dapp_row_title, site, &verb) else {
+                    unreachable!("{tag}: the title has two parts");
+                };
+                let whole = crate::wallet::fill(
+                    &crate::wallet::fill(&s.dapp_row_title, "place", site),
+                    "intent",
+                    &verb,
+                );
+                assert_eq!(parts.joined(), whole, "{tag}: the parts say the title");
+                assert_eq!(parts.parts.len(), 2, "{tag}: {parts:?}");
+                let action: Vec<&TitlePart> =
+                    parts.parts.iter().filter(|part| !part.place).collect();
+                assert_eq!(action.len(), 1, "{tag}");
+                assert_eq!(action[0].text.as_ref(), verb, "{tag}: the action, whole");
+                let place: Vec<&TitlePart> = parts.parts.iter().filter(|part| part.place).collect();
+                assert_eq!(place.len(), 1, "{tag}");
+                assert!(place[0].text.contains(site), "{tag}: {:?}", place[0].text);
+                assert!(
+                    parts
+                        .parts
+                        .iter()
+                        .all(|part| part.text.trim() == part.text.as_ref()),
+                    "{tag}: no part carries a space at its edge"
+                );
+            }
+        }
+        let of = |tag: &str, site: &str| {
+            let s = WalletStrings::resolve(&crate::loc::Loc::for_language(tag));
+            let parts = title_parts_of(&s.dapp_row_title, site, &s.intent_contract_call)
+                .unwrap_or_else(|| unreachable!("{tag}: two parts"));
+            (parts.parts, parts.spaced)
+        };
+        assert_eq!(
+            of("zh", WALK_SITE),
+            (
+                vec![part("在 arcorbs.game3.app", true), part("合约交互", false)],
+                true
+            )
+        );
+        assert_eq!(
+            of("en", WALK_SITE),
+            (
+                vec![
+                    part("Contract interaction", false),
+                    part("on arcorbs.game3.app", true)
+                ],
+                true
+            )
+        );
+        // Japanese writes no space between them.
+        let (ja, spaced) = of("ja", WALK_SITE);
+        assert!(!spaced && ja[0].place && ja[0].text.starts_with(WALK_SITE));
+
+        // A template shaped another way still never cuts the action: words
+        // after it that do not name the place stay on it; no place, or no
+        // action, is one part — nothing to wrap between.
+        let odd = title_parts_of("{{place}} で {{intent}} する", "a.example", "交換")
+            .unwrap_or_else(|| unreachable!("two parts"));
+        assert_eq!(
+            odd.parts,
+            vec![part("a.example で", true), part("交換 する", false)]
+        );
+        assert_eq!(title_parts_of("{{intent}}", "a.example", "Swap"), None);
+        assert_eq!(title_parts_of("On {{place}}", "a.example", "Swap"), None);
+
+        // The rows the home and History draw, from the real feed core.
+        let feed = crate::wallet::fixtures::dapp_feed();
+        let zh = WalletStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        let flows = crate::flows::FlowStrings::resolve(&crate::loc::Loc::for_language("zh"));
+        let rows = activity_rows(&feed, &zh, &flows, false);
+        assert!(!rows.is_empty());
+        let history: Vec<ActivityRowModel> = crate::flows::live::history(&feed, &flows, &zh, false)
+            .into_iter()
+            .flat_map(|group| group.rows)
+            .collect();
+        assert_eq!(history.len(), 4, "History draws every row");
+        for row in rows.iter().chain(&history) {
+            let parts = row
+                .title_parts
+                .as_ref()
+                .unwrap_or_else(|| unreachable!("{}: in parts", row.title));
+            assert_eq!(parts.joined(), row.title.as_ref());
+            assert_eq!(parts.parts[1], part("合约交互", false), "{}", row.title);
+            assert!(parts.parts[0].place);
+        }
+        assert!(history.iter().any(|row| row.title.contains(LONG_SITE)));
+        // A transfer's title is one word: nothing to carry in parts.
+        let transfers = crate::wallet::fixtures::transfer_feed(false);
+        assert!(
+            activity_rows(&transfers, &zh, &flows, false)
+                .iter()
+                .all(|row| row.title_parts.is_none())
+        );
+        // And the detail a dApp row opens says its title the same way.
+        let id = history_item_ids(&feed)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| unreachable!("a row"));
+        let detail =
+            crate::flows::live::tx_detail(&feed, &id, &flows, &zh, false, "zh", Money::usd())
+                .unwrap_or_else(|| unreachable!("the row opens"));
+        assert_eq!(
+            detail.title_parts.map(|parts| parts.joined()),
+            Some(detail.title.to_string())
+        );
+    }
+
     /// A dApp's row (083 H2, spec 093): titled by the core's headline verb in
     /// the sheet's words — the descriptor's text when the wallet has no word
     /// for it — "on" the place the core named, or the verb alone when it
@@ -2610,8 +2763,9 @@ mod tests {
             assert!(status.1, "drawn as the failure it is");
             assert!(detail.pending[0].retry, "it can still be read again");
 
+            let fallback = loc.t("assets.chainFallback");
             assert!(
-                rpc_failing_names(&tempo).is_empty(),
+                rpc_failing_names(&tempo, &fallback).is_empty(),
                 "no RPC is failing: a report must not say one is"
             );
 
@@ -2620,13 +2774,75 @@ mod tests {
             set_unreachable(&mut down, &[137]);
             assert!(unreachable_list(&down, &s, "en", money).rows[0].rpc_fixable);
             assert!(unreachable_chips(&down)[0].rpc_fixable);
-            assert_eq!(rpc_failing_names(&down), vec!["Polygon".to_owned()]);
+            assert_eq!(
+                rpc_failing_names(&down, &fallback),
+                vec!["Polygon".to_owned()]
+            );
             let detail = balance_detail(&down, &s, "en", money);
             let status = detail.pending[0].status.as_ref().map(|(text, _)| text);
             assert_eq!(status, Some(&s.detail_status(STATUS_RPC_UNAVAILABLE)));
             assert_eq!(status.map(AsRef::as_ref), Some("RPC unavailable"));
             // A key this build does not know says nothing false.
             assert_eq!(s.detail_status("home.someLaterStatus").as_ref(), "");
+        });
+    }
+
+    /// PR 4 item 9. The feedback sheet on the owner's phone read 「无法连接的
+    /// RPC 1625」: a chain id under a label about RPCs, which reads as a
+    /// count. The desktop's line names each network that cannot be reached —
+    /// its own name, the person's name for one they added, and for one with
+    /// no name the corpus's words ("Chain 1625", 「链 1625」) — under the
+    /// label "Unreachable networks", and no part of the list is a bare
+    /// number, in any language.
+    #[test]
+    fn a_report_names_every_unreachable_network_and_never_a_bare_id() {
+        use crate::executor::bug_report::{DeviceFacts, environment_lines};
+        crate::executor::storage::tests::with_temp_state("report-unreachable-names", || {
+            let named = serde_json::json!([
+                { "chainId": 4242, "displayName": "My devnet" },
+                { "chainId": 5151, "displayName": "  " },
+            ]);
+            let key = crate::executor::storage::KEY_CUSTOM_NETWORKS;
+            assert!(crate::executor::storage::write_value(key, named).is_ok());
+            let mut down = view(Some(10.0));
+            set_unreachable(&mut down, &[137, 4242, 5151, 1625]);
+
+            let line = |down: &BalanceView, tag: &str| {
+                let loc = crate::loc::Loc::for_language(tag);
+                let names = rpc_failing_names(down, &loc.t("assets.chainFallback"));
+                let labels = crate::settings::SettingsStrings::resolve(&loc).bug_labels;
+                let facts = DeviceFacts {
+                    unreachable: names.clone(),
+                    ..DeviceFacts::default()
+                };
+                (names, environment_lines(&labels, &facts)[3].clone())
+            };
+            let (names, said) = line(&down, "en");
+            assert_eq!(names, ["Polygon", "My devnet", "Chain 5151", "Chain 1625"]);
+            assert_eq!(
+                said,
+                "Unreachable networks: Polygon, My devnet, Chain 5151, Chain 1625"
+            );
+            let (names, said) = line(&down, "zh");
+            assert_eq!(names, ["Polygon", "My devnet", "链 5151", "链 1625"]);
+            assert_eq!(said, "连不上的网络: Polygon, My devnet, 链 5151, 链 1625");
+
+            for (tag, loc) in crate::loc::Loc::every_language() {
+                let template = loc.t("assets.chainFallback");
+                assert!(template.contains("{{chainId}}"), "{tag}: {template}");
+                for name in rpc_failing_names(&down, &template) {
+                    assert!(
+                        !name.trim().chars().all(|c| c.is_ascii_digit()),
+                        "{tag}: `{name}` is a bare id"
+                    );
+                    assert!(!name.contains("{{"), "{tag}: {name}");
+                }
+            }
+            // Nothing out of reach: the line says so, not an empty list.
+            set_unreachable(&mut down, &[]);
+            let (names, said) = line(&down, "en");
+            assert!(names.is_empty());
+            assert_eq!(said, "Unreachable networks: none");
         });
     }
 
@@ -2805,6 +3021,31 @@ mod tests {
     }
 
     /// A locale whose group separator is `.` must not be cut in half.
+    /// PR 4 item 8: a figure's symbol is the core's, for the app's language.
+    /// The owner's balance read 「CN¥188.44」 on one phone and 「¥34.03」 on
+    /// the other; the desktop wrote the yuan and the yen with the same bare
+    /// "¥". One rule now: "¥" alone is the reader's own of the two.
+    #[test]
+    fn a_figure_wears_the_cores_symbol_for_the_apps_language() {
+        let cny = Money::new("CNY", Some(7.2));
+        assert_eq!(cny.alone(26.17, "zh"), "¥188.42");
+        assert_eq!(cny.alone(26.17, "zh-HK"), "¥188.42");
+        assert_eq!(cny.alone(26.17, "en"), "CN¥188.42");
+        let jpy = Money::new("JPY", Some(150.0));
+        assert_eq!(jpy.alone(10.0, "zh"), "JP¥1,500");
+        assert_eq!(jpy.alone(10.0, "en"), "¥1,500");
+        assert_eq!(jpy.alone(10.0, "ja"), "¥1,500");
+        let hkd = Money::new("HKD", Some(7.8));
+        assert_eq!(hkd.alone(10.0, "zh"), "HK$78.00");
+        assert_eq!(hkd.alone(10.0, "en"), "HK$78.00");
+        // The other shapes a figure is drawn in go through the same place.
+        assert_eq!(cny.figure(26.17, "en").as_deref(), Some("CN¥188.42"));
+        assert_eq!(cny.room(26.17, "zh"), "¥188.42");
+        // A currency without a glyph is its code, spaced from the digits.
+        let chf = Money::new("CHF", Some(1.0));
+        assert_eq!(chf.alone(10.0, "en"), "CHF\u{a0}10.00");
+    }
+
     /// The rule the whole type exists for: a currency nobody could price is
     /// drawn as USD, **never** as that currency at rate 1. "A rate of 1 is a
     /// claim (1 USD = 1 CNY)", and the core answers `None` rather than 1 for
@@ -3076,15 +3317,20 @@ mod tests {
             let unpriced = asset_detail(&held, &feed, 1, &s, "en-US", &waiting)
                 .unwrap_or_else(|| unreachable!("row 1 exists"));
             assert_eq!(unpriced.sub, mon.sub);
-            // Hidden says the network and no figure — and keeps no room for
-            // one: nothing of the worth, drawn or not, is on the line.
+            // Hidden, the worth is the bare mask in the worth's own place
+            // (PR 4 item 3) — whether or not the currency has committed:
+            // there is no figure to wait for, and none of it on the line.
             let mut masked = held.clone();
             masked.hidden = true;
             for money in [Money::default(), waiting.clone()] {
                 let hidden = asset_detail(&masked, &feed, 0, &s, "en-US", &money)
                     .unwrap_or_else(|| unreachable!("row 0 exists"));
-                assert_eq!(hidden.sub.worth, SubWorth::Absent);
-                assert_eq!(hidden.sub.text(), "Gnosis");
+                assert_eq!(
+                    hidden.sub.worth,
+                    SubWorth::Said(SharedString::from(crate::wallet::fixtures::MASK))
+                );
+                assert_eq!(hidden.sub.text(), "•••• · Gnosis");
+                assert_eq!(hidden.amount.as_ref(), "•••• xDAI");
             }
             // …and the id that row opens, from the same walk.
             assert_eq!(xdai.activity_ids, vec!["a".to_owned()]);
@@ -3619,8 +3865,12 @@ pub fn asset_rows(
                     token.chain_id,
                 )),
                 badge: badge(token.chain_id),
+                // Hidden, a coin amount keeps its unit on every surface (the
+                // core's `privacy::masked_amount`, PR 4 item 3): "•••• BNB",
+                // as the token's own page and a feed row read. The worth
+                // beside it is fiat, and masks bare.
                 balance: if view.hidden {
-                    SharedString::from(crate::wallet::fixtures::MASK)
+                    SharedString::from(vela_core::app::privacy::masked_amount(&token.symbol))
                 } else {
                     SharedString::from(token_amount_text(&token.balance))
                 },
@@ -3868,8 +4118,13 @@ pub fn asset_detail(
         // the name after it is drawn where it will stay.
         sub: crate::wallet::fixtures::AssetSub {
             worth: if view.hidden {
-                // Hidden says the network and no figure.
-                crate::wallet::fixtures::SubWorth::Absent
+                // Hidden, the worth is the bare mask — a fiat figure has no
+                // unit to keep — in the worth's own place: "•••• · Gnosis".
+                // Hiding turns digits into dots and moves nothing else; the
+                // line used to drop the worth and slide the network over.
+                crate::wallet::fixtures::SubWorth::Said(SharedString::from(
+                    crate::wallet::fixtures::MASK,
+                ))
             } else {
                 match token.price_usd {
                     Some(price) => match money.figure(amount * price, locale) {
@@ -4074,6 +4329,11 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
             (ActivityKind::Received, None) => s.label_received.clone(),
             (ActivityKind::Dapp, None) => s.label_dapp.clone(),
         },
+        // Where that title may wrap: between what was done and where.
+        title_parts: item
+            .dapp
+            .as_ref()
+            .and_then(|dapp| dapp_title_parts(dapp, s)),
         subtitle: subtitle_text(&item.subtitle, s),
         // The chain this happened on, drawn as its logo where the endpoint has
         // one (§8.3; issue 201): the badge used to be a colour, and a colour
@@ -4229,11 +4489,7 @@ pub(crate) fn dapp_title(
     dapp: &vela_core::app::activity_feed::FeedDapp,
     s: &WalletStrings,
 ) -> SharedString {
-    let verb = dapp
-        .intent_term
-        .and_then(|term| s.terms.get(&term).cloned())
-        .or_else(|| dapp.intent.clone().map(SharedString::from))
-        .unwrap_or_else(|| s.intent_contract_call.clone());
+    let verb = dapp_verb(dapp, s);
     match dapp.place.as_deref() {
         // The place first: a host or a built-in protocol name carries no
         // braces, while a descriptor's verb is text somebody else wrote.
@@ -4244,6 +4500,65 @@ pub(crate) fn dapp_title(
         )),
         None => verb,
     }
+}
+
+/// The headline verb of a dApp interaction, in the reader's words.
+fn dapp_verb(dapp: &vela_core::app::activity_feed::FeedDapp, s: &WalletStrings) -> SharedString {
+    dapp.intent_term
+        .and_then(|term| s.terms.get(&term).cloned())
+        .or_else(|| dapp.intent.clone().map(SharedString::from))
+        .unwrap_or_else(|| s.intent_contract_call.clone())
+}
+
+/// [`dapp_title`] in the parts a row may wrap between (PR 4 item 1): what
+/// was done, and where — the place with the word that ties it to the action
+/// ("on arcorbs.game3.app", 「在 arcorbs.game3.app」, 「arcorbs.game3.appで」).
+/// In the order the language writes them, which is the title template's own
+/// (`history.dappRowTitle`). `None` when the title is one part: no place.
+pub(crate) fn dapp_title_parts(
+    dapp: &vela_core::app::activity_feed::FeedDapp,
+    s: &WalletStrings,
+) -> Option<crate::wallet::fixtures::TitleParts> {
+    let place = dapp.place.as_deref()?;
+    title_parts_of(&s.dapp_row_title, place, &dapp_verb(dapp, s))
+}
+
+/// The title template cut at its action. What stands before `{{intent}}`
+/// and what stands after it are the place's side(s): filled, trimmed, each a
+/// part of its own — except words after the action that do not name the
+/// place (a verb ending), which stay on the action. `None` for a template
+/// that does not make two parts of them.
+pub(crate) fn title_parts_of(
+    template: &str,
+    place: &str,
+    verb: &str,
+) -> Option<crate::wallet::fixtures::TitleParts> {
+    use crate::wallet::fixtures::{TitlePart, TitleParts};
+    const PLACE: &str = "{{place}}";
+    let (before, after) = template.split_once("{{intent}}")?;
+    let filled = |side: &str| crate::wallet::fill(side, "place", place);
+    let part = |text: String, place: bool| TitlePart {
+        text: SharedString::from(text),
+        place,
+    };
+    let mut parts = Vec::new();
+    let mut spaced = false;
+    if !before.trim().is_empty() {
+        parts.push(part(
+            filled(before).trim().to_owned(),
+            before.contains(PLACE),
+        ));
+        spaced |= before.ends_with(char::is_whitespace);
+    }
+    if after.contains(PLACE) {
+        parts.push(part(verb.to_owned(), false));
+        parts.push(part(filled(after).trim().to_owned(), true));
+        spaced |= after.starts_with(char::is_whitespace);
+    } else {
+        // Words after the action that are not the place belong to it.
+        parts.push(part(format!("{verb}{}", after.trim_end()), false));
+    }
+    (parts.len() > 1 && parts.iter().any(|part| part.place)).then_some(TitleParts { parts, spaced })
 }
 
 /// `+120` / `−2`. The minus is U+2212, not a hyphen — the mocks use it and it
@@ -4265,47 +4580,29 @@ pub fn token_amount_text(value: &str) -> String {
     with_decimal_mark(vela_core::app::send::max_figure(value))
 }
 
-/// The same ladder cut DOWN — for a ceiling the person may type back ("you
-/// can send up to", what is left): rounded up, it would be a figure the
-/// balance cannot cover.
+/// The same ladder cut DOWN — for a figure of what is THERE that the person
+/// may type back ("you can send up to", what is left): rounded up, it would
+/// be a figure the balance cannot cover. The cut is the core's
+/// (`l10n::cut_token_amount`: 2 places from a thousand, 4 from one, 6 below,
+/// dust kept at its first digit, nothing ever carried); the desktop kept a
+/// copy of that ladder here, whose dust case rounded half up. Written with
+/// the person's decimal mark, ungrouped, like [`token_amount_text`].
 #[must_use]
 pub fn token_amount_text_down(value: &str) -> String {
-    let exact = value.trim();
-    let (int_raw, frac_raw) = exact.split_once('.').unwrap_or((exact, ""));
-    if !int_raw.bytes().all(|b| b.is_ascii_digit()) || !frac_raw.bytes().all(|b| b.is_ascii_digit())
-    {
-        return exact.to_owned();
-    }
-    let int_digits = int_raw.trim_start_matches('0');
-    let places = match int_digits.len() {
-        0 => 6,
-        1..=3 => 4,
-        _ => 2,
-    };
-    let cut: String = frac_raw.chars().take(places).collect();
-    // Below the last place, the half-up rule's two significant digits are
-    // already a cut; anything else is the truncation itself.
-    if int_digits.is_empty() && cut.trim_end_matches('0').is_empty() {
-        return token_amount_text(exact);
-    }
-    let int_part = if int_digits.is_empty() {
-        "0"
-    } else {
-        int_digits
-    };
-    let frac = cut.trim_end_matches('0');
-    with_decimal_mark(if frac.is_empty() {
-        int_part.to_owned()
-    } else {
-        format!("{int_part}.{frac}")
-    })
+    with_decimal_mark(vela_core::l10n::cut_token_amount(value))
 }
 
 pub(crate) fn with_decimal_mark(figure: String) -> String {
-    let decimal = crate::executor::format_prefs::current()
-        .number
-        .separators()
-        .decimal;
+    with_mark_of(figure, crate::executor::format_prefs::current().number)
+}
+
+/// A dot-decimal figure with `preset`'s decimal mark — [`with_decimal_mark`]
+/// for a given preset.
+pub(crate) fn with_mark_of(
+    figure: String,
+    preset: vela_core::l10n::number::NumberPreset,
+) -> String {
+    let decimal = preset.separators().decimal;
     if decimal == "." {
         figure
     } else {

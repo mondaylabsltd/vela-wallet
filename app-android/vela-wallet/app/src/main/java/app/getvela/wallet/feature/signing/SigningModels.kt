@@ -370,6 +370,30 @@ data class FeeTokenOption(
     val reason: String? = null,
 )
 
+/**
+ * The lines a fee card comes to say WITHOUT the person doing anything, named
+ * before they are said (the 2026-10-11 phone walk, item 2).
+ *
+ * The signing sheet is anchored at the bottom and wraps its content, so each
+ * line that arrived after it opened pushed everything above it up: the sheet's
+ * top went 243 → 166 → 89 px in two steps as the fee landed — once for an
+ * empty gap (the "no coin can pay" line's room, known a second before its
+ * words), once for the speed's note — and the ✕ moved 154 px under a finger.
+ *
+ * So the room is kept from the first frame, under the card: [speedNote] — the
+ * note a fee lands with on a network where a faster speed costs nothing — and
+ * the tallest of [lines], the sentences a landed fee says under the card (no
+ * coin can pay, the paying coin is short). A line said takes its room; one
+ * not said leaves it empty. The sheet has its final height from the start,
+ * and nothing above or below the card moves when a fee lands, fails, or is
+ * measured again (`SigningLive.feeRooms` says which lines, and why not more).
+ */
+@Immutable
+data class FeeRooms(
+    val speedNote: String? = null,
+    val lines: List<String> = emptyList(),
+)
+
 @Immutable
 sealed interface FeeModel {
     data class OnChain(
@@ -426,6 +450,12 @@ sealed interface FeeModel {
          * confirm under it does not move when it lands.
          */
         val worthRoom: Boolean = false,
+        /**
+         * What the card may still come to say by itself, after the sheet is
+         * up ([FeeRooms]): the sheet keeps their room under the card from its
+         * first frame. `null` on a drawn board, which says all it will.
+         */
+        val rooms: FeeRooms? = null,
     ) : FeeModel
 
     /** Off-chain signature: the ✓ line, in place of a fee row. */

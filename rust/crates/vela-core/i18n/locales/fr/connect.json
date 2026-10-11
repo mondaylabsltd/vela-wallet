@@ -103,6 +103,7 @@
       "disconnectBody": "Le site devra se reconnecter avant de pouvoir voir votre adresse ou vous demander de signer.",
       "a11ySecure": "Site sécurisé",
       "a11yInsecure": "Site non sécurisé — non chiffré",
+      "a11yLocal": "Page locale — non chiffrée",
       "historyTitle": "dApps récentes",
       "historyOpen": "Récent",
       "historyEmpty": "Aucune dApp récente",

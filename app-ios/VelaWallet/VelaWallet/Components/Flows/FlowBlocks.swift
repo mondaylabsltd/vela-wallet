@@ -1113,6 +1113,20 @@ struct FeeSpeedControlView: View {
             .padding(.horizontal, Tokens.Space.s12)
     }
 
+    /// The room a note takes INSIDE the signing sheet's fee card — the
+    /// note's own lines at the card's inner width, and the gap the control
+    /// puts above it — for the place under the card to hold until the card
+    /// says it (`SigningFeeView.place`). One definition with `note`, so the
+    /// room given up and the room taken are the same to the point.
+    static func noteRoom(_ text: String, textScale: CGFloat) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.flowCaption.scaled(textScale))
+            .fixedSize(horizontal: false, vertical: true)
+            // The control's own 12, inside the card's 4 (`SigningFeeView`).
+            .padding(.horizontal, Tokens.Space.s12 + Tokens.Space.s4)
+            .padding(.top, Tokens.Space.s4)
+    }
+
     /// One speed: name … fee, and under the fee its gas bid (round 2, all
     /// four shells). The tier descriptions are gone from this picker (they
     /// stay on Settings' default speed); the bid is the whole second line,

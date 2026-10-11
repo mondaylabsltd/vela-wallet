@@ -58,6 +58,11 @@ enum WalletLive {
         /// The stored choice on its way (`CurrencyView.pending`): what the
         /// hero's label names while its figure waits.
         var pendingCode: String? = nil
+        /// The app's language tag (`Loc.resolvedLanguage`): the one thing
+        /// besides the code that the figure's sign depends on — "¥" is the
+        /// yuan to a Chinese reader and the yen to everybody else
+        /// (`FiatSign`). English where nobody said: a drawing, a test.
+        var language = "en"
 
         static let usd = Display(code: "USD", rate: 1)
 
@@ -67,14 +72,15 @@ enum WalletLive {
             Display(code: "USD", rate: 1, settled: false, pendingCode: pending)
         }
 
-        /// The badge the hero's figure wears. Decoration, not identity — the
-        /// code itself is already stated in the line above the figure, so a
-        /// currency the catalog has never heard of shows the number bare rather
-        /// than borrowing somebody else's `$`.
+        /// The sign the figure wears, as it leads the digits — the CORE's
+        /// (`fiatSymbol(code:language:)`), the same string on every screen
+        /// of every shell. This file used to look a glyph up in the picker's
+        /// own list, where the yuan and the yen were both "¥", and a currency
+        /// that list had never heard of was written with no sign at all.
         ///
         /// Private to this file ON PURPOSE: nothing else may glue it to a
         /// number — every fiat figure is written by `fiat(_:)` below.
-        fileprivate var glyph: String { CurrencyCatalog.entry(code)?.glyph ?? "" }
+        fileprivate var glyph: String { FiatSign.lead(code, language: language) }
 
         // MARK: THE fiat formatter (PR 3 notes 9, 27)
 
@@ -128,18 +134,23 @@ enum WalletLive {
         /// One not committed yet is WAITING (see `settled`), never dollars
         /// shown as if they were the answer. No view at all is a surface with
         /// no currency machine behind it — a drawing, a test: dollars.
-        static func from(_ view: CurrencyViewWire?) -> Display {
+        ///
+        /// `language`: the app's language tag, for the figure's sign.
+        static func from(_ view: CurrencyViewWire?, language: String = "en") -> Display {
             guard let view else { return .usd }
             guard view.committed else { return .waiting(for: view.pending) }
             guard let rate = view.rate, rate > 0, rate.isFinite else { return .usd }
-            return Display(code: view.code, rate: rate)
+            return Display(code: view.code, rate: rate, language: language)
         }
 
         /// The LIVE app's display. Its machine is booted with the first
         /// screen, so a view not there yet is one on its way: waiting, never
         /// the dollar placeholder for the frames before it answers.
-        static func live(_ view: CurrencyViewWire?) -> Display {
-            view.map(from) ?? .waiting(for: nil)
+        ///
+        /// `language` is not optional here: the live app always has one, and
+        /// a figure drawn without it would call a Chinese reader's yuan "CN¥".
+        static func live(_ view: CurrencyViewWire?, language: String) -> Display {
+            view.map { from($0, language: language) } ?? .waiting(for: nil)
         }
 
         /// The display currency as the SEND MACHINE is told it — ONE rule,
@@ -182,7 +193,7 @@ enum WalletLive {
         networks: WalletNetworks = .builtin
     ) -> WalletHomeModel {
         var copy = model
-        let display = Display.from(currency)
+        let display = Display.from(currency, language: loc.resolvedLanguage)
         copy.balance = balance(view, display: display, fallback: model.balance, loc: loc,
                                networks: networks)
         copy.balance.refresh = refresh(view, loc: loc, now: now, spinning: spinning)
@@ -476,7 +487,13 @@ enum WalletLive {
                 // pushed the ticker and chain out of the row on a phone.
                 // Hidden, the quantity is money too (PR 2): 418.25 xDAI is
                 // the balance in another unit. Send's picker keeps it.
-                balance: view.hidden ? WalletFixtures.mask : tokenAmountText(token.balance),
+                //
+                // And hidden, it keeps its coin: the core's one spelling of a
+                // hidden coin amount (`maskedAmount(unit:)`, "•••• xDAI") on
+                // every surface — this row read the bare mask while the
+                // token's own page read 「•••• BNB」 (device walk 2026-10-10).
+                // The worth beside it is fiat, and stays the bare mask.
+                balance: view.hidden ? maskedAmount(unit: token.symbol) : tokenAmountText(token.balance),
                 fiat: fiat(token, hidden: view.hidden, display: display),
                 masked: view.hidden,
                 // The real logo, with the lettermark behind it (058). The
@@ -742,16 +759,41 @@ extension WalletLive {
 
     /// `dappTitle` split around its place, as the locale orders them — `nil`
     /// when the title names no place, or the template does not name it once.
+    ///
+    /// Where the template puts the ACTION first ("{{intent}} on {{place}}"),
+    /// the word between them is the place's (`joiner`): a title too long for
+    /// one line reads "Contract interaction" over "on arcorbs.game3.app",
+    /// not "…interaction on" over a bare host.
     static func dappTitleParts(_ dapp: FeedDappWire, loc: Loc) -> TitlePlace? {
         guard let place = dapp.place, !place.isEmpty else { return nil }
         let mark = "\u{FFFC}"
-        let pieces = loc.t("history.dappRowTitle", vars: ["intent": dappVerb(dapp, loc: loc), "place": mark])
+        let verbMark = "\u{FFFD}"
+        let verb = dappVerb(dapp, loc: loc)
+        let pieces = loc.t("history.dappRowTitle", vars: ["intent": verbMark, "place": mark])
             .components(separatedBy: mark)
         guard pieces.count == 2 else { return nil }
+        let said = { (text: String) in text.replacingOccurrences(of: verbMark, with: verb) }
+        // The action first: what stands between it and the place is the
+        // place's joiner.
+        let before = pieces[0].components(separatedBy: verbMark)
+        if before.count == 2 {
+            let joiner = before[1].trimmingCharacters(in: .whitespaces)
+            return TitlePlace(
+                lead: (before[0] + verb).trimmingCharacters(in: .whitespaces),
+                place: place,
+                trail: said(pieces[1]).trimmingCharacters(in: .whitespaces),
+                gapBefore: joiner.isEmpty
+                    ? (before[1].last?.isWhitespace ?? false)
+                    : (before[1].first?.isWhitespace ?? false),
+                gapAfter: pieces[1].first?.isWhitespace ?? false,
+                joiner: joiner,
+                joinerGap: !joiner.isEmpty && (before[1].last?.isWhitespace ?? false)
+            )
+        }
         return TitlePlace(
-            lead: pieces[0].trimmingCharacters(in: .whitespaces),
+            lead: said(pieces[0]).trimmingCharacters(in: .whitespaces),
             place: place,
-            trail: pieces[1].trimmingCharacters(in: .whitespaces),
+            trail: said(pieces[1]).trimmingCharacters(in: .whitespaces),
             gapBefore: pieces[0].last?.isWhitespace ?? false,
             gapAfter: pieces[1].first?.isWhitespace ?? false
         )

@@ -141,6 +141,9 @@
                   Identifier = "ParallelSpaceDeviceTests">
                </Test>
                <Test
+                  Identifier = "ParallelSpaceSitesDeviceTests">
+               </Test>
+               <Test
                   Identifier = "FeeSpeedDeviceTests">
                </Test>
                <Test
@@ -187,6 +190,9 @@
                </Test>
                <Test
                   Identifier = "PR3DeviceTests">
+               </Test>
+               <Test
+                  Identifier = "PR4DeviceTests">
                </Test>
             </SkippedTests>
          </TestableReference>

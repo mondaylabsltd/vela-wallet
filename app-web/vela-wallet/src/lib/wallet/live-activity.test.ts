@@ -12,7 +12,16 @@ import { preferences } from '$lib/services/preferences.svelte';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
-import { dayLabel, liveActivityGroups, liveActivityRow } from './live';
+import {
+	dappTitle,
+	dappTitleParts,
+	dayLabel,
+	liveActivityGroups,
+	liveActivityRow,
+	middleCut
+} from './live';
+import type { ActivityTitlePart } from './model';
+import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { withFigureMaskable } from './testing/figure-maskable';
 
 const m = resolveWalletMessages('en');
@@ -280,6 +289,90 @@ describe('liveActivityRow', () => {
 			m.activity.intents.permitIntent
 		);
 		expect(m.activity.intents.permitIntent).toBe('Spending permit');
+	});
+
+	/**
+	 * Device walk of 2026-10-11, item 1. The owner's row read 「在
+	 * arcorbs.game3.app 合 / 约交互」: one wrapping text, broken where the
+	 * width ran out. The title is handed to the row in the two parts it may be
+	 * broken between — what was done, and where — read off each language's own
+	 * template; how they are DRAWN is `ActivityRow.svelte.test.ts`'s.
+	 */
+	describe('a dApp row’s title, in the parts a line may be broken between', () => {
+		const contract = (place: string | null) =>
+			feedDapp({ intent_term: 'intentContractCall', place });
+		const text = (parts: ActivityTitlePart[] | undefined) =>
+			(parts ?? [])
+				.map((part) =>
+					part.kind === 'action' ? part.text : part.before + part.head + part.tail + part.after
+				)
+				.join('');
+
+		it('joined, the parts are the title exactly — in every language, in its own order', () => {
+			for (const locale of SUPPORTED_LOCALES) {
+				const lm = resolveWalletMessages(locale);
+				for (const place of [
+					'arcorbs.game3.app',
+					'Uniswap',
+					'a.very.long.sub.domain.example.org'
+				]) {
+					const parts = dappTitleParts(contract(place), lm);
+					expect(parts?.map((part) => part.kind).sort(), locale).toEqual(['action', 'place']);
+					expect(text(parts), `${locale} · ${place}`).toBe(dappTitle(contract(place), lm));
+				}
+			}
+		});
+
+		it('the action is the verb alone; what joins it to the site stays with the site', () => {
+			expect(dappTitleParts(contract('arcorbs.game3.app'), m)).toEqual([
+				{ kind: 'action', text: 'Contract interaction ' },
+				{ kind: 'place', before: 'on ', head: 'arcorbs', tail: '.game3.app', after: '' }
+			]);
+			// Chinese says where first: 「在 arcorbs.game3.app」, then 「合约交互」.
+			expect(dappTitleParts(contract('arcorbs.game3.app'), zh)).toEqual([
+				{ kind: 'place', before: '在 ', head: 'arcorbs', tail: '.game3.app', after: ' ' },
+				{ kind: 'action', text: '合约交互' }
+			]);
+			const ja = dappTitleParts(contract('arcorbs.game3.app'), resolveWalletMessages('ja'));
+			expect(ja?.[0]).toMatchObject({ kind: 'place', before: '', after: 'で' });
+			expect(ja?.[1].kind).toBe('action');
+		});
+
+		it('the row carries them only when there is a place to break before', () => {
+			const row = (dapp: FeedDapp) =>
+				liveActivityRow(
+					item({ id: 'x', direction: 'out', kind: 'dapp_tx', value: null, symbol: '', dapp }),
+					zh,
+					false
+				);
+			expect(row(contract('arcorbs.game3.app')).titleParts).toHaveLength(2);
+			expect(row(contract('arcorbs.game3.app')).title).toBe('在 arcorbs.game3.app 合约交互');
+			expect('titleParts' in row(contract(null))).toBe(false);
+		});
+
+		it('a place gives way in its middle: a host keeps its end, the part that says whose site it is', () => {
+			expect(middleCut('arcorbs.game3.app')).toEqual({ head: 'arcorbs', tail: '.game3.app' });
+			expect(middleCut('app.uniswap.org.evil.xyz')).toEqual({
+				head: 'app.uniswap.org',
+				tail: '.evil.xyz'
+			});
+			// A name, not a host: its last few characters.
+			expect(middleCut('Aave Lending Pool V3')).toEqual({
+				head: 'Aave Lending P',
+				tail: 'ool V3'
+			});
+			// A two-label host, or one too short to cut in two, is all head.
+			expect(middleCut('Uniswap')).toEqual({ head: 'Uniswap', tail: '' });
+			expect(middleCut('a.example')).toEqual({ head: 'a.example', tail: '' });
+			expect(middleCut('localhost:8137')).toEqual({ head: 'localhos', tail: 't:8137' });
+			// An end too long to keep whole keeps a few characters instead.
+			const long = middleCut('app.averyveryverylongregistrabledomainname.example');
+			expect(long.tail).toHaveLength(6);
+			for (const place of ['arcorbs.game3.app', 'Uniswap', 'x', '', '127.0.0.1:8137']) {
+				const { head, tail } = middleCut(place);
+				expect(head + tail).toBe(place);
+			}
+		});
 	});
 
 	it('the second line is the core’s parts, worded and joined', () => {

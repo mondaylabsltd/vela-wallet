@@ -278,6 +278,7 @@ export * from './NetWizardErrorKind';
 export * from './NetWizardPhase';
 export * from './NetWizardView';
 export * from './NumberPreset';
+export * from './OriginLock';
 export * from './OutboxRecord';
 export * from './PayRequest';
 export * from './PaymentRequestEvent';

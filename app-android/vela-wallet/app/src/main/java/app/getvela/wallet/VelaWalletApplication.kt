@@ -50,6 +50,7 @@ import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.PoolRelayPort
 import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.dev.ParallelSpaceBinding
+import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocaleResolver
 import app.getvela.wallet.feature.contacts.core.ContactsController
@@ -83,7 +84,7 @@ import kotlinx.coroutines.SupervisorJob
  */
 class AppContainer(private val app: Application) {
 
-    val i18nRuntime = I18nRuntime { tag ->
+    val i18nRuntime = I18nRuntime(onLanguage = { AppLanguage.tag = it }) { tag ->
         app.assets.open("i18n/$tag.json").use { it.readBytes() }
     }
 
@@ -250,6 +251,15 @@ class AppContainer(private val app: Application) {
             ethCall = { chainId, to, data ->
                 (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
                     ?.json?.optString("result")?.takeIf { it.startsWith("0x") && it != "0x" }
+            },
+            // The wallet's networks — the list Settings → Networks shows, the
+            // one the pool seeds its endpoints from, waited for the same way
+            // (a lookup made before the rows exist would otherwise ask nobody).
+            walletChains = {
+                kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                    settings.networks.first { it.loaded && it.networks.isNotEmpty() }
+                }
+                settings.networks.value.networks.map { it.chain_id.toInt() }.toSet()
             },
         )
     }

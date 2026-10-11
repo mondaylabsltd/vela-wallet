@@ -253,6 +253,25 @@ export type FeeModel =
 			/** Present only while the selector is open (cs33). */
 			selector?: { title: string; options: FeeTokenOption[] };
 			/**
+			 * The row keeps a line for the money under the coin from its first
+			 * frame, whatever the display currency (device walk of 2026-10-11,
+			 * item 2). Side by side, a figure that landed — "0.000825 ETH" and
+			 * "≈ $2.48" — wrapped under the label wherever the row was narrow,
+			 * and the row grew 20 px under a reader. The live builder says this
+			 * for every fee it draws; a drawn board does not, and keeps its line.
+			 */
+			moneyLine?: boolean;
+			/**
+			 * What a fee may come to say under its card once it lands — "No
+			 * token can pay this fee", the paying coin is short — each held as
+			 * room from the first frame, unseen and unsaid: the sheet is
+			 * anchored at the bottom, so a line that ARRIVES there moves its
+			 * top, its header and its ✕ (the phones' 77 px steps). The live
+			 * builder names them in every state of the fee. Absent — a drawn
+			 * board — no room is kept.
+			 */
+			rooms?: string[];
+			/**
 			 * The row has something to DO when it is pressed: ask a failed quote
 			 * again, or open the list of coins that can pay. On a chain with one
 			 * fee coin and a quote in hand there is nothing to choose — so the row

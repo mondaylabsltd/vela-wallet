@@ -15,6 +15,13 @@ import uniffi.vela_core_uniffi.TVar
  * thread-safe; vars are pre-stringified — one FFI crossing per translation.
  */
 class I18nRuntime(
+    /**
+     * Told the active language before [state] says it: the app's own runtime
+     * publishes it to [AppLanguage] here, so a figure redrawn because the
+     * language changed is already drawn in the new one. Nothing by default —
+     * a test's or a board's runtime speaks only for itself.
+     */
+    private val onLanguage: (String) -> Unit = {},
     private val readCatalog: (tag: String) -> ByteArray,
 ) : VelaStrings {
 
@@ -29,6 +36,7 @@ class I18nRuntime(
     fun initialize(localeTag: String) {
         engine = I18n(readCatalog(FALLBACK))
         applyLocale(localeTag)
+        onLanguage(engine.language())
         _state.value = State(ready = true, language = engine.language(), direction = engine.dir())
     }
 
@@ -37,6 +45,7 @@ class I18nRuntime(
         check(::engine.isInitialized) { "I18nRuntime.setLocale before initialize" }
         if (tag == _state.value.language && _state.value.ready) return
         applyLocale(tag)
+        onLanguage(engine.language())
         _state.value = State(ready = true, language = engine.language(), direction = engine.dir())
     }
 

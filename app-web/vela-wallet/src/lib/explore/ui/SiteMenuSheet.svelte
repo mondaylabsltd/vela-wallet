@@ -2,10 +2,17 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
-	import type { MenuItemModel, SiteModel } from '../model';
+	import type { MenuItemModel, SiteMarkModel, SiteModel } from '../model';
+	import SiteMark from './SiteMark.svelte';
 
 	interface Props {
 		site: SiteModel;
+		/**
+		 * The open page's mark (the core's `OriginLock`). Absent on a history
+		 * row's menu, whose line is a host and no claim about a connection —
+		 * this sheet drew a padlock there too.
+		 */
+		mark?: SiteMarkModel;
 		statusLine: string;
 		items: MenuItemModel[];
 		closeLabel: string;
@@ -13,15 +20,15 @@
 		onpick?: (id: string) => void;
 	}
 
-	let { site, statusLine, items, closeLabel, onclose, onpick }: Props = $props();
+	let { site, mark, statusLine, items, closeLabel, onclose, onpick }: Props = $props();
 </script>
 
 <header class="head">
 	<LetterAvatar letter={site.letter} tint={site.tint} size={40} />
 	<span class="who">
 		<span class="host">{site.host}</span>
-		<span class="status">
-			<Icon icon={UTILITY_ICONS.lock} size="xs" />
+		<span class="status" data-lock={mark?.lock}>
+			{#if mark}<SiteMark {mark} />{/if}
 			{statusLine}
 		</span>
 	</span>
@@ -77,7 +84,18 @@
 		align-items: center;
 		gap: var(--space-sm);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	/* The words wear their mark's tone: green for a padlock's "Secure site",
+	   the warning for public http. A local page, and a line that is only a
+	   host, stay plain. */
+	.status[data-lock='secure'] {
 		color: var(--color-success-base);
+	}
+
+	.status[data-lock='insecure'] {
+		color: var(--color-warning-base);
 	}
 
 	.close {

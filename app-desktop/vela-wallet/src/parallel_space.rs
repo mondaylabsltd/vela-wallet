@@ -55,6 +55,35 @@ pub fn active() -> bool {
     }
 }
 
+/// Is `account` a parallel-space test wallet — one of the fixture keyset's?
+///
+/// Judged from the ACCOUNT, never from `VELA_PARALLEL_SPACE`: a wallet any of
+/// whose founding keys is one of the committed test keys is a test wallet
+/// whichever way this run was started — that key's private scalar is public,
+/// so it can be nobody's own. The switch says how THIS run signs; it does not
+/// say whose the account in front is: a space run opens on the person's own
+/// account until a test wallet is created or signed into, and a test wallet a
+/// space run left in the store is still there on the next ordinary dev run.
+/// The dApp browser reads this to keep the space's sites apart from the
+/// person's (`browser_host::wallet_news`).
+///
+/// Without the `dev-fixtures` feature the keyset is not in the build, no path
+/// creates such a wallet, and this is a constant `false`.
+#[must_use]
+pub fn is_test_wallet(account: &vela_core::app::Account) -> bool {
+    #[cfg(feature = "dev-fixtures")]
+    {
+        let fixture =
+            |id: &str| matches!(vela_core::dev_fixtures::by_credential_id(id), Ok(Some(_)));
+        fixture(&account.id) || account.keys.iter().any(|key| fixture(&key.credential_id))
+    }
+    #[cfg(not(feature = "dev-fixtures"))]
+    {
+        let _ = account;
+        false
+    }
+}
+
 /// The marker, over whichever screen `root` is. A no-op when the space is
 /// not active, so every root can call it without a branch of its own.
 pub fn overlay(root: Div, _window: &Window) -> Div {
@@ -186,6 +215,89 @@ mod badge_tests {
         assert!(inset.top.is_none(), "along the top, over the tab strip");
         assert!(inset.right.is_none());
         assert!(inset.bottom.is_some() && inset.left.is_some());
+    }
+}
+
+#[cfg(test)]
+mod test_wallet_tests {
+    use vela_core::app::{Account, AccountKey};
+
+    fn key(credential_id: &str) -> AccountKey {
+        AccountKey {
+            credential_id: credential_id.to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            name: "Key".to_owned(),
+            transports: String::new(),
+            signer_origin: None,
+        }
+    }
+
+    fn account(id: &str, keys: &[&str]) -> Account {
+        Account {
+            id: id.to_owned(),
+            name: "Wallet".to_owned(),
+            address: "0x44EEC06897ff7ab8C7f16819511A64bA168A6D33".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: "2026-08-25T00:00:00.000Z".to_owned(),
+            keys: keys.iter().map(|id| key(id)).collect(),
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        }
+    }
+
+    /// `vela-fixture-01`, as a credential id is spelled.
+    const FIXTURE_1: &str = "76656c612d666978747572652d3031";
+
+    /// An account of the person's own is never a test wallet.
+    #[test]
+    fn a_persons_account_is_not_a_test_wallet() {
+        assert!(!super::is_test_wallet(&account("cred0", &["cred0"])));
+        assert!(!super::is_test_wallet(&account("cred0", &[])));
+    }
+
+    /// A wallet founded by a fixture key is one — whether it is the only
+    /// key, one of several, a record from before the key list existed, or
+    /// spelled with a prefix and capitals — and whatever `VELA_PARALLEL_SPACE`
+    /// says: the wallet a space run left in the store is still a test wallet
+    /// on the next run.
+    #[cfg(feature = "dev-fixtures")]
+    #[test]
+    fn a_wallet_with_a_fixture_key_is_a_test_wallet() {
+        use vela_core::dev_fixtures as fixtures;
+        let ids: Vec<String> = fixtures::accounts()
+            .unwrap_or_else(|error| unreachable!("{error}"))
+            .into_iter()
+            .map(|account| account.credential_id_hex)
+            .collect();
+        assert_eq!(ids[0], FIXTURE_1, "the keyset's first credential id");
+        assert!(!super::active(), "the switch is not set in this run");
+        for id in &ids {
+            assert!(super::is_test_wallet(&account(id, &[id])));
+        }
+        let every: Vec<&str> = ids.iter().map(String::as_str).collect();
+        assert!(
+            super::is_test_wallet(&account(&ids[0], &every)),
+            "the golden Safe"
+        );
+        assert!(
+            super::is_test_wallet(&account(&ids[0], &[])),
+            "a legacy record"
+        );
+        assert!(super::is_test_wallet(&account(
+            "cred0",
+            &["cred0", &ids[1]]
+        )));
+        let shouted = format!("0x{}", ids[2].to_uppercase());
+        assert!(super::is_test_wallet(&account(&shouted, &[&shouted])));
+    }
+
+    /// Without the keyset in the build nothing is a test wallet: the answer
+    /// is a constant, and no fixture credential id is compiled in to compare.
+    #[cfg(not(feature = "dev-fixtures"))]
+    #[test]
+    fn a_build_without_the_keyset_knows_no_test_wallet() {
+        assert!(!super::is_test_wallet(&account(FIXTURE_1, &[FIXTURE_1])));
     }
 }
 

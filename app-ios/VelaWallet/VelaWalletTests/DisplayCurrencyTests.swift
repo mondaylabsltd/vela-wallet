@@ -130,7 +130,7 @@ struct DisplayCurrencyTests {
     /// somebody who had picked CNY that their choice had not taken.
     @Test func aMissingRateDegradesRatherThanRelabelling() {
         let unpriced = CurrencyViewWire(code: "CNY", rate: nil, committed: true)
-        let value = SettingsLive.currencyRowValue(unpriced)
+        let value = SettingsLive.currencyRowValue(unpriced, language: "en")
         #expect(value == "CNY", "showed \(value) for a chosen, unpriceable currency")
         #expect(!value.contains("¥"))
         #expect(!value.contains("USD"))
@@ -138,8 +138,10 @@ struct DisplayCurrencyTests {
 
     @Test func aPricedCurrencyConvertsAndWearsItsOwnSymbol() {
         let priced = CurrencyViewWire(code: "CNY", rate: 7.1, committed: true)
-        let value = SettingsLive.currencyRowValue(priced)
+        let value = SettingsLive.currencyRowValue(priced, language: "zh")
         #expect(value.hasPrefix("CNY · ¥"))
+        // To an English reader the bare "¥" is the yen: the yuan says so.
+        #expect(SettingsLive.currencyRowValue(priced, language: "en").hasPrefix("CNY · CN¥"))
         // 1,234.56 × 7.1 — converted, not relabelled.
         #expect(value.contains("8,765"))
     }
@@ -153,11 +155,11 @@ struct DisplayCurrencyTests {
     /// the commit.
     @Test func anUncommittedChoiceDrawsNoFigure() {
         let seeded = CurrencyViewWire(code: "CNY", rate: 7.1, committed: false)
-        #expect(SettingsLive.currencyRowValue(seeded) == "")
-        #expect(SettingsLive.currencyRowValue(.unread) == "")
-        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: false)) == "")
+        #expect(SettingsLive.currencyRowValue(seeded, language: "en") == "")
+        #expect(SettingsLive.currencyRowValue(.unread, language: "en") == "")
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: false), language: "en") == "")
         // Committed USD is a choice like any other, with its sample.
-        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: true))
+        #expect(SettingsLive.currencyRowValue(CurrencyViewWire(code: "USD", rate: 1, committed: true), language: "en")
                 .hasPrefix("USD · $"))
     }
 
@@ -166,7 +168,7 @@ struct DisplayCurrencyTests {
     /// not taken.
     @Test func aStoredChoiceOnItsWayIsNamedAlone() {
         let pending = CurrencyViewWire(code: "USD", rate: 1, committed: false, pending: "CNY")
-        #expect(SettingsLive.currencyRowValue(pending) == "CNY")
+        #expect(SettingsLive.currencyRowValue(pending, language: "en") == "CNY")
     }
 
     /// `pending` rides on the view under that name; a view without it (a
@@ -199,11 +201,18 @@ struct DisplayCurrencyTests {
         #expect(model.currencySheet.rows.count == CurrencyCatalog.entries.count)
     }
 
-    /// A code the catalog has never heard of — a device region can produce one —
-    /// must not crash or invent a symbol. It is named, as chosen.
+    /// A code no table has heard of — a device region can produce one — must
+    /// not crash or invent a symbol. Its sign is its code (the core's rule),
+    /// said ONCE: the sample figure as every figure in it is written, the
+    /// code a no-break space off the digits.
     @Test func anUnknownCodeDegradesInsteadOfInventingASymbol() {
         let exotic = CurrencyViewWire(code: "XPF", rate: 110, committed: true)
-        let value = SettingsLive.currencyRowValue(exotic)
-        #expect(value == "XPF")
+        let value = SettingsLive.currencyRowValue(exotic, language: "en")
+        #expect(value == "XPF\u{00A0}135,801.60")
+        #expect(!value.contains("$") && !value.contains("·"))
+        // …and with no rate it is named, as chosen.
+        #expect(SettingsLive.currencyRowValue(
+            CurrencyViewWire(code: "XPF", rate: nil, committed: true), language: "en"
+        ) == "XPF")
     }
 }

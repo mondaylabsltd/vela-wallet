@@ -1758,8 +1758,18 @@ pub fn quiet_button(theme: &Theme, label: SharedString) -> Div {
         .child(label)
 }
 
-/// `danger`: filled with the error colour — delete a transaction, a contact,
-/// a group. Only where the web draws one.
+/// A destructive action said quietly: [`quiet_button`]'s box with its label
+/// in the danger colour — no fill, no outline, the row's small type. For a
+/// delete that stands under the useful actions of a page and must not
+/// outweigh them: a transaction record's "Delete record" was a filled red
+/// button, the heaviest thing on the page it sat at the bottom of (PR 4
+/// item 10).
+pub fn destructive_text(theme: &Theme, label: SharedString) -> Div {
+    quiet_button(theme, label).text_color(theme.error_base)
+}
+
+/// `danger`: filled with the error colour — the confirm of a destructive
+/// dialog (delete a contact, a group, erase). Never a page's standing action.
 pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
     button_base(label)
         .rounded(px(12.))

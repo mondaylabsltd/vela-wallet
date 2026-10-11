@@ -398,7 +398,7 @@
       "previewVersion": "应用版本",
       "previewPlatform": "平台",
       "previewLanguage": "语言",
-      "previewRpc": "无法连接的 RPC",
+      "previewRpc": "连不上的网络",
       "previewFailures": "最近失败",
       "previewNone": "无"
     },

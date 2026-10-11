@@ -75,7 +75,7 @@ struct WelcomeScreen: View {
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.bottom, Tokens.Space.s8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(theme.bgBase.ignoresSafeArea())
+        .pageGround(theme.bgBase)
     }
 }
 

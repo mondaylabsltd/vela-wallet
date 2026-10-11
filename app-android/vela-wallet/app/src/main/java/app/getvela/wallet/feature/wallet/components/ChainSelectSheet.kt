@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.wallet.components
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,6 +48,7 @@ fun ChainSelectSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .sheetScrolls()
                 .padding(
                     start = VelaSizing.screenPaddingX,
                     end = VelaSizing.screenPaddingX,

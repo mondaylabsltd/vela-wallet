@@ -8,6 +8,7 @@ import app.getvela.wallet.feature.explore.ConnectionModel
 import app.getvela.wallet.feature.browser.core.BhistEntry
 import app.getvela.wallet.feature.browser.core.BhistView
 import app.getvela.wallet.feature.browser.core.EngineState
+import app.getvela.wallet.feature.browser.core.OriginLock
 import app.getvela.wallet.feature.browser.core.ExploreSite
 import app.getvela.wallet.feature.browser.core.ExploreView
 import app.getvela.wallet.feature.explore.ExploreEmptyCopy
@@ -18,6 +19,7 @@ import app.getvela.wallet.feature.explore.GroupAction
 import app.getvela.wallet.feature.explore.GroupKind
 import app.getvela.wallet.feature.explore.GroupManageRow
 import app.getvela.wallet.feature.explore.GroupModel
+import app.getvela.wallet.feature.explore.SiteLock
 import app.getvela.wallet.feature.explore.SiteModel
 import app.getvela.wallet.feature.explore.TabModel
 import app.getvela.wallet.feature.explore.TileModel
@@ -210,7 +212,7 @@ object ExploreLive {
             browser = fallback.browser.copy(
                 url = bar?.url.orEmpty(),
                 host = bar?.host.orEmpty(),
-                secure = bar?.lock == "closed",
+                lock = barLock(bar),
                 lockShown = bar != null && bar.lock != "none",
                 canBack = engine?.canBack ?: false,
                 canForward = engine?.canForward ?: false,
@@ -241,12 +243,11 @@ object ExploreLive {
                 ),
             ),
             siteMenuSheet = engine?.let { e ->
-                val secure = tab?.secure ?: false
                 fallback.siteMenuSheet.copy(
                     site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host), iconUrls = iconsOf(e.url)),
                     // Spec 079 (owner): the lock alone — no "安全站点".
                     statusLine = "",
-                    secure = secure,
+                    lock = siteLock(tab?.lock),
                     // What each row does now depends on the page: the star's row
                     // unpins a favourite, and Disconnect is offered only to a
                     // site that is connected.
@@ -365,7 +366,6 @@ object ExploreLive {
     /** E7 — the connection sheet for the page in front: the CORE's origin and address, the wallet's own name. */
     fun connection(fallback: ConnectionModel, e: EngineState, strings: VelaStrings, tab: DbrTabView?, identity: Identity): ConnectionModel {
         val connected = tab?.connected_address != null
-        val secure = tab?.secure ?: false
         return fallback.copy(
             site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host), iconUrls = iconsOf(e.url)),
             // Spec 079 (owner): the lock alone says https; "已连接" is a fact about
@@ -383,8 +383,37 @@ object ExploreLive {
             networkName = identity.chainName.ifBlank { fallback.networkName },
             networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
             networkLogoUrl = identity.chainId.takeIf { it > 0 }?.let { app.getvela.wallet.core.marks.Marks.chainLogoUrl(it) },
-            secure = secure,
+            lock = siteLock(tab?.lock),
         )
+    }
+
+    /**
+     * The core's word for a connection ([OriginLock], on the tab and the
+     * consent views) as the mark the screens draw. No word — a tab the core
+     * has no page for — is the open lock: nothing there to call encrypted.
+     */
+    fun siteLock(lock: OriginLock?): SiteLock = when (lock) {
+        OriginLock.Secure -> SiteLock.Secure
+        OriginLock.Local -> SiteLock.Local
+        OriginLock.Insecure, null -> SiteLock.Insecure
+    }
+
+    /**
+     * The ADDRESS BAR's mark. Whether the bar has one at all, and for which
+     * address, is the core's `browserAddressBar` — the committed document's,
+     * so the host and its mark are always the same page's (spec 082 RE1); a
+     * tab's own `lock` follows the origin a load is heading for and would name
+     * the next page beside this one's host. That rule still answers "closed"
+     * for every page the wallet may be used from, http on this device
+     * included, so a closed lock's kind is asked of the core for the bar's
+     * OWN address (`dappOriginLock`): a padlock for https alone, the local
+     * mark for http here. A "local" from the bar itself is taken as said.
+     */
+    fun barLock(bar: uniffi.vela_core_uniffi.BrowserAddressBar?): SiteLock = when (bar?.lock) {
+        "local" -> SiteLock.Local
+        // Whatever the core calls that address's connection: never a padlock it did not say.
+        "closed" -> siteLock(OriginLock.of(uniffi.vela_core_uniffi.dappOriginOf(bar.url)))
+        else -> SiteLock.Insecure
     }
 
     /**
@@ -392,7 +421,7 @@ object ExploreLive {
      * not-yet-connected form. The origin is the CORE's (`DpermConsentView`);
      * the words are `connect.browser.*`; the site's own name is not asked.
      */
-    fun consent(fallback: ConnectionModel, consent: DbrConsentView, strings: VelaStrings, identity: Identity, secure: Boolean): ConnectionModel {
+    fun consent(fallback: ConnectionModel, consent: DbrConsentView, strings: VelaStrings, identity: Identity): ConnectionModel {
         val host = consent.origin.substringAfter("://").substringBefore('/')
         // Spec 096 F11: the account and the network a Connect shares are the
         // CORE's (`DbrConsentView.address`, `.chain_id`) — the same facts every
@@ -405,7 +434,8 @@ object ExploreLive {
             title = strings.t("connect.browser.title", mapOf("host" to host)),
             site = SiteModel(id = consent.origin, name = host, host = host, letter = letterOf(host), tint = tintOf(host), iconUrls = iconsOf(consent.origin)),
             statusLine = "",
-            secure = secure,
+            // The core's own word for the asking site's connection: a padlock for https only.
+            lock = siteLock(consent.lock),
             networkLogoUrl = consent.chain_id.takeIf { it > 0 }?.let { app.getvela.wallet.core.marks.Marks.chainLogoUrl(it) },
             primaryAction = true,
             accountName = (if (isActive) identity.accountName else shortAddress(shared)).ifBlank { fallback.accountName },

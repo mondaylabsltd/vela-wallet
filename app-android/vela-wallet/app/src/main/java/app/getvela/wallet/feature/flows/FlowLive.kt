@@ -705,9 +705,11 @@ object FlowLive {
         currency: CurrencyView,
         chainFilter: Int? = null,
         emptyCopy: AssetsEmptyModel? = fallback.empty,
+        /** The language a worth's symbol is written for (`fiatSymbol`); the app's unless a board says its own. */
+        language: String = app.getvela.wallet.core.i18n.AppLanguage.tag,
     ): AssetsModel {
         // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
-        val rows = WalletLive.assetRows(view, chainNames, currency)
+        val rows = WalletLive.assetRows(view, chainNames, currency, language)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         // Empty when the core says so (`empty_key`: the first read ended and
         // found nothing held) — it was this builder's own "no rows, not
@@ -754,6 +756,7 @@ object FlowLive {
             BalanceView(tokens = listOf(token), hidden = view.hidden),
             chainNames,
             currency,
+            strings.language,
         ).single()
 
         val theirs = FeedView(
@@ -796,7 +799,7 @@ object FlowLive {
         currency: CurrencyView,
         strings: VelaStrings,
     ): List<FactRowModel> {
-        val money = WalletLive.Money.of(currency)
+        val money = WalletLive.Money.of(currency, strings.language)
         val contract = token.token_address
         return listOf(
             FactRowModel(

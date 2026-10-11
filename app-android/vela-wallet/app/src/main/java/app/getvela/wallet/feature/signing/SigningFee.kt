@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -31,6 +33,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.flows.components.FeeSpeedControl
+import app.getvela.wallet.feature.flows.components.FeeSpeedNote
 import app.getvela.wallet.feature.signing.components.SigningPositive
 import app.getvela.wallet.feature.wallet.components.TokenIcon
 import app.getvela.wallet.feature.wallet.components.WalletMetrics
@@ -60,24 +63,74 @@ fun SigningFee(
         is FeeModel.OffChain -> SigningPositive(fee.note, modifier, quiet = true)
         is FeeModel.OnChain -> Column(modifier = modifier.fillMaxWidth()) {
             SigningFeeBody(fee, onFee, onPick, onToggleSpeed, onPickSpeed, onRefresh)
-            // Issue #262: the reason the confirm below is shut, said where the
-            // fix is. While the fee is measured again the last words keep
-            // their line's height, unsaid: invisible, and silent to TalkBack.
-            (fee.warning ?: fee.heldWarning)?.let {
-                val said = fee.warning != null
-                Text(
-                    text = it,
-                    color = colors.errorBase,
-                    fontFamily = VelaFontFamily,
-                    fontWeight = VelaFontWeight.medium,
-                    fontSize = VelaTextSize.sm,
-                    modifier = Modifier
-                        .padding(top = VelaSpacing.sm, start = VelaSpacing.xl, end = VelaSpacing.xl)
-                        .then(if (said) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}),
-                )
-            }
+            FeeLines(fee)
         }
     }
+}
+
+/** The room under the fee card: the line said there, and what the card may still say ([FeeRooms]). */
+const val FEE_LINES_TAG = "signing-fee-lines"
+
+/**
+ * Under the fee card: the line it says there, and the room of everything it
+ * may still come to say.
+ *
+ * Issue #262: the reason the confirm below is shut is said where the fix is.
+ * While the fee is measured again the last words keep their line's height,
+ * unsaid: invisible, and silent to TalkBack ([FeeModel.OnChain.heldWarning]).
+ *
+ * And ([FeeRooms], the 2026-10-11 walk) the place is as tall as the tallest
+ * sentence named for it, plus — until the card has said it — the speed's
+ * note: each drawn unseen and unsaid, at the width and in the face it would
+ * be said in, so a line's arrival fills room that was already there. The
+ * note is said INSIDE the card, which grows by exactly the room given up
+ * here. A line taller than its own room (a failure's reason, in a language
+ * that needs two lines for it) takes the note's unused room before it makes
+ * the place any taller. With no rooms named (a drawn board) this is the line
+ * alone, as before.
+ */
+@Composable
+private fun FeeLines(fee: FeeModel.OnChain) {
+    val line = fee.warning ?: fee.heldWarning
+    val rooms = fee.rooms
+    if (line == null && rooms == null) return
+    val noteRoom = rooms?.speedNote?.takeIf { fee.speed?.freeNote == null }
+    Layout(
+        modifier = Modifier.fillMaxWidth().testTag(FEE_LINES_TAG),
+        content = {
+            // 0 — the line: said, or held unseen.
+            if (line != null) FeeLine(line, seen = fee.warning != null) else Spacer(Modifier)
+            // 1 — the speed's note, while the card has not said it: the card's own note, at the card's own inset.
+            if (noteRoom != null) {
+                Box(modifier = Modifier.padding(horizontal = VelaSpacing.sm).alpha(0f).clearAndSetSemantics {}) { FeeSpeedNote(noteRoom) }
+            } else {
+                Spacer(Modifier)
+            }
+            // 2… — every sentence the card may put here.
+            rooms?.lines?.forEach { FeeLine(it, seen = false) }
+        },
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minHeight = 0)
+        val placed = measurables.map { it.measure(loose) }
+        val rooms = placed[1].height + (placed.drop(2).maxOfOrNull { it.height } ?: 0)
+        layout(constraints.maxWidth, maxOf(placed[0].height, rooms)) {
+            placed.forEach { it.place(0, 0) }
+        }
+    }
+}
+
+@Composable
+private fun FeeLine(text: String, seen: Boolean) {
+    Text(
+        text = text,
+        color = VelaTheme.colors.errorBase,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.medium,
+        fontSize = VelaTextSize.sm,
+        modifier = Modifier
+            .padding(top = VelaSpacing.sm, start = VelaSpacing.xl, end = VelaSpacing.xl)
+            .then(if (seen) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}),
+    )
 }
 
 @Composable
