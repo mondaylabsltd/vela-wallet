@@ -263,30 +263,37 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 	//     the send core is token | payee | fee-coin and knows nothing about a
 	//     speed, so anything that re-prices by re-asking the core for the same
 	//     three is a no-op from here on, and only the second pick says so.
-	// Opened again, the other speeds are priced again (`tierPreview.show`, and
-	// the pick above reset its stamp) — and until that pricing lands, a row
-	// goes on showing the figure it had. Tapped then, it is not a settled
-	// quote: the session in force cannot adopt it, asks the relay itself, and
-	// the fee row says "…" in between. That is the right thing to do, and not
-	// what this step is about; an idle machine got there first in 5 runs of
-	// 120 (the tap came 53 ms after the control opened, the relay's question
-	// 20 ms after the tap). So the row is tapped once it IS a settled quote:
-	// the relay has been asked again since the control opened, nothing is
-	// still out, the row holds a figure — and all of that is still so two
-	// painted frames on.
+	// A row that shows a figure IS a settled quote, and a tap on it promotes —
+	// measured: tapped 123 ms after the control reopened, the fee row went
+	// straight to the tapped figure and the relay was asked nothing. What this
+	// step tripped over, 5 runs in 120 on an idle machine, is the form's own
+	// quote. The send core asks it twice: once when the form is complete, and
+	// again `FORM_ESTIMATE_DEBOUNCE_MS` (400 ms) after that answer lands — the
+	// first answer names the fee coin, which is part of what the quote is
+	// about (`form_estimate_key`). While that second question is out, nothing
+	// can be promoted: every row says "…", the session in force is measuring,
+	// and a pick made then is rightly priced by asking — the fee row says "…"
+	// in between. The test tapped 53 ms after reopening; the question left 20
+	// ms later.
+	//
+	// So the row is tapped once the form has finished asking: the relay has
+	// priced the operation twice, nothing is still out, the row holds a figure
+	// — and all of that is still so two painted frames on. (Counted from the
+	// start, not from the reopening: on a slow machine the second question
+	// has come and gone before the control is opened again.)
+	const FORM_QUOTES = 2;
 	const asking = new Set<unknown>();
 	page.on('request', (request) => {
 		if (RELAY.test(request.url()) || request.url().startsWith(STUB)) asking.add(request);
 	});
 	page.on('requestfinished', (request) => asking.delete(request));
 	page.on('requestfailed', (request) => asking.delete(request));
-	const pricedBefore = priced;
 	await speed.click();
 	const economyAgain = page
 		.getByRole('button', { pressed: false })
 		.filter({ hasText: en('send.gasTier.slow') });
 	const quoted = async () =>
-		priced > pricedBefore &&
+		priced >= FORM_QUOTES &&
 		asking.size === 0 &&
 		/[\d.]+\s*ETH/.test((await economyAgain.textContent()) ?? '');
 	await expect
@@ -301,7 +308,7 @@ test('the speed on the form is the tier on the wire — default, and after a pic
 				);
 				return quoted();
 			},
-			{ timeout: 30_000, message: 'the reopened control priced its rows again' }
+			{ timeout: 30_000, message: 'the form has asked its quote twice, and nothing is out' }
 		)
 		.toBe(true);
 
