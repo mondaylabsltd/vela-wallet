@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,7 +70,14 @@ fun SigningGalleryScreen(systemDarkTheme: Boolean, initialState: String? = null)
             modifier = Modifier
                 .fillMaxSize()
                 .background(colors.bgRaised)
-                .statusBarsPadding(),
+                .statusBarsPadding()
+                // The live sheet stands above the navigation bar (its host
+                // pads it); a board must too, or it is not the sheet that
+                // ships. Without this the pinned confirm was cut on a 3-button
+                // phone — only its top 80 px showed on CS67, CS68 and CS36 —
+                // and the line under it lay behind the bar (the 2026-10-11
+                // walk). Boards are how sheets get reviewed.
+                .navigationBarsPadding(),
         ) {
             Row(
                 modifier = Modifier
