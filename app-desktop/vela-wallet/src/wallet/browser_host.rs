@@ -818,6 +818,50 @@ pub fn bar_mark(bar: &browser_load::AddressBar) -> Option<OriginLock> {
     }
 }
 
+/// What a tab's status line says, if anything (spec 099 FR-014), as
+/// `(seen-key, words, warning)`: its page reloaded to save memory
+/// (`reloaded`, the shell's own fact), the wallet not offered to it, or the
+/// latest request that ended in trouble — each in the core's words for its
+/// layer.
+///
+/// A function of the machine's CURRENT view of the tab and nothing kept:
+/// "This site is not connected" is a statement about now, and the core stops
+/// counting that trouble the moment the site connects (PR 4 item 7) — so the
+/// line goes with it, and comes back if the site is disconnected.
+#[must_use]
+pub fn status_words(
+    loc: &crate::loc::Loc,
+    reloaded: bool,
+    tab: &vela_core::app::dapp_browser::DbrTabView,
+) -> Option<(String, String, bool)> {
+    use vela_core::app::dapp_record::{DbrPageState, DbrProviderState};
+    if reloaded {
+        return Some((
+            "reloaded".to_owned(),
+            loc.t("componentsUi.browserStatus.reloaded").to_string(),
+            false,
+        ));
+    }
+    if tab.page == DbrPageState::Ready
+        && matches!(
+            tab.provider,
+            DbrProviderState::InsecureOrigin | DbrProviderState::NoHello
+        )
+    {
+        return Some((
+            format!("provider:{:?}", tab.provider),
+            loc.t(tab.provider.key()).to_string(),
+            true,
+        ));
+    }
+    let note = tab.last_failure.as_ref()?;
+    Some((
+        format!("{}:{}:{:?}", tab.failed_recent, note.method, note.reason),
+        format!("{} · {}", loc.t(&note.key), note.method),
+        true,
+    ))
+}
+
 /// Back, forward and reload (RD6, RJ5): what the engine says it can do while
 /// a page is in front; all off on the start page.
 ///
@@ -3089,6 +3133,80 @@ mod tests {
             let status = &answers(&out)[0]["result"];
             assert_eq!(status["status"], 200, "{status}");
             assert_eq!(status["receipts"][0]["transactionHash"], json!(tx));
+        });
+    }
+
+    /// PR 4 item 7. A page that asked for a signature before it was
+    /// connected left 「此网站尚未连接 · personal_sign」 under the bar for as
+    /// long as its tab lived, connected or not. The line is read from the
+    /// machine's current view: there while the site is not connected, gone
+    /// the moment it connects, and true again after a disconnect.
+    #[test]
+    fn the_not_connected_line_goes_when_the_site_connects() {
+        storage::tests::with_temp_state("dbr-host-status-line", || {
+            let zh = crate::loc::Loc::for_tag("zh");
+            let en = crate::loc::Loc::for_tag("en");
+            let line = |driver: &BrowserDriver, loc: &crate::loc::Loc| {
+                let tab = driver.view().tabs.into_iter().find(|tab| tab.tab == TAB)?;
+                status_words(loc, false, &tab).map(|(_, words, warning)| (words, warning))
+            };
+            let mut driver = booted();
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+            assert_eq!(
+                line(&driver, &zh),
+                None,
+                "a page with no trouble says nothing"
+            );
+
+            let out = ask(
+                &mut driver,
+                DAPP,
+                "d1",
+                "1",
+                "personal_sign",
+                json!(["0x00", A1]),
+            );
+            assert_eq!(answers(&out)[0]["error"]["code"], json!(4100));
+            let said = Some(("此网站尚未连接 · personal_sign".to_owned(), true));
+            assert_eq!(line(&driver, &zh), said);
+            assert_eq!(
+                line(&driver, &en),
+                Some(("This site isn't connected · personal_sign".to_owned(), true))
+            );
+
+            // The site connects: the statement is no longer true.
+            ask(
+                &mut driver,
+                DAPP,
+                "d1",
+                "2",
+                "eth_requestAccounts",
+                json!([]),
+            );
+            assert_eq!(line(&driver, &zh), said, "asking is not being connected");
+            driver.dispatch(Event::ConsentApproved {
+                now_ms: 1_757_000_000_000.0,
+            });
+            assert_eq!(line(&driver, &zh), None, "connected: the line is gone");
+            assert_eq!(line(&driver, &en), None);
+            // The request stays in the tab's record, where Details reads it.
+            driver.dispatch(Event::InspectorOpened {
+                tab: TAB.to_owned(),
+            });
+            let record = driver.view().inspector;
+            assert!(
+                record.is_some_and(|record| record
+                    .rows
+                    .iter()
+                    .any(|row| row.method == "personal_sign")),
+                "the record keeps the row"
+            );
+
+            // Disconnected again, it is true again.
+            driver.dispatch(Event::RevokeRequested {
+                origin: DAPP.to_owned(),
+            });
+            assert_eq!(line(&driver, &zh), said);
         });
     }
 

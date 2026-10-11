@@ -15105,42 +15105,18 @@ impl WalletPage {
             .child(body)
     }
 
-    /// What the shown tab's status line says, if anything (spec 099 FR-014),
-    /// as `(seen-key, words, warning)`: its page reloaded to save memory, the
-    /// wallet not offered to it, or the latest request that ended in trouble —
-    /// each in the core's words for its layer.
+    /// What the shown tab's status line says, if anything
+    /// ([`crate::wallet::browser_host::status_words`]) — of the view handed
+    /// in, which is the machine's current one: nothing of it is kept here.
     fn browser_status_words(
         &self,
         tab: &vela_core::app::dapp_browser::DbrTabView,
     ) -> Option<(String, String, bool)> {
-        use vela_core::app::dapp_record::{DbrPageState, DbrProviderState};
-        if self.reloaded_tab.as_deref() == Some(tab.tab.as_str()) {
-            return Some((
-                "reloaded".to_owned(),
-                self.loc
-                    .t("componentsUi.browserStatus.reloaded")
-                    .to_string(),
-                false,
-            ));
-        }
-        if tab.page == DbrPageState::Ready
-            && matches!(
-                tab.provider,
-                DbrProviderState::InsecureOrigin | DbrProviderState::NoHello
-            )
-        {
-            return Some((
-                format!("provider:{:?}", tab.provider),
-                self.loc.t(tab.provider.key()).to_string(),
-                true,
-            ));
-        }
-        let note = tab.last_failure.as_ref()?;
-        Some((
-            format!("{}:{}:{:?}", tab.failed_recent, note.method, note.reason),
-            format!("{} · {}", self.loc.t(&note.key), note.method),
-            true,
-        ))
+        crate::wallet::browser_host::status_words(
+            &self.loc,
+            self.reloaded_tab.as_deref() == Some(tab.tab.as_str()),
+            tab,
+        )
     }
 
     /// The shown tab's status line (spec 099 FR-014): one quiet line under
