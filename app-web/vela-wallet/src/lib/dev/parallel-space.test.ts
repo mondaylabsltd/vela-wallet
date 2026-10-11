@@ -278,6 +278,35 @@ describe('the person’s connected sites', () => {
 		expect(area.sites()).toBe(before);
 	});
 
+	/**
+	 * With the person's sites set aside, every grant in the store is the
+	 * space's own, and follows the space's accounts by the ordinary rule —
+	 * the space is told to the core only to protect what could NOT be set
+	 * aside. (`extension-follow-account.e2e.ts` signs out and into another
+	 * wallet inside the space: the grant of the account that left is dropped
+	 * and the site cut off, never handed the new account unasked — issue 315.)
+	 */
+	it('inside, a site connected to a space account that leaves the space is cut off, as anywhere', async () => {
+		const area = extension();
+		const before = area.sites();
+		await enterParallelSpace();
+		await connectInside(area);
+		const fixtures = fixtureStoredAccounts().map((a) => a.address);
+
+		// Signed in to Parallel Two alone: Parallel One left this device.
+		const outcome = await followActiveAccount({
+			activeAddress: fixtures[1],
+			addresses: [fixtures[1]]
+		});
+		expect(outcome.removed.sort()).toEqual([TESTDAPP, NEW_SITE].sort());
+		expect(outcome.repinned).toEqual([]);
+		expect(await listGrants()).toEqual([]);
+
+		// The person's own, set aside, were not part of that — and come back.
+		await exitParallelSpace();
+		expect(area.sites()).toBe(before);
+	});
+
 	it('a second entry does not replace what was set aside with the space’s own', async () => {
 		const area = extension();
 		const before = area.sites();

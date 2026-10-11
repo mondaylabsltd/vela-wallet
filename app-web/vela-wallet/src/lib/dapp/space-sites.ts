@@ -78,6 +78,20 @@ export async function setSitesAside(): Promise<boolean> {
 }
 
 /**
+ * Whether the person's sites are set aside right now: the record is there.
+ * Then every site entry under the two prefixes is the SPACE's own.
+ */
+export async function sitesAreSetAside(): Promise<boolean> {
+	const store = area();
+	if (!store) return false;
+	try {
+		return isRecord((await store.get(SPACE_SITES_KEY))[SPACE_SITES_KEY]);
+	} catch {
+		return false;
+	}
+}
+
+/**
  * How a restore ended. `held` is the one that matters to the caller: the
  * record is still whole and could not be given back, so the person's sites are
  * in it and nowhere else — leaving the space now would strand them.
