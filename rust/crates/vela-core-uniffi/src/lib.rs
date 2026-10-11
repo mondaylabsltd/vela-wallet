@@ -911,6 +911,38 @@ pub fn masked_amount(unit: String) -> String {
     vela_core::app::privacy::masked_amount(&unit)
 }
 
+/// The symbol a fiat figure is written with (`l10n::fiat_symbol`): ONE table
+/// for all four shells. `$` alone is the US dollar's; `¥` alone is the yuan
+/// in Chinese and the yen in every other language, the other one carrying
+/// its country (`JP¥` / `CN¥`); a currency with no glyph of its own is its
+/// code. `language` is the app's language tag. Each shell used to keep its
+/// own table, and one phone wrote "CN¥188.44" where the other wrote "¥34.03".
+#[uniffi::export]
+pub fn fiat_symbol(code: String, language: String) -> String {
+    vela_core::l10n::fiat_symbol(&code, &language)
+}
+
+/// An exact token figure cut to the precision a person reads
+/// (`l10n::cut_token_amount`): the token ladder, never rounded up, dust kept
+/// at its first significant digit. For a figure of what is THERE — a balance,
+/// what is left of one. Dot-decimal in, dot-decimal out; text that is not a
+/// figure comes back unchanged.
+#[uniffi::export]
+pub fn cut_token_amount(plain: String) -> String {
+    vela_core::l10n::cut_token_amount(&plain)
+}
+
+/// What the address bar's mark says about the connection to a page at
+/// `origin` (`dapp_permissions::origin_lock`): `secure` — https, the only
+/// padlock; `local` — http on this device or the person's own network, a
+/// neutral mark; `insecure` — public http, the warning. The browser's tab
+/// and consent views carry it already (`lock`); this is for a surface that
+/// has only an origin.
+#[uniffi::export]
+pub fn dapp_origin_lock(origin: String) -> String {
+    snake_name(&vela_core::app::dapp_permissions::origin_lock(&origin))
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where
