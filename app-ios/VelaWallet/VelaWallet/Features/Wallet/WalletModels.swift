@@ -145,15 +145,24 @@ struct ActivityRowModel: Identifiable {
 /// locale's own order. The words either side are drawn whole; the place (a
 /// site's host) is the one part that is cut, in its middle.
 struct TitlePlace: Equatable {
-    /// The words before the place, its edge spaces trimmed.
+    /// The words before the place, its edge spaces trimmed — less `joiner`,
+    /// where the action comes first: "Contract interaction", 「在」.
     let lead: String
     let place: String
     /// The words after it, its edge spaces trimmed.
     let trail: String
-    /// The template had a space between the lead and the place.
+    /// The template had a space between the lead and the place (or, with a
+    /// `joiner`, between the lead and the joiner).
     let gapBefore: Bool
     /// …and between the place and the trail.
     let gapAfter: Bool
+    /// Where the ACTION comes first ("Contract interaction on ⟨place⟩"): the
+    /// word that ties the place to it — "on", "bei" — which belongs on the
+    /// place's line, not at the end of the action's. Empty where the place
+    /// comes first (「在 ⟨place⟩ 合约交互」: 在 is the lead, already on it).
+    var joiner = ""
+    /// The template had a space between the joiner and the place.
+    var joinerGap = false
 }
 
 struct ActivityGroupModel: Identifiable {

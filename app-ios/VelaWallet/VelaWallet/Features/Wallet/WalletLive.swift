@@ -759,16 +759,41 @@ extension WalletLive {
 
     /// `dappTitle` split around its place, as the locale orders them — `nil`
     /// when the title names no place, or the template does not name it once.
+    ///
+    /// Where the template puts the ACTION first ("{{intent}} on {{place}}"),
+    /// the word between them is the place's (`joiner`): a title too long for
+    /// one line reads "Contract interaction" over "on arcorbs.game3.app",
+    /// not "…interaction on" over a bare host.
     static func dappTitleParts(_ dapp: FeedDappWire, loc: Loc) -> TitlePlace? {
         guard let place = dapp.place, !place.isEmpty else { return nil }
         let mark = "\u{FFFC}"
-        let pieces = loc.t("history.dappRowTitle", vars: ["intent": dappVerb(dapp, loc: loc), "place": mark])
+        let verbMark = "\u{FFFD}"
+        let verb = dappVerb(dapp, loc: loc)
+        let pieces = loc.t("history.dappRowTitle", vars: ["intent": verbMark, "place": mark])
             .components(separatedBy: mark)
         guard pieces.count == 2 else { return nil }
+        let said = { (text: String) in text.replacingOccurrences(of: verbMark, with: verb) }
+        // The action first: what stands between it and the place is the
+        // place's joiner.
+        let before = pieces[0].components(separatedBy: verbMark)
+        if before.count == 2 {
+            let joiner = before[1].trimmingCharacters(in: .whitespaces)
+            return TitlePlace(
+                lead: (before[0] + verb).trimmingCharacters(in: .whitespaces),
+                place: place,
+                trail: said(pieces[1]).trimmingCharacters(in: .whitespaces),
+                gapBefore: joiner.isEmpty
+                    ? (before[1].last?.isWhitespace ?? false)
+                    : (before[1].first?.isWhitespace ?? false),
+                gapAfter: pieces[1].first?.isWhitespace ?? false,
+                joiner: joiner,
+                joinerGap: !joiner.isEmpty && (before[1].last?.isWhitespace ?? false)
+            )
+        }
         return TitlePlace(
-            lead: pieces[0].trimmingCharacters(in: .whitespaces),
+            lead: said(pieces[0]).trimmingCharacters(in: .whitespaces),
             place: place,
-            trail: pieces[1].trimmingCharacters(in: .whitespaces),
+            trail: said(pieces[1]).trimmingCharacters(in: .whitespaces),
             gapBefore: pieces[0].last?.isWhitespace ?? false,
             gapAfter: pieces[1].first?.isWhitespace ?? false
         )

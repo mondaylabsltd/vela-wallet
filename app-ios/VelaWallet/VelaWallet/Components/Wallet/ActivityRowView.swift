@@ -23,19 +23,18 @@ struct ActivityRowView: View {
             iconCircle
             // Amounts always render fully (spec: numbers never clip); the
             // subtitle is the yielding element — it middle-truncates when the
-            // row runs out of width. The title is never cut: a dApp's title
-            // names its place (spec 093, "Spending permit on Uniswap"), so a
-            // long one takes a second line rather than squeezing the figure
-            // ("Unlimited USDC") into an ellipsis.
+            // row runs out of width. A dApp's title names its place (spec
+            // 093, "Spending permit on Uniswap"), so a long one takes a
+            // second line rather than squeezing the figure ("Unlimited
+            // USDC") into an ellipsis — and it breaks only BETWEEN what was
+            // done and where (`PlaceTitleView`). A title with no place is
+            // what was done, alone: one line.
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 if let parts = model.titlePlace {
                     placeTitle(parts)
                 } else {
-                    Text(verbatim: model.title)
-                        .typeRole(Typography.rowTitle.scaled(textScale))
+                    ActionWords(text: model.title, role: Typography.rowTitle.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(verbatim: model.subtitle)
                     .typeRole(Typography.rowSub.literal.scaled(textScale))
@@ -79,19 +78,14 @@ struct ActivityRowView: View {
     }
 
     /// A dApp's title: the verb and its words whole, the place cut in its
-    /// middle when the row runs short (`PlaceTitleLayout`). Said as the one
+    /// middle when the row runs short (`PlaceTitleView`). Said as the one
     /// title it is.
     private func placeTitle(_ parts: TitlePlace) -> some View {
-        let role = Typography.rowTitle.scaled(textScale)
-        return PlaceTitleLayout(gapBefore: parts.gapBefore, gapAfter: parts.gapAfter, gap: role.size * 0.28) {
-            Text(verbatim: parts.lead).typeRole(role).lineLimit(2)
-            Text(verbatim: parts.place).typeRole(role).lineLimit(1).truncationMode(.middle)
-            Text(verbatim: parts.trail).typeRole(role).lineLimit(2)
-        }
-        .foregroundStyle(theme.fgBase)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: model.title))
-        .accessibilityAddTraits(.isStaticText)
+        PlaceTitleView(parts: parts, role: Typography.rowTitle.scaled(textScale))
+            .foregroundStyle(theme.fgBase)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: model.title))
+            .accessibilityAddTraits(.isStaticText)
     }
 
     private var amountColor: Color {
@@ -194,15 +188,87 @@ struct ChainBadgeDot: View {
     .themed(.light)
 }
 
+/// A dApp row's title in its parts — what was done, and where.
+///
+/// 「在 arcorbs.game3.app 合约交互」 broke INSIDE what was done on the other
+/// phone, 「…合 / 约交互」 (device walk 2026-10-11). Here a title breaks only
+/// between its parts:
+/// - what was done (the words either side of the place) keeps ONE line
+///   (`ActionWords`): where a row is too narrow for it — the largest text
+///   size on a small phone, beside a figure — it is set smaller rather than
+///   broken;
+/// - where it was done is one line too, cut in its MIDDLE when the line is
+///   shorter than it: the start of a host and its registrable end both stay.
+/// So a title is one line, or two with the break between the action and the
+/// site (`PlaceTitleLayout`).
+struct PlaceTitleView: View {
+    let parts: TitlePlace
+    let role: TypeRole
+
+    var body: some View {
+        PlaceTitleLayout(gapBefore: parts.gapBefore, gapAfter: parts.gapAfter, gap: role.size * 0.28) {
+            ActionWords(text: parts.lead, role: role)
+                .accessibilityIdentifier("title.lead")
+            placeCell
+            ActionWords(text: parts.trail, role: role)
+                .accessibilityIdentifier("title.trail")
+        }
+    }
+
+    /// Where: the place, with the word that ties it to an action before it
+    /// ("on") on the same line — the joiner whole, the place cut.
+    @ViewBuilder private var placeCell: some View {
+        let place = Text(verbatim: parts.place).typeRole(role)
+            .lineLimit(1).truncationMode(.middle)
+            .accessibilityIdentifier("title.place")
+        if parts.joiner.isEmpty {
+            place
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: parts.joinerGap ? role.size * 0.28 : 0) {
+                Text(verbatim: parts.joiner).typeRole(role).lineLimit(1).fixedSize()
+                    .accessibilityIdentifier("title.joiner")
+                place
+            }
+        }
+    }
+}
+
+/// What was done — "Contract interaction on", 「合约交互」, a title with no
+/// place at all — on one line, whole.
+///
+/// At its own size when the line has room; else set smaller, a step at a
+/// time, down to `floor`. It is never broken to make room for the site, and
+/// never cut. Only words that ALONE are wider than the row even then (two
+/// English words at the largest text size, beside a figure, on the narrowest
+/// phone) take a second line — between words, at the small size.
+struct ActionWords: View {
+    let text: String
+    let role: TypeRole
+
+    /// The sizes tried, largest first.
+    static let steps: [CGFloat] = [1, 0.85, 0.7]
+    static var floor: CGFloat { steps[steps.count - 1] }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            ForEach(Self.steps, id: \.self) { step in
+                Text(verbatim: text).typeRole(role.scaled(step)).lineLimit(1)
+            }
+            Text(verbatim: text).typeRole(role.scaled(Self.floor))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 /// Lays a title out as lead · place · trail (`TitlePlace`): on one line when
 /// it fits; else broken at the place's edge — never inside the place, and
-/// never by cutting the words either side of it, which wrap (two lines at
-/// most) rather than lose a word.
+/// never inside the words either side of it, each of which keeps one line.
 ///
 /// - a trail (the verb after the place — 「在 ⟨place⟩ 合约交互」, 「⟨place⟩で署名」):
 ///   first the lead and the place, cut to what is left; under them the trail.
 /// - no trail (the verb first — "Contract interaction on ⟨place⟩"): first the
-///   lead; under it the place.
+///   lead; under it the place, its joiner ("on") with it.
 struct PlaceTitleLayout: Layout {
     var gapBefore: Bool
     var gapAfter: Bool
