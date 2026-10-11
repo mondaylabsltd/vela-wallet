@@ -3,6 +3,7 @@ package app.getvela.wallet.feature.settings.components
 import kotlin.math.roundToInt
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -37,7 +38,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,7 +94,7 @@ fun VelaSettingsRow(
         RowTone.Accent -> colors.accentBase
         RowTone.Danger -> colors.errorBase
     }
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().testTag(settingsRowTag(row.id))) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -140,14 +143,29 @@ fun VelaSettingsRow(
                         onTextLayout = { firstLinePx = it.getLineBottom(0).roundToInt() },
                     )
                     if (row.subtitle != null) {
-                        Text(
-                            text = row.subtitle,
-                            color = if (row.subtitlePositive) colors.successBase else colors.fgSubtle,
-                            fontFamily = VelaFontFamily,
-                            fontSize = VelaTextSize.base,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        // A line that is a STATE keeps the room of every line
+                        // it can come to read (`subtitleRoom`): drawn unseen
+                        // and unread under it, so the tallest sets the height.
+                        Box {
+                            row.subtitleRoom.forEach { line ->
+                                Text(
+                                    text = line,
+                                    fontFamily = VelaFontFamily,
+                                    fontSize = VelaTextSize.base,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.alpha(0f).clearAndSetSemantics {},
+                                )
+                            }
+                            Text(
+                                text = row.subtitle,
+                                color = if (row.subtitlePositive) colors.successBase else colors.fgSubtle,
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.base,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
@@ -190,12 +208,17 @@ fun VelaSettingsRow(
                     tint = colors.fgSubtle,
                     modifier = Modifier.size(VelaIconSize.sm),
                 )
-                RowTrailing.None -> Unit
+                // The glyph's place, kept for a row whose glyph comes and
+                // goes with its state: the title wraps the same either way.
+                RowTrailing.None -> if (row.trailingRoom) Spacer(Modifier.size(VelaIconSize.sm))
             }
         }
         if (divider) SettingsDivider()
     }
 }
+
+/** A settings row's whole place — the row and its hairline — by the row's id: what a test measures. */
+fun settingsRowTag(id: String): String = "settings-row-$id"
 
 /**
  * A row that is one switch (spec 091 — About's debug mode): a title, one line
