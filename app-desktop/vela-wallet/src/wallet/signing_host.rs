@@ -1670,16 +1670,7 @@ fn release(trusted_signer: &trusted_signer::Channel, channel: &CeremonyChannel) 
 /// The same list the network settings show, because a request for a chain the
 /// settings say is present must not be refused as absent.
 pub fn known_chain_ids() -> Vec<u32> {
-    let mut ids: Vec<u32> = vela_core::app::network_admin::BUILTIN_CHAINS
-        .iter()
-        .map(|chain| chain.chain_id)
-        .collect();
-    for custom in crate::executor::network_admin::read_store_custom_chain_ids() {
-        if !ids.contains(&custom) {
-            ids.push(custom);
-        }
-    }
-    ids
+    crate::executor::network_admin::wallet_chain_ids()
 }
 
 /// The first call's `to` / `data` / `value`, for the decoder.

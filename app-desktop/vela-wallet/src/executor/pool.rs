@@ -2096,6 +2096,79 @@ mod tests {
         });
     }
 
+    /// PR 4 item 9: what the desktop has for a chain that is not one of the
+    /// wallet's networks — 1625, where the `.g` name service's registry
+    /// lives. NOTHING: no override, no provider slug, no built-in, no curated
+    /// public endpoint, and the chain index is not consulted here at all. So
+    /// a call for it has no node to be sent to; the core concludes it at
+    /// once, with no request, and counts the chain in none of the lists the
+    /// "can't reach" notices and the problem report read. With every
+    /// provider key configured it is still nothing. Once the person adds the
+    /// network, its own endpoint is the pool.
+    ///
+    /// (The relay's per-chain base is the BUNDLER tier — it is built for any
+    /// chain id and asked only by a user operation, never by a read.)
+    #[test]
+    fn a_chain_the_wallet_does_not_have_has_no_endpoint_and_is_asked_nothing() {
+        const GRAVITY: u32 = 1625;
+        storage::tests::with_temp_state("pool-no-network", || {
+            assert!(
+                BUILTIN_CHAINS.iter().all(|chain| chain.chain_id != GRAVITY),
+                "1625 is not one of the wallet's networks"
+            );
+            let (rpc, bundler) = collect_endpoints(GRAVITY);
+            assert!(rpc.is_empty(), "no RPC endpoint: {rpc:?}");
+            assert!(
+                bundler
+                    .iter()
+                    .all(|endpoint| endpoint.url.ends_with("/1625"))
+            );
+
+            // Every provider key the settings can hold changes nothing: no
+            // provider has a slug for a chain the wallet does not list.
+            let keyed = storage::write_value(
+                storage::KEY_RPC_PROVIDERS,
+                json!({ "alchemy": "key-a", "drpc": "key-d", "ankr": "key-k" }),
+            );
+            assert!(keyed.is_ok());
+            assert_eq!(stored_provider_keys().len(), 3);
+            assert!(collect_endpoints(GRAVITY).0.is_empty());
+            assert!(
+                !collect_endpoints(1).0.is_empty(),
+                "the same keys do reach a chain the wallet has"
+            );
+
+            // The call itself, through the real pool thread and the core:
+            // refused, and the chain is nobody's trouble.
+            let answer = call(
+                GRAVITY,
+                "eth_call",
+                json!([{ "to": "0x00", "data": "0x" }, "latest"]),
+            );
+            assert!(answer.is_err(), "nothing answered: {answer:?}");
+            for (list, name) in [
+                (failed_chains(), "failed"),
+                (unreached_chains(), "unreached"),
+                (rate_limited_chains(), "rate-limited"),
+            ] {
+                assert!(!list.contains(&GRAVITY), "1625 is listed as {name}");
+            }
+
+            // Added by the person: its own endpoint, and only that.
+            let added = storage::write_value(
+                storage::KEY_CUSTOM_NETWORKS,
+                json!([{ "chainId": GRAVITY, "rpcURL": "https://rpc.gravity.example" }]),
+            );
+            assert!(added.is_ok());
+            let urls: Vec<String> = collect_endpoints(GRAVITY)
+                .0
+                .into_iter()
+                .map(|endpoint| endpoint.url)
+                .collect();
+            assert_eq!(urls, ["https://rpc.gravity.example"]);
+        });
+    }
+
     /// The six tiers, in order, with bans deliberately NOT filtered.
     #[test]
     fn endpoints_are_collected_in_source_order() {

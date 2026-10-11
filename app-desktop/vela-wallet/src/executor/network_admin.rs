@@ -321,6 +321,25 @@ pub fn read_store_custom_chain_ids() -> Vec<u32> {
         .collect()
 }
 
+/// Every network the wallet has: the built-ins, then whatever the person
+/// added — the list Settings → Networks shows. What "the wallet's networks"
+/// means wherever something must not act on a chain outside them: a dApp's
+/// switch, a signing request's chain, a name service's registry
+/// (`identity::name_service_identity`).
+#[must_use]
+pub fn wallet_chain_ids() -> Vec<u32> {
+    let mut ids: Vec<u32> = vela_core::app::network_admin::BUILTIN_CHAINS
+        .iter()
+        .map(|chain| chain.chain_id)
+        .collect();
+    for custom in read_store_custom_chain_ids() {
+        if !ids.contains(&custom) {
+            ids.push(custom);
+        }
+    }
+    ids
+}
+
 fn read_store() -> NetShellResult {
     let endpoints = storage::read_value(storage::KEY_SERVICE_ENDPOINTS)
         .ok()
