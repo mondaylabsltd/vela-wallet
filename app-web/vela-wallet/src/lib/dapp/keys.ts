@@ -27,3 +27,10 @@ export const CHAIN_PREFIX = 'vela.chain.';
 export const CHAINS_KEY = 'vela.ext.chains';
 /** Where a request is answered: `'panel'` (default) or `'window'`. */
 export const SURFACE_KEY = 'vela.ext.surface';
+/**
+ * The person's own sites while the wallet is in the parallel space: every
+ * `vela.perm.*` and `vela.chain.*` entry as it stood on the way in, kept in one
+ * record so no reader of those prefixes — the worker above all — can take a
+ * site set aside for a connected one (`space-sites.ts`).
+ */
+export const SPACE_SITES_KEY = 'vela.parallelSpace.realSitesBackup';

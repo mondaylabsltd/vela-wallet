@@ -11,6 +11,9 @@
  *   - Passkey / WebAuthn: real credential → fixed fixture keyset (the ONLY change)
  *   - Wallet accounts: the person's → fixture Safes (swapped; the real cache is
  *     backed up on entry and restored on exit)
+ *   - Connected sites (the extension's grants): the person's are set aside on
+ *     entry and put back exactly on exit; the space starts with none
+ *     (`dapp/space-sites.ts`)
  *   - Everything else: unchanged
  *
  * Web deltas from the Expo module (spec 026 D19): accounts live in
@@ -23,6 +26,7 @@
  */
 import type { Account } from '$lib/core/generated/Account';
 import { loadCore } from '$lib/core/client';
+import { restoreSites, setSitesAside } from '$lib/dapp/space-sites';
 import { setPasskeyOverride, relyingPartyId } from '$lib/onboarding/core/passkey';
 import { STORAGE_KEYS } from '$lib/onboarding/core/storage';
 import { getItem, setItem } from '$lib/services/storage';
@@ -191,27 +195,57 @@ async function removeFixtureContact(): Promise<void> {
  * not overwrite the backup with fixture data) and restored on exit; the true
  * keys live in the device passkey, never here, so the swap is safe and fully
  * reversible.
+ *
+ * The person's connected sites are set aside on that first entry too, and for
+ * the same reason they are not on a second: by then the grants in storage are
+ * the space's own.
+ *
+ * The ORDER is part of the rule. Every other document of this origin — the
+ * side panel beside a wallet tab — reads the session again the moment the
+ * account list changes (`session.svelte.ts`), and its follow asks the core
+ * about every grant. So the flag is written BEFORE the fixture accounts: a
+ * document that sees them also sees that it is in a space, and tells the core
+ * so (`follow.ts`). With the accounts first, a follow that ran in between
+ * would ask the ordinary question — "has this site's account left the
+ * wallet?" — about the person's grants, and the answer removes them.
  */
 export async function enterParallelSpace(): Promise<void> {
 	// Deriving a fixture Safe is a core call, so the core comes first.
 	await loadCore();
 	installFixtureSigner();
 
-	if (readLocal(K_FLAG) !== '1') {
+	const first = readLocal(K_FLAG) !== '1';
+	if (first) {
 		writeLocal(
 			K_BACKUP,
 			JSON.stringify({ accounts: readLocal(K_ACCOUNTS), idx: readLocal(K_ACTIVE_INDEX) })
 		);
 	}
+	writeLocal(K_FLAG, '1');
+	if (first) await setSitesAside();
 
 	writeLocal(K_ACCOUNTS, JSON.stringify(fixtureStoredAccounts()));
 	writeLocal(K_ACTIVE_INDEX, '0');
-	writeLocal(K_FLAG, '1');
 	await seedFixtureContact();
 }
 
-/** Exit: remove the signer, restore the real wallet cache, drop the fixture contact. */
-export async function exitParallelSpace(): Promise<void> {
+/**
+ * Exit: put the person's sites back, remove the signer, restore the real
+ * wallet cache, drop the fixture contact.
+ *
+ * The sites come back BEFORE the accounts and the flag goes LAST, for the
+ * reason the entry gives: a document that reads the restored accounts must
+ * find the person's grants beside them, and one that still reads the fixtures
+ * must still know it is in a space.
+ *
+ * And if the sites could NOT be given back — they are set aside, and the
+ * write that returns them was refused — the exit stops there, still in the
+ * space with everything as it was: leaving would strand them in a record
+ * nothing reads. Leaving again tries again. Returns whether the space was
+ * left.
+ */
+export async function exitParallelSpace(): Promise<boolean> {
+	if ((await restoreSites()) === 'held') return false;
 	uninstallFixtureSigner();
 
 	const rawBackup = readLocal(K_BACKUP);
@@ -239,6 +273,7 @@ export async function exitParallelSpace(): Promise<void> {
 	removeLocal(K_BACKUP);
 	removeLocal(K_FLAG);
 	await removeFixtureContact();
+	return true;
 }
 
 /**
@@ -282,8 +317,12 @@ export function installParallelConsole(): void {
 			return summary();
 		},
 		async exit() {
-			await exitParallelSpace();
-			console.log('[vela] parallel space OFF — reload to restore the real wallet');
+			const left = await exitParallelSpace();
+			console.log(
+				left
+					? '[vela] parallel space OFF — reload to restore the real wallet'
+					: '[vela] still in the parallel space — the connected sites set aside could not be put back; try again'
+			);
 			return summary();
 		},
 		status: () => summary(),

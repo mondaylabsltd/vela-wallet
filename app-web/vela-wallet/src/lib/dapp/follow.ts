@@ -17,6 +17,7 @@
 import { loadCore } from '$lib/core/client';
 import { checksumAddress } from '$lib/core/kernels';
 import type { Account } from '$lib/core/generated/Account';
+import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
 import { listGrants } from './connections';
 import { getGrant, revokeGrant, setGrant } from './grants';
 import { planAccountSwitch } from './core/dperm-connect';
@@ -29,6 +30,13 @@ export interface FollowFacts {
 	/** Every wallet address; `null` while storage is still being read. */
 	addresses: string[] | null;
 	nowMs?: number;
+	/**
+	 * Whether those are the parallel space's accounts rather than the
+	 * person's. Left out, it is read from the space's stored flag — the one
+	 * fact every document of this origin shares, a side panel that was open
+	 * when the space was entered in a tab included.
+	 */
+	space?: boolean;
 }
 
 /** What was written, for the caller (and the tests) to see. */
@@ -43,6 +51,11 @@ export async function followActiveAccount(facts: FollowFacts): Promise<FollowOut
 	if (grants.length === 0) return outcome;
 	await loadCore();
 	const nowMs = facts.nowMs ?? Date.now();
+	// The parallel space swaps the account list for its fixtures. Asked
+	// without this, the core takes every grant of the person's for one whose
+	// account left the wallet and removes it — entering the space cut every
+	// site off. Told, it leaves alone whatever is not the space's own.
+	const space = facts.space ?? parallelFlagSet();
 
 	for (const stored of grants) {
 		if (stored.address.toLowerCase() === facts.activeAddress.toLowerCase()) continue;
@@ -51,7 +64,8 @@ export async function followActiveAccount(facts: FollowFacts): Promise<FollowOut
 			storedGrant: toWireGrant(stored)!,
 			currentAddresses: facts.addresses,
 			activeAddress: facts.activeAddress,
-			nowMs
+			nowMs,
+			space
 		});
 		switch (plan.kind) {
 			case 'repin':
@@ -136,10 +150,14 @@ export class SessionFollower {
 		const address = view.address;
 		const accounts = view.accounts.map((row) => row.account);
 		const addresses = accounts.map((account) => account.address);
+		// Read with the accounts it describes: whose list this is must not be
+		// decided later, when the queued follow runs.
+		const space = parallelFlagSet();
 		const key = JSON.stringify([
 			view.has_wallet,
 			address.toLowerCase(),
-			addresses.map((a) => a.toLowerCase())
+			addresses.map((a) => a.toLowerCase()),
+			space
 		]);
 		if (key === this.#followed) return null;
 		this.#followed = key;
@@ -154,7 +172,12 @@ export class SessionFollower {
 		const run = this.#queue.then(async (): Promise<FollowOutcome> => {
 			await this.#publish(facts);
 			if (!address) return { repinned: [], removed: [] };
-			return followActiveAccount({ activeAddress: address, addresses, nowMs: options.nowMs });
+			return followActiveAccount({
+				activeAddress: address,
+				addresses,
+				nowMs: options.nowMs,
+				space
+			});
 		});
 		this.#queue = run.catch(() => {});
 		return run;

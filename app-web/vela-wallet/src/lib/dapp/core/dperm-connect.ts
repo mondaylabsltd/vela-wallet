@@ -126,6 +126,13 @@ export interface AccountSwitchQuestion {
 	/** The account the wallet switched TO. */
 	activeAddress: string;
 	nowMs: number;
+	/**
+	 * The wallet is in the parallel space: `currentAddresses` are the space's
+	 * accounts, and the person's own are set aside, not gone. The core then
+	 * leaves alone any grant that is not for one of the space's accounts —
+	 * neither removed nor re-pinned (`space_keeps_grant`).
+	 */
+	space: boolean;
 }
 
 /** What the core authored for one connected site on an account switch. */
@@ -173,7 +180,8 @@ export function planAccountSwitch(question: AccountSwitchQuestion): AccountSwitc
 						grant: question.storedGrant,
 						current_addresses: question.currentAddresses,
 						active_address: question.activeAddress,
-						now_ms: question.nowMs
+						now_ms: question.nowMs,
+						space: question.space
 					} satisfies DpermEvent)
 				)
 			) as DispatchResult
