@@ -191,9 +191,7 @@ struct HeroStatusLineTests {
                                    onRefreshNow: {})
                 .themed(.light)
         )
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 844))
-        window.rootViewController = host
-        window.makeKeyAndVisible()
+        let window = HostedWindow.show(host, size: CGSize(width: width, height: 844))
         defer { window.isHidden = true }
         var last: CGRect?
         var found: [Element] = []

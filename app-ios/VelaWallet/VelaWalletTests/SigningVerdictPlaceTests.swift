@@ -464,9 +464,7 @@ struct SigningVerdictPlaceTests {
         _ = Self.automation
         let box = Box(try model(verdicts[0]))
         let host = UIHostingController(rootView: Host(box: box))
-        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
-        window.rootViewController = host
-        window.makeKeyAndVisible()
+        let window = HostedWindow.show(host, size: size)
         defer { window.isHidden = true }
         var out: [Seen] = []
         for verdict in verdicts {

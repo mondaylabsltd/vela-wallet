@@ -90,9 +90,7 @@ final class SigningSheetProbe {
         _ = Self.automation
         box = Box(model)
         host = UIHostingController(rootView: Host(box: box))
-        window = UIWindow(frame: CGRect(origin: .zero, size: size))
-        window.rootViewController = host
-        window.makeKeyAndVisible()
+        window = HostedWindow.show(host, size: size)
     }
 
     func close() { window.isHidden = true }

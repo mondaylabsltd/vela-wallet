@@ -228,9 +228,7 @@ struct SigningSheetSteadyTests {
         _ = Self.automation
         let box = Box(model(steps[0]))
         let host = UIHostingController(rootView: Host(box: box))
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
-        window.rootViewController = host
-        window.makeKeyAndVisible()
+        let window = HostedWindow.show(host, size: CGSize(width: width, height: height))
         defer { window.isHidden = true }
         var frames: [Frame] = []
         var trees: [[Element]] = []
