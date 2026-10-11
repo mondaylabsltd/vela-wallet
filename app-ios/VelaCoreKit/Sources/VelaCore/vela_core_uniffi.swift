@@ -7566,8 +7566,9 @@ public struct BrowserAddressBar: Equatable, Hashable {
      */
     public var host: String
     /**
-     * `closed` (https, or http on loopback / a private network), `open`
-     * (public http) or `none` (a failure panel, a pending load, an empty tab).
+     * `closed` (https — the only padlock), `local` (http on loopback / a
+     * private network — a neutral mark), `open` (public http) or `none` (a
+     * failure panel, a pending load, an empty tab).
      */
     public var lock: String
 
@@ -7582,8 +7583,9 @@ public struct BrowserAddressBar: Equatable, Hashable {
          * Lower-case host, a non-default port kept; empty when nothing.
          */host: String, 
         /**
-         * `closed` (https, or http on loopback / a private network), `open`
-         * (public http) or `none` (a failure panel, a pending load, an empty tab).
+         * `closed` (https — the only padlock), `local` (http on loopback / a
+         * private network — a neutral mark), `open` (public http) or `none` (a
+         * failure panel, a pending load, an empty tab).
          */lock: String) {
         self.url = url
         self.host = host
