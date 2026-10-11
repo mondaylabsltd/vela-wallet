@@ -476,7 +476,13 @@ enum WalletLive {
                 // pushed the ticker and chain out of the row on a phone.
                 // Hidden, the quantity is money too (PR 2): 418.25 xDAI is
                 // the balance in another unit. Send's picker keeps it.
-                balance: view.hidden ? WalletFixtures.mask : tokenAmountText(token.balance),
+                //
+                // And hidden, it keeps its coin: the core's one spelling of a
+                // hidden coin amount (`maskedAmount(unit:)`, "•••• xDAI") on
+                // every surface — this row read the bare mask while the
+                // token's own page read 「•••• BNB」 (device walk 2026-10-10).
+                // The worth beside it is fiat, and stays the bare mask.
+                balance: view.hidden ? maskedAmount(unit: token.symbol) : tokenAmountText(token.balance),
                 fiat: fiat(token, hidden: view.hidden, display: display),
                 masked: view.hidden,
                 // The real logo, with the lettermark behind it (058). The
