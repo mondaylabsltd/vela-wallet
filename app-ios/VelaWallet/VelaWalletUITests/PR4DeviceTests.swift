@@ -46,6 +46,8 @@
 //    Explore tab brought forward and read: its account chip, its site
 //    menu's line, its mark. `RECORDS_LABEL` names the pass (before / after
 //    the space); the two must read the same.
+//  - `testPutBackInFront` — the tab the person had in front, in front again:
+//    the app is attached to, never launched, so it outlives the test.
 //
 //  In the parallel space (`VELA_PARALLEL_SPACE=1`):
 //  - `testSpaceConnectAndMarks` — the test dApp: the local mark (never a
@@ -267,6 +269,9 @@ final class PR4DeviceTests: XCTestCase {
             var lines: [String] = []
             var venueY = Set<CGFloat>(), appearanceY = Set<CGFloat>(), recordY = Set<CGFloat>()
             var last = "", index = 0, shots = 0
+            // What the block's rows SAY, sample by sample: a row still being
+            // asked about must say nothing the registry's answer takes back.
+            var said: [(at: TimeInterval, words: [String])] = []
             while Date().timeIntervalSince(started) < 24 {
                 let at = Date().timeIntervalSince(started)
                 guard let seen = see(app) else { settle(0.2); continue }
@@ -291,9 +296,18 @@ final class PR4DeviceTests: XCTestCase {
                 if let venue { venueY.insert(Self.tenth(venue.frame.minY)) }
                 if let appearance { appearanceY.insert(Self.tenth(appearance.frame.minY)) }
                 if let record { recordY.insert(Self.tenth(record.frame.minY)) }
+                // The rows' own words: every text between the block's lead
+                // paragraph and the record row.
+                let lead = seen.texts.first { $0.label.hasPrefix("其中任意一把") }
+                let wordsTop = lead?.frame.maxY ?? top
+                let words = seen.texts.filter { text in
+                    text.frame.minY >= wordsTop - 1 && text.frame.maxY <= bottom + 1 && !text.label.isEmpty
+                }.map { $0.label }
+                if said.last?.words != words { said.append((at, words)) }
                 let body = String(
-                    format: "keys=%@ rows=[%@] record.y=%@ state=[%@] paragraph=%@ FIRST-ROW-UNDER(venue).y=%@ 外观.y=%@ 语言.y=%@",
+                    format: "keys=%@ words=[%@] rows=[%@] record.y=%@ state=[%@] paragraph=%@ FIRST-ROW-UNDER(venue).y=%@ 外观.y=%@ 语言.y=%@",
                     header?.label ?? "-",
+                    words.joined(separator: " / "),
                     rows.map { String(format: "%@@%.1f h%.1f", String($0.label.prefix(18)), $0.frame.minY, $0.frame.height) }
                         .joined(separator: " | "),
                     record.map { String(format: "%.1f", $0.frame.minY) } ?? "-",
@@ -313,7 +327,24 @@ final class PR4DeviceTests: XCTestCase {
             }
             note("keys-\(tag)-timeline", lines.joined(separator: "\n"))
             dump(app, "keys-\(tag)-end")
-            report.append("\(tag): first row under the keys block y \(venueY.sorted()) · 外观 y \(appearanceY.sorted()) · record row y \(recordY.sorted()) · \(index) samples")
+            // Said earlier and not said (or not part of what is said) at the
+            // end: taken back. The dot between a kind and an id is no word.
+            let settled = said.last?.words ?? []
+            var takenBack: [String] = []
+            for moment in said.dropLast() {
+                for word in moment.words {
+                    let bare = word.trimmingCharacters(in: CharacterSet(charactersIn: " ·\u{00A0}"))
+                    if bare.isEmpty { continue }
+                    if !settled.contains(where: { $0.contains(bare) }) {
+                        takenBack.append(String(format: "t=%.2f 「%@」", moment.at, word))
+                    }
+                }
+            }
+            note("keys-\(tag)-said", said.map { String(format: "t=%.2f ", $0.at) + $0.words.joined(separator: " / ") }
+                .joined(separator: "\n") + "\ntaken back by the answer: \(takenBack.isEmpty ? "nothing" : takenBack.joined(separator: "; "))")
+            XCTAssertTrue(takenBack.isEmpty, "a key row said something the registry's answer took back (\(tag)): \(takenBack)")
+            XCTAssertFalse(settled.isEmpty, "the keys block said nothing at the end (\(tag))")
+            report.append("\(tag): first row under the keys block y \(venueY.sorted()) · 外观 y \(appearanceY.sorted()) · record row y \(recordY.sorted()) · \(index) samples · the rows said: \(said.map { $0.words.joined(separator: " / ") }.joined(separator: "  →  ")) · taken back: \(takenBack.isEmpty ? "nothing" : takenBack.joined(separator: "; "))")
             XCTAssertFalse(app.staticTexts["PARALLEL SPACE"].exists, "this walk is the person's own wallet, not the space")
             XCTAssertEqual(venueY.count, 1, "the first row under the keys block moved (\(tag)): \(venueY.sorted())")
             XCTAssertEqual(appearanceY.count, 1, "the section under the keys block moved (\(tag)): \(appearanceY.sorted())")
@@ -1022,6 +1053,94 @@ final class PR4DeviceTests: XCTestCase {
         tapTab(["钱包", "Wallet"], in: app)
         settle(1)
         app.terminate()
+    }
+
+    /// The tab the person had in front when the walk began (`FRONT_TAB`, a
+    /// fragment of its row's label), brought forward again and LEFT there.
+    ///
+    /// The app is attached to by its bundle identifier and never launched by
+    /// the test: an app a test launches ends with the test's session, and one
+    /// the system launched (`devicectl device process launch`) does not. Run
+    /// from an .xctestrun with no target application, after such a launch.
+    /// Nothing on the page is touched and nothing is typed; whatever the page
+    /// asks by itself is refused and reported.
+    func testPutBackInFront() throws {
+        let fragment = ProcessInfo.processInfo.environment["FRONT_TAB"] ?? ""
+        guard !fragment.isEmpty else {
+            XCTFail("FRONT_TAB is not set")
+            return
+        }
+        let app = XCUIApplication(bundleIdentifier: Self.appId)
+        guard app.state == .runningForeground || app.state == .runningBackground
+            || app.state == .runningBackgroundSuspended else {
+            XCTFail("the app is not running: it is launched by the system first, never by this test")
+            return
+        }
+        app.activate()
+        launched = app
+        guard app.buttons["探索"].waitForExistence(timeout: 30) else {
+            XCTFail("no tab bar")
+            shoot(app, "front-NO-TAB-BAR")
+            return
+        }
+        guard !app.staticTexts["PARALLEL SPACE"].exists else {
+            XCTFail("in the parallel space: nothing is tapped")
+            shoot(app, "front-IN-THE-SPACE")
+            return
+        }
+        refuseAnythingAsked(app, context: "before the tab is brought forward")
+        guard tapTab(["探索", "Explore"], in: app) else { return }
+        settle(2)
+        let rows = app.buttons.matching(identifier: "explore.resume.row")
+        _ = rows.firstMatch.waitForExistence(timeout: 8)
+        note("front-rows", rows.allElementsBoundByIndex.map { $0.label }.joined(separator: " | "))
+        let row = rows.matching(NSPredicate(format: "label CONTAINS %@", fragment)).firstMatch
+        if row.exists {
+            row.tap()
+        } else {
+            // The home lists the three tabs used last; the others are cards
+            // in the switcher. There, ONLY a card's own picture is tapped —
+            // its ✕ closes the tab, and the line under the grid closes all.
+            let switcher = app.buttons.matching(identifier: "explore.resume.header").firstMatch
+            guard switcher.exists, switcher.isHittable else {
+                XCTFail("no open tab called \(fragment), and no way to the switcher")
+                shoot(app, "front-NO-SUCH-TAB")
+                return
+            }
+            switcher.tap()
+            let done = app.buttons.matching(NSPredicate(format: "label == %@", "完成")).firstMatch
+            guard done.waitForExistence(timeout: 8) else {
+                XCTFail("the tab switcher did not open")
+                shoot(app, "front-NO-SWITCHER")
+                return
+            }
+            settle(1.2)
+            shoot(app, "front-switcher")
+            dump(app, "front-switcher")
+            let cards = see(app)?.native.filter { node in
+                node.elementType == .button && node.frame.height > 80 && node.identifier != "explore.tabs.new"
+                    && node.label != "关闭标签页" && !node.label.isEmpty
+            } ?? []
+            note("front-switcher-cards", cards.map { String(format: "%@ @%.0f,%.0f %.0fx%.0f", $0.label, $0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height) }
+                .joined(separator: "\n"))
+            let wanted = cards.filter { $0.label.contains(fragment) }
+            guard wanted.count == 1, let card = wanted.first,
+                  card.frame.minY > 60, card.frame.maxY < app.frame.height - 20 else {
+                // Out by 完成: nothing is opened and nothing closed.
+                XCTFail("the switcher has not exactly one card called \(fragment) on screen (\(wanted.count)): nothing was opened")
+                done.tap()
+                return
+            }
+            tap(card.frame, in: app)
+        }
+        XCTAssertTrue(app.buttons["explore.bar.account"].waitForExistence(timeout: 15), "the tab did not come forward")
+        settle(8)
+        refuseAnythingAsked(app, context: "the tab in front again")
+        shoot(app, "front-tab")
+        dump(app, "front-tab")
+        if let seen = see(app) {
+            note("front-tab-chip", "chip [\(seen.id("explore.bar.account")?.label ?? "-")] tabs \(seen.id("explore.bar.tabs")?.value as? String ?? "-")")
+        }
     }
 
     // MARK: - 10. In the space: the local mark, the banner, the connection (items 5 b, 7, 11)
