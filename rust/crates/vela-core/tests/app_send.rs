@@ -3118,6 +3118,7 @@ fn split_remaining_is_the_balance_less_the_rows() {
         ],
     });
     assert_eq!(sut.view().split_remaining.as_deref(), Some("1.5"));
+    assert_eq!(sut.view().split_remaining_display.as_deref(), Some("1.5"));
 
     sut.dispatch(Event::RecipientsChanged {
         recipients: vec![
@@ -3130,6 +3131,14 @@ fn split_remaining_is_the_balance_less_the_rows() {
         Some("1.199999999999999999"),
         "exact to the wei"
     );
+    // What a person reads is the same figure on the token ladder, cut:
+    // 1.1999, never the eighteen places and never 1.2 — that would say more
+    // is left than is (the 2026-10-10 iPhone walk: "0.000300194967818323
+    // BNB left" beside "Balance 0.0003").
+    assert_eq!(
+        sut.view().split_remaining_display.as_deref(),
+        Some("1.1999")
+    );
 
     // Over the balance there is nothing left — `split_over_balance` says that.
     sut.dispatch(Event::RecipientsChanged {
@@ -3140,6 +3149,7 @@ fn split_remaining_is_the_balance_less_the_rows() {
     });
     let view = sut.view();
     assert_eq!(view.split_remaining, None);
+    assert_eq!(view.split_remaining_display, None, "nothing to read either");
     assert!(view.split_over_balance);
 
     // And a row that cannot be summed leaves nothing to subtract from.

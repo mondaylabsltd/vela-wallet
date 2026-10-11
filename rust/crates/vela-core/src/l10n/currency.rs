@@ -72,6 +72,81 @@ pub fn currency_fraction_digits(code: &str) -> usize {
     }
 }
 
+/// The symbol a fiat figure is written with: ONE rule for all four shells.
+///
+/// Each shell used to keep its own table. Android asked the platform
+/// (`Currency.getSymbol(Locale.US)`) and wrote the owner's balance as
+/// "CN¥188.44" while its own Settings row said "CNY · ¥" and the iPhone
+/// beside it wrote "¥34.03"; the web gave the Hong Kong dollar a bare "$",
+/// the US dollar's (the 2026-10-11 phone walk). The rule:
+///
+/// 1. **A glyph of its own** is the symbol: `€ £ ₩ ₫ ₹ ₺ ₱ ₪ ฿ ₴ ₦ ₽ zł Kč
+///    Ft Rp RM R R$`.
+/// 2. **`$` alone is the US dollar's**, in every language: it is what every
+///    price in a wallet is quoted in. Every other dollar and peso carries its
+///    country: `HK$ CA$ A$ NZ$ S$ NT$ MX$ AR$`.
+/// 3. **`¥` alone belongs to the reader's own of the two that share it**:
+///    the yuan in Chinese (`zh`, `zh-TW`, `zh-HK`), the yen in every other
+///    language. The other one carries its country: `JP¥` in Chinese, `CN¥`
+///    elsewhere. This is the one place the language matters, and it is
+///    CLDR's own answer: a Chinese reader's "¥188.44" is yuan and a Japanese
+///    reader's "¥1,234" is yen, and writing either one's own money with a
+///    country prefix is what read as a mistake on the phone. The two are
+///    never both bare: within a language "¥" names one currency.
+/// 4. **No glyph anybody would recognise** (`CHF`, `SEK`, `NOK`, `DKK` —
+///    "kr" is four currencies), or a code this table has never heard of:
+///    the code itself, upper-cased, which [`format_fiat`] spaces from the
+///    digits.
+///
+/// So within one language no two currencies are written alike, and a
+/// figure's symbol is the same string on every screen of every shell —
+/// the home total, a fee's worth, Settings' currency row and its picker.
+/// `language` is the app's language tag; only its primary subtag is read.
+#[must_use]
+pub fn fiat_symbol(code: &str, language: &str) -> String {
+    let code = code.trim().to_ascii_uppercase();
+    let chinese = language
+        .split(['-', '_'])
+        .next()
+        .is_some_and(|primary| primary.eq_ignore_ascii_case("zh"));
+    let symbol = match code.as_str() {
+        "USD" => "$",
+        "EUR" => "€",
+        "GBP" => "£",
+        "CNY" if chinese => "¥",
+        "CNY" => "CN¥",
+        "JPY" if chinese => "JP¥",
+        "JPY" => "¥",
+        "KRW" => "₩",
+        "VND" => "₫",
+        "INR" => "₹",
+        "TRY" => "₺",
+        "PHP" => "₱",
+        "ILS" => "₪",
+        "THB" => "฿",
+        "UAH" => "₴",
+        "NGN" => "₦",
+        "RUB" => "₽",
+        "PLN" => "zł",
+        "CZK" => "Kč",
+        "HUF" => "Ft",
+        "IDR" => "Rp",
+        "MYR" => "RM",
+        "ZAR" => "R",
+        "BRL" => "R$",
+        "HKD" => "HK$",
+        "CAD" => "CA$",
+        "AUD" => "A$",
+        "NZD" => "NZ$",
+        "SGD" => "S$",
+        "TWD" => "NT$",
+        "MXN" => "MX$",
+        "ARS" => "AR$",
+        _ => return code,
+    };
+    symbol.to_owned()
+}
+
 /// Per-call fiat options.
 #[derive(Debug, Clone, Copy)]
 pub struct FiatOptions {
@@ -155,6 +230,112 @@ mod tests {
             preset: NumberPreset::CommaDot,
             drop_minor_units_above: None,
         }
+    }
+
+    /// Every currency a picker offers on any shell: the drawn eight, the
+    /// Chainlink fiat feeds, and what the FX endpoint quotes.
+    const OFFERED: [&str; 34] = [
+        "USD", "EUR", "GBP", "CNY", "JPY", "KRW", "HKD", "VND", "AUD", "CAD", "CHF", "BRL", "MXN",
+        "PHP", "SGD", "NZD", "TRY", "IDR", "ARS", "BGN", "CZK", "DKK", "HUF", "ILS", "INR", "ISK",
+        "MYR", "NOK", "PLN", "RON", "SEK", "THB", "ZAR", "TWD",
+    ];
+
+    /// The fifteen languages the app ships.
+    const LANGUAGES: [&str; 15] = [
+        "en", "zh", "zh-TW", "zh-HK", "ja", "ko", "vi", "id", "tr", "es-MX", "pt-BR", "fr", "de",
+        "ru", "it",
+    ];
+
+    /// The owner's phone: yuan, in Chinese. One string, whichever shell asks.
+    #[test]
+    fn a_chinese_readers_yuan_is_a_bare_yen_sign() {
+        for language in [
+            "zh",
+            "zh-CN",
+            "zh-Hans",
+            "zh-TW",
+            "zh-HK",
+            "zh_Hans_CN",
+            "ZH",
+        ] {
+            assert_eq!(fiat_symbol("CNY", language), "¥", "{language}");
+            assert_eq!(fiat_symbol("JPY", language), "JP¥", "{language}");
+        }
+        assert_eq!(
+            format_fiat(188.44, "CNY", &fiat_symbol("CNY", "zh"), "zh", opts()),
+            "¥188.44"
+        );
+    }
+
+    /// Everywhere else the bare sign is the yen's, and the yuan says whose
+    /// it is: the two are never written alike in one language.
+    #[test]
+    fn the_yen_and_the_yuan_are_never_written_alike() {
+        for language in LANGUAGES {
+            let (yuan, yen) = (fiat_symbol("CNY", language), fiat_symbol("JPY", language));
+            assert_ne!(yuan, yen, "{language}");
+            assert!(yuan == "¥" || yen == "¥", "{language}: one of them is bare");
+        }
+        for language in ["en", "ja", "ko", "fr", "de", "es-MX", ""] {
+            assert_eq!(fiat_symbol("JPY", language), "¥", "{language}");
+            assert_eq!(fiat_symbol("CNY", language), "CN¥", "{language}");
+        }
+    }
+
+    /// Within a language no two offered currencies share a symbol — the
+    /// web's picker gave the Hong Kong dollar the US dollar's "$".
+    #[test]
+    fn no_two_offered_currencies_share_a_symbol_in_any_language() {
+        for language in LANGUAGES {
+            let mut seen = std::collections::BTreeMap::new();
+            for code in OFFERED {
+                let symbol = fiat_symbol(code, language);
+                assert!(!symbol.is_empty(), "{code}");
+                let other = seen.insert(symbol.clone(), code);
+                assert_eq!(
+                    other, None,
+                    "{language}: {code} and {other:?} are both written {symbol:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_dollar_sign_alone_is_the_us_dollars() {
+        for language in LANGUAGES {
+            assert_eq!(fiat_symbol("USD", language), "$", "{language}");
+            for code in OFFERED {
+                if code != "USD" {
+                    assert_ne!(fiat_symbol(code, language), "$", "{language} {code}");
+                }
+            }
+        }
+        assert_eq!(fiat_symbol("HKD", "zh-HK"), "HK$");
+        assert_eq!(fiat_symbol("MXN", "es-MX"), "MX$");
+        assert_eq!(fiat_symbol("BRL", "pt-BR"), "R$");
+    }
+
+    /// No glyph of its own, or a code nobody listed: the code, upper-cased —
+    /// which `format_fiat` then spaces from the digits.
+    #[test]
+    fn a_currency_without_a_glyph_is_written_with_its_code() {
+        for code in ["CHF", "SEK", "NOK", "DKK", "ISK", "RON", "BGN", "XYZ"] {
+            assert_eq!(fiat_symbol(code, "en"), code);
+        }
+        assert_eq!(fiat_symbol(" chf ", "en"), "CHF", "trimmed, upper-cased");
+        assert_eq!(fiat_symbol("usd", "en"), "$", "case-insensitive");
+        assert_eq!(
+            format_fiat(1234.5, "CHF", &fiat_symbol("CHF", "en"), "en", opts()),
+            "CHF\u{00A0}1,234.50"
+        );
+        assert_eq!(
+            format_fiat(1234.5, "HKD", &fiat_symbol("HKD", "en"), "en", opts()),
+            "HK$1,234.50"
+        );
+        assert_eq!(
+            format_fiat(1234.5, "PLN", &fiat_symbol("PLN", "en"), "en", opts()),
+            "zł\u{00A0}1,234.50"
+        );
     }
 
     #[test]
