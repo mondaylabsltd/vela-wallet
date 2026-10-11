@@ -19,6 +19,41 @@ async function openContacts(page: Page): Promise<void> {
 	await expect(page.getByRole('heading', { name: en('contacts.title') }).first()).toBeVisible();
 }
 
+/**
+ * What the book's store holds under `key` — the same place the app writes
+ * (`services/storage.ts`: database `vela`, store `kv`), read as it stands.
+ *
+ * The core shows a change the moment it makes it and writes it behind
+ * (`ContactOperation::Write…`, best-effort: "the in-memory ledger stays
+ * authoritative"). So a row on the screen is not yet a row on the disk, and
+ * a reload issued the instant the row appears can beat the write: on a quiet
+ * machine it did, and the group was gone. "Survives a reload" is asked once
+ * the write has landed.
+ */
+function stored(page: Page, key: string): Promise<string> {
+	return page.evaluate(
+		(k) =>
+			new Promise<string>((resolve, reject) => {
+				const open = indexedDB.open('vela', 1);
+				open.onupgradeneeded = () => open.result.createObjectStore('kv');
+				open.onerror = () => reject(open.error);
+				open.onsuccess = () => {
+					const db = open.result;
+					const request = db.transaction('kv', 'readonly').objectStore('kv').get(k);
+					request.onsuccess = () => {
+						db.close();
+						resolve(typeof request.result === 'string' ? request.result : '');
+					};
+					request.onerror = () => {
+						db.close();
+						reject(request.error);
+					};
+				};
+			}),
+		key
+	);
+}
+
 async function addContact(page: Page, name: string, address: string): Promise<void> {
 	// The phone's "+" opens the drawn C5 sheet (new / import / export) since
 	// 028 US5; 新建联系人 is its first row. The empty state's own button still
@@ -52,6 +87,7 @@ test('an added contact survives a reload; a deleted one stays gone', async ({ pa
 	await expect(page.getByText('Alice', { exact: true })).toBeVisible();
 
 	// Durability: the book is the core's stored ledger, not screen state.
+	await expect.poll(() => stored(page, 'vela.contacts')).toContain('Alice');
 	await page.reload();
 	await expect(page.getByText('Alice', { exact: true })).toBeVisible();
 
@@ -62,6 +98,10 @@ test('an added contact survives a reload; a deleted one stays gone', async ({ pa
 	await expect(page.getByText('Alice', { exact: true })).toHaveCount(0);
 
 	// A tombstone is durable too — deletion does not resurrect on reload.
+	await expect.poll(() => stored(page, 'vela.contacts')).not.toContain('Alice');
+	await expect
+		.poll(async () => (await stored(page, 'vela.contacts.dismissed')).toLowerCase())
+		.toContain(ALICE_ADDR.slice(2, 14));
 	await page.reload();
 	await expect(page.getByText(en('contacts.empty'))).toBeVisible();
 });
@@ -90,6 +130,7 @@ test('a group is created, joined to the book, and survives restart', async ({ pa
 	await page.getByRole('button', { name: en('contacts.save') }).click();
 	await expect(page.getByText('Payroll', { exact: true })).toBeVisible();
 
+	await expect.poll(() => stored(page, 'vela.contactGroups')).toContain('Payroll');
 	await page.reload();
 	await expect(page.getByText('Payroll', { exact: true })).toBeVisible();
 });
