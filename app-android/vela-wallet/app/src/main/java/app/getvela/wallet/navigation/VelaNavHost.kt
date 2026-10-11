@@ -1078,7 +1078,7 @@ fun VelaNavHost(
                     val feedbackState by feedback.state.collectAsStateWithLifecycle()
                     val i18nState by application.container.i18nRuntime.state.collectAsStateWithLifecycle()
                     val poolView by application.container.pool.view.collectAsStateWithLifecycle()
-                    val facts = reportFacts(i18nState.language, poolView.failed_chains.map { chainNames[it] ?: it.toString() })
+                    val facts = reportFacts(i18nState.language, SettingsLive.unreachableNetworks(poolView.failed_chains, chainNames, strings))
                     val reportBase = remember(strings) { SettingsFixtures.buildState(SettingsScreenState.ST15, strings) }
                     val reportModel = SettingsLive.withFeedbackStatus(
                         SettingsLive.withFeedback(reportBase, facts, strings),
@@ -2302,7 +2302,7 @@ fun VelaNavHost(
                 }
                 // What this device may say about itself in a report — five named
                 // fields, never an address, a balance or an endpoint URL.
-                val feedbackFacts = reportFacts(i18nState.language, poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() })
+                val feedbackFacts = reportFacts(i18nState.language, SettingsLive.unreachableNetworks(poolView.failed_chains, chainNamesNow, strings))
                 val liveModel = run {
                     var m = SettingsLive.withWizard(
                         SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),

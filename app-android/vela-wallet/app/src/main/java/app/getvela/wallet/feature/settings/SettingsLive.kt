@@ -906,6 +906,21 @@ object SettingsLive {
         },
     )
 
+    /**
+     * The networks a report says are out of reach, as a person reads them:
+     * each by its NAME, and one this device has no name for as the corpus's
+     * "Chain 1625" (`assets.chainFallback`) — never a bare id. The feedback
+     * sheet on the owner's phone read 「无法连接的 RPC  1625」, which reads as a
+     * count of RPCs; it was a chain id, with nothing to say what it was. (The
+     * label says "Unreachable networks" now, and the core no longer lists a
+     * chain the wallet does not have; a network added and then left without
+     * a name would still land here.)
+     */
+    fun unreachableNetworks(chainIds: List<Int>, chainNames: Map<Int, String>, strings: VelaStrings): List<String> =
+        chainIds.map { id ->
+            chainNames[id]?.takeIf { it.isNotBlank() } ?: strings.t("assets.chainFallback", mapOf("chainId" to id.toString()))
+        }
+
     /** The corpus labels the report's environment lines wear — the preview's and the payload's alike. */
     fun feedbackLabels(strings: VelaStrings): BugReport.EnvironmentLabels = BugReport.EnvironmentLabels(
         version = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_VERSION),
