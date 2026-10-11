@@ -2771,11 +2771,10 @@ struct RootView: View {
             commit: BuildInfo.commit,
             platform: "iOS \(UIDevice.current.systemVersion)",
             language: loc.resolvedLanguage,
-            unreachable: pool.failedChains.map { chainId in
+            unreachable: SettingsLive.unreachableNames(pool.failedChains, name: { chainId in
                 names.first { $0.chainId == chainId }?.displayName
                     ?? ChainCatalog.meta(chainId)?.displayName
-                    ?? "chain-\(chainId)"
-            },
+            }, loc: loc),
             failures: VelaLog.recentFailures
         )
     }

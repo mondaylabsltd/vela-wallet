@@ -1483,11 +1483,27 @@ enum SettingsLive {
         let platform: String
         /// The UI language tag in use.
         let language: String
-        /// Display NAMES of networks whose whole RPC pool failed. Never URLs.
+        /// Display NAMES of networks whose whole RPC pool failed
+        /// (`unreachableNames`). Never URLs, never a bare chain id.
         let unreachable: [String]
         /// The last failures the app logged, as `scope: kind` (spec 082 RE11,
         /// `VelaLog.recentFailures`) — no host and no hash is ever in one.
         var failures: [String] = []
+    }
+
+    /// The networks a report says could not be reached, each by its NAME —
+    /// the wallet's own name for it, the person's own networks included —
+    /// and one nobody has a name for in the corpus's words, "Chain 1625"
+    /// (`assets.chainFallback`). Never a bare id: 「无法连接的 RPC 1625」 read
+    /// like a count on the phone (device walk 2026-10-11), and this shell's
+    /// "chain-1625" was a string of its own that no language had.
+    static func unreachableNames(_ chainIds: [Int], name: (Int) -> String?, loc: Loc) -> [String] {
+        chainIds.map { chainId in
+            let named = name(chainId)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return named.isEmpty
+                ? loc.t("assets.chainFallback", vars: ["chainId": String(chainId)])
+                : named
+        }
     }
 
     /// The feedback sheet's "what will be sent" block, from THIS device
