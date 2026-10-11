@@ -21694,6 +21694,7 @@ mod tests {
             methods: vec!["eth_requestAccounts".to_owned()],
             address: None,
             chain_id: 1,
+            lock: vela_core::app::dapp_permissions::OriginLock::Secure,
         };
         let sheet = |tab: &str| DbrSigningView {
             tab: tab.to_owned(),

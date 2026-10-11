@@ -140,7 +140,7 @@ pub struct BrowserHost {
     /// What the machine was last told, so a refresh that changed nothing
     /// says nothing.
     chains: Vec<u32>,
-    wallet: Option<(Vec<String>, String)>,
+    wallet: Option<ToldWallet>,
     /// Settings' debug mode as last told (spec 091).
     debug_mode: Option<bool>,
     /// Spec 079 US4 / 082 RF1: the pool's view of which chains are down, as
@@ -406,43 +406,16 @@ impl BrowserHost {
         }
     }
 
-    /// Every account and the active one, from the session.
-    ///
-    /// While the session is still reading storage it says nothing: `None` is
-    /// the core's "not known yet", and a cold read must never log a site out.
+    /// Every account and the active one, from the session
+    /// ([`wallet_news`]).
     fn follow_wallet(&mut self, cx: &mut Context<Self>) {
         let session = crate::session::view(cx);
-        if session.loading {
+        let Some((told, events)) = wallet_news(&session, self.wallet.as_ref()) else {
             return;
-        }
-        let addresses: Vec<String> = session
-            .accounts
-            .iter()
-            .map(|row| row.account.address.clone())
-            .collect();
-        let active = session.address;
-        let told = (addresses.clone(), active.clone());
-        if self.wallet.as_ref() == Some(&told) {
-            return;
-        }
-        let switched = self.wallet.as_ref().map(|(_, was)| was) != Some(&active);
+        };
         self.wallet = Some(told);
-        self.dispatch(
-            Event::AccountsUpdated {
-                addresses: (!addresses.is_empty()).then_some(addresses),
-            },
-            cx,
-        );
-        if switched && !active.is_empty() {
-            // Every grant follows it (`followActiveAccount`), and each open
-            // page of those sites hears `accountsChanged` — the core's rule.
-            self.dispatch(
-                Event::AccountSwitched {
-                    address: active,
-                    now_ms: now_ms(),
-                },
-                cx,
-            );
+        for event in events {
+            self.dispatch(event, cx);
         }
     }
 
@@ -566,6 +539,62 @@ impl BrowserHost {
     pub fn tab(&self, id: &str) -> Option<&vela_core::app::dapp_browser::DbrTabView> {
         self.view.tabs.iter().find(|tab| tab.tab == id)
     }
+}
+
+/// Every account address and the one in front — what the machine was told.
+pub type ToldWallet = (Vec<String>, String);
+
+/// What the machine is told when the session's wallet is not what it was
+/// last `told`: every account, and — when the one in front changed — the
+/// switch. `None`: nothing new.
+///
+/// While the session is still reading storage it says nothing: `None` is the
+/// core's "not known yet", and a cold read must never log a site out.
+///
+/// The switch says whether the account now in front is a dev space's test
+/// wallet ([`crate::parallel_space::is_test_wallet`]) and never the person's
+/// own. The core then sets the person's sites aside whole — not re-pinned to
+/// the test wallet, not dropped when it goes, nothing written — and puts them
+/// back exactly on the next switch to an account of theirs. Told `false` for
+/// a test wallet, every connection the person had followed it and was removed
+/// with it: the Arc Orbs connection lost on the 2026-10-11 phone walk.
+#[must_use]
+pub fn wallet_news(
+    session: &vela_core::app::session::SessionView,
+    told: Option<&ToldWallet>,
+) -> Option<(ToldWallet, Vec<Event>)> {
+    if session.loading {
+        return None;
+    }
+    let addresses: Vec<String> = session
+        .accounts
+        .iter()
+        .map(|row| row.account.address.clone())
+        .collect();
+    let active = session.address.clone();
+    let now = (addresses.clone(), active.clone());
+    if told == Some(&now) {
+        return None;
+    }
+    let switched = told.map(|(_, was)| was) != Some(&active);
+    let mut events = vec![Event::AccountsUpdated {
+        addresses: (!addresses.is_empty()).then_some(addresses),
+    }];
+    if switched && !active.is_empty() {
+        let space = session
+            .accounts
+            .iter()
+            .find(|row| row.account.address == active)
+            .is_some_and(|row| crate::parallel_space::is_test_wallet(&row.account));
+        // Every grant follows it (`followActiveAccount`), and each open
+        // page of those sites hears `accountsChanged` — the core's rule.
+        events.push(Event::AccountSwitched {
+            address: active,
+            now_ms: now_ms(),
+            space,
+        });
+    }
+    Some((now, events))
 }
 
 /// What the browser machine hears when `tab`'s page goes but the tab stays —
@@ -1173,6 +1202,7 @@ mod tests {
         driver.dispatch(Event::AccountSwitched {
             address: A1.to_owned(),
             now_ms: 1_757_000_000_000.0,
+            space: false,
         });
         driver.dispatch(Event::NetworksChanged {
             chain_ids: vec![1, 100, 8453],
@@ -2766,6 +2796,7 @@ mod tests {
             driver.dispatch(Event::AccountSwitched {
                 address: SAFE.to_owned(),
                 now_ms: 1_757_000_000_000.0,
+                space: false,
             });
             driver.dispatch(Event::NetworksChanged {
                 chain_ids: vec![1, 56, 100],
@@ -2937,6 +2968,466 @@ mod tests {
             let status = &answers(&out)[0]["result"];
             assert_eq!(status["status"], 200, "{status}");
             assert_eq!(status["receipts"][0]["transactionHash"], json!(tx));
+        });
+    }
+
+    // -- PR 4 item 5: a dev space has its own sites -------------------------
+
+    const NEW_SITE: &str = "https://new.example";
+    /// A dev space's test wallet, by address.
+    const T1: &str = "0x7777777777777777777777777777777777777777";
+
+    /// The site store as it lies on disk: every `vela.perm.*` and
+    /// `vela.chain.*`, with its raw text.
+    fn site_store() -> Vec<(String, String)> {
+        let mut all: Vec<(String, String)> = storage::raw_entries()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|(key, _)| key.starts_with("vela.perm.") || key.starts_with("vela.chain."))
+            .collect();
+        all.sort();
+        all
+    }
+
+    /// The whole store, byte for byte.
+    fn store_file() -> Vec<u8> {
+        storage::path()
+            .ok()
+            .and_then(|path| std::fs::read(path).ok())
+            .unwrap_or_default()
+    }
+
+    /// The person's own sites: two connections of `address` and a network
+    /// they chose for one of them.
+    fn seed_the_persons_sites(address: &str) {
+        seed_grant(DAPP, address, 100);
+        seed_grant(OTHER, address, 1);
+        let _ = storage::write_value("vela.chain.https://dapp.example", json!(8453));
+    }
+
+    fn ask_in(
+        driver: &mut BrowserDriver,
+        tab: &str,
+        origin: &str,
+        message: Value,
+    ) -> Vec<Outbound> {
+        driver.dispatch(Event::PageMessage {
+            tab: tab.to_owned(),
+            frame_origin: format!("{origin}/app"),
+            is_main_frame: true,
+            message_json: message.to_string(),
+            now_ms: 0.0,
+        })
+    }
+
+    /// The accounts `origin`'s page in `tab` is given, lower-cased.
+    fn accounts_of(driver: &mut BrowserDriver, tab: &str, origin: &str, doc: &str) -> Vec<String> {
+        let out = ask_in(
+            driver,
+            tab,
+            origin,
+            json!({"t":"req","doc":doc,"id":"accounts","method":"eth_accounts","params":[]}),
+        );
+        answers(&out)[0]["result"]
+            .as_array()
+            .map(|all| {
+                all.iter()
+                    .filter_map(|one| one.as_str().map(str::to_ascii_lowercase))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// What a visit to a dev space does while `test_wallet` is in front: a
+    /// site the person is connected to is connected again there, a site they
+    /// never met is connected, and the first is moved to another network.
+    /// `unchanged` is called after every step.
+    fn visit_the_space(driver: &mut BrowserDriver, test_wallet: &str, unchanged: &dyn Fn(&str)) {
+        let test_wallet = test_wallet.to_ascii_lowercase();
+        assert!(
+            accounts_of(driver, TAB, DAPP, "d1").is_empty(),
+            "the person's connection is not the space's"
+        );
+        unchanged("a page asked who is connected");
+        for (tab, origin, doc) in [(TAB, DAPP, "d1"), ("t2", NEW_SITE, "n1")] {
+            let out = ask_in(
+                driver,
+                tab,
+                origin,
+                json!({"t":"req","doc":doc,"id":"connect","method":"eth_requestAccounts","params":[]}),
+            );
+            assert!(answers(&out).is_empty(), "{origin} is asked about inside");
+            // The approval's one write is the test wallet's own activity
+            // row; of the sites, nothing.
+            let before = store_file();
+            driver.dispatch(Event::ConsentApproved {
+                now_ms: 1_757_000_500_000.0,
+            });
+            unchanged("a site was connected inside");
+            let strip = |bytes: &[u8]| {
+                let mut all: serde_json::Map<String, Value> =
+                    serde_json::from_slice(bytes).unwrap_or_default();
+                all.remove("vela.transactionHistory");
+                all
+            };
+            assert_eq!(strip(&before), strip(&store_file()));
+            assert_eq!(accounts_of(driver, tab, origin, doc), [test_wallet.clone()]);
+        }
+        let writes = storage::generation();
+        let out = ask_in(
+            driver,
+            TAB,
+            DAPP,
+            json!({"t":"req","doc":"d1","id":"switch","method":"wallet_switchEthereumChain","params":[{"chainId":"0x1"}]}),
+        );
+        assert_eq!(answers(&out)[0]["result"], Value::Null, "switched, inside");
+        unchanged("a site changed network inside");
+        assert_eq!(storage::generation(), writes, "and that wrote nothing");
+        let inside: Vec<(String, String)> = driver
+            .view()
+            .sites
+            .iter()
+            .map(|site| (site.origin.clone(), site.address.to_ascii_lowercase()))
+            .collect();
+        assert_eq!(inside.len(), 2, "the space lists its own sites: {inside:?}");
+        assert!(inside.iter().all(|(_, address)| *address == test_wallet));
+    }
+
+    /// PR 4 item 5. The owner's Arc Orbs connection was lost on a walk
+    /// through the parallel space: entering it re-pinned every connection to
+    /// the test wallet, and removing the test wallet dropped them. Told that
+    /// the account in front is a dev space's, the machine leaves the person's
+    /// sites alone: enter, connect inside, change network inside, leave — the
+    /// store's `vela.perm.*` and `vela.chain.*` are what they were at every
+    /// step, the way in and the way out write nothing at all, and the pages
+    /// are connected to the person's account again.
+    #[test]
+    fn a_dev_space_leaves_the_persons_sites_exactly_as_they_were() {
+        storage::tests::with_temp_state("dbr-host-space", || {
+            seed_the_persons_sites(A1);
+            let mut driver = booted();
+            ask_in(&mut driver, TAB, DAPP, json!({"t":"hello","doc":"d1"}));
+            ask_in(&mut driver, "t2", NEW_SITE, json!({"t":"hello","doc":"n1"}));
+            assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [A1]);
+            let sites = site_store();
+            assert_eq!(sites.len(), 3, "two connections and a network: {sites:?}");
+            let listed = driver.view().sites;
+            let file = store_file();
+            let writes = storage::generation();
+            let unchanged = |when: &str| assert_eq!(site_store(), sites, "{when}");
+
+            // In: the test wallet joins the list and comes to the front.
+            driver.dispatch(Event::AccountsUpdated {
+                addresses: Some(vec![A1.to_owned(), A2.to_owned(), T1.to_owned()]),
+            });
+            driver.dispatch(Event::AccountSwitched {
+                address: T1.to_owned(),
+                now_ms: 1_757_000_400_000.0,
+                space: true,
+            });
+            assert_eq!(store_file(), file, "the way in is byte for byte nothing");
+            assert_eq!(storage::generation(), writes, "and no write at all");
+
+            visit_the_space(&mut driver, T1, &unchanged);
+
+            // Out: the person's account in front, then the test wallet gone.
+            let writes = storage::generation();
+            let file = store_file();
+            driver.dispatch(Event::AccountSwitched {
+                address: A1.to_owned(),
+                now_ms: 1_757_000_600_000.0,
+                space: false,
+            });
+            driver.dispatch(Event::AccountsUpdated {
+                addresses: Some(vec![A1.to_owned(), A2.to_owned()]),
+            });
+            assert_eq!(store_file(), file, "the way out is byte for byte nothing");
+            assert_eq!(storage::generation(), writes, "and no write at all");
+            unchanged("the person's account is in front again");
+            assert_eq!(driver.view().sites, listed, "Settings lists what it listed");
+            assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [A1]);
+            assert!(
+                accounts_of(&mut driver, "t2", NEW_SITE, "n1").is_empty(),
+                "what was connected inside ended with the visit"
+            );
+        });
+    }
+
+    /// The same way in, told the account is the person's own: an ordinary
+    /// switch, which every connection follows and the store records. It is
+    /// what the desktop said for a test wallet before PR 4, and why
+    /// [`wallet_news`] must say otherwise.
+    #[test]
+    fn told_the_account_is_the_persons_own_their_sites_follow_it() {
+        storage::tests::with_temp_state("dbr-host-no-space", || {
+            seed_the_persons_sites(A1);
+            let mut driver = booted();
+            let sites = site_store();
+            driver.dispatch(Event::AccountsUpdated {
+                addresses: Some(vec![A1.to_owned(), A2.to_owned(), T1.to_owned()]),
+            });
+            driver.dispatch(Event::AccountSwitched {
+                address: T1.to_owned(),
+                now_ms: 1_757_000_400_000.0,
+                space: false,
+            });
+            assert_ne!(site_store(), sites, "every connection was re-pinned");
+            let stored = storage::read_value("vela.perm.https://dapp.example")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            assert_eq!(stored["address"], json!(T1));
+        });
+    }
+
+    fn real_account(id: &str, address: &str) -> vela_core::app::Account {
+        vela_core::app::Account {
+            id: id.to_owned(),
+            name: "Everyday wallet".to_owned(),
+            address: address.to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: "2026-08-25T00:00:00.000Z".to_owned(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: id.to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: "Everyday wallet".to_owned(),
+                transports: "usb".to_owned(),
+                signer_origin: None,
+            }],
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        }
+    }
+
+    /// The real session machine over the store, as `session.rs` pumps it.
+    struct Wallets {
+        host: CoreHost<vela_core::app::session::Session>,
+    }
+
+    impl Wallets {
+        fn boot() -> Self {
+            let mut wallets = Self {
+                host: CoreHost::new(),
+            };
+            wallets.send(vela_core::app::session::Event::Boot);
+            wallets
+        }
+
+        fn send(&mut self, event: vela_core::app::session::Event) {
+            let mut pending = self.host.dispatch(event);
+            while let Some(next) = pending.pop() {
+                if crate::executor::session_blocks(&next.operation) {
+                    continue;
+                }
+                let result = crate::executor::perform_session(&next.operation);
+                pending.extend(self.host.resolve(next.id, result));
+            }
+        }
+
+        fn view(&self) -> vela_core::app::session::SessionView {
+            self.host.view()
+        }
+
+        /// Bring `address`'s account to the front, as the switcher does.
+        fn switch_to(&mut self, address: &str) {
+            let index = self
+                .view()
+                .accounts
+                .iter()
+                .find(|row| row.account.address == address)
+                .map(|row| row.index)
+                .unwrap_or_else(|| unreachable!("no account at {address}"));
+            self.send(vela_core::app::session::Event::SwitchAccount { index });
+        }
+    }
+
+    /// Tell the machine what [`BrowserHost::follow_wallet`] would, and hand
+    /// back whether a switch was said and into a space.
+    fn follow(
+        driver: &mut BrowserDriver,
+        told: &mut Option<ToldWallet>,
+        session: &vela_core::app::session::SessionView,
+    ) -> Option<bool> {
+        let (now, events) = wallet_news(session, told.as_ref())?;
+        *told = Some(now);
+        let mut space = None;
+        for event in events {
+            if let Event::AccountSwitched { space: into, .. } = &event {
+                space = Some(*into);
+            }
+            driver.dispatch(event);
+        }
+        space
+    }
+
+    /// What the machine hears about the wallet: nothing while the session is
+    /// still reading, nothing when nothing changed, the list alone when the
+    /// account in front stayed, and the switch — never into a space for an
+    /// account of the person's own.
+    #[test]
+    fn the_wallet_is_told_once_and_a_persons_account_is_never_a_space() {
+        storage::tests::with_temp_state("dbr-host-wallet-news", || {
+            let first = real_account("cred0", A1);
+            let second = real_account("cred1", A2);
+            assert!(storage::save_account(&first).is_ok());
+            let wallets = Wallets::boot();
+            let mut loading = wallets.view();
+            loading.loading = true;
+            assert!(
+                wallet_news(&loading, None).is_none(),
+                "a cold read says nothing"
+            );
+
+            let Some((told, events)) = wallet_news(&wallets.view(), None) else {
+                unreachable!("a wallet that was never told is news");
+            };
+            assert_eq!(told, (vec![A1.to_owned()], A1.to_owned()));
+            assert!(matches!(
+                events.as_slice(),
+                [
+                    Event::AccountsUpdated { addresses: Some(all) },
+                    Event::AccountSwitched { address, space: false, .. },
+                ] if all == &[A1.to_owned()] && address == A1
+            ));
+            assert!(wallet_news(&wallets.view(), Some(&told)).is_none());
+
+            // Another account added, the one in front unchanged: the list.
+            assert!(storage::save_account(&second).is_ok());
+            let mut wallets = Wallets::boot();
+            let Some((told, events)) = wallet_news(&wallets.view(), Some(&told)) else {
+                unreachable!("a longer list is news");
+            };
+            assert!(matches!(events.as_slice(), [Event::AccountsUpdated { .. }]));
+            // And a switch to it, as the host follows it: said once.
+            wallets.switch_to(A2);
+            let mut driver = BrowserDriver::new();
+            let mut told = Some(told);
+            assert_eq!(follow(&mut driver, &mut told, &wallets.view()), Some(false));
+            assert_eq!(
+                told,
+                Some((vec![A1.to_owned(), A2.to_owned()], A2.to_owned()))
+            );
+            assert_eq!(follow(&mut driver, &mut told, &wallets.view()), None);
+        });
+    }
+
+    /// PR 4 item 5, from the session to the store. A parallel-space test
+    /// wallet is an ordinary record in the same store, known by its keys: the
+    /// fixture keyset's. Switching to it is told as a space — with
+    /// `VELA_PARALLEL_SPACE` unset, as on a dev run that finds the wallet an
+    /// earlier space run left — and the person's sites are on disk what they
+    /// were through the visit, the switch back and the test wallet's removal.
+    #[cfg(feature = "dev-fixtures")]
+    #[test]
+    fn a_test_wallet_in_front_is_a_space_and_the_persons_sites_survive_it() {
+        use vela_core::dev_fixtures as fixtures;
+        storage::tests::with_temp_state("dbr-host-space-session", || {
+            assert!(
+                !crate::parallel_space::active(),
+                "the account says so, not the switch"
+            );
+            let Ok(fixture) = fixtures::account(0) else {
+                unreachable!("the keyset has a first key");
+            };
+            let mut test_wallet = real_account(&fixture.credential_id_hex, &fixture.address);
+            test_wallet.keys[0]
+                .public_key_hex
+                .clone_from(&fixture.public_key_hex);
+            test_wallet
+                .public_key_hex
+                .clone_from(&fixture.public_key_hex);
+            assert!(storage::save_account(&real_account("cred0", A1)).is_ok());
+            assert!(storage::save_account(&test_wallet).is_ok());
+            assert!(storage::save_active_index(0).is_ok());
+            seed_the_persons_sites(A1);
+
+            let mut wallets = Wallets::boot();
+            let mut told = None;
+            let mut driver = BrowserDriver::new();
+            assert_eq!(follow(&mut driver, &mut told, &wallets.view()), Some(false));
+            driver.dispatch(Event::NetworksChanged {
+                chain_ids: vec![1, 100, 8453],
+            });
+            driver.dispatch(Event::Start);
+            ask_in(&mut driver, TAB, DAPP, json!({"t":"hello","doc":"d1"}));
+            ask_in(&mut driver, "t2", NEW_SITE, json!({"t":"hello","doc":"n1"}));
+            assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [A1]);
+            let sites = site_store();
+            let listed = driver.view().sites;
+            let unchanged = |when: &str| assert_eq!(site_store(), sites, "{when}");
+
+            // In, by the switcher. The session records which account is in
+            // front; the browser machine writes nothing.
+            wallets.switch_to(&fixture.address);
+            let writes = storage::generation();
+            assert_eq!(follow(&mut driver, &mut told, &wallets.view()), Some(true));
+            assert_eq!(storage::generation(), writes, "the way in wrote nothing");
+            unchanged("the test wallet came to the front");
+
+            visit_the_space(&mut driver, &fixture.address, &unchanged);
+
+            // Out, by the switcher.
+            wallets.switch_to(A1);
+            let writes = storage::generation();
+            assert_eq!(follow(&mut driver, &mut told, &wallets.view()), Some(false));
+            assert_eq!(storage::generation(), writes, "the way out wrote nothing");
+            unchanged("the person's account is in front again");
+            assert_eq!(driver.view().sites, listed);
+            assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [A1]);
+            assert!(accounts_of(&mut driver, "t2", NEW_SITE, "n1").is_empty());
+
+            // The test wallet signed out: a shorter list, and still nothing.
+            assert!(storage::remove_account(&fixture.address).is_ok());
+            let wallets = Wallets::boot();
+            let writes = storage::generation();
+            assert_eq!(follow(&mut driver, &mut told, &wallets.view()), None);
+            assert_eq!(storage::generation(), writes);
+            unchanged("the test wallet was removed");
+            assert_eq!(driver.view().sites, listed);
+        });
+    }
+
+    /// A launch with the test wallet already in front — the parallel space
+    /// started on a store that holds it: the stored sites are the person's,
+    /// set aside as they are read, and they are there again once the person's
+    /// account is.
+    #[cfg(feature = "dev-fixtures")]
+    #[test]
+    fn a_launch_inside_the_space_reads_the_persons_sites_and_keeps_them() {
+        use vela_core::dev_fixtures as fixtures;
+        storage::tests::with_temp_state("dbr-host-space-launch", || {
+            let Ok(fixture) = fixtures::account(0) else {
+                unreachable!("the keyset has a first key");
+            };
+            let test_wallet = real_account(&fixture.credential_id_hex, &fixture.address);
+            assert!(storage::save_account(&real_account("cred0", A1)).is_ok());
+            assert!(storage::save_account(&test_wallet).is_ok());
+            assert!(storage::save_active_index(1).is_ok());
+            seed_the_persons_sites(A1);
+            let sites = site_store();
+
+            let mut wallets = Wallets::boot();
+            let mut told = None;
+            let mut driver = BrowserDriver::new();
+            assert_eq!(follow(&mut driver, &mut told, &wallets.view()), Some(true));
+            driver.dispatch(Event::NetworksChanged {
+                chain_ids: vec![1, 100, 8453],
+            });
+            let writes = storage::generation();
+            driver.dispatch(Event::Start);
+            assert!(driver.view().sites.is_empty(), "the space has no site yet");
+            ask_in(&mut driver, TAB, DAPP, json!({"t":"hello","doc":"d1"}));
+            assert!(accounts_of(&mut driver, TAB, DAPP, "d1").is_empty());
+            assert_eq!(storage::generation(), writes);
+
+            wallets.switch_to(A1);
+            let writes = storage::generation();
+            assert_eq!(follow(&mut driver, &mut told, &wallets.view()), Some(false));
+            assert_eq!(storage::generation(), writes);
+            assert_eq!(site_store(), sites);
+            assert_eq!(driver.view().sites.len(), 2);
+            assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [A1]);
         });
     }
 }
