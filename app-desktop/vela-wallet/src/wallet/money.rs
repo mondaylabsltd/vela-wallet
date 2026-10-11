@@ -2200,6 +2200,8 @@ mod tests {
                             fee_token: gas_fee_token.clone(),
                             auto_fee_token: *auto_fee_token,
                             number: crate::executor::format_prefs::current().number,
+                            // Read just above, and passed as `deployed`.
+                            read_deployment: None,
                         });
                         self.pump_fee(fee_pending);
                         let view = self.fee.view();
