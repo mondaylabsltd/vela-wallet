@@ -78,6 +78,8 @@ use crate::settings::components::{
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
+#[cfg(test)]
+use crate::settings::live::key_holder;
 use crate::settings::model::NetworkRowModel;
 use crate::signing::SigningStrings;
 use crate::signing::components as signing_components;
@@ -854,6 +856,11 @@ pub struct WalletPage {
         vela_core::wallet_keys::KeysSource,
         Vec<vela_core::wallet_keys::WalletKeyRow>,
     )>,
+    /// The same wallet's keys as this device's own record gives them
+    /// (`settings_live::device_key_rows`), read the moment the account comes
+    /// to the front: what the keys block draws until `keys_check` lands, so
+    /// its rows stand where they will from the first frame.
+    keys_device: Vec<vela_core::wallet_keys::WalletKeyRow>,
     /// Which key rows are open, by founding position; and the `row:label` of
     /// the value just copied, for the button's "Copied".
     keys_open: std::collections::HashSet<usize>,
@@ -990,6 +997,8 @@ pub struct WalletPage {
     sim_pin_landed: bool,
     /// `VELA_SIGN_FEE=a>b`: the pinned fee has landed on its second state.
     fee_pin_landed: bool,
+    /// `VELA_KEYS=a>b`: the pinned keys block has landed on its second state.
+    keys_pin_landed: bool,
     /// The sidebar's network list — twenty-odd chains outgrow a short window.
     networks_scroll: crate::ui::SmoothScroll,
     /// The settings panel's, for the same bar.
@@ -1266,6 +1275,36 @@ enum FootPlace {
 /// body and half starts the foot, the hairline on the seam.
 const FOOT_GAP: f32 = 16.;
 
+/// The least width a key row keeps for the key's name and the line under it
+/// (who holds it, and its short id) before its pills may take the rest. It
+/// was 180, with the line under the name free to wrap; that line is one line
+/// now, and at 200 it holds "Apple Passwords · abcd…1234" whole beside three
+/// English pills, while three Chinese pills still fit beside it on one line.
+/// A longer holder ("Google Password Manager") is cut there — only in the
+/// row of the key this device signs with, the one with three pills.
+const KEY_NAME_MIN_W: f32 = 200.;
+
+/// How wide the bar is that stands for who holds a key while the registry is
+/// asked — about a short vault name.
+const KEY_HOLDER_PENDING_W: f32 = 88.;
+
+/// A part of a key row nobody has vouched for yet: `shape`, breathing — the
+/// hero's own skeleton pace — so it reads as on its way, not as a blank.
+fn key_pending(id: impl Into<ElementId>, shape: Div) -> impl IntoElement {
+    shape.with_animation(
+        id,
+        gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+        |shape, delta| {
+            let t = if delta < 0.5 {
+                delta * 2.
+            } else {
+                2. - delta * 2.
+            };
+            shape.opacity(1. - 0.6 * t)
+        },
+    )
+}
+
 /// Between the signing account's row and the confirm under it, in the
 /// signing column's foot (PR 4 item 2). Half the foot's own 16: the row
 /// belongs to the button, and the 8 saved is body — at the design size the
@@ -1315,6 +1354,9 @@ fn consent_account(
 impl WalletPage {
     pub fn new(gallery: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut page = Self::with_section(Section::Wallet, gallery, window, cx);
+        if gallery {
+            Self::land_pinned_keys(cx);
+        }
         if gallery && let Some(tab) = GalleryTab::from_gallery_env() {
             page.select_tab(tab, window);
             // `VELA_SECTION=settings` with a chip: that chip's state as
@@ -1437,6 +1479,7 @@ impl WalletPage {
         if section == Section::Settings {
             page.pin_settings_page();
         }
+        Self::land_pinned_keys(cx);
         // `VELA_FEEDBACK_STATE` on the live route too: the signed-in page, in
         // one Feedback state — or, `autosend`, a REAL send of a report with
         // `VELA_SCREENSHOT_FILES` attached (078 round 3).
@@ -1446,6 +1489,26 @@ impl WalletPage {
             page.pin_feedback_state(&state);
         }
         page
+    }
+
+    /// `VELA_KEYS=asking3>3` (developer builds): the Account page's keys
+    /// block lands on its second state a moment after the window opens, as
+    /// the registry's answer does.
+    fn land_pinned_keys(cx: &mut Context<Self>) {
+        if settings_fixtures::keys_pin_lands().is_none() {
+            return;
+        }
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(signing_fixtures::SIM_PIN_LANDS_AFTER)
+                .await;
+            let _ = page.update(cx, |page, cx| {
+                page.keys_pin_landed = true;
+                page.pin_settings_scroll();
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// `VELA_SETTINGS_PAGE=signing` (developer builds): open Settings on a
@@ -1742,6 +1805,8 @@ impl WalletPage {
             verdict_reveal: std::rc::Rc::default(),
             sim_pin_landed: false,
             fee_pin_landed: false,
+            keys_pin_landed: false,
+            keys_device: Vec::new(),
             networks_scroll: crate::ui::SmoothScroll::new(),
             settings_scroll: crate::ui::SmoothScroll::new(),
             text_scale_slider: crate::ui::StepSlider::new(),
@@ -9804,6 +9869,13 @@ impl WalletPage {
             list = list.child(row).child(div().h(px(1.)).bg(theme.divider));
         }
 
+        // `VELA_KEYS`: the drawn page has no wallet and so no keys block;
+        // pinned, it draws the live one in the pinned state, where the
+        // signed-in page has it — over the way out.
+        let pinned_keys_block = self
+            .pinned_keys()
+            .is_some()
+            .then(|| self.keys_block(theme, cx));
         div()
             .flex()
             .flex_col()
@@ -9816,10 +9888,13 @@ impl WalletPage {
             )
             .child(list)
             .child(self.account_buttons(theme, false, cx))
+            .children(pinned_keys_block)
             .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
             .child(
                 div()
                     .id("settings-sign-out")
+                    .relative()
+                    .children(crate::dev_probe::mark("keys-next"))
                     .flex()
                     .items_center()
                     .gap(px(8.))
@@ -9915,6 +9990,13 @@ impl WalletPage {
             .key_route()
             .map(|route| route.credential_id)
             .unwrap_or_default();
+        // What the record itself says, at once and with nobody asked: the
+        // block's rows until the registry's answer fills them in.
+        self.keys_device = settings_live::device_key_rows(&device, &sign_in_credential);
+        // `VELA_KEYS`: the block is pinned, and nobody is asked.
+        if settings_fixtures::keys_pin().is_some() {
+            return;
+        }
         cx.spawn(async move |page, cx| {
             let asked = keys_address.clone();
             let answer = cx
@@ -9940,6 +10022,37 @@ impl WalletPage {
         self.ask_ethereum_backup(cx);
     }
 
+    /// `VELA_BACKUP_STATE` (developer builds): the copy-record row's answer
+    /// in the state it names — see [`Self::ask_ethereum_backup`].
+    fn pinned_backup() -> Option<crate::executor::registry::BackupAnswer> {
+        use vela_core::registry_backup::{BackupCall, BackupState, REGISTRY, TARGET_CHAIN};
+        let state = crate::dev_env::var!("VELA_BACKUP_STATE").and_then(|want| {
+            serde_json::from_value::<BackupState>(serde_json::Value::String(want)).ok()
+        })?;
+        Some(crate::executor::registry::BackupAnswer {
+            state,
+            call: (state == BackupState::NotBackedUp).then(|| BackupCall {
+                chain_id: TARGET_CHAIN,
+                to: REGISTRY.to_owned(),
+                value: "0".to_owned(),
+                data: "0x".to_owned(),
+            }),
+            row: state.row(),
+        })
+    }
+
+    /// The copy-record row's answer as the block draws it: the session's —
+    /// or, under `VELA_KEYS`, still out while the keys are being asked about
+    /// and `VELA_BACKUP_STATE`'s once they are in (the two reads start
+    /// together and their answers land a moment apart).
+    fn backup_answer(&self) -> Option<crate::executor::registry::BackupAnswer> {
+        match self.pinned_keys() {
+            Some(settings_fixtures::KeysPin::Asking(_)) => None,
+            Some(_) => Self::pinned_backup(),
+            None => self.backup_check.clone(),
+        }
+    }
+
     /// The backup half of the check, alone — what "Could not check" asks
     /// again, without taking the key list back to its skeleton.
     fn ask_ethereum_backup(&mut self, cx: &mut Context<Self>) {
@@ -9952,23 +10065,8 @@ impl WalletPage {
         // walk — a wallet from before registry V13, or one never copied,
         // cannot be had on demand, and each state's row has to be looked at.
         // The same env-pin family as `VELA_SETTINGS_STATE`.
-        if let Some(state) = crate::dev_env::var!("VELA_BACKUP_STATE").and_then(|want| {
-            serde_json::from_value::<vela_core::registry_backup::BackupState>(
-                serde_json::Value::String(want),
-            )
-            .ok()
-        }) {
-            use vela_core::registry_backup::{BackupCall, BackupState, REGISTRY, TARGET_CHAIN};
-            self.backup_check = Some(crate::executor::registry::BackupAnswer {
-                state,
-                call: (state == BackupState::NotBackedUp).then(|| BackupCall {
-                    chain_id: TARGET_CHAIN,
-                    to: REGISTRY.to_owned(),
-                    value: "0".to_owned(),
-                    data: "0x".to_owned(),
-                }),
-                row: state.row(),
-            });
+        if let Some(pinned) = Self::pinned_backup() {
+            self.backup_check = Some(pinned);
             return;
         }
         let address = account.address.clone();
@@ -10011,7 +10109,8 @@ impl WalletPage {
     fn backup_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         use crate::executor::registry::{BackupPress, backup_line};
         use vela_core::registry_backup::BackupState;
-        let line = backup_line(self.backup_check.as_ref())?;
+        let answer = self.backup_answer();
+        let line = backup_line(answer.as_ref())?;
         let title = self.loc.t(&line.title_key);
         let subtitle = self.loc.t(&line.subtitle_key);
         let colour = if line.positive {
@@ -10024,8 +10123,7 @@ impl WalletPage {
             BackupPress::Retry => (None, true),
             BackupPress::Nothing => (None, false),
         };
-        let backed_up = self
-            .backup_check
+        let backed_up = answer
             .as_ref()
             .is_some_and(|answer| answer.state == BackupState::BackedUp);
         let actionable = call.is_some() || retry;
@@ -10077,10 +10175,21 @@ impl WalletPage {
                             .child(title),
                     )
                     .child(
+                        // The row's status: ONE line through "Checking…" and
+                        // every answer that replaces it (PR 4 item 13.1), so
+                        // the row is one height whatever the chain says. The
+                        // longest of them, in any language, is well inside
+                        // the column at the narrowest window (a test holds
+                        // the corpus to that); past it, it is cut, not
+                        // wrapped.
                         div()
+                            .min_w(px(0.))
+                            .whitespace_nowrap()
+                            .overflow_hidden()
+                            .text_ellipsis()
                             .text_size(theme::text_row_sub())
                             .text_color(colour)
-                            .child(crate::ui::prose(subtitle)),
+                            .child(subtitle),
                     ),
             );
         // What the row's end says it will do: ask again, go on, or — done.
@@ -10449,6 +10558,18 @@ impl WalletPage {
         )
     }
 
+    /// `VELA_KEYS` (developer builds): the state the Account page's keys
+    /// block is pinned to. The block is the signed-in page's alone (a window
+    /// with no wallet has no keys to list), so the pin stands in for that
+    /// account's own keys — and for the registry, which is then not asked.
+    fn pinned_keys(&self) -> Option<settings_fixtures::KeysPin> {
+        if self.keys_pin_landed {
+            settings_fixtures::keys_pin_lands()
+        } else {
+            settings_fixtures::keys_pin()
+        }
+    }
+
     /// The keys that control this wallet, with their Ethereum backup beneath
     /// them (spec 062) — one block. A person offered "back up your keys" is
     /// owed the sight of them first: what each is called, who is holding it,
@@ -10460,14 +10581,7 @@ impl WalletPage {
         let title = s.keys_title.clone();
         let subtitle = s.keys_subtitle.clone();
         let from_device = s.keys_from_device.clone();
-        let synced = s.keys_synced.clone();
-        let not_synced = s.keys_not_synced.clone();
-        let key_n = s.keys_key_n.clone();
-        let lines = (
-            s.keys_provider_platform.clone(),
-            s.keys_provider_generic.clone(),
-            s.keys_provider_security_key.clone(),
-        );
+        let words = settings_live::KeyRowWords::of(s);
         // Spec 102: a key is captioned by where it LIVES — never by the page
         // it was made on. A wallet on the person's own signing domain says
         // that domain once, by the title: only its page can reach these keys.
@@ -10479,8 +10593,6 @@ impl WalletPage {
                     &[("domain", &account.signing_domain)],
                 )
             });
-        let user_verified = s.keys_user_verified.clone();
-        let signs_here = s.keys_signs_here.clone();
         let labels = (
             s.keys_public_key.clone(),
             s.keys_credential.clone(),
@@ -10492,10 +10604,29 @@ impl WalletPage {
         // The paragraph under the backup row, when the core names one
         // (`BackupLine::explain_key`): none under a wallet that can never be
         // copied (PR 3 note 6).
-        let explain = crate::executor::registry::backup_line(self.backup_check.as_ref())
+        let explain = crate::executor::registry::backup_line(self.backup_answer().as_ref())
             .and_then(|line| line.explain_key)
             .map(|key| self.loc.t(&key));
-        let check = self.keys_check.clone();
+        // `VELA_KEYS`: the block in the pinned state.
+        let pinned = self.pinned_keys();
+        let check = match pinned {
+            Some(pin) => pin.answer(),
+            None => self.keys_check.clone(),
+        };
+        // The rows: the walk's answer once it is in; until then, what this
+        // device's own record already says — how many keys, what they are
+        // called, which one signs here (`settings_live::device_key_rows`).
+        let (source, keys, answered) = match check {
+            Some((source, keys)) => (Some(source), keys, true),
+            None => (
+                None,
+                match pinned {
+                    Some(pin) => pin.device_rows(),
+                    None => self.keys_device.clone(),
+                },
+                false,
+            ),
+        };
 
         let mut header = div().flex().items_baseline().gap(px(8.)).child(
             div()
@@ -10504,7 +10635,8 @@ impl WalletPage {
                 .text_color(theme.fg_base)
                 .child(title),
         );
-        if let Some((_, keys)) = &check {
+        // How many, from the first frame: the record knows.
+        if !keys.is_empty() {
             header = header.child(
                 div()
                     .text_size(theme::text_row_sub())
@@ -10538,7 +10670,18 @@ impl WalletPage {
                     .child(keys_on),
             );
         }
+        // The block, each of its rows and the row under it say where they
+        // are to a measurement pass (`crate::dev_probe`).
         let mut block = div()
+            .relative()
+            .children(crate::dev_probe::mark("keys-block"))
+            // …under a second name that says whether the answer is in, so a
+            // pass that watches it land knows that it did.
+            .children(crate::dev_probe::mark(if answered {
+                "keys-answered"
+            } else {
+                "keys-asking"
+            }))
             .flex()
             .flex_col()
             .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
@@ -10552,329 +10695,414 @@ impl WalletPage {
                     .child(crate::ui::prose(subtitle)),
             );
 
-        match check {
-            // The shape of one row, so the block does not jump when the answer lands.
-            None => {
-                block = block.child(
+        if keys.is_empty() && !answered {
+            // No record of a key at all yet: the shape of one row.
+            block = block.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .py(px(14.))
+                    .border_b_1()
+                    .border_color(theme.divider)
+                    .child(
+                        div()
+                            .size(px(theme::KEY_ROW_MARK))
+                            .rounded_full()
+                            .bg(theme.divider),
+                    )
+                    .child(
+                        div()
+                            .w(px(160.))
+                            .h(px(10.))
+                            .rounded_full()
+                            .bg(theme.divider),
+                    ),
+            );
+        }
+        // One row per key, at its final size from the first frame (PR 4 item
+        // 13.1): asked or answered, a row is the same boxes — its mark, its
+        // name over one line of who holds it, the room of the fullest set of
+        // pills it can end with, and the chevron's place. The registry's
+        // answer fills them in; it adds no row and moves none.
+        for (index, key) in keys.iter().enumerate() {
+            let model = settings_live::key_row(key, index, answered, &words);
+
+            let mut row = div().flex().items_center().gap(px(12.)).py(px(14.));
+            if !model.mark_known {
+                // Nobody has said whose vault this is yet: a disc, not a
+                // guess at one.
+                row = row.child(key_pending(
+                    ("settings-key-pending-mark", index),
                     div()
+                        .size(px(theme::KEY_ROW_MARK))
+                        .flex_none()
+                        .rounded_full()
+                        .bg(theme.divider),
+                ));
+            } else if let Some(mark) = super::components::passkey_mark(
+                &mut self.identicons,
+                &key.aaguid,
+                theme.is_dark(),
+                theme::KEY_ROW_MARK,
+            ) {
+                row = row.child(mark);
+            } else if let Some(mark) = super::components::passkey_fallback_mark(
+                &mut self.identicons,
+                &key.authenticator_attachment,
+                &key.transports,
+                key.method == "security_key",
+                theme,
+                theme::KEY_ROW_MARK,
+            ) {
+                row = row.child(mark);
+            } else {
+                row = row.child(
+                    div()
+                        .size(px(theme::KEY_ROW_MARK))
+                        .flex_none()
                         .flex()
                         .items_center()
-                        .gap(px(12.))
-                        .py(px(14.))
-                        .border_b_1()
-                        .border_color(theme.divider)
-                        .child(
-                            div()
-                                .size(px(theme::KEY_ROW_MARK))
-                                .rounded_full()
-                                .bg(theme.divider),
-                        )
-                        .child(
-                            div()
-                                .w(px(160.))
-                                .h(px(10.))
-                                .rounded_full()
-                                .bg(theme.divider),
-                        ),
+                        .justify_center()
+                        .child(icon_img(
+                            &mut self.icons,
+                            Icon::Lock,
+                            false,
+                            theme.fg_subtle,
+                            18.,
+                        )),
                 );
             }
-            Some((source, keys)) => {
-                for (index, key) in keys.iter().enumerate() {
-                    let name = if key.name.is_empty() {
-                        key_n.replace("{{n}}", &(index + 1).to_string())
-                    } else {
-                        key.name.clone()
-                    };
-                    let holder = key_holder(key, &lines);
-                    let body = key.public_key_hex.trim_start_matches("04");
-                    let fingerprint = (body.len() >= 8)
-                        .then(|| format!("{}…{}", &body[..4], &body[body.len() - 4..]));
-
-                    let mut row = div().flex().items_center().gap(px(12.)).py(px(14.));
-                    if let Some(mark) = super::components::passkey_mark(
-                        &mut self.identicons,
-                        &key.aaguid,
-                        theme.is_dark(),
-                        theme::KEY_ROW_MARK,
-                    ) {
-                        row = row.child(mark);
-                    } else if let Some(mark) = super::components::passkey_fallback_mark(
-                        &mut self.identicons,
-                        &key.authenticator_attachment,
-                        &key.transports,
-                        key.method == "security_key",
-                        theme,
-                        theme::KEY_ROW_MARK,
-                    ) {
-                        row = row.child(mark);
-                    } else {
-                        row = row.child(
-                            div()
-                                .size(px(theme::KEY_ROW_MARK))
-                                .flex_none()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(icon_img(
-                                    &mut self.icons,
-                                    Icon::Lock,
-                                    false,
-                                    theme.fg_subtle,
-                                    18.,
-                                )),
-                        );
-                    }
-                    let mut meta = div()
-                        .flex()
-                        .flex_wrap()
-                        .items_center()
-                        .gap(px(6.))
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_subtle)
-                        .child(holder);
-                    if let Some(fingerprint) = fingerprint {
-                        meta = meta
-                            .child("·")
-                            .child(div().font_family(theme::font_mono()).child(fingerprint));
-                    }
-                    // The name keeps room to be read: in a long language the
-                    // pills wrap onto more lines rather than squeezing it to a
-                    // letter per line (ru, found 2026-09-26).
-                    row = row.child(
+            // Who holds the key, then its short id — ONE line, whatever the
+            // holder turns out to be called: it used to wrap under a long
+            // name, so a row's height waited on the registry's words. A
+            // holder longer than its room is cut, the short id never.
+            let holder = match &model.holder {
+                Some(holder) => div()
+                    .min_w(px(0.))
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(holder.clone())
+                    .into_any_element(),
+                // Not known yet: a bar on the line's own height — never the
+                // device's guess at the word (see `KeyRowModel::holder`).
+                None => div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .child(key_pending(
+                        ("settings-key-pending-holder", index),
                         div()
-                            .flex_1()
-                            .min_w(px(180.))
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_title())
-                                    .text_color(theme.fg_base)
-                                    .child(name),
-                            )
-                            .child(meta),
-                    );
-                    let mut badges = div()
-                        .flex()
-                        .flex_wrap()
-                        .items_center()
-                        .justify_end()
-                        .gap(px(8.))
-                        .min_w(px(0.));
-                    // The key this device signs with stands out from every
-                    // other row (founder, 2026-09-26): filled, first, ticked —
-                    // the explorer's pills beside it are only outlined.
-                    if key.signs_here {
-                        badges = badges.child(
-                            div()
-                                .id("settings-key-signs-here")
-                                .flex_none()
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .px(px(8.))
-                                .py(px(2.))
-                                .rounded_full()
-                                .bg(theme.success_soft)
-                                // Same height as the outlined pills beside it.
-                                .border_1()
-                                .border_color(theme.success_soft)
-                                .text_size(theme::text_row_sub())
-                                .font_weight(gpui::FontWeight::MEDIUM)
-                                .text_color(theme.success_base)
-                                .child(icon_img(
-                                    &mut self.icons,
-                                    Icon::Check,
-                                    false,
-                                    theme.success_base,
-                                    12.,
-                                ))
-                                .child(signs_here.clone()),
-                        );
-                    }
-                    // The registry explorer's pills; one nobody can vouch for is not drawn.
-                    let mut pills: Vec<(gpui::SharedString, gpui::Hsla)> = Vec::new();
-                    if key.user_verified == Some(true) {
-                        pills.push((user_verified.clone(), theme.info_base));
-                    }
-                    if let Some(is_synced) = key.synced {
-                        pills.push(if is_synced {
-                            (synced.clone(), theme.success)
-                        } else {
-                            (not_synced.clone(), theme.fg_subtle)
-                        });
-                    }
-                    for (text, colour) in pills {
-                        badges = badges.child(
-                            div()
-                                .flex_none()
-                                .px(px(8.))
-                                .py(px(2.))
-                                .rounded_full()
-                                .border_1()
-                                .border_color(colour)
-                                .text_size(theme::text_row_sub())
-                                .text_color(colour)
-                                .child(text),
-                        );
-                    }
-                    row = row.child(badges);
-
-                    // What the row opens onto: the explorer's facts, the two a
-                    // person pastes elsewhere copyable. Nothing to open when only
-                    // the device answered.
-                    let transport = [
-                        key.authenticator_attachment.as_str(),
-                        key.transports.as_str(),
-                    ]
-                    .into_iter()
-                    .filter(|part| !part.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" · ");
-                    let details: Vec<(gpui::SharedString, String, bool, bool)> = [
-                        (
-                            labels.0.clone(),
-                            if key.public_key_hex.is_empty() {
-                                String::new()
-                            } else {
-                                format!("0x{}", key.public_key_hex)
-                            },
-                            true,
-                            true,
-                        ),
-                        (labels.1.clone(), key.credential_id.clone(), true, true),
-                        (
-                            gpui::SharedString::from("AAGUID"),
-                            key.aaguid.clone(),
-                            true,
-                            false,
-                        ),
-                        (labels.2.clone(), transport, false, false),
-                        (labels.3.clone(), key.attestation_hex.clone(), true, false),
-                    ]
-                    .into_iter()
-                    .filter(|(_, value, _, _)| !value.is_empty())
-                    .collect();
-                    // A row with no credential id came from the device alone and
-                    // has nothing worth opening.
-                    let expandable = !key.credential_id.is_empty();
-                    let is_open = self.keys_open.contains(&index);
-                    let mut stateful = row.id(("settings-key-row", index));
-                    if expandable {
-                        stateful = stateful
-                            .child(icon_img(
-                                &mut self.icons,
-                                if is_open {
-                                    Icon::ChevronUp
-                                } else {
-                                    Icon::ChevronDown
-                                },
-                                false,
-                                theme.fg_subtle,
-                                14.,
-                            ))
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                if !page.keys_open.remove(&index) {
-                                    page.keys_open.insert(index);
-                                }
-                                cx.notify();
-                            }));
-                    }
-                    let mut entry = div()
-                        .flex()
-                        .flex_col()
-                        .border_b_1()
-                        .border_color(theme.divider)
-                        .child(stateful);
-                    if expandable && is_open {
-                        let mut card = div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(12.))
-                            .p(px(16.))
-                            .mb(px(12.))
-                            .rounded(px(12.))
-                            .border_1()
-                            .border_color(theme.divider)
-                            .bg(theme.bg_sunken);
-                        for (slot, (label, value, mono, copyable)) in
-                            details.into_iter().enumerate()
-                        {
-                            let mut shown = div()
-                                .flex_1()
-                                .min_w(px(0.))
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.fg_base)
-                                .child(gpui::SharedString::from(value.clone()));
-                            if mono {
-                                shown = shown.font_family(theme::font_mono());
-                            }
-                            let mut line = div()
-                                .flex()
-                                .items_start()
-                                .gap(px(12.))
-                                .child(
-                                    div()
-                                        .w(px(110.))
-                                        .flex_none()
-                                        .text_size(theme::text_row_sub())
-                                        .text_color(theme.fg_subtle)
-                                        .child(label),
-                                )
-                                .child(shown);
-                            if copyable {
-                                let copy_id = format!("{index}:{slot}");
-                                let copy_id = format!("key:{copy_id}");
-                                let done = self.copied.as_deref() == Some(copy_id.as_str());
-                                line = line.child(
-                                    div()
-                                        .id(("settings-key-copy", index * 8 + slot))
-                                        .flex_none()
-                                        .px(px(8.))
-                                        .py(px(2.))
-                                        .rounded(px(6.))
-                                        .border_1()
-                                        .border_color(theme.divider)
-                                        .text_size(theme::text_row_sub())
-                                        .text_color(theme.fg_subtle)
-                                        .cursor_pointer()
-                                        .child(if done {
-                                            copied_label.clone()
-                                        } else {
-                                            copy_label.clone()
-                                        })
-                                        .on_click(cx.listener(move |page, _, _, cx| {
-                                            // `KeysBlock`: "Copied" for 1.2 s, then
-                                            // the button is a button again.
-                                            page.copy_text(
-                                                copy_id.clone(),
-                                                value.clone(),
-                                                std::time::Duration::from_millis(1200),
-                                                cx,
-                                            );
-                                        })),
-                                );
-                            }
-                            card = card.child(line);
-                        }
-                        entry = entry.child(card);
-                    }
-                    block = block.child(entry);
-                }
-                if source == KeysSource::Device {
-                    block = block.child(
-                        div()
-                            .py(px(8.))
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(from_device),
-                    );
-                }
+                            .w(px(KEY_HOLDER_PENDING_W))
+                            .h(px(10.))
+                            .rounded_full()
+                            .bg(theme.divider),
+                    ))
+                    // An unpainted glyph gives the box the text line's height.
+                    .child(div().invisible().child("\u{200b}"))
+                    .into_any_element(),
+            };
+            let mut meta = div()
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .min_w(px(0.))
+                .whitespace_nowrap()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(holder);
+            if let Some(fingerprint) = model.fingerprint.clone() {
+                meta = meta.child(div().flex_none().child("·")).child(
+                    div()
+                        .flex_none()
+                        .font_family(theme::font_mono())
+                        .child(fingerprint),
+                );
             }
+            // The name keeps room to be read: in a long language the
+            // pills wrap onto more lines rather than squeezing it to a
+            // letter per line (ru, found 2026-09-26).
+            row = row.child(
+                div()
+                    .flex_1()
+                    .min_w(px(KEY_NAME_MIN_W))
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            .child(model.name.clone()),
+                    )
+                    .child(meta),
+            );
+            // The pills. Their box is the ROOM of the fullest set this row
+            // can end with — laid out and never painted — so it wraps, and
+            // is as tall, as it will be whatever the registry says; what is
+            // known is drawn over it.
+            let success_soft = theme.success_soft;
+            let success_base = theme.success_base;
+            let signs_here_pill = |icons: &mut crate::icons::IconCache, text: SharedString| {
+                // The key this device signs with stands out from every
+                // other row (founder, 2026-09-26): filled, first, ticked —
+                // the explorer's pills beside it are only outlined.
+                div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .px(px(8.))
+                    .py(px(2.))
+                    .rounded_full()
+                    .bg(success_soft)
+                    // Same height as the outlined pills beside it.
+                    .border_1()
+                    .border_color(success_soft)
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(success_base)
+                    .child(icon_img(icons, Icon::Check, false, success_base, 12.))
+                    .child(text)
+            };
+            let outlined_pill = |text: SharedString, colour: gpui::Hsla| {
+                div()
+                    .flex_none()
+                    .px(px(8.))
+                    .py(px(2.))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(colour)
+                    .text_size(theme::text_row_sub())
+                    .text_color(colour)
+                    .child(text)
+            };
+            let pill_line = || {
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .justify_end()
+                    .gap(px(8.))
+            };
+            // A slot's box: as wide as the WIDEST of the words it may come
+            // to say, and one pill tall — the first word's pill in flow, the
+            // others laid out under it with no height of their own, so they
+            // lend the column their width and nothing else. ("Device-bound"
+            // is a hair wider than "Cloud-synced": sized by either one
+            // alone, a row's pills wrapped once the other landed.)
+            let slot_box = |words: &[SharedString], colour: gpui::Hsla| {
+                let mut stack = div().flex_none().flex().flex_col();
+                for (nth, text) in words.iter().enumerate() {
+                    let pill = outlined_pill(text.clone(), colour);
+                    stack = stack.child(if nth == 0 {
+                        pill
+                    } else {
+                        div().h(px(0.)).overflow_hidden().child(pill)
+                    });
+                }
+                stack
+            };
+            let mut room = pill_line().invisible();
+            for (slot, words) in model.room.iter().enumerate() {
+                room = room.child(match words.as_slice() {
+                    [text] if slot == 0 && key.signs_here => {
+                        signs_here_pill(&mut self.icons, text.clone())
+                    }
+                    words => slot_box(words, theme.fg_subtle),
+                });
+            }
+            let mut shown = pill_line().absolute().inset_0().content_center();
+            for (slot, pill) in model.pills.iter().enumerate() {
+                shown = match pill {
+                    settings_live::KeyPill::SignsHere(text) => shown.child(
+                        signs_here_pill(&mut self.icons, text.clone())
+                            .id("settings-key-signs-here"),
+                    ),
+                    settings_live::KeyPill::Fact(text, tone) => shown.child(outlined_pill(
+                        text.clone(),
+                        match tone {
+                            settings_live::PillTone::Info => theme.info_base,
+                            settings_live::PillTone::Good => theme.success,
+                            settings_live::PillTone::Quiet => theme.fg_subtle,
+                        },
+                    )),
+                    // Nobody has vouched for it yet: a quiet capsule the
+                    // size of its slot, with no word in it.
+                    settings_live::KeyPill::Pending(words) => shown.child(key_pending(
+                        ("settings-key-pending-pill", index * 4 + slot),
+                        slot_box(words, gpui::transparent_black())
+                            .rounded_full()
+                            .bg(theme.divider),
+                    )),
+                };
+            }
+            row = row.child(div().relative().min_w(px(0.)).child(room).child(shown));
+
+            // What the row opens onto: the explorer's facts, the two a
+            // person pastes elsewhere copyable. Nothing to open when only
+            // the device answered.
+            let transport = [
+                key.authenticator_attachment.as_str(),
+                key.transports.as_str(),
+            ]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · ");
+            let details: Vec<(gpui::SharedString, String, bool, bool)> = [
+                (
+                    labels.0.clone(),
+                    if key.public_key_hex.is_empty() {
+                        String::new()
+                    } else {
+                        format!("0x{}", key.public_key_hex)
+                    },
+                    true,
+                    true,
+                ),
+                (labels.1.clone(), key.credential_id.clone(), true, true),
+                (
+                    gpui::SharedString::from("AAGUID"),
+                    key.aaguid.clone(),
+                    true,
+                    false,
+                ),
+                (labels.2.clone(), transport, false, false),
+                (labels.3.clone(), key.attestation_hex.clone(), true, false),
+            ]
+            .into_iter()
+            .filter(|(_, value, _, _)| !value.is_empty())
+            .collect();
+            // Whether the row opens is the model's (`key_row`): only a row
+            // the registry answered for, and never before it has. The
+            // chevron's place is there either way, so the pills beside it
+            // stand where they will.
+            let expandable = model.expandable;
+            let is_open = self.keys_open.contains(&index);
+            let mut chevron = div().w(px(14.)).flex_none();
+            if expandable {
+                chevron = chevron.child(icon_img(
+                    &mut self.icons,
+                    if is_open {
+                        Icon::ChevronUp
+                    } else {
+                        Icon::ChevronDown
+                    },
+                    false,
+                    theme.fg_subtle,
+                    14.,
+                ));
+            }
+            let mut stateful = row.child(chevron).id(("settings-key-row", index));
+            if expandable {
+                stateful =
+                    stateful
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |page, _, _, cx| {
+                            if !page.keys_open.remove(&index) {
+                                page.keys_open.insert(index);
+                            }
+                            cx.notify();
+                        }));
+            }
+            let mut entry = div()
+                .relative()
+                .children(crate::dev_probe::mark(format!("keys-row-{index}")))
+                .flex()
+                .flex_col()
+                .border_b_1()
+                .border_color(theme.divider)
+                .child(stateful);
+            if expandable && is_open {
+                let mut card = div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(12.))
+                    .p(px(16.))
+                    .mb(px(12.))
+                    .rounded(px(12.))
+                    .border_1()
+                    .border_color(theme.divider)
+                    .bg(theme.bg_sunken);
+                for (slot, (label, value, mono, copyable)) in details.into_iter().enumerate() {
+                    let mut shown = div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_base)
+                        .child(gpui::SharedString::from(value.clone()));
+                    if mono {
+                        shown = shown.font_family(theme::font_mono());
+                    }
+                    let mut line = div()
+                        .flex()
+                        .items_start()
+                        .gap(px(12.))
+                        .child(
+                            div()
+                                .w(px(110.))
+                                .flex_none()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_subtle)
+                                .child(label),
+                        )
+                        .child(shown);
+                    if copyable {
+                        let copy_id = format!("{index}:{slot}");
+                        let copy_id = format!("key:{copy_id}");
+                        let done = self.copied.as_deref() == Some(copy_id.as_str());
+                        line = line.child(
+                            div()
+                                .id(("settings-key-copy", index * 8 + slot))
+                                .flex_none()
+                                .px(px(8.))
+                                .py(px(2.))
+                                .rounded(px(6.))
+                                .border_1()
+                                .border_color(theme.divider)
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_subtle)
+                                .cursor_pointer()
+                                .child(if done {
+                                    copied_label.clone()
+                                } else {
+                                    copy_label.clone()
+                                })
+                                .on_click(cx.listener(move |page, _, _, cx| {
+                                    // `KeysBlock`: "Copied" for 1.2 s, then
+                                    // the button is a button again.
+                                    page.copy_text(
+                                        copy_id.clone(),
+                                        value.clone(),
+                                        std::time::Duration::from_millis(1200),
+                                        cx,
+                                    );
+                                })),
+                        );
+                    }
+                    card = card.child(line);
+                }
+                entry = entry.child(card);
+            }
+            block = block.child(entry);
         }
-        match (self.backup_row(theme, cx), explain) {
+        if source == Some(KeysSource::Device) {
+            block = block.child(
+                div()
+                    .py(px(8.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(from_device),
+            );
+        }
+        let backup = self.backup_row(theme, cx).map(|row| {
+            div()
+                .relative()
+                .child(row)
+                .children(crate::dev_probe::mark("keys-backup"))
+        });
+        match (backup, explain) {
             // Under the row, what the copy makes public and what it costs
             // (`registry_backup::EXPLAIN_KEY`): the wallet's name, each key's
             // name, public key, credential ID and authenticator model, for
@@ -10994,6 +11222,10 @@ impl WalletPage {
             .child(
                 div()
                     .id("settings-sign-out-live")
+                    .relative()
+                    // The first row under the keys block, for a measurement
+                    // pass: it must not move when the block's answer lands.
+                    .children(crate::dev_probe::mark("keys-next"))
                     .flex()
                     .items_center()
                     .gap(px(8.))
@@ -21619,31 +21851,6 @@ fn signing_clock(chain_id: u32, seen_submitted_ms: Option<f64>) -> crate::signin
         typical_s: vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from),
         chain_name: crate::flows::live::chain_name(chain_id).to_string(),
         seen_submitted_ms,
-    }
-}
-
-/// Who is holding a key, for the line under its name in the keys list.
-///
-/// `lines` is the fallback trio in the core's method order — built-in passkey,
-/// phone or tablet, security key — used when no catalog can name the vault.
-///
-/// Spec 102: by where the key LIVES, always — never "Trusted Signer". A key
-/// made on a signing page ran its ceremony in a browser, and the authenticator
-/// on the far side of it reports where the key is like any other: an iCloud
-/// passkey made on the page is this device's kind, a key made by scanning a
-/// code is a phone. The core says which (`WalletKeyRow::method` is the place);
-/// this only says it.
-fn key_holder(
-    key: &vela_core::wallet_keys::WalletKeyRow,
-    lines: &(SharedString, SharedString, SharedString),
-) -> SharedString {
-    if !key.provider_name.is_empty() {
-        return SharedString::from(key.provider_name.clone());
-    }
-    match key.method.as_str() {
-        "security_key" => lines.2.clone(),
-        "hybrid" => lines.1.clone(),
-        _ => lines.0.clone(),
     }
 }
 

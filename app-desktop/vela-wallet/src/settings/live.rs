@@ -468,6 +468,204 @@ pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> 
     rows
 }
 
+// ---------------------------------------------------------------------------
+// The keys block's rows (spec 062; PR 4 item 13.1)
+// ---------------------------------------------------------------------------
+
+/// The keys view's rows from this device's OWN record, by the core's walk
+/// asked with no address — so it asks no chain and answers at once
+/// (`vela_core::wallet_keys::step`). `sign_in_credential` marks the key this
+/// device signs with.
+///
+/// What the keys block is drawn from on its first frame, before any registry
+/// has answered: how many keys the wallet has, what the person called them,
+/// and which one signs here. On the phones the block was one skeleton row
+/// until the registry answered, then grew to the wallet's keys, and
+/// everything under it dropped (~250 pt on the iPhone, 151 px on the
+/// Xiaomi); on the desktop the same, 177 pt for a wallet of three keys.
+#[must_use]
+pub fn device_key_rows(
+    device: &[vela_core::wallet_keys::DeviceKey],
+    sign_in_credential: &str,
+) -> Vec<vela_core::wallet_keys::WalletKeyRow> {
+    match vela_core::wallet_keys::step("", device, &[], sign_in_credential) {
+        vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
+        // With no address there is nobody to ask.
+        vela_core::wallet_keys::KeysStep::Ask { .. } => Vec::new(),
+    }
+}
+
+/// Who is holding a key, for the line under its name in the keys list.
+///
+/// `lines` is the fallback trio in the core's method order — built-in passkey,
+/// phone or tablet, security key — used when no catalog can name the vault.
+///
+/// Spec 102: by where the key LIVES, always — never "Trusted Signer". A key
+/// made on a signing page ran its ceremony in a browser, and the authenticator
+/// on the far side of it reports where the key is like any other: an iCloud
+/// passkey made on the page is this device's kind, a key made by scanning a
+/// code is a phone. The core says which (`WalletKeyRow::method` is the place);
+/// this only says it.
+#[must_use]
+pub fn key_holder(
+    key: &vela_core::wallet_keys::WalletKeyRow,
+    lines: &(SharedString, SharedString, SharedString),
+) -> SharedString {
+    if !key.provider_name.is_empty() {
+        return SharedString::from(key.provider_name.clone());
+    }
+    match key.method.as_str() {
+        "security_key" => lines.2.clone(),
+        "hybrid" => lines.1.clone(),
+        _ => lines.0.clone(),
+    }
+}
+
+/// The words a key row is said in.
+pub struct KeyRowWords {
+    /// "Key {{n}}", for a key nobody named.
+    pub key_n: String,
+    /// [`key_holder`]'s fallback trio.
+    pub holders: (SharedString, SharedString, SharedString),
+    pub user_verified: SharedString,
+    pub synced: SharedString,
+    pub not_synced: SharedString,
+    pub signs_here: SharedString,
+}
+
+impl KeyRowWords {
+    #[must_use]
+    pub fn of(s: &SettingsStrings) -> Self {
+        Self {
+            key_n: s.keys_key_n.clone(),
+            holders: (
+                s.keys_provider_platform.clone(),
+                s.keys_provider_generic.clone(),
+                s.keys_provider_security_key.clone(),
+            ),
+            user_verified: s.keys_user_verified.clone(),
+            synced: s.keys_synced.clone(),
+            not_synced: s.keys_not_synced.clone(),
+            signs_here: s.keys_signs_here.clone(),
+        }
+    }
+}
+
+/// How a fact's pill is inked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PillTone {
+    Info,
+    Good,
+    Quiet,
+}
+
+/// One pill at the end of a key's row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KeyPill {
+    /// "Signed in": the key this device signs with — the device's own fact,
+    /// which no registry answers for, so it is said from the first frame.
+    SignsHere(SharedString),
+    /// A fact the registry vouches for.
+    Fact(SharedString, PillTone),
+    /// Not vouched for yet: a quiet capsule, saying nothing, as wide as the
+    /// widest of the words it may come to say (its [`PillSlot`]).
+    Pending(PillSlot),
+}
+
+/// The words one pill of a row may come to say: one for a fact that is
+/// either said or not ("Verify to use"), two for the one that is said either
+/// way ("Cloud-synced" / "Device-bound"). A slot is as wide as its widest
+/// word — which only the layout knows, so the drawing lays every one out.
+pub type PillSlot = Vec<SharedString>;
+
+/// One key's row, as it is drawn.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyRowModel {
+    /// The person's name for the key, or "Key n".
+    pub name: SharedString,
+    /// Who holds the key — "Apple Passwords", "Security key". `None` while
+    /// the registry has not answered: a bar of the line's own height, never
+    /// a word. This device's record of how a key was made can say "built in"
+    /// of a key the registry knows for a security key, and on the iPhone a
+    /// row said exactly that for three seconds before it was corrected.
+    pub holder: Option<SharedString>,
+    /// The key's short id, from its public key — the key's own, whoever
+    /// answers.
+    pub fingerprint: Option<SharedString>,
+    /// The vault's mark may be drawn (the answer is in); before that, a
+    /// blank disc of the mark's size.
+    pub mark_known: bool,
+    /// The pills, in order.
+    pub pills: Vec<KeyPill>,
+    /// The fullest set of pills this row can come to hold, slot by slot. Its
+    /// room is kept in EVERY state — asking, answered, and when no chain
+    /// answers — so the row is one height from its first frame.
+    pub room: Vec<PillSlot>,
+    /// The row opens onto the registry's facts for the key.
+    pub expandable: bool,
+}
+
+/// The row for `key`, the `index`-th of the wallet's keys. `answered`: the
+/// walk has ended and `key` is its row; otherwise `key` is this device's own
+/// record of it ([`device_key_rows`]) and the registry is still being asked.
+///
+/// While asking, the row says only what the registry cannot contradict — the
+/// name, the short id, and whether this device signs with it — and stands at
+/// its final size: the holder is a bar, the mark a disc, and each pill a
+/// registry may vouch for is a quiet capsule where it will stand.
+#[must_use]
+pub fn key_row(
+    key: &vela_core::wallet_keys::WalletKeyRow,
+    index: usize,
+    answered: bool,
+    words: &KeyRowWords,
+) -> KeyRowModel {
+    let name = if key.name.is_empty() {
+        SharedString::from(words.key_n.replace("{{n}}", &(index + 1).to_string()))
+    } else {
+        SharedString::from(key.name.clone())
+    };
+    let body = key.public_key_hex.trim_start_matches("04");
+    let fingerprint = (body.len() >= 8 && body.is_ascii())
+        .then(|| SharedString::from(format!("{}…{}", &body[..4], &body[body.len() - 4..])));
+    // What each pill a registry may vouch for can come to say.
+    let verified_slot: PillSlot = vec![words.user_verified.clone()];
+    let sync_slot: PillSlot = vec![words.synced.clone(), words.not_synced.clone()];
+    let sign_in = key.signs_here.then(|| words.signs_here.clone());
+    let mut pills: Vec<KeyPill> = sign_in.iter().cloned().map(KeyPill::SignsHere).collect();
+    if answered {
+        // The registry explorer's pills; one nobody can vouch for is not drawn.
+        if key.user_verified == Some(true) {
+            pills.push(KeyPill::Fact(words.user_verified.clone(), PillTone::Info));
+        }
+        if let Some(is_synced) = key.synced {
+            pills.push(if is_synced {
+                KeyPill::Fact(words.synced.clone(), PillTone::Good)
+            } else {
+                KeyPill::Fact(words.not_synced.clone(), PillTone::Quiet)
+            });
+        }
+    } else {
+        pills.push(KeyPill::Pending(verified_slot.clone()));
+        pills.push(KeyPill::Pending(sync_slot.clone()));
+    }
+    KeyRowModel {
+        name,
+        holder: answered.then(|| key_holder(key, &words.holders)),
+        fingerprint,
+        mark_known: answered,
+        pills,
+        room: sign_in
+            .into_iter()
+            .map(|text| vec![text])
+            .chain([verified_slot, sync_slot])
+            .collect(),
+        // A row with no credential id came from the device alone and has
+        // nothing worth opening — and nothing opens before the answer.
+        expandable: answered && !key.credential_id.is_empty(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2372,5 +2570,256 @@ mod parity_tests {
             row(&host).rpc_save_deferred,
             "leaving the field asks for the save, held for the chain-id verdict"
         );
+    }
+}
+
+/// PR 4 item 13.1 — Settings does not drop when the keys block loads. The
+/// block's rows are this device's own record from the first frame; the
+/// registry's answer fills them in. What a row is made of is decided here
+/// ([`key_row`]); where gpui puts it is measured on the real window by
+/// `scripts/check-settings-keys.sh`.
+#[cfg(test)]
+mod keys_tests {
+    use super::*;
+    use crate::settings::fixtures::KeysPin;
+    use vela_core::wallet_keys::KeysSource;
+
+    fn words() -> KeyRowWords {
+        KeyRowWords::of(&SettingsStrings::resolve(&crate::loc::Loc::for_language(
+            "en",
+        )))
+    }
+
+    fn rows(pin: KeysPin) -> (bool, Vec<KeyRowModel>) {
+        let words = words();
+        let (answered, keys) = match pin.answer() {
+            Some((_, keys)) => (true, keys),
+            None => (false, pin.device_rows()),
+        };
+        let models = keys
+            .iter()
+            .enumerate()
+            .map(|(index, key)| key_row(key, index, answered, &words))
+            .collect();
+        (answered, models)
+    }
+
+    /// While the registry is asked, the block already has the wallet's keys:
+    /// one row each, in the record's order, by the names the person gave
+    /// them, the one this device signs with marked — as many, and called the
+    /// same, as when the answer is in. Nothing is added when it lands.
+    #[test]
+    fn the_rows_are_the_devices_record_from_the_first_frame() {
+        for count in [1, 3] {
+            let (answered, asking) = rows(KeysPin::Asking(count));
+            assert!(!answered);
+            let (_, landed) = rows(KeysPin::Answered(count));
+            assert_eq!(asking.len(), count, "a row per key, before any answer");
+            assert_eq!(landed.len(), count, "and the answer adds none");
+            for (before, after) in asking.iter().zip(&landed) {
+                assert_eq!(before.name, after.name);
+                assert_eq!(before.fingerprint, after.fingerprint);
+                assert!(before.fingerprint.is_some(), "the key's own short id");
+                // The same room, slot for slot: the row is one box either way.
+                assert_eq!(before.room, after.room);
+            }
+            assert_eq!(asking[0].name.as_ref(), "Everyday wallet");
+            assert_eq!(
+                asking[0].pills.first(),
+                Some(&KeyPill::SignsHere("Signed in".into())),
+                "which key signs here is this device's own fact"
+            );
+            assert!(asking.iter().skip(1).all(|row| {
+                !row.pills
+                    .iter()
+                    .any(|pill| matches!(pill, KeyPill::SignsHere(_)))
+            }));
+        }
+        // A key nobody named is "Key n" from the first frame too.
+        assert_eq!(rows(KeysPin::Asking(3)).1[2].name.as_ref(), "Key 3");
+    }
+
+    /// Nothing the registry may contradict is said while it is asked. This
+    /// device's record of how the second key was made reads as a built-in
+    /// passkey; the registry knows it for a security key. On the iPhone the
+    /// row said "Built-in passkey", with a person's glyph, for three seconds.
+    /// Here the holder is a bar and the mark a disc until the answer is in,
+    /// no pill says a fact, and the row does not open.
+    #[test]
+    fn a_row_says_nothing_the_registry_may_contradict_while_asking() {
+        let words = words();
+        let pin = KeysPin::Asking(3);
+        let device = pin.device_rows();
+        let (_, asking) = rows(pin);
+        for row in &asking {
+            assert_eq!(row.holder, None, "{}: no word for who holds it", row.name);
+            assert!(!row.mark_known, "{}: no vault's mark", row.name);
+            assert!(!row.expandable, "{}: nothing to open yet", row.name);
+            assert!(
+                !row.pills
+                    .iter()
+                    .any(|pill| matches!(pill, KeyPill::Fact(..))),
+                "{}: a fact nobody vouched for: {:?}",
+                row.name,
+                row.pills
+            );
+            // …and each pill a registry may vouch for is a quiet capsule
+            // where it will stand: one per slot of the room.
+            let pending = row
+                .pills
+                .iter()
+                .filter(|pill| matches!(pill, KeyPill::Pending(_)))
+                .count();
+            assert_eq!(pending, 2, "{}: {:?}", row.name, row.pills);
+            assert_eq!(row.pills.len(), row.room.len(), "{}", row.name);
+        }
+
+        // The case that showed on the phone: what the device would have said
+        // of the second key, against what the registry says.
+        let guess = key_holder(&device[1], &words.holders);
+        assert_eq!(guess, words.holders.0, "the record reads as built in");
+        let (_, landed) = rows(KeysPin::Answered(3));
+        assert_eq!(landed[1].holder.as_ref(), Some(&words.holders.2));
+        assert_ne!(landed[1].holder.as_ref(), Some(&guess), "and it is not");
+        assert_eq!(landed[0].holder.as_deref(), Some("Apple Passwords"));
+        assert!(landed.iter().all(|row| row.mark_known && row.expandable));
+    }
+
+    /// Every pill a row can come to show has a slot in its room that holds
+    /// its word — so the room, laid out from the first frame, is never
+    /// smaller than what lands in it; and the pill that is said either way
+    /// ("Cloud-synced" / "Device-bound") is sized by both its words.
+    #[test]
+    fn the_room_holds_every_pill_a_row_can_come_to_show() {
+        let words = words();
+        for pin in [KeysPin::Answered(3), KeysPin::Silent(3), KeysPin::Asking(3)] {
+            for row in rows(pin).1 {
+                assert!(row.pills.len() <= row.room.len(), "{pin:?} {}", row.name);
+                for pill in &row.pills {
+                    let said: Vec<&SharedString> = match pill {
+                        KeyPill::SignsHere(text) | KeyPill::Fact(text, _) => vec![text],
+                        KeyPill::Pending(slot) => slot.iter().collect(),
+                    };
+                    assert!(
+                        said.iter()
+                            .all(|text| row.room.iter().any(|slot| slot.contains(text))),
+                        "{pin:?} {}: {pill:?} has no slot in {:?}",
+                        row.name,
+                        row.room
+                    );
+                }
+                let sync = row.room.last().cloned().unwrap_or_default();
+                assert_eq!(sync, vec![words.synced.clone(), words.not_synced.clone()]);
+            }
+        }
+        // In every language the app ships, too: three slots for the key that
+        // signs here, two for the others, none of them empty.
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            let words = KeyRowWords::of(&SettingsStrings::resolve(&loc));
+            let device = KeysPin::Asking(3).device_rows();
+            for (index, key) in device.iter().enumerate() {
+                let row = key_row(key, index, false, &words);
+                assert_eq!(row.room.len(), if key.signs_here { 3 } else { 2 }, "{tag}");
+                assert!(
+                    row.room.iter().flatten().all(|text| !text.is_empty()),
+                    "{tag}"
+                );
+            }
+        }
+    }
+
+    /// No chain answered: the rows stay as this device's record gives them
+    /// — the same count, the same names, the same room — and now say what
+    /// the device remembers of each (the block adds one sentence under them
+    /// that says so). No pill is drawn that nobody can vouch for.
+    #[test]
+    fn a_silent_registry_leaves_the_rows_where_they_stood() {
+        let pin = KeysPin::Silent(3);
+        assert!(matches!(pin.answer(), Some((KeysSource::Device, _))));
+        let (answered, silent) = rows(pin);
+        assert!(answered, "the walk has ended");
+        let (_, asking) = rows(KeysPin::Asking(3));
+        assert_eq!(silent.len(), asking.len());
+        for (after, before) in silent.iter().zip(&asking) {
+            assert_eq!(after.name, before.name);
+            assert_eq!(after.room, before.room);
+            assert!(after.holder.is_some(), "what this device remembers");
+            assert!(!after.expandable, "nothing of the registry's to open");
+            assert!(
+                after
+                    .pills
+                    .iter()
+                    .all(|pill| matches!(pill, KeyPill::SignsHere(_))),
+                "{:?}",
+                after.pills
+            );
+        }
+    }
+
+    /// The pins say what their names say, and a session's own record gives
+    /// the same rows the pin's does: one per key of the account, a legacy
+    /// record's one key included.
+    #[test]
+    fn the_devices_record_gives_a_row_per_key() {
+        assert_eq!(KeysPin::named("asking3"), Some(KeysPin::Asking(3)));
+        assert_eq!(KeysPin::named("1"), Some(KeysPin::Answered(1)));
+        assert_eq!(KeysPin::named("silent3"), Some(KeysPin::Silent(3)));
+        assert_eq!(KeysPin::named("asking9"), None);
+        assert_eq!(KeysPin::named(""), None);
+        assert_eq!(KeysPin::Asking(1).answer(), None);
+
+        let device = KeysPin::Asking(3).device();
+        let rows = device_key_rows(&device, &device[2].credential_id);
+        assert_eq!(rows.len(), 3);
+        let signs: Vec<bool> = rows.iter().map(|row| row.signs_here).collect();
+        assert_eq!(signs, [false, false, true]);
+        assert!(rows.iter().all(|row| row.credential_id.is_empty()
+            && row.synced.is_none()
+            && row.user_verified.is_none()));
+        assert_eq!(device_key_rows(&device[..1], "").len(), 1);
+        assert!(device_key_rows(&[], "").is_empty());
+    }
+
+    /// The copy-record row's status is drawn on ONE line, so the row is one
+    /// height through "Checking…" and every answer. That holds as long as
+    /// the longest status fits the row at the narrowest window — about 490
+    /// pt for the words, at 13 pt type: 60 characters with room to spare —
+    /// in every language. A status longer than that would be cut; this is
+    /// where the corpus is held to it.
+    #[test]
+    fn the_copy_record_rows_status_fits_one_line_in_every_language() {
+        use crate::executor::registry::{BackupAnswer, backup_line};
+        use vela_core::registry_backup::BackupState;
+        const ONE_LINE: usize = 60;
+        let states = [
+            BackupState::BackedUp,
+            BackupState::NotBackedUp,
+            BackupState::CouldNotCheck,
+            BackupState::NotCopyable,
+        ];
+        let mut statuses = vec![backup_line(None)];
+        statuses.extend(states.into_iter().map(|state| {
+            backup_line(Some(&BackupAnswer {
+                state,
+                call: None,
+                row: state.row(),
+            }))
+        }));
+        let lines: Vec<_> = statuses.into_iter().flatten().collect();
+        assert_eq!(lines.len(), 5, "checking, and a row for each of the four");
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            for line in &lines {
+                let said = loc.t(&line.subtitle_key);
+                assert!(
+                    !said.is_empty() && said.as_ref() != line.subtitle_key,
+                    "{tag}"
+                );
+                assert!(
+                    said.chars().count() <= ONE_LINE,
+                    "{tag}: `{said}` is {} characters",
+                    said.chars().count()
+                );
+            }
+        }
     }
 }

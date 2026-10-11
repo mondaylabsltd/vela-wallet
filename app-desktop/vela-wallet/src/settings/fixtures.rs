@@ -784,6 +784,147 @@ pub fn about_version(s: &SettingsStrings, live: bool) -> SharedString {
     ))
 }
 
+// ---------------------------------------------------------------------------
+// The keys block's states (PR 4 item 13.1)
+// ---------------------------------------------------------------------------
+
+/// One state of Settings' keys block, as `VELA_KEYS` names it ([`keys_pin`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeysPin {
+    /// The registry has not answered yet; this device's record says the
+    /// wallet has this many keys.
+    Asking(usize),
+    /// The registry answered, with this many keys.
+    Answered(usize),
+    /// No chain answered: the device's record alone, and the sentence that
+    /// says so.
+    Silent(usize),
+}
+
+impl KeysPin {
+    /// The pin a name names: `asking1`, `asking3`, `1`, `3`, `silent3`.
+    #[must_use]
+    pub fn named(want: &str) -> Option<Self> {
+        let want = want.trim();
+        let count = |digits: &str| digits.parse::<usize>().ok().filter(|n| (1..=3).contains(n));
+        if let Some(digits) = want.strip_prefix("asking") {
+            return count(digits).map(Self::Asking);
+        }
+        if let Some(digits) = want.strip_prefix("silent") {
+            return count(digits).map(Self::Silent);
+        }
+        count(want).map(Self::Answered)
+    }
+
+    fn count(self) -> usize {
+        match self {
+            Self::Asking(count) | Self::Answered(count) | Self::Silent(count) => count,
+        }
+    }
+
+    /// What this device's own record says of the wallet's keys: their names,
+    /// their public keys and what each authenticator reported when it was
+    /// made — and nothing a registry would add. The second key's record says
+    /// "internal", which the core reads as a built-in passkey; the registry
+    /// ([`Self::answer`]) knows it for a security key.
+    #[must_use]
+    pub fn device(self) -> Vec<vela_core::wallet_keys::DeviceKey> {
+        let key = |n: u8, name: &str, transports: &str| vela_core::wallet_keys::DeviceKey {
+            credential_id: format!("pinned-credential-{n}"),
+            public_key_hex: format!("04{}", format!("{n:x}{n:x}").repeat(64)),
+            name: name.to_owned(),
+            transports: transports.to_owned(),
+        };
+        [
+            key(0xa, "Everyday wallet", "internal,hybrid"),
+            key(0xb, "Desk key", "internal"),
+            key(0xc, "", "hybrid"),
+        ]
+        .into_iter()
+        .take(self.count())
+        .collect()
+    }
+
+    /// The rows the device's record alone gives — the core's walk asked with
+    /// no address, so it asks no chain. The first key is the one this device
+    /// signs with.
+    #[must_use]
+    pub fn device_rows(self) -> Vec<vela_core::wallet_keys::WalletKeyRow> {
+        super::live::device_key_rows(&self.device(), "pinned-credential-10")
+    }
+
+    /// The registry's answer, once it is in: `None` while asking. A registry
+    /// answer fills every row in — the vault by name, whether the key is
+    /// synced, that the person was verified — and may say something else
+    /// than the device's record did (the second key: a security key).
+    #[must_use]
+    pub fn answer(
+        self,
+    ) -> Option<(
+        vela_core::wallet_keys::KeysSource,
+        Vec<vela_core::wallet_keys::WalletKeyRow>,
+    )> {
+        use vela_core::wallet_keys::KeysSource;
+        match self {
+            Self::Asking(_) => None,
+            Self::Silent(_) => Some((KeysSource::Device, self.device_rows())),
+            Self::Answered(_) => {
+                let mut rows = self.device_rows();
+                for (index, row) in rows.iter_mut().enumerate() {
+                    row.credential_id = format!("cGlubmVkLWNyZWRlbnRpYWwt{index}");
+                    row.attestation_hex = format!("0x{}", "5d".repeat(20));
+                    row.user_verified = Some(true);
+                    match index {
+                        0 => {
+                            // Apple Passwords, by its AAGUID.
+                            "fbfc3007-154e-4ecc-8c0b-6e020557d7bd".clone_into(&mut row.aaguid);
+                            "Apple Passwords".clone_into(&mut row.provider_name);
+                            row.synced = Some(true);
+                        }
+                        1 => {
+                            "security_key".clone_into(&mut row.method);
+                            "cross-platform".clone_into(&mut row.authenticator_attachment);
+                            "usb,nfc".clone_into(&mut row.transports);
+                            row.synced = Some(false);
+                        }
+                        _ => {
+                            "hybrid".clone_into(&mut row.method);
+                            row.synced = Some(true);
+                            row.user_verified = None;
+                        }
+                    }
+                }
+                Some((KeysSource::Registry, rows))
+            }
+        }
+    }
+}
+
+/// `VELA_KEYS=asking1|asking3|1|3|silent3` (developer builds), on the Account
+/// page — the drawn one, which then draws the block too, or a session's: its
+/// keys block in that state — the registry still out over a
+/// device record of one or three keys, its answer in, or no chain answering.
+/// The registry answers in a second and one way per wallet; whether the page
+/// under the block moves when it does has to be measured (PR 4 item 13.1:
+/// Settings dropped ~250 pt on the iPhone when the keys loaded).
+///
+/// `VELA_KEYS=asking3>3` is an answer that LANDS: the first while the window
+/// opens, the second ([`keys_pin_lands`]) a moment later
+/// (`signing::fixtures::SIM_PIN_LANDS_AFTER`). Same env-pin family as
+/// `VELA_SETTINGS_STATE`.
+#[must_use]
+pub fn keys_pin() -> Option<KeysPin> {
+    let want = crate::dev_env::var!("VELA_KEYS")?;
+    KeysPin::named(want.split('>').next().unwrap_or_default())
+}
+
+/// The state `VELA_KEYS=<first>><then>` lands on, if it names one.
+#[must_use]
+pub fn keys_pin_lands() -> Option<KeysPin> {
+    let want = crate::dev_env::var!("VELA_KEYS")?;
+    KeysPin::named(want.split_once('>')?.1)
+}
+
 #[cfg(test)]
 mod about_tests {
     use super::*;
