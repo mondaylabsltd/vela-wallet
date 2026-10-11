@@ -49,6 +49,26 @@ export default defineConfig({
 	 * the pin stays — nothing here was measured again with more workers.
 	 */
 	workers: 3,
+	/**
+	 * How long a WAIT may last — not how long anything should take. No test
+	 * asserts a duration with these: an `expect` still passes the instant its
+	 * condition holds, so on a quiet machine nothing here changes a run.
+	 *
+	 * Playwright's defaults (5 s for an expectation, 30 s for a test) assume
+	 * the machine is the suite's own. This one builds three other things at
+	 * the same time, and the wallet's first paint after a navigation — the
+	 * core is 5 MB of wasm — then takes six to thirteen seconds. Measured on
+	 * one commit, the whole suite at `--retries=0`:
+	 *
+	 *   load  8–21:    448 passed
+	 *   load 22–63:    10 failed — every one "Timeout: 5000ms" on a default wait
+	 *   load 26–185:   30 failed — 26 of them that, 3 a test's own time running out
+	 *
+	 * A red run that means "the machine was busy" teaches people to rerun a red
+	 * run. A wait that needs longer than this says so with its own `timeout`.
+	 */
+	expect: { timeout: 20_000 },
+	timeout: 90_000,
 	testMatch: '**/*.e2e.{ts,js}',
 	projects: [
 		// Everything runs on chromium…
