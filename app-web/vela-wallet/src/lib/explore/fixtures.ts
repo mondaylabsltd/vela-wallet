@@ -20,10 +20,12 @@ import type {
 	GroupModel,
 	MenuItemModel,
 	ResumeSectionModel,
+	SiteMarkModel,
 	SiteModel,
 	TabModel,
 	TileModel
 } from './model';
+import { siteMark } from './site-mark';
 
 type Identicon = (seed: string) => string;
 
@@ -176,11 +178,19 @@ function groups(m: ExploreMessages, recent: SiteModel[]): GroupModel[] {
 	];
 }
 
-function browser(identicon: Identicon, connected: boolean, tabCount: number): BrowserModel {
+function browser(
+	m: ExploreMessages,
+	identicon: Identicon,
+	connected: boolean,
+	tabCount: number
+): BrowserModel {
+	const origin = `https://${SITES.uniswap.host}`;
 	return {
-		url: `https://${SITES.uniswap.host}/swap`,
+		url: `${origin}/swap`,
 		host: SITES.uniswap.host,
-		secure: true,
+		// The core's word for this origin, like any live page's: the board
+		// draws a padlock because the page is https, not because it is a board.
+		mark: siteMark(origin, m),
 		connected,
 		canBack: true,
 		canForward: false,
@@ -230,7 +240,8 @@ function siteMenuSheet(m: ExploreMessages, browsing: BrowserModel): SiteMenuShee
 	return {
 		kind: 'site-menu',
 		site: SITES.uniswap,
-		statusLine: m.secureSite,
+		mark: browsing.mark,
+		statusLine: browsing.mark.words,
 		items: siteMenuItems(m, browsing.canForward)
 	};
 }
@@ -291,13 +302,18 @@ function tileMenuItems(m: ExploreMessages): MenuItemModel[] {
 	];
 }
 
-function connectionSheet(m: ExploreMessages, identicon: Identicon): ConnectionSheet {
+function connectionSheet(
+	m: ExploreMessages,
+	identicon: Identicon,
+	mark: SiteMarkModel
+): ConnectionSheet {
 	return {
 		kind: 'connection' as const,
 		connection: {
 			title: m.connectionTitle,
 			site: SITES.uniswap,
-			statusLine: `${m.secureSite} · ${m.connectedTag}`,
+			mark,
+			statusLine: `${mark.words} · ${m.connectedTag}`,
 			account: {
 				name: IDENTITY.name,
 				address: IDENTITY.addressDisplay,
@@ -347,7 +363,7 @@ export function buildMobileState(
 	const selected = browsing || state === 'e5' ? 'uniswap' : 'start';
 	// E1 is the first visit: the start page is the only tab there is.
 	const strip = tabs(m, selected, populated ? PHONE_TAB_SITES : []);
-	const page = browser(identicon, true, strip.length);
+	const page = browser(m, identicon, true, strip.length);
 
 	const base: ExploreHomeModel = {
 		state,
@@ -372,7 +388,7 @@ export function buildMobileState(
 			groupManage: groupManageSheet(m),
 			siteMenu: siteMenuSheet(m, page),
 			recentMenu: recentMenuSheet(m),
-			connection: connectionSheet(m, identicon)
+			connection: connectionSheet(m, identicon, page.mark)
 		},
 		navLabels: m.nav
 	};
@@ -399,6 +415,7 @@ export function buildDesktopState(
 ): ExploreDesktopModel {
 	const browsing = state === 'de3' || state === 'de4';
 	const populated = state !== 'de1';
+	const page = browser(m, identicon, browsing, DESKTOP_TAB_SITES.length);
 
 	return {
 		state,
@@ -417,7 +434,7 @@ export function buildDesktopState(
 			bookmark: m.addToFavorites,
 			menu: m.siteMenu
 		},
-		browser: browser(identicon, browsing, DESKTOP_TAB_SITES.length),
+		browser: page,
 		start: {
 			empty: populated ? undefined : { title: m.startTitle, caption: m.startHint, cta: m.startCta },
 			favorites: populated ? favoritesSection(m) : undefined,
@@ -426,7 +443,7 @@ export function buildDesktopState(
 		// DE2 pins the menu under the PancakeSwap tile, which is where the mock
 		// opened it; a real right-click passes the pointer instead.
 		contextMenu: state === 'de2' ? { items: tileMenuItems(m), x: 300, y: 208 } : undefined,
-		connection: connectionSheet(m, identicon).connection,
+		connection: connectionSheet(m, identicon, page.mark).connection,
 		initialPanel: state === 'de4' ? 'signing' : state === 'de3' ? 'connection' : 'none',
 		closeLabel: m.closeLabel
 	};

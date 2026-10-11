@@ -330,6 +330,7 @@
 			{:else if sheet.kind === 'site-menu'}
 				<SiteMenuSheet
 					site={sheet.site}
+					mark={sheet.mark}
 					statusLine={sheet.statusLine}
 					items={sheet.items}
 					closeLabel={copy.close}

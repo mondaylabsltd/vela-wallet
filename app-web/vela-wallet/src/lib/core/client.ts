@@ -39,6 +39,7 @@ import init, {
 	CreateWalletCore,
 	DappPermissionsCore,
 	DappSessionCore,
+	dappOriginLock,
 	dpermSettleOnClose,
 	DisplayCurrencyCore,
 	fiatSymbol,
@@ -156,6 +157,12 @@ export { publicRpcUrls };
 // How a pending request is settled when the request window goes away: 4900,
 // never 4001 (spec 070 T063). The window asks rather than restating it.
 export { dpermSettleOnClose };
+// The mark a site's address wears (`dapp_browser::origin_lock`): `secure` for
+// https — the only padlock — `local` for http on this device or the person's
+// own network, `insecure` for public http. One rule for all four apps; a
+// padlock used to be drawn from "safe to use the wallet from", which is true
+// of `http://127.0.0.1:8137` and says nothing about encryption.
+export { dappOriginLock };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 export { registryResolveKeyStep, registryResolveUnitStep };
 // Settings' shared rules (spec 072): how every shell's preference spellings
