@@ -1075,14 +1075,15 @@ test('a dApp send closed after approving is still answered, and no landing comes
  * the fee, and not at the sheet's own simulation: a person could confirm
  * before the one part of the sheet a site cannot write was on screen. Here,
  * on the real machines, with a node that is asked to simulate and holds its
- * answer: the confirm is shut with the core's line under it; at the core's
- * deadline it opens beside the caution that nothing could be checked, in the
- * verdict's place; and through all of it the confirm, in the sheet's foot,
- * does not move.
+ * answer: the confirm is shut with the core's line under it while the
+ * verdict's place — there from the sheet's first frame — says "Checking…";
+ * at the core's deadline it opens beside the caution that nothing could be
+ * checked, in that place; and through all of it neither the confirm, in the
+ * sheet's foot, nor the sheet's own ✕ moves.
  *
  * What comes after the deadline has two endings, and the caution outlives
  * neither wrongly: the pool gives up — "could not check" IS then the verdict,
- * and the caution stays, the same card (it used to leave the sheet at that
+ * and the caution stays, the same line (it used to leave the sheet at that
  * moment, said and taken back over an open confirm); or the node answers
  * after all, and its verdict takes the caution's place. And a node that says
  * at once that it does not offer the simulation draws the caution with no
@@ -1094,22 +1095,29 @@ test('a dApp send closed after approving is still answered, and no landing comes
 
 /**
  * What stands in the sheet's foot and in its verdict's place right now: can
- * the confirm be pressed, the line shown under it, and what the
- * balance-changes card says.
+ * the confirm be pressed, the line shown under it, what the place SAYS — the
+ * balance card's line ("Checking…", "No asset changes") or the core's notice
+ * — and where the confirm and the sheet's ✕ are.
  */
 async function verdictPlace(page: Page) {
 	return page.evaluate(() => {
 		const sheet = document.querySelector('[role="dialog"]');
 		const confirm = sheet?.querySelector<HTMLButtonElement>('[data-testid="signing-confirm"]');
 		const line = sheet?.querySelector<HTMLElement>('.confirm-note');
+		// What is said, never a room: a room is laid out and holds no words.
+		const said = sheet?.querySelector('[data-testid="signing-verdict"] .said');
+		const close = sheet?.querySelector('header.header .close');
 		return {
 			disabled: confirm ? confirm.disabled : true,
 			line:
 				line && getComputedStyle(line).visibility !== 'hidden'
 					? (line.textContent?.trim() ?? '')
 					: null,
-			said: sheet?.querySelector('section.balances .note')?.textContent?.trim() ?? null,
-			top: confirm ? confirm.getBoundingClientRect().top : null
+			said:
+				(said?.querySelector('.banner p') ?? said?.querySelector('.note'))?.textContent?.trim() ??
+				null,
+			top: confirm ? confirm.getBoundingClientRect().top : null,
+			close: close ? close.getBoundingClientRect().top : null
 		};
 	});
 }
@@ -1123,6 +1131,8 @@ async function verdictPlace(page: Page) {
 async function waitsForTheVerdict(page: Page): Promise<'held' | 'cautioned'> {
 	const checking = en('componentsUi.signing.confirmBlock.simChecking');
 	const couldNot = en('componentsUi.signing.simUnavailableWarning');
+	// What the place says while the simulation is out.
+	const out = en('componentsUi.funding.checking');
 	expect(checking).toBe('Checking what this transaction does…');
 	let rested: 'held' | 'cautioned' | null = null;
 	const looks: string[] = [];
@@ -1131,14 +1141,14 @@ async function waitsForTheVerdict(page: Page): Promise<'held' | 'cautioned'> {
 			async () => {
 				const now = await verdictPlace(page);
 				looks.push(JSON.stringify(now));
-				if (now.disabled && now.line === checking && now.said === null) rested = 'held';
+				if (now.disabled && now.line === checking && now.said === out) rested = 'held';
 				else if (!now.disabled && now.said === couldNot) rested = 'cautioned';
 				return rested;
 			},
 			{ timeout: 25_000, intervals: [100] }
 		)
 		.not.toBeNull();
-	// Open, and nothing in the verdict's place: never, in any look.
+	// Open over "Checking…", or over nothing at all: never, in any look.
 	const open = looks.filter((look) => {
 		const now = JSON.parse(look) as { disabled: boolean; said: string | null };
 		return !now.disabled && now.said !== couldNot;
@@ -1240,14 +1250,15 @@ async function raiseSimulated(
 	return node;
 }
 
-/** Where the confirm rests: the same place twice running. */
-async function restingTop(page: Page): Promise<number> {
-	let last = -1;
+/** Where the confirm and the sheet's ✕ rest: the same places twice running. */
+async function restingTop(page: Page): Promise<{ top: number; close: number }> {
+	let last = { top: -1, close: -1 };
 	await expect
 		.poll(
 			async () => {
-				const now = (await verdictPlace(page)).top ?? -1;
-				const still = now === last;
+				const look = await verdictPlace(page);
+				const now = { top: look.top ?? -1, close: look.close ?? -1 };
+				const still = now.top === last.top && now.close === last.close;
 				last = now;
 				return still;
 			},
@@ -1260,10 +1271,14 @@ async function restingTop(page: Page): Promise<number> {
 /**
  * Look at the sheet again and again until `over()` — and in every look the
  * confirm can be pressed, no line stands under it, the caution is in the
- * verdict's place, and the confirm is where it was. What must NOT happen has
- * only a watch to stand on; what ends the watch is a condition.
+ * verdict's place, and the confirm and the ✕ are where they were. What must
+ * NOT happen has only a watch to stand on; what ends the watch is a condition.
  */
-async function cautionStands(page: Page, top: number, over: () => boolean): Promise<number> {
+async function cautionStands(
+	page: Page,
+	at: { top: number; close: number },
+	over: () => boolean
+): Promise<number> {
 	const couldNot = en('componentsUi.signing.simUnavailableWarning');
 	let looks = 0;
 	await expect
@@ -1275,7 +1290,8 @@ async function cautionStands(page: Page, top: number, over: () => boolean): Prom
 					disabled: false,
 					line: null,
 					said: couldNot,
-					top
+					top: at.top,
+					close: at.close
 				});
 				return over();
 			},
@@ -1287,7 +1303,7 @@ async function cautionStands(page: Page, top: number, over: () => boolean): Prom
 
 const SCREENS = [
 	['the phone sheet', 390, 844],
-	['the centred card', 1400, 900]
+	['the centred card', 1440, 900]
 ] as const;
 
 for (const [name, width, height] of SCREENS) {
@@ -1298,7 +1314,10 @@ for (const [name, width, height] of SCREENS) {
 			const node = await raiseSimulated(page, { width, height }, 'hold');
 			const confirm = page.getByTestId('signing-confirm');
 			const couldNot = en('componentsUi.signing.simUnavailableWarning');
-			const card = page.locator('[role="dialog"] section.balances');
+			const place = page.locator('[role="dialog"] [data-testid="signing-verdict"]');
+			// What is said in the place: the core's notice, or the balance card.
+			const caution = place.locator('.said .banner');
+			const card = place.locator('.said section.balances');
 
 			// Held, with the line under it — unless this machine was slow enough
 			// for the deadline to pass first, which is the next state, checked below.
@@ -1306,18 +1325,21 @@ for (const [name, width, height] of SCREENS) {
 			const linePresent = first === 'held' ? await restingTop(page) : null;
 			if (first === 'held') await page.screenshot({ path: testInfo.outputPath('held.png') });
 
-			// The deadline: the caution lands, the confirm opens, the line is gone.
-			await expect(card).toContainText(couldNot, { timeout: 20_000 });
-			await expect(card.locator('.note')).toHaveAttribute('data-tone', 'caution');
-			await expect(card).toHaveAttribute('data-verdict', '');
+			// The deadline: the caution lands — the banner the phones draw, in
+			// the place — the confirm opens, the line is gone.
+			await expect(caution).toContainText(couldNot, { timeout: 20_000 });
+			await expect(caution).toHaveAttribute('data-tone', 'caution');
+			await expect(place).toHaveAttribute('data-stage', 'landed');
+			await expect(place.locator('.said')).toHaveAttribute('data-verdict', '');
+			await expect(card).toHaveCount(0);
 			await expect(confirm).toBeEnabled();
 			expect((await verdictPlace(page)).line).toBeNull();
 			const lineAbsent = await restingTop(page);
 			await expect(confirm).toBeInViewport({ ratio: 1 });
-			await expect(card).toBeInViewport({ ratio: 1 });
+			await expect(caution).toBeInViewport({ ratio: 1 });
 			await page.screenshot({ path: testInfo.outputPath('cautioned.png') });
 
-			let after: number;
+			let after: { top: number; close: number };
 			if (ending === 'the pool gives up') {
 				// Every request to the node fails from here on. The pool tries it
 				// again, and then stops asking: it has given up, and the read
@@ -1332,9 +1354,9 @@ for (const [name, width, height] of SCREENS) {
 				);
 				expect(looks).toBeGreaterThan(10);
 				expect(node.asked).toBeGreaterThanOrEqual(askedBefore);
-				await expect(card).toHaveCount(1);
-				await expect(card).toContainText(couldNot);
-				await expect(card.locator('.note')).toHaveAttribute('data-tone', 'caution');
+				await expect(caution).toHaveCount(1);
+				await expect(caution).toContainText(couldNot);
+				await expect(caution).toHaveAttribute('data-tone', 'caution');
 				after = await restingTop(page);
 				await page.screenshot({ path: testInfo.outputPath('gave-up.png') });
 			} else {
@@ -1352,10 +1374,12 @@ for (const [name, width, height] of SCREENS) {
 
 			testInfo.annotations.push({
 				type: 'confirm-top',
-				description: `${width}x${height}, ${ending}: line present ${linePresent}, at the deadline ${lineAbsent}, after ${after}`
+				description: `${width}x${height}, ${ending}: line present ${JSON.stringify(linePresent)}, at the deadline ${JSON.stringify(lineAbsent)}, after ${JSON.stringify(after)}`
 			});
-			if (linePresent !== null) expect(lineAbsent).toBe(linePresent);
-			expect(after).toBe(lineAbsent);
+			// The confirm AND the sheet's ✕: the place was there from the first
+			// frame, so neither the caution nor the verdict moved the sheet's top.
+			if (linePresent !== null) expect(lineAbsent).toEqual(linePresent);
+			expect(after).toEqual(lineAbsent);
 		});
 	}
 }
@@ -1367,11 +1391,13 @@ test('a node that does not offer the simulation: the caution is on the sheet, an
 	const firstAsked = node.lastAskedAt;
 	const confirm = page.getByTestId('signing-confirm');
 	const couldNot = en('componentsUi.signing.simUnavailableWarning');
-	const card = page.locator('[role="dialog"] section.balances');
+	const place = page.locator('[role="dialog"] [data-testid="signing-verdict"]');
+	const caution = place.locator('.said .banner');
 
-	await expect(card).toContainText(couldNot, { timeout: 20_000 });
-	await expect(card.locator('.note')).toHaveAttribute('data-tone', 'caution');
-	await expect(card.locator('.row')).toHaveCount(0);
+	await expect(caution).toContainText(couldNot, { timeout: 20_000 });
+	await expect(caution).toHaveAttribute('data-tone', 'caution');
+	// The notice, and no balance card: nothing was checked, so nothing is listed.
+	await expect(place.locator('.said section.balances')).toHaveCount(0);
 	// The fee has its say, then the confirm opens: nothing else holds it.
 	await expect(confirm).toBeEnabled({ timeout: 30_000 });
 	const top = await restingTop(page);
@@ -1381,10 +1407,10 @@ test('a node that does not offer the simulation: the caution is on the sheet, an
 	// long. Watched well past it: the caution neither goes nor is drawn anew.
 	const looks = await cautionStands(page, top, () => Date.now() - firstAsked > 7_000);
 	expect(looks).toBeGreaterThan(5);
-	await expect(card).toHaveCount(1);
+	await expect(caution).toHaveCount(1);
 	await expect(confirm).toBeInViewport({ ratio: 1 });
 	testInfo.annotations.push({
 		type: 'confirm-top',
-		description: `390x844, not offered: ${top} throughout (${looks} looks)`
+		description: `390x844, not offered: ${JSON.stringify(top)} throughout (${looks} looks)`
 	});
 });

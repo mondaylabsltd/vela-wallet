@@ -149,11 +149,16 @@ test('an unlimited approval is kept as asked and said in danger; a cap is one ch
  * PR 3 device round, items 1 and 3. The sheet's own simulation — the read it
  * already makes for the fee — is read by the core; when the node checked the
  * request and nothing of the person's moves, the sheet says the core's line,
- * "No asset changes", in a balance-changes card after the request's own
- * blocks. It lands late (the node answers after the sheet has opened), and
- * the confirm, in the sheet's foot outside the scroll, is where it was.
+ * "No asset changes", in the verdict's place after the request's own blocks.
+ * The place is there from the first frame, saying "Checking…"; the answer
+ * lands in it late (the node answers after the sheet has opened), and neither
+ * the confirm, in the sheet's foot outside the scroll, nor the sheet's own
+ * top and its ✕ are anywhere but where they were.
+ *
+ * (What a check that MOVES something draws, and a call that fails:
+ * `signing-verdict.e2e.ts`.)
  */
-test('a request that moves nothing says "No asset changes" — and its landing moves no confirm', async ({
+test('a request that moves nothing says "No asset changes" — in a place that was there, so its landing moves nothing', async ({
 	page
 }, testInfo) => {
 	await openWallet(page);
@@ -195,28 +200,47 @@ test('a request that moves nothing says "No asset changes" — and its landing m
 	]);
 	const confirm = page.getByTestId('signing-confirm');
 	await expect(confirm).toBeVisible({ timeout: 25_000 });
-	const card = page.locator('[role="dialog"] section.balances');
+	const place = page.locator('[role="dialog"] [data-testid="signing-verdict"]');
+	// What is SAID in the place — never a room, which is laid out and holds no words.
+	const card = place.locator('.said section.balances');
 	const line = en('componentsUi.signing.simResultNoChange');
 	expect(line).toBe('No asset changes');
+	const couldNot = en('componentsUi.signing.simUnavailableWarning');
 
-	// The node was asked once, and has not answered: nothing is said yet.
-	// (PR 3: four seconds on, the core's deadline puts the caution that
-	// nothing could be checked in the card's place — the one card that may be
-	// there before the answer; `fee-speed.e2e.ts` walks that.)
+	// The node was asked once, and has not answered: the place says so, and no
+	// verdict that has not been given is anywhere on the sheet. (Four seconds
+	// on, the core's deadline puts the caution that nothing could be checked
+	// in the same place — `fee-speed.e2e.ts` walks that.)
 	await expect.poll(() => asked, { timeout: 20_000 }).toBe(1);
-	await expect(
-		card.filter({ hasNotText: en('componentsUi.signing.simUnavailableWarning') })
-	).toHaveCount(0);
+	await expect(card).toContainText(en('componentsUi.signing.balanceChangesTitle'));
 	await expect(page.getByText(line)).toHaveCount(0);
-	// The sheet has opened and its fee has had its say: where the confirm rests.
-	const restingY = async () => {
-		let last = -1;
+	const saysChecking = async () =>
+		(await card.locator('.note').count()) === 1 &&
+		(await card.locator('.note').textContent()) === en('componentsUi.funding.checking');
+	const cautioned = () => place.locator('.said .banner').filter({ hasText: couldNot }).count();
+	expect((await saysChecking()) || (await cautioned()) === 1).toBe(true);
+	// The sheet has opened and its fee has had its say: where its parts rest.
+	const resting = async () => {
+		const where = () =>
+			page.evaluate(() => {
+				const sheet = document.querySelector('[role="dialog"]')!;
+				const top = (selector: string) =>
+					Math.round((sheet.querySelector(selector)?.getBoundingClientRect().top ?? NaN) * 10) / 10;
+				return JSON.stringify({
+					sheet: Math.round(sheet.getBoundingClientRect().top * 10) / 10,
+					close: top('header.header .close'),
+					place: top('[data-testid="signing-verdict"]'),
+					fee: top('.footer > .line'),
+					confirm: top('[data-testid="signing-confirm"]')
+				});
+			});
+		let last = '';
 		await expect
 			.poll(
 				async () => {
-					const y = (await confirm.boundingBox())?.y ?? -1;
-					const still = y === last;
-					last = y;
+					const now = await where();
+					const still = now === last;
+					last = now;
 					return still;
 				},
 				{ timeout: 20_000, intervals: [400] }
@@ -224,23 +248,24 @@ test('a request that moves nothing says "No asset changes" — and its landing m
 			.toBe(true);
 		return last;
 	};
-	const was = await restingY();
+	const was = await resting();
 
 	answer();
-	await expect(card).toBeVisible({ timeout: 20_000 });
+	await expect(card).toContainText(line, { timeout: 20_000 });
 	await expect(card).toContainText(en('componentsUi.signing.balanceChangesTitle'));
-	await expect(card).toContainText(line);
-	// The card and its one line: no balance rows (spec 082 RG6 stands).
+	// The card and its one line: nothing moves, so no balance rows.
 	await expect(card.locator('.row')).toHaveCount(0);
-	await expect(card).toHaveAttribute('data-verdict', '');
-	// Whole, in sight, and the confirm has not moved.
+	await expect(place).toHaveAttribute('data-stage', 'landed');
+	await expect(place.locator('.said')).toHaveAttribute('data-verdict', '');
+	// Whole, in sight — and nothing has moved: the sheet's top, its ✕, the
+	// place, the fee row, the confirm.
 	await expect(card).toBeInViewport({ ratio: 1 });
-	expect(await restingY()).toBe(was);
+	expect(await resting()).toBe(was);
 	await expect(confirm).toBeInViewport({ ratio: 1 });
 	// One read served the fee and the sheet.
 	expect(asked).toBe(1);
-	// Nothing else was drawn from the simulation.
-	await expect(page.getByText(en('componentsUi.signing.simUnavailableWarning'))).toHaveCount(0);
+	// Nothing else is said of the simulation.
+	await expect(page.getByText(couldNot)).toHaveCount(0);
 	await page.screenshot({ path: testInfo.outputPath('no-asset-changes-en.png') });
 });
 
