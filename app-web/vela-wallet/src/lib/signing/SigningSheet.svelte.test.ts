@@ -18,6 +18,23 @@ import { verdictRooms, type VerdictWords } from './verdict';
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Past the sheet's entry animation — WAITED for, never timed. This was a
+ * 300 ms pause over a 220 ms slide: on a busy machine the slide had not
+ * finished, the sheet was measured mid-entrance, and a suite about things
+ * not moving failed on a different test each run, by a pixel or by a hundred.
+ * The sheet's own animation and its scrim's are the ones awaited (a turning
+ * refresh control never finishes); then a frame, so what is measured is drawn.
+ */
+async function entered(sheet: HTMLElement): Promise<void> {
+	const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+	await frame();
+	const scrim = sheet.parentElement?.querySelector('.scrim');
+	const playing = [...sheet.getAnimations(), ...(scrim?.getAnimations() ?? [])];
+	await Promise.all(playing.map((animation) => animation.finished.catch(() => undefined)));
+	await frame();
+}
+
 function model(over: Partial<SigningModel> = {}): SigningModel {
 	return {
 		id: 'cs1',
@@ -60,9 +77,9 @@ async function drawn(props: {
 		}
 	});
 	await tick();
-	await pause(300); // past the entry animation
 	const root = document.body;
 	const sheet = root.querySelector<HTMLElement>('[role="dialog"]')!;
+	await entered(sheet);
 	return {
 		screen,
 		onclose,
@@ -1268,7 +1285,8 @@ describe('the verdict’s place: there from the first frame, and nothing moves f
 	};
 	type Blocks = SigningModel['blocks'];
 	type Said = Extract<Blocks[number], { kind: 'balances' | 'warning' }>;
-	const card = (rows: Extract<Said, { kind: 'balances' }>['rows'], note?: string): Said => ({
+	type Card = Extract<Said, { kind: 'balances' }>;
+	const card = (rows: Card['rows'], note?: string): Card => ({
 		kind: 'balances',
 		title: WORDS.balancesTitle,
 		rows,
