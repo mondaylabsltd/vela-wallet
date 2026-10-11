@@ -3,6 +3,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { en, seedSignedIn } from './live-helpers';
+import { readKv } from './stub-chain';
 
 // The live wiring's phase-3/4 scope is the mobile layout (desktop
 // interactivity is a recorded debt) — so the suites speak to it.
@@ -20,8 +21,7 @@ async function openContacts(page: Page): Promise<void> {
 }
 
 /**
- * What the book's store holds under `key` — the same place the app writes
- * (`services/storage.ts`: database `vela`, store `kv`), read as it stands.
+ * What the book's store holds under `key`, as text (`''` while it holds nothing).
  *
  * The core shows a change the moment it makes it and writes it behind
  * (`ContactOperation::Write…`, best-effort: "the in-memory ledger stays
@@ -30,29 +30,7 @@ async function openContacts(page: Page): Promise<void> {
  * machine it did, and the group was gone. "Survives a reload" is asked once
  * the write has landed.
  */
-function stored(page: Page, key: string): Promise<string> {
-	return page.evaluate(
-		(k) =>
-			new Promise<string>((resolve, reject) => {
-				const open = indexedDB.open('vela', 1);
-				open.onupgradeneeded = () => open.result.createObjectStore('kv');
-				open.onerror = () => reject(open.error);
-				open.onsuccess = () => {
-					const db = open.result;
-					const request = db.transaction('kv', 'readonly').objectStore('kv').get(k);
-					request.onsuccess = () => {
-						db.close();
-						resolve(typeof request.result === 'string' ? request.result : '');
-					};
-					request.onerror = () => {
-						db.close();
-						reject(request.error);
-					};
-				};
-			}),
-		key
-	);
-}
+const stored = async (page: Page, key: string): Promise<string> => (await readKv(page, key)) ?? '';
 
 async function addContact(page: Page, name: string, address: string): Promise<void> {
 	// The phone's "+" opens the drawn C5 sheet (new / import / export) since

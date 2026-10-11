@@ -177,6 +177,11 @@ test.describe('desktop', () => {
 		// Named by the person now: the prompt to name it is gone.
 		await expect(save).toHaveCount(0);
 
+		// Written, not only shown — the core writes behind what it shows, and a
+		// reload issued this instant can beat the write.
+		await expect
+			.poll(async () => (await readKv(page, 'vela.contacts')) ?? '')
+			.toContain('Carol from history');
 		await page.reload();
 		await expect(page.getByText('Carol from history', { exact: true }).first()).toBeVisible();
 		await expect(page.getByText(STRANGER_SHORT, { exact: true })).toHaveCount(1); // the row's address line
