@@ -33,7 +33,7 @@ use std::collections::VecDeque;
 use gpui::Context;
 
 use vela_core::app::dapp_browser::{DappBrowser, DbrOperation, DbrShellResult, DbrView, Event};
-use vela_core::app::dapp_permissions::{OriginLock, origin_lock, origin_of};
+use vela_core::app::dapp_permissions::OriginLock;
 
 use crate::core_host::{CoreHost, Pending};
 use crate::executor::dapp_browser::{self as executor, Performed, SigningOrder};
@@ -793,28 +793,27 @@ pub fn bar_of(shown: Option<&str>, watch: &LoadWatch) -> browser_load::AddressBa
     browser_load::address_bar(shown, pending, failed)
 }
 
-/// The mark beside the bar's host (PR 4 item 11): the core's [`OriginLock`]
-/// of the document the bar names — the padlock for https alone, a neutral
-/// mark for http on this computer or the person's own network, the warning
-/// for public http — and none when the bar names nothing on screen (a
-/// failure panel, a load that has not committed, an empty tab).
+/// The mark beside the bar's host (PR 4 item 11): the padlock for https
+/// alone, a neutral mark for http on this computer or the person's own
+/// network, the warning for public http — and none when the bar names
+/// nothing on screen (a failure panel, a load that has not committed, an
+/// empty tab).
 ///
-/// Of the bar's OWN address, which is the committed document's, and not of
-/// the browser machine's tab view: that view's origin moves when a load
-/// STARTS, and the bar's host and its mark must always be one URL's (spec 082
-/// RE1, G28) — else a page could put another site's padlock beside its own
-/// host by starting a load that never commits. Where the two name the same
-/// site they are the same mark: both are `origin_lock` of that origin.
+/// It is the core's own answer, read off the bar it built
+/// (`browser_load::address_bar`'s [`browser_load::BarLock`]), so the bar's
+/// host and its mark are always one URL's — the committed document's (spec
+/// 082 RE1, G28). Never the browser machine's tab view: that view's origin
+/// moves when a load STARTS, and a page could put another site's padlock
+/// beside its own host by starting a load that never commits. Where the two
+/// name the same site they are the same mark: both are the core's
+/// `origin_lock` of that origin.
 #[must_use]
 pub fn bar_mark(bar: &browser_load::AddressBar) -> Option<OriginLock> {
     match bar.lock {
         browser_load::BarLock::None => None,
-        browser_load::BarLock::Closed | browser_load::BarLock::Open => Some(
-            origin_of(&bar.url)
-                .as_deref()
-                .map(origin_lock)
-                .unwrap_or_default(),
-        ),
+        browser_load::BarLock::Closed => Some(OriginLock::Secure),
+        browser_load::BarLock::Local => Some(OriginLock::Local),
+        browser_load::BarLock::Open => Some(OriginLock::Insecure),
     }
 }
 

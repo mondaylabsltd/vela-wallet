@@ -73,17 +73,7 @@ class WalletKeys(
      * one — its row comes back marked `signs_here`.
      */
     suspend fun read(address: String, device: List<DeviceKey>, signInCredential: String): Result {
-        val deviceJson = JSONArray().apply {
-            device.forEach {
-                put(
-                    JSONObject()
-                        .put("credential_id", it.credentialId)
-                        .put("public_key_hex", it.publicKeyHex)
-                        .put("name", it.name)
-                        .put("transports", it.transports),
-                )
-            }
-        }.toString()
+        val deviceJson = deviceJson(device)
         val answers = JSONArray()
         repeat(MAX_ROUNDS) {
             val next = runCatching { JSONObject(step(address, deviceJson, answers.toString(), signInCredential)) }.getOrNull() ?: return Result(Source.Device, emptyList())
@@ -107,8 +97,37 @@ class WalletKeys(
             }.forEach(answers::put)
         }
         // Never settled: what the device alone says, asked with no address so it can ask nobody.
-        return runCatching { parse(JSONObject(step("", deviceJson, "[]", signInCredential))) }.getOrDefault(Result(Source.Device, emptyList()))
+        return deviceOnly(device, signInCredential)
     }
+
+    /**
+     * What this device's own record says about the wallet's keys, with nobody
+     * asked: the core's walk run with no address, so it asks no chain and
+     * answers at once — how many keys, in founding order, the names the
+     * record holds and which one this device signs with.
+     *
+     * Settings opens its keys block on these rows, so the block has its final
+     * height before the registry answers (device walk, 2026-10-11: one
+     * skeleton row grew into the wallet's keys and everything under it
+     * dropped). It is NOT the registry's answer: nobody has vouched for a
+     * badge, and what holds a key is not known — a row drawn from it states
+     * neither (`SettingsLive.withWalletKeys`).
+     */
+    fun deviceOnly(device: List<DeviceKey>, signInCredential: String): Result =
+        runCatching { parse(JSONObject(step("", deviceJson(device), "[]", signInCredential))) }
+            .getOrDefault(Result(Source.Device, emptyList()))
+
+    private fun deviceJson(device: List<DeviceKey>): String = JSONArray().apply {
+        device.forEach {
+            put(
+                JSONObject()
+                    .put("credential_id", it.credentialId)
+                    .put("public_key_hex", it.publicKeyHex)
+                    .put("name", it.name)
+                    .put("transports", it.transports),
+            )
+        }
+    }.toString()
 
     private fun parse(done: JSONObject): Result {
         val source = when (done.optString("source")) {

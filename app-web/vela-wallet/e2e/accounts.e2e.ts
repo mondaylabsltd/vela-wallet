@@ -195,7 +195,10 @@ test.describe('two records deriving one address', () => {
 		await page.getByRole('button', { name: 'Account', exact: true }).click();
 
 		// Scoped to the panel: the sidebar header names the active account too.
-		const rows = page.getByRole('main').getByRole('button', { name: /Twice Signed In/ });
+		// And to the ACCOUNT's row, which reads the name and then the address:
+		// the Keys block under it draws the wallet's key from its first frame
+		// now, and a single-key wallet's key carries the wallet's name.
+		const rows = page.getByRole('main').getByRole('button', { name: /^Twice Signed In 0x/ });
 		await expect(rows).toHaveCount(1);
 		// One wallet is counted as one: "1 account · ", in the singular.
 		await expect(page.getByRole('main').getByText(/^1 account · /)).toBeVisible();
@@ -221,7 +224,7 @@ test.describe('two records deriving one address', () => {
 		await expect(page.getByText('Twice Signed In').first()).toBeVisible();
 		await page.getByRole('button', { name: 'Account', exact: true }).click();
 		const main = page.getByRole('main');
-		await expect(main.getByRole('button', { name: /Twice Signed In/ })).toHaveCount(1);
+		await expect(main.getByRole('button', { name: /^Twice Signed In 0x/ })).toHaveCount(1);
 		await expect(main.getByRole('button', { name: /Another Wallet/ })).toHaveCount(1);
 		await expect(main.getByText(/^2 accounts · /)).toBeVisible();
 

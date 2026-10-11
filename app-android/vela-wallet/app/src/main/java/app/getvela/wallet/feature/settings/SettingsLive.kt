@@ -1250,11 +1250,29 @@ object SettingsLive {
      * them (spec 062) — ONE block, under the account it belongs to. A person
      * offered "back up your keys" is owed the sight of them first.
      *
-     * `keys == null` is "still asking": a title and no guessed count. A registry
-     * that did not answer leaves the device's own memory on screen, labelled,
-     * without sync badges; one that answered with nothing is NOT called
-     * unreachable. The backup row is a button only while there is something to
-     * do, and absent where there is no registry on Ethereum or no registration.
+     * `keys == null` is "still asking". The block does not wait for the answer
+     * to have its shape: it opens on [device] — what this device's own record
+     * says, with nobody asked (`WalletKeys.deviceOnly`) — so every key the
+     * wallet has stands where it will stand, the count is the record's own,
+     * and the registry's answer fills the rows in place. On the phone the
+     * block was ONE skeleton row until the registry answered, and then
+     * everything under it dropped by the height of the wallet's keys (device
+     * walk, 2026-10-11: 151 px for one key).
+     *
+     * A row drawn while asking states only what the record knows for certain:
+     * the name it holds (a key the record does not name gets no "Key 2"
+     * either — the registry may name it), the fingerprint, and "Signed in".
+     * What holds the key and the registry's badges are NOT stated: the record
+     * does not know them, and a guess here read "Built-in passkey" until the
+     * registry answered "Security key". Nothing opens until there is
+     * something to open onto.
+     *
+     * A registry that did not answer leaves the device's own memory on
+     * screen, labelled — in the caption under the title, whose room is kept
+     * for it, so the label arrives without moving a row — and without sync
+     * badges; one that answered with nothing is NOT called unreachable. The backup row is a button only while there
+     * is something to do, and absent where there is no registry on Ethereum
+     * or no registration.
      */
     fun withWalletKeys(
         model: SettingsScreenModel,
@@ -1263,48 +1281,75 @@ object SettingsLive {
         strings: VelaStrings,
         /** Spec 102: the account's signing domain — said only when it is not `getvela.app`. */
         signingDomain: String = "getvela.app",
+        /** The device's own record, drawn while [keys] is still being asked; `null` before it is read. */
+        device: app.getvela.wallet.feature.settings.core.WalletKeys.Result? = null,
     ): SettingsScreenModel {
         val k = I18nKeys.SettingsUi
-        val rows = keys?.rows.orEmpty().mapIndexed { index, row ->
+        val pending = keys == null
+        val rows = (keys ?: device)?.rows.orEmpty().mapIndexed { index, row ->
             val body = row.publicKeyHex.removePrefix("0x").let { if (it.length == 130 && it.startsWith("04")) it.drop(2) else it }
+            val unnamed = strings.t(k.KEYS_KEY_N).replace("{{n}}", (index + 1).toString())
             WalletKeyRowModel(
-                name = row.key.name.ifEmpty { strings.t(k.KEYS_KEY_N).replace("{{n}}", (index + 1).toString()) },
+                name = row.key.name.ifEmpty { if (pending) "" else unnamed },
+                nameRoom = unnamed,
                 // Spec 102: captioned by where the key LIVES — the vault when the
                 // catalog knows it, else its place — never by a page it was made on.
-                holder = row.key.providerName.ifEmpty {
-                    strings.t(
-                        when (row.key.method) {
-                            app.getvela.wallet.feature.onboarding.core.KeyMethod.SecurityKey -> k.KEYS_PROVIDER_SECURITY_KEY
-                            app.getvela.wallet.feature.onboarding.core.KeyMethod.Hybrid -> k.KEYS_PROVIDER_GENERIC
-                            app.getvela.wallet.feature.onboarding.core.KeyMethod.Platform -> k.KEYS_PROVIDER_PLATFORM
-                        },
-                    )
+                holder = if (pending) {
+                    ""
+                } else {
+                    row.key.providerName.ifEmpty {
+                        strings.t(
+                            when (row.key.method) {
+                                app.getvela.wallet.feature.onboarding.core.KeyMethod.SecurityKey -> k.KEYS_PROVIDER_SECURITY_KEY
+                                app.getvela.wallet.feature.onboarding.core.KeyMethod.Hybrid -> k.KEYS_PROVIDER_GENERIC
+                                app.getvela.wallet.feature.onboarding.core.KeyMethod.Platform -> k.KEYS_PROVIDER_PLATFORM
+                            },
+                        )
+                    }
                 },
                 fingerprint = if (body.length >= 8) "${body.take(4)}…${body.takeLast(4)}".lowercase() else "",
                 pills = listOfNotNull(
                     // First: the key this device signs with (founder, 2026-09-26).
+                    // The device's own fact, so it is said while asking too.
                     if (row.signsHere) KeyPillModel(strings.t(k.KEYS_SIGNS_HERE), KeyPillTone.SignsHere) else null,
-                    if (row.userVerified == true) KeyPillModel(strings.t(k.KEYS_USER_VERIFIED), KeyPillTone.Verified) else null,
-                    row.synced?.let { KeyPillModel(strings.t(if (it) k.KEYS_SYNCED else k.KEYS_NOT_SYNCED), if (it) KeyPillTone.Synced else KeyPillTone.Local) },
+                    if (!pending && row.userVerified == true) KeyPillModel(strings.t(k.KEYS_USER_VERIFIED), KeyPillTone.Verified) else null,
+                    row.synced?.takeIf { !pending }?.let { KeyPillModel(strings.t(if (it) k.KEYS_SYNCED else k.KEYS_NOT_SYNCED), if (it) KeyPillTone.Synced else KeyPillTone.Local) },
                 ),
                 // The registry explorer's facts, in its order; what is absent is left out.
-                details = listOf(
-                    KeyDetailModel(strings.t(k.KEYS_PUBLIC_KEY), if (row.publicKeyHex.isEmpty()) "" else "0x${row.publicKeyHex.removePrefix("0x")}", mono = true, copy = true),
-                    KeyDetailModel(strings.t(k.KEYS_CREDENTIAL), row.credentialId, mono = true, copy = true),
-                    KeyDetailModel("AAGUID", row.key.aaguid, mono = true, copy = false),
-                    KeyDetailModel(strings.t(k.KEYS_TRANSPORT), listOf(row.key.authenticatorAttachment, row.key.transports).filter { it.isNotEmpty() }.joinToString(" · "), mono = false, copy = false),
-                    KeyDetailModel(strings.t(k.KEYS_ATTESTATION), row.attestationHex, mono = true, copy = false),
-                ).filter { it.value.isNotEmpty() },
+                details = if (pending) {
+                    emptyList()
+                } else {
+                    listOf(
+                        KeyDetailModel(strings.t(k.KEYS_PUBLIC_KEY), if (row.publicKeyHex.isEmpty()) "" else "0x${row.publicKeyHex.removePrefix("0x")}", mono = true, copy = true),
+                        KeyDetailModel(strings.t(k.KEYS_CREDENTIAL), row.credentialId, mono = true, copy = true),
+                        KeyDetailModel("AAGUID", row.key.aaguid, mono = true, copy = false),
+                        KeyDetailModel(strings.t(k.KEYS_TRANSPORT), listOf(row.key.authenticatorAttachment, row.key.transports).filter { it.isNotEmpty() }.joinToString(" · "), mono = false, copy = false),
+                        KeyDetailModel(strings.t(k.KEYS_ATTESTATION), row.attestationHex, mono = true, copy = false),
+                    ).filter { it.value.isNotEmpty() }
+                },
                 key = row.key,
+                pending = pending,
             )
         }
         return model.copy(
             keys = WalletKeysModel(
                 title = strings.t(k.KEYS_TITLE),
                 subtitle = strings.t(k.KEYS_SUBTITLE),
-                count = if (keys == null) "" else rows.size.toString(),
-                loading = keys == null,
+                // The record's own count while asking — a count, not a guess.
+                count = if (keys == null && device == null) "" else rows.size.toString(),
+                loading = pending,
+                badgeRoom = listOf(
+                    listOf(strings.t(k.KEYS_USER_VERIFIED), strings.t(k.KEYS_SYNCED)),
+                    listOf(strings.t(k.KEYS_USER_VERIFIED), strings.t(k.KEYS_NOT_SYNCED)),
+                ),
+                holderRoom = listOf(
+                    strings.t(k.KEYS_PROVIDER_PLATFORM),
+                    strings.t(k.KEYS_PROVIDER_GENERIC),
+                    strings.t(k.KEYS_PROVIDER_SECURITY_KEY),
+                    KEY_VAULT_ROOM,
+                ),
                 note = if (keys?.source == app.getvela.wallet.feature.settings.core.WalletKeys.Source.Device) strings.t(k.KEYS_FROM_DEVICE) else null,
+                noteRoom = strings.t(k.KEYS_FROM_DEVICE),
                 rows = rows,
                 // Spec 102: a wallet on its own domain says so — its keys
                 // belong to that site, and only a page there can use them.
@@ -1359,8 +1404,39 @@ object SettingsLive {
             subtitlePositive = row?.tone == app.getvela.wallet.feature.settings.core.RegistryBackup.Tone.Positive,
             trailing = trailing,
             actionable = trailing != RowTrailing.None,
+            // "Checking…" becomes one of four lines, and a chevron or a retry
+            // glyph arrives with two of them: the row keeps the room of the
+            // tallest line and of the glyph from its first frame, so the
+            // answer changes its words and nothing under it.
+            subtitleRoom = BACKUP_LINES.map { strings.t(it) },
+            trailingRoom = true,
         )
     }
 
     const val ETHEREUM_BACKUP_ROW = "ethereum-backup"
+
+    /**
+     * Every line the backup row's state can read — "Checking…" and the core's
+     * four (`BackupState::row`). Named here only to keep their ROOM; which
+     * one is said is the core's answer.
+     */
+    internal val BACKUP_LINES = listOf(
+        I18nKeys.SettingsUi.BACKUP_CHECKING,
+        "settingsModals.backup.backedUp",
+        "settingsModals.backup.notBackedUp",
+        I18nKeys.SettingsUi.BACKUP_COULD_NOT_CHECK,
+        "settingsModals.backup.cannotCopy",
+    )
+
+    /**
+     * Room for a vault's name on a key row — never drawn, only measured. What
+     * holds a key is the registry's to say, so until it answers the line
+     * under the key's name cannot know whether it will be one line or two;
+     * it keeps room for the three places a key lives (in this language) and
+     * for the platform's own vault, which is where a passkey made on Android
+     * lives unless the person chose another and is as long as the common
+     * ones get. A vault with a longer name can still add a line at the sizes
+     * where only it wraps.
+     */
+    internal const val KEY_VAULT_ROOM = "Google Password Manager"
 }

@@ -2597,8 +2597,9 @@ pub struct BrowserAddressBar {
     pub url: String,
     /// Lower-case host, a non-default port kept; empty when nothing.
     pub host: String,
-    /// `closed` (https, or http on loopback / a private network), `open`
-    /// (public http) or `none` (a failure panel, a pending load, an empty tab).
+    /// `closed` (https — the only padlock), `local` (http on loopback / a
+    /// private network — a neutral mark), `open` (public http) or `none` (a
+    /// failure panel, a pending load, an empty tab).
     pub lock: String,
 }
 
@@ -3516,6 +3517,8 @@ mod tests_082 {
         );
         let public_http = browser_address_bar(Some("http://example.com/".into()), None, None);
         assert_eq!(public_http.lock, "open");
+        let on_device = browser_address_bar(Some("http://127.0.0.1:8137/".into()), None, None);
+        assert_eq!(on_device.lock, "local", "no padlock for plain http");
         let empty = browser_address_bar(None, None, None);
         assert_eq!((empty.url.as_str(), empty.lock.as_str()), ("", "none"));
 

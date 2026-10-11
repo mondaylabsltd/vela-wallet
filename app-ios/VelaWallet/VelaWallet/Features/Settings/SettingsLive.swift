@@ -479,12 +479,14 @@ enum SettingsLive {
     ///
     /// `device` is what this device's own record says (`WalletKeys
     /// .deviceOnly`), known before any chain is asked: while still asking,
-    /// the block draws THOSE rows — every key the wallet has, by name, each
-    /// with the room its badges will take — so the registry's answer fills
-    /// rows in instead of adding them, and nothing under the block moves
-    /// (iPhone walk 2026-10-10: one skeleton row, then three keys, and the
-    /// page dropped ~250 pt). With neither there is one skeleton row, for the
-    /// instant before the record is read.
+    /// the block draws THOSE rows — every key the wallet has, each with the
+    /// room its badges will take — so the registry's answer fills rows in
+    /// instead of adding them, and nothing under the block moves (iPhone walk
+    /// 2026-10-10: one skeleton row, then three keys, and the page dropped
+    /// ~250 pt). Such a row is `pending`: it says what the record knows for
+    /// certain and nothing the answer may contradict — no kind, no mark, no
+    /// made-up name, nothing to open. With neither there is one skeleton
+    /// row, for the instant before the record is read.
     static func withWalletKeys(
         _ keys: WalletKeys.Result?,
         device: WalletKeys.Result? = nil,
@@ -494,6 +496,14 @@ enum SettingsLive {
     ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
         let known = keys ?? device
+        // The registry is still being asked: the rows are the device's own,
+        // and say only what its record knows for certain. What the answer
+        // may contradict is left unsaid (owner's iPhone, 2026-10-11: a key
+        // read 「内置通行密钥」 with a person glyph for three seconds, then
+        // 「安全密钥」 with a key — the record's method falls back to
+        // "platform"). A registry that did not answer is `keys` with the
+        // device as its source: final, and shown as the device reads it.
+        let pending = keys == nil
         let rows = (known?.rows ?? []).enumerated().map { index, row -> WalletKeyRowModel in
             var body = row.publicKeyHex.hasPrefix("0x") ? String(row.publicKeyHex.dropFirst(2)) : row.publicKeyHex
             if body.count == 130, body.hasPrefix("04") { body = String(body.dropFirst(2)) }
@@ -507,12 +517,13 @@ enum SettingsLive {
             }
             // The vault's name outranks the generic line.
             let holder = row.key.providerName.isEmpty ? loc.t(line) : row.key.providerName
+            let numbered = loc.t(k.keysKeyN).replacingOccurrences(of: "{{n}}", with: String(index + 1))
             return WalletKeyRowModel(
                 id: index,
-                name: row.key.name.isEmpty
-                    ? loc.t(k.keysKeyN).replacingOccurrences(of: "{{n}}", with: String(index + 1))
-                    : row.key.name,
-                holder: holder,
+                // A name the record holds is the device's fact and stays; one
+                // it does not hold is the registry's to give, or nobody's.
+                name: row.key.name.isEmpty ? (pending ? "" : numbered) : row.key.name,
+                holder: pending ? "" : holder,
                 fingerprint: body.count >= 8 ? "\(body.prefix(4))…\(body.suffix(4))".lowercased() : "",
                 pills: [
                     // The key this device signs with stands out, first
@@ -522,7 +533,10 @@ enum SettingsLive {
                     row.synced.map { KeyPillModel(text: loc.t($0 ? k.keysSynced : k.keysNotSynced), tone: $0 ? .synced : .local) },
                 ].compactMap { $0 },
                 // The registry explorer's facts, in its order; what is absent is left out.
-                details: [
+                // None while it is still being asked: a row opened on the
+                // device's two facts would grow by the registry's three when
+                // they land, under the person's finger.
+                details: pending ? [] : [
                     KeyDetailModel(label: loc.t(k.keysPublicKey), value: row.publicKeyHex.isEmpty ? "" : "0x" + body130(row.publicKeyHex), mono: true, copy: true),
                     KeyDetailModel(label: loc.t(k.keysCredential), value: row.credentialId, mono: true, copy: true),
                     KeyDetailModel(label: "AAGUID", value: row.key.aaguid, mono: true, copy: false),
@@ -533,7 +547,9 @@ enum SettingsLive {
                     ),
                     KeyDetailModel(label: loc.t(k.keysAttestation), value: row.attestationHex, mono: true, copy: false),
                 ].filter { !$0.value.isEmpty },
-                key: row.key
+                key: pending ? nil : row.key,
+                pending: pending,
+                nameRoom: numbered
             )
         }
         // A record with no key at all (the DEBUG read-only seed) has nothing to
@@ -555,7 +571,8 @@ enum SettingsLive {
             badgeRoom: [
                 [loc.t(k.keysUserVerified), loc.t(k.keysSynced)],
                 [loc.t(k.keysUserVerified), loc.t(k.keysNotSynced)],
-            ]
+            ],
+            holderRoom: [k.keysProviderPlatform, k.keysProviderSecurityKey, k.keysProviderGeneric].map { loc.t($0) }
         )
         return next
     }

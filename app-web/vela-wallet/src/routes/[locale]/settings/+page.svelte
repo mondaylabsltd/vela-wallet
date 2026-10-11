@@ -47,7 +47,7 @@
 		checkEthereumBackup,
 		type EthereumBackupRow
 	} from '$lib/services/registry-backup';
-	import { readWalletKeys, type WalletKeys } from '$lib/services/wallet-keys';
+	import { deviceOnlyKeys, readWalletKeys, type WalletKeys } from '$lib/services/wallet-keys';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
@@ -286,13 +286,16 @@
 	});
 
 	// Which passkeys control the active wallet — read from the registry contract
-	// each time this page meets an account; `null` while the first answer is in
-	// flight. The device's own record is the floor it falls back to.
+	// each time this page meets an account. The device's own record stands in
+	// the block from the first frame (`deviceOnlyKeys`: its rows, marked as
+	// still being asked), and is the floor the answer falls back to: the block
+	// was one grey row until the registry answered, and then everything under
+	// it dropped by the rest of the keys (device walk, item 13.1).
 	let walletKeys = $state<WalletKeys | null>(null);
 	$effect(() => {
 		const account = session.view.accounts[session.view.active_index]?.account;
 		if (!account) return;
-		walletKeys = null;
+		walletKeys = deviceOnlyKeys(account);
 		let cancelled = false;
 		void readWalletKeys(account).then((keys) => {
 			if (!cancelled) walletKeys = keys;

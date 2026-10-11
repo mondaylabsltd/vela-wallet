@@ -386,7 +386,10 @@ struct RootView: View {
         return ZStack(alignment: .top) {
             themedBackground
 
-            content(router: $router.path)
+            // Erased (`StackGauge`): every modifier below this body's ZStack
+            // would otherwise carry the whole router's value in a new
+            // temporary on the main thread's one megabyte of stack.
+            AnyView(content(router: $router.path))
                 // Composed from the first frame, hidden by the opaque overlay,
                 // so the hand-off has nothing left to build (FR-013a).
                 .opacity(pageOpacity)
@@ -678,7 +681,8 @@ struct RootView: View {
             #endif
         case nil:
             NavigationStack(path: path) {
-                signedInOrWelcome
+                // Erased, for the stack's sake (`StackGauge`).
+                AnyView(signedInOrWelcome)
                     .navigationDestination(for: AppRoute.self) { route in
                         switch route {
                         case .create:
@@ -834,7 +838,9 @@ struct RootView: View {
                 let state = sendStates.contains(drawn)
                     ? (send.view.map { SendLive.flowState($0, feeSheetOpen: feeSheetOpen) } ?? drawn)
                     : drawn
-                flowScreen(state)
+                // Erased, for the stack's sake (`StackGauge`): the twenty
+                // modifiers below each wrap what is under them.
+                AnyView(flowScreen(state))
                 .transition(.move(edge: .trailing))
                 // The field holds what is typed and the core holds the value:
                 // a field bound straight to a machine loses characters on the
@@ -2252,6 +2258,10 @@ struct RootView: View {
     /// add-token sheet is `manage_tokens`. Every other flow is a picture, and
     /// visibly so.
     private func flowModel(_ state: FlowStateId) -> FlowScreenModel {
+        // The deepest frame of the router's own: body → appBody → content →
+        // signedInOrWelcome → flowScreen → here, and a screen's whole model
+        // is still to be built under it.
+        StackGauge.note("flowModel")
         var model = WalletFlowFixtures.build(state, loc: loc)
         // The fee coins opened from the confirm — a fee that would fail,
         // "Pay with another coin" (PR 2 polish) — sit over the confirm the

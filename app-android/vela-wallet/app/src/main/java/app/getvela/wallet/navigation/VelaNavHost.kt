@@ -244,6 +244,21 @@ fun VelaNavHost(
     val session by application.container.session.view.collectAsStateWithLifecycle()
     val onboarding: OnboardingViewModel = viewModel()
 
+    // The keys this device's own record gives the account in front, read as
+    // the account comes to the front — before anybody can open Settings — and
+    // from the record alone: `deviceOnly` asks no chain. Settings opens its
+    // keys block on these rows, so the block has its final height on its
+    // first frame instead of growing when the registry answers (device walk,
+    // 2026-10-11). Kept with the address it was read for: another account's
+    // rows are never shown under this one.
+    var deviceKeys by remember { mutableStateOf<Pair<String, app.getvela.wallet.feature.settings.core.WalletKeys.Result>?>(null) }
+    LaunchedEffect(session.address, session.activeName) {
+        val address = session.address
+        if (address.isBlank()) return@LaunchedEffect
+        val device = application.container.deviceKeysOf(address, session.activeName)
+        deviceKeys = address to application.container.walletKeys.deviceOnly(device, application.container.signInCredentialOf(address))
+    }
+
     // Which body the signed-in shell shows. 钱包 and 探索 are SECTIONS of the
     // wallet route; 通讯录 and 设置 are routes pushed over it. Hoisted out of
     // the wallet route (spec 047) so a pushed route's tab bar can pick a
@@ -2298,7 +2313,12 @@ fun VelaNavHost(
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
                     val device = application.container.deviceKeysOf(address, session.activeName)
-                    walletKeys = application.container.walletKeys.read(address, device, application.container.signInCredentialOf(address))
+                    val signIn = application.container.signInCredentialOf(address)
+                    // The record as it stands NOW — a key added since the
+                    // account came to the front is a row before the registry
+                    // says so — and then the registry.
+                    deviceKeys = address to application.container.walletKeys.deviceOnly(device, signIn)
+                    walletKeys = application.container.walletKeys.read(address, device, signIn)
                 }
                 // What this device may say about itself in a report — five named
                 // fields, never an address, a balance or an endpoint URL.
@@ -2325,7 +2345,11 @@ fun VelaNavHost(
                     }
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
                     m = SettingsLive.withConnections(m, connectedSites.sites, strings)
-                    m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck, strings, sessionView.activeRow?.signingDomain ?: "getvela.app")
+                    m = SettingsLive.withWalletKeys(
+                        m, walletKeys, backupCheck, strings, sessionView.activeRow?.signingDomain ?: "getvela.app",
+                        // While the registry is asked: the device's own rows, where they will stand.
+                        device = deviceKeys?.takeIf { it.first == session.address }?.second,
+                    )
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
                     m = SettingsLive.withFeedback(m, feedbackFacts, strings)
                     m = SettingsLive.withFeedbackStatus(m, feedbackState.sending, feedbackState.outcome)

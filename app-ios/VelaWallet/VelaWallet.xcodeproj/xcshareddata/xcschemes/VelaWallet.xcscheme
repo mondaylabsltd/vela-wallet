@@ -191,6 +191,9 @@
                <Test
                   Identifier = "PR3DeviceTests">
                </Test>
+               <Test
+                  Identifier = "PR4DeviceTests">
+               </Test>
             </SkippedTests>
          </TestableReference>
       </Testables>
