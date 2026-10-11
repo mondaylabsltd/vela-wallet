@@ -42,8 +42,12 @@ function countDocuments(page: Page): { of(path: string): number } {
 }
 
 /**
- * Every chunk the wallet loads by itself, once it has stopped asking for
- * more: its first paint's, and the routes it warms behind it.
+ * The chunks the wallet has loaded by the time it stops asking for more for
+ * a moment: its first paint's, and what follows straight behind it. Not a
+ * promise that nothing lazy is left — what it warms later (two dozen chunks,
+ * seconds on) is not in the set, and nothing below needs it to be: every
+ * chunk the first paint needs was loaded before the wallet's name was on the
+ * page, so whatever is NOT in the set is a lazy import, like the dev console.
  */
 async function settledChunks(page: Page): Promise<Set<string>> {
 	const loaded = new Set<string>();
@@ -131,7 +135,13 @@ test('leaving a page whose lazy chunks are still loading goes where it was asked
 		held.push(route);
 	});
 	await page.evaluate(() => localStorage.setItem('vela.dev.console', '1'));
-	await page.reload();
+	// Not until "load". A lazy import is preloaded with a `<link>`, and this
+	// one is being held: when the import starts while the document is still
+	// loading, WebKit does not fire `load` until that link answers — so the
+	// reload waited out the test, one run in eight on a busy machine, and
+	// three in three with that order forced (Chromium and Firefox fire it
+	// regardless). The page is up when the wallet's name is on it.
+	await page.reload({ waitUntil: 'commit' });
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await expect.poll(() => held.length, { timeout: 30_000 }).toBeGreaterThan(0);
 	const walletLoads = documents.of('/en/wallet');
