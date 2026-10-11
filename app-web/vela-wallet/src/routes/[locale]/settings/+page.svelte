@@ -223,7 +223,7 @@
 		void readWorkerFailureLines().then((lines) => (workerFailures = lines));
 	});
 	const deviceFacts = $derived.by<DeviceFacts>(() =>
-		currentDeviceFacts(data.locale, workerFailures)
+		currentDeviceFacts(data.locale, workerFailures, m.bugReport.chainFallback)
 	);
 
 	/**

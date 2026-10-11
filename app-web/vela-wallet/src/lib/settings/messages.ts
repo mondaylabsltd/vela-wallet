@@ -398,7 +398,14 @@ export interface SettingsMessages {
 		previewVersion: string;
 		previewPlatform: string;
 		previewLanguage: string;
+		/** "Unreachable networks" — what follows is a list of networks, by name. */
 		previewRpc: string;
+		/**
+		 * `assets.chainFallback` ("Chain {{chainId}}"): how that list writes a
+		 * network that has no name. Never a bare id — "1625" after the label
+		 * read as a count (device walk of 2026-10-11, item 9).
+		 */
+		chainFallback: string;
 		previewFailures: string;
 		previewNone: string;
 		consent: string;
@@ -963,6 +970,7 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.previewPlatform',
 	'componentsUi.bugReport.previewLanguage',
 	'componentsUi.bugReport.previewRpc',
+	'assets.chainFallback',
 	'componentsUi.bugReport.previewFailures',
 	'componentsUi.bugReport.previewNone',
 	'componentsUi.bugReport.consent',

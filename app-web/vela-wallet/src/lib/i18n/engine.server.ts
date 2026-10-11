@@ -713,6 +713,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			previewPlatform: k('componentsUi.bugReport.previewPlatform'),
 			previewLanguage: k('componentsUi.bugReport.previewLanguage'),
 			previewRpc: k('componentsUi.bugReport.previewRpc'),
+			chainFallback: k('assets.chainFallback'),
 			previewFailures: k('componentsUi.bugReport.previewFailures'),
 			previewNone: k('componentsUi.bugReport.previewNone'),
 			consent: k('componentsUi.bugReport.consent'),

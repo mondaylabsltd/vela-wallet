@@ -2080,7 +2080,10 @@
 	/** The extension worker's failure lines, read when a report opens. */
 	let relayWorkerFailures = $state<string[]>([]);
 	const relayReportModel = $derived(
-		liveRelayReport(rm, deviceFacts(data.locale ?? 'en', relayWorkerFailures))
+		liveRelayReport(
+			rm,
+			deviceFacts(data.locale ?? 'en', relayWorkerFailures, rm.bugReport.chainFallback)
+		)
 	);
 
 	function openRelayReport(from: 'relayer' | 'relay-unreachable'): void {
@@ -2123,7 +2126,7 @@
 			area: report.area,
 			fingerprint: report.fingerprint,
 			labels: feedbackLabels(rm),
-			facts: deviceFacts(data.locale ?? 'en', relayWorkerFailures),
+			facts: deviceFacts(data.locale ?? 'en', relayWorkerFailures, rm.bugReport.chainFallback),
 			screenshots: typed.screenshots
 		});
 		await relayReportSend.send(() => fileReport(payload), copy);
