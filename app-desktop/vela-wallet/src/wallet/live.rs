@@ -858,8 +858,18 @@ mod tests {
         assert_eq!(token_amount_text_down("1.22456789"), "1.2245");
         assert_eq!(token_amount_text_down("999.99996"), "999.9999");
         assert_eq!(token_amount_text_down("1234.567"), "1234.56");
-        assert_eq!(token_amount_text_down("0.0000001234"), "0.00000012");
         assert_eq!(token_amount_text_down("3"), "3");
+        // Dust is cut at its first digit — the core's rule. The desktop's
+        // own copy of the ladder rounded dust half up: 0.000000196 read
+        // "0.0000002", more than there is.
+        assert_eq!(token_amount_text_down("0.0000001234"), "0.0000001");
+        assert_eq!(token_amount_text_down("0.000000196"), "0.0000001");
+        // The owner's balance on the walk (PR 4 item 13).
+        assert_eq!(token_amount_text_down("0.000300194967818323"), "0.0003");
+        // The person's decimal mark, ungrouped.
+        let comma = vela_core::l10n::number::NumberPreset::DotComma;
+        assert_eq!(with_mark_of("1234.56".to_owned(), comma), "1234,56");
+        assert_eq!(with_mark_of("0.0003".to_owned(), comma), "0,0003");
     }
 
     /// Spec 079: the picker's figure per network — the home screen's own
@@ -4311,47 +4321,29 @@ pub fn token_amount_text(value: &str) -> String {
     with_decimal_mark(vela_core::app::send::max_figure(value))
 }
 
-/// The same ladder cut DOWN — for a ceiling the person may type back ("you
-/// can send up to", what is left): rounded up, it would be a figure the
-/// balance cannot cover.
+/// The same ladder cut DOWN — for a figure of what is THERE that the person
+/// may type back ("you can send up to", what is left): rounded up, it would
+/// be a figure the balance cannot cover. The cut is the core's
+/// (`l10n::cut_token_amount`: 2 places from a thousand, 4 from one, 6 below,
+/// dust kept at its first digit, nothing ever carried); the desktop kept a
+/// copy of that ladder here, whose dust case rounded half up. Written with
+/// the person's decimal mark, ungrouped, like [`token_amount_text`].
 #[must_use]
 pub fn token_amount_text_down(value: &str) -> String {
-    let exact = value.trim();
-    let (int_raw, frac_raw) = exact.split_once('.').unwrap_or((exact, ""));
-    if !int_raw.bytes().all(|b| b.is_ascii_digit()) || !frac_raw.bytes().all(|b| b.is_ascii_digit())
-    {
-        return exact.to_owned();
-    }
-    let int_digits = int_raw.trim_start_matches('0');
-    let places = match int_digits.len() {
-        0 => 6,
-        1..=3 => 4,
-        _ => 2,
-    };
-    let cut: String = frac_raw.chars().take(places).collect();
-    // Below the last place, the half-up rule's two significant digits are
-    // already a cut; anything else is the truncation itself.
-    if int_digits.is_empty() && cut.trim_end_matches('0').is_empty() {
-        return token_amount_text(exact);
-    }
-    let int_part = if int_digits.is_empty() {
-        "0"
-    } else {
-        int_digits
-    };
-    let frac = cut.trim_end_matches('0');
-    with_decimal_mark(if frac.is_empty() {
-        int_part.to_owned()
-    } else {
-        format!("{int_part}.{frac}")
-    })
+    with_decimal_mark(vela_core::l10n::cut_token_amount(value))
 }
 
 pub(crate) fn with_decimal_mark(figure: String) -> String {
-    let decimal = crate::executor::format_prefs::current()
-        .number
-        .separators()
-        .decimal;
+    with_mark_of(figure, crate::executor::format_prefs::current().number)
+}
+
+/// A dot-decimal figure with `preset`'s decimal mark — [`with_decimal_mark`]
+/// for a given preset.
+pub(crate) fn with_mark_of(
+    figure: String,
+    preset: vela_core::l10n::number::NumberPreset,
+) -> String {
+    let decimal = preset.separators().decimal;
     if decimal == "." {
         figure
     } else {

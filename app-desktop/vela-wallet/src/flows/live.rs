@@ -3890,18 +3890,13 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             )
         }),
         summary_detail: None,
-        remaining: send.split_remaining.as_ref().filter(|_| split).map(|left| {
-            fill(
-                &s.split_remaining,
-                "amount",
-                format!(
-                    "{} {symbol}",
-                    crate::wallet::live::token_amount_text_down(left)
-                )
-                .trim(),
-            )
-            .into()
-        }),
+        // The core's figure for a person (`split_remaining_display`), never
+        // the exact one (`split_remaining`) — see [`left_figure`].
+        remaining: send
+            .split_remaining_display
+            .as_deref()
+            .filter(|_| split)
+            .map(|left| fill(&s.split_remaining, "amount", &left_figure(left, &symbol)).into()),
         summary_over: split && send.split_over_balance,
         fill_empty: split_fill_source(send).map(|amount| {
             fill(
@@ -4993,11 +4988,42 @@ fn batch_rows(view: &BatchView, symbol: &str, s: &FlowStrings) -> Vec<BatchRow> 
     rows.into_iter().map(|(_, row)| row).collect()
 }
 
+/// What is left to give out, as it is drawn — "0.0003 BNB".
+///
+/// `display` is the core's `SendView.split_remaining_display`: the exact
+/// remainder cut to the token ladder and never rounded up, so it never says
+/// more is left than is. The iPhone printed the exact one — 「还剩
+/// 0.000300194967818323 BNB」 beside 「余额 0.0003」 (PR 4 item 13); the
+/// desktop cut it with a ladder of its own. Written the way the balance
+/// beside it is: the person's decimal mark, no grouping, then the coin.
+fn left_figure(display: &str, symbol: &str) -> String {
+    left_figure_with(
+        display,
+        symbol,
+        crate::executor::format_prefs::current().number,
+    )
+}
+
+/// [`left_figure`] for a given number preset.
+fn left_figure_with(
+    display: &str,
+    symbol: &str,
+    preset: vela_core::l10n::number::NumberPreset,
+) -> String {
+    format!(
+        "{} {symbol}",
+        crate::wallet::live::with_mark_of(display.to_owned(), preset)
+    )
+    .trim()
+    .to_owned()
+}
+
 /// DSD2cL's total line (the web's `total`): what the import sends, in the
 /// token and — for a fiat sheet — in the sheet's currency, against what the
-/// account holds. `remaining` is the form's `split_remaining` when this
-/// import ADDS to rows already there: then that, not the whole balance, is
-/// what it draws from. `None` until a row parses.
+/// account holds. `remaining` is the form's remainder as a person reads it
+/// ([`batch_remaining`]) when this import ADDS to rows already there: then
+/// that, not the whole balance, is what it draws from. `None` until a row
+/// parses.
 #[must_use]
 pub fn batch_total(
     view: &BatchView,
@@ -5015,14 +5041,7 @@ pub fn batch_total(
             .as_ref()
             .map(|fiat| format!("{fiat} {}", view.fiat_code).into()),
         balance: match remaining {
-            Some(left) => fill(
-                &s.split_remaining,
-                "amount",
-                &format!(
-                    "{} {symbol}",
-                    crate::wallet::live::token_amount_text_down(left)
-                ),
-            ),
+            Some(left) => fill(&s.split_remaining, "amount", &left_figure(left, symbol)),
             None => fill(
                 &s.balance_label,
                 "amount",
@@ -5037,14 +5056,16 @@ pub fn batch_total(
 }
 
 /// What an import's total line is read against when it ADDS to rows already
-/// on the split form: the core's `split_remaining`. `None` — the whole
-/// balance — when the form is empty or the person chose to replace its rows
-/// (the web's `formHasRows && !replaces ? remaining : undefined`).
+/// on the split form: the core's remainder, as a person reads it
+/// (`split_remaining_display` — this line is drawn, never counted with).
+/// `None` — the whole balance — when the form is empty or the person chose
+/// to replace its rows (the web's `formHasRows && !replaces ? remaining :
+/// undefined`).
 #[must_use]
 pub fn batch_remaining(send: &SendView, replaces: bool) -> Option<&str> {
     let form_has_rows =
         (send.split_import_room as usize) < vela_core::app::send::BATCH_MAX_RECIPIENTS;
-    send.split_remaining
+    send.split_remaining_display
         .as_deref()
         .filter(|_| form_has_rows && !replaces)
 }
@@ -9184,6 +9205,7 @@ mod parity_tests {
                 ],
                 confirm_amount: String::new(),
                 split_remaining: Some("7".to_owned()),
+                split_remaining_display: Some("7".to_owned()),
                 ..CoreHost::<SendMachine>::new().view()
             };
             let form = with_inputs(&view, send_form);
@@ -9217,6 +9239,7 @@ mod parity_tests {
             // Over the balance: no "left", and the total in error ink.
             let over = SendView {
                 split_remaining: None,
+                split_remaining_display: None,
                 split_over_balance: true,
                 confirm_amount: "12".to_owned(),
                 ..view
@@ -9619,15 +9642,128 @@ mod parity_tests {
         assert!(batch_total(&empty, "USDT", "1000", None, &s).is_none());
     }
 
+    /// PR 4 item 13. Send to several recipients printed 「还剩
+    /// 0.000300194967818323 BNB」 beside 「余额 0.0003」. Through the real
+    /// send machine, holding exactly that: the form's line and the
+    /// importer's read "0.0003 BNB left" — the core's figure for a person,
+    /// with the person's decimal mark — while the exact remainder stays
+    /// exact for whoever counts.
+    #[test]
+    fn what_is_left_of_a_split_reads_like_the_balance_beside_it() {
+        use vela_core::app::send::{
+            Event as SendEvent, SendAccountRef, SendChainInfo, SendDisplayContext, SendOpenParams,
+            SendOperation, SendShellResult,
+        };
+        use vela_core::l10n::number::NumberPreset;
+        const HELD: &str = "0.000300194967818323";
+        crate::executor::storage::tests::with_temp_state("parity-split-left", || {
+            let bnb = token(56, "BNB", None, HELD);
+            let drive = |host: &mut CoreHost<SendMachine>, event: SendEvent| {
+                let mut pending = host.dispatch(event);
+                while let Some(effect) = pending.pop() {
+                    let result = match &effect.operation {
+                        SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                            tokens: Some(vec![bnb.clone()]),
+                            chains: vec![SendChainInfo {
+                                chain_id: 56,
+                                network: bnb.network.clone(),
+                                native_symbol: "BNB".to_owned(),
+                            }],
+                        },
+                        SendOperation::LoadAccountCredential { .. } => {
+                            SendShellResult::AccountCredential {
+                                public_key_hex: Some("04aa".to_owned()),
+                            }
+                        }
+                        SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                        _ => continue,
+                    };
+                    pending.extend(host.resolve(effect.id, result));
+                }
+            };
+            let mut host = CoreHost::<SendMachine>::new();
+            drive(
+                &mut host,
+                SendEvent::Open {
+                    account: Some(SendAccountRef {
+                        id: "cred0".to_owned(),
+                        address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                        name: None,
+                    }),
+                    params: SendOpenParams::default(),
+                    display: SendDisplayContext::default(),
+                },
+            );
+            drive(&mut host, SendEvent::SelectToken { token_id: bnb.id() });
+            drive(&mut host, SendEvent::EnterSplitMode);
+            let view = host.view();
+            assert!(view.split_mode);
+            assert_eq!(view.split_remaining.as_deref(), Some(HELD), "exact");
+            assert_eq!(view.split_remaining_display.as_deref(), Some("0.0003"));
+
+            let en = FlowStrings::resolve(&crate::loc::Loc::for_language("en"));
+            let zh = FlowStrings::resolve(&crate::loc::Loc::for_language("zh"));
+            assert_eq!(
+                fill(&en.split_remaining, "amount", &left_figure("0.0003", "BNB")),
+                "0.0003 BNB left"
+            );
+            assert_eq!(
+                fill(&zh.split_remaining, "amount", &left_figure("0.0003", "BNB")),
+                "还剩 0.0003 BNB"
+            );
+            // The form's own line, in the language of this run.
+            let s = strings();
+            let form = with_inputs(&view, send_form);
+            let left = form.remaining.clone().unwrap_or_default();
+            assert_eq!(
+                left.as_ref(),
+                fill(&s.split_remaining, "amount", "0.0003 BNB"),
+                "the form"
+            );
+            assert!(!left.contains("194967"), "not the eighteen places: {left}");
+            // The importer's line, adding to rows already on the form.
+            let adding = SendView {
+                split_import_room: 57,
+                ..view.clone()
+            };
+            assert_eq!(batch_remaining(&adding, false), Some("0.0003"));
+            let batch = BatchView {
+                recipient_count: 1,
+                total_token: "0.0001".to_owned(),
+                ..CoreHost::<BatchImport>::new().view()
+            };
+            let total = batch_total(&batch, "BNB", HELD, batch_remaining(&adding, false), &s)
+                .unwrap_or_else(|| unreachable!("one row parsed"));
+            assert_eq!(
+                total.balance.as_ref(),
+                fill(&s.split_remaining, "amount", "0.0003 BNB"),
+                "the importer"
+            );
+            // The person's decimal mark, as the balance beside it is written.
+            assert_eq!(
+                left_figure_with("0.0003", "BNB", NumberPreset::DotComma),
+                "0,0003 BNB"
+            );
+            assert_eq!(
+                left_figure_with("1234.56", "USDT", NumberPreset::SpaceComma),
+                "1234,56 USDT"
+            );
+            // A coin with no symbol yet leaves no stray space.
+            assert_eq!(left_figure_with("7", "", NumberPreset::CommaDot), "7");
+        });
+    }
+
     /// The total is read against what is left only when the import ADDS to
     /// rows already on the form — an empty form, or a replace, draws from the
     /// whole balance (#288).
     #[test]
     fn an_import_that_adds_reads_against_what_is_left() {
         let blank = CoreHost::<SendMachine>::new().view();
+        // The exact figure is not the one this line draws.
         let with_rows = SendView {
             split_import_room: 57,
-            split_remaining: Some("7".to_owned()),
+            split_remaining: Some("7.000000000000000001".to_owned()),
+            split_remaining_display: Some("7".to_owned()),
             ..blank.clone()
         };
         assert_eq!(batch_remaining(&with_rows, false), Some("7"));
@@ -9636,6 +9772,7 @@ mod parity_tests {
             split_import_room: u32::try_from(vela_core::app::send::BATCH_MAX_RECIPIENTS)
                 .unwrap_or(u32::MAX),
             split_remaining: Some("7".to_owned()),
+            split_remaining_display: Some("7".to_owned()),
             ..blank
         };
         assert_eq!(
