@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.SpanStyle
@@ -240,16 +241,22 @@ private fun AmountLine(model: ActivityRowModel, amountColor: Color) {
 }
 
 /**
- * A dApp row's title, the verb never the part cut.
+ * A dApp row's title: it wraps only BETWEEN its parts, and only the place is
+ * ever cut.
  *
- * Whole when it fits — on one line, or on two before anything is cut: beside
- * a figure an English title ("Contract interaction on swap.example") does
- * not fit one line of a phone, and cutting its place down to "s…" told
- * nobody where (the 102 device run). Only a title two lines cannot hold goes
- * back to the one-line rule: the words either side of the place keep their
- * width, and the place — a site's host — takes what is left, cut in its
- * middle (「在 127.0…8137 合约交互」). A tail ellipsis would cut the verb
- * instead: 「在 127.0.0.1:8137 合约…」. Said as the one title it is.
+ * The title is the core's sentence about a place — 「在 {place} {intent}」,
+ * "{intent} on {place}" — and a second line was added so an English one need
+ * not cut its place down to "s…" (the 102 device run). But the two lines were
+ * one wrapping text, and a wrapping text breaks where the width runs out:
+ * 「在 arcorbs.game3.app 合 / 约交互」 on the owner's phone (2026-10-11), the
+ * action split inside its word.
+ *
+ * So the lines are decided, not left to the text ([TitleLines]): whole on one
+ * line when it fits; else two lines broken between the action and the place
+ * — 「在 arcorbs.game3.app」 over 「合约交互」, "Contract interaction" over
+ * "on arcorbs.game3.app". Every part is drawn on ONE line and cannot wrap;
+ * the place (a site's host) takes what its line has left and is cut in its
+ * middle when that is not enough. Said as the one title it is.
  */
 @Composable
 private fun PlaceTitle(parts: TitlePlace, title: String) {
@@ -267,29 +274,98 @@ private fun PlaceTitle(parts: TitlePlace, title: String) {
     BoxWithConstraints {
         val wide = constraints.maxWidth
         // Measured before it is drawn, so the row never shows one title for a frame and another after.
-        val whole = remember(title, wide, style) {
-            !measurer.measure(title, style, overflow = TextOverflow.Ellipsis, maxLines = 2, constraints = Constraints(maxWidth = wide)).hasVisualOverflow
+        val lines = remember(parts, wide, style) {
+            TitleLines.of(parts, wide) { text -> measurer.measure(text, style, maxLines = 1, softWrap = false).size.width }
         }
-        if (whole) {
-            Text(text = title, style = style, maxLines = 2)
-            return@BoxWithConstraints
-        }
-        @Composable
-        fun part(text: String, modifier: Modifier = Modifier, overflow: TextOverflow = TextOverflow.Clip) = Text(
-            text = text,
-            style = style,
-            maxLines = 1,
-            softWrap = false,
-            overflow = overflow,
-            modifier = modifier,
-        )
-        Row(
-            modifier = Modifier.clearAndSetSemantics { contentDescription = title },
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.clearAndSetSemantics {
+                contentDescription = title
+                this[ActivityTitleLinesKey] = lines
+            },
         ) {
-            if (parts.lead.isNotEmpty()) part(if (parts.gapBefore) parts.lead + " " else parts.lead)
-            part(parts.place, Modifier.weight(1f, fill = false), TextOverflow.MiddleEllipsis)
-            if (parts.trail.isNotEmpty()) part(if (parts.gapAfter) " " + parts.trail else parts.trail)
+            lines.forEach { line ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (line.before.isNotEmpty()) TitlePart(line.before, style, wraps = line.wraps)
+                    line.place?.let { place ->
+                        Text(
+                            text = place,
+                            style = style,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.MiddleEllipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
+                    if (line.after.isNotEmpty()) TitlePart(line.after, style, wraps = false)
+                }
+            }
+        }
+    }
+}
+
+/** The words either side of the place: one line, never wrapped — unless they alone are wider than the row. */
+@Composable
+private fun TitlePart(text: String, style: TextStyle, wraps: Boolean) = Text(
+    text = text,
+    style = style,
+    maxLines = if (wraps) 2 else 1,
+    softWrap = wraps,
+    overflow = if (wraps) TextOverflow.Ellipsis else TextOverflow.Clip,
+)
+
+/** What a dApp row's title put on each of its lines, for a test: the row says its one title, the lines are here. */
+internal val ActivityTitleLinesKey = SemanticsPropertyKey<List<TitleLine>>("ActivityTitleLines")
+
+/**
+ * One line of a dApp row's title: the words before the place, the place (when
+ * this is its line), the words after. [wraps]: a line of words alone that is
+ * wider than the row — the one case a part may take a second line, between
+ * its own words.
+ */
+internal data class TitleLine(val before: String, val place: String?, val after: String, val wraps: Boolean = false) {
+    val text: String get() = before + place.orEmpty() + after
+}
+
+/**
+ * Where a dApp row's title breaks ([PlaceTitle]) — a rule over widths, so it
+ * can be read without a screen.
+ *
+ * - It fits one line: one line.
+ * - Else it breaks between the ACTION and the place, and nowhere else. What
+ *   joins the two — 「在 」, " on ", 「で」, " bei " — stays on the place's
+ *   line, before or after it as the language has it: 「在 arcorbs.game3.app」
+ *   over 「合约交互」; "Contract interaction" over "on arcorbs.game3.app".
+ * - The place is the only part ever cut (in its middle, by its line): the
+ *   words beside it keep their width.
+ * - The action's line is one line. Only when the action ALONE is wider than
+ *   the row (two English words at the largest text size, beside a figure)
+ *   does it take a second — between its own words ([TitleLine.wraps]).
+ * - A title whose action is not known ([TitlePlace.intent] empty) breaks at
+ *   an edge of the place: the words on one side take their own line; with
+ *   words on both sides the place stays with the shorter side.
+ */
+internal object TitleLines {
+    fun of(parts: TitlePlace, wide: Int, width: (String) -> Int): List<TitleLine> {
+        val lead = if (parts.lead.isNotEmpty() && parts.gapBefore) parts.lead + " " else parts.lead
+        val trail = if (parts.trail.isNotEmpty() && parts.gapAfter) " " + parts.trail else parts.trail
+        if (width(lead + parts.place + trail) <= wide) return listOf(TitleLine(lead, parts.place, trail))
+        fun words(text: String) = TitleLine(text, null, "", wraps = width(text) > wide)
+        val action = parts.intent.takeIf { it.isNotBlank() }
+        val inLead = action?.let { lead.lastIndexOf(it) }?.takeIf { it >= 0 }
+        val inTrail = action?.let { trail.indexOf(it) }?.takeIf { it >= 0 }
+        return when {
+            // The action first: it ends its line, and what follows it goes down with the place.
+            inLead != null -> {
+                val cut = inLead + action.length
+                listOf(words(lead.substring(0, cut).trimEnd()), TitleLine(lead.substring(cut).trimStart(), parts.place, trail))
+            }
+            // The place first: what leads up to the action stays with the place.
+            inTrail != null -> listOf(TitleLine(lead, parts.place, trail.substring(0, inTrail).trimEnd()), words(trail.substring(inTrail).trimStart()))
+            parts.lead.isEmpty() && parts.trail.isEmpty() -> listOf(TitleLine("", parts.place, ""))
+            parts.trail.isEmpty() -> listOf(words(parts.lead), TitleLine("", parts.place, ""))
+            parts.lead.isEmpty() -> listOf(TitleLine("", parts.place, ""), words(parts.trail))
+            width(lead) <= width(trail) -> listOf(TitleLine(lead, parts.place, ""), words(parts.trail))
+            else -> listOf(words(parts.lead), TitleLine("", parts.place, trail))
         }
     }
 }

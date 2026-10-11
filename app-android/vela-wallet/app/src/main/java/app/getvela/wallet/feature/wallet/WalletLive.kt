@@ -297,7 +297,8 @@ object WalletLive {
     fun dappTitleParts(dapp: FeedDapp, strings: VelaStrings): TitlePlace? {
         val place = dapp.place?.takeIf { it.isNotBlank() } ?: return null
         val mark = "\uFFFC"
-        val pieces = strings.t(I18nKeys.Wallet.DAPP_ROW_TITLE, mapOf("intent" to dappVerb(dapp, strings), "place" to mark))
+        val verb = dappVerb(dapp, strings)
+        val pieces = strings.t(I18nKeys.Wallet.DAPP_ROW_TITLE, mapOf("intent" to verb, "place" to mark))
             .split(mark)
         if (pieces.size != 2) return null
         return TitlePlace(
@@ -306,6 +307,7 @@ object WalletLive {
             trail = pieces[1].trim(),
             gapBefore = pieces[0].lastOrNull()?.isWhitespace() == true,
             gapAfter = pieces[1].firstOrNull()?.isWhitespace() == true,
+            intent = verb,
         )
     }
 
