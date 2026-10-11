@@ -21,11 +21,20 @@ class IdentityWaterfallTest {
     private var chainAnswers: (Int, String, String) -> String? = { _, _, _ -> null }
     private var clock = 1_000_000.0
 
+    /** The wallet's networks, by chain — every name service's own unless a test says otherwise. */
+    private var walletChains: Set<Int> = IdentityResolver.NAME_SERVICES.map { it.chainId }.toSet()
+
+    /**
+     * The REAL resolver — its waterfall, its reverse walk and the core's
+     * forward check — over a transport that writes down every call it is
+     * asked to make, by chain.
+     */
     private fun resolver(own: List<Pair<String, String>> = emptyList()) = IdentityResolver(
         store = store,
         ownAccounts = { own },
         registryName = { calls += "index"; registry },
-        ethCall = { chain, to, data -> calls += "call:$chain"; chainAnswers(chain, to, data) },
+        ethCall = { chain, to, data -> synchronized(calls) { calls += "call:$chain" }; chainAnswers(chain, to, data) },
+        walletChains = { walletChains },
         now = { clock },
     )
 
@@ -69,10 +78,14 @@ class IdentityWaterfallTest {
      * resolves `claimed` to whatever `forwardsTo` says — `null` for a name with
      * no forward record at all.
      */
-    private fun serveEns(claimed: String, forwardsTo: String?) {
+    private fun serveEns(claimed: String, forwardsTo: String?) = serve(mapOf(1 to (claimed to forwardsTo)))
+
+    /** The same, on each of [names]' chains: that chain's registry reverse-resolves `alice` to the name, which forwards as said. */
+    private fun serve(names: Map<Int, Pair<String, String?>>) {
         chainAnswers = { chain, to, data ->
+            val (claimed, forwardsTo) = names[chain] ?: (null to null)
             when {
-                chain != 1 -> null
+                claimed == null -> null
                 data.startsWith("0x" + IdentityResolver.SEL_RESOLVER) -> "0x" + resolverAddr.padStart(64, '0')
                 !to.equals("0x$resolverAddr", ignoreCase = true) -> null
                 data.startsWith("0x" + IdentityResolver.SEL_NAME) -> abiString(claimed)
@@ -92,6 +105,63 @@ class IdentityWaterfallTest {
         assertEquals("ENS", identity.source)
         assertTrue("the index was asked first", calls.first() == "index")
         assertTrue("every service was asked", IdentityResolver.NAME_SERVICES.all { s -> calls.any { it == "call:${s.chainId}" } })
+    }
+
+    // -- the 2026-10-11 walk, item 9: a network the wallet does not have is not asked ----------
+
+    /** The wallet's 25 networks hold four of the five services' chains: 1625, the `.g` registry's, is not one of them. */
+    private val withoutG = setOf(1, 10, 56, 100, 137, 8453, 42161)
+
+    @Test
+    fun `a name service on a network the wallet does not have is skipped, and the others still answer`() = runBlocking {
+        walletChains = withoutG
+        // The address has a `.g` name AND an ENS name.
+        serve(mapOf(1625 to ("alice.g" to alice), 1 to ("alice.eth" to alice)))
+        val identity = resolver().resolve(alice)
+        assertEquals("the next service in priority order answers", "alice.eth" to "ENS", identity!!.name to identity.source)
+        assertTrue("not one call was made for chain 1625: $calls", calls.none { it == "call:1625" })
+        // Every service on a network the wallet has was asked.
+        for (chain in listOf(56, 42161, 8453, 1)) assertTrue("chain $chain was asked: $calls", calls.any { it == "call:$chain" })
+        assertEquals(listOf(".bnb", ".arb", "Basename", "ENS"), IdentityResolver.askedServices(withoutG).map { it.label })
+    }
+
+    @Test
+    fun `with nothing else to say, an address named only on that network has no name, and no call is made for it`() = runBlocking {
+        walletChains = withoutG
+        serve(mapOf(1625 to ("alice.g" to alice)))
+        assertNull(resolver().resolve(alice))
+        assertTrue(calls.toString(), calls.none { it == "call:1625" })
+        assertNull("a miss is never cached: adding the network must show the name", store.values[IdentityResolver.CACHE_KEY])
+    }
+
+    /** The person adds the network (a custom one, in Settings → Networks): the service is asked, in its place in the order. */
+    @Test
+    fun `once that network is one of the wallet's, its name service is asked and answers in priority order`() = runBlocking {
+        serve(mapOf(1625 to ("alice.g" to alice), 1 to ("alice.eth" to alice)))
+        walletChains = withoutG
+        assertEquals("ENS", resolver().resolve(alice)!!.source)
+        // A positive is cached for a day; this is the next day's look, with the network added.
+        clock += IdentityResolver.CACHE_TTL_MS + 1
+        calls.clear()
+        val networks = app.getvela.wallet.feature.settings.core.NetView(
+            loaded = true,
+            networks = withoutG.map { app.getvela.wallet.feature.settings.core.NetNetworkRow(id = "$it", chain_id = it.toLong(), display_name = "Chain $it", native_symbol = "ETH") } +
+                app.getvela.wallet.feature.settings.core.NetNetworkRow(id = "custom-1625", chain_id = 1625, display_name = "Gravity", native_symbol = "G", is_custom = true, rpc_url = "https://rpc.example"),
+        )
+        // As the app reads it: every row of the list Settings → Networks shows, built-in or custom.
+        walletChains = networks.networks.map { it.chain_id.toInt() }.toSet()
+        val identity = resolver().resolve(alice)
+        assertTrue("`.g` was asked: $calls", calls.any { it == "call:1625" })
+        assertEquals("`.g` comes before ENS", "alice.g" to ".g", identity!!.name to identity.source)
+    }
+
+    /** A wallet whose networks cannot be read asks no name service at all: the index, and nothing on any chain. */
+    @Test
+    fun `with no networks known, no name service is asked`() = runBlocking {
+        walletChains = emptySet()
+        serveEns(claimed = "alice.eth", forwardsTo = alice)
+        assertNull(resolver().resolve(alice))
+        assertEquals(listOf("index"), calls)
     }
 
     /**
