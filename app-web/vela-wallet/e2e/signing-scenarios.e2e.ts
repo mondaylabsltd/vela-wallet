@@ -219,7 +219,17 @@ test('a request that moves nothing says "No asset changes" — in a place that w
 		(await card.locator('.note').textContent()) === en('componentsUi.funding.checking');
 	const cautioned = () => place.locator('.said .banner').filter({ hasText: couldNot }).count();
 	expect((await saysChecking()) || (await cautioned()) === 1).toBe(true);
-	// The sheet has opened and its fee has had its say: where its parts rest.
+	// The request has been READ — not "the sheet held still for a moment": on
+	// a busy machine it does that under "Loading…" too, and the reading that
+	// lands next moves everything below it (the place went from 306 to 539
+	// in one run). An approval that has been read shows its spending cap.
+	await expect(
+		page.locator('[role="dialog"]').getByText(en('componentsUi.signingApprove.spendingCap'))
+	).toBeVisible({ timeout: 40_000 });
+	await expect(
+		page.locator('[role="dialog"]').getByText(en('componentsUi.signing.loading'), { exact: true })
+	).toHaveCount(0);
+	// Where its parts rest.
 	const resting = async () => {
 		const where = () =>
 			page.evaluate(() => {
