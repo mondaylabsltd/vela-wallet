@@ -57,7 +57,9 @@ vi.mock('$app/state', () => ({
 		get route() {
 			return { id: nav.route };
 		},
-		params: { locale: 'zh' },
+		get params() {
+			return { locale: pageState.locale };
+		},
 		data: {}
 	},
 	updated: { current: false }
@@ -69,6 +71,7 @@ vi.mock('$app/paths', () => ({
 
 import Layout from './+layout.svelte';
 import { panelSurface } from '$lib/dapp/panel-surface.svelte';
+import { pageLanguage } from '$lib/i18n/page-language.svelte';
 
 /**
  * The surface's listeners, module-wide: `panelSurface` is the document's one
@@ -116,9 +119,16 @@ class FakeSession {
 }
 const sessionState = new FakeSession();
 
+/** The locale in the path, as reactive as `page.params` is. */
+class FakePage {
+	locale = $state('zh');
+}
+const pageState = new FakePage();
+
 afterEach(() => {
 	sessionState.view.allowed_route = 'wallet';
 	sessionState.view.has_wallet = true;
+	pageState.locale = 'zh';
 	panelSurface.stop();
 	delete (globalThis as { chrome?: unknown }).chrome;
 	nav.goto.mockClear();
@@ -263,6 +273,35 @@ describe('the account follow and the grant spelling, from every route (G58)', ()
 		await new Promise((r) => setTimeout(r, 50));
 		expect(follow.normalizeGrantSpelling).not.toHaveBeenCalled();
 		expect(follow.note).not.toHaveBeenCalled();
+		await screen.unmount();
+	});
+});
+
+/**
+ * Device walk of 2026-10-11, item 8. Which currency a bare "¥" names turns on
+ * the reader's language, and the money formatter is called far from anything
+ * that knows the locale — so the layout says it once. What is proved here is
+ * the wiring a node test cannot see: that it is said BEFORE the page below
+ * draws its first figure, and said again when the locale in the path changes.
+ */
+describe('the page language, for the money formatter', () => {
+	it('is the path’s locale before the page renders, and follows it', async () => {
+		const seen: string[] = [];
+		const page = createRawSnippet(() => ({
+			render: () => {
+				seen.push(pageLanguage());
+				return '<p>wallet</p>';
+			}
+		}));
+		const screen = render(Layout, { props: { children: page } as any });
+		expect(seen).toEqual(['zh']);
+
+		pageState.locale = 'ja';
+		flushSync();
+		expect(pageLanguage()).toBe('ja');
+		pageState.locale = 'zh-HK';
+		flushSync();
+		expect(pageLanguage()).toBe('zh-HK');
 		await screen.unmount();
 	});
 });

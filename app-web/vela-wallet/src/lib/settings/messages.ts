@@ -14,6 +14,22 @@
  */
 import type { PluralCopy } from '$lib/i18n/plural';
 
+/**
+ * The eight drawn currencies — the picker's floor while no rate source has
+ * answered (`core/currency-catalog.ts`), and the ones whose symbols travel
+ * with the page's strings (`SettingsMessages.currency.symbols`).
+ */
+export const DRAWN_CURRENCY_CODES: readonly string[] = [
+	'USD',
+	'EUR',
+	'GBP',
+	'CNY',
+	'JPY',
+	'KRW',
+	'HKD',
+	'VND'
+];
+
 export interface SettingsMessages {
 	title: string;
 	nav: { wallet: string; contacts: string; explore: string; settings: string };
@@ -56,7 +72,17 @@ export interface SettingsMessages {
 		timeSubtitle: string;
 	};
 	formatNote: { system: string; indian: string; h24: string; h12: string };
-	currency: { title: string; searchPlaceholder: string };
+	currency: {
+		title: string;
+		searchPlaceholder: string;
+		/**
+		 * How each drawn currency is written in this language — the core's
+		 * `fiat_symbol`, resolved with the page's strings ("¥" is the yuan's
+		 * in Chinese and the yen's elsewhere). The live picker asks the core
+		 * itself, for whatever the rate sources offer.
+		 */
+		symbols: Record<string, string>;
+	};
 	advanced: {
 		networksTitle: string;
 		networksSubtitle: string;

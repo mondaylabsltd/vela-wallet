@@ -140,7 +140,7 @@ describe('no fiat figure before the display currency commits — every surface t
 		expect(liveBalance(balance, COMMITTED, m)).toMatchObject({
 			state: 'normal',
 			currency: 'CNY',
-			integer: '¥6,852',
+			integer: 'CN¥6,852',
 			decimals: '91'
 		});
 		// The whole home, both layouts: not one figure anywhere on it.
@@ -169,8 +169,8 @@ describe('no fiat figure before the display currency commits — every surface t
 		// A token amount is not fiat: it does not wait.
 		expect(withheld.map((row) => row.balance)).toEqual(['418.25', '376.5432']);
 		expect(rows(COMMITTED).map((row) => row.fiat)).toEqual([
-			{ kind: 'value', text: '¥3,011.40' },
-			{ kind: 'value', text: '¥2,711.11' }
+			{ kind: 'value', text: 'CN¥3,011.40' },
+			{ kind: 'value', text: 'CN¥2,711.11' }
 		]);
 	});
 
@@ -244,7 +244,7 @@ describe('no fiat figure before the display currency commits — every surface t
 		expect(liveUnreachable(balance, ON_ITS_WAY, rescue).rows[0].line).toBe(
 			`Last seen ${MONEY_PENDING}`
 		);
-		expect(liveUnreachable(balance, COMMITTED, rescue).rows[0].line).toBe('Last seen ¥1,130.40');
+		expect(liveUnreachable(balance, COMMITTED, rescue).rows[0].line).toBe('Last seen CN¥1,130.40');
 		const sheet = liveBalanceDetail(balance, ON_ITS_WAY, rescue, m.balance.unpriced);
 		expect(sheet.summary).toContain(MONEY_PENDING);
 		expect(sheet.done.map((row) => row.amount)).toEqual([MONEY_PENDING, MONEY_PENDING]);
@@ -309,7 +309,7 @@ describe('no fiat figure before the display currency commits — every surface t
 		const received = items.find((item) => item.id === 'received')!;
 		expect(detail(received, ON_ITS_WAY).fiat).toBe(`≈ ${MONEY_PENDING}`);
 		expect(detail(received, ON_ITS_WAY).amount).toBe('+289.5 USDT');
-		expect(detail(received, COMMITTED).fiat).toBe('≈ ¥2,084.40');
+		expect(detail(received, COMMITTED).fiat).toBe('≈ CN¥2,084.40');
 		// A row the core has no price for has no "≈" line either way — never "≈ …".
 		const unpriced = items.filter((item) => !item.priced);
 		expect(unpriced.length).toBeGreaterThan(0);
@@ -343,10 +343,10 @@ describe('the list of surfaces is the core’s, and each has a case', () => {
 		}
 	});
 
-	it('money is formatted in one place: nothing else pairs a currency glyph with digits', () => {
-		// `currencyGlyph` is what turns a code into "¥"; outside the formatter
-		// it is only the picker's row glyph (a symbol beside a currency's
-		// name, no figure).
+	it('money is formatted in one place: nothing else pairs a currency symbol with digits', () => {
+		// `fiatSymbol` is the core's rule for what turns a code into "¥";
+		// outside the formatter it is only the picker's row badge (a symbol
+		// beside a currency's name, no figure).
 		const users = [
 			'src/lib/wallet/live.ts',
 			'src/lib/wallet/live-detail.ts',
@@ -357,15 +357,23 @@ describe('the list of surfaces is the core’s, and each has a case', () => {
 			'src/lib/settings/live.ts'
 		].map((file) => [file, readFileSync(file, 'utf8')] as const);
 		const calls = users.flatMap(([file, source]) =>
-			[...source.matchAll(/currencyGlyph\(/g)].map(() => file)
+			[...source.matchAll(/fiatSymbol\(/g)].map(() => file)
 		);
-		expect(calls.sort()).toEqual(['src/lib/settings/live.ts', 'src/lib/wallet/live.ts']);
+		// The formatter's one lookup, and the picker's two branches (the rate
+		// sources' list, and the drawn eight while none has answered).
+		expect(calls.sort()).toEqual([
+			'src/lib/settings/live.ts',
+			'src/lib/settings/live.ts',
+			'src/lib/wallet/live.ts'
+		]);
+		// …and the web keeps no table of its own to disagree with it.
+		expect(readFileSync('src/lib/settings/fixtures.ts', 'utf8')).not.toMatch(/glyph: '[^']/);
 		// …and the formatter itself answers "withheld" before anything else.
 		const formatter = users[0][1];
 		const body = formatter.slice(formatter.indexOf('export function moneyParts('));
 		expect(body.indexOf('if (!currency.committed) return null;')).toBeGreaterThan(0);
 		expect(body.indexOf('if (!currency.committed) return null;')).toBeLessThan(
-			body.indexOf('currencyGlyph(')
+			body.indexOf('leadingSymbol(')
 		);
 	});
 });

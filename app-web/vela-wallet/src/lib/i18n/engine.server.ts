@@ -12,7 +12,11 @@
  * committed `public/` asset and `initSync`'d at import (`wasm-init.server.ts`);
  * catalogs are statically imported raw, so resolution is synchronous.
  */
-import { I18n as WasmI18n, i18nPluralSuffixes } from '../../../../../rust/pkg-web/vela_core.js';
+import {
+	fiatSymbol,
+	I18n as WasmI18n,
+	i18nPluralSuffixes
+} from '../../../../../rust/pkg-web/vela_core.js';
 import './wasm-init.server';
 import { FALLBACK_LOCALE, type Locale } from './locales';
 import { FLOW_KEYS, FLOW_PLURAL_KEYS, type FlowMessages, type WelcomeMessages } from './messages';
@@ -38,6 +42,7 @@ import {
 	BACKUP_EXPLAIN_KEYS,
 	BACKUP_ROW_KEYS,
 	BALANCE_STATUS_KEYS,
+	DRAWN_CURRENCY_CODES,
 	NET_HINT_KEYS,
 	NET_RPC_FIELD_KEYS,
 	NET_STOP_KEYS,
@@ -463,7 +468,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		},
 		currency: {
 			title: k('componentsUi.currency.title'),
-			searchPlaceholder: k('componentsUi.currency.searchPlaceholder')
+			searchPlaceholder: k('componentsUi.currency.searchPlaceholder'),
+			symbols: Object.fromEntries(
+				DRAWN_CURRENCY_CODES.map((code) => [code, fiatSymbol(code, locale)])
+			)
 		},
 		advanced: {
 			networksTitle: k('settings.advanced.networksTitle'),

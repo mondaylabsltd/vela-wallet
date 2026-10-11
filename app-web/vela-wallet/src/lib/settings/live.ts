@@ -15,6 +15,8 @@ import { pluralForm } from '$lib/i18n/plural';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
 import { moneyText, trimBalance, unreachableLine } from '$lib/wallet/live';
+import { fiatSymbol } from '$lib/core/client';
+import { pageLanguage } from '$lib/i18n/page-language.svelte';
 import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
 import {
 	formatBytes,
@@ -49,14 +51,7 @@ import {
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
 import { chainLogoURL } from '$lib/flows/marks';
-import {
-	chainMeta,
-	feedbackPanel,
-	languageRows,
-	markFor,
-	currencyGlyph,
-	PROVIDER_KEY_URLS
-} from './fixtures';
+import { chainMeta, feedbackPanel, languageRows, markFor, PROVIDER_KEY_URLS } from './fixtures';
 import type { SettingsMessages } from './messages';
 import type {
 	AboutModel,
@@ -695,13 +690,22 @@ function liveCurrencyRows(
 	view: CurrencyView,
 	catalog?: LiveCurrencyCatalog
 ): SelectRowModel[] {
+	// The badge is the core's symbol for the currency, in the page's language
+	// — the same string every figure in that currency is written with, so the
+	// picker never shows one symbol for two currencies ("¥" is the reader's
+	// own of the yen and the yuan; a currency with no glyph shows its code).
+	const language = catalog?.locale ?? pageLanguage();
 	if (catalog === undefined || catalog.codes.length === 0) {
-		return drawn.map((row) => ({ ...row, selected: row.id === chosenCurrency(view) }));
+		return drawn.map((row) => ({
+			...row,
+			glyph: fiatSymbol(row.id, language),
+			selected: row.id === chosenCurrency(view)
+		}));
 	}
 	return catalog.codes.map((code) => ({
 		id: code,
 		label: code,
-		glyph: currencyGlyph(code),
+		glyph: fiatSymbol(code, language),
 		caption:
 			currencyDisplayName(code, catalog.locale) ?? drawn.find((row) => row.id === code)?.caption,
 		selected: code === chosenCurrency(view)

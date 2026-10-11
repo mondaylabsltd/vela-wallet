@@ -2892,9 +2892,9 @@ describe('no fiat figure before the display currency commits — the signing she
 		expect(JSON.stringify(amount)).toContain('100 USDC');
 		expect(JSON.stringify(amount)).toContain(`≈ ${MONEY_PENDING}`);
 		const landed = buildSigningModel(inputs({ fee: PRICED_FEE, currency: COMMITTED }))!;
-		expect(landed.fee).toMatchObject({ value: '0.0021 ETH', valueFiat: '≈ ¥45.36' });
+		expect(landed.fee).toMatchObject({ value: '0.0021 ETH', valueFiat: '≈ CN¥45.36' });
 		expect(landed.fee).not.toHaveProperty('valueFiatWithheld');
-		expect(JSON.stringify(landed.blocks)).toContain('≈ ¥720.00');
+		expect(JSON.stringify(landed.blocks)).toContain('≈ CN¥720.00');
 	});
 
 	it('signing_sheet: with the fee coins open, no coin’s fee is priced in a placeholder', () => {

@@ -23,9 +23,11 @@ import {
 	moneyText,
 	tokenAmountText,
 	trimBalance,
+	unitAdornment,
 	withLiveWallet,
 	withLiveWalletDesktop
 } from './live';
+import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 import { buildDesktopState } from './fixtures';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
@@ -128,6 +130,71 @@ describe('moneyParts', () => {
 });
 
 /**
+ * Device walk of 2026-10-11, item 8: the symbol a figure is written with is
+ * the core's (`fiat_symbol`), in the page's language. The web's own table
+ * wrote the yen and the yuan with one "¥" and the Hong Kong dollar with the
+ * US dollar's "$".
+ */
+describe('the symbol a fiat figure is written with', () => {
+	const held = (code: string, rate = 1): CurrencyView => ({
+		code,
+		rate,
+		committed: true,
+		pending: null
+	});
+	const inLanguage = <T>(tag: string, read: () => T): T => {
+		setPageLanguage(tag);
+		try {
+			return read();
+		} finally {
+			setPageLanguage('en');
+		}
+	};
+
+	it('the yuan reads "¥" to a Chinese reader and "CN¥" to everybody else', () => {
+		for (const zh of ['zh', 'zh-TW', 'zh-HK']) {
+			expect(inLanguage(zh, () => moneyText(26.17, held('CNY', 7.2)))).toBe('¥188.42');
+		}
+		for (const other of ['en', 'ja', 'fr']) {
+			expect(inLanguage(other, () => moneyText(26.17, held('CNY', 7.2)))).toBe('CN¥188.42');
+		}
+	});
+
+	it('the yen is the reverse — the two are never written alike in one language', () => {
+		expect(inLanguage('ja', () => moneyParts(10, held('JPY', 150))?.integer)).toBe('¥1,500');
+		expect(inLanguage('en', () => moneyParts(10, held('JPY', 150))?.integer)).toBe('¥1,500');
+		expect(inLanguage('zh', () => moneyParts(10, held('JPY', 150))?.integer)).toBe('JP¥1,500');
+	});
+
+	it('"$" alone is the US dollar; every other dollar carries its country', () => {
+		expect(moneyText(4, held('USD'))).toBe('$4.00');
+		expect(moneyText(4, held('HKD', 7.8))).toBe('HK$31.20');
+		expect(moneyText(4, held('SGD'))).toBe('S$4.00');
+		expect(inLanguage('zh-HK', () => moneyText(4, held('HKD', 7.8)))).toBe('HK$31.20');
+	});
+
+	it('a symbol that ends in a letter, and a bare code, stand off the digits by a no-break space', () => {
+		expect(moneyText(4, held('PLN'))).toBe('zł\u00A04.00');
+		expect(moneyText(4, held('IDR'))).toBe('Rp\u00A04.00');
+		// No glyph anybody would recognise: the code leads, spaced the same way.
+		expect(moneyText(4, held('CHF'))).toBe('CHF\u00A04.00');
+		expect(moneyText(4, held('SEK'))).toBe('SEK\u00A04.00');
+		// A glyph sits against its digits, however many letters come before it.
+		expect(moneyText(4, held('BRL'))).toBe('R$4.00');
+	});
+
+	it('the unit beside a figure being typed is the same symbol; a bare code follows instead', () => {
+		expect(unitAdornment('USD', 'ETH')).toEqual({ prefix: '$' });
+		expect(unitAdornment('HKD', 'ETH')).toEqual({ prefix: 'HK$' });
+		expect(unitAdornment('CNY', 'ETH')).toEqual({ prefix: 'CN¥' });
+		expect(inLanguage('zh', () => unitAdornment('CNY', 'ETH'))).toEqual({ prefix: '¥' });
+		expect(unitAdornment('PLN', 'ETH')).toEqual({ prefix: 'zł\u00A0' });
+		expect(unitAdornment('CHF', 'ETH')).toEqual({ suffix: 'CHF' });
+		expect(unitAdornment(null, 'ETH')).toEqual({ suffix: 'ETH' });
+	});
+});
+
+/**
  * The core's rule (`CurrencyView.committed`, the 102 device run): while the
  * display currency is not the person's yet, the pair on the wire is the USD/1
  * placeholder and NO money figure is drawn in it. An iPhone home showed
@@ -163,7 +230,7 @@ describe('no money figure before the display currency is the person’s', () => 
 		expect(liveBalance(KNOWN, CNY, m)).toMatchObject({
 			state: 'normal',
 			currency: 'CNY',
-			integer: '¥8,761',
+			integer: 'CN¥8,761',
 			decimals: '40'
 		});
 	});
@@ -185,13 +252,13 @@ describe('no money figure before the display currency is the person’s', () => 
 	it('every other figure is the pending mark, on the line the figure will stand on', () => {
 		expect(moneyText(1234, UNREAD)).toBe(MONEY_PENDING);
 		expect(moneyText(1234, CNY_ON_ITS_WAY)).toBe(MONEY_PENDING);
-		expect(moneyText(1234, CNY)).toBe('¥8,761.40');
+		expect(moneyText(1234, CNY)).toBe('CN¥8,761.40');
 		// A holding keeps its token amount — that is no currency's — and its
 		// worth waits.
 		const row = liveAssetRow(ETH, CNY_ON_ITS_WAY, m, false);
 		expect(row.balance).toBe('1.5');
 		expect(row.fiat).toEqual({ kind: 'value', text: MONEY_PENDING });
-		expect(liveAssetRow(ETH, CNY, m, false).fiat).toEqual({ kind: 'value', text: '¥31,950.00' });
+		expect(liveAssetRow(ETH, CNY, m, false).fiat).toEqual({ kind: 'value', text: 'CN¥31,950.00' });
 		// Hidden is hidden, committed or not.
 		expect(liveAssetRow(ETH, CNY_ON_ITS_WAY, m, true).fiat).toEqual({ kind: 'masked' });
 	});

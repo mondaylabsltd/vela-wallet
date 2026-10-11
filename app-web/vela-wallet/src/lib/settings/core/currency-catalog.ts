@@ -14,18 +14,10 @@
  */
 import { FIAT_FEED_CODES } from '$lib/services/fiat-rates';
 import { getSupportedFxCodes } from '$lib/services/fiat-fx';
+import { DRAWN_CURRENCY_CODES } from '../messages';
 
 /** The drawn eight (settings/fixtures.ts) — the floor, never the ceiling. */
-export const DEFAULT_CURRENCY_CODES: readonly string[] = [
-	'USD',
-	'EUR',
-	'GBP',
-	'CNY',
-	'JPY',
-	'KRW',
-	'HKD',
-	'VND'
-];
+export const DEFAULT_CURRENCY_CODES: readonly string[] = DRAWN_CURRENCY_CODES;
 
 /** USD first, then everything either source prices, alphabetically. */
 export async function loadCurrencyCodes(): Promise<string[]> {

@@ -508,9 +508,13 @@ describe('the form', () => {
 			expect(typedIn('EUR')?.adornment).toEqual({ prefix: '€' });
 		});
 
-		it('follows the figure with the code when the catalog has no symbol for it', () => {
-			// Never a borrowed "$": an unknown currency is named, not guessed.
-			expect(typedIn('PLN')?.adornment).toEqual({ suffix: 'PLN' });
+		it('follows the figure with the code when the core has no symbol for it', () => {
+			// Never a borrowed "$": a currency with no glyph is named, not guessed.
+			expect(typedIn('CHF')?.adornment).toEqual({ suffix: 'CHF' });
+			expect(typedIn('XYZ')?.adornment).toEqual({ suffix: 'XYZ' });
+			// One with a symbol made of letters leads like any other, held off
+			// the digits the way the "≈" line holds it.
+			expect(typedIn('PLN')?.adornment).toEqual({ prefix: 'zł\u00A0' });
 		});
 
 		it('follows a token figure with the token', () => {
@@ -521,7 +525,8 @@ describe('the form', () => {
 			// Typed in yuan; the display currency has since become euros. "€"
 			// over these digits would be a relabel — the same number, a new unit.
 			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true, pending: null });
-			expect(figure?.adornment).toEqual({ prefix: '¥' });
+			// On an English page the yuan is "CN¥": the bare sign is the yen's.
+			expect(figure?.adornment).toEqual({ prefix: 'CN¥' });
 			expect(figure?.denomLabel).toBe('CNY');
 		});
 
@@ -3004,8 +3009,8 @@ describe('no fiat figure before the display currency commits — Send', () => {
 		// The row is told, so it can keep the layout a long figure will need.
 		expect(form.fee.valueFiatWithheld).toBe(true);
 		const landed = liveSendForm(formModel(), withCurrency(COMMITTED, { ...typed, fee: QUOTE }));
-		expect(landed.amount?.fiat).toBe('≈ ¥10,800.00');
-		expect(landed.fee.valueFiat).toBe('≈ ¥45.36');
+		expect(landed.amount?.fiat).toBe('≈ CN¥10,800.00');
+		expect(landed.fee.valueFiat).toBe('≈ CN¥45.36');
 		expect(landed.fee.valueFiatWithheld).toBeUndefined();
 		// No money half at all (an unpriced coin): nothing is withheld either.
 		const unpriced = liveSendForm(

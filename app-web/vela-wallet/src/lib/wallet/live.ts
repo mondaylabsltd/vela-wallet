@@ -26,7 +26,7 @@ import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedLine } from '$lib/core/generated/FeedLine';
 import type { FeedRow } from '$lib/core/generated/FeedRow';
 import type { FeedView } from '$lib/core/generated/FeedView';
-import { maskedAmount } from '$lib/core/client';
+import { fiatSymbol, maskedAmount } from '$lib/core/client';
 import { formatRelativeTime } from '$lib/core/kernels';
 import {
 	formatDate,
@@ -38,7 +38,7 @@ import { chainName, explorerAddressURL, explorerBaseURL } from '$lib/services/ne
 import { balanceTokenMark, chainLogoURL } from '$lib/flows/marks';
 import { shortenAddress } from './identity';
 import { fill } from './messages';
-import { currencyGlyph, currencySymbol } from '$lib/settings/fixtures';
+import { pageLanguage } from '$lib/i18n/page-language.svelte';
 import { BALANCE_MASK, chainColor, MASK } from './fixtures';
 import type { WalletMessages } from './messages';
 
@@ -205,6 +205,32 @@ export function figureCurrency(currency: CurrencyView): string | undefined {
 	return currency.rate !== null ? currency.code : 'USD';
 }
 
+/** The pattern space between a symbol that ends in a letter and its digits. */
+const NBSP = '\u00A0';
+
+/**
+ * The symbol a figure in `code` LEADS with, as the page's language writes it
+ * — or `null` when the currency has no glyph of its own and is named by its
+ * code instead.
+ *
+ * The symbol is the core's (`fiat_symbol`, device walk of 2026-10-11, item 8):
+ * one rule for all four apps, so a figure reads the same string on the home
+ * total, a fee's worth, the send form and Settings' currency row. The web's
+ * own table wrote the Hong Kong dollar with the US dollar's "$" and the yen
+ * and the yuan with one "¥"; under the core's rule no two currencies are
+ * written alike within a language ("¥" is the reader's own of the two, the
+ * other is "JP¥" / "CN¥").
+ *
+ * What is the web's is only the spacing, and it is the core formatter's too:
+ * a symbol that ends in a letter ("zł", "Rp") is held off the digits by a
+ * no-break space, and a glyph sits against them.
+ */
+function leadingSymbol(code: string): string | null {
+	const symbol = fiatSymbol(code, pageLanguage());
+	if (symbol === code.trim().toUpperCase()) return null;
+	return /\p{L}$/u.test(symbol) ? symbol + NBSP : symbol;
+}
+
 /** A fiat figure, in the pieces a surface draws it from. */
 export interface MoneyParts {
 	code: string;
@@ -240,7 +266,9 @@ export function moneyParts(usd: number, currency: CurrencyView): MoneyParts | nu
 	// way here and another way on the next machine is a wallet whose totals a
 	// person has to re-read before believing.
 	const grouped = groupDigits(whole);
-	const glyph = currencyGlyph(code);
+	// A currency with no glyph leads with its code, held off the digits the
+	// same way ("CHF 4.00").
+	const glyph = leadingSymbol(code) ?? code + NBSP;
 	return { code, glyph, integer: `${glyph}${grouped}`, decimals: frac };
 }
 
@@ -263,8 +291,8 @@ export function moneyText(usd: number, currency: CurrencyView): string {
  * the figure is in token units, and the unit is the token's symbol.
  *
  * A currency with a real symbol leads the figure ("$4.00"), exactly as
- * `moneyText` writes it on the line beneath; one the catalog has no symbol for
- * follows it as its code ("4.00 PLN"), and a token always follows
+ * `moneyText` writes it on the line beneath; one the core has no symbol for
+ * follows it as its code ("4.00 CHF"), and a token always follows
  * ("0.00075 BNB"). Nothing here defaults to "$": an unknown unit is no
  * adornment at all, which is a gap a person can see rather than a claim.
  */
@@ -273,7 +301,7 @@ export function unitAdornment(
 	tokenSymbol: string
 ): { prefix?: string; suffix?: string } {
 	if (code === null) return tokenSymbol === '' ? {} : { suffix: tokenSymbol };
-	const symbol = currencySymbol(code);
+	const symbol = leadingSymbol(code);
 	return symbol === null ? { suffix: code } : { prefix: symbol };
 }
 

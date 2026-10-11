@@ -41,6 +41,7 @@ import init, {
 	DappSessionCore,
 	dpermSettleOnClose,
 	DisplayCurrencyCore,
+	fiatSymbol,
 	ExtCacheCore,
 	FeePolicyCore,
 	FeeSpeedCore,
@@ -134,6 +135,12 @@ export { minGasPriceWei, peggedNativeUsd };
 // Synchronous, and callable once `loadCore()` has resolved — every caller is
 // a view-model builder over a core view, which cannot exist before that.
 export { maskedAmount };
+// The symbol a fiat figure is written with (`l10n::fiat_symbol`): one rule for
+// all four apps, where the web kept a table of its own that wrote the Hong
+// Kong dollar with the US dollar's "$" and the yen and the yuan with one "¥".
+// `language` is the page's locale; a currency with no glyph of its own comes
+// back as its code. Synchronous, callable once `loadCore()` has resolved.
+export { fiatSymbol };
 export { identiconNormalizeSeed, identiconSvgCircular };
 // Which plural form a count takes in a language (CLDR, issue 409): flow copy
 // ships every form, and the screen asks this rather than `count === 1`.

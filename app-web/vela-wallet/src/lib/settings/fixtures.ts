@@ -150,32 +150,22 @@ export const LOCALE_ENDONYMS: { id: string; label: string }[] = [
 	{ id: 'it', label: 'Italiano' }
 ];
 
-/** Currency rows, with the symbol the ST5 badge shows. */
-/** The live money formatter's glyph lookup — content, so it lives here. */
-export function currencyGlyph(code: string): string {
-	return currencySymbol(code) ?? code + ' ';
-}
-
 /**
- * The same lookup, saying out loud when it MISSED (issue 231). `currencyGlyph`
- * folds "no symbol" into a `CODE ` prefix, which is right inside a sentence
- * ("≈ PLN 4.00") and wrong beside a figure being typed, where a code belongs
- * after the number. One catalog behind both, so the send form's hero and the
- * "≈" line beneath it cannot come to disagree about what a currency looks like.
+ * The drawn currency rows. No symbol here: how a currency is WRITTEN is the
+ * core's rule and turns on the reader's language (`fiat_symbol`), so the
+ * badge's symbol arrives with the page's strings (`m.currency.symbols`). The
+ * table this file kept gave the Hong Kong dollar the US dollar's "$" and the
+ * yen and the yuan one "¥" (device walk of 2026-10-11, item 8).
  */
-export function currencySymbol(code: string): string | null {
-	return CURRENCIES.find((c) => c.id === code)?.glyph ?? null;
-}
-
 const CURRENCIES = [
-	{ id: 'USD', glyph: '$', caption: '美元' },
-	{ id: 'EUR', glyph: '€', caption: '欧元' },
-	{ id: 'GBP', glyph: '£', caption: '英镑' },
-	{ id: 'CNY', glyph: '¥', caption: '人民币' },
-	{ id: 'JPY', glyph: '¥', caption: '日元' },
-	{ id: 'KRW', glyph: '₩', caption: '韩元' },
-	{ id: 'HKD', glyph: '$', caption: '港元' },
-	{ id: 'VND', glyph: '₫', caption: '越南盾' }
+	{ id: 'USD', caption: '美元' },
+	{ id: 'EUR', caption: '欧元' },
+	{ id: 'GBP', caption: '英镑' },
+	{ id: 'CNY', caption: '人民币' },
+	{ id: 'JPY', caption: '日元' },
+	{ id: 'KRW', caption: '韩元' },
+	{ id: 'HKD', caption: '港元' },
+	{ id: 'VND', caption: '越南盾' }
 ];
 
 const NUMBER_SAMPLES = [
@@ -916,7 +906,7 @@ function currencySheet(m: SettingsMessages): SelectSheetModel {
 		rows: CURRENCIES.map((c, i) => ({
 			id: c.id,
 			label: c.id,
-			glyph: c.glyph,
+			glyph: m.currency.symbols[c.id] ?? c.id,
 			caption: c.caption,
 			selected: i === 0
 		}))
