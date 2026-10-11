@@ -17,6 +17,8 @@
 	import { resolve } from '$app/paths';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { updated } from '$app/state';
+	import { version } from '$app/environment';
+	import { installChunkRecovery } from '$lib/services/chunk-recovery';
 	import { ensureCustomNetworks } from '$lib/services/networks';
 	import { invalidateAllPools } from '$lib/services/rpc-pool';
 	import { normalizePackagedUrl } from '$lib/extension/page-url';
@@ -224,10 +226,18 @@
 		};
 		window.addEventListener('offline', wentOffline);
 		window.addEventListener('online', cameBack);
-		// A lazy import that failed to fetch (a deploy moved the hashes) is
-		// unrecoverable in place; the document is.
-		const preloadFailed = () => location.reload();
-		window.addEventListener('vite:preloadError', preloadFailed);
+		// A lazy import that failed to fetch. A deploy that moved the hashes is
+		// unrecoverable in place and the document is — but that is one reason
+		// of three, and the commonest is a page being LEFT, whose cancelled
+		// imports this used to answer with a reload of its own
+		// (`chunk-recovery.ts`): the build is asked about, a tab recovers from a
+		// given build once, and never under an open sheet.
+		installChunkRecovery({
+			version,
+			moved: () => updated.check(),
+			busy: () => document.querySelector('[role="dialog"], [data-testid="dapp-receipt"]') !== null,
+			reload: () => location.reload()
+		});
 
 		// The dev/e2e console (spec 025) is a DYNAMIC import behind its gate:
 		// a static one would drag the core's JS glue into the first-paint
