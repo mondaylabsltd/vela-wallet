@@ -202,8 +202,11 @@ test('erasing leaves nothing of this wallet in the browser (SC-407)', async ({ p
 
 	// An erase that finds a key still there after its sweep stays on the sheet
 	// and says "try again" — and this test then only timed out waiting to
-	// leave (once in eight runs of the whole suite, on WebKit, never when
-	// repeated alone). The app logs which keys survived; a failure says them.
+	// leave. The app logs which keys survived, and a failure here says them:
+	// that is how the one that happened twice on WebKit was named —
+	// `vela.fxRates.v1`, a cache the rates request (this page talks to the
+	// live network) filled behind the sweep. The store is sealed for an erase
+	// now (`services/storage.ts`); this stays for the next writer.
 	const survived: string[] = [];
 	page.on('console', (message) => {
 		if (!message.text().startsWith('[erase] incomplete')) return;
