@@ -11,7 +11,11 @@ const STORAGE_SUITES = [
 	'**/preferences.e2e.ts',
 	// 072's wide settings: a saved provider key survives its own panel, and a
 	// cleared row or an erase takes what it said and nothing else.
-	'**/settings-desktop.e2e.ts'
+	'**/settings-desktop.e2e.ts',
+	// A failed lazy import: the tab's memory of the build it recovered from is
+	// session storage — and the cancelled imports of a page being left, which
+	// it must ignore, are reported by Firefox alone.
+	'**/chunk-recovery.e2e.ts'
 ];
 
 export default defineConfig({
