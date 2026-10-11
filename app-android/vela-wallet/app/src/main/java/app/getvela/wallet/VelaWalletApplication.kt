@@ -50,6 +50,7 @@ import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.PoolRelayPort
 import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.dev.ParallelSpaceBinding
+import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocaleResolver
 import app.getvela.wallet.feature.contacts.core.ContactsController
@@ -83,7 +84,7 @@ import kotlinx.coroutines.SupervisorJob
  */
 class AppContainer(private val app: Application) {
 
-    val i18nRuntime = I18nRuntime { tag ->
+    val i18nRuntime = I18nRuntime(onLanguage = { AppLanguage.tag = it }) { tag ->
         app.assets.open("i18n/$tag.json").use { it.readBytes() }
     }
 

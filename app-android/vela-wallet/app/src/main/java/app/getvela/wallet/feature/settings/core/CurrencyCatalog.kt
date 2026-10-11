@@ -1,24 +1,24 @@
 package app.getvela.wallet.feature.settings.core
 
 /**
- * The currencies this wallet offers, and the glyph each one shows.
+ * The currencies this wallet offers: their codes and their names.
  *
- * **Shell content, not a core rule** — and deliberately so. The
- * `display_currency` machine decides *which* code is current and whether it
- * can be priced; it has no opinion about what a `¥` looks like or which eight
- * currencies a picker is worth filling with. The core's own comment says as
- * much: "the shell derives the symbol from its catalog and owns all
- * formatting".
+ * **Not their symbols.** What a currency's figure is written with is the
+ * core's rule (`fiatSymbol(code, language)`), and Settings' row and picker
+ * ask it like every figure does. This catalog used to keep a glyph per code —
+ * "¥" for the yuan AND the yen, "$" for the US AND the Hong Kong dollar — so
+ * two rows of one picker read alike, and the row said 「CNY · ¥」 over a
+ * balance written 「CN¥188.44」.
  *
- * It lives here rather than in `SettingsFixtures` because live code must not
- * import from a fixture file: a fixture is a picture of a screen, and the
- * moment production reads one, deleting a picture breaks the product. Same
- * list, same order as `app-web/vela-wallet/src/lib/settings/fixtures.ts`, so
- * the two clients offer a person the same choices.
+ * Which currencies a picker is worth filling with is shell content: the
+ * `display_currency` machine decides which code is current and whether it can
+ * be priced. It lives here rather than in `SettingsFixtures` because live
+ * code must not import from a fixture file. Same list, same order as
+ * `app-web/vela-wallet/src/lib/settings/fixtures.ts`.
  */
 object CurrencyCatalog {
 
-    data class Entry(val code: String, val glyph: String, val caption: String)
+    data class Entry(val code: String, val caption: String)
 
     /**
      * Eight, in this order.
@@ -29,17 +29,13 @@ object CurrencyCatalog {
      * choosing i18n keys for currency names and that is a content decision.
      */
     val entries: List<Entry> = listOf(
-        Entry("USD", "$", "US Dollar"),
-        Entry("EUR", "€", "Euro"),
-        Entry("GBP", "£", "British Pound"),
-        Entry("CNY", "¥", "Chinese Yuan"),
-        Entry("JPY", "¥", "Japanese Yen"),
-        Entry("KRW", "₩", "South Korean Won"),
-        Entry("HKD", "$", "Hong Kong Dollar"),
-        Entry("VND", "₫", "Vietnamese Dong"),
+        Entry("USD", "US Dollar"),
+        Entry("EUR", "Euro"),
+        Entry("GBP", "British Pound"),
+        Entry("CNY", "Chinese Yuan"),
+        Entry("JPY", "Japanese Yen"),
+        Entry("KRW", "South Korean Won"),
+        Entry("HKD", "Hong Kong Dollar"),
+        Entry("VND", "Vietnamese Dong"),
     )
-
-    /** The glyph for a code, or the code itself when it is one we do not stock. */
-    fun glyph(code: String): String =
-        entries.firstOrNull { it.code == code }?.glyph ?: code
 }

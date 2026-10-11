@@ -124,14 +124,14 @@ object SettingsFixtures {
      * names are data here rather than 120 translated strings.
      */
     private val CURRENCIES = listOf(
-        Triple("USD", "$", "US Dollar"),
-        Triple("EUR", "€", "Euro"),
-        Triple("GBP", "£", "British Pound"),
-        Triple("CNY", "¥", "Chinese Yuan"),
-        Triple("JPY", "¥", "Japanese Yen"),
-        Triple("KRW", "₩", "South Korean Won"),
-        Triple("HKD", "$", "Hong Kong Dollar"),
-        Triple("VND", "₫", "Vietnamese Dong"),
+        "USD" to "US Dollar",
+        "EUR" to "Euro",
+        "GBP" to "British Pound",
+        "CNY" to "Chinese Yuan",
+        "JPY" to "Japanese Yen",
+        "KRW" to "South Korean Won",
+        "HKD" to "Hong Kong Dollar",
+        "VND" to "Vietnamese Dong",
     )
 
     private val NUMBER_SAMPLES =
@@ -808,8 +808,9 @@ object SettingsFixtures {
     private fun currencySheet(s: VelaStrings) = SelectSheetModel(
         title = s.t(I18nKeys.SettingsUi.CURRENCY_SHEET_TITLE),
         searchPlaceholder = s.t(I18nKeys.SettingsUi.CURRENCY_SEARCH),
-        rows = CURRENCIES.mapIndexed { i, (code, glyph, name) ->
-            SelectRowModel(code, code, glyph = glyph, caption = name, selected = i == 0)
+        rows = CURRENCIES.mapIndexed { i, (code, name) ->
+            // The symbol is the core's, in the board's language — as the live picker asks it.
+            SelectRowModel(code, code, glyph = app.getvela.wallet.feature.wallet.WalletLive.Money.fiatSign(code, s.language), caption = name, selected = i == 0)
         },
     )
 

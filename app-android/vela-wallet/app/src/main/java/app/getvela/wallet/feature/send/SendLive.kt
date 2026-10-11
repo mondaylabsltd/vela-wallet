@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.flows.ContactGroupModel
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.ContactsView
@@ -706,7 +707,7 @@ object SendLive {
     }
 
     private fun amountModel(view: SendView, symbol: String, fiatLine: String, fiatWithheld: Boolean, ctx: Context): AmountFieldModel {
-        val (prefix, suffix) = unitAdornment(view.amount_fiat_code, symbol)
+        val (prefix, suffix) = unitAdornment(view.amount_fiat_code, symbol, ctx.strings.language)
         // Typing in fiat, the line under the figure is the TOKEN amount — not
         // a fiat figure, so never withheld.
         val typingFiat = view.amount_fiat_code != null
@@ -740,12 +741,12 @@ object SendLive {
      * leads it ("$4.00"); one without follows as its code ("4.00 PLN").
      * Nothing defaults to "$" — an unknown unit is no adornment at all.
      */
-    internal fun unitAdornment(code: String?, tokenSymbol: String): Pair<String?, String?> {
+    internal fun unitAdornment(code: String?, tokenSymbol: String, language: String = AppLanguage.tag): Pair<String?, String?> {
         if (code == null) return null to tokenSymbol.ifEmpty { null }
-        // The same ISO-4217 table `WalletLive.Money` writes the "≈" line with,
-        // so the figure and the line beneath it agree on what a currency looks like.
-        val sign = runCatching { java.util.Currency.getInstance(code).getSymbol(java.util.Locale.US) }
-            .getOrNull()?.takeIf { it != code }
+        // The core's symbol (`fiatSymbol`), the one `WalletLive.Money` writes
+        // the "≈" line with — so the figure and the line beneath it agree on
+        // what a currency looks like, in this language.
+        val sign = WalletLive.Money.fiatSign(code, language).takeIf { it != code }
         return if (sign == null) null to code else sign to null
     }
 

@@ -27,6 +27,7 @@ import app.getvela.wallet.core.format.TextScaleLevel
 import app.getvela.wallet.core.format.TimeFormatKey
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyCatalog
@@ -300,7 +301,7 @@ object SettingsLive {
 
     const val VENUE_ROW = "signing-venue"
 
-    fun withCurrency(model: SettingsScreenModel, view: CurrencyView): SettingsScreenModel {
+    fun withCurrency(model: SettingsScreenModel, view: CurrencyView, language: String = AppLanguage.tag): SettingsScreenModel {
         // The person's own choice — on its way (`pending`) or settled — never
         // the USD placeholder standing in for it.
         val code = view.pending?.takeIf { !view.committed } ?: view.code
@@ -308,7 +309,7 @@ object SettingsLive {
             sections = model.sections.map { section ->
                 section.copy(
                     rows = section.rows.map { row ->
-                        if (row.id == "currency") row.copy(value = currencyRowValue(code)) else row
+                        if (row.id == "currency") row.copy(value = currencyRowValue(code, language)) else row
                     },
                 )
             },
@@ -317,7 +318,9 @@ object SettingsLive {
                     SelectRowModel(
                         id = entry.code,
                         label = entry.code,
-                        glyph = entry.glyph,
+                        // The symbol a figure in it is written with — the
+                        // core's, in this language: no two rows alike.
+                        glyph = WalletLive.Money.fiatSign(entry.code, language),
                         caption = entry.caption,
                         selected = entry.code == code,
                     )
@@ -721,8 +724,12 @@ object SettingsLive {
      * a sample amount implies a rate, and while the choice is still on its
      * way (`pending`) there is not one yet.
      */
-    private fun currencyRowValue(code: String): String =
-        "$code · ${CurrencyCatalog.glyph(code)}"
+    private fun currencyRowValue(code: String, language: String): String {
+        // The sign every figure in it carries (the core's `fiatSymbol`); a
+        // currency whose sign IS its code says the code once.
+        val sign = WalletLive.Money.fiatSign(code, language)
+        return if (sign == code) code else "$code · $sign"
+    }
 
     // -- Spec 047 US1: the rows that read the device, not a fixture -----------------
 

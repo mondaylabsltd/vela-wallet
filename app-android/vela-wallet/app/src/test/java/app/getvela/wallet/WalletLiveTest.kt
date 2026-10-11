@@ -890,7 +890,11 @@ class WalletLiveTest {
         assertEquals("GBP", model.balance.currency)
     }
 
-    /** A currency with no sign in the JVM's table reads as a code, never a wrong sign. */
+    /**
+     * A currency with no sign of its own in the core's table reads as its
+     * code, never a wrong sign — held off the digits by a no-break space, as
+     * the core's `format_fiat` writes it (it was a plain space here).
+     */
     @Test
     fun `an unsigned currency shows its code`() {
         val view = BalanceView(display_total_usd = 100.0)
@@ -900,7 +904,7 @@ class WalletLiveTest {
             currency = CurrencyView(code = "CHF", rate = 0.80, committed = true),
         )
 
-        assertEquals("CHF 80", model.balance.integer)
+        assertEquals("CHF\u00A080", model.balance.integer)
     }
 
     /** A nonsense rate is no rate: zero or infinity must never reach a figure. */

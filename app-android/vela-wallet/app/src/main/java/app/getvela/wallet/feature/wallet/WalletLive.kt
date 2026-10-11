@@ -10,6 +10,7 @@ import app.getvela.wallet.feature.browser.ExploreLive
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.feature.flows.TokenMarkModel
+import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyView
@@ -26,6 +27,7 @@ import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.FeedTxKind
 import app.getvela.wallet.feature.wallet.core.FeedTxStatus
+import uniffi.vela_core_uniffi.fiatSymbol
 import uniffi.vela_core_uniffi.maskedAmount
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -836,25 +838,47 @@ object WalletLive {
             /** Dollars, unconverted — the default before a currency is known. */
             fun dollars(): Money = Money("USD", "$", null)
 
-            fun of(view: CurrencyView): Money {
+            /**
+             * [language]: the app's language tag — which of the yuan and the
+             * yen is written "¥" alone depends on it ([fiatSign]). A builder
+             * with strings in hand passes `strings.language`; the rest read
+             * the app's ([AppLanguage]).
+             */
+            fun of(view: CurrencyView, language: String = AppLanguage.tag): Money {
                 // No settled choice yet: the placeholder's dollars, marked as
                 // not the person's — figures drawn in the display currency wait.
                 if (!view.committed) return Money("USD", "$", null, settled = false, label = view.pending.orEmpty())
                 val rate = view.rate?.takeIf { it.isFinite() && it > 0.0 }
                 // A settled choice nothing could price means dollars — and saying so.
                 if (rate == null) return Money("USD", "$", null)
-                return Money(view.code, symbolFor(view.code), rate)
+                return Money(view.code, fiatPrefix(view.code, language), rate)
             }
 
             /**
-             * The currency's own sign, from the JVM's ISO-4217 table rather
-             * than a table of this app's own. An unknown code falls back to the
-             * code itself, which reads as "CHF 12.00" — plain, and never the
-             * wrong sign in front of a number.
+             * The symbol a fiat figure in [code] is written with — the CORE's
+             * rule (`l10n::fiat_symbol`), one table for all four shells: "$"
+             * alone is the US dollar's and every other dollar carries its
+             * country (HK$, CA$…); "¥" alone is the yuan in Chinese and the
+             * yen in every other language, the other one carrying its country
+             * (JP¥ / CN¥); a currency with no glyph anybody would recognise is
+             * its code.
+             *
+             * This shell used to ask the platform (`Currency.getSymbol(Locale.US)`)
+             * and wrote the owner's balance 「CN¥188.44」 under a Settings row
+             * that said 「CNY · ¥」, beside an iPhone that wrote 「¥34.03」.
              */
-            private fun symbolFor(code: String): String = runCatching {
-                java.util.Currency.getInstance(code).getSymbol(java.util.Locale.US)
-            }.getOrNull()?.takeIf { it != code } ?: "$code "
+            fun fiatSign(code: String, language: String = AppLanguage.tag): String = fiatSymbol(code, language)
+
+            /**
+             * [fiatSign] as it stands before the digits: a symbol that ends
+             * in a letter — a code, "zł", "Rp", "R" — is held apart from them
+             * by a no-break space ("CHF 12.00"); a glyph is not ("HK$12.00").
+             * CLDR's currency spacing, as the core's `format_fiat` applies it.
+             */
+            internal fun fiatPrefix(code: String, language: String = AppLanguage.tag): String {
+                val sign = fiatSign(code, language)
+                return if (sign.lastOrNull()?.isLetter() == true) "$sign\u00A0" else sign
+            }
         }
     }
 
