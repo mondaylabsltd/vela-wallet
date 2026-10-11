@@ -14802,6 +14802,21 @@ public func create2Address(deployerHex: String, salt: Data, initCodeHash: Data)t
 })
 }
 /**
+ * An exact token figure cut to the precision a person reads
+ * (`l10n::cut_token_amount`): the token ladder, never rounded up, dust kept
+ * at its first significant digit. For a figure of what is THERE — a balance,
+ * what is left of one. Dot-decimal in, dot-decimal out; text that is not a
+ * figure comes back unchanged.
+ */
+public func cutTokenAmount(plain: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_cut_token_amount(
+        FfiConverterString.lower(plain),uniffiCallStatus
+    )
+})
+}
+/**
  * Address-bar text → the URL to load: `https://` for a host, `http://` only
  * for loopback / private-network hosts, a DuckDuckGo search for anything
  * else (spec 070 research R6). `None` for blank input.
@@ -14852,6 +14867,22 @@ public func dappOffersWallet(origin: String, debugMode: Bool) -> Bool  {
     uniffi_vela_core_uniffi_fn_func_dapp_offers_wallet(
         FfiConverterString.lower(origin),
         FfiConverterBool.lower(debugMode),uniffiCallStatus
+    )
+})
+}
+/**
+ * What the address bar's mark says about the connection to a page at
+ * `origin` (`dapp_permissions::origin_lock`): `secure` — https, the only
+ * padlock; `local` — http on this device or the person's own network, a
+ * neutral mark; `insecure` — public http, the warning. The browser's tab
+ * and consent views carry it already (`lock`); this is for a surface that
+ * has only an origin.
+ */
+public func dappOriginLock(origin: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_origin_lock(
+        FfiConverterString.lower(origin),uniffiCallStatus
     )
 })
 }
@@ -15101,6 +15132,23 @@ public func feeSignalsCacheTtlMs() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_fee_signals_cache_ttl_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * The symbol a fiat figure is written with (`l10n::fiat_symbol`): ONE table
+ * for all four shells. `$` alone is the US dollar's; `¥` alone is the yuan
+ * in Chinese and the yen in every other language, the other one carrying
+ * its country (`JP¥` / `CN¥`); a currency with no glyph of its own is its
+ * code. `language` is the app's language tag. Each shell used to keep its
+ * own table, and one phone wrote "CN¥188.44" where the other wrote "¥34.03".
+ */
+public func fiatSymbol(code: String, language: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fiat_symbol(
+        FfiConverterString.lower(code),
+        FfiConverterString.lower(language),uniffiCallStatus
     )
 })
 }
@@ -17488,6 +17536,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_create2_address() != 41676) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_cut_token_amount() != 29717) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_browser_input() != 24918) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17498,6 +17549,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_offers_wallet() != 54718) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_origin_lock() != 31502) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_origin_of() != 63765) {
@@ -17555,6 +17609,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_fee_signals_cache_ttl_ms() != 43504) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_fiat_symbol() != 42441) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_first_grouped_quote_price() != 50678) {
