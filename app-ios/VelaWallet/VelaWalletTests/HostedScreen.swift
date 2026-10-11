@@ -131,6 +131,44 @@ final class HostedScreen {
         try await Task.sleep(for: .milliseconds(50))
     }
 
+    // MARK: - A sheet over the screen
+
+    /// What a presented sheet shows: its own frame in the window, and the
+    /// tree of what is on it.
+    struct Sheet {
+        /// The sheet's frame in the window — its top edge is where it stands.
+        let frame: CGRect
+        let seen: Seen
+        /// The lowest point a thing on the sheet can be and still be reached:
+        /// the window's bottom, less the home indicator's room.
+        let floor: CGFloat
+    }
+
+    /// The sheet this screen presented, once it has stopped moving (two reads
+    /// agree on its frame and its tree) — `nil` if none came up.
+    func sheet(until ready: (Seen) -> Bool = { _ in true }) async throws -> Sheet? {
+        var last: (CGRect, [Element])?
+        for _ in 0..<60 {
+            try await Task.sleep(for: .milliseconds(120))
+            guard let presented = host.presentedViewController, let view = presented.view,
+                  view.window != nil
+            else { continue }
+            view.layoutIfNeeded()
+            _ = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            let frame = view.convert(view.bounds, to: window)
+            var tree: [Element] = []
+            collect(view as Any, depth: 0, into: &tree)
+            let seen = Seen(tree: tree)
+            if !tree.isEmpty, ready(seen), let last, last.0 == frame, last.1 == tree {
+                return Sheet(frame: frame, seen: seen, floor: window.bounds.height - window.safeAreaInsets.bottom)
+            }
+            last = (frame, tree)
+        }
+        return nil
+    }
+
     // MARK: - Scrolling
 
     /// Every scroll view under the host, outermost first.

@@ -189,7 +189,10 @@ struct UsbWalletPickerSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.vertical, Tokens.Space.s32)
-        .presentationDetents([.medium])
+        // As tall as its list, and scrolling past the screen: at half the
+        // screen with no scroll, a key holding more wallets than fit there
+        // had its last ones cut off.
+        .contentSizedSheet(expected: 320)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
     }

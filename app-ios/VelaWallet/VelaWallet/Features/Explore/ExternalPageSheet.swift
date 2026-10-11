@@ -42,7 +42,10 @@ struct ExternalPageSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.vertical, Tokens.Space.s32)
-        .presentationDetents([.height(320)])
+        // As tall as what it holds: a fixed 320 pt fits a short address at
+        // the usual text size and cut the two answers under anything longer,
+        // in a sheet that did not scroll.
+        .contentSizedSheet(expected: 320)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
     }

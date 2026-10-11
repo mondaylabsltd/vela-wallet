@@ -169,10 +169,18 @@ struct EndpointSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.vertical, Tokens.Space.s32)
-        .presentationDetents([.medium])
+        // As tall as what it holds. It opened at half the screen, and on a
+        // 4.7" phone its content is taller than that: 恢复默认 ended 10 pt
+        // under the screen's edge (31 pt in English), in a sheet that does
+        // not scroll — the way to put the default back, out of reach
+        // (measured, `SheetFitTests`).
+        .contentSizedSheet(expected: Self.expectedHeight)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
     }
+
+    /// About what the content comes to at a default text size.
+    static let expectedHeight: CGFloat = 370
 }
 
 /// The way back out of a signed-in wallet.

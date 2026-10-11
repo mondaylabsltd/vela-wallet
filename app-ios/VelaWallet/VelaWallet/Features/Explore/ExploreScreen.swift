@@ -113,6 +113,10 @@ struct ExploreScreen: View {
     /// so Close page — the last row, and since DESIGN N the way to close a
     /// page — never sits under a half-height sheet's edge.
     @State private var siteMenuHeight: CGFloat = 0
+    /// The connection panel's own height, measured the same way: its sheet —
+    /// connected, or a site asking — is exactly that tall, so the last
+    /// action is on it without a drag.
+    @State private var connectionHeight: CGFloat = 0
     /// **Which** sheet is open — never a snapshot of what it said when it
     /// opened. A sheet holding a captured model shows the section you hid,
     /// the site you unpinned, and — the one that matters — a CONNECTED panel
@@ -705,10 +709,15 @@ struct ExploreScreen: View {
         }
     }
 
-    /// How tall a sheet may be: the site menu as tall as its rows, the rest
+    /// How tall a sheet may be: the site menu as tall as its rows, and the
+    /// connection panel — which is also the sheet a site asks to connect on —
+    /// as tall as what it holds, so its answers are on it from the first
+    /// frame at any text size (at half the screen, a longer explainer put
+    /// 连接 and 拒绝 under the edge until the sheet was dragged up); the rest
     /// half or whole.
     private func detents(for kind: ExploreSheetKind) -> Set<PresentationDetent> {
         if kind == .siteMenu, siteMenuHeight > 0 { return [.height(siteMenuHeight)] }
+        if kind == .connection, connectionHeight > 0 { return [.height(connectionHeight)] }
         return [.medium, .large]
     }
 
@@ -1195,7 +1204,9 @@ struct ExploreScreen: View {
                         controller?.pickSiteChain(origin: connection.origin, chainId: chainId)
                     }
                 )
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { connectionHeight = $0 }
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
     }
 }
